@@ -378,8 +378,12 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         console.error(error);
       }
     };
+    let lastFlowReview = 0;
     const reviewFlow = () => {
-      try { runtime.evaluateFlow?.(); } catch (error) { console.error(error); }
+      if (Date.now() - lastFlowReview >= 3_600_000) {
+        lastFlowReview = Date.now();
+        try { runtime.evaluateFlow?.(); } catch (error) { console.error(error); }
+      }
       try { runtime.dispatchDailyStepAudit?.(); } catch (error) { console.error(error); }
     };
     remind();

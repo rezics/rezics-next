@@ -325,7 +325,6 @@ export class WorkerStore implements AttemptFence {
         task.integratedCommits = plan.commits;
       }
       this.saveTask(task);
-      recordFlow(this.db, {taskId:ref.taskId,attempt:ref.attempt,stage:'verification',action:'verified',at:new Date().toISOString()});
       recordFlow(this.db, {taskId:ref.taskId,attempt:ref.attempt,stage:'integration',action:'integrated',at:new Date().toISOString()});
       recordFlow(this.db, {taskId:ref.taskId,attempt:ref.attempt,stage:'dev-update',action:'updated',at:new Date().toISOString()});
       if (plan) this.clearIntegrationPlan(ref);
@@ -385,7 +384,6 @@ export class WorkerStore implements AttemptFence {
             task.integratedCommits = plan.commits;
           }
           this.saveTask(task);
-          recordFlow(this.db, {taskId:member.taskId,attempt:member.attempt,stage:'verification',action:'verified',at:new Date().toISOString()});
           recordFlow(this.db, {taskId:member.taskId,attempt:member.attempt,stage:'integration',action:'integrated',at:new Date().toISOString()});
           recordFlow(this.db, {taskId:member.taskId,attempt:member.attempt,stage:'dev-update',action:'updated',at:new Date().toISOString()});
           if (plan) this.clearIntegrationPlan(member);

@@ -22,7 +22,21 @@ test('goal report --flow gives per stage and per Goal totals and percentiles, ef
   const result=flowReport(events,[task('t1')],Date.parse(date(20)));
   expect(result.stages.find(s=>s.stage==='landing')).toMatchObject({totalMs:180000,p50Ms:180000,p90Ms:180000});
   expect(result.goals[0]).toMatchObject({goal:'sample',totalMs:780000,p50Ms:780000,p90Ms:780000});
+  expect(result.goals[0]?.stages.find(s=>s.stage==='landing')).toMatchObject({totalMs:180000,p50Ms:180000,p90Ms:180000});
+  expect(result.bottleneck).toBe('check');
   expect(result.flowEfficiency).toBeGreaterThan(0); expect(result.queues.find(q=>q.stage==='landing')?.length).toBe(0); expect(result.attemptsPerIntegrated).toBe(1);
+});
+
+test('incomplete lifecycle phases remain unknown instead of receiving inferred timestamps', () => {
+  const events:any[]=[
+    {taskId:'t1',attempt:0,stage:'dispatch',action:'dispatched',at:date(0)},
+    {taskId:'t1',attempt:1,stage:'worker',action:'started',at:date(1)},
+    {taskId:'t1',attempt:1,stage:'check',action:'requested',at:date(2)},
+  ];
+  const result=flowReport(events,[task('t1')],Date.parse(date(20)));
+  expect(result.stages.find(s=>s.stage==='check')).toMatchObject({count:0,totalMs:0,p50Ms:null,p90Ms:null});
+  expect(result.tasks[0]?.workingMs).toBeNull();
+  expect(result.queues.find(q=>q.stage==='check')).toMatchObject({length:1,tasks:['t1']});
 });
 
 test('the manager host evaluates absolute thresholds and sends one supermanager environment alarm per breached threshold per hour', () => {

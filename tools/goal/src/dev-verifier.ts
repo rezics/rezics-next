@@ -8,6 +8,7 @@ import type { SqliteManagerInbox } from './inbox.ts';
 import { matchesPath } from './briefs.ts';
 import { gateRunner, git, type GateRunner } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import { recordFlow } from './flow.ts';
 
 const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
@@ -58,6 +59,11 @@ function taskLandings(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
         !skippedKinds.has(task.brief.kind),
     );
 }
+function recordVerified(settings: Settings, store: Pick<WorkerStore, 'tasks' | 'db'>, base: string, target: string): void {
+  const at = new Date().toISOString();
+  for (const task of taskLandings(settings, store, base, target))
+    recordFlow(store.db, {taskId:task.id,attempt:task.currentAttempt,stage:'verification',action:'verified',at});
+}
 function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Check[] {
   const checkout = settings.mainCheckout;
   const files = changedFiles(checkout, base, target);
@@ -98,7 +104,7 @@ function installDependencies(tree: string, stateDirectory: string): boolean {
 
 export type DevVerifierOptions = {
   settings: Settings;
-  store: Pick<WorkerStore, 'tasks' | 'task' | 'updateTask'>;
+  store: Pick<WorkerStore, 'tasks' | 'task' | 'updateTask' | 'db'>;
   inbox: Pick<SqliteManagerInbox, 'deliver'>;
   runGate?: GateRunner;
 };
@@ -145,6 +151,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
       if (!failed) {
         try {
           git(checkout, 'update-ref', ref(verifiedBranch), dev, verified);
+          recordVerified(settings, store, verified, dev);
         } catch {
           /* dev-verified moved concurrently */
         }
@@ -157,6 +164,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
       if (failed.passed) {
         try {
           git(checkout, 'update-ref', ref(verifiedBranch), dev, verified);
+          recordVerified(settings, store, verified, dev);
         } catch {
           /* dev-verified moved concurrently */
         }

@@ -15,41 +15,89 @@ export function readFlow(db: Database, since = '0000-01-01T00:00:00.000Z'): Flow
   ensureFlow(db);
   return (db.query('SELECT task_id,attempt,stage,action,at,detail FROM flow_events WHERE at >= ? ORDER BY at,sequence').all(since) as any[]).map(r => ({taskId:r.task_id,attempt:r.attempt,stage:r.stage,action:r.action,at:r.at,...(r.detail === null ? {} : {detail:r.detail})}));
 }
-const percentile = (values: number[], p: number): number => values.length ? values[Math.ceil(p * values.length) - 1]! : 0;
+
+const percentile = (values: number[], p: number): number | null => values.length ? values[Math.ceil(p * values.length) - 1]! : null;
+const summarize = (values: number[]) => {
+  const sorted = [...values].sort((a,b) => a-b);
+  return { count: sorted.length, totalMs: sorted.reduce((x,y) => x+y,0), p50Ms: percentile(sorted,.5), p90Ms: percentile(sorted,.9) };
+};
+const startActions: Record<FlowStage, string[]> = {
+  dispatch: ['dispatched'], start: ['requested'], check: ['requested'], worker: ['started'], landing: ['enqueued'],
+  'dev-update': ['requested'], verification: ['requested'], integration: ['requested'], promotion: ['requested'],
+};
+const endActions: Record<FlowStage, string[]> = {
+  dispatch: ['started'], start: ['started'], check: ['released'], worker: ['finished'], landing: ['finished'],
+  'dev-update': ['updated'], verification: ['verified'], integration: ['integrated'], promotion: ['promoted'],
+};
+function stageDurations(events: FlowEvent[], stage: FlowStage): number[] {
+  if (stage === 'dispatch') {
+    const dispatch = events.find(e => e.stage === 'dispatch' && e.action === 'dispatched');
+    const started = events.find(e => e.stage === 'start' && e.action === 'requested');
+    if (dispatch && started) return [Math.max(0,Date.parse(started.at)-Date.parse(dispatch.at))];
+  }
+  const groups = new Map<number, FlowEvent[]>();
+  for (const event of events) if (event.stage === stage) groups.set(event.attempt, [...(groups.get(event.attempt) ?? []), event]);
+  const durations: number[] = [];
+  for (const group of groups.values()) {
+    let start: number | undefined;
+    for (const event of group) {
+      if (startActions[stage].includes(event.action)) start = Date.parse(event.at);
+      if (start !== undefined && endActions[stage].includes(event.action)) {
+        const end = Date.parse(event.at);
+        if (Number.isFinite(start) && Number.isFinite(end) && end >= start) durations.push(end-start);
+        start = undefined;
+      }
+    }
+  }
+  return durations;
+}
+
 export function flowReport(events: FlowEvent[], tasks: Task[], now = Date.now()) {
   const ordered = [...events].sort((a,b) => a.at.localeCompare(b.at));
   const byTask = new Map<string, FlowEvent[]>();
   for (const event of ordered) byTask.set(event.taskId, [...(byTask.get(event.taskId) ?? []), event]);
-  const durations: Record<string, number[]> = Object.fromEntries(FLOW_STAGES.map(s => [s, []]));
+  const stageSummaries = FLOW_STAGES.map(stage => ({stage, ...summarize([...new Set(ordered.filter(e => e.stage === stage).map(e => e.taskId))].flatMap(id => stageDurations(byTask.get(id) ?? [], stage)))}));
   const taskRows = tasks.map(task => {
     const es = byTask.get(task.id) ?? [];
-    const integrated = es.find(e => e.stage === 'integration' && e.action === 'integrated');
     const dispatch = es.find(e => e.stage === 'dispatch' && e.action === 'dispatched');
-    const elapsed = dispatch && integrated ? Date.parse(integrated.at) - Date.parse(dispatch.at) : null;
-    for (const stage of FLOW_STAGES) {
-      const starts = es.filter(e => e.stage === stage && ['requested','enqueued','started'].includes(e.action));
-      const ends = es.filter(e => e.stage === stage && ['acquired','released','finished','updated','verified','integrated','promoted'].includes(e.action));
-      if (starts.length && ends.length) durations[stage]!.push(Math.max(0, Date.parse(ends[ends.length - 1]!.at) - Date.parse(starts[0]!.at)));
+    const integrated = es.find(e => e.stage === 'integration' && e.action === 'integrated');
+    const elapsed = dispatch && integrated ? Date.parse(integrated.at)-Date.parse(dispatch.at) : null;
+    let workerMs = 0; let open: number | undefined;
+    for (const e of es) if (e.stage === 'worker') {
+      if (e.action === 'started') open = Date.parse(e.at);
+      else if (e.action === 'finished' && open !== undefined) { workerMs += Math.max(0,Date.parse(e.at)-open); open = undefined; }
     }
     const checks = es.filter(e => e.stage === 'check');
-    const waits = checks.reduce((n,e) => n + (e.action === 'requested' ? Date.parse((checks.find(x => x.action === 'acquired' && x.at >= e.at)?.at ?? e.at)) - Date.parse(e.at) : 0), 0);
-    const running = es.filter(e => e.stage === 'worker' && ['started','finished'].includes(e.action));
-    let workingTime = 0, openStart: number | null = null;
-    for (const event of running) { if (event.action === 'started') openStart = Date.parse(event.at); else if (openStart !== null) { workingTime += Math.max(0, Date.parse(event.at)-openStart); openStart = null; } }
-    const working = running.some(e=>e.action==='started') ? Math.max(0, workingTime - waits) : null;
-    return { taskId: task.id, goal: task.brief.goal, elapsedMs: elapsed, workingMs: working, efficiency: elapsed && working !== null ? working / elapsed : null };
+    let checkWaitMs = 0; let checkKnown = true; let requested: number | undefined;
+    for (const e of checks) {
+      if (e.action === 'requested') requested = Date.parse(e.at);
+      if (e.action === 'acquired' && requested !== undefined) { checkWaitMs += Math.max(0,Date.parse(e.at)-requested); requested = undefined; }
+      if (e.action === 'requested' && !checks.some(x => x.at >= e.at && x.action === 'acquired')) checkKnown = false;
+    }
+    const working = es.some(e => e.stage === 'worker' && e.action === 'started') && (!checks.length || checkKnown) ? Math.max(0,workerMs-checkWaitMs) : null;
+    return {taskId:task.id,goal:task.brief.goal,elapsedMs:elapsed,workingMs:working,efficiency:elapsed && working !== null ? working/elapsed : null};
   });
-  const queues = ['start','check','landing','verification','promotion'].map(stage => {
-    const pending = ordered.filter(e => e.stage === stage && ['requested','enqueued'].includes(e.action) && !ordered.some(x => x.taskId === e.taskId && x.at >= e.at && x.stage === stage && ['started','acquired','released','verified','promoted','integrated'].includes(x.action)));
-    return {stage, length:pending.length, oldestAgeMs:pending.length ? now - Date.parse(pending[0]!.at) : 0, tasks:pending.map(e => e.taskId)};
+  const queues = (['start','check','landing','verification','promotion'] as const).map(stage => {
+    const requests = ordered.filter(e => e.stage === stage && ['requested','enqueued'].includes(e.action));
+    const pending = requests.filter(e => !ordered.some(x => x.taskId === e.taskId && x.attempt === e.attempt && x.stage === stage && x.at >= e.at && endActions[stage].includes(x.action)));
+    return {stage,length:pending.length,oldestAgeMs:pending.length ? Math.max(0,now-Date.parse(pending[0]!.at)) : 0,tasks:pending.map(e => e.taskId)};
   });
-  const stages = FLOW_STAGES.map(stage => { const a = durations[stage]!.sort((x,y)=>x-y); return {stage,totalMs:a.reduce((x,y)=>x+y,0),p50Ms:percentile(a,.5),p90Ms:percentile(a,.9)}; });
-  const waiting = queues.map(q => ({stage:q.stage,ms:q.oldestAgeMs}));
-  const attempts = ordered.reduce((m,e)=> { if(e.stage==='worker'&&e.action==='started')m.set(e.taskId,(m.get(e.taskId)??0)+1); return m; },new Map<string,number>());
-  const integratedIds = new Set(ordered.filter(e=>e.stage==='integration'&&e.action==='integrated').map(e=>e.taskId));
-  const summarize = (values:number[]) => { const sorted=[...values].sort((a,b)=>a-b); return {totalMs:sorted.reduce((a,b)=>a+b,0),p50Ms:percentile(sorted,.5),p90Ms:percentile(sorted,.9)}; };
-  const efficiencyRows=taskRows.filter(t=>t.elapsedMs!==null&&t.workingMs!==null);
-  return { stages, goals: [...new Set(tasks.map(t=>t.brief.goal))].map(goal=>{const rows=taskRows.filter(t=>t.goal===goal); return {goal,...summarize(rows.flatMap(t=>t.elapsedMs===null?[]:[t.elapsedMs])),stages:FLOW_STAGES.map(stage=>({stage,...summarize(rows.flatMap(row=>{const es=byTask.get(row.taskId)??[]; const starts=es.filter(e=>e.stage===stage&&['requested','enqueued','started'].includes(e.action)); const ends=es.filter(e=>e.stage===stage&&['acquired','released','finished','updated','verified','integrated','promoted'].includes(e.action)); return starts.length&&ends.length?[Math.max(0,Date.parse(ends[ends.length-1]!.at)-Date.parse(starts[0]!.at))]:[];}))}))};}), tasks:taskRows, queues, bottleneck: waiting.sort((a,b)=>b.ms-a.ms)[0]?.stage ?? null, flowEfficiency: efficiencyRows.length ? efficiencyRows.reduce((n,t)=>n+(t.workingMs??0),0)/efficiencyRows.reduce((n,t)=>n+(t.elapsedMs??0),0) : null, attemptsPerIntegrated: integratedIds.size ? [...integratedIds].reduce((n,id)=>n+(attempts.get(id)??0),0)/integratedIds.size : null };
+  const integrated = new Set(ordered.filter(e => e.stage === 'integration' && e.action === 'integrated').map(e => e.taskId));
+  const attemptCounts = new Map<string,number>();
+  for (const e of ordered) if (e.stage === 'worker' && e.action === 'started') attemptCounts.set(e.taskId,(attemptCounts.get(e.taskId) ?? 0)+1);
+  const eligible = taskRows.filter(t => t.elapsedMs !== null && t.workingMs !== null);
+  const goals = [...new Set(tasks.map(t => t.brief.goal))].map(goal => {
+    const members = tasks.filter(t => t.brief.goal === goal);
+    const rows = taskRows.filter(t => t.goal === goal);
+    return {goal,...summarize(rows.flatMap(t => t.elapsedMs === null ? [] : [t.elapsedMs])),stages:FLOW_STAGES.map(stage => ({stage,...summarize(members.flatMap(t => stageDurations(byTask.get(t.id) ?? [],stage)))}))};
+  });
+  const waitEnds: Record<(typeof queues)[number]['stage'], string[]> = {start:['started'],check:['acquired'],landing:['started'],verification:['verified'],promotion:['promoted']};
+  const bottleneck = [...queues].map(q => ({stage:q.stage,ms:ordered.reduce((sum,e) => {
+    if (e.stage !== q.stage || !['requested','enqueued'].includes(e.action)) return sum;
+    const end = ordered.find(x => x.taskId === e.taskId && x.attempt === e.attempt && x.stage === e.stage && x.at >= e.at && waitEnds[q.stage].includes(x.action));
+    return sum + (end ? Math.max(0,Date.parse(end.at)-Date.parse(e.at)) : Math.max(0,now-Date.parse(e.at)));
+  },0)})).sort((a,b) => b.ms-a.ms)[0]?.stage ?? null;
+  return {stages:stageSummaries,goals,tasks:taskRows,queues,bottleneck,flowEfficiency:eligible.length ? eligible.reduce((n,t)=>n+(t.workingMs ?? 0),0)/eligible.reduce((n,t)=>n+(t.elapsedMs ?? 0),0) : null,attemptsPerIntegrated:integrated.size ? [...integrated].reduce((n,id)=>n+(attemptCounts.get(id) ?? 0),0)/integrated.size : null};
 }
 
 export type FlowThresholds = { efficiencyBelow: number; oldestQueueMs: number; landingP90Ms: number; attemptsPerIntegrated: number };
@@ -57,10 +105,10 @@ export const DEFAULT_FLOW_THRESHOLDS: FlowThresholds = { efficiencyBelow: .4, ol
 export function checkFlowAlarms(db: Database, report: ReturnType<typeof flowReport>, inbox: (summary: string) => void, now = new Date(), thresholds = DEFAULT_FLOW_THRESHOLDS): string[] {
   ensureFlow(db);
   const breaches: [string,string,string][] = [];
-  if (report.flowEfficiency !== null && report.flowEfficiency < thresholds.efficiencyBelow) breaches.push(['flow-efficiency','working vs elapsed',`${(report.flowEfficiency*100).toFixed(1)}%`]);
-  for (const q of report.queues) if (q.oldestAgeMs > thresholds.oldestQueueMs) breaches.push([`queue-${q.stage}`,q.stage,`${Math.round(q.oldestAgeMs/60000)} min`]);
-  const landing = report.stages.find(s=>s.stage==='landing'); if (landing && landing.p90Ms > thresholds.landingP90Ms) breaches.push(['landing-p90','landing',`${Math.round(landing.p90Ms/60000)} min p90`]);
-  if (report.attemptsPerIntegrated !== null && report.attemptsPerIntegrated > thresholds.attemptsPerIntegrated) breaches.push(['attempts-per-integrated','worker',report.attemptsPerIntegrated.toFixed(2)]);
+  if (report.flowEfficiency !== null && report.flowEfficiency < thresholds.efficiencyBelow) breaches.push(['flow-efficiency','worker',`flow efficiency ${(report.flowEfficiency*100).toFixed(1)}%`]);
+  for (const q of report.queues) if (q.oldestAgeMs > thresholds.oldestQueueMs) breaches.push([`queue-${q.stage}`,q.stage,`oldest queue entry ${Math.round(q.oldestAgeMs/60000)} min`]);
+  const landing = report.stages.find(s=>s.stage==='landing'); if (landing?.p90Ms !== null && landing?.p90Ms !== undefined && landing.p90Ms > thresholds.landingP90Ms) breaches.push(['landing-p90','landing',`p90 ${Math.round(landing.p90Ms/60000)} min`]);
+  if (report.attemptsPerIntegrated !== null && report.attemptsPerIntegrated > thresholds.attemptsPerIntegrated) breaches.push(['attempts-per-integrated','worker',`attempts per integrated task ${report.attemptsPerIntegrated.toFixed(2)}`]);
   const sent: string[] = [];
   for (const [key,stage,measurement] of breaches) {
     const old = db.query('SELECT sent_at FROM flow_alarm_sends WHERE threshold=?').get(key) as {sent_at:string}|null;
