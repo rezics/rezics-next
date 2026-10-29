@@ -151,10 +151,14 @@ export function validateScenarioReport(xml: string, scenarios: readonly string[]
     const body = match[2] ?? '';
     executed.set(name, { skipped: /<(?:skipped|disabled)\b/.test(body), failed: /<(?:failure|error)\b/.test(body) });
   }
+  // A registered command is an acceptance suite, so any skipped or todo test invalidates its evidence,
+  // including cases that were not individually named as capability scenarios.
+  for (const [name, result] of executed) {
+    if (result.skipped) errors.push(`Scenario was skipped or todo: ${name}`);
+  }
   for (const scenario of scenarios) {
     const result = executed.get(scenario);
     if (!result) errors.push(`Scenario did not execute exactly: ${scenario}`);
-    else if (result.skipped) errors.push(`Scenario was skipped or todo: ${scenario}`);
     else if (result.failed) errors.push(`Scenario failed: ${scenario}`);
   }
   return errors;
