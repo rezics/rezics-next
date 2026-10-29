@@ -135,7 +135,8 @@ test('default own-reference refresh survives reopen without rewriting bootstrap 
 
     expect((await reopened.runRecords(registration, input(edition, work))).status).toBe('committed');
     const proposals = native.requests.flatMap((request) => request.commands).filter(
-      (command) => command.op === 'propose' && command.source.external_id === edition.key,
+      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+        command.op === 'propose' && command.source.external_id === edition.key,
     );
     const resolved = proposals.find(
       (command) => command.statement.property.id === 'schema:exampleOfWork' &&
@@ -152,7 +153,7 @@ test('default own-reference refresh survives reopen without rewriting bootstrap 
     expect(native.requests.length).toBe(before);
     expect(native.receipts.get(bootstrap!.key)).toEqual(initialRow);
     expect(native.requests.flatMap((request) => request.commands).filter((command) => command.key === bootstrap!.key))
-      .toEqual([bootstrap]);
+      .toEqual([bootstrap!]);
   } finally {
     await reopened.close();
     rmSync(directory, { recursive: true, force: true });
