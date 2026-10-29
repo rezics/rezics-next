@@ -3909,6 +3909,11 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
       events().some((event) => event.kind === 'run' && String(event.script).includes('echo landing')),
       JSON.stringify(events().map(({ kind, requested, granted, reason, landingWaitingSlots, landingMarkerFiles, landingMarkers }) => ({ kind, requested, granted, reason, landingWaitingSlots, landingMarkerFiles, landingMarkers }))),
     ).toBe(true);
+    await waitFor(() => events().some((event) =>
+      event.kind === 'slot' && event.granted &&
+      String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
+      String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
+    ), 10_000);
     const grants = events().filter((event) => event.kind === 'slot' && event.granted);
     const landingGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_PRIORITY landing'));
     const ordinaryGrant = grants.findIndex((event) =>
