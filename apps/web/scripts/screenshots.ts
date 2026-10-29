@@ -429,7 +429,6 @@ async function captureScreenshots(options: Options): Promise<number> {
     const jobs = stories.flatMap((id) =>
       options.locales.flatMap((locale) => options.themes.map((theme) => ({ id, locale, theme }))),
     );
-<<<<<<< HEAD
     const { files, failures } = await capture(browser, origin, jobs, options.out, options.width, progress);
     return reportCaptureResults(files, failures, (text) => process.stdout.write(text));
   } finally {
