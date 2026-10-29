@@ -4,6 +4,8 @@ import type { Pool } from 'pg';
 import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
+import { shareAccount } from '../access/account-share.ts';
+import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,
@@ -14,6 +16,7 @@ import {
   runCommand,
   type CommandEvent,
   type CommandAuthorization,
+  type CommandTransaction,
   type CommandOutcome,
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
@@ -370,16 +373,26 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     order: Order,
     sessionId: string,
     intent: PrincipalCommandReceipt,
-  ): CommandAuthorization {
+  ): CommandAuthorization & { permitsBenefits(tx: CommandTransaction): boolean } {
+    const activeBuyers = new WeakSet<CommandTransaction>();
     const r = route(order.id);
     const expectedDigest = digest({ orderId: order.id });
     return {
       action: 'commerce.checkout.apply',
       resource: { route: r, id: order.id },
       denied: () => new GrantDeniedError(),
+      permitsBenefits: (tx) => activeBuyers.has(tx),
       async authorize(tx) {
         if (intent.kind !== 'commerce.checkout.apply' || !Buffer.from(intent.digest).equals(expectedDigest))
           throw new GrantDeniedError();
+        // Account before order in admission and both apply ports. Keep this evidence
+        // local to the physical transaction: a serialization retry must fence again.
+        try {
+          await shareAccount(tx, order.buyerAccountId);
+          activeBuyers.add(tx);
+        } catch (error) {
+          if (!(error instanceof LifecycleDeniedError)) throw error;
+        }
         const current = await store.lockOrder(tx, r, order.id);
         if (!current || current.buyerAccountId !== order.buyerAccountId || current.checkoutSessionId !== sessionId)
           throw new GrantDeniedError();
@@ -437,7 +450,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       throw error;
     }
   }
-  /** Legacy trusted split-read apply. Runtime callers remain unfenced until compatible cutover. */
+  /** Legacy trusted split-read apply; terminal benefits share the native fence. */
   function applyCheckoutSnapshot(body: CheckoutSnapshot, workflowId: string) {
     return applySnapshot(body, workflowId);
   }
@@ -468,12 +481,13 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           key: key(stepCommandKey(workflowId, 'apply')),
           digest: digest({ orderId: id }),
         };
+    const authorization = refreshAuthorization(claim?.order ?? order, snapshot.sessionId, intent);
     try {
       const result = await runCommand(
         pool,
         {
           partition: partitionOf(r),
-          ...(claim ? { authorization: refreshAuthorization(claim.order, snapshot.sessionId, intent) } : {}),
+          authorization,
           receipt: {
             actorAccountId: order.buyerAccountId,
             ...intent,
@@ -496,7 +510,19 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
             snapshot.transactions.map((t) => t.id),
           );
           if (!state || state.order.checkoutSessionId !== snapshot.sessionId) throw new Unchanged();
-          const decision = decideCheckout(state, snapshot, claim ? 'admitted-revision' : 'legacy-time');
+          let decision = decideCheckout(state, snapshot, claim ? 'admitted-revision' : 'legacy-time');
+          if (
+            decision.changed &&
+            !authorization.permitsBenefits(tx) &&
+            (decision.entitlement.kind === 'grant' || decision.entitlement.kind === 'restore')
+          ) {
+            // Terminal buyers retain financial truth, never a new private benefit.
+            // Recompute change detection after removing only the benefit effect.
+            decision =
+              decision.settlement === state.order.settlement && decision.newTransactions.length === 0
+                ? { changed: false }
+                : { ...decision, entitlement: { kind: 'none' } };
+          }
           if (!decision.changed) throw new Unchanged();
           const applied = await store.applyCheckoutDecision(tx, r, state, decision, {
             transactionId: command.transactionId,

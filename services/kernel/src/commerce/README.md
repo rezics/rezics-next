@@ -192,12 +192,14 @@ contains the committed revision and unchanged captured terms; it is metadata, no
 An unsuccessful/ambiguous begin returns no usable claim; abandon it and begin a fresh physical invocation.
 A completed intent exits via rollback with no admission receipt, revision, envelope or provider read.
 
-Both ports construct explicit module-internal `CommandAuthorization` for the original immutable apply intent,
-lock and validate its exact native order/Session, and retain the buyer account receipt principal through the
+Admission and both claimed and legacy apply construct explicit module-internal `CommandAuthorization` for the
+original immutable apply intent, lock and validate its exact native order/Session, and retain the buyer account receipt principal through the
 existing service receipt attribution with null command basis. They create no AccountActor, token, scope or
 active-account restriction. Execute authorization precedes all receipt access; the metadata helper runs under
-that same lock. Financial service admission supplies no personal-benefit permission. The separate terminal
-benefit fence remains required before runtime cutover; this slice retains existing settlement benefit behavior.
+that same lock. Financial service admission supplies no personal-benefit permission. Each physical attempt first
+acquires the real buyer account share barrier, before the order lock. Only an actual `LifecycleDeniedError`
+suppresses grant/restore; terminal buyers can still admit and apply financial reconciliation. Active-benefit
+evidence belongs to that transaction and is reacquired on every retry.
 
 Claimed apply locks before every business decision, keeps the captured revision through native retries, and
 returns `{changed:false, superseded:true}` with rollback and no apply receipt when superseded. Business unchanged
@@ -214,7 +216,7 @@ They use the native profile fixture's provisioning, signed Access identities and
 commands, plus the official Stripe adapter against the loopback fixture. This proves only the native slice.
 The existing [full SDK user cases](../../test/commerce/session-refresh-user-cases.test.ts) remain required.
 Native locator binding and transport bounds, combined fresh Session-queue wiring, compatible persisted-history/
-executor cutover, paid-order/event repair, terminal benefits and composed/unrelated-data growth captures remain pending.
+executor cutover, paid-order/event repair and composed/unrelated-data growth captures remain pending.
 
 ### SDK recovery, cutover and physical bounds
 
@@ -321,7 +323,7 @@ An order once paid remains paid. Benefit access follows current provider state s
 - Active chargebacks revoke; won disputes restore absent a full refund; lost disputes stay revoked. Warnings,
   inquiries and prevented disputes retain access under the existing policy.
 - At terminal buyer T, the fence always prevents benefit restoration or private reads, even when financial truth
-  still needs reconciliation. Current trusted settlement does not implement that terminal-benefit fence.
+  still needs reconciliation. Both trusted apply ports implement that terminal-benefit fence.
 
 Before grant/restore, use the real [`shareAccount`](../access/account-share.ts) barrier in the same native
 transaction. Its account share lock serializes against tombstoning until commit; a plain account read does not.
@@ -331,6 +333,14 @@ recreation and recompute the remaining decision; do not swallow availability fai
 Financial truth survives terminal buyers and creators: permitted retained named transactions and incremental
 royalty statements still reconcile, without recreating private relations. This barrier is not the whole financial
 erasure participant and supplies no retention exemption.
+
+The apply command removes a denied grant/restore from its decision and recomputes whether financial effects
+remain. A new named transaction or settlement change still commits atomically with its original buyer-attributed
+receipt and outbox; a benefit-only change becomes unchanged with no apply receipt. Existing revoked entitlements
+remain revoked. Availability, deadline and SQL errors propagate through the native executor and roll back the
+entire apply. Stable completion still precedes a new claim, and original receipt replay precedes the captured
+revision check without executing benefits again. The [native terminal-benefit cases](../../test/commerce/terminal-benefit.test.ts)
+use fresh Auth deletion, real account/order lock schedules and PostgreSQL failure witnesses for both apply ports.
 
 Pending refund revocation is REZICS access policy, not proof money moved. Financial accounting uses actual signed
 Balance Transactions once, including refund/dispute reversals, with separate currencies and integer shares.
@@ -514,12 +524,13 @@ Parent/root authorization and royalty source reads are separate anchored checkou
 
 ### Native refresh admission and application
 
-- Touches: one bound order lock and metadata-only stable completion PK lookup; if uncompleted, one real conditional
+- Touches: one buyer-account PK share barrier before one bound order lock and metadata-only stable completion PK lookup; if uncompleted, one real conditional
   revision claim, order-updated event, attempt receipt and envelope. Release before bounded provider identity/full
   reads. Apply adds native account share/order/benefit locks, named transaction probes/changes and stable receipt,
   plus incremental creator accounting and shared DBOS persistence. No history/catalogue scan or cross-home held
   connection; all retries, claims, no-ops, events, payload bytes and pool time are charged.
-- Bound: constant keyed claim/lookup work plus bounded named apply work, using existing maximum 256 transactions
+- Bound: one additional keyed account share read per physical admission/apply attempt, including retries, completed
+  intents and terminal suppression, plus constant keyed claim/lookup work and bounded named apply work, using existing maximum 256 transactions
   and 257-key total-count lookahead. Current provider caps are 100 refunds and 10 disputes, with advancing-page
   validation. The actual provider adapter now enforces pagination, nested expansion/fee-detail bytes, total
   sends and its operation deadline as above; combined native/provider attempts still need enforcement/evidence. Stripe steps currently allow five attempts plus SDK network retries; no combined
