@@ -106,6 +106,7 @@ Kind metadata is a fixed bounded page in configured order, with data ID/localize
 control for continuation. Counts are attempted once on the initial query and retained across hit continuations;
 changed conditions start a new query. Later metadata pages may mark counts unavailable. The research values
 Smax=2/C=2/K_page=8 remain proposals pending first native measurement, not frozen output or engine bounds.
+Metadata continuation does not exclude unshown kinds from hits or authorize another hit/count enumeration.
 
 ## Implementation status and native acceptance prerequisites
 
@@ -168,10 +169,13 @@ These are implementation closure requirements, not native cases supplied or pass
   maintained evidence or checked witnesses, whole-query safety, original/terminal support and retained cursor work.
 - Bound: share [Universal search Cost](search-conditions.md#mixed-kind-ranked-page-and-kind-counts) and
   [Filtered lists budgets](filtered-lists.md#budgets); no per-kind/source allowance. Counts include raw rejects,
-  duplicates, lookahead, shard/iterator work, SQL, Access and bytes. Proposed C=2 enumeration runs only in a spare
-  third round, at most `min(C,2*remaining+1)` candidates; a full page permits one. Hit refill means unavailable
-  counts. No repeated count enumeration on hit continuation. At ten million matches use exact fixed maintained
-  evidence, capped fully checked witnesses or unavailable; sparse `terminate_after` is no examined-work proof.
+  duplicates, lookahead, shard/iterator work, SQL, Access and bytes. Proposed C=2 permits one physical enumeration
+  only in a spare third round, at most `min(C,2*remaining+1)` raw candidates total across kinds; a full page
+  permits one. Never reset remaining slots. Hit refill or a broader source set that cannot fit means unavailable
+  counts. Maintained fixed evidence also shares the fixed/statement/byte budget. These are proposal constraints,
+  not measured native bounds. No repeated count enumeration on hit continuation. At ten million matches use
+  exact fixed maintained evidence, capped fully checked witnesses or unavailable; sparse `terminate_after` is
+  no examined-work proof.
 - Growth check: Search's native merged-page capture at 64/512/4096 grows matches, corpus, kinds and reductions
   independently at fixed page size. Cover dominant/rare kinds, broader disjunction, nested OR/NOT, exact zero,
   certified positive lower bounds, unavailable evidence, partial shards and excluded-row reductions arriving and

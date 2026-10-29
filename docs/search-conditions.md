@@ -4,6 +4,8 @@ This document owns the adopted universal search contract. [Filtered lists](filte
 admission, useful pages, disclosure, identity and numerical ceilings; [Search](../services/kernel/src/search/README.md)
 owns execution. [Universal search research](research/universal-search.md) supplies evidence, not runtime proof.
 This adoption does not deliver native producers, change a frozen ABI or certify unmeasured bounds.
+The design is adopted for implementation. Native measurement that contradicts a Cost obligation reopens that
+precise decision; another design or document-review round is not an implementation prerequisite.
 
 ## One request and configured kinds
 
@@ -147,11 +149,13 @@ including suspension, removes discovery from T; no field, reason or order reveal
 Lifting a fence is ordinary publication; verification reversal is a field reduction.
 
 First account text is ONLY handle and displayName; biography/links require a later Accounts decision. Catalogue
-descriptions remain searchable. Account summary preserves the exact public `ids` identity item (`id`, `kind`,
+descriptions remain searchable. Never index email, credentials, consent, controller, birth date or preferences.
+Account summary preserves the exact public `ids` identity item (`id`, `kind`,
 `handle`, `displayName`, active public `state`, `automated`, `operatorId`), avatar under the profile guard and
 verification while the actual agent read still returns that account. Exact handle treatment uses only the
 ACTIVE claim, case-insensitively under the owner rule. Former-handle forwarding/`movedTo` serves direct lookup,
-not search alias ranking. Copies enter shared-history custody/minimization through the existing fixed identity
+not search alias ranking. A catalogue Person may link an account only under that same agent-read guard.
+Copies enter shared-history custody/minimization through the existing fixed identity
 participant; fence, deletion and erasure remove discovery immediately, without ordinary projection lag.
 
 ## Global consumed frontier
@@ -267,9 +271,11 @@ These are acceptance obligations; native SQL, Access and engine feasibility are 
   `64+16*input` rows, 16 SQL statements/backend, four searches, one connection/backend, four MiB response. Stronger
   Library 100-row steps still apply. Total is linear in finite relevant input; replay rereads at most one step.
   At most 32 live owner outputs, 24-hour idle expiry; public one current/one building generation per admitted
-  definition, not permission for a per-request public store. Only the exact authorized one-owner exception above
-  may prepare. Config changes maintain compiled Zone rows; new-query release admission resolves Agent roster,
-  never mutating captured literal OR. Subject text copies update holders in paged steps; changed dependencies
+  definition, not permission for a per-request public store. Private owner preparation requires the exact
+  authorized one-owner exception above; it grants no protected Content preparation authority. Public preparation
+  retains its existing admitted-definition authority. Config changes maintain compiled Zone rows; new-query
+  release admission resolves Agent roster, never mutating captured literal OR. Subject text copies update holders
+  in paged steps; changed dependencies
   locate affected definitions through indexes. Storage includes heap/TOAST, all indexes/positions, MVCC/WAL,
   abandoned generations and cleanup; directory/result/frontier/intent copies require custody and viewer erasure.
 - Growth check: 64/512/4096 inputs, holders and dependencies; bounded steps, linear total, interruption/replay,
@@ -283,13 +289,24 @@ These are acceptance obligations; native SQL, Access and engine feasibility are 
   privacy, summaries, configured metadata and initial broader disjunctive count evidence.
 - Bound: no new allowance. Native composition must fit 12 SQL/backend for one read or `8+4R_reads` composed,
   16 reads/128 total slots, existing round/candidate/engine/Access/byte ceilings and one connection/backend.
-  Each independent Collection output consumes actual reads/slots even on the same database. Research Smax=2,
-  C=2 and K_page=8 remain PROPOSALS until first implementation measures the complete envelope. Proposed staged
-  `n+1,n+1`, then competitive third-round `2r+1`, derives `H<=4n+3` for n=1..100; it proves candidate algebra,
-  not native SQL/Access/engine bounds. All heads/EOF are required before consumption. Count enumeration runs only
-  when the third round is spare, at most `min(C,2r+1)` raw candidates: a full page permits ONE, not two. Hit refill
-  makes C=0/unavailable. Count source/SQL/engine/privacy work must fit the same envelope; no match-linear direct
-  aggregation, repeated continuation counts or `terminate_after` fiction about sparse/shard iterator work.
+  S counts distinct physical reads induced by the request, not configured kinds or registered stores. Each
+  independent Collection output consumes actual reads/slots even on the same database; sixteen OR outputs
+  remain sixteen reads until an actual indexed coalesced producer replaces them.
+  Research Smax=2, C=2 and K_page=8 remain PROPOSALS until first implementation measures the complete envelope.
+  Its proposed one merged read requests n slots once; internal fetches share that read's envelope. Independently
+  invoked reads retain composed accounting. This planner boundary is not an implemented source or allowance.
+  Proposed staging fetches `n+1` from each of two sources in separate rounds before consumption, then shares
+  `2r+1` across competitive exhausted buffers in round three, where r is unfilled slots. It derives `H<=4n+3`
+  for n=1..100, proving candidate algebra, not native SQL/Access/engine bounds. Every round still fits at most
+  two engine calls and one owner seek, including rating phases and any split refill. All heads/EOF are required
+  before consumption; no equal per-kind share substitutes for dominant-source top n+1.
+  The proposed count plan permits only one physical enumeration when round three is spare, at most
+  `min(C,2r+1)` raw candidates TOTAL across kinds: a full page permits ONE, not two. Never reset remaining slots
+  to buy count work. Hit refill makes C=0/unavailable; broader count source sets that do not fit also give
+  unavailable counts. Fixed maintained evidence must fit the same fixed/statement/byte budget. Count source,
+  SQL, engine and privacy work share the envelope; no match-linear direct aggregation, repeated continuation
+  counts or `terminate_after` fiction about sparse/shard iterator work. Unresolved hit work cannot become a short
+  successful page; direct/prepared admission and useful finite progress remain required.
 - Growth check: Search owns the merged-page native capture using Performance's harness at 64/512/4096. Measure
   actual S=1 and proposed Smax, n=1/2/20/100, dominant kinds, overlap/rejects, all sorts/phases/depth, Collection OR
   read multiplication, source failure and broader count authorization/privacy. Include common-page 16 reads/128
@@ -318,6 +335,9 @@ Required missing producers and their native failing/unsupported cases are:
 - Commerce with Search/Semantic: structural directory, equivalent owner text/rank, finite complete evaluation and
   activation/custody; both sparsity axes, manual-only members, label/history-only presence, original/survivor
   disclosure, interrupted activation and paged text-holder updates remain required.
+- Commerce with Search: owner/Collection count evidence; private, manual, dynamic and foreign published
+  populations need exact counter/privacy atomicity or fully checked witnesses, without exposing owner facts.
+  Existing exact subject-Collections counters certify only their own population, not arbitrary query counts.
 - Accounts/Access with Commerce: actual logical Everything operational authorization/native source eligibility;
   more-than-four-home routing, same-viewer fences and OR branches outside Everything must be tested. Search with
   HTTP/Access owns the verified request bridge; anonymous/string/foreign cases must write zero.
