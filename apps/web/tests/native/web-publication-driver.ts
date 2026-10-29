@@ -125,23 +125,34 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         `Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`,
       );
 
-    const created = new Map<string, { id: string; label: string; type: string }>();
+    const created = new Map<string, { id: string; label: string; labels: Record<string, string>; type: string }>();
     const entries = Object.entries(data.subjects).map(([key, value]) => ({
       key,
       type: typeByKey[key]!,
       label: titleOf(value),
+      labels: { en: titleOf(value), ...('zhHansTitle' in value ? { 'zh-Hans': value.zhHansTitle } : {}) } as Record<string, string>,
       descriptions: 'description' in value ? { en: String(value.description) } : undefined,
     }));
     for (const view of data.traversal.views) {
       const count = data.traversal.countPerView;
       for (let index = 1; index <= count; index++) {
         const key = `${view}-${String(index).padStart(3, '0')}`;
-        entries.push({ key, type: 'schema:Book', label: `${view} ${index}`, descriptions: undefined });
+        entries.push({ key, type: 'schema:Book', label: `${view} ${index}`, labels: { en: `${view} ${index}` }, descriptions: undefined });
       }
       entries.push({
         key: `${view}-withheld`,
         type: 'schema:Book',
         label: `${view} withheld`,
+        labels: { en: `${view} withheld` },
+        descriptions: undefined,
+      });
+    }
+    for (const [index, title] of [...data.search.matchingBooks].reverse().entries()) {
+      entries.push({
+        key: `search-book-${index + 1}`,
+        type: 'schema:Book',
+        label: title,
+        labels: { en: title, [data.search.locale]: title },
         descriptions: undefined,
       });
     }
@@ -193,7 +204,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       batches.map(async ({ persona, entries: writerEntries }) => {
         for (let start = 0; start < writerEntries.length; start += fixtureBatchSize) {
           const batch = writerEntries.slice(start, start + fixtureBatchSize);
-          const commands = batch.map(({ key, type, label, descriptions }) => ({
+          const commands = batch.map(({ key, type, labels, descriptions }) => ({
             op: 'create',
             key,
             source: {
@@ -204,7 +215,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
               converter_revision: 'web-publication-fixture@1',
               field_group: 'facts',
             },
-            subject: { type, labels: { en: label }, ...(descriptions ? { descriptions } : {}) },
+            subject: { type, labels, ...(descriptions ? { descriptions } : {}) },
           }));
           let response: Response;
           response = await kernel(
@@ -225,7 +236,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
               throw new Error(
                 `Could not create fixture subject ${item.key}: API status ${item.status} ${JSON.stringify(item.problem)}`,
               );
-            created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
+            created.set(item.key, { id: item.value.id, label: entry.label, labels: entry.labels, type: entry.type });
           }
         }
       }),
@@ -234,7 +245,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
       if (!subject) throw new Error(`Fixture subject ${key} was not created`);
-      return new URL(subjectPath(subject.id, subject.label, locale), publicOrigin).href;
+      return new URL(subjectPath(subject.id, subject.labels[locale] ?? subject.label, locale), publicOrigin).href;
     };
     const subjects = Object.fromEntries(
       [...created.keys()].map((key) => [key, urlFor(key)]),
