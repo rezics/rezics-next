@@ -354,6 +354,7 @@ if (script.includes('/proc/loadavg')) {
     multiWaitingId,
     landingWaitingSlots,
     landingWaitingId,
+    landingMarkers,
     landingMarkerFiles: readdirSync(dir).filter((name) => name.startsWith(landingMarkerPrefix)),
   };
   log(probeEvent);
