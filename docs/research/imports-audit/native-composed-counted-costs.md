@@ -550,5 +550,44 @@ backends, the same backend value under the other actual owner, reversed repeated
 by success, full raw foreground/background array retention and canonical cost immutability. Those hand-built inputs
 prove projection association only. Native proof remains the unchanged portable suite under the existing
 `growth-outcomes.test.ts` wrapper. The implementation is limited to the four assigned paths; no acceptance or
-specification contradiction was found. The acceptance and typecheck receipts for the implementation commit are
-recorded below after the manager returns their results.
+specification contradiction was found.
+
+## Implementation receipts
+
+The implementation is based on `4c61cd6000e7120f9e2cd45014fc998a5c7b68ca`, with code committed at
+`0347a4037d` and the corrected focused-test expectation at `e4a8cf9798`. The root `bun run typecheck` passed at the
+latter revision. The focused acceptance command ran at that same revision:
+
+- `growth-plan-coverage.test.ts`: 1 test passed, with 30 expectation calls.
+- `growth-outcomes.test.ts`: the wrapper failed. Its 17 child cases all stopped during fixture seed/settle, before
+  measured Imports operations. The child names were: first independent converter has bounded record work and zero
+  database or network access; second independent converter has bounded record work and zero database or network
+  access; third independent converter has bounded record work and zero database or network access; fourth independent
+  converter has bounded record work and zero database or network access; all four converters reject oversized records
+  within the hard record budget; dump streaming reads supplied bytes once and yields with bounded read ahead and page
+  memory; native import growth preserves canonical PostgreSQL capture and exact separate SQLite transport and
+  derived work bounds; unchanged refresh still point seeks the fence without reading source or subject history; one
+  new record uses an indexed missing key seek and bounded authoritative writes; one changed record uses per key
+  reconciliation and bounded authoritative writes; converter revision change has the same bounded indexed
+  reconciliation cost; mass disappearance is detected from maintained counters before publishing; allowed vanished
+  records use bounded source generation keyset pages; bulk client requests grow only with the separately bounded
+  command batch; bulk client rejects a batch beyond the hard command cap before publishing; private 300 command plans
+  split by both public command and byte caps; configured platform reader cap accepts exactly 64 KiB and rejects the
+  next content byte independently of source caps.
+
+The first child failure was `first independent converter has bounded record work and zero database or network
+access`. It raised `GrowthSettleInfrastructureError: VACUUM did not make every page all-visible after three rounds;
+relations: [{"relation":"core.consumer_lag","pages":1,"visible":0}]` from the seed path at
+`api-population.ts:139`. This is a seed/settle harness receipt for Growth Review; Imports did not change seed, settle,
+retry, deadline, scheduling, or bounds. The run produced no measured native Imports SQL, so it provides no native
+plan/backend pairing evidence for the repaired projection. The focused hand-built association case passed but is not
+native proof.
+
+The earlier supplied native receipt remains the only execution evidence for the reported missing-plan failures:
+the vanished-page occurrence was the successful `SELECT operation FROM semantic.fact WHERE route =
+$1::integer AND subject_id = $2::uuid AND slot_id = $3::uuid ORDER BY log_seq DESC LIMIT 1` from
+`slots-read-operation.sql`, with a null statement error and an empty projected `explain`; the isolated new-record case
+named `read-item-types.sql`. That receipt states raw plans and inclusive client calls were retained, but does not
+expose a matching native plan/backend tuple for those occurrences. I do not treat the unit fixture's explicit backend
+IDs as native evidence. The focused acceptance therefore remains qualified by the independent settle failure rather
+than claimed all-green.
