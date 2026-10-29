@@ -2,10 +2,22 @@ import { expect, test } from 'bun:test';
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, POSTGRES_IMAGE, run, schemaDump, ownDatabase } from '../scripts/database.ts';
+import { DEFAULT_RUN_TIMEOUT, migrate, POSTGRES_IMAGE, run, schemaDump, ownDatabase } from '../scripts/database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const timeout = 60_000;
+
+test('run keeps its 120-second default and reports ETIMEDOUT for a child exceeding a per-call timeout', () => {
+  expect(DEFAULT_RUN_TIMEOUT).toBe(120_000);
+  expect(run(process.execPath, ['--eval', 'console.log("completed")'])).toBe('completed');
+  let failure: unknown;
+  try {
+    run(process.execPath, ['--eval', 'setTimeout(() => {}, 10_000)'], process.env, { timeout: 50 });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toHaveProperty('code', 'ETIMEDOUT');
+});
 
 function traceDocker(action: (commands: () => string[][], temporary: string) => void): void {
   const docker = Bun.which('docker');

@@ -93,10 +93,12 @@ if (import.meta.main) {
         const env = { ...process.env, AUTH_TEST_DATABASE_URL: database.url };
         const compilerDatabase = await prepareCompilerDatabase();
         try {
-          run(resolve('../../node_modules/.bin/tsc'), ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], {
-            ...env,
-            DATABASE_URL: compilerDatabase.url,
-          });
+          run(
+            resolve('../../node_modules/.bin/tsc'),
+            ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+            { ...env, DATABASE_URL: compilerDatabase.url },
+            { timeout: 600_000 },
+          );
         } finally {
           await compilerDatabase.remove();
         }

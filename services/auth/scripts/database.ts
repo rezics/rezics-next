@@ -6,14 +6,20 @@ const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b16345aa4e5f4e3efd68d68f7cd6d014f529a69108';
 
 export const TEMPLATE_DATABASE = 'rezics_auth_test';
+export const DEFAULT_RUN_TIMEOUT = 120_000;
 
 type TestDatabase = { readonly url: string; readonly container: string; close: () => void };
 
-export function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
+export function run(
+  program: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  { timeout = DEFAULT_RUN_TIMEOUT }: { timeout?: number } = {},
+): string {
   // 30s was short enough to kill a live `docker run` while the daemon was still
   // creating the container. The container then stayed up, owned by this process,
   // and the next start waited even longer. Two minutes still fails a stuck daemon.
-  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8', timeout: 120_000 });
+  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8', timeout });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
   return result.stdout.trim();
