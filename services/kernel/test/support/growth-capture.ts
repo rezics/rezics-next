@@ -971,7 +971,7 @@ async function tupleDetails(database: GrowthDatabase, relation: string, blocks: 
               ${workflowExists ? `(SELECT jsonb_build_object('name',ws.name,'status',ws.status,'queue_name',ws.queue_name,'created_at',ws.created_at)
                   FROM ${workflowTable} ws WHERE to_jsonb(ws)->>'workflow_uuid'=to_jsonb(t)->>'workflow_uuid' LIMIT 1)` : 'NULL::jsonb'} AS workflow
          FROM ${qualified} t
-        WHERE t.ctid >= format('(%s,1)',$1)::tid AND t.ctid < format('(%s,1)',$1::integer+1)::tid
+        WHERE t.ctid >= format('(%s,1)',$1::integer)::tid AND t.ctid < format('(%s,1)',$1::integer+1)::tid
         ORDER BY t.xmin::text::bigint DESC,t.ctid LIMIT 16`,
       [Number(blkno), horizon, primary, text],
     );
