@@ -192,6 +192,15 @@ function failureIncidents(
 }
 
 function recentCommands(attempt: Attempt): string[] {
+  const seen = new Set<string>();
+  const command = (id: unknown, value: unknown): string[] => {
+    if (typeof value !== 'string' || !value.trim()) return [];
+    if (typeof id === 'string') {
+      if (seen.has(id)) return [];
+      seen.add(id);
+    }
+    return [value.trim()];
+  };
   try {
     return readFileSync(attempt.logPath, 'utf8')
       .split(/\r?\n/)
@@ -200,13 +209,16 @@ function recentCommands(attempt: Attempt): string[] {
           const event = JSON.parse(line) as Record<string, any>;
           const payload = event.payload ?? event;
           const item = event.item ?? payload;
-          if (item.type === 'command_execution' && typeof item.command === 'string') return [item.command.trim()];
+          if (item.type === 'command_execution') return command(item.id, item.command);
           if (event.type === 'assistant')
             return (event.message?.content ?? []).flatMap((part: Record<string, any>) =>
-              part.type === 'tool_use' && typeof part.input?.command === 'string' ? [part.input.command.trim()] : [],
+              part.type === 'tool_use' ? command(part.id, part.input?.command) : [],
             );
-          if (payload.type === 'function_call' && typeof (payload.arguments ?? payload.input) === 'string')
-            return [String(payload.arguments ?? payload.input).trim()];
+          if (payload.type === 'function_call') {
+            const input = payload.arguments ?? payload.input;
+            const args = typeof input === 'string' ? JSON.parse(input) : input;
+            return command(payload.call_id ?? payload.id, args?.cmd ?? args?.command);
+          }
           return [];
         } catch {
           return [];
