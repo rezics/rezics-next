@@ -24,6 +24,29 @@ CREATE SCHEMA semantic;
 
 
 --
+-- Name: capture_identity_epoch_source(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_source() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r integer; id uuid;
+BEGIN
+  IF TG_OP='DELETE' THEN r=OLD.route; id=OLD.subject_id;
+  ELSE r=NEW.route; id=NEW.subject_id; END IF;
+  IF TG_TABLE_NAME='merge_member' THEN
+    INSERT INTO semantic.identity_epoch_member_dirty(route,terminal,original)
+    VALUES (r,id,CASE WHEN TG_OP='DELETE' THEN OLD.member_id ELSE NEW.member_id END)
+    ON CONFLICT (route,terminal,original) DO UPDATE SET revision=semantic.identity_epoch_member_dirty.revision+1;
+    IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+  INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES (r,id)
+  ON CONFLICT (route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
+  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END; $$;
+
+
+--
 -- Name: context_extension_head(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -118,6 +141,22 @@ CREATE FUNCTION semantic.prevent_redirect_mutation() RETURNS trigger
 CREATE FUNCTION semantic.prevent_revision_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$ BEGIN RAISE EXCEPTION 'Semantic revisions are immutable' USING ERRCODE = '23514'; END; $$;
+
+
+--
+-- Name: protect_identity_epoch_job(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.protect_identity_epoch_job() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514'; END IF;
+  IF (to_jsonb(NEW)-'state') IS DISTINCT FROM (to_jsonb(OLD)-'state') OR OLD.state='published' THEN
+    RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
 
 
 SET default_tablespace = '';
@@ -399,6 +438,305 @@ CREATE TABLE semantic.hidden_candidate (
     CONSTRAINT hidden_candidate_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT hidden_candidate_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT hidden_candidate_visibility_check CHECK ((visibility = ANY (ARRAY['hidden'::text, 'taken_down'::text])))
+);
+
+
+--
+-- Name: identity_epoch_ack; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_ack (
+    partition_no integer DEFAULT 0 NOT NULL,
+    job_id uuid NOT NULL,
+    step text NOT NULL,
+    version integer NOT NULL,
+    scope_digest text NOT NULL,
+    progress jsonb NOT NULL,
+    native_partition integer NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    native_transaction_id uuid NOT NULL,
+    CONSTRAINT identity_epoch_ack_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT identity_epoch_ack_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text]))),
+    CONSTRAINT identity_epoch_ack_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: identity_epoch_bootstrap_custody; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_bootstrap_custody (
+    partition_no integer DEFAULT 0 NOT NULL,
+    source_partition integer NOT NULL,
+    source_generation bigint NOT NULL,
+    native_transaction_id uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_custody_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: identity_epoch_bootstrap_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_bootstrap_home (
+    partition_no integer NOT NULL,
+    phase text NOT NULL,
+    after_route integer NOT NULL,
+    after_original uuid NOT NULL,
+    after_member uuid NOT NULL,
+    generation bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_bootstrap_home_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
+);
+
+
+--
+-- Name: identity_epoch_bootstrap_page; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_bootstrap_page (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    phase text NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_page_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
+);
+
+
+--
+-- Name: identity_epoch_bootstrap_row; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_bootstrap_row (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    route integer NOT NULL,
+    original uuid NOT NULL,
+    terminal uuid NOT NULL,
+    source_revision bigint NOT NULL,
+    present boolean NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_change; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_change (
+    partition_no integer DEFAULT 0 NOT NULL,
+    job_id uuid NOT NULL,
+    original uuid NOT NULL,
+    previous_terminal uuid NOT NULL,
+    terminal uuid NOT NULL,
+    CONSTRAINT identity_epoch_change_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: identity_epoch_control; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_control (
+    partition_no integer NOT NULL,
+    published_epoch bigint NOT NULL,
+    pending_job uuid,
+    pending_epoch bigint,
+    CONSTRAINT identity_epoch_control_check CHECK (((pending_job IS NULL) = (pending_epoch IS NULL))),
+    CONSTRAINT identity_epoch_control_check1 CHECK (((pending_epoch IS NULL) OR (pending_epoch = (published_epoch + 1)))),
+    CONSTRAINT identity_epoch_control_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT identity_epoch_control_published_epoch_check CHECK ((published_epoch >= 0))
+);
+
+
+--
+-- Name: identity_epoch_dirty; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_dirty (
+    route integer NOT NULL,
+    original uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    captured_revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT identity_epoch_dirty_check CHECK (((revision >= captured_revision) AND (captured_revision >= 0)))
+);
+
+
+--
+-- Name: identity_epoch_effect_receipt; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_effect_receipt (
+    partition_no integer DEFAULT 0 NOT NULL,
+    job_id uuid NOT NULL,
+    step text NOT NULL,
+    effect_key text NOT NULL,
+    kind text NOT NULL,
+    native_partition integer,
+    native_epoch integer,
+    native_position bigint,
+    native_transaction_id uuid,
+    CONSTRAINT identity_epoch_effect_receipt_check CHECK (((native_transaction_id IS NULL) = (native_partition IS NULL))),
+    CONSTRAINT identity_epoch_effect_receipt_check1 CHECK (((native_transaction_id IS NULL) = (native_epoch IS NULL))),
+    CONSTRAINT identity_epoch_effect_receipt_check2 CHECK (((native_transaction_id IS NULL) = (native_position IS NULL))),
+    CONSTRAINT identity_epoch_effect_receipt_kind_check CHECK ((kind = ANY (ARRAY['remove'::text, 'add'::text, 'pending-fence'::text, 'published-fence'::text]))),
+    CONSTRAINT identity_epoch_effect_receipt_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT identity_epoch_effect_receipt_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text])))
+);
+
+
+--
+-- Name: identity_epoch_group; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_group (
+    partition_no integer DEFAULT 0 NOT NULL,
+    terminal uuid NOT NULL,
+    observed_count bigint NOT NULL,
+    CONSTRAINT identity_epoch_group_observed_count_check CHECK ((observed_count >= 0)),
+    CONSTRAINT identity_epoch_group_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: identity_epoch_home_gate; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_home_gate (
+    route integer NOT NULL,
+    destination uuid NOT NULL,
+    original uuid NOT NULL,
+    terminal uuid NOT NULL,
+    epoch bigint NOT NULL,
+    pending_job uuid,
+    pending_epoch bigint,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT identity_epoch_home_gate_check CHECK ((route = ((get_byte(uuid_send(destination), 10) * 256) + get_byte(uuid_send(destination), 11)))),
+    CONSTRAINT identity_epoch_home_gate_check1 CHECK (((pending_job IS NULL) = (pending_epoch IS NULL))),
+    CONSTRAINT identity_epoch_home_gate_epoch_check CHECK ((epoch >= 0)),
+    CONSTRAINT identity_epoch_home_gate_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: identity_epoch_job; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_job (
+    partition_no integer DEFAULT 0 NOT NULL,
+    job_id uuid NOT NULL,
+    epoch bigint NOT NULL,
+    intent jsonb NOT NULL,
+    receipt_key text NOT NULL,
+    receipt jsonb NOT NULL,
+    scope_digest text NOT NULL,
+    state text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT identity_epoch_job_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT identity_epoch_job_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT identity_epoch_job_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'published'::text])))
+);
+
+
+--
+-- Name: identity_epoch_legacy_member; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_legacy_member (
+    partition_no integer DEFAULT 0 NOT NULL,
+    terminal uuid NOT NULL,
+    original uuid NOT NULL,
+    source_partition integer NOT NULL,
+    source_generation bigint NOT NULL,
+    CONSTRAINT identity_epoch_legacy_member_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: identity_epoch_mapping; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_mapping (
+    route integer NOT NULL,
+    original uuid NOT NULL,
+    terminal uuid NOT NULL,
+    epoch bigint NOT NULL,
+    origin text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT identity_epoch_mapping_check CHECK ((route = ((get_byte(uuid_send(original), 10) * 256) + get_byte(uuid_send(original), 11)))),
+    CONSTRAINT identity_epoch_mapping_epoch_check CHECK ((epoch >= 0)),
+    CONSTRAINT identity_epoch_mapping_origin_check CHECK ((origin = ANY (ARRAY['creation'::text, 'published'::text]))),
+    CONSTRAINT identity_epoch_mapping_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: identity_epoch_member_dirty; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_member_dirty (
+    route integer NOT NULL,
+    terminal uuid NOT NULL,
+    original uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    captured_revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT identity_epoch_member_dirty_check CHECK (((revision >= captured_revision) AND (captured_revision >= 0)))
+);
+
+
+--
+-- Name: identity_epoch_native_commit; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_native_commit (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    purpose text NOT NULL,
+    CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text])))
+);
+
+
+--
+-- Name: identity_epoch_original; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_original (
+    partition_no integer DEFAULT 0 NOT NULL,
+    original uuid NOT NULL,
+    terminal uuid NOT NULL,
+    source_partition integer NOT NULL,
+    source_generation bigint NOT NULL,
+    present boolean NOT NULL,
+    CONSTRAINT identity_epoch_original_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: identity_epoch_step; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_step (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    step text NOT NULL,
+    version integer NOT NULL,
+    scope_digest text NOT NULL,
+    frontier jsonb NOT NULL,
+    state text NOT NULL,
+    work jsonb NOT NULL,
+    CONSTRAINT identity_epoch_step_frontier_check CHECK (((octet_length((frontier)::text) <= 2048) AND (jsonb_array_length((frontier -> 'after'::text)) <= 8))),
+    CONSTRAINT identity_epoch_step_state_check CHECK ((state = ANY (ARRAY['more'::text, 'complete'::text]))),
+    CONSTRAINT identity_epoch_step_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text]))),
+    CONSTRAINT identity_epoch_step_version_check CHECK ((version = 1))
 );
 
 
@@ -849,6 +1187,182 @@ ALTER TABLE ONLY semantic.hidden_candidate
 
 
 --
+-- Name: identity_epoch_ack identity_epoch_ack_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_ack
+    ADD CONSTRAINT identity_epoch_ack_pkey PRIMARY KEY (job_id, step);
+
+
+--
+-- Name: identity_epoch_bootstrap_custody identity_epoch_bootstrap_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_custody
+    ADD CONSTRAINT identity_epoch_bootstrap_custody_pkey PRIMARY KEY (source_partition, source_generation);
+
+
+--
+-- Name: identity_epoch_bootstrap_home identity_epoch_bootstrap_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_home
+    ADD CONSTRAINT identity_epoch_bootstrap_home_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: identity_epoch_bootstrap_page identity_epoch_bootstrap_page_partition_no_generation_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_page
+    ADD CONSTRAINT identity_epoch_bootstrap_page_partition_no_generation_key UNIQUE (partition_no, generation);
+
+
+--
+-- Name: identity_epoch_bootstrap_page identity_epoch_bootstrap_page_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_page
+    ADD CONSTRAINT identity_epoch_bootstrap_page_pkey PRIMARY KEY (partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_bootstrap_row identity_epoch_bootstrap_row_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_row
+    ADD CONSTRAINT identity_epoch_bootstrap_row_pkey PRIMARY KEY (partition_no, transaction_id, original, terminal);
+
+
+--
+-- Name: identity_epoch_change identity_epoch_change_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_change
+    ADD CONSTRAINT identity_epoch_change_pkey PRIMARY KEY (job_id, original);
+
+
+--
+-- Name: identity_epoch_control identity_epoch_control_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_control
+    ADD CONSTRAINT identity_epoch_control_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: identity_epoch_dirty identity_epoch_dirty_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_dirty
+    ADD CONSTRAINT identity_epoch_dirty_pkey PRIMARY KEY (route, original);
+
+
+--
+-- Name: identity_epoch_effect_receipt identity_epoch_effect_receipt_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_effect_receipt
+    ADD CONSTRAINT identity_epoch_effect_receipt_pkey PRIMARY KEY (job_id, step, effect_key);
+
+
+--
+-- Name: identity_epoch_group identity_epoch_group_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_group
+    ADD CONSTRAINT identity_epoch_group_pkey PRIMARY KEY (terminal);
+
+
+--
+-- Name: identity_epoch_home_gate identity_epoch_home_gate_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_home_gate
+    ADD CONSTRAINT identity_epoch_home_gate_pkey PRIMARY KEY (route, destination, original);
+
+
+--
+-- Name: identity_epoch_job identity_epoch_job_epoch_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_job
+    ADD CONSTRAINT identity_epoch_job_epoch_key UNIQUE (epoch);
+
+
+--
+-- Name: identity_epoch_job identity_epoch_job_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_job
+    ADD CONSTRAINT identity_epoch_job_pkey PRIMARY KEY (job_id);
+
+
+--
+-- Name: identity_epoch_job identity_epoch_job_receipt_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_job
+    ADD CONSTRAINT identity_epoch_job_receipt_key_key UNIQUE (receipt_key);
+
+
+--
+-- Name: identity_epoch_legacy_member identity_epoch_legacy_member_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_legacy_member
+    ADD CONSTRAINT identity_epoch_legacy_member_pkey PRIMARY KEY (terminal, original);
+
+
+--
+-- Name: identity_epoch_mapping identity_epoch_mapping_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_mapping
+    ADD CONSTRAINT identity_epoch_mapping_pkey PRIMARY KEY (route, original);
+
+
+--
+-- Name: identity_epoch_member_dirty identity_epoch_member_dirty_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_member_dirty
+    ADD CONSTRAINT identity_epoch_member_dirty_pkey PRIMARY KEY (route, terminal, original);
+
+
+--
+-- Name: identity_epoch_native_commit identity_epoch_native_commit_partition_no_transaction_id_ep_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_native_commit
+    ADD CONSTRAINT identity_epoch_native_commit_partition_no_transaction_id_ep_key UNIQUE (partition_no, transaction_id, epoch, "position");
+
+
+--
+-- Name: identity_epoch_native_commit identity_epoch_native_commit_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_native_commit
+    ADD CONSTRAINT identity_epoch_native_commit_pkey PRIMARY KEY (partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_original identity_epoch_original_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_original
+    ADD CONSTRAINT identity_epoch_original_pkey PRIMARY KEY (original);
+
+
+--
+-- Name: identity_epoch_step identity_epoch_step_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_step
+    ADD CONSTRAINT identity_epoch_step_pkey PRIMARY KEY (partition_no, transaction_id, job_id, step);
+
+
+--
 -- Name: inbound_link_context_count inbound_link_context_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -1017,6 +1531,34 @@ CREATE INDEX fact_label ON semantic.fact USING btree (route, subject_id, languag
 --
 
 CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (kind <> 'statement'::text);
+
+
+--
+-- Name: identity_epoch_dirty_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_dirty_pending ON semantic.identity_epoch_dirty USING btree (route, original) WHERE (revision > captured_revision);
+
+
+--
+-- Name: identity_epoch_member_dirty_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_member_dirty_pending ON semantic.identity_epoch_member_dirty USING btree (route, terminal, original) WHERE (revision > captured_revision);
+
+
+--
+-- Name: identity_epoch_one_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_one_pending ON semantic.identity_epoch_job USING btree (state) WHERE (state = 'pending'::text);
+
+
+--
+-- Name: identity_epoch_original_group; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_original_group ON semantic.identity_epoch_original USING btree (terminal, original) WHERE present;
 
 
 --
@@ -1216,6 +1758,83 @@ CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH
 
 
 --
+-- Name: identity_epoch_bootstrap_custody identity_epoch_bootstrap_custody_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_bootstrap_custody_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_custody FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_bootstrap_page identity_epoch_bootstrap_page_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_bootstrap_page_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_page FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_bootstrap_row identity_epoch_bootstrap_row_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_bootstrap_row_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_row FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: merge_member identity_epoch_capture_member; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_capture_member AFTER INSERT OR DELETE OR UPDATE ON semantic.merge_member FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_source();
+
+
+--
+-- Name: redirect identity_epoch_capture_redirect; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_capture_redirect AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_source();
+
+
+--
+-- Name: subject identity_epoch_capture_subject; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_capture_subject AFTER INSERT OR DELETE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_source();
+
+
+--
+-- Name: identity_epoch_change identity_epoch_change_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_change_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_change FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_change identity_epoch_change_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_change_immutable_truncate BEFORE TRUNCATE ON semantic.identity_epoch_change FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_job identity_epoch_job_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_job_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_job FOR EACH ROW EXECUTE FUNCTION semantic.protect_identity_epoch_job();
+
+
+--
+-- Name: identity_epoch_native_commit identity_epoch_native_commit_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_native_commit_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_native_commit FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_step identity_epoch_step_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_step_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_step FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: moderation moderation_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -1389,6 +2008,62 @@ ALTER TABLE ONLY semantic.fact
 
 ALTER TABLE ONLY semantic.hidden_candidate
     ADD CONSTRAINT hidden_candidate_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: identity_epoch_ack identity_epoch_ack_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_ack
+    ADD CONSTRAINT identity_epoch_ack_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+
+
+--
+-- Name: identity_epoch_bootstrap_page identity_epoch_bootstrap_page_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_page
+    ADD CONSTRAINT identity_epoch_bootstrap_page_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_bootstrap_row identity_epoch_bootstrap_row_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_row
+    ADD CONSTRAINT identity_epoch_bootstrap_row_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_bootstrap_page(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_change identity_epoch_change_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_change
+    ADD CONSTRAINT identity_epoch_change_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+
+
+--
+-- Name: identity_epoch_effect_receipt identity_epoch_effect_receipt_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_effect_receipt
+    ADD CONSTRAINT identity_epoch_effect_receipt_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+
+
+--
+-- Name: identity_epoch_mapping identity_epoch_mapping_route_original_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_mapping
+    ADD CONSTRAINT identity_epoch_mapping_route_original_fkey FOREIGN KEY (route, original) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: identity_epoch_step identity_epoch_step_partition_no_transaction_id_native_epo_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_step
+    ADD CONSTRAINT identity_epoch_step_partition_no_transaction_id_native_epo_fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position");
 
 
 --
