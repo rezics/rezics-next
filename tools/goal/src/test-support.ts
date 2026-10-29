@@ -165,16 +165,18 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
   const ensureDev = () => {
     if (!repositoryGit(h.root, 'branch', '--list', 'dev')) repositoryGit(h.root, 'branch', 'dev', 'main');
   };
-  function dispatch(file: string, after: string[] = [], acceptance = ['true']) {
+  function dispatch(file: string, after: string[] = [], acceptance = ['true'], goal = 'fixture') {
     const briefFile = join(h.settings.stateDirectory, `brief-${crypto.randomUUID()}.md`);
     writeFileSync(
       briefFile,
       markdown
+        .replace('goal: fixture', `goal: ${goal}`)
         .replace('paths: [result.txt]', `paths: [${file}]`)
         .replace('command: [bun, test]', `command: ${JSON.stringify(acceptance)}`)
         .replace('waiting: []', `waiting: []\nafter: ${JSON.stringify(after)}`),
     );
     const task = h.tasks.dispatch(briefFile);
+    mkdirSync(dirname(join(task.worktree, file)), { recursive: true });
     mkdirSync(join(task.worktree, '.temp'), { recursive: true });
     writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file, content: file }));
     return task;

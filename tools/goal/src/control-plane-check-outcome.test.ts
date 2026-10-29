@@ -29,11 +29,11 @@ const failedCheck: GateOutcome = {
   },
   logPath: 'fixture-gate.log',
   hostMs: 25,
-  changedFiles: ['result.txt'],
+  changedFiles: ['tools/goal/src/result.ts'],
   diffLines: 201,
 };
 
-function controlPlaneBrief(path = 'result.txt'): string {
+function controlPlaneBrief(path = 'tools/goal/src/result.ts'): string {
   return markdown.replace('goal: fixture', 'goal: control-plane').replace('paths: [result.txt]', `paths: [${path}]`);
 }
 
@@ -79,7 +79,7 @@ test('a control-plane task with a changed path outside its brief still escalates
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     await job.start(task.id);
 
-    job.onGateOutcome({ ...failedCheck, taskId: task.id, changedFiles: ['outside.ts'], diffLines: 1 });
+    job.onGateOutcome({ ...failedCheck, taskId: task.id, changedFiles: ['tools/goal/src/outside.ts'], diffLines: 1 });
     await job.drain();
 
     expect(h.store.record({ taskId: task.id, attempt: 1 })?.escalation).toBe('scope-growth');

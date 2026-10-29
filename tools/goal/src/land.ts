@@ -78,7 +78,6 @@ export class SqliteLandingQueue implements LandingQueue {
             COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
             OR (
               json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
-              AND COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') != 'stabilize'
               AND json_array_length(request, '$.declaredPaths') > 0
               AND NOT EXISTS (
                 SELECT 1 FROM json_each(request, '$.declaredPaths')
@@ -90,7 +89,6 @@ export class SqliteLandingQueue implements LandingQueue {
             COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
             OR (
               json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
-              AND COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') != 'stabilize'
               AND json_array_length(request, '$.declaredPaths') > 0
               AND NOT EXISTS (
                 SELECT 1 FROM json_each(request, '$.declaredPaths')
