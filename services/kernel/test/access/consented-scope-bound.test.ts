@@ -21,7 +21,7 @@ import { captureFixture, captureAttempt } from './durable-initiator-capture.test
 import { createProductionAccess } from '../community/membership-fixture.ts';
 import { nativeModule } from './durable-initiator.test.ts';
 
-const maximum = Array.from({ length: MAX_CONSENTED_SCOPES }, (_, i) => `scope:${i}:`.padEnd(128, 'a'));
+const maximum = Array.from({ length: MAX_CONSENTED_SCOPES }, (_, i) => `scope-${i}:`.padEnd(128, 'a'));
 let h: Awaited<ReturnType<typeof nativeModule>>;
 let site: NativeContentSystem;
 let client: WorkClient;
@@ -136,6 +136,29 @@ test('the full default website catalogue commits membership and content actor sn
   const realm = newId(route),
     space = newId(route),
     thread = newId(route);
+  const spaceRevision = newId(route);
+  const connection = await pool.connect();
+  try {
+    await connection.query('BEGIN');
+    await connection.query(
+      `INSERT INTO community.space
+       (route,space_id,state,head_revision_id,created_at,creator)
+       VALUES ($1,$2,'active',$3,statement_timestamp(),$4)`,
+      [route, space, spaceRevision, actor.accountId],
+    );
+    await connection.query(
+      `INSERT INTO community.space_revision
+       (route,space_id,revision_id,predecessor,title,summary,created_at,author)
+       VALUES ($1,$2,$3,NULL,'Scope bound','',statement_timestamp(),$4)`,
+      [route, space, spaceRevision, actor.accountId],
+    );
+    await connection.query('COMMIT');
+  } catch (error) {
+    await connection.query('ROLLBACK');
+    throw error;
+  } finally {
+    connection.release();
+  }
   await pool.query(
     `INSERT INTO community.realm
     (route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
