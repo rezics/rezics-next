@@ -160,21 +160,23 @@ async function realms() {
       }),
       201,
     );
-    for (const actor of [fixture.member, fixture.subjectOwner])
+    if (visibility === 'protected') {
+      for (const actor of [fixture.member, fixture.subjectOwner])
+        await json(
+          await call('POST', `/v1/realms/${realm.realmId}/members`, fixture.owner, { accountId: actor.id }),
+          202,
+        );
+      // The ban must defeat this independent read grant even before membership removal.
       await json(
-        await call('POST', `/v1/realms/${realm.realmId}/members`, fixture.owner, { accountId: actor.id }),
-        202,
+        await call('POST', '/v1/grants', fixture.owner, {
+          resource,
+          subject: { kind: 'account', id: fixture.subjectOwner.id },
+          actions: ['realm:read'],
+          valid: '(,)',
+        }),
+        201,
       );
-    // The ban must defeat this independent read grant even before membership removal.
-    await json(
-      await call('POST', '/v1/grants', fixture.owner, {
-        resource,
-        subject: { kind: 'account', id: fixture.subjectOwner.id },
-        actions: ['realm:read'],
-        valid: '(,)',
-      }),
-      201,
-    );
+    }
     result.push(realm);
   }
   await driver.settle();
@@ -182,7 +184,7 @@ async function realms() {
     await queryCommunityDatabase('SELECT state FROM access.account WHERE account_id=$1', [fixture.outsider.id]),
   ).toEqual([{ state: 'active' }]);
   for (const realm of result) {
-    for (const actor of [fixture.member, fixture.subjectOwner]) {
+    for (const actor of realm.visibility === 'protected' ? [fixture.member, fixture.subjectOwner] : []) {
       const membership = await json(await call('GET', `/v1/realms/${realm.realmId}/members/me`, actor), 200);
       expect(membership).toMatchObject({ state: 'member' });
     }
@@ -204,7 +206,7 @@ async function realms() {
 }
 
 async function banWithRemovalPending(realms: Realm[]) {
-  for (const realm of realms) {
+  for (const realm of realms.filter(({ visibility }) => visibility === 'protected')) {
     await json(
       await call('PUT', `/v1/realms/${realm.realmId}/bans/${fixture.subjectOwner.id}`, fixture.owner, {
         reason: 'Publication persona ban',
