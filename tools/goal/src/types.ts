@@ -199,6 +199,16 @@ export type PromotionRun = {
   blockedOn?: { taskId: string; attempt: number };
   promoteHead?: string;
   promoteTaskIds?: string[];
+  /** Same-candidate retries of infrastructure-only stabilize gate failures. */
+  infrastructureReruns?: {
+    kind: 'promotion-infrastructure-rerun';
+    commit: string;
+    command: string[];
+    attempt: number;
+    initial: PromotionGateResult;
+    result: PromotionGateResult;
+    log: string;
+  }[];
 };
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
 export type Attempt = AttemptRef & {

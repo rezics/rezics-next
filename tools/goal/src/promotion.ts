@@ -448,6 +448,74 @@ function blockStabilize(
   );
 }
 
+function infrastructureText(text: string): boolean {
+  return /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|docker\s+(?:run\b|:).*?(?:failed|failure|error|exit(?:ed)?(?: with code)? [1-9])|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(
+    text,
+  );
+}
+
+function infrastructureFailure(
+  options: PromotionOptions,
+  run: PromotionRun,
+  result: PromotionGateResult,
+  index: number,
+): boolean {
+  if (result.timedOut) return true;
+  const path = join(options.settings.stateDirectory, `promotion-${run.id}-head-${index}.log`);
+  const text = `${result.firstFailure?.assertion ?? ''}\n${existsSync(path) ? readFileSync(path, 'utf8') : ''}`;
+  return infrastructureText(text);
+}
+
+function stabilizeRetryCommands(
+  options: PromotionOptions,
+  run: PromotionRun,
+  failed: PromotionGateResult,
+  index: number,
+): string[][] {
+  if (JSON.stringify(failed.command) !== JSON.stringify(run.rootGate)) return [[...failed.command]];
+  const path = join(options.settings.stateDirectory, `promotion-${run.id}-head-${index}.log`);
+  if (!existsSync(path)) return [[...failed.command]];
+  const log = readFileSync(path, 'utf8');
+  const workspaces = (log.match(/^Failed workspaces:\s*(.+)$/m)?.[1] ?? '').trim().split(/\s+/).filter(Boolean);
+  const unique = [...new Set(workspaces.filter((workspace) => /^(?:apps|services|packages)\/[^/]+$/.test(workspace)))];
+  return unique.length ? unique.map((workspace) => ['bun', 'run', '--cwd', workspace, 'check']) : [[...failed.command]];
+}
+
+async function rerunStabilizeInfrastructure(
+  options: PromotionOptions,
+  run: PromotionRun,
+  result: PromotionGateResult[],
+): Promise<PromotionGateResult[]> {
+  const initial = result.find((item) => !item.passed);
+  if (!initial || !infrastructureFailure(options, run, initial, result.indexOf(initial))) return result;
+  let current = initial;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (!infrastructureFailure(options, run, current, result.indexOf(current))) break;
+    const index = result.indexOf(current);
+    const commands = stabilizeRetryCommands(options, run, current, index);
+    const label = `head-infrastructure-rerun-${attempt}`;
+    const [rerun] = await gateAt(options, run, run.devHead, commands, label, 'headResults', true);
+    if (!rerun) break;
+    run.infrastructureReruns = [
+      ...(run.infrastructureReruns ?? []),
+      {
+        kind: 'promotion-infrastructure-rerun',
+        commit: run.devHead,
+        command: [...rerun.command],
+        attempt,
+        initial: current,
+        result: rerun,
+        log: join(options.settings.stateDirectory, `promotion-${run.id}-${label}-0.log`),
+      },
+    ];
+    options.job.tasks.store.savePromotion(run);
+    current = rerun;
+    if (rerun.passed) return [rerun];
+    if (!rerun.timedOut && !infrastructureText(rerun.firstFailure?.assertion ?? '')) break;
+  }
+  return [current];
+}
+
 async function saveHeadDecision(
   options: PromotionOptions,
   run: PromotionRun,
@@ -938,14 +1006,8 @@ export async function promote(options: PromotionOptions): Promise<void> {
           }
         }
         const tasks = run.taskIds.map((id) => store.task(id));
-        const checked = await gateAt(
-          options,
-          run,
-          run.devHead,
-          commandsFor(run.rootGate, tasks),
-          'head',
-          'headResults',
-        );
+        let checked = await gateAt(options, run, run.devHead, commandsFor(run.rootGate, tasks), 'head', 'headResults');
+        if (stabilization) checked = await rerunStabilizeInfrastructure(options, run, checked);
         const failed = checked.find((item) => !item.passed);
         if (stabilization && failed) {
           blockStabilize(options, run, failed, checked.indexOf(failed));
