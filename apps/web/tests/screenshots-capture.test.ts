@@ -60,7 +60,7 @@ test('a run without failures retains its zero exit status and output', () => {
 });
 
 test('full page capture resets scroll only when no viewport overlay is open', async () => {
-  const prepare = extracted<(page: { evaluate: (fn: () => unknown) => Promise<unknown> }) => Promise<void>(
+  const prepare = extracted<((page: { evaluate: (fn: () => unknown) => Promise<unknown> }) => Promise<void>)>(
     'prepareFullPageCapture',
     'captureOne',
   );
