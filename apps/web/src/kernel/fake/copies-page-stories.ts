@@ -1,3 +1,4 @@
+import { resetCopyKindsStory } from './copies-kinds';
 import type { FakeRoute } from '../fake-modules.ts';
 import recording from '../recorded/library-copies.json';
 
@@ -6,6 +7,7 @@ let mode: CopiesStoryMode = 'many';
 
 /** Set the copies fixture before mounting a page story. */
 export function setCopiesStoryMode(next: CopiesStoryMode): void {
+  resetCopyKindsStory();
   mode = next;
 }
 

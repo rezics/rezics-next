@@ -1,7 +1,12 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { nameSubjectTypes } from '../subject/definitions';
+import { nameSubjectTypes, readRelease } from '../subject/definitions';
+import { copyLabels, resolveCopyProfile } from './copies-profiles';
+import { readSessionIdentity } from '../session/state';
+import { getLocale } from '../paraglide/runtime.js';
+import { prepareSession, viewerCredential } from '../session/request';
+import { copiesSubjectId } from './copies-query';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
@@ -37,6 +42,24 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const page = await loadCopiesPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     await nameSubjectTypes(page.copies.map((copy) => copy.subject));
+    const release = await readRelease();
+    const locale = getLocale();
+    const profiles = new Map<string, ReturnType<typeof resolveCopyProfile>>();
+    for (const copy of page.copies) {
+      const type = copy.subject?.type ?? '';
+      let profile = profiles.get(type);
+      if (!profile) {
+        profile = resolveCopyProfile(release, type, locale);
+        profiles.set(type, profile);
+      }
+      Object.assign(copy, { profile, ...copyLabels(release, type, copy.kind, copy.status, locale) });
+    }
+    if (page.subjectId) {
+      page.profile = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.profile;
+      // An empty filtered list has no embedded subject; resolve just the explicitly selected subject.
+      if (!page.profile) page.profile = await resolveSubject(page.subjectId);
+    }
+    page.csrfToken = (await readSessionIdentity(getRequest(), env as Partial<SessionEnv>)).csrfToken;
     return page;
   });
 
@@ -59,4 +82,23 @@ export const deleteCopy = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<CopyRemoveResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return removeCopy(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+async function resolveSubject(id: string) {
+  if (!copiesSubjectId(id)) return { kinds: [] };
+  const request = getRequest();
+  await prepareSession(request, env as Partial<SessionEnv>);
+  const authorization = viewerCredential(request);
+  if (!authorization) return { kinds: [] };
+  const result = await kernelClient().subjects({ id }).get({ headers: { authorization } });
+  if (result.error || !result.data?.subject) return { kinds: [] };
+  return resolveCopyProfile(await readRelease(), result.data.subject.type, getLocale());
+}
+
+/** Resolve a newly entered edition on the server, using its authoritative type rather than a browser hint. */
+export const readCopySubject = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => (typeof input === 'string' ? input : ''))
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return resolveSubject(data);
   });

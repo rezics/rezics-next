@@ -8,24 +8,20 @@ import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { de, enUS, es, fr, ja, ko, zhCN, zhTW } from 'date-fns/locale';
 import { CalendarDays } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
 import { coverSubject, rowRatio, SubjectCover } from './subject-row';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import { createCopy, deleteCopy, updateCopy } from './copies-actions';
-import {
-  copyStatusLabel,
-  type CopiesPageData,
-  type CopyItem,
-  type CopyStatusWrite,
-  type SavedCopy,
-} from './copies-read';
+import { createCopy, deleteCopy, updateCopy, readCopySubject } from './copies-actions';
+import { type CopiesPageData, type CopyItem, type SavedCopy } from './copies-read';
 import { subjectHref } from '../subject/subject-href';
 
-const statuses: readonly CopyStatusWrite[] = ['ordered', 'owned', 'lent', 'disposed'];
+import type { CopyProfile } from './copies-profiles';
+import { CopiesFallback } from './copies-fallback';
+export { CopiesFallback } from './copies-fallback';
 const inputClass =
   'min-h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const button =
@@ -100,22 +96,35 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
-function StatusField({ value, onChange }: { value: CopyStatusWrite; onChange: (value: CopyStatusWrite) => void }) {
+function ChoiceField({
+  name,
+  label,
+  value,
+  choices,
+  onChange,
+}: {
+  name: string;
+  label: string;
+  value: string;
+  choices: { id: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
   const id = useId();
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium" htmlFor={id}>
-        {m.library_copy_status()}
+        {label}
       </label>
       <select
         id={id}
+        name={name}
         className={inputClass}
         value={value}
-        onChange={(event) => onChange(event.currentTarget.value as CopyStatusWrite)}
+        onChange={(event) => onChange(event.currentTarget.value)}
       >
-        {statuses.map((status) => (
-          <option key={status} value={status}>
-            {copyStatusLabel(status)}
+        {choices.map((choice) => (
+          <option key={choice.id} value={choice.id}>
+            {choice.label}
           </option>
         ))}
       </select>
@@ -124,7 +133,7 @@ function StatusField({ value, onChange }: { value: CopyStatusWrite; onChange: (v
 }
 
 type Draft = {
-  status: CopyStatusWrite;
+  status: string;
   location: string;
   source: string;
   acquiredOn: string;
@@ -132,7 +141,7 @@ type Draft = {
   note: string;
 };
 const draftOf = (copy?: CopyItem): Draft => ({
-  status: (copy?.status ?? 'owned') as CopyStatusWrite,
+  status: copy?.status ?? '',
   location: copy?.location ?? '',
   source: copy?.source ?? '',
   acquiredOn: copy?.acquiredOn ?? '',
@@ -140,8 +149,12 @@ const draftOf = (copy?: CopyItem): Draft => ({
   note: copy?.note ?? '',
 });
 
-function CopyForm({
+export function CopyForm({
   copy,
+  profile,
+  sendKind = false,
+  inline = false,
+  initialKind,
   subjectId,
   addKey,
   onClose,
@@ -151,6 +164,10 @@ function CopyForm({
   onKey,
 }: {
   copy?: CopyItem;
+  profile?: CopyProfile;
+  sendKind?: boolean;
+  inline?: boolean;
+  initialKind?: string;
   subjectId: string | null;
   addKey: string;
   onClose: () => void;
@@ -160,8 +177,16 @@ function CopyForm({
   onKey: (key: string) => void;
 }) {
   const mobile = useIsMobile();
+  const lookup = useRef(0);
+  const [choices, setChoices] = useState(profile);
+  const [kind, setKind] = useState(copy?.kind ?? initialKind ?? profile?.kinds[0]?.id ?? '');
+  const selected = choices?.kinds.find((choice) => choice.id === kind);
+  const editable = !copy ? Boolean(selected) : Boolean(copy.kind && copy.kind !== 'legacy-unspecified' && selected);
   const [edition, setEdition] = useState(subjectId ?? '');
-  const [draft, setDraft] = useState(() => draftOf(copy));
+  const [draft, setDraft] = useState(() => ({
+    ...draftOf(copy),
+    status: copy?.status ?? selected?.statuses[0]?.id ?? '',
+  }));
   const [more, setMore] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -172,7 +197,7 @@ function CopyForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || !editable) return;
     setPending(true);
     setFailure(null);
     try {
@@ -202,6 +227,8 @@ function CopyForm({
         onSaved({
           ...copy,
           status: result.copy.status,
+          statusLabel:
+            selected?.statuses.find((status) => status.id === result.copy.status)?.label ?? m.library_other(),
           revision: result.copy.revision,
           location: result.copy.location,
           source: result.copy.source,
@@ -212,7 +239,7 @@ function CopyForm({
         });
       } else {
         const result = await createCopy({
-          data: { subjectId: subjectId ?? edition, idempotencyKey: addKey, ...fields },
+          data: { subjectId: subjectId ?? edition, idempotencyKey: addKey, ...(sendKind ? { kind } : {}), ...fields },
           headers: csrfHeaders(),
         });
         if (!result.ok) {
@@ -262,45 +289,105 @@ function CopyForm({
 
   const content: ReactNode = (
     <form
+      method="post"
+      action={`/${locale()}/library/copies`}
       aria-label={title}
       data-idempotency-key={copy?.idempotencyKey ?? addKey}
       onSubmit={submit}
       className="space-y-4"
     >
-      {!copy ? <TextField label={m.library_copy_edition()} value={subjectId ?? edition} onChange={setEdition} /> : null}
-      <StatusField value={draft.status} onChange={(value) => change('status', value)} />
-      <button
-        type="button"
-        className="text-sm text-primary underline underline-offset-4"
-        aria-expanded={more}
-        onClick={() => setMore(!more)}
-      >
-        {more ? m.library_copy_less() : m.library_copy_more()}
-      </button>
-      {more ? (
-        <div className="space-y-4">
-          <TextField
-            label={m.library_copy_location()}
-            value={draft.location}
-            onChange={(value) => change('location', value)}
+      <input type="hidden" name="intent" value={copy ? 'update' : 'create'} />
+      <input type="hidden" name="idempotencyKey" value={copy?.idempotencyKey ?? addKey} />
+      <input type="hidden" name="subjectId" value={subjectId ?? edition} />
+      <input type="hidden" name="sendKind" value={String(sendKind)} />
+      {!copy && !subjectId ? (
+        <TextField
+          label={m.library_copy_edition()}
+          value={subjectId ?? edition}
+          onChange={(value) => {
+            setEdition(value);
+            setChoices(undefined);
+            const current = ++lookup.current;
+            if (/^[0-9a-f-]{36}$/i.test(value))
+              void readCopySubject({ data: value })
+                .then((next) => {
+                  if (current !== lookup.current) return;
+                  setChoices(next);
+                  setKind(next.kinds[0]?.id ?? '');
+                  change('status', next.kinds[0]?.statuses[0]?.id ?? '');
+                })
+                .catch(() => {
+                  if (current === lookup.current) setFailure(m.library_copy_failure());
+                });
+          }}
+        />
+      ) : null}
+      {!copy && selected ? (
+        choices!.kinds.length > 1 ? (
+          <ChoiceField
+            name="kind"
+            label={m.library_copy_kind()}
+            value={kind}
+            choices={choices!.kinds}
+            onChange={(value) => {
+              setKind(value);
+              change('status', choices!.kinds.find((item) => item.id === value)?.statuses[0]?.id ?? '');
+            }}
           />
-          <TextField
-            label={m.library_copy_source()}
-            value={draft.source}
-            onChange={(value) => change('source', value)}
-          />
-          <DateField
-            label={m.library_copy_acquired()}
-            value={draft.acquiredOn}
-            onChange={(value) => change('acquiredOn', value)}
-          />
-          <DateField
-            label={m.library_copy_disposed()}
-            value={draft.disposedOn}
-            onChange={(value) => change('disposedOn', value)}
-          />
-          <TextField label={m.library_copy_note()} value={draft.note} onChange={(value) => change('note', value)} />
-        </div>
+        ) : (
+          <input type="hidden" name="kind" value={kind} />
+        )
+      ) : null}
+      {editable ? (
+        <ChoiceField
+          name="status"
+          label={m.library_copy_status()}
+          value={draft.status}
+          choices={selected!.statuses}
+          onChange={(value) => change('status', value)}
+        />
+      ) : copy ? (
+        <>
+          <p>{copy.statusLabel ?? m.library_other()}</p>
+          <p>{m.library_copy_no_longer_offered()}</p>
+        </>
+      ) : null}
+      {editable ? (
+        <>
+          <button
+            type="button"
+            className="text-sm text-primary underline underline-offset-4"
+            aria-expanded={more}
+            onClick={() => setMore(!more)}
+          >
+            {more ? m.library_copy_less() : m.library_copy_more()}
+          </button>
+          {more ? (
+            <div className="space-y-4">
+              <TextField
+                label={m.library_copy_location()}
+                value={draft.location}
+                onChange={(value) => change('location', value)}
+              />
+              <TextField
+                label={m.library_copy_source()}
+                value={draft.source}
+                onChange={(value) => change('source', value)}
+              />
+              <DateField
+                label={m.library_copy_acquired()}
+                value={draft.acquiredOn}
+                onChange={(value) => change('acquiredOn', value)}
+              />
+              <DateField
+                label={m.library_copy_disposed()}
+                value={draft.disposedOn}
+                onChange={(value) => change('disposedOn', value)}
+              />
+              <TextField label={m.library_copy_note()} value={draft.note} onChange={(value) => change('note', value)} />
+            </div>
+          ) : null}
+        </>
       ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
       {confirming ? (
@@ -317,9 +404,11 @@ function CopyForm({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-3">
-        <button type="submit" className={button} disabled={pending}>
-          {copy ? m.library_copy_save() : m.library_copy_add_submit()}
-        </button>
+        {editable ? (
+          <button type="submit" className={button} disabled={pending}>
+            {copy ? m.library_copy_save() : m.library_copy_add_submit()}
+          </button>
+        ) : null}
         {copy ? (
           <button type="button" className={quiet} disabled={pending} onClick={() => setConfirming(true)}>
             {m.library_copy_delete()}
@@ -332,6 +421,7 @@ function CopyForm({
     </form>
   );
 
+  if (inline) return content;
   return (
     <Exposure operation={copy ? 'copy.update' : 'copy.create'}>
       {mobile ? (
@@ -382,7 +472,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
         <p className="text-sm text-muted-foreground">
           {kind}
           {kind ? ' · ' : ''}
-          {copyStatusLabel(copy.status)}
+          {copy.kindLabel ?? m.library_other()} · {copy.statusLabel ?? m.library_other()}
         </p>
         {copy.acquiredOn ? (
           <p className="text-sm text-muted-foreground">
@@ -409,7 +499,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
   );
 }
 
-export function CopiesPage({ page }: { page: CopiesPageData }) {
+export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: string }) {
   const [copies, setCopies] = useState(page.copies);
   const [addKey, setAddKey] = useState(page.addKey);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
@@ -422,10 +512,18 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading>{m.library_copy_heading()}</PageHeading>
-        <button type="button" className={button} onClick={() => setEditing(null)}>
-          {m.library_copy_add()}
-        </button>
+        {!page.subjectId || page.profile?.kinds.length ? (
+          <button type="button" className={button} onClick={() => setEditing(null)}>
+            {m.library_copy_add()}
+          </button>
+        ) : null}
       </header>
+      {failure ? (
+        <p role="alert">{failure === 'unsupported' ? m.library_copy_unsupported() : m.library_copy_failure()}</p>
+      ) : null}
+      <noscript>
+        <CopiesFallback page={page} csrfToken={page.csrfToken} />
+      </noscript>
       {page.subjectId ? (
         <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span>{m.library_copy_filtered_heading({ title: filteredTitle ?? m.library_copy_this_edition() })}</span>
@@ -469,6 +567,8 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
         <CopyForm
           key={editing?.id ?? 'add'}
           {...(editing ? { copy: editing } : {})}
+          profile={editing?.profile ?? page.profile}
+          sendKind={page.sendKind}
           subjectId={page.subjectId}
           addKey={addKey}
           onClose={() => setEditing(undefined)}
@@ -476,7 +576,17 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
           onCreated={(copy) =>
             setCopies((current) => [
               ...current,
-              { ...copy, kind: copy.kind ?? null, subject: null, idempotencyKey: crypto.randomUUID() },
+              {
+                ...copy,
+                kind: copy.kind ?? null,
+                subject: current.find((item) => item.subject?.id === page.subjectId)?.subject ?? null,
+                profile: page.profile,
+                kindLabel: page.profile?.kinds.find((kind) => kind.id === copy.kind)?.label,
+                statusLabel: page.profile?.kinds
+                  .find((kind) => kind.id === copy.kind)
+                  ?.statuses.find((status) => status.id === copy.status)?.label,
+                idempotencyKey: crypto.randomUUID(),
+              },
             ])
           }
           onSaved={(next) => setCopies((current) => current.map((item) => (item.id === next.id ? next : item)))}

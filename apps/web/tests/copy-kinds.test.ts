@@ -84,7 +84,7 @@ mock.module('@tanstack/react-router', () => ({
 const views = await import('../src/library/copies-page');
 const profiles = await import('../src/library/copies-profiles');
 const actions = await import('../src/library/copies-form-action');
-const fakeModule = await import('../src/kernel/fake/copy-profiles');
+const fakeModule = await import('../src/kernel/fake/copies-kinds');
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
 const key = '10203040-5060-4070-8090-102030405060';
 const request = () =>
@@ -156,6 +156,8 @@ function transport(refusal = false) {
   return { client, calls };
 }
 function posted(html: string, changes: Record<string, string> = {}) {
+  // Successful controls belong to the submitted form, not other update/delete forms on the page.
+  html = html.match(/<form[^>]*method="post"[^>]*>[\s\S]*?<\/form>/)?.[0] ?? html;
   const body = new URLSearchParams();
   for (const match of html.matchAll(/<input[^>]*name="([^"]*)"[^>]*value="([^"]*)"/g)) body.set(match[1]!, match[2]!);
   for (const name of ['kind', 'status']) {

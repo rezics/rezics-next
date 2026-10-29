@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { setCopiesStoryMode, type CopiesStoryMode } from '../kernel/fake/copies-page-stories';
+import { setCopyKindsStory } from '../kernel/fake/copies-kinds';
+import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths } from './page';
 
 const meta = { title: 'Pages/Library/Copies', parameters: { layout: 'fullscreen' } } satisfies Meta;
@@ -56,5 +58,29 @@ export const Refusal: Story = {
     );
     await userEvent.click(dialog.getByRole('button', { name: /Add copy|新增复本/ }));
     await expect(dialog.findByRole('alert')).resolves.toBeVisible();
+  },
+};
+
+function ProfileStory({ retired = false }: { retired?: boolean }) {
+  setCopiesStoryMode('one');
+  setCopyKindsStory(retired);
+  return <PageStory visitor="Signed In" path="/library/copies?subjectId=01a17a3b-0884-721b-91ef-d7ffd7bb58e4" />;
+}
+export const TwoKinds: Story = {
+  render: () => <ProfileStory />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
+    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_add(), exact: true }));
+    await within(document.body).findByRole('combobox', { name: m.library_copy_kind() });
+  },
+};
+export const NoLongerOffered: Story = {
+  render: () => <ProfileStory retired />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
+    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_edit(), exact: true }));
+    await within(document.body).findByText(m.library_copy_no_longer_offered());
   },
 };

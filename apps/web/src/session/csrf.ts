@@ -81,7 +81,12 @@ function base64Url(bytes: Uint8Array): string {
 export async function csrfTokenFromRequest(request: Request): Promise<string | null> {
   const header = request.headers.get('X-CSRF-Token');
   if (header !== null) return header;
-  if (new URL(request.url).pathname !== '/auth/sign-out') return null;
+  if (
+    !/^\/(?:auth\/sign-out|(?:(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)\/)?library\/copies)$/.test(
+      new URL(request.url).pathname,
+    )
+  )
+    return null;
   if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/x-www-form-urlencoded')
     return null;
   const length = request.headers.get('content-length');

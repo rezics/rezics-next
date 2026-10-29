@@ -1,3 +1,8 @@
+import type { CopyProfile } from './copies-profiles';
+import { libraryCopyStatusLabel } from './profiles';
+import definitions from '../kernel/recorded/definitions-release.json';
+import type { Release } from '../subject/definitions';
+import { getLocale } from '../paraglide/runtime.js';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
@@ -29,6 +34,9 @@ export type CopyItem = {
   note: string | null;
   subject: LibrarySubject | null;
   idempotencyKey: string;
+  profile?: CopyProfile;
+  kindLabel?: string;
+  statusLabel?: string;
 };
 
 export type CopiesPageData = {
@@ -37,6 +45,9 @@ export type CopiesPageData = {
   copies: CopyItem[];
   next: string | null;
   addKey: string;
+  profile?: CopyProfile;
+  sendKind?: boolean;
+  csrfToken?: string | null;
 };
 
 export type SavedCopy = {
@@ -134,11 +145,10 @@ function statusWriteOf(value: unknown): CopyStatusWrite | undefined {
 }
 
 export function copyStatusLabel(status: CopyStatusRead): string {
-  if (status === 'ordered') return m.library_copy_status_ordered();
-  if (status === 'owned') return m.library_copy_status_owned();
-  if (status === 'lent') return m.library_copy_status_lent();
-  if (status === 'disposed') return m.library_copy_status_disposed();
-  return m.library_other();
+  return (
+    libraryCopyStatusLabel(definitions.release as unknown as Release, '', 'legacy-unspecified', status, getLocale())
+      ?.text ?? m.library_other()
+  );
 }
 
 function textOf(value: unknown, max: number): string | null | undefined {
@@ -232,6 +242,7 @@ function saved(copy: SavedCopy): SavedCopy {
   return {
     id: copy.id,
     status: copy.status,
+    ...(copy.kind === undefined ? {} : { kind: copy.kind }),
     revision: copy.revision,
     location: copy.location,
     source: copy.source,
@@ -297,8 +308,9 @@ export async function loadCopiesPage(
   const subjectId = copiesSubjectId(input.subjectId) ?? null;
   if (!authorization) return { signedIn: false, subjectId, copies: [], next: null, addKey: crypto.randomUUID() };
   const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor);
+  const sendKind = page.copies.some((copy) => Object.hasOwn(copy, 'kind'));
   const copies = page.copies.map(present);
-  return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID() };
+  return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID(), sendKind };
 }
 
 /** One create write. The returned copy omits the subject id; the page keeps a label only when it already has one. */
