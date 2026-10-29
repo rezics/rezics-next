@@ -348,7 +348,16 @@ test('Expired registration pages seek through equal expiry times and send both m
     const registrations = [];
     for (let i = 0; i < 67; i++)
       registrations.push(await f.workflows.beginRegistration({ key: `page-${i}`, handle: `page-${i}` }));
-    registrations.sort((a, b) => a.registrationId.localeCompare(b.registrationId));
+    // Random registration IDs must use the database's collation for both the
+    // deadline anchors and the expected order within the tied deadlines.
+    const orderedIds = (
+      await f.db.admin.query<{ registration_id: string }>(
+        'SELECT registration_id FROM auth_registration_stage WHERE registration_id=ANY($1::text[]) ORDER BY registration_id',
+        [registrations.map((ref) => ref.registrationId)],
+      )
+    ).rows;
+    const rank = new Map(orderedIds.map((row, index) => [row.registration_id, index]));
+    registrations.sort((a, b) => rank.get(a.registrationId)! - rank.get(b.registrationId)!);
     const expiry = Date.parse(registrations[0]!.expiresAt);
     // Put the smallest ID last and the largest first. The other 65 deadlines
     // coincide, spanning the page boundary; timestamp precision must survive it.
