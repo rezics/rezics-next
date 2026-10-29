@@ -259,7 +259,10 @@ test('zero-owner deletion remains possible and deleted handle identity has only 
     [org, claim.value.reservationId],
   );
   await commands.tombstone(await context(actor), { accountId: org, key: key() });
-  expect(await readPublicAccountByHandle(pool, handle)).toEqual([{ id: org, state: 'deleted', kind: 'organization' }]);
+  expect(await readPublicAccountByHandle(pool, handle)).toEqual([]);
+  expect(await readPublicIdentities(pool, [routeOf(org)!], [org])).toEqual([
+    { id: org, kind: 'organization', state: 'deleted' },
+  ]);
   await createOrganizationCloseRunner({ pool }).continueCommitted(org);
 });
 
