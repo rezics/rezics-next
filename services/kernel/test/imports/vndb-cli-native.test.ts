@@ -199,7 +199,7 @@ test('ordinary VNDB archive CLI publishes and reopens through real account-key A
       }
     };
     const expected = {
-      source: 'vndb',
+      source: 'vndb' as const,
       sourceRecordId: 'v123',
       mean: 7.35,
       count: 20,

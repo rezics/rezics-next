@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SourceRecord } from '@rezics/conversion';
+import type { SourceRecord } from '../../../../packages/conversion/src/index.ts';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { Exchange, Observation, VndbStatisticsDriver } from '../../../../specs/imports-vndb-statistics-driver.ts';
 import { readArchive } from '../../../importer/src/archive.ts';
@@ -288,6 +288,9 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
               maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
               maxChunkBytes: DEFAULT_DUMP_CHUNK_BYTES,
               maxMetadataBytes: 4096,
+              onProgress() {
+                // This outcome binding makes no archive memory or growth measurement claim.
+              },
             }),
           );
         } catch {

@@ -73,6 +73,20 @@ Admission waiting itself is queued work, not a test failure. The concrete tool
 blocker is a completion handoff without terminal results; the maintainer required
 finishing without another wait, poll or duplicate check submission.
 
+The authorized retry against committed revision `aae205b053` produced terminal
+results. Native check `fc7e0670-d77d-4c60-a1bd-1e92d0997eb4` and root typecheck
+`b3cc79ff-07fb-4d41-9a33-1abf7ea54a07` both exited 1. The first diagnostic was
+`test/imports/vndb-cli-native.test.ts(230,49): error TS2769: No overload matches this call.`
+The expected source literal widened to string. Root typecheck also found the
+kernel test's unavailable package alias and required archive progress callback.
+These are binding defects, before any child/native outcome assertion. The fixes
+retain the source literal type, use the existing relative conversion type import,
+and supply the required callback without inventing byte/growth observations.
+No assertion, source bytes, runtime policy or production path changed.
+
+Retry logs are `.temp/goal/checks/worker-check-2026-10-29T20-39-33.185Z-1e181978.log`
+and `.temp/goal/checks/worker-check-2026-10-29T20-39-48.939Z-6da7bc30.log`.
+
 No native pass, reached product failure, receipt/state observation or root
 typecheck result is claimed. The source inspection pins catalogue version 1.0.0,
 converter `vndb@7`, source date 2026-10-25 and synthetic native entry revision 7;
