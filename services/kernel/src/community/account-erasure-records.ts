@@ -100,7 +100,7 @@ async function erasableOperation(pool: Pool, row: Locator, at: number): Promise<
     const partition = await readPartition(client, partitionOf(row.owner_route));
     if (!partition || partition.writeState === 'moved') throw new Error('Community owner partition is unavailable');
     const operation = await readOperation.run(client, row);
-    if (!operation || operation.actor_client_id === null) return true;
+    if (!operation) return true;
     // All membership producers commit the exact workflow ID as their command key.
     // It also survives minimization of another party on the same operation.
     const workflow = await readWorkflow.run(client, { id: operation.creation_idempotency_key });

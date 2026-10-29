@@ -369,7 +369,7 @@ test.serial(
       // The exact boundary remains pending: "older than" the grace is strict.
       now = new Date(recent.requested_at).getTime() + grace;
       expect((await phase.eraseAccountCommunityRecordsPage(deps, account.id, { erasedAt: erased.at })).pending).toBe(2);
-      now++;
+      now = new Date(running.requested_at).getTime() + grace + 1;
       expect((await phase.eraseAccountCommunityRecordsPage(deps, account.id, { erasedAt: erased.at })).pending).toBe(1);
       expect((await readOperations()).find((row) => row.operation_id === recent.operation_id)).toMatchObject({
         initiator_account_id: null,
