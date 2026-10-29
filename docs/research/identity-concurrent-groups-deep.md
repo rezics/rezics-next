@@ -16,12 +16,11 @@ No whole-job global lock, serialization fallback, distributed transaction or add
 
 ## Evidence boundary
 
-Repository evidence is the current tree at `b7efa45b3ce2c01e35ba0380a91f4a89cedb938a`. Read the full
-[types][types], [protocol][protocol], 980-line [native cutover cases][native], 553-line [support][support], and original
-[admission][admission], [publication][publication], [HTTP][http] and [fixture][fixture] cases. The fixture checks for
-runtime exports; declarations and SQL fixture membership are not installed producers or a successful bootstrap.
-The supplied integrated result failed in setup at `bootstrapRelease`/`P1114`, before scenario execution; its successful
-typecheck proves no native protocol behavior. No native probe, benchmark, production data or external executable ran here.
+Evidence is the tree at `b7efa45b3ce2c01e35ba0380a91f4a89cedb938a`: full [types][types], [protocol][protocol],
+980-line [cutover cases][native], 553-line [support][support], original [admission][admission], [publication][publication],
+[HTTP][http] and [fixture][fixture]. Fixture membership/declarations are not installed producers or successful bootstrap.
+The supplied integrated result failed in setup at `bootstrapRelease`/`P1114`, before scenarios; successful typecheck proves
+no native behavior. No native probe, benchmark, production data or external executable ran here.
 
 Read all eight items in each supplied [cost review][cost-review] and [Accounts review][accounts-review], plus the full
 [integrated review][integrated-review]. Both prior [cutover reports][old-current] [were read][old-deep] only as evidence
@@ -29,11 +28,10 @@ about the former globally serialized design. Their sole-pending assumption is su
 was read and no conclusions were coordinated. Both independent reports must be read fully and compared before a costly
 protocol choice or freeze; one specification closure follows adoption, in the owning documents.
 
-Other primary seams inspected: [filtered-list identity/cursors/budgets][filtered], Library's [owner contract][library]
-and [structural access analysis][directory], Semantic creation/import/merge/move/reversal SQL and callers,
-[native command executor][command], fence/receipt/partition ownership, [operational transactions][operational],
-[command documentation][command-doc], Work composition/client/retention, and Accounts verification delivery.
-Operational source and documentation were also inspected at `5b5c3be17ea1c7c747d09cdcdcfa0ac89ca37cfe`.
+Also inspected: [filtered lists][filtered], Library [owner contract][library]/[structural access analysis][directory], Semantic
+creation/import/merge/move/reversal SQL/callers, [command executor][command]/fence/receipt/partition ownership,
+[operational transactions][operational]/[documentation][command-doc], Work composition/client/retention and Accounts delivery.
+Operational source/docs were also inspected at `5b5c3be17ea1c7c747d09cdcdcfa0ac89ca37cfe`.
 
 ## Native authority and the smallest data model
 
@@ -144,10 +142,10 @@ PREPARING -> CANCELLING -> cancellation custody at EVERY planned home -> FREE
 At a group home, one command locks quota/header/attempt rows and one indexed free slot, never scans P slots. Check active
 ownership/cancellation and exact input versions, then install the unique claim and retained native receipt/wakeup:
 ```sql
-SELECT * FROM group_header WHERE home=$1 AND incarnation=$2 FOR UPDATE;
-UPDATE capacity SET occupied=occupied+1 WHERE home=$1 AND occupied<$P RETURNING occupied;
-UPDATE group_header SET claim=$job,version=version+1
- WHERE home=$1 AND incarnation=$2 AND generation=$g AND version=$v AND claim IS NULL RETURNING *;
+SELECT generation,version,claim FROM group_header WHERE home=$1 AND incarnation=$2 FOR UPDATE;
+UPDATE capacity SET occupied=occupied+1 WHERE home=$1 AND occupied<$3 RETURNING occupied;
+UPDATE group_header SET claim=$4,version=version+1
+ WHERE home=$1 AND incarnation=$2 AND generation=$5 AND version=$6 AND claim IS NULL RETURNING *;
 ```
 These are sketches inside `runCommand`, with locked attempt-state UPSERT/recheck and all-or-rollback slot allocation.
 Uniqueness plus `INSERT ... ON CONFLICT`/locked recheck closes first absence. Native rollback removes claims/receipt/outbox;
@@ -185,7 +183,8 @@ Explicitly document that distinction: charging all active jobs as resident group
 Many jobs execute concurrently between OPEN and CLOSE. Lists prepare while count>0; no reader waits for completion.
 Keep group/source gates pending until CLOSE's committed publication receipt is in their native custody; a crash in that
 handoff may conservatively prepare, never expose an unpublished result. Poll completion requires that same publication
-and handoff custody. CLOSE must resolve a committed OPEN once, including cancellation before domain admission.
+and handoff custody. Abort/CLOSE locks a terminal attempt record even if OPEN has not arrived, rejecting delayed OPEN;
+decrement only for an actual committed OPEN, once. This prevents cancellation from orphaning the reader count.
 Measure marker throughput: only short metadata commands serialize. Asynchronous derived zero is unsafe if source changes
 precede its pending increment. Maximum allocated job epoch is also unsafe. [Sequences are not commit order][pg-sequences].
 
@@ -274,13 +273,12 @@ boundaries, actual pools/cold-warm captures and growth checks; no planner pin or
 Keep exactly mapping, Search and ONE existing Library participant with its native version-1 receipt ABI. Library covers
 all canonical candidate/support directories, working/ready generations, members, entries, labels, sessions, copies,
 output drivers, concurrent first-apply registrations, follows/support/totals and every prior OLD/NEW effect/fence.
-No additional erasure participant or ownership transfer is implied by expanding that participant's coverage.
+Keep existing erasure participation and payload ownership.
 
 Use candidate `(owner,canonical)` and structural support `(owner,canonical,scope,original)`, inverse `(original,owner,scope)`
-and owner/original access. Scope holds accepted driver/profile/lifecycle dimensions with existence counts and seek
-extrema/locators, dirty/coverage state; it is not a per-fact revision/TX mirror. A million sessions with the same
-original/profile/lifecycle produce one structural scope row. Native session/copy/label facts and their ordered indexes
-retain body/identity authority. Do not require old `canonical_source_fact` writes as proof of the new directory.
+and owner/original access. Scope holds accepted driver/profile/lifecycle dimensions, existence counts, seek extrema/locators
+and coverage/dirty state, not per-fact revision/TX mirrors. A million sessions with the same original/profile/lifecycle
+produce one scope row. Native facts/indexes retain body/identity authority; old `canonical_source_fact` writes prove no new directory.
 
 Rekey a structural scope once, maintain candidate first/last support and indexed extrema, and retain finite old/new scope
 manifests. A changed top needs an indexed next-native-fact seek, not copying every session or sorting history. Distinct
@@ -312,8 +310,9 @@ success page/finish/clear pending until publication; reversal cannot clear its p
 Refactor the SAME [existing workflow][verification-work] into bounded native ensure/probe steps separated by workflow-level
 `DBOS.sleep`; no new queue or detached workflow, and no durable step held across the whole publication age. A probe reads
 indexed native state, releases connections and returns pending. Sleep inside a DBOS step is ordinary process sleep in the
-inspected SDK, not durable workflow sleep. [DBOS native sleep][dbos-sleep] and [step executor][dbos-step] establish this and
-the commit-before-journal crash gap: retry the native receipt after recovery, never infer completion from DBOS step success.
+inspected SDK. Native installed `5.4.6-preview` confirms this at `services/kernel/node_modules/@dbos-inc/dbos-sdk/dist/src/dbos.js:844`;
+its `dbos-executor.js:723` also journals after the body. [Pinned sleep][dbos-sleep]/[executor][dbos-step] give source evidence.
+Retry native receipts after that commit-to-journal gap; DBOS success alone is not completion. Dependencies were read only.
 
 Actual [Core operational TX][operational] exposes `enqueueIntent` only: bounded accounts, native T, request authorization
 or work-step mode, sorted account terminal fences, partition fence and `enqueueInTransaction` on the same connection.
@@ -359,15 +358,13 @@ This report is the research deliverable, not an implemented or measured feasibil
 
 ## External primary sources, reuse and licences
 
-Reused read-only clones under `/home/edge/projects/rezics/rezics-next/.reference/`; reuse is indexed there. Nothing was
-installed, built, executed or copied from them. PostgreSQL source snapshot is release object `0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`
-in `library-shelf-maintenance/postgres`, PostgreSQL License (`COPYRIGHT`), distinct from that clone's development HEAD.
-Read `src/backend/utils/time/snapmgr.c`, `src/backend/access/heap/heapam.c` and `src/backend/commands/trigger.c`:
-transaction snapshots, tuple-lock rechecks and capture-installation locks are separate native mechanisms. DBOS Transact
-TypeScript snapshot `980dc55095f445b189aecb59e7f3334345179f65` in `search-worker-outcome-harness/dbos-transact-ts`, MIT
-(`LICENSE`), supplies `src/dbos-executor.ts` and `src/dbos.ts`. These sources share the patterns of native atomic local
-state, explicit durable recovery and completion after custody; neither supplies cross-home atomicity. Repository source
-is AGPL-3.0-only. Recommend the designs in this repository's existing stack, not source passages or new infrastructure.
+Read-only clones under `/home/edge/projects/rezics/rezics-next/.reference/` were reused/indexed, never installed/built/run/copied.
+PostgreSQL release object `0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`, `library-shelf-maintenance/postgres`, PostgreSQL License
+(`COPYRIGHT`), differs from clone development HEAD. Read `src/backend/utils/time/snapmgr.c`, `src/backend/access/heap/heapam.c`
+and `src/backend/commands/trigger.c`: transaction snapshots, tuple-lock rechecks and capture-installation locks are separate.
+DBOS Transact TypeScript `980dc55095f445b189aecb59e7f3334345179f65`, `search-worker-outcome-harness/dbos-transact-ts`, MIT
+(`LICENSE`): `src/dbos-executor.ts`, `src/dbos.ts`. Both projects use atomic local state, durable recovery and completion after
+custody; neither supplies cross-home atomicity. Repository source is AGPL-3.0-only. Recommend designs in this stack, not copying.
 
 [types]: ../../services/kernel/src/semantic/identity-epoch-contract.ts
 [protocol]: ../../services/kernel/src/semantic/identity-epoch-contract.md
