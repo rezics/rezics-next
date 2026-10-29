@@ -49,6 +49,14 @@ test(
       const edit = page.getByRole('form', { name: 'Edit copy' });
       await edit.waitFor();
       await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+
+      const waiting = article(page, 'Waiting');
+      await waiting.getByRole('button', { name: 'More actions' }).click();
+      const waitingMenu = page.getByRole('dialog');
+      await waitingMenu.waitFor();
+      await waitingMenu.getByRole('button', { name: 'Delete' }).click();
+      await page.getByRole('form', { name: 'Edit copy' }).waitFor();
+      await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
     } finally {
       await page.context().close();
     }

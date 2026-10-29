@@ -461,6 +461,11 @@ export function CopyForm({
 function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; ratio: CoverRatio }) {
   const href = copy.subject ? subjectHref({ id: copy.subject.id, label: copy.subject.label }, locale()) : null;
   const title = copy.subject?.label ?? m.library_subject_unavailable();
+  const canEdit = Boolean(
+    copy.kind &&
+    copy.kind !== 'legacy-unspecified' &&
+    copy.profile?.kinds.some((candidate) => candidate.id === copy.kind),
+  );
   const kind =
     copy.subject?.typeLabel ??
     copy.subject?.types?.[0]
@@ -513,7 +518,13 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
               <EllipsisIcon aria-hidden="true" className="size-5" />
             </button>
           }
-          entries={[{ type: 'item', label: m.library_copy_edit(), onSelect: onEdit }]}
+          entries={[
+            {
+              type: 'item',
+              label: canEdit ? m.library_copy_edit() : m.library_copy_delete(),
+              onSelect: onEdit,
+            },
+          ]}
         />
       </ListRowControl>
     </ListRow>
