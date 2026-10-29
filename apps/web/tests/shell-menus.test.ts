@@ -127,12 +127,25 @@ test(
     await page.keyboard.press('Escape');
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
 
+    await page.setViewportSize(desktop);
+    await language.click();
+    await page.getByRole('menu').getByText('日本語', { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu').waitFor({ state: 'hidden' });
+
+    await page.setViewportSize(phone);
     const theme = page.getByRole('button', { name: en.shell_theme!, exact: true });
     await theme.click();
     await page.getByRole('dialog').waitFor();
     await page.getByRole('dialog').getByText(en.shell_theme_dark!, { exact: true }).waitFor();
     await page.keyboard.press('Escape');
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
+
+    await page.setViewportSize(desktop);
+    await theme.click();
+    await page.getByRole('menu').getByText(en.shell_theme_dark!, { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu').waitFor({ state: 'hidden' });
 
     await page.context().close();
   },

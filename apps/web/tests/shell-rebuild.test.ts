@@ -287,10 +287,9 @@ function signedInState(): Promise<NonNullable<BrowserContextOptions['storageStat
     const en = await messages('en');
     const page = await open('/en');
     await page.getByRole('button', { name: en.account_menu!, exact: true }).click();
-    const signInUrl = await page.locator('a[href^="/auth/sign-in"]').getAttribute('href');
     await Promise.all([
       page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
-      page.goto(new URL(signInUrl!, origin).href),
+      page.getByRole('link', { name: en.account_sign_in!, exact: true }).click(),
     ]);
     await page.waitForURL(`${origin}/en`);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });

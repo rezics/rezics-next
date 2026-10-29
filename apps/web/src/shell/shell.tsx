@@ -163,7 +163,7 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                   className="h-10"
                   isActive={pathname === '/inbox'}
                   tooltip={messages.nav_inbox()}
-                  render={<Link to="/inbox" onClick={() => setOpenMobile(false)} />}
+                  render={<Link to="/inbox" />}
                 >
                   <InboxIcon aria-hidden="true" className="text-sidebar-primary" />
                   <span>{messages.nav_inbox()}</span>

@@ -6,14 +6,21 @@ import { PageStory, pagePaths, pageReady } from './page';
 const meta = { title: 'Pages/Shell', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+async function accountMenu(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const canvas = within(context.canvasElement);
+  await userEvent.click(await canvas.findByRole('button', { name: m.account_menu() }));
+  const content =
+    window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
+      ? await within(document.body).findByRole('dialog', { name: m.account_menu() })
+      : await within(document.body).findByRole('menu');
+  await expect(content).toBeVisible();
+  return content;
+}
 export const SignedIn: Story = {
   name: 'Signed In',
   play: async (context) => {
-    await pageReady(context);
-    const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.account_menu() }));
-    const menu = await within(document.body).findByRole('group', { name: m.account_menu() });
-    await expect(menu).toBeVisible();
+    const menu = await accountMenu(context);
     await within(menu).findByRole('link', { name: m.account_security_settings() });
     await within(menu).findByRole('button', { name: m.account_sign_out() });
   },
@@ -22,12 +29,9 @@ export const SignedIn: Story = {
 export const SignedOut: Story = {
   name: 'Signed Out',
   play: async (context) => {
-    await pageReady(context);
-    const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.account_menu() }));
-    const menu = await within(document.body).findByRole('group', { name: m.account_menu() });
-    await expect(menu).toBeVisible();
+    const menu = await accountMenu(context);
     await within(menu).findByRole('link', { name: m.account_sign_in() });
+    const canvas = within(context.canvasElement);
     // Interface links are plain at rest, whether the underline sits on the link or on text inside it.
     const links = [...context.canvasElement.querySelectorAll('main a')];
     await expect(links.length).toBeGreaterThan(0);

@@ -240,7 +240,7 @@ afterAll(async () => {
     } catch {}
 });
 
-const signInLink = (page: Page, _own: Messages) => page.locator('a[href^="/auth/sign-in"]');
+const signInLink = (page: Page, own: Messages) => page.getByRole('link', { name: own.account_sign_in!, exact: true });
 const accountMenuButton = (page: Page, own: Messages) =>
   page.getByRole('button', { name: own.account_menu!, exact: true });
 async function openAccountMenu(page: Page, own: Messages) {
@@ -265,10 +265,9 @@ async function signIn(page: Page, own: Messages, javaScriptEnabled = true) {
   const origin = await site();
   const from = page.url();
   await openAccountMenu(page, own);
-  const href = await signInLink(page, own).getAttribute('href');
   await Promise.all([
     page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
-    page.goto(new URL(href!, origin).href),
+    signInLink(page, own).click(),
   ]);
   await page.waitForURL(from);
   await page.waitForLoadState('networkidle');
