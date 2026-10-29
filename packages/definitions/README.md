@@ -11,8 +11,19 @@ Validation checks references, CURIE expansion, sorted unique lists, type bases a
 facets, datatype-specific members, fixed value schemas, context defaults, saved
 filters, and regular-expression safety. A facet is an item, a time, a quantity, or
 a code: a `string` whose release definition has a `pattern`. Pattern checks use
-recheck's in-process synchronous entry point, with a three-second timeout per
-distinct pattern; inconclusive results fail validation.
+one shared structural admission policy and recheck 4.5.0's in-process synchronous
+entry point. Safety verdicts have no wall-clock deadline. Admission permits at most
+256 source characters, 16 nested groups, repetition endpoints of 64, a sum of 128
+repetition endpoints, and 128 expanded structural units (including group and
+quantifier overhead). Nested repetitions multiply their costs before analysis.
+Backreferences, named groups, Unicode properties, lookbehind, and lookahead of
+more than one character atom are refused. All shipped value schemas fit this profile.
+The checker caps graph construction at 256 transitions and accepts only an
+`automaton` safe verdict. Its `auto` selection is used because the pinned version
+bypasses graph limits in explicit `automaton` mode; a synchronous diagnostic guard
+refuses limit failures and fuzz fallback before seeding or matching. Recall attack
+execution is disabled. Invalid, unsupported, over-budget, and inconclusive patterns
+fail validation. Proof results are cached only within each release/compiler call.
 
 Releases allow at most 1,024 types, 4,096 properties, 64 properties and 16 facets per
 type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per

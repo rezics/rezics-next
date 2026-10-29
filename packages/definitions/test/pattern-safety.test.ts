@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 
-const safe = ['^[A-Z][a-z]+$', '^\\S', '^(?:[0-9]{8}|[0-9]{12,14})$'];
-const hostile = ['^(a+)+$', '^(a|aa)+$', '^(a*)*$', '[', '\\u{110000}'];
+const safe = ['^[A-Z][a-z]+$', '^\\S', '^(?:[0-9]{8}|[0-9]{12,14})$', '^(?![0-9])[a-z]+$', '^97[89]-?(?:[0-9]-?){9}[0-9]$'];
+const hostile = [
+  '^(a+)+$', '^(a|aa)+$', '^(a*)*$', '[', '\\u{110000}', 'x'.repeat(257),
+  '^a{999999999999999999999999999999}$', '^a{2147483647,}$', '^a{65}$',
+  '^(?:a{8}){8}$', '^(?:a{64}){64}$', '^(?=a+)a+$', '^(?<=a)b$', '^(a)\\1$',
+  '^\\p{Letter}+$', '('.repeat(17) + 'a' + ')'.repeat(17),
+];
 
 // Each subprocess starts with cold module state. recheck's Scala.js nanoTime reads
 // performance.now(), not Date.now(). No clock patch escapes the child lifetime.
@@ -64,8 +69,11 @@ async function evaluate(step: number, reverse: boolean) {
 
 test('pattern safety verdicts are structural and independent of clock or host load', async () => {
   for (const reverse of [false, true]) {
-    const fixed = await evaluate(0, reverse);
     const advancing = await evaluate(3001, reverse);
+    for (const [pattern, , issues] of advancing) {
+      if (pattern === 'fixed' || safe.includes(pattern)) expect(issues).toEqual([]);
+    }
+    const fixed = await evaluate(0, reverse);
     expect(advancing).toEqual(fixed);
     for (const [pattern, , issues] of fixed) {
       if (pattern === 'fixed' || safe.includes(pattern)) expect(issues).toEqual([]);
@@ -90,5 +98,17 @@ test('compiler and release validator share deterministic hostile-pattern refusal
         message: 'Pattern must be safe Unicode syntax of at most 256 characters',
       }]);
     }
+  }
+});
+
+
+test('structural expansion and graph limits bound short patterns with enormous analysis work', async () => {
+  const { safePattern } = await import('../src/pattern-safety.ts');
+  // Each source is short. Repetition multiplication, assertion determinization,
+  // and ordered-NFA growth must be bounded before proof/attack construction.
+  for (const pattern of hostile) expect(safePattern(pattern)).toBe(false);
+  expect(safePattern('^[ab]*a[ab]{32}$')).toBe(false);
+  for (const pattern of [...safe, '^a{64}$', '^[{}]{2}$', '^\\u{61}+$']) {
+    expect(safePattern(pattern)).toBe(true);
   }
 });
