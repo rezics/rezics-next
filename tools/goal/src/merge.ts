@@ -119,8 +119,12 @@ export function processGroupRunner(
   };
 }
 
-export function gateRunner(timeoutMs = 600_000, stateDirectory?: string): GateRunner {
-  const run = processGroupRunner(timeoutMs, stateDirectory);
+export function gateRunner(
+  timeoutMs = 600_000,
+  stateDirectory?: string,
+  environment: NodeJS.ProcessEnv = {},
+): GateRunner {
+  const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...environment });
   return (argv, cwd, logPath) => run(argv, cwd, logPath);
 }
 
