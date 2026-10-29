@@ -49,9 +49,14 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
     expect(checked.map(({ command }) => command)).toEqual([
       ['bun', 'test'],
       ['bun', 'test'],
+      ['bun', 'test'],
+      ['bun', 'test'],
     ]);
     expect(checked[0]!.files).toEqual(['first.txt']);
     expect(checked[1]!.files).toEqual(['first.txt', 'second.txt']);
+    // Each task runs once on its stabilize landing candidate and once on the merged-dev candidate.
+    expect(checked[2]!.files).toEqual(['first.txt', 'second.txt']);
+    expect(checked[3]!.files).toEqual(['first.txt', 'second.txt']);
     expect(git(h.root, 'merge-base', '--is-ancestor', h.head('stabilize'), 'dev')).toBe('');
   } finally {
     h.dispose();
@@ -66,8 +71,9 @@ test('a failing stabilize acceptance keeps dev unchanged, leaves stabilize integ
     const task = dispatchStabilize(h, 'policy.txt', 'semantic');
     await h.start(task);
     const dev = h.head('dev');
+    let acceptanceRuns = 0;
     const runner: GateRunner = async (command) =>
-      command[1] === 'test'
+      command[1] === 'test' && ++acceptanceRuns === 2
         ? {
             passed: false,
             output: 'AssertionError: pattern admission rejected\nExpected policy to pass',

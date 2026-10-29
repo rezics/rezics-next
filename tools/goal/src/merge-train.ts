@@ -777,6 +777,7 @@ export class MergeTrain {
       acquired = true;
       const roundHead = this.integrationHead();
       const deferred = new Set<number>();
+      let processedEntry = false;
       try {
         if (o.codeIsCurrent && !o.codeIsCurrent()) {
           await handOff();
@@ -789,6 +790,7 @@ export class MergeTrain {
           }
           const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
           if (!entry) break;
+          processedEntry = true;
           try {
             if (entry.outcome) {
               o.sink.onGateOutcome(entry.outcome);
@@ -889,7 +891,9 @@ export class MergeTrain {
             retryDeferred.delete(entry.id);
           }
         }
-        await o.beforeRelease?.();
+        // The main and dev lanes drain concurrently. A hook intended to observe a finished landing must not
+        // be consumed by the idle lane before the lane with queued work reaches its handoff.
+        if (processedEntry) await o.beforeRelease?.();
       } finally {
         lease.release();
       }
