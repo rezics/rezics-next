@@ -1167,3 +1167,103 @@ at fail (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/scripts/check.
 error: script "check" exited with code 1
 check: log .temp/goal/checks/worker-check-2026-10-29T14-08-55.413Z-8eb9fb4b.log
 ```
+
+### Completed root typecheck output
+
+Command: `bun scripts/worker-check.ts -- bun run typecheck`. Exit status: 0.
+Local log: `.temp/goal/checks/worker-check-2026-10-29T14-09-13.292Z-cb773011.log`.
+This run checks the unchanged seventeen-case test file. Both required runs are now finished; each command ran
+once in this resumed verification. Receipt-only evidence additions do not change the tested specification.
+The native red remains the expected missing Realm wire and Context lifecycle evidence, not a tool blocker.
+No passing runtime, growth, co-owner freeze or promoted delivery is claimed.
+
+```text
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, b 0/6 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (a 1/4 free, b 0/6 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, c 0/3 free, b 0/6 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, c 0/3 free, b 0/6 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, c 0/3 free, b 0/6 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, c 0/3 free, b 0/6 free)
+remote-check: every check slot is busy; waiting for a free one (b 2/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: slot wait 650.693 s on b
+
+Number of files: 5,324 (reg: 4,993, dir: 330, link: 1)
+Number of created files: 12 (reg: 12)
+Number of deleted files: 0
+Number of regular files transferred: 52
+Total file size: 57,677,490 bytes
+Total transferred file size: 964,936 bytes
+Literal data: 274,627 bytes
+Matched data: 690,309 bytes
+File list size: 196,593
+File list generation time: 0.508 seconds
+File list transfer time: 0.000 seconds
+Total bytes sent: 319,190
+Total bytes received: 23,870
+
+sent 319,190 bytes  received 23,870 bytes  40,360.00 bytes/sec
+total size is 57,677,490  speedup is 168.13
+remote-check: rsync 8.987 s on b
+remote-check: running on b
+bun install v1.4.4-canary.1 (a0cc096ce)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+
++ @types/bun@1.4.4
++ bun@1.4.4-canary.20261027.1
++ oxfmt@0.74.0
++ oxlint@1.89.0
++ typescript@7.1.0-beta
+
+896 packages installed [421.00ms]
+remote-check: bun install 0.437 s on b
+$ bun scripts/typecheck.ts
+Workspace @rezics/auth-contract finished in 0.13s
+$ bun run typecheck  (packages/auth-contract)
+
+Workspace @rezics/composition finished in 0.24s
+$ bun run typecheck  (packages/composition)
+
+Workspace @rezics/filter finished in 0.20s
+$ bun run typecheck  (packages/filter)
+
+Workspace @rezics/document finished in 0.40s
+$ bun run typecheck  (packages/document)
+
+Workspace @rezics/ui finished in 0.73s
+$ bun run typecheck  (packages/ui)
+
+Workspace @rezics/client finished in 1.25s
+$ bun run typecheck  (packages/client)
+
+Workspace @rezics/definitions finished in 1.35s
+$ bun run typecheck  (packages/definitions)
+
+Workspace @rezics/conversion finished in 1.50s
+$ bun run typecheck  (packages/conversion)
+
+Workspace @rezics/importer finished in 1.44s
+$ bun run typecheck  (services/importer)
+
+Workspace @rezics/auth-pages finished in 12.01s
+$ bun run typecheck  (apps/auth)
+
+Workspace @rezics/web finished in 21.24s
+$ bun run typecheck  (apps/web)
+
+Workspace @rezics/auth finished in 66.96s
+$ bun run typecheck  (services/auth)
+
+Workspace @rezics/kernel finished in 84.33s
+$ bun run typecheck  (services/kernel)
+
+remote-check: command 88.690 s on b
+remote-check: run used 253.102 CPU seconds over 89.283 s (2.83 cores), peak memory 3654 MiB on b
+worker-check: bun run typecheck peak 3.6 GiB (weight 5)
+check: exit status 0
+check: log .temp/goal/checks/worker-check-2026-10-29T14-09-13.292Z-cb773011.log
+```
