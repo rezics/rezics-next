@@ -57,7 +57,7 @@ test('a passing batch publishes every member through one dev update', async () =
     ]);
     expect(git(h.root, 'show', 'dev:atomic-first.ts')).toBe('atomic-first.ts');
     expect(git(h.root, 'show', 'dev:atomic-second.ts')).toBe('atomic-second.ts');
-    expect(git(h.root, 'rev-parse', 'dev')).toBe(h.outcomes[1]?.mergedCommit);
+    expect(git(h.root, 'rev-parse', 'dev')).toBe(h.outcomes[1]!.mergedCommit!);
     expect(git(h.root, 'merge-base', '--is-ancestor', h.outcomes[0]!.mergedCommit!, 'dev')).toBe('');
   } finally {
     h.dispose();
