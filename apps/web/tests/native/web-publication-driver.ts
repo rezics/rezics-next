@@ -69,7 +69,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       entries.push({ key: `${view}-withheld`, type: 'schema:Book', label: `${view} withheld`, descriptions: undefined });
     }
     const batches = Array.from({ length: Math.ceil(entries.length / 100) }, (_, index) => entries.slice(index * 100, index * 100 + 100));
-    await Promise.all(batches.map(async (batch) => {
+    for (const batch of batches) {
       const commands = batch.map(({ key, type, label, descriptions }) => ({
         op: 'create',
         key,
@@ -83,11 +83,20 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         },
         subject: { type, labels: { en: label }, ...(descriptions ? { descriptions } : {}) },
       }));
-      const response = await stack.kernel(
-        '/v1/subjects:batchWrite',
-        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commands }) },
-        'editor',
-      );
+      let response: Response;
+      while (true) {
+        response = await stack.kernel(
+          '/v1/subjects:batchWrite',
+          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commands }) },
+          'editor',
+        );
+        if (response.status !== 429) break;
+        const retryAfter = Number(response.headers.get('retry-after'));
+        const problem = (await response.json()) as { code?: string; effect_status?: string };
+        if (problem.code !== 'rate_limited' || problem.effect_status !== 'not_applied' || !Number.isFinite(retryAfter) || retryAfter < 1)
+          throw new Error(`Could not batch-create fixture subjects through kernel API: 429 ${JSON.stringify(problem)}`);
+        await Bun.sleep(retryAfter * 1000);
+      }
       if (!response.ok)
         throw new Error(`Could not batch-create fixture subjects through kernel API: ${response.status} ${await response.text()}`);
       const result = (await response.json()) as { results: { key: string; status: number; value?: { id: string } }[] };
@@ -97,7 +106,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
           throw new Error(`Could not create fixture subject ${item.key}: API status ${item.status}`);
         created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
       }
-    }));
+    }
 
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
