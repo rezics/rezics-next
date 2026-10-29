@@ -144,3 +144,8 @@ unchanged wrapper proves all 9 child cases pass. No failure identity or placemen
 Receipt `57e628fb-1451-4813-a1e8-a0267e948ce8`; log (relative to measurement checkout)
 `.temp/goal/checks/worker-check-2026-10-29T05-01-20.531Z-9c940427.log`.
 Next is the canary half of this pair; other remaining suites are UNEXECUTED.
+
+Canary `cli-credentials-outcomes` completed exit 0: outer 1 pass, 0 fail, 5 expectations;
+wrapper proves 9 child passes. No failures. Receipt `7245f589-abf2-48c1-8e37-6457f72d761a`;
+measurement log `.temp/goal/checks/worker-check-2026-10-29T05-01-34.952Z-f2fd68fa.log`.
+The credential pair is complete. Next: canary `cli-outcomes`, then previous; remaining two pairs UNEXECUTED.
