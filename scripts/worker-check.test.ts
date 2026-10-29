@@ -706,7 +706,15 @@ test('a class with three sub-256 MiB peaks skips the memory lease and explains t
     expect(log).toContain('local p90 200.0 MiB; skipping local memory lease');
     expect(log).not.toContain('worker-check: waiting');
   } finally {
-    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE']) {
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+    ]) {
       if (old[key] === undefined) delete process.env[key];
       else process.env[key] = old[key]!;
     }
@@ -726,13 +734,34 @@ test('a local memory lease wait is appended to the goal wait file while it is wa
     process.env.REZICS_CHECK_MEMORY_GIB = '1';
     process.env.GOAL_CHECK_WAIT_FILE = waitFile;
     const running = runWorkerCheck(localCommand(fixture.localMarker), fixture.root, false, undefined, 15);
-    await untilRecorded(() => existsSync(waitFile) && readFileSync(waitFile, 'utf8').trim().split('\n').some((line) => Number(line) > 0));
+    await untilRecorded(
+      () =>
+        existsSync(waitFile) &&
+        readFileSync(waitFile, 'utf8')
+          .trim()
+          .split('\n')
+          .some((line) => Number(line) > 0),
+    );
     await holder.release();
     expect(await running).toBe(0);
-    expect(readFileSync(waitFile, 'utf8').trim().split('\n').reduce((sum, line) => sum + Number(line), 0)).toBeGreaterThan(0);
+    expect(
+      readFileSync(waitFile, 'utf8')
+        .trim()
+        .split('\n')
+        .reduce((sum, line) => sum + Number(line), 0),
+    ).toBeGreaterThan(0);
   } finally {
     await holder.release();
-    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE', 'GOAL_CHECK_WAIT_FILE']) {
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+      'GOAL_CHECK_WAIT_FILE',
+    ]) {
       if (old[key] === undefined) delete process.env[key];
       else process.env[key] = old[key]!;
     }
@@ -749,10 +778,14 @@ test('a remote transport retry keeps recording the local memory lease wait', asy
   const command = localCommand(fixture.localMarker);
   const commandClass = checkClass(command, fixture.root);
   for (const peak of [3, 3, 3]) recordPeak(fixture.memory, commandClass, peak * 2 ** 30);
-  const holder = await acquireStackSlot('holder', {
-    REZICS_STACK_SLOTS: '4',
-    REZICS_STACK_LEASE_DIR: leaseDirectory,
-  }, 4);
+  const holder = await acquireStackSlot(
+    'holder',
+    {
+      REZICS_STACK_SLOTS: '4',
+      REZICS_STACK_LEASE_DIR: leaseDirectory,
+    },
+    4,
+  );
   try {
     workerEnv(fixture, join(fixture.root, 'hosts.json'));
     process.env.WORKER_REMOTE_MODE = 'transport';
@@ -760,12 +793,28 @@ test('a remote transport retry keeps recording the local memory lease wait', asy
     process.env.REZICS_CHECK_MEMORY_GIB = '4';
     process.env.GOAL_CHECK_WAIT_FILE = waitFile;
     const running = runWorkerCheck(command, fixture.root, false, undefined, 15);
-    await untilRecorded(() => existsSync(waitFile) && readFileSync(waitFile, 'utf8').trim().split('\n').some((line) => Number(line) > 0));
+    await untilRecorded(
+      () =>
+        existsSync(waitFile) &&
+        readFileSync(waitFile, 'utf8')
+          .trim()
+          .split('\n')
+          .some((line) => Number(line) > 0),
+    );
     await holder.release();
     expect(await running).toBe(0);
   } finally {
     await holder.release();
-    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE', 'GOAL_CHECK_WAIT_FILE']) {
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+      'GOAL_CHECK_WAIT_FILE',
+    ]) {
       if (old[key] === undefined) delete process.env[key];
       else process.env[key] = old[key]!;
     }

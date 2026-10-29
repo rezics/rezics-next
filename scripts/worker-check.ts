@@ -369,18 +369,19 @@ export async function runWorkerCheck(
   const lease = noMemoryLease
     ? undefined
     : await acquireStackSlot(
-    `worker-check: ${commandClass}`,
-    {
-      ...leaseEnv,
-      REZICS_STACK_SLOTS: String(capacity),
-      REZICS_STACK_LEASE_DIR: directory,
-    },
-    weight,
-    (line) => writeSync(descriptor, `${line}\n`),
-    leaseWaitRepeatMs,
-  );
+        `worker-check: ${commandClass}`,
+        {
+          ...leaseEnv,
+          REZICS_STACK_SLOTS: String(capacity),
+          REZICS_STACK_LEASE_DIR: directory,
+        },
+        weight,
+        (line) => writeSync(descriptor, `${line}\n`),
+        leaseWaitRepeatMs,
+      );
   beginLedger(hostname(), 0);
-  if (lease) env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
+  if (lease)
+    env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
   let child: ReturnType<typeof spawn>;
   let scoped = false;
   const peakFile = join(directory, `peak.${process.pid}.${randomUUID()}.tmp`);
