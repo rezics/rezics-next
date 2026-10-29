@@ -11,7 +11,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { onCheckHost, ROOT, runOnCheckHost } from './stack-run.ts';
+import { onCheckHost, runOnCheckHost } from './stack-run.ts';
+import { ROOT } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
