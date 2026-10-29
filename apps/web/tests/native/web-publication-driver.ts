@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
 import { startNativeWebStack } from './stack';
@@ -55,35 +54,48 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       throw new Error(`Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`);
 
     const created = new Map<string, { id: string; label: string; type: string }>();
-    const makeSubject = async (key: string, type: string, label: string, descriptions?: Record<string, string>) => {
-      const response = await stack.kernel(
-        '/v1/subjects',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` },
-          body: JSON.stringify({ type, labels: { en: label }, ...(descriptions ? { descriptions } : {}) }),
-        },
-        'editor',
-      );
-      if (response.status !== 201)
-        throw new Error(`Could not create fixture subject ${key} through kernel API: ${response.status} ${await response.text()}`);
-      const body = (await response.json()) as { subject: { id: string } };
-      created.set(key, { id: body.subject.id, label, type });
-      return body.subject.id;
-    };
-
-    for (const [key, value] of Object.entries(data.subjects)) {
-      const type = typeByKey[key] ?? 'schema:Book';
-      const label = titleOf(value);
-      await makeSubject(key, type, label, 'description' in value ? { en: String(value.description) } : undefined);
-    }
+    const entries = Object.entries(data.subjects).map(([key, value]) => ({
+      key,
+      type: typeByKey[key] ?? 'schema:Book',
+      label: titleOf(value),
+      descriptions: 'description' in value ? { en: String(value.description) } : undefined,
+    }));
     for (const [view, count] of Object.entries({ editions: 105, contents: 105, cast: 105, crew: 105, inverse: 105, relations: 105 })) {
       for (let index = 1; index <= count; index++) {
         const key = `${view}-${String(index).padStart(3, '0')}`;
-        const personTarget = view === 'inverse';
-        await makeSubject(key, personTarget ? 'schema:Book' : 'schema:Book', `${view} ${index}`);
+        entries.push({ key, type: 'schema:Book', label: `${view} ${index}`, descriptions: undefined });
       }
-      await makeSubject(`${view}-withheld`, 'schema:Book', `${view} withheld`);
+      entries.push({ key: `${view}-withheld`, type: 'schema:Book', label: `${view} withheld`, descriptions: undefined });
+    }
+    for (let start = 0; start < entries.length; start += 100) {
+      const batch = entries.slice(start, start + 100);
+      const commands = batch.map(({ key, type, label, descriptions }) => ({
+        op: 'create',
+        key,
+        source: {
+          source: 'web-publication-fixture',
+          external_id: key,
+          record_revision: '1',
+          digest: '0'.repeat(64),
+          converter_revision: 'web-publication-fixture@1',
+          field_group: 'facts',
+        },
+        subject: { type, labels: { en: label }, ...(descriptions ? { descriptions } : {}) },
+      }));
+      const response = await stack.kernel(
+        '/v1/subjects:batchWrite',
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commands }) },
+        'editor',
+      );
+      if (!response.ok)
+        throw new Error(`Could not batch-create fixture subjects through kernel API: ${response.status} ${await response.text()}`);
+      const result = (await response.json()) as { results: { key: string; status: number; value?: { id: string } }[] };
+      for (const item of result.results) {
+        const entry = batch.find(({ key }) => key === item.key)!;
+        if (item.status !== 201 || !item.value?.id)
+          throw new Error(`Could not create fixture subject ${item.key}: API status ${item.status}`);
+        created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
+      }
     }
 
     const urlFor = (key: string, locale = 'en') => {
