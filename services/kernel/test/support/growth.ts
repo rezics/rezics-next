@@ -379,7 +379,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           else await check.operation(db, scale, repetition);
         }, { includeBackends: true });
       });
-      for (const backend of warmupCapture.capture.statementBackends ?? [])
+      for (const backend of warmupCapture!.capture.statementBackends ?? [])
         if (backend !== undefined) seenBackends.add(backend);
       for (const [target, relations] of warmed.writes) {
         const accumulated = pendingWrites.get(target) ?? new Set<string>();
