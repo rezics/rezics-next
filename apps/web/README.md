@@ -24,6 +24,7 @@ pools schedule files by their latest recorded wall time, longest first, and upda
 Durable Object state, so parallel servers do not share SQLite data.
 The wrapper generates Paraglide messages when they are missing or older than the message files; branches do not change
 `scripts/isolated.ts` to add their own generation step.
+Generation retries a Lix timeout twice in a new process.
 
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 
