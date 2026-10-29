@@ -1323,20 +1323,28 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       if (outcome.stage === 'rebase') {
+        const files = rebaseConflictFiles(outcome);
+        const failure = outcome.firstFailure
+          ? {
+              ...outcome.firstFailure,
+              excerpt: files.length
+                ? `${outcome.firstFailure.excerpt}\nConflicted files: ${files.join(', ')}`
+                : outcome.firstFailure.excerpt,
+            }
+          : null;
         store.updateAttempt(outcome, (a) => {
-          a.failure = outcome.firstFailure ?? null;
+          a.failure = failure;
           a.failureCommand = outcome.failedCommand ? [...outcome.failedCommand] : null;
           a.failureOnBase = outcome.failsOnMain ?? null;
           a.failureLogPath = outcome.logPath;
           a.approaches.push({
             approach: `Attempt ${a.attempt}: ${a.profile.model}/${a.profile.effort}`,
-            result: outcome.firstFailure
-              ? `${outcome.firstFailure.assertion}: ${outcome.firstFailure.excerpt}`
+            result: failure
+              ? `${failure.assertion}: ${failure.excerpt}`
               : 'Failed at rebase',
           });
         });
         const evidencePath = evidenceBundle(task, store.attempt(outcome));
-        const files = rebaseConflictFiles(outcome);
         if (attempt.escalation === 'rebase-conflict') {
           record.escalation = 'spec-conflict';
           store.updateAttempt(outcome, (a) => {
