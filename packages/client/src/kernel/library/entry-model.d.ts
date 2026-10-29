@@ -32,10 +32,11 @@ export type EntryPage = {
     state: EntryState | null;
     limit: number;
 };
-/** Database projection for one physical copy. Subject is not unique: one edition may have many copies. */
+/** Database projection for one holding. Subject is not unique: one edition may have many copies. */
 export type CopyRow = {
     route: number;
     copyId: string;
+    kind?: string | null;
     accountId: string;
     subjectId: string;
     status: string;

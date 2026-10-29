@@ -4765,7 +4765,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     disposedOn?: string | null;
                     note?: string | null;
                     subjectId: string;
-                    status: string;
+                    kind?: string;
+                    status?: string;
                 };
                 params: {};
                 query: unknown;
@@ -4777,6 +4778,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         copy: {
                             id: string;
                             subjectId: string;
+                            kind?: string | null;
                             status: string;
                             revision: number;
                             location: string | null;
@@ -4790,6 +4792,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         copy: {
                             id: string;
                             subjectId: string;
+                            kind?: string | null;
                             status: string;
                             revision: number;
                             location: string | null;
@@ -4960,6 +4963,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             } | null;
                             id: string;
                             subjectId: string;
+                            kind?: string | null;
                             status: string;
                             revision: number;
                             location: string | null;
@@ -5131,6 +5135,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 } | null;
                                 id: string;
                                 subjectId: string;
+                                kind?: string | null;
                                 status: string;
                                 revision: number;
                                 location: string | null;
@@ -5270,6 +5275,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             copy: {
                                 id: string;
                                 subjectId: string;
+                                kind?: string | null;
                                 status: string;
                                 revision: number;
                                 location: string | null;

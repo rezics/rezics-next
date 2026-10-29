@@ -32373,6 +32373,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "kind": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "location": {
                             "type": [
                               "string",
@@ -33332,6 +33338,11 @@
                       "null"
                     ]
                   },
+                  "kind": {
+                    "description": "Declared kind required for a fresh create; optional only for replay of an old receipt.",
+                    "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
+                    "type": "string"
+                  },
                   "location": {
                     "maxLength": 200,
                     "type": [
@@ -33354,6 +33365,7 @@
                     ]
                   },
                   "status": {
+                    "description": "Declared status required for a fresh create; optional only for replay of an old receipt.",
                     "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
                     "type": "string"
                   },
@@ -33362,7 +33374,6 @@
                   }
                 },
                 "required": [
-                  "status",
                   "subjectId"
                 ],
                 "type": "object"
@@ -33395,6 +33406,12 @@
                         },
                         "id": {
                           "type": "string"
+                        },
+                        "kind": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "location": {
                           "type": [
@@ -34854,6 +34871,12 @@
                         "id": {
                           "type": "string"
                         },
+                        "kind": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "location": {
                           "type": [
                             "string",
@@ -35874,6 +35897,12 @@
                         },
                         "id": {
                           "type": "string"
+                        },
+                        "kind": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "location": {
                           "type": [
