@@ -154,7 +154,12 @@ async function call(
 async function setup(trace = false) {
   const driver = await nativeStage(trace, 'create community driver', () => createCommunityDriver());
   const { system } = communityFixtureRuntime();
-  const fixture = await nativeStage(trace, 'provision community fixture', () => driver.provision(), system.database.pool);
+  const fixture = await nativeStage(
+    trace,
+    'provision community fixture',
+    () => driver.provision(),
+    system.database.pool,
+  );
   const deletion = accountDeletionRuntime(system);
   const persona = await nativeStage(trace, 'create deletable person', () => deletion.person(), system.database.pool);
   const owner = { id: persona.accountId, bearer: persona.bearer };
@@ -353,7 +358,12 @@ test("an account revision erasure page stays within its bound as other editors' 
   const route = routeOf(realm.realmId)!;
   let db: Awaited<ReturnType<typeof openGrowthDatabase>> | undefined;
   try {
-    await nativeStage(true, 'pre-deletion drain effects', () => drainEffects(system.database.pool, partitionOf(route)), system.database.pool);
+    await nativeStage(
+      true,
+      'pre-deletion drain effects',
+      () => drainEffects(system.database.pool, partitionOf(route)),
+      system.database.pool,
+    );
     await nativeStage(true, 'pre-deletion settle', () => driver.settle(), system.database.pool);
     const admin = system.database.pool;
     const revisions = Array.from({ length: 50 }, () => newId(route));
@@ -392,10 +402,11 @@ test("an account revision erasure page stays within its bound as other editors' 
     await nativeStage(
       true,
       'real deletePersona',
-      () => deletePersona(
-        { pool: system.database.pool, auth: deletion.auth },
-        { accountId: owner.id, bearer: owner.bearer },
-      ),
+      () =>
+        deletePersona(
+          { pool: system.database.pool, auth: deletion.auth },
+          { accountId: owner.id, bearer: owner.bearer },
+        ),
       system.database.pool,
     );
     await nativeStage(
@@ -429,78 +440,84 @@ test("an account revision erasure page stays within its bound as other editors' 
       );
       after = null;
     };
-    const report = await nativeStage(true, 'checkGrowth entry', () => checkGrowth(db!, {
-      name: "an account revision erasure page stays within its bound as other editors' revisions grow",
-      rule: 'series',
-      scales: [256, 1024, 4096],
-      repetitions: 1,
-      warmups: 1,
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      async grow(database, scale, previous) {
-        stageMarker(`grow scale ${scale}`, 'start', { previous });
-        const ids = Array.from({ length: scale - previous }, () => newId(route));
-        for (let offset = 0; offset < ids.length; offset += 256) {
-          const batch = ids.slice(offset, offset + 256);
-          await nativeStage(
-            true,
-            `grow scale ${scale}: revision rows ${offset + batch.length}/${ids.length}`,
-            () =>
-              boundedFixtureQuery(
-                database.admin,
-                `insert other editor revisions at ${scale} (${offset + batch.length}/${ids.length})`,
-                `INSERT INTO community.realm_revision
+    const report = await nativeStage(
+      true,
+      'checkGrowth entry',
+      () =>
+        checkGrowth(db!, {
+          name: "an account revision erasure page stays within its bound as other editors' revisions grow",
+          rule: 'series',
+          scales: [256, 1024, 4096],
+          repetitions: 1,
+          warmups: 1,
+          bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+          async grow(database, scale, previous) {
+            stageMarker(`grow scale ${scale}`, 'start', { previous });
+            const ids = Array.from({ length: scale - previous }, () => newId(route));
+            for (let offset = 0; offset < ids.length; offset += 256) {
+              const batch = ids.slice(offset, offset + 256);
+              await nativeStage(
+                true,
+                `grow scale ${scale}: revision rows ${offset + batch.length}/${ids.length}`,
+                () =>
+                  boundedFixtureQuery(
+                    database.admin,
+                    `insert other editor revisions at ${scale} (${offset + batch.length}/${ids.length})`,
+                    `INSERT INTO community.realm_revision
                 (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
                 SELECT $1,$2,id,$3,'Other editor','Keep','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
-                [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.member.id, batch],
-              ),
-            system.database.pool,
-          );
-          await nativeStage(
-            true,
-            `grow scale ${scale}: revision locators ${offset + batch.length}/${ids.length}`,
-            () =>
-              boundedFixtureQuery(
-                database.admin,
-                `insert other editor revision locators at ${scale} (${offset + batch.length}/${ids.length})`,
-                `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
+                    [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.member.id, batch],
+                  ),
+                system.database.pool,
+              );
+              await nativeStage(
+                true,
+                `grow scale ${scale}: revision locators ${offset + batch.length}/${ids.length}`,
+                () =>
+                  boundedFixtureQuery(
+                    database.admin,
+                    `insert other editor revision locators at ${scale} (${offset + batch.length}/${ids.length})`,
+                    `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
                 SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
-                [routeOf(fixture.member.id), fixture.member.id, route, realm.realmId, batch],
-              ),
-            system.database.pool,
-          );
-        }
-        const population = await nativeStage(
-          true,
-          `grow scale ${scale}: verify other editor revisions`,
-          () =>
-            boundedFixtureQuery<{ n: number }>(
-              database.admin,
-              `count other editor revisions at ${scale}`,
-              'SELECT count(*)::integer AS n FROM community.realm_revision WHERE route=$1 AND realm_id=$2 AND author=$3',
-              [route, realm.realmId, fixture.member.id],
-            ),
-          system.database.pool,
-        );
-        expect(population.rows[0].n).toBe(scale);
-        stageMarker(`grow scale ${scale}`, 'done');
-      },
-      async operation(database) {
-        const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
-        expect(page.found).toBe(50);
-        expect(page.pending).toBe(0);
-        expect(page.next).not.toBeNull();
-        after = page.next;
-      },
-      async warmup(database) {
-        await resetPage(database);
-        const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
-        expect(page.found).toBe(50);
-        after = page.next;
-      },
-      async prepare(database) {
-        await resetPage(database);
-      },
-    }), system.database.pool);
+                    [routeOf(fixture.member.id), fixture.member.id, route, realm.realmId, batch],
+                  ),
+                system.database.pool,
+              );
+            }
+            const population = await nativeStage(
+              true,
+              `grow scale ${scale}: verify other editor revisions`,
+              () =>
+                boundedFixtureQuery<{ n: number }>(
+                  database.admin,
+                  `count other editor revisions at ${scale}`,
+                  'SELECT count(*)::integer AS n FROM community.realm_revision WHERE route=$1 AND realm_id=$2 AND author=$3',
+                  [route, realm.realmId, fixture.member.id],
+                ),
+              system.database.pool,
+            );
+            expect(population.rows[0].n).toBe(scale);
+            stageMarker(`grow scale ${scale}`, 'done');
+          },
+          async operation(database) {
+            const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
+            expect(page.found).toBe(50);
+            expect(page.pending).toBe(0);
+            expect(page.next).not.toBeNull();
+            after = page.next;
+          },
+          async warmup(database) {
+            await resetPage(database);
+            const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
+            expect(page.found).toBe(50);
+            after = page.next;
+          },
+          async prepare(database) {
+            await resetPage(database);
+          },
+        }),
+      system.database.pool,
+    );
     expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
     expect(after).not.toBeNull();
