@@ -711,5 +711,7 @@
   "moderation_dismissed": "已驳回",
   "moderation_reports_empty": "此页没有举报。",
   "moderation_action_failed": "无法完成审核操作。",
-  "action_cancel": "取消"
+  "action_cancel": "取消",
+  "moderation_target_deleted": "此帖子已删除。",
+  "moderation_target_withheld": "此内容已被隐去。"
 }

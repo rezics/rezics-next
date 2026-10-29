@@ -711,5 +711,7 @@
   "moderation_dismissed": "Dismissed",
   "moderation_reports_empty": "There are no reports on this page.",
   "moderation_action_failed": "The moderation action could not be completed.",
-  "action_cancel": "Cancel"
+  "action_cancel": "Cancel",
+  "moderation_target_deleted": "This post was deleted.",
+  "moderation_target_withheld": "This content is withheld."
 }

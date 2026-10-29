@@ -711,5 +711,7 @@
   "moderation_dismissed": "Rejeté",
   "moderation_reports_empty": "Aucun signalement sur cette page.",
   "moderation_action_failed": "L’action de modération n’a pas abouti.",
-  "action_cancel": "Annuler"
+  "action_cancel": "Annuler",
+  "moderation_target_deleted": "Cette publication a été supprimée.",
+  "moderation_target_withheld": "Ce contenu est masqué."
 }

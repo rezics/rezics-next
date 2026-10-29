@@ -711,5 +711,7 @@
   "moderation_dismissed": "Abgelehnt",
   "moderation_reports_empty": "Auf dieser Seite gibt es keine Meldungen.",
   "moderation_action_failed": "Die Moderationsaktion konnte nicht abgeschlossen werden.",
-  "action_cancel": "Abbrechen"
+  "action_cancel": "Abbrechen",
+  "moderation_target_deleted": "Dieser Beitrag wurde gelöscht.",
+  "moderation_target_withheld": "Dieser Inhalt wird zurückgehalten."
 }

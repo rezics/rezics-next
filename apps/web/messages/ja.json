@@ -711,5 +711,7 @@
   "moderation_dismissed": "却下済み",
   "moderation_reports_empty": "このページに報告はありません。",
   "moderation_action_failed": "モデレーション操作を完了できませんでした。",
-  "action_cancel": "キャンセル"
+  "action_cancel": "キャンセル",
+  "moderation_target_deleted": "この投稿は削除されました。",
+  "moderation_target_withheld": "このコンテンツは非表示です。"
 }

@@ -711,5 +711,7 @@
   "moderation_dismissed": "已駁回",
   "moderation_reports_empty": "此頁沒有檢舉。",
   "moderation_action_failed": "無法完成審核操作。",
-  "action_cancel": "取消"
+  "action_cancel": "取消",
+  "moderation_target_deleted": "此貼文已刪除。",
+  "moderation_target_withheld": "此內容已被隱去。"
 }

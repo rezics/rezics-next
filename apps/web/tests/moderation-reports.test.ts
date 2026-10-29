@@ -185,10 +185,7 @@ test('open reports require a reason and statement for take down and offer dismis
 test('withheld and deleted report targets use the existing content placeholders', () => {
   const markup = renderToStaticMarkup(
     createElement(ModerationReportsView, {
-      reports: [
-        report(1, { kind: 'post', id: id(50) }),
-        report(2, { kind: 'post', id: id(51) }),
-      ],
+      reports: [report(1, { kind: 'post', id: id(50) }), report(2, { kind: 'post', id: id(51) })],
       targets: [
         { key: `post:${id(50)}`, kind: 'post', value: { post: { availability: 'withheld' } } },
         { key: `post:${id(51)}`, kind: 'post', value: { post: { availability: 'erased' } } },

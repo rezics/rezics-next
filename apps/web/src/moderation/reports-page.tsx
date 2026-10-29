@@ -1,18 +1,29 @@
 import { documentText } from '@rezics/document';
-import { useState } from 'react';
+import { Tombstone } from '@rezics/ui/tombstone';
+import { Withheld } from '@rezics/ui/withheld';
+import { useState, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { actionOnReport } from './actions';
 import type { Report, ResolvedReportTarget } from './reports-read';
 import { PageHeading } from '../shell/page-heading';
 
 type Target = ResolvedReportTarget;
-function targetText(target: Target | undefined): string {
+function targetContent(target: Target | undefined): ReactNode {
   if (!target?.value || typeof target.value !== 'object') return m.moderation_target_unavailable();
   const data = target.value as Record<string, any>;
   const resource = data.post ?? data.thread ?? data.board ?? data;
   if (!resource || typeof resource !== 'object') return m.moderation_target_unavailable();
-  if (resource.availability === 'withheld' || resource.availability === 'erased' || resource.removed)
-    return m.moderation_target_unavailable();
+  if (resource.availability === 'withheld')
+    return <Withheld shape="passage" labels={{ withheld: m.moderation_target_withheld() }} />;
+  if (resource.availability === 'erased' || resource.availability === 'deleted' || resource.removed)
+    return (
+      <Tombstone
+        shape={target.kind === 'post' ? 'post' : 'row'}
+        reason="deleted"
+        labels={{ deleted: m.moderation_target_deleted() }}
+      />
+    );
+  if (resource.availability === 'unavailable') return m.moderation_target_unavailable();
   const revision = resource.revision && typeof resource.revision === 'object' ? resource.revision : resource;
   if (target.kind === 'post') {
     const body = revision.body ?? resource.body;
@@ -58,7 +69,7 @@ export function ModerationReportsView({
               <li key={report.id} className="space-y-3 rounded-lg border p-4">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">{report.target.kind}</p>
-                  <blockquote className="border-l-2 pl-3">{targetText(target)}</blockquote>
+                  <blockquote className="border-l-2 pl-3">{targetContent(target)}</blockquote>
                 </div>
                 <p>
                   <span className="font-medium">{m.moderation_reason_label()}:</span> {report.reason}
@@ -92,7 +103,6 @@ export function ModerationReportsView({
 }
 
 function ReportActions({ reportId, target }: { reportId: string; target: Report['target'] }) {
-  const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   async function dismiss() {
@@ -130,49 +140,34 @@ function ReportActions({ reportId, target }: { reportId: string; target: Report[
   }
   return (
     <div className="space-y-3">
-      {open ? (
-        <form className="space-y-3" onSubmit={takeDown}>
-          <label className="block space-y-1">
-            <span>{m.moderation_reason_label()}</span>
-            <textarea
-              name="reason"
-              required
-              maxLength={2048}
-              className="min-h-20 w-full rounded-md border bg-background p-2"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span>{m.moderation_statement_label()}</span>
-            <textarea
-              name="statement"
-              required
-              maxLength={2048}
-              className="min-h-20 w-full rounded-md border bg-background p-2"
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <button disabled={pending} className="rounded-md bg-primary px-4 py-2 text-primary-foreground">
-              {m.moderation_take_down()}
-            </button>
-            <button type="button" className="rounded-md border px-4 py-2" onClick={() => setOpen(false)}>
-              {m.action_cancel()}
-            </button>
-          </div>
-        </form>
-      ) : (
+      <form className="space-y-3" onSubmit={takeDown}>
+        <label className="block space-y-1">
+          <span>{m.moderation_reason_label()}</span>
+          <textarea
+            name="reason"
+            required
+            maxLength={2048}
+            className="min-h-20 w-full rounded-md border bg-background p-2"
+          />
+        </label>
+        <label className="block space-y-1">
+          <span>{m.moderation_statement_label()}</span>
+          <textarea
+            name="statement"
+            required
+            maxLength={2048}
+            className="min-h-20 w-full rounded-md border bg-background p-2"
+          />
+        </label>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="rounded-md bg-primary px-4 py-2 text-primary-foreground"
-            onClick={() => setOpen(true)}
-          >
+          <button disabled={pending} className="rounded-md bg-primary px-4 py-2 text-primary-foreground">
             {m.moderation_take_down()}
           </button>
           <button type="button" disabled={pending} className="rounded-md border px-4 py-2" onClick={dismiss}>
             {m.moderation_dismiss()}
           </button>
         </div>
-      )}
+      </form>
       {message ? <p role="alert">{message}</p> : null}
     </div>
   );

@@ -711,5 +711,7 @@
   "moderation_dismissed": "Descartada",
   "moderation_reports_empty": "No hay denuncias en esta página.",
   "moderation_action_failed": "No se pudo completar la acción de moderación.",
-  "action_cancel": "Cancelar"
+  "action_cancel": "Cancelar",
+  "moderation_target_deleted": "Esta publicación se eliminó.",
+  "moderation_target_withheld": "Este contenido está oculto."
 }

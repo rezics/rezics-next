@@ -711,5 +711,7 @@
   "moderation_dismissed": "기각됨",
   "moderation_reports_empty": "이 페이지에는 신고가 없습니다.",
   "moderation_action_failed": "검토 작업을 완료할 수 없습니다.",
-  "action_cancel": "취소"
+  "action_cancel": "취소",
+  "moderation_target_deleted": "이 게시물은 삭제되었습니다.",
+  "moderation_target_withheld": "이 콘텐츠는 공개되지 않습니다."
 }
