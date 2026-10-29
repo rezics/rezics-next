@@ -1,0 +1,3 @@
+SELECT original::text,terminal::text FROM semantic.identity_epoch_original
+      WHERE generation=$1 AND present AND original>coalesce($2::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+      ORDER BY original LIMIT $3;

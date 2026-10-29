@@ -138,9 +138,16 @@ their source command, including unnamed account-agent births. `stepIdentityEpoch
 bounded native source pages and installs mappings only when their source transaction receipt is taken into control
 custody. The resolver rechecks original and terminal visibility independently; mappings do not grant Access.
 
-Native admission, all-home bootstrap scheduling, structural writer fencing and publication are not complete. The
-store therefore keeps the catalogue epoch unavailable and rejects positive admission until their actual native
-receipts and fixed participant acknowledgements exist.
+The default Semantic WorkModule and native fixtures call `stepIdentityEpochBootstrapWork(pool)` for bounded work
+across all 4096 homes, including empty homes. Native source changes retain dirty heads and wake the same scheduler.
+`readIdentityEpochCutover(client)` observes retained topology custody; point mappings do not wait for that sweep.
+
+Admission captures exact native input generations before effects, checks the 4096-original cap, and reserves P=1
+at the local control home. Overlapping input claims are busy; a different job occupying that home is locally
+unavailable. Disjoint homes retain independent progress. `identityJobPartition(job)` resolves routed job custody.
+Search and Library participant completion is never inferred from a receipt locator or bootstrap exhaustion.
+Cross-home preparation and output generation retirement remain incomplete; successful public merge and account
+verification/reversal delivery are not established by a pending store job.
 
 ## Agents
 

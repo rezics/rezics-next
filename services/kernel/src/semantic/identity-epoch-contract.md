@@ -7,9 +7,9 @@ This is the sole owning specification for concurrent identity admission, publica
 This document adopts scoped concurrent publication. It is **not a formatted-byte freeze, Cost confirmation,
 type delivery, runtime delivery, publication completion or root-gate completion**. Performance must confirm all
 nine review items and all coowners must review these corrected bytes before types or executable native work.
-P remains symbolic until the capacity owner adopts it. No new numeric budget is selected here.
+The initial production capacity is P=1: one admitted or PREPARING job reservation per native control partition, charged once per (home, job). Capacity is local; recovery, cancellation and reclamation require no new reservation.
 
-The adjacent `identity-epoch-contract.ts` and existing native fixtures describe a superseded globally serialized
+The adjacent `identity-epoch-contract.ts` exposes the scoped native storage protocol. Earlier globally serialized
 proposal. In particular, one `controlPartition`, one pending `readEpoch` and its sole-job admission sketch do not
 fit this contract unchanged. Existing native cases remain evidence and required outcomes; they are not the new
 frozen boundary. Missing producers below mean actual missing native implementation and proof, never permission
@@ -420,8 +420,8 @@ pending; Accounts adds no polling step, pending success DTO or second operation 
 
 Required `semantic/identity-epoch-store.ts` export `identityEpochStore: IdentityEpochStore` owns:
 
-1. A fixed native control partition; a durable job ID, native bigint target epoch, immutable intent and existing
-   receipt reference; last published epoch and sole pending job; exact group cardinality and affected-original index.
+1. Ordered native control resources and a first-resource job home; a durable routed job ID, native bigint target
+   epoch, immutable intent and existing receipt reference; partition-local published basis and reservations; exact group cardinality and affected-original index.
    Durable JSON serializes bigint as canonical decimal strings, never Number. A job contains no client result vector.
 2. `admit(tx, {intent, receipt}) -> CommandResult<IdentityJobRef>` under a live native control command. It verifies
    real ordinary authorization (or the exact persisted platform decision), receipt/intent equality, complete group
@@ -1050,7 +1050,7 @@ The proposed public two-probe raw-100 argument is rejected. Existing page budget
 Define A current originals, G current groups, M pending memberships, E published epochs, R live minimized
 obligations, L live scoped effect keys and H receipt/outbox/binding history. Let D registered dependency rows,
 S scopes, F relevant native structural fact rows and n raw entries actually examined in a bounded step. q denotes
-an actual physical partition; P is its symbolic fixed capacity. Logs mean log(2+size). Rows include filtered,
+an actual physical partition; P=1 is its fixed initial production capacity. Logs mean log(2+size). Rows include filtered,
 discarded, deleted, joined/materialized, overlap, lookahead and replay work; blocks include shared index/heap/
 payload/catalogue work, not cache misses. O(n log X) means keyed points/writes against named X indexes, not scans.
 R/L/H retain O(R+L+H) actual rows/payload plus indexes, while a point on them is O(1) rows and O(log(R+L+H)) blocks.

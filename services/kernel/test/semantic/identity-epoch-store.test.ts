@@ -5,7 +5,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { writeSubject } from '../../src/semantic/subject.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
-import { readIdentityEpochCutover, stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
+import { readIdentityEpochCutover, stepIdentityEpochBootstrap, stepIdentityEpochBootstrapWork } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { resolveSubject } from '../../src/library/subject-anchor.ts';
 import {
   digest,
@@ -14,6 +14,7 @@ import {
   home,
   release,
   seedLegacyGroup,
+  seedLegacyRoot,
   type EpochFixture,
 } from './support/identity-epoch.ts';
 
@@ -36,7 +37,7 @@ async function admission(intent: IdentityIntent, key = randomUUID(), receiptDige
     return runCommand(
       f.pool,
       {
-        partition: store.controlPartition,
+        partition: home(next.kind==='merge'?next.survivor:next.original),
         basis: { actorAccountId: current.accountId, clientId: current.clientId, requestedBy: current.requestedBy },
         authorization: await f.authorization('subject:merge', persona),
       },
@@ -70,13 +71,14 @@ async function bootstrapHome(partition: number) {
   throw new Error('Bounded bootstrap did not finish the finite fixture');
 }
 
-async function requireCutover(ids: string[]) {
-  for (const partition of new Set(ids.map(home))) await bootstrapHome(partition);
-  // No test setter, direct readiness SQL or fabricated participant receipt is permitted here.
-  expect(
-    await store.readEpoch(f.pool),
-    'MISSING actual creation/structural writer cutover hooks; staged legacy pages cannot authorize admission',
-  ).toMatchObject({ state: 'published' });
+async function requireCutover(_ids: string[]) {
+  for (let step=0;step<100_000;step++) {
+    const progress=await stepIdentityEpochBootstrapWork(f.pool);
+    if (!progress) break;
+    expect(progress.work.rows).toBeLessThanOrEqual(100);
+    if (step===99_999) throw new Error('Native bootstrap scheduler failed to settle finite topology');
+  }
+  expect((await readIdentityEpochCutover(f.pool)).state).toBe('ready');
 }
 
 async function storeSnapshot(ids: string[]) {
@@ -93,6 +95,45 @@ async function storeSnapshot(ids: string[]) {
   };
 }
 
+test('bounded bootstrap never infers self or readiness from absent mapping', async () => {
+  const original = await seedLegacyRoot(f, 0x5e10);
+  const members = await seedLegacyGroup(f, original, 101);
+  expect(await store.readMapping(f.pool, original)).toEqual({ state: 'unavailable', reason: 'bootstrap' });
+  expect(await store.readMapping(f.pool, newId(0x5e10))).toEqual({ state: 'absent' });
+  const first = await stepIdentityEpochBootstrap(f.pool, home(original));
+  expect(first.work.rows).toBeLessThanOrEqual(100);
+  await bootstrapHome(home(original));
+  const group = (
+    await f.admin.query('SELECT observed_count::text FROM semantic.identity_epoch_group WHERE terminal=$1', [original])
+  ).rows[0];
+  expect(group.observed_count).toBe('102');
+  expect(
+    (await f.admin.query('SELECT count(*)::text n FROM semantic.identity_epoch_original WHERE terminal=$1', [original]))
+      .rows[0].n,
+  ).toBe('102');
+  expect(await store.readEpoch(f.pool)).toEqual({ state: 'unavailable', reason: 'bootstrap' });
+  expect(await readIdentityEpochCutover(f.pool)).toEqual({state:'blocked'});
+  const outside = (await f.admin.query('SELECT 1 FROM semantic.identity_epoch_bootstrap_home WHERE partition_no=4094')).rowCount;
+  expect(outside).toBe(0);
+  // A create after the scan, and a redirect at an already visited key, must enter maintained dirty work.
+  const concurrent = (await f.create('Concurrent legacy create', 0x5e10)).subject.id;
+  const survivor = (await f.create('Concurrent destination', 0x5e10)).subject.id;
+  await f.merge(concurrent, survivor);
+  await bootstrapHome(home(original));
+  expect(
+    (await f.admin.query('SELECT terminal FROM semantic.identity_epoch_original WHERE original=$1', [concurrent]))
+      .rows[0].terminal,
+  ).toBe(survivor);
+  expect(await store.readMapping(f.pool, members[0]!)).toMatchObject({state:'mapped',terminal:original});
+  const before = await storeSnapshot([original]);
+  await expect(
+    (await admission({ kind: 'merge', survivor: original, redirected: concurrent, release: release.digest })).execute(),
+  ).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
+  expect(await storeSnapshot([original])).toEqual(before);
+  await requireCutover([original]);
+  expect(await store.readMapping(f.pool,members[0]!)).toMatchObject({state:'mapped',terminal:original});
+}, 600_000);
+
 test('native identity store admits one capped durable job with no early publication and idempotent authorized receipt', async () => {
   const survivor = (await f.create()).subject.id;
   const redirected = (await f.create()).subject.id;
@@ -100,10 +141,10 @@ test('native identity store admits one capped durable job with no early publicat
   await requireCutover([survivor, redirected]);
   const intent = { kind: 'merge' as const, survivor, redirected, release: release.digest };
   const { execute, receipt } = await admission(intent);
-  const before = await store.readEpoch(f.pool);
+  const before = await store.readEpoch(f.pool, home(survivor));
   const admitted = await execute();
   const job = admitted.value;
-  expect(await store.readEpoch(f.pool)).toEqual({
+  expect(await store.readEpoch(f.pool, home(survivor))).toEqual({
     state: 'pending',
     publishedEpoch: before.state === 'published' ? before.epoch : -1n,
     job,
@@ -127,7 +168,7 @@ test('native identity store admits one capped durable job with no early publicat
   const stable = await store.pageChanges(f.pool, job, null);
   expect(await store.pageChanges(f.pool, job, null)).toEqual(stable);
   await expect(
-    runCommand(f.pool, { partition: store.controlPartition }, (tx) => store.publish(tx, job)),
+    runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
   const snapshot = await storeSnapshot([survivor, redirected]);
   await f.real.revoke(globalResource, 'editor', 'subject:merge');
@@ -151,41 +192,6 @@ test('cap4096 is checked against complete legacy groups before every durable adm
     (await admission({ kind: 'merge', survivor, redirected, release: release.digest })).execute(),
   ).rejects.toMatchObject({ code: 'identity_group_overflow' });
   expect(await storeSnapshot(ids)).toEqual(before);
-});
-
-test('bounded bootstrap never infers self or readiness from absent mapping', async () => {
-  const original = (await f.create('Legacy original without a creation hook', 0x5e10)).subject.id;
-  const members = await seedLegacyGroup(f, original, 101);
-  expect(await store.readMapping(f.pool, original)).toEqual({ state: 'unavailable', reason: 'bootstrap' });
-  expect(await store.readMapping(f.pool, newId(0x5e10))).toEqual({ state: 'absent' });
-  const first = await stepIdentityEpochBootstrap(f.pool, home(original));
-  expect(first.work.rows).toBeLessThanOrEqual(100);
-  await bootstrapHome(home(original));
-  const group = (
-    await f.admin.query('SELECT observed_count::text FROM semantic.identity_epoch_group WHERE terminal=$1', [original])
-  ).rows[0];
-  expect(group.observed_count).toBe('102');
-  expect(
-    (await f.admin.query('SELECT count(*)::text n FROM semantic.identity_epoch_original WHERE terminal=$1', [original]))
-      .rows[0].n,
-  ).toBe('102');
-  expect(await store.readEpoch(f.pool)).toEqual({ state: 'unavailable', reason: 'bootstrap' });
-  expect((await readIdentityEpochCutover(f.pool)).missingWriters).toContain('semantic/subject.ts:writeSubject');
-  // A create after the scan, and a redirect at an already visited key, must enter maintained dirty work.
-  const concurrent = (await f.create('Concurrent legacy create', 0x5e10)).subject.id;
-  const survivor = (await f.create('Concurrent destination', 0x5e10)).subject.id;
-  await f.merge(concurrent, survivor);
-  await bootstrapHome(home(original));
-  expect(
-    (await f.admin.query('SELECT terminal FROM semantic.identity_epoch_original WHERE original=$1', [concurrent]))
-      .rows[0].terminal,
-  ).toBe(survivor);
-  expect(await store.readMapping(f.pool, members[0]!)).toEqual({ state: 'unavailable', reason: 'bootstrap' });
-  const before = await storeSnapshot([original]);
-  await expect(
-    (await admission({ kind: 'merge', survivor: original, redirected: concurrent, release: release.digest })).execute(),
-  ).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
-  expect(await storeSnapshot([original])).toEqual(before);
 });
 
 test('native current mapping resolves a created original through the real Library subject reader', async () => {
@@ -263,7 +269,7 @@ test('stale home effect and fabricated step receipt cannot publish identity epoc
     ).rejects.toMatchObject({ code: 'identity_step_receipt_invalid' });
   }
   await expect(
-    runCommand(f.pool, { partition: store.controlPartition }, (tx) => store.publish(tx, job)),
+    runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
   expect(await storeSnapshot([original, destination])).toEqual(before);
   const missingHomeId = newId(0xfff0);

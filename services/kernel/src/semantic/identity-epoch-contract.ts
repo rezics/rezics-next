@@ -1,4 +1,4 @@
-/** Specification only. No implementation, permission result, or runtime registration. */
+/** Native identity storage and fixed participant protocol. Mapping conveys no permission. */
 import type { Pool } from 'pg';
 import type { CommandReceipt, CommandResult, CommandTransaction } from '../command/command.ts';
 import type { mergeSubjects } from './merges.ts';
@@ -95,18 +95,18 @@ export type IdentityEffect =
   | Readonly<{ kind: 'structural'; job: IdentityJobRef; original: string }>
   | Readonly<{ kind: 'follow-count'; original: string; terminal: string; epoch: IdentityEpoch }>;
 
-/** MISSING producer: semantic/identity-epoch-store.ts, export identityEpochStore.
+/** Native producer: semantic/identity-epoch-store.ts, export identityEpochStore.
  * Every mutation uses currentCommand(tx), its real owner and native time.
  * Pool methods release each home before acquiring another home or engine.
  */
 export type IdentityEpochStore = Readonly<{
-  /** Fixed native control home, not a client routing parameter. */
+  /** Bootstrap topology home. Job control homes are encoded in native job IDs. */
   controlPartition: number;
-  readEpoch(client: CommandTransaction): Promise<IdentityEpochState>;
+  readEpoch(client: CommandTransaction, partition?: number): Promise<IdentityEpochState>;
   readJob(client: CommandTransaction, job: IdentityJobRef): Promise<IdentityJob | null>;
   findJob(client: CommandTransaction, receipt: IdentityReceipt): Promise<IdentityJob | null>;
-  /** Releases source before ONE indexed fixed-control pending observation and ONE epoch probe.
-   * Revalidates the source against that coherent control basis; no list/publication wait.
+  /** Source and explicit current control use one native backend RR snapshot when colocated.
+   * Observes only the affected group; no list/publication wait.
    * Missing/unready/moved source OR control is unavailable, never guessed self.
    */
   readMapping(pool: Pool, original: string): Promise<IdentityMapping>;
