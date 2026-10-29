@@ -131,6 +131,17 @@ The component is an observation of source identity, not authorization evidence o
 This boundary does not prepare types or read display metadata. Fresh profile writers use `readItemTypes` independently.
 Full subject display readers retain their existing projection freshness and deadline behavior.
 
+## Identity epoch status
+
+`identityEpochStore.readMapping` is bound to the Library subject resolver. Revision-1 births store a self mapping in
+their source command, including unnamed account-agent births. `stepIdentityEpochBootstrap(pool, partition)` exports
+bounded native source pages and installs mappings only when their source transaction receipt is taken into control
+custody. The resolver rechecks original and terminal visibility independently; mappings do not grant Access.
+
+Native admission, all-home bootstrap scheduling, structural writer fencing and publication are not complete. The
+store therefore keeps the catalogue epoch unavailable and rejects positive admission until their actual native
+receipts and fixed participant acknowledgements exist.
+
 ## Agents
 
 ### Account agents
