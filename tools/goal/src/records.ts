@@ -54,8 +54,7 @@ export function readLogFromOffset(
       read += count;
     }
     let text = buffer.subarray(0, read).toString('utf8');
-    const startsMidLine = readStart > 0 && (readStart > start || readStart === start);
-    if (startsMidLine) {
+    if (readStart > 0) {
       const previous = Buffer.alloc(1);
       const gotPrevious = readSync(fd, previous, 0, 1, readStart - 1);
       if (gotPrevious && previous[0] !== 10) {
@@ -353,9 +352,7 @@ export function readMeasurement(
   options: MeasurementOptions & { maxLogBytes?: number } = {},
 ): LogMeasurement {
   let text = '';
-  if (options.logStartOffset !== undefined)
-    text = readLogFromOffset(attempt.logPath, options.logStartOffset, options.maxLogBytes);
-  else if (options.maxLogBytes !== undefined) text = readLogTail(attempt.logPath, options.maxLogBytes);
+  if (options.maxLogBytes !== undefined) text = readLogTail(attempt.logPath, options.maxLogBytes);
   else
     try {
       text = readFileSync(attempt.logPath, 'utf8');
@@ -371,7 +368,23 @@ export function readMeasurement(
     ...interval,
     ...(options.baseline ? { baseline: options.baseline } : {}),
   });
-  const completed = text.split('\n').some((line) => {
+  const runText =
+    options.logStartOffset === undefined
+      ? text
+      : readLogFromOffset(attempt.logPath, options.logStartOffset, options.maxLogBytes);
+  if (runText !== text) {
+    const runOutcome = measureLog(runText, {
+      ...(selected ? { adapter: selected } : {}),
+      ...interval,
+    });
+    measurement.session = runOutcome.session;
+    measurement.result = runOutcome.result;
+    measurement.blocker = runOutcome.blocker;
+    measurement.failureKind = runOutcome.failureKind;
+    measurement.usageLimitRefusal = runOutcome.usageLimitRefusal;
+    measurement.waitingChecks = runOutcome.waitingChecks;
+  }
+  const completed = runText.split('\n').some((line) => {
     try {
       const event = JSON.parse(line);
       return adapters.some((adapter) => adapter.completed(event));
