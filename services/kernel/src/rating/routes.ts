@@ -9,7 +9,7 @@ import { withConnection } from '../database/pool.ts';
 import { readRealm } from '../community/realm.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
+import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { globalReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
@@ -263,19 +263,23 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         params: t.Object({ id, questionId: id }, closed),
         headers,
         body: RatingVoteInputSchema,
-        response: { 200: RatingVoteResponseSchema, ...failures },
+        response: {
+          200: withHeaders(RatingVoteResponseSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures,
+        },
         detail: detail('rating.vote_put', true),
       },
-      async ({ actor, params, body, headers, admission, job }) => {
+      async ({ actor, params, body, headers, admission, job, session }) => {
         requirePersonalScope(actor, params.id, params.questionId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(() =>
-            votes().putVote(actor, { questionId: params.questionId, targetId: params.id, units: body.units }, key),
+            votes().putVoteOutcome(actor, { questionId: params.questionId, targetId: params.id, units: body.units }, key),
           ),
         );
-        if (!result) throw new ProblemError('not_found');
-        return voteView(result);
+        if (!result.vote) throw new ProblemError('not_found');
+        if (result.component) session.record(result.component);
+        return voteView(result.vote);
       },
     )
     .delete(
@@ -283,17 +287,21 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         params: t.Object({ id, questionId: id }, closed),
         headers,
-        response: { 204: t.Void(), ...failures },
+        response: {
+          204: withHeaders(t.Void(), { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures,
+        },
         detail: detail('rating.vote_delete', true),
       },
-      async ({ actor, params, headers, admission, job, set }) => {
+      async ({ actor, params, headers, admission, job, set, session }) => {
         requirePersonalScope(actor, params.id, params.questionId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        await admission.run('normal', job, () =>
+        const result = await admission.run('normal', job, () =>
           command(() =>
-            votes().putVote(actor, { questionId: params.questionId, targetId: params.id, units: null }, key),
+            votes().putVoteOutcome(actor, { questionId: params.questionId, targetId: params.id, units: null }, key),
           ),
         );
+        if (result.component) session.record(result.component);
         set.status = 204;
       },
     )

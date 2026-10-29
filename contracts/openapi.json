@@ -138940,7 +138940,14 @@
         ],
         "responses": {
           "204": {
-            "description": "Response for status 204"
+            "description": "Response for status 204",
+            "headers": {
+              "rezics-session-token": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -140375,7 +140382,14 @@
                 }
               }
             },
-            "description": "Response for status 200"
+            "description": "Response for status 200",
+            "headers": {
+              "rezics-session-token": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "content": {

@@ -3,6 +3,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, type CommandEvent } from '../command/command.ts';
+import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
 import { LibraryNotFoundError, createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { resolveSubject } from '../library/subject-anchor.ts';
@@ -43,6 +44,7 @@ export type Vote = {
 };
 
 export type PutVoteInput = { questionId: string; targetId: string; units: number | null };
+export type PutVoteOutcome = { vote: Vote | null; component: SessionComponent | null };
 
 export class VoteInvalidError extends Error {
   constructor(readonly field: string) {
@@ -173,7 +175,7 @@ export function createVoteCommands(config: Dependencies) {
   const { pool, access, clock } = config;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
 
-  async function putVote(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<Vote | null> {
+  async function putVoteOutcome(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
     if (
       !input ||
@@ -317,11 +319,18 @@ export function createVoteCommands(config: Dependencies) {
           };
         },
       );
-      return outcome.value;
+      return {
+        vote: outcome.value,
+        component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
+      };
     } catch (error) {
-      if (error instanceof VoteUnchanged) return error.vote;
+      if (error instanceof VoteUnchanged) return { vote: error.vote, component: null };
       throw error;
     }
+  }
+
+  async function putVote(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<Vote | null> {
+    return (await putVoteOutcome(actor, input, idempotencyKey)).vote;
   }
 
   async function readOwnVote(actor: Actor, questionId: string, targetId: string): Promise<Vote | null> {
@@ -354,5 +363,5 @@ export function createVoteCommands(config: Dependencies) {
     });
   }
 
-  return { putVote, readOwnVote, readRatingQuestion };
+  return { putVote, putVoteOutcome, readOwnVote, readRatingQuestion };
 }

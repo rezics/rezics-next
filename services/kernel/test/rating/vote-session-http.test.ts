@@ -134,7 +134,7 @@ afterAll(async () => {
   await database?.close();
 });
 
-test('a first PUT, changing PUT, and DELETE answer the voter session component at their committed position', async () => {
+test("a vote put or delete that changes the vote answers its command's session component for the voter", async () => {
   const subjectId = await subject();
   const path = `/v1/subjects/${subjectId}/ratings/00000000-0000-7000-8000-000000000001/vote`;
 
@@ -160,7 +160,7 @@ test('a first PUT, changing PUT, and DELETE answer the voter session component a
   }
 });
 
-test('replaying a vote command answers the same body and component, while an unchanged PUT answers no token', async () => {
+test('a replayed vote command answers the same body and component, and a no-op put records no component', async () => {
   const subjectId = await subject();
   const path = `/v1/subjects/${subjectId}/ratings/00000000-0000-7000-8000-000000000001/vote`;
   const key = randomUUID();

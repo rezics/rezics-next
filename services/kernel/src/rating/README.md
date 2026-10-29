@@ -144,6 +144,7 @@ population, question and source-statistics reads are public under subject and Re
 
 - `PUT /v1/subjects/{id}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
   requires an `Idempotency-Key`. It returns `{ "units", "revision", "at" }` for the caller's current vote.
+- A vote write that changes or replays answers the session token; a no-op does not.
 - `DELETE` on the same path also requires an `Idempotency-Key`, writes a tombstone for a cleared vote, and returns
   `204 No Content`.
 - `GET` on the same path returns `{ "units", "revision", "at" }` for the caller's current vote. It returns `404`

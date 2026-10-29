@@ -171,6 +171,10 @@ test('rating question and own vote routes are mounted once with their declared a
       expect(document.paths[path]?.[method]?.['x-action']).toBe(action);
       expect(document.paths[path]?.[method]?.['x-exposure']).toBe(exposure);
       expect(document.paths[path]?.[method]?.security).toEqual(security);
+      if (path.endsWith('/vote') && (method === 'put' || method === 'delete'))
+        expect(document.paths[path]?.[method]?.responses?.[method === 'put' ? '200' : '204']?.headers).toHaveProperty(
+          'rezics-session-token',
+        );
       const native = path.replace(/\{(\w+)\}/g, ':$1');
       expect(app.routes.filter((route) => route.path === native && route.method.toLowerCase() === method)).toHaveLength(
         1,
