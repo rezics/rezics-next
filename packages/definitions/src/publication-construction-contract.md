@@ -166,10 +166,10 @@ successful fixed proofs, and every property-value pattern is still walked uncond
 Native cases include safe `^A$`, unsafe `^(a+)+$`, checkpoint exhaustion `^[ab]{32}a[ab]*$`, and structural/analysis
 refusal `^[ab]*a[ab]{32}$`. The copied checker additionally records actual native status or guarded exception;
 `analyzePattern` intentionally exposes only safe/steps. Unknown, exception or unsafe is never safe. For each defect,
-the test actually executes a sorted safe prefix followed by that same defect, with aggregate boundaries one
-checkpoint below, exactly at and one above its observed total. A separate fixed-candidate schedule executes 900
-sorted safe literal sources then the exhausted pattern. This is a diagnostic method schedule, not a publication
-admission API or a fabricated HTTP result.
+the test executes a sorted safe prefix followed by that same defect at the fixed candidate aggregate. Prefixes
+leave one checkpoint less than, exactly, and one more than the defect's observed work. The fixture constructor
+uses observed native literal costs; the schedule independently executes every chosen source and sums actual
+checkpoints. This is a diagnostic method schedule, not a publication admission API or a fabricated HTTP result.
 
 The proposal for review is: cheap bounded 400 first; then sorted analyses; a defect with no aggregate excess retains
 its diagnostic; when the SAME completed pattern both defects and first exceeds the aggregate, return the existing
@@ -209,3 +209,23 @@ Handoff requires the full four formatted files/diff and their SHA-256 values, ra
 counter identity/compatibility evidence, first actual growth failures and this exact cap/lifetime/precedence
 proposal. There is no product fix in this change. Expected native growth failures are the specification's delivered
 reds; setup failures are not acceptable substitutes and must be repaired before handoff.
+
+## First native observations
+
+The first completed instrumentation run compared all 117 rows successfully, including every full original and
+instrumented output. At 64/512/4096 entries each duplicate-heavy bases, mappings and qualifiers array executed
+1953/130305/8382465 actual accumulated-index copies. The 512-entry family already exceeds the generous
+linear node/edge allowance. Valid and late-invalid crossed release validation executed base reads AND base
+expansions of 64/4096/262144 each, and declared-qualifier scans of 1500/98016/6289152. The direct Filter mode
+also reaches both defects; successful rows count its fixed two admissions, refused rows one. All retained bodies
+fit the byte cap. These are actual loop lower bounds, with the full node/edge/string/filter dimensions and raw
+outcomes in the acceptance log, not extrapolated d-squared counters.
+
+Native checker outputs were safe/7 steps for `^A$`, vulnerable automaton/156 for `^(a+)+$`, guarded
+exhaustion/8193 for `^[ab]{32}a[ab]*$`, and guarded analysis refusal/457 for `^[ab]*a[ab]{32}$`. The latter
+is not claimed to be a returned native `unknown` status: the wrapper refuses before an accepted automaton
+result. Both refusals remain false. The former 900-literal fixture totaled 16293, below the candidate; its
+failed excess expectation was a fixture error, corrected to exact native boundary schedules. It was not a
+product admission red. Earlier setup attempts failed on copied read-only directory modes and then missing
+filesystem imports; both were corrected without touching installed dependencies. Only reached growth
+assertions in a completed fidelity run count as the delivered construction reds.

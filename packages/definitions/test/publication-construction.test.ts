@@ -28,6 +28,15 @@ test('copied native validation and dependency counters preserve full outputs on 
       expect(Array.isArray(row.original)).toBe(true);
       expect((row.original as unknown[]).length, row.name).toBeGreaterThan(0);
       expect((row.original as unknown[]).length, row.name).toBeLessThanOrEqual(64);
+      const errors = row.original as { pointer: string; code: string }[];
+      expect(
+        errors.map((error) => error.pointer),
+        row.name,
+      ).toEqual(errors.map((error) => error.pointer).sort());
+      expect(new Set(errors.map((error) => error.pointer)).size).toBe(errors.length);
+      expect(errors.every((error) => error.code === 'invalid')).toBe(true);
+      expect(errors[0]!.pointer).toStartWith('/filters/construction0~1f00/filter/');
+      if (row.axes.filters! >= 64) expect(errors.length, row.name).toBe(64);
     }
   }
 }, 240_000);
