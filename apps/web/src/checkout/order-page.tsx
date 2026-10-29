@@ -88,16 +88,7 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
           <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
             <SubjectCover data={order.subject} size="sm" priority />
             <div className="min-w-0 space-y-4">
-              {order.subject.href ? (
-                <a
-                  href={order.subject.href}
-                  className="block break-words text-lg font-medium text-primary underline underline-offset-4"
-                >
-                  {order.subject.subject.title}
-                </a>
-              ) : (
-                <p className="break-words text-lg font-medium">{order.subject.subject.title}</p>
-              )}
+              <p className="break-words text-lg font-medium">{order.subject.subject.title}</p>
               <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm">
                 <dt className="text-muted-foreground">{m.order_reference()}</dt>
                 <dd className="break-all font-mono">{order.id}</dd>
@@ -143,14 +134,6 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
             {m.order_next_step()}
           </h2>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
-            {order.subject.href && (
-              <a
-                href={order.subject.href}
-                className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-              >
-                {m.order_open_subject()}
-              </a>
-            )}
             <a
               href={`/${locale}/library`}
               className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"

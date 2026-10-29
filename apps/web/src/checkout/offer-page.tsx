@@ -90,26 +90,26 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
               <AlertDescription className="text-foreground">{note}</AlertDescription>
             </Alert>
           )}
-          <Exposure operation="order.create">
-            <div className="pt-2">
-              {phase === 'retry' ? (
-                <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
-                  {m.offer_retry()}
-                </Button>
-              ) : phase === 'closed' ? null : (
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  disabled={phase !== 'ready' || session === 'unknown'}
-                  onClick={() => void start()}
-                >
-                  {m.offer_buy()}
-                </Button>
-              )}
-            </div>
-          </Exposure>
         </div>
       </header>
+      <Exposure operation="order.create">
+        <div className="pt-2">
+          {phase === 'retry' ? (
+            <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
+              {m.offer_retry()}
+            </Button>
+          ) : phase === 'closed' ? null : (
+            <Button
+              size="lg"
+              className="w-full sm:w-auto"
+              disabled={phase !== 'ready' || session === 'unknown'}
+              onClick={() => void start()}
+            >
+              {m.offer_buy()}
+            </Button>
+          )}
+        </div>
+      </Exposure>
     </article>
   );
 }

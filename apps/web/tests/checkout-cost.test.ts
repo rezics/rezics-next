@@ -338,6 +338,8 @@ test('checkout start stays within its bound as s grows', async () => {
     holdCatalogue(s);
     expect(heldOffers).toHaveLength(s);
     expect(heldOrders).toHaveLength(s);
+    const warmed = await fetch(`${origin}/en/offers/${targetOfferId}`);
+    expect(warmed.status).toBe(200);
     kernelCalls.length = 0;
     authCalls.length = 0;
     const { counts, env } = sessionHarness();
