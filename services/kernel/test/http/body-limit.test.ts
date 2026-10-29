@@ -19,17 +19,20 @@ function streamed(chunks: Uint8Array[], extraHeaders: Record<string, string> = {
   const request = new Request('http://localhost/probe', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...extraHeaders },
-    body: new ReadableStream<Uint8Array>({
-      pull(controller) {
-        reads++;
-        const chunk = chunks.shift();
-        if (chunk) controller.enqueue(chunk);
-        else controller.close();
+    body: new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          reads++;
+          const chunk = chunks.shift();
+          if (chunk) controller.enqueue(chunk);
+          else controller.close();
+        },
+        cancel() {
+          cancelled = true;
+        },
       },
-      cancel() {
-        cancelled = true;
-      },
-    }, { highWaterMark: 0 }),
+      { highWaterMark: 0 },
+    ),
     // Bun's Request requires duplex for streamed bodies; its type omits the extension.
     duplex: 'half',
   } as RequestInit);
