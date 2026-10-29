@@ -38,7 +38,7 @@ test('file-mode plans without a static relative import to search work do not nee
 test('file-mode plans need search when a selected test static import closure reaches search work', () => {
   withModule(
     {
-      'test/ordinary.test.ts': "import '../support/worker.ts';",
+      'test/ordinary.test.ts': "import './support/worker.ts';",
       'test/support/worker.ts': "import '../../src/search/work.ts';",
       'src/search/work.ts': "export const url = process.env.OPENSEARCH_URL;",
     },
