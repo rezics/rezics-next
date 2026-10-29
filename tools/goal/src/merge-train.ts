@@ -426,10 +426,14 @@ function pathsChangedByTaskButUnchangedOnDev(
   return taskPaths.filter((path) => compare(dev, taskTip, path) && !compare(dev, candidate, path));
 }
 
-function refuseNoEffect(result: GateOutcome, paths: readonly string[], logPath: string): void {
+function refuseNoEffect(
+  result: GateOutcome,
+  paths: readonly string[],
+  logPath: string,
+  reason = `Change had no effect on dev: ${paths.join(', ')}`,
+): void {
   result.stage = 'merge';
   result.conflictedFiles = [...paths];
-  const reason = `Change had no effect on dev: ${paths.join(', ')}`;
   result.firstFailure = firstFailure(reason);
   appendFileSync(logPath, `${reason}\n`);
 }
@@ -442,8 +446,47 @@ function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean 
 }
 
 class WorkerConflictError extends Error {
-  constructor(readonly path: string) {
-    super(`Worker change conflicts with dev in ${path}`);
+  constructor(
+    readonly path: string,
+    readonly detail = '',
+  ) {
+    super(`Worker change conflicts with dev in ${path}${detail ? `: ${detail}` : ''}`);
+  }
+}
+
+/** Inspect the actual diff: an unchanged duplicate is not an addition, while a moved line is. */
+function assertTaskDeletionsAbsent(cwd: string, file: string, base: string, task: string, result: string): void {
+  mkdirSync(join(cwd, '.temp'), { recursive: true });
+  const scratch = mkdtempSync(join(cwd, '.temp', 'union-deletions-'));
+  try {
+    const basePath = join(scratch, 'base');
+    const taskPath = join(scratch, 'task');
+    writeFileSync(basePath, base);
+    writeFileSync(taskPath, task);
+    const diff = spawnSync(
+      'git',
+      ['diff', '--no-index', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0', '--', basePath, taskPath],
+      { cwd, encoding: 'utf8' },
+    );
+    if (diff.status !== 0 && diff.status !== 1)
+      throw new Error(diff.stderr.trim() || `Cannot read task diff for ${file}`);
+    const deleted = new Set<string>();
+    const added = new Set<string>();
+    let inHunk = false;
+    for (const line of diff.stdout.split(/\r?\n/)) {
+      if (line.startsWith('@@')) inHunk = true;
+      else if (inHunk && line.startsWith('-')) deleted.add(line.slice(1));
+      else if (inHunk && line.startsWith('+')) added.add(line.slice(1));
+    }
+    const remaining = new Set(result.split(/\r?\n/));
+    const conflicts = [...deleted].filter((line) => !added.has(line) && remaining.has(line));
+    if (conflicts.length)
+      throw new WorkerConflictError(
+        file,
+        `task-deleted lines remain: ${conflicts.map((line) => JSON.stringify(line)).join(', ')}`,
+      );
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 
@@ -472,6 +515,8 @@ export function resolveMechanicalConflicts(
   paths: readonly string[],
   formatCommand?: readonly string[],
   markdown: 'insertions' | 'union' = 'insertions',
+  // Index stage holding the task; callers replaying it during a rebase must select stage 3.
+  taskStage: 2 | 3 = 2,
 ): string[] | false {
   const resolved = new Map<string, string>();
   const unionResolved: string[] = [];
@@ -523,6 +568,7 @@ export function resolveMechanicalConflicts(
         if (merged.status === null || merged.status > 1) return false;
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+        if (markdown === 'union') assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text);
         if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
           throw new WorkerConflictError(file);
         unionResolved.push(file);
@@ -541,6 +587,8 @@ export function resolveMechanicalConflicts(
       const ours = parseFlatJsonObject(stages[1]!);
       const theirs = parseFlatJsonObject(stages[2]!);
       const base = parseFlatJsonObject(stages[0]!);
+      text = `${JSON.stringify(merged.value, null, 2)}\n`;
+      assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text);
       if (
         ours &&
         theirs &&
@@ -550,7 +598,6 @@ export function resolveMechanicalConflicts(
         comparableJson(theirs) !== comparableJson(base)
       )
         throw new WorkerConflictError(file);
-      text = `${JSON.stringify(merged.value, null, 2)}\n`;
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
     resolved.set(path, text);
@@ -640,7 +687,7 @@ function rebaseWithDerivedFiles(
       const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
       // Validate all ordinary conflicts before choosing a generated side or running a generator.
       if (textConflicts.length) {
-        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union');
+        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union', 3);
         if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts) ?? rebaseError;
         const markdownUnion = unionResolved.length ? `; Markdown union: ${unionResolved.join(', ')}` : '';
         appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${textConflicts.join(', ')}${markdownUnion}\n`);
@@ -1116,7 +1163,7 @@ export class MergeTrain {
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
             if (error instanceof WorkerConflictError) {
-              refuseNoEffect(result, [error.path], logPath);
+              refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
               localOutcomes.set(entry.id, result);
               try {
                 git(trainTree, 'rebase', '--abort');
@@ -1780,7 +1827,7 @@ export class MergeTrain {
             rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             if (!(error instanceof WorkerConflictError)) throw error;
-            refuseNoEffect(result, [error.path], logPath);
+            refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
             return finish();
           }
         }
@@ -2667,7 +2714,7 @@ export class MergeTrain {
       resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'),
       ...FORMAT_FLAGS,
     ];
-    if (!resolveMechanicalConflicts(tree, files, formatCommand)) return false;
+    if (!resolveMechanicalConflicts(tree, files, formatCommand, 'insertions', 3)) return false;
     git(tree, 'add', '--', ...files);
     git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;
