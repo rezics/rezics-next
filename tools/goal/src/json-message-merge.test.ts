@@ -73,9 +73,9 @@ test('two different values for the same message key refuse and name that key', a
     git(task.worktree, ['add', '--', catalog]);
     git(task.worktree, ['commit', '-m', 'Update message catalog']);
 
-    expect(() => rebaseOnto(task.worktree, h.head(), base, join(h.settings.stateDirectory, 'conflict.rebase.log'))).toThrow(
-      /JSON message conflict in apps\/web\/messages\/en\.json: key shared/,
-    );
+    expect(() =>
+      rebaseOnto(task.worktree, h.head(), base, join(h.settings.stateDirectory, 'conflict.rebase.log')),
+    ).toThrow(/JSON message conflict in apps\/web\/messages\/en\.json: key shared/);
   } finally {
     h.dispose();
   }

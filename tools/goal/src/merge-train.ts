@@ -504,7 +504,10 @@ function parseFlatJsonObject(text: string): JsonObject | undefined {
 function comparableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(comparableJson).join(',')}]`;
   if (value && typeof value === 'object')
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${comparableJson((value as JsonObject)[key])}`).join(',')}}`;
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${comparableJson((value as JsonObject)[key])}`)
+      .join(',')}}`;
   return JSON.stringify(value);
 }
 
