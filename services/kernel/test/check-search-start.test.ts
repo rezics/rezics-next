@@ -50,6 +50,35 @@ test('file-mode plans need search when a selected test static import closure rea
   );
 });
 
+test('file-mode plans scan imports after a shebang in the selected import closure', () => {
+  withModule(
+    {
+      'test/ordinary.test.ts': "import './support/worker.ts';",
+      'test/support/worker.ts': "#!/usr/bin/env bun\nimport '../../src/search/work.ts';",
+      'src/search/work.ts': 'export const searchEnabled = true;',
+    },
+    (directory) => {
+      expect(planNeedsSearch({ files: ['test/ordinary.test.ts'], tests: ['test/ordinary.test.ts'] }, directory)).toBe(
+        true,
+      );
+    },
+  );
+});
+
+test('file-mode plans need search when a file in the import closure cannot be scanned', () => {
+  withModule(
+    {
+      'test/ordinary.test.ts': "import './support/worker.ts';",
+      'test/support/worker.ts': 'const =',
+    },
+    (directory) => {
+      expect(planNeedsSearch({ files: ['test/ordinary.test.ts'], tests: ['test/ordinary.test.ts'] }, directory)).toBe(
+        true,
+      );
+    },
+  );
+});
+
 test('full check plans always need search', () => {
   expect(planNeedsSearch({ files: null, tests: [] }, import.meta.dir)).toBe(true);
 });

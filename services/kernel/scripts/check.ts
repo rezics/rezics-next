@@ -70,9 +70,19 @@ export function planNeedsSearch(plan: CheckPlan, moduleDirectory: string): boole
     const file = pending.pop()!;
     if (visited.has(file) || !pathIsWithin(root, file) || !existsSync(file)) continue;
     visited.add(file);
-    const source = readFileSync(file, 'utf8');
-    if (source.includes('OPENSEARCH_URL')) return true;
-    for (const imported of transpiler.scanImports(source)) {
+    let source: string;
+    let imports: ReturnType<typeof transpiler.scanImports>;
+    try {
+      source = readFileSync(file, 'utf8');
+      if (source.includes('OPENSEARCH_URL')) return true;
+      // Bun's import scanner treats a shebang as invalid syntax, even though the runtime accepts it.
+      const scanSource = source.startsWith('#!') ? source.replace(/^#![^\r\n]*(?:\r?\n|$)/, '') : source;
+      imports = transpiler.scanImports(scanSource);
+    } catch {
+      // An incomplete static plan must pay for search rather than fail or omit a needed service.
+      return true;
+    }
+    for (const imported of imports) {
       const dependency = resolveTypeScriptImport(file, imported.path, root);
       if (dependency && !visited.has(dependency)) pending.push(dependency);
     }
