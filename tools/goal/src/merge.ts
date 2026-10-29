@@ -128,10 +128,12 @@ export type CheckResultGateOptions = {
 export function gateRunner(
   timeoutMs = 600_000,
   stateDirectory?: string,
-  environment: NodeJS.ProcessEnv = {},
+  environment: NodeJS.ProcessEnv | CheckResultGateOptions = {},
   reuse?: CheckResultGateOptions,
 ): GateRunner {
-  const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...environment });
+  if ('root' in environment && 'results' in environment) { reuse = environment; environment = {}; }
+  const env = environment as NodeJS.ProcessEnv;
+  const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...env });
   return async (argv, cwd, logPath) => {
     let key: ReturnType<typeof checkResultKey> | undefined;
     let cached: CheckResult | undefined;
@@ -143,7 +145,7 @@ export function gateRunner(
         cleanBefore = git(cwd, 'status', '--porcelain').length === 0;
         if (cleanBefore) {
           head = git(cwd, 'rev-parse', 'HEAD');
-          key = checkResultKey({ root: reuse.root, cwd, command: argv, env: { ...process.env, ...environment } });
+          key = checkResultKey({ root: reuse.root, cwd, command: argv, env: { ...process.env, ...env } });
           cached = reuse.results.lookup(key.key);
           appendFileSync(logPath, `check-results: ${cached ? 'hit' : 'miss'} ${key.key}\n`);
           if (cached && reuse.enabled && !reuse.shadow) return { passed: true, output: 'reused check result', timedOut: false };
