@@ -39,12 +39,12 @@ function filesInCommits(cwd: string, commitList: readonly string[]): string[] {
       files.add(file);
   return [...files];
 }
-function taskLandings(settings: Settings, store: WorkerStore, base: string, target: string): Task[] {
+function taskLandings(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Task[] {
   const landed = new Set(commits(settings.mainCheckout, base, target));
   return store.tasks().filter((task) => task.state === 'integrated' && task.integratedCommit &&
     landed.has(task.integratedCommit) && task.brief.kind !== undefined && !skippedKinds.has(task.brief.kind));
 }
-function createChecks(settings: Settings, store: WorkerStore, base: string, target: string): Check[] {
+function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Check[] {
   const checkout = settings.mainCheckout;
   const files = changedFiles(checkout, base, target);
   if (!files.length) return [];
