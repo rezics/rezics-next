@@ -780,7 +780,7 @@ export function createAccess(config: PermissionConfig): Access {
       const use = decision.allowed ? governanceReachUse(evidence, actor, action, resource) : undefined;
       if (use && hasLiveCommandTransaction(client) && !recordGovernanceReachUse(client, use))
         return { allowed: false, explicit: false };
-      return decision;
+      return { allowed: decision.allowed, explicit: decision.explicit };
     },
     async authorize(client, actor, action, resource, evidence, time) {
       const allowed = await checkPermission(client, actor, action, resource, evidence, time, config.clock);
