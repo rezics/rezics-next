@@ -25,7 +25,9 @@ import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOpti
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
   readonly actors: Omit<ContentActors, 'worker' | 'otherWorker'>;
-  readonly auth: Omit<ContentSystem['auth'], 'websiteClient'>;
+  readonly auth: Omit<ContentSystem['auth'], 'websiteClient'> & {
+    readonly ordinaryScopes: readonly string[];
+  };
   /** The full fixture registers its website client on this same real Auth service. */
   readonly nativeAuth: AuthService;
 };
@@ -231,6 +233,9 @@ async function createNativeContentSystemWithOptions(
     const scopes = ordinaryScopes
       ? [...ordinaryScopes]
       : [...actions.keys()].filter((action) => action !== 'media:complete').sort();
+    const registeredOrdinaryScopes = Object.freeze([...scopes]);
+    // The content wrapper preserves this client object but rebuilds its auth object.
+    Object.defineProperty(ordinaryClient, 'scopes', { value: registeredOrdinaryScopes });
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
       firstParty: true,
@@ -362,6 +367,7 @@ async function createNativeContentSystemWithOptions(
       actors: { anonymous: null, author, other, moderator, suspended },
       auth: {
         ordinaryClient,
+        ordinaryScopes: registeredOrdinaryScopes,
         issue,
         // Ordinary Auth renews access via its signed native session cookie,
         // rather than the website-only OAuth refresh protocol. Pass that real
