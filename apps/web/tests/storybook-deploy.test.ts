@@ -250,6 +250,7 @@ describe('deployment sequencing', () => {
       const cloudflareOutputDir = mkdtempSync(resolve(root, '.temp/storybook-cloudflare-output-'));
       const calls: string[][] = [];
       const outputLines: string[] = [];
+      let liveReads = 0;
       try {
         await runDeployment({
           dryRun,
@@ -267,7 +268,7 @@ describe('deployment sequencing', () => {
               ? 'dry run'
               : 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev';
           },
-          fetchBuild: async () => ({ commit: 'a'.repeat(40) }),
+          fetchBuild: async () => ({ commit: ++liveReads === 1 ? 'b'.repeat(40) : 'a'.repeat(40) }),
           isTreeClean: async () => [],
           print: (line) => outputLines.push(line),
         });
