@@ -496,6 +496,7 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 ```
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
+Explicit retries are recorded with their amended brief as pending host start intents and return without waiting for capacity. The host consumes pending intents on recovery ticks in their saved order, starting each once as capacity becomes available.
 `cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. Tasks held
 after it remain held because cancellation does not satisfy `after`; each manager that owns those held tasks receives one
 instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled

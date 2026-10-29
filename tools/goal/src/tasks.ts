@@ -355,6 +355,37 @@ export class WorkerTasks {
     if (!worker) throw new TaskHeldForDependenciesError();
     return worker;
   }
+  /** Persist an explicit retry for the host to start on its next recovery sweep. */
+  queueRetry(taskId: string, options: RetryOptions = {}): void {
+    const task = this.store.task(taskId);
+    if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt');
+    const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
+    if (reshaped && (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager))
+      throw new Error('a reshaped brief must keep the same goal and manager');
+    if (reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown)) throw new BriefContractUnchangedError();
+    const ref = { taskId, attempt: task.currentAttempt };
+    const briefPath = reshaped ? join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`) : undefined;
+    if (reshaped && briefPath) {
+      mkdirSync(dirname(briefPath), { recursive: true });
+      writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
+    }
+    this.store.write(ref, () => {
+      const current = this.store.task(taskId);
+      if (!['ready', 'running', 'landing', 'stopped'].includes(current.state)) throw new Error(`cannot retry ${current.state} task`);
+      if (reshaped) {
+        current.brief = reshaped.brief;
+        current.briefPath = briefPath!;
+        current.taskClass = reshaped.taskClass;
+        current.pendingBriefChange = {
+          previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+          newBriefHash: briefHash(reshaped.brief.markdown),
+        };
+        if (!this.dependenciesMet({ brief: current.brief })) current.state = 'held';
+        else current.state = 'ready';
+      } else if (current.state === 'stopped') current.state = 'ready';
+      this.store.saveRetryIntent(ref, options);
+    });
+  }
   async retryHeld(taskId: string): Promise<RunningWorker> {
     await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)), taskId);
     // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and

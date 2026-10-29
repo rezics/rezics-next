@@ -93,7 +93,7 @@ export async function runWorkerCommand(
       if (!arg || (argv.length !== 1 && !(argv.length === 3 && argv[1] === '--brief' && argv[2])))
         throw new Error('usage: retry <task> [--brief <file>]');
       try {
-        await job.start(arg, argv.length === 3 ? { brief: argv[2]! } : {});
+        tasks.queueRetry(arg, argv.length === 3 ? { brief: argv[2]! } : {});
       } catch (error) {
         if (!(error instanceof BriefContractUnchangedError)) throw error;
         print(error.message);
