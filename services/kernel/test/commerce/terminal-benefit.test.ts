@@ -365,8 +365,8 @@ async function fenced(buyer: Persona, order: Order, entitlementId?: string) {
     if (entitlementId) expect((await request(viewer, `/v1/entitlements/${entitlementId}`)).status).toBe(404);
   }
 }
-async function terminal(buyer: Persona) {
-  const t = await deletePersona(options, buyer);
+async function terminal(buyer: Persona, deletionOptions: Parameters<typeof deletePersona>[0] = options) {
+  const t = await deletePersona(deletionOptions, buyer);
   expect(Number.isFinite(Date.parse(t.at))).toBe(true);
   expect(await readErasureStatus(pool, buyer.accountId)).toMatchObject({
     at: t.at,
@@ -527,12 +527,40 @@ describe('fresh Auth account deletion fences native late paid and refund-reversa
     const attempt = await prepare(order, 'claimed', scheduled);
     const start = trace.length;
     const pause = arm(order);
-    const applying = attempt.apply();
-    let deleting: ReturnType<typeof terminal> | undefined;
+    const executeReady = Promise.withResolvers<void>();
+    const executeRelease = Promise.withResolvers<void>();
+    // Fresh Auth approval commits two native commands on this buyer's partition.
+    // Complete those before the apply snapshot, then delay only the actual execute
+    // request. Otherwise approval can force a valid serialization retry, release
+    // the first share lock and let T win; acquiring a lock is no commit guarantee.
+    const deleting = terminal(buyer, {
+      ...options,
+      auth: {
+        ...auth,
+        host: {
+          ...auth.host,
+          async handler(request: Request) {
+            if (new URL(request.url).pathname === '/account-operations/execute') {
+              executeReady.resolve();
+              await executeRelease.promise;
+            }
+            return auth.host.handler(request);
+          },
+        },
+      },
+    });
+    let applying: ReturnType<typeof attempt.apply> | undefined;
     try {
+      await Promise.race([
+        executeReady.promise,
+        deleting.then(() => {
+          throw new Error('Auth deletion completed without reaching its execute request');
+        }),
+      ]);
+      applying = attempt.apply();
       const pid = await pause.reached;
       accountBeforeOrder(trace.slice(start), buyer.accountId);
-      deleting = terminal(buyer);
+      executeRelease.resolve();
       await until(
         async () =>
           (
@@ -557,9 +585,10 @@ describe('fresh Auth account deletion fences native late paid and refund-reversa
       expect(times.rows[0]!.before_t).toBe(true);
       await fenced(buyer, order, grant.entitlement_id);
     } finally {
+      executeRelease.resolve();
       pause.release();
       gate = undefined;
-      await Promise.allSettled([applying, ...(deleting ? [deleting] : [])]);
+      await Promise.allSettled([applying, deleting]);
     }
   });
 

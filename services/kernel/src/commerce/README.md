@@ -341,6 +341,13 @@ remain revoked. Availability, deadline and SQL errors propagate through the nati
 entire apply. Stable completion still precedes a new claim, and original receipt replay precedes the captured
 revision check without executing benefits again. The [native terminal-benefit cases](../../test/commerce/terminal-benefit.test.ts)
 use fresh Auth deletion, real account/order lock schedules and PostgreSQL failure witnesses for both apply ports.
+The share-first schedule completes fresh sign-in and approval before starting apply, pausing only the actual Auth
+execute request until the account share is held. Approval itself commits two buyer-partition commands
+([binding and creation](../access/workflow-approvals.ts)); starting it after apply's snapshot can invalidate that
+snapshot at the shared [partition counter](../command/fence.sql). Native serialization retries release the old
+share lock and may then observe T. A lock acquisition alone never promises a commit. Preapproval isolates the
+required share-first commit schedule while preserving the same real Auth deletion, blocking-PID witness and
+pre-T grant assertions; the reverse schedules still capture provider bytes before T and fence each apply retry.
 
 Pending refund revocation is REZICS access policy, not proof money moved. Financial accounting uses actual signed
 Balance Transactions once, including refund/dispute reversals, with separate currencies and integer shares.
