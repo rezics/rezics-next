@@ -549,6 +549,7 @@ async function startStack(): Promise<
           // native registration ports, adding only public signup's Siteverify port.
           // Two Auth workflow executors cannot coexist in one process.
           const { createAccountWorkflows } = await import('../../../../services/auth/src/index.ts');
+          const { registerAuthMaintenance } = await import('../../../../services/auth/src/maintenance.ts');
           const { createRegistrationPorts } =
             await import('../../../../services/kernel/test/support/registration-ports.ts');
           const runtime = driver!.fixtures.runtime;
@@ -565,6 +566,7 @@ async function startStack(): Promise<
             referenceKeys: { current: Math.max(...keys.keys()), keys },
           });
           await auth.host.workflows.close();
+          let maintenance: ReturnType<typeof registerAuthMaintenance> | undefined;
           const workflows = createAccountWorkflows({
             database: auth.database,
             systemDatabaseUrl: auth.database.options.connectionString!,
@@ -572,7 +574,11 @@ async function startStack(): Promise<
             stagingKey: randomBytes(32),
             auth: auth.service,
             access: ports,
+            executorId: auth.host.config.executorId,
             handleSignals: false,
+            registerWorkflows: () => {
+              maintenance = registerAuthMaintenance(auth.service);
+            },
             turnstile: {
               secret: '1x0000000000000000000000000000000AA',
               // An explicit test provider boundary, as in Auth's own signup tests.
@@ -588,6 +594,7 @@ async function startStack(): Promise<
           });
           closePageWorkflows = () => workflows.close();
           await workflows.start();
+          await maintenance!.start(auth.host.config.maintenanceSchedule);
           auth.host.workflows = workflows;
           signupHandler = workflows.handler;
         }
