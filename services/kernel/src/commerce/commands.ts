@@ -9,16 +9,20 @@ import {
   CommandUnavailableError,
   IdempotencyConflictError,
   principalCommandIdentity,
+  hasOwnCommandCompletion,
+  normalizeCommandKey,
   runCommand,
   type CommandEvent,
   type CommandAuthorization,
+  type CommandOutcome,
+  type PrincipalCommandReceipt,
 } from '../command/command.ts';
 import { accessCommandAuthorization, type Actor } from '../request/access.ts';
 import type { Access } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
-import type { CheckoutSession, CheckoutSnapshot, Offer } from './model.ts';
+import type { CheckoutSession, CheckoutSnapshot, Offer, Order } from './model.ts';
 import { assertTransactionBound, decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
 import offerCreated from './command-offer-created.sql';
@@ -32,10 +36,23 @@ export class OfferUnavailableError extends Error {
   }
 }
 class Unchanged extends Error {}
+class CompletedRefresh extends Error {}
+class SupersededRefresh extends Error {}
 const unchanged = { changed: false } as const;
 const WORK_STEP_DEADLINE_MS = 5_000;
 export type CheckoutOutcome = { session: CheckoutSession } | { kind: 'failed' | 'unknown' };
 export type OfferInput = Pick<Offer, 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'taxCode'>;
+
+/** Trusted native port input, never a client operation or buyer permission. */
+export type CheckoutRefreshInput = Readonly<{ orderId: string; sessionId: string; workflowId: string }>;
+/** Committed admission metadata; neither permission nor durable provider truth. */
+export type CheckoutRefreshClaim = Readonly<{ order: Order; workflowId: string; attemptId: string }>;
+export type CheckoutRefreshAdmission =
+  | { kind: 'completed' }
+  | { kind: 'claimed'; command: CommandOutcome<CheckoutRefreshClaim> };
+export type CheckoutRefreshApplication =
+  | { changed: false; superseded?: true }
+  | (CommandOutcome<Extract<store.AppliedCheckoutDecision, { changed: true }>> & { changed: true });
 
 /** Stable identity for a trusted durable-work step; this module performs no workflows. */
 export function stepCommandKey(workflowId: string, step: string): string {
@@ -346,27 +363,132 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     }
     throw new CommandUnavailableError('deadline', partitionOf(r));
   }
-  async function applyCheckoutSnapshot(body: CheckoutSnapshot, workflowId: string) {
+  // The trusted internal apply port is restricted to one recorded order/Session/intent.
+  // Buyer attribution names its receipt owner, not an AccountActor or an Access grant.
+  // Omitting legacy command basis deliberately retains null service attribution.
+  function refreshAuthorization(
+    order: Order,
+    sessionId: string,
+    intent: PrincipalCommandReceipt,
+  ): CommandAuthorization {
+    const r = route(order.id);
+    const expectedDigest = digest({ orderId: order.id });
+    return {
+      action: 'commerce.checkout.apply',
+      resource: { route: r, id: order.id },
+      denied: () => new GrantDeniedError(),
+      async authorize(tx) {
+        if (intent.kind !== 'commerce.checkout.apply' || !Buffer.from(intent.digest).equals(expectedDigest))
+          throw new GrantDeniedError();
+        const current = await store.lockOrder(tx, r, order.id);
+        if (!current || current.buyerAccountId !== order.buyerAccountId || current.checkoutSessionId !== sessionId)
+          throw new GrantDeniedError();
+        return 'execute';
+      },
+    };
+  }
+  function applyIntent(order: Order, workflowId: string): PrincipalCommandReceipt {
+    return {
+      kind: 'commerce.checkout.apply',
+      key: normalizeCommandKey({ kind: 'account', id: order.buyerAccountId }, stepCommandKey(workflowId, 'apply')),
+      digest: digest({ orderId: order.id }),
+    };
+  }
+  async function beginCheckoutRefresh(input: CheckoutRefreshInput): Promise<CheckoutRefreshAdmission> {
+    const { orderId, sessionId, workflowId } = input;
+    const attemptId = Bun.randomUUIDv7(); // Stable only within this physical invocation's native retries.
+    const r = route(orderId);
+    const order = await store.readOrder(pool, r, orderId);
+    if (!order || !sessionId || order.checkoutSessionId !== sessionId) throw new GrantDeniedError();
+    const intent = applyIntent(order, workflowId);
+    try {
+      const command = await runCommand<CheckoutRefreshClaim>(
+        pool,
+        {
+          partition: partitionOf(r),
+          authorization: refreshAuthorization(order, sessionId, intent),
+          receipt: {
+            actorAccountId: order.buyerAccountId,
+            kind: 'commerce.checkout.refresh',
+            key: attemptId,
+            digest: digest({
+              orderId,
+              sessionId,
+              intent: { ...intent, digest: Buffer.from(intent.digest).toString('hex') },
+            }),
+          },
+        },
+        async (tx, command) => {
+          // authorize already acquired the exact order lock; it remains held through commit.
+          if (await hasOwnCommandCompletion(tx, intent)) throw new CompletedRefresh();
+          const current = await store.readOrder(tx, r, orderId);
+          if (!current) throw new GrantDeniedError();
+          const claimed = await store.claimOrderRefresh(tx, r, current, {
+            transactionId: command.transactionId,
+            time: authoritativeTimeValue(command.time),
+          });
+          return { value: { order: claimed, workflowId, attemptId }, events: [updated(orderId, claimed.revision)] };
+        },
+      );
+      // No authority escapes if native commit acknowledgement fails; abandon that invocation.
+      return { kind: 'claimed', command };
+    } catch (error) {
+      if (error instanceof CompletedRefresh) return { kind: 'completed' };
+      throw error;
+    }
+  }
+  /** Legacy trusted split-read apply. Runtime callers remain unfenced until compatible cutover. */
+  function applyCheckoutSnapshot(body: CheckoutSnapshot, workflowId: string) {
+    return applySnapshot(body, workflowId);
+  }
+  /** New trusted native port: use only bytes read after this invocation's committed admission. */
+  function applyClaimedCheckoutSnapshot(
+    body: CheckoutSnapshot,
+    claim: CheckoutRefreshClaim,
+  ): Promise<CheckoutRefreshApplication> {
+    return applySnapshot(body, claim.workflowId, structuredClone(claim));
+  }
+  async function applySnapshot(body: CheckoutSnapshot, workflowId: string, claim?: CheckoutRefreshClaim) {
     assertTransactionBound(body.transactions);
     const snapshot = structuredClone(body),
       id = snapshot.clientReferenceId;
+    if (
+      claim &&
+      (id !== claim.order.id || snapshot.sessionId !== claim.order.checkoutSessionId || snapshot.metadataOrderId !== id)
+    )
+      throw new GrantDeniedError();
     const r = id === null ? null : routeOf(id);
     if (r === null || id === null) return unchanged;
     const order = await store.readOrder(pool, r, id);
     if (!order || order.checkoutSessionId !== snapshot.sessionId) return unchanged;
+    const intent = claim
+      ? applyIntent(claim.order, workflowId)
+      : {
+          kind: 'commerce.checkout.apply',
+          key: key(stepCommandKey(workflowId, 'apply')),
+          digest: digest({ orderId: id }),
+        };
     try {
       const result = await runCommand(
         pool,
         {
           partition: partitionOf(r),
+          ...(claim ? { authorization: refreshAuthorization(claim.order, snapshot.sessionId, intent) } : {}),
           receipt: {
             actorAccountId: order.buyerAccountId,
-            kind: 'commerce.checkout.apply',
-            key: key(stepCommandKey(workflowId, 'apply')),
-            digest: digest({ orderId: id }),
+            ...intent,
           },
         },
         async (tx, command) => {
+          if (claim) {
+            const locked = await store.lockOrder(tx, r, id);
+            if (
+              !locked ||
+              locked.revision !== claim.order.revision ||
+              locked.checkoutSessionId !== claim.order.checkoutSessionId
+            )
+              throw new SupersededRefresh();
+          }
           const state = await store.readSettlementState(
             tx,
             r,
@@ -374,7 +496,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
             snapshot.transactions.map((t) => t.id),
           );
           if (!state || state.order.checkoutSessionId !== snapshot.sessionId) throw new Unchanged();
-          const decision = decideCheckout(state, snapshot);
+          const decision = decideCheckout(state, snapshot, claim ? 'admitted-revision' : 'legacy-time');
           if (!decision.changed) throw new Unchanged();
           const applied = await store.applyCheckoutDecision(tx, r, state, decision, {
             transactionId: command.transactionId,
@@ -413,6 +535,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       return { ...result, changed: true as const };
     } catch (error) {
       if (error instanceof Unchanged) return unchanged;
+      if (error instanceof SupersededRefresh) return { changed: false, superseded: true } as const;
       throw error;
     }
   }
@@ -443,6 +566,8 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     createOrder,
     recordCheckout,
     applyCheckoutSnapshot,
+    beginCheckoutRefresh,
+    applyClaimedCheckoutSnapshot,
     readOffer,
     readOrderForAccount,
     readEntitlementForAccount,

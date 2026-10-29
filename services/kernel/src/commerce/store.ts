@@ -18,6 +18,7 @@ import orderSessionRead from './store-order-session-read.sql';
 import orderSession from './store-order-session.sql';
 import orderSettlement from './store-order-settlement.sql';
 import orderLock from './store-order-lock.sql';
+import orderRefresh from './store-order-refresh.sql';
 import orderDecision from './store-order-decision.sql';
 import entitlementRead from './store-entitlement-read.sql';
 import entitlementOrder from './store-entitlement-order.sql';
@@ -154,6 +155,30 @@ export async function insertOrder(
 export async function readOrder(client: Client, route: number, id: string): Promise<Order | null> {
   const row = await orderRead.run(queryClient(client), { route, id });
   return row ? asOrder(row) : null;
+}
+/** Caller retains this transaction and lock through completion lookup, claim or apply. */
+export async function lockOrder(client: Client, route: number, id: string): Promise<Order | null> {
+  const locked = await orderLock.run(queryClient(client), { route, id });
+  return locked ? readOrder(client, route, id) : null;
+}
+export async function claimOrderRefresh(
+  client: Client,
+  route: number,
+  order: Order,
+  context: WriteContext,
+): Promise<Order> {
+  if (order.revision >= 2147483647) throw new RangeError('Commerce order revision exhausted');
+  return asOrder(
+    required(
+      await orderRefresh.run(queryClient(client), {
+        route,
+        id: order.id,
+        revision: order.revision,
+        session_id: required(order.checkoutSessionId),
+        ...write(context),
+      }),
+    ),
+  );
 }
 export async function readOrderBySession(client: Client, route: number, sessionId: string): Promise<Order | null> {
   const row = await orderSessionRead.run(queryClient(client), { route, session_id: sessionId });

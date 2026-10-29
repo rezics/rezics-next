@@ -91,7 +91,9 @@ bounds the body at 256 KiB and awaits durable enqueue before acknowledging. Inva
 valid payload claims about payment never substitute for a provider read. Event-ID dedupe uses the durable identity
 in [enqueue](enqueue.ts), independently of entitlement uniqueness and Balance Transaction accounting dedupe.
 
-### Receipt-aware native refresh admission (implementation pending)
+<a id="receipt-aware-native-refresh-admission-implementation-pending"></a>
+
+### Receipt-aware native refresh admission (native prerequisite delivered)
 
 Every trigger resolves an immutable Checkout Session/order binding: direct Session events, PaymentIntent-derived
 refund/dispute events, initial/expiry reconciliation, verified provider-event recovery and explicit known-order
@@ -115,8 +117,8 @@ read, native apply. Neither an admission token nor provider truth is a separatel
    buyer-partition command. Lock the bound order and check the stable apply intent's completion under that
    same order lock, before any domain write, using the approved metadata-only
    [`hasOwnCommandCompletion(tx, {kind, key, digest})`](../command/README.md#metadata-only-own-completion).
-   This helper is not implemented. Retain the original apply authorization policy; receipt ownership supplies
-   no authority for another action/resource. Matching completion returns read-only completion, with no revision
+   This helper is integrated and exported by `command/command.ts`. Retain the original apply authorization policy;
+   receipt ownership supplies no authority for another action/resource. Matching completion returns read-only completion, with no revision
    advance or provider read. It returns no historic response. Use native `noEffect` only if this transaction
    wrote no domain data, or a rollback sentinel. Never use an unlocked peek or Commerce-local receipt SQL.
    In particular, a completed retry A must not claim over admitted B and then replay A's old result.
@@ -145,6 +147,59 @@ revision cannot authorize it. If A wins the lock, its commit precedes B's admiss
 read. Thus A cannot apply after later admission commits, even when B's business apply is unchanged, cancelled
 or fails. A newer no-op never returns authority to an older observation. Stable completion lookup under that
 same lock also prevents an older apply committing between the completion check and the revision claim.
+
+### Delivered native ABI and remaining integration
+
+[Commands](commands.ts) exports these new types and returns these additional trusted methods from
+`createCommerceCommands`:
+
+```ts
+type CheckoutRefreshInput = Readonly<{ orderId: string; sessionId: string; workflowId: string }>;
+type CheckoutRefreshClaim = Readonly<{ order: Order; workflowId: string; attemptId: string }>;
+type CheckoutRefreshAdmission =
+  | { kind: 'completed' }
+  | { kind: 'claimed'; command: CommandOutcome<CheckoutRefreshClaim> };
+
+beginCheckoutRefresh(input: CheckoutRefreshInput): Promise<CheckoutRefreshAdmission>;
+type CheckoutRefreshApplication =
+  | { changed: false; superseded?: true }
+  | (CommandOutcome<Extract<AppliedCheckoutDecision, { changed: true }>> & { changed: true });
+
+applyClaimedCheckoutSnapshot(body: CheckoutSnapshot, claim: CheckoutRefreshClaim): Promise<CheckoutRefreshApplication>;
+```
+
+Pass the original trusted workflow identity, including its existing `wf:` prefix exactly once:
+`stepCommandKey(workflowId, 'apply')` only appends `:apply`. The stable kind is `commerce.checkout.apply`,
+with SHA-256 of canonical `{orderId}`. Admission generates a new UUID inside every invocation; its
+`commerce.checkout.refresh` receipt binds order, recorded Session and that exact stable intent. SQL retries
+reuse this one UUID. Native receipt keys are limited to 255 characters. The returned `command.value.order`
+contains the committed revision and unchanged captured terms; it is metadata, not permission or provider truth.
+An unsuccessful/ambiguous begin returns no usable claim; abandon it and begin a fresh physical invocation.
+A completed intent exits via rollback with no admission receipt, revision, envelope or provider read.
+
+Both ports construct explicit module-internal `CommandAuthorization` for the original immutable apply intent,
+lock and validate its exact native order/Session, and retain the buyer account receipt principal through the
+existing service receipt attribution with null command basis. They create no AccountActor, token, scope or
+active-account restriction. Execute authorization precedes all receipt access; the metadata helper runs under
+that same lock. Financial service admission supplies no personal-benefit permission. The separate terminal
+benefit fence remains required before runtime cutover; this slice retains existing settlement benefit behavior.
+
+Claimed apply locks before every business decision, keeps the captured revision through native retries, and
+returns `{changed:false, superseded:true}` with rollback and no apply receipt when superseded. Business unchanged
+returns `{changed:false}` with apply rollback while the admission remains committed. A changed result is the
+existing native `CommandOutcome<AppliedCheckoutDecision>` plus `changed:true`; receipt replay acknowledges the
+original result and original envelope before the body, even after later revisions. `observedAt` is metadata in
+this claimed path. `applyCheckoutSnapshot(body, workflowId)` remains explicitly legacy with its existing timestamp
+behavior until compatible production wiring. No workflow or StripePort caller is migrated by these additions.
+
+[Focused native admission tests](../../test/commerce/checkout-refresh-admission.test.ts) cover real claim envelopes,
+completion under the order lock, newer no-op fencing, equal/backward clocks, named financial reversal, native
+serialization retries, stale rollback, committed-effect-before-successor ordering and invalid/overflow rollback.
+They use the native profile fixture's provisioning, signed Access identities and ordinary grants/offer/order
+commands, plus the official Stripe adapter against the loopback fixture. This proves only the native slice.
+The existing [full SDK user cases](../../test/commerce/session-refresh-user-cases.test.ts) remain required.
+Locator/transport bounds, combined fresh Session-queue wiring, compatible persisted-history/executor cutover,
+paid-order/event repair, terminal benefits and composed/unrelated-data growth captures remain pending.
 
 ### SDK recovery, cutover and physical bounds
 
@@ -190,8 +245,9 @@ It durably clocks, reads and applies in separate steps. Those identities dedupli
 Session refreshes. [Settlement](settlement.ts) rejects an older `observedAt`, while a newer business no-op is rolled
 back without retaining that observation. A delayed old pending-full-refund response with no Balance Transaction can
 therefore revoke after a newer canceled-refund no-op. Equal clocks also supply no ordering proof. Receipt-aware
-admission, mandatory apply revision checks, fresh combined retries, Session routing, provider locator/transport
-bounds and compatible cutover remain unimplemented; neither existing timestamp tests nor the
+admission and mandatory apply revision checks are now available through the additional native ports documented above.
+The live split-step path remains unfenced. Fresh combined retries, Session routing, provider locator/transport
+bounds and compatible cutover remain unimplemented; neither native prerequisite tests nor the
 [current](../../../../docs/research/commerce-session-refresh-recovery-current.md) and
 [deep reports](../../../../docs/research/commerce-session-refresh-recovery-deep.md) prove runtime acceptance.
 
@@ -414,8 +470,8 @@ Parent/root authorization and royalty source reads are separate anchored checkou
   creator history, provider history, DBOS backlog and partition count independently with selected keys fixed;
   include cancellation/timeouts and terminal races. Measure examined rows, buffers, statements, provider elements/
   bytes, pool time and persistence, including abandoned work and retries. These measurements are absent and this
-  prose change executes none. The old growth-orders “Webhook and commerce jobs” case measures a known-order read,
-  not a real signed-event queue run; its pass cannot fill this gap.
+  native slice proves ordering/rollback only, not those measurements. The old growth-orders “Webhook and commerce
+  jobs” case measures a known-order read, not a real signed-event queue run; its pass cannot fill this gap.
 
 ### Financial erasure participation
 

@@ -59,12 +59,20 @@ const nonRevokingDisputeStatuses = new Set([
 ]);
 
 /** Decide from the current provider snapshot without performing effects or mutating the input. */
-export function decideCheckout(state: SettlementState, snapshot: CheckoutSnapshot): CheckoutDecision {
+export function decideCheckout(
+  state: SettlementState,
+  snapshot: CheckoutSnapshot,
+  precedence: 'legacy-time' | 'admitted-revision' = 'legacy-time',
+): CheckoutDecision {
   assertTransactionBound(snapshot.transactions);
   if (snapshot.sessionId !== state.order.checkoutSessionId) {
     throw new CheckoutMismatchError('Checkout Session differs from the recorded session');
   }
-  if (state.order.observedAt !== null && Date.parse(snapshot.observedAt) < Date.parse(state.order.observedAt)) {
+  if (
+    precedence === 'legacy-time' &&
+    state.order.observedAt !== null &&
+    Date.parse(snapshot.observedAt) < Date.parse(state.order.observedAt)
+  ) {
     return { changed: false };
   }
 
