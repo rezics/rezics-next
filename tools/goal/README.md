@@ -318,6 +318,12 @@ thirty minutes. Failure signatures from attempts ended in the previous thirty mi
 failures across at least two tasks produce one incident with the attempt and task counts, affected Goal names and one
 example. The incident repeats after two hours while the signature remains present.
 
+A running attempt that exceeds its routed time limit (two hours by default) sends its owning manager one event. The
+event includes elapsed time, commits in the task worktree, time recorded waiting for check slots and the last ten shell
+commands in the run log. Check wait time is reported separately; it does not reduce this elapsed time. If those recent
+commands repeatedly run `ps` or `pgrep` without a `scripts/worker-check.ts` invocation, the watchdog sends that manager
+one additional polling event. Both alerts are deduplicated for the lifetime of that attempt.
+
 When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every listed check host no more than once per
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
