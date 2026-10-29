@@ -19,8 +19,7 @@ export function decodeLibraryProfilePin(value: unknown): LibraryProfilePin | nul
     return { provenance, releaseDigest, acceptingType, profileId };
   }
   if (provenance === 'legacy' && profileId === 'legacy-fixed-v1') {
-    if (acceptingType !== null && (typeof acceptingType !== 'string' || acceptingType.length === 0))
-      return invalid();
+    if (acceptingType !== null && (typeof acceptingType !== 'string' || acceptingType.length === 0)) return invalid();
     return { provenance, releaseDigest, acceptingType, profileId };
   }
   return invalid();
