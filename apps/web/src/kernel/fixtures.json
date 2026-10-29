@@ -568,6 +568,45 @@
       }
     },
     {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e0b",
+      "type": "schema:Book",
+      "labels": {
+        "en": "Count-free works preview",
+        "zh-Hans": "无总数的作品预览"
+      },
+      "descriptions": {},
+      "aliases": {},
+      "statements": {}
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e0c",
+      "type": "schema:Book",
+      "labels": {
+        "en": "A work with an unavailable relation total",
+        "zh-Hans": "关系总数不可用的作品"
+      },
+      "descriptions": {},
+      "aliases": {},
+      "statements": {
+        "schema:author": [
+          {
+            "id": "0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f0b",
+            "rank": "normal",
+            "property": {
+              "id": "schema:author",
+              "data_type": "wikibase-item"
+            },
+            "value": {
+              "type": "value",
+              "content": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e0b"
+            },
+            "qualifiers": [],
+            "references": []
+          }
+        ]
+      }
+    },
+    {
       "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e12",
       "type": "schema:Recipe",
       "labels": {
@@ -922,5 +961,11 @@
     "schema:Recipe": {
       "bases": ["schema:CreativeWork", "schema:Thing"]
     }
-  }
+  },
+  "linksWithoutCount": [
+    {
+      "subject": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e0b",
+      "property": "schema:author"
+    }
+  ]
 }

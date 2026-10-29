@@ -1,8 +1,48 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import { SubjectPage, type SubjectPageData } from '../features/pages/subject';
+import { subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
+import subjectPageRecording from '../kernel/recorded/subject-page.json';
+import { getLocale } from '../paraglide/runtime';
+import { subjectTabs } from '../features/pages/views';
 import { PageStory, pagePaths, pageReady } from './page';
 import { ratingsFixtures } from '../kernel/fake/ratings';
+
+function countUnavailablePage(): SubjectPageData {
+  const page = structuredClone(subjectPageRecording) as unknown as SubjectPageData;
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, {
+    subject: page.subject,
+    account: page.account ?? null,
+  });
+  for (const [key, read] of Object.entries(plan.reads)) {
+    if (read.kind !== 'links' || read.property !== 'schema:exampleOfWork') continue;
+    const result = page.reads[key];
+    if (
+      result?.status === 200 &&
+      typeof result.body === 'object' &&
+      result.body !== null &&
+      !Array.isArray(result.body)
+    ) {
+      delete (result.body as Record<string, unknown>).count;
+    }
+  }
+  return page;
+}
+
+function CountUnavailablePageStory() {
+  const page = countUnavailablePage();
+  return (
+    <SubjectPage
+      page={page}
+      locale={getLocale()}
+      messages={subjectPageMessages()}
+      tabs={subjectTabs(page)}
+      tabLabels={viewTabLabels()}
+    />
+  );
+}
 
 const meta = { title: 'Pages/Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -119,4 +159,10 @@ export const OwnVoteForbidden: Story = {
       ratingsFixture="subject-ratings-own-forbidden"
     />
   ),
+};
+
+export const CountUnavailable: Story = {
+  name: 'Count Unavailable',
+  play: pageReady,
+  render: () => <CountUnavailablePageStory />,
 };

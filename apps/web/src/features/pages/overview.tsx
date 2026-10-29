@@ -97,8 +97,8 @@ export type Item = {
 };
 export type Count = { value: number; exact: boolean };
 
-function hasMore(count: Count, returned: number): boolean {
-  return !count.exact || count.value > returned;
+function hasMore(count: Count | undefined, returned: number): boolean {
+  return count !== undefined && (!count.exact || count.value > returned);
 }
 
 export function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
@@ -241,13 +241,19 @@ function limitOf(props: Record<string, unknown>): number {
 }
 
 /** The holders a `links` read returned, in the kernel's order. */
-function linkItems(section: Section | undefined, limit: number): { items: Item[]; count: Count } | undefined {
+function linkItems(
+  section: Section | undefined,
+  limit: number,
+): { items: Item[]; count?: Count; more: boolean } | undefined {
   if (!section?.ok || section.read.kind !== 'links') return;
   return holderItems(section.body, limit);
 }
 
 /** The holders in the body of a `links` read, with its exact or "at least" count. */
-export function holderItems(body: Record<string, unknown>, limit: number): { items: Item[]; count: Count } | undefined {
+export function holderItems(
+  body: Record<string, unknown>,
+  limit: number,
+): { items: Item[]; count?: Count; more: boolean } | undefined {
   if (!Array.isArray(body.links)) return;
   const links = body.links.filter(isRecord).slice(0, limit);
   const count = isRecord(body.count) ? body.count : undefined;
@@ -267,12 +273,14 @@ export function holderItems(body: Record<string, unknown>, limit: number): { ite
         ]
       : [],
   );
+  const total =
+    typeof count?.value === 'number'
+      ? { value: Math.max(count.value, items.length), exact: count.exact === true }
+      : undefined;
   return {
     items,
-    count: {
-      value: typeof count?.value === 'number' ? Math.max(count.value, items.length) : items.length,
-      exact: count ? count.exact === true : true,
-    },
+    ...(total ? { count: total } : {}),
+    more: total ? hasMore(total, items.length) : body.next != null || body.links.length > items.length,
   };
 }
 
@@ -297,7 +305,7 @@ function statementItems(
   property: unknown,
   limit: number,
   value: OverviewValue,
-): { items: Item[]; count: Count } | undefined {
+): { items: Item[]; count: Count; more?: boolean } | undefined {
   const read = subjectRead(section);
   if (!read || typeof property !== 'string') return;
   const held = Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : undefined;
@@ -342,7 +350,7 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       title={text.text || title}
       titleLang={text.text ? text.lang : undefined}
       count={listed.count}
-      more={props.paged !== true && hasMore(listed.count, listed.items.length)}
+      more={props.paged !== true && (listed.more ?? hasMore(listed.count, listed.items.length))}
       href={viewHref(value, view)}
       locale={value.locale}
     >
@@ -360,7 +368,7 @@ export const GROUP_TITLES: Record<RelationGroup, (options: { locale: never }) =>
   other: (options) => m.subject_relation_group_other({}, options),
 };
 
-type RelationEntry = { property: string; label: string; group: RelationGroup; items: Item[]; count: Count };
+type RelationEntry = { property: string; label: string; group: RelationGroup; items: Item[]; more: boolean };
 
 /**
  * The relations of the page, grouped by relation group. Each `RelationGroups` node reads one property; the first
@@ -379,6 +387,10 @@ export function RelationGroups(props: Record<string, unknown>) {
   const id = String(props.id);
 
   const entries: RelationEntry[] = [];
+  const groupTotals = new Map<RelationGroup, { value: number; exact: boolean; hasCount: boolean }>();
+  let totalValue = 0;
+  let totalExact = true;
+  let totalHasCount = true;
   let failed = 0;
   for (const node of nodes) {
     const section = value.sections.get(node.id);
@@ -389,13 +401,27 @@ export function RelationGroups(props: Record<string, unknown>) {
     }
     const property = typeof node.props.property === 'string' ? node.props.property : '';
     const definition = Object.hasOwn(value.relations, property) ? value.relations[property] : undefined;
+    const group = definition?.group ?? 'other';
+    const total = groupTotals.get(group) ?? { value: 0, exact: true, hasCount: true };
+    if (listed.count) {
+      if (listed.items.length > 0) {
+        total.value += listed.count.value;
+        total.exact = total.exact && listed.count.exact;
+        totalValue += listed.count.value;
+        totalExact = totalExact && listed.count.exact;
+      }
+    } else {
+      total.hasCount = false;
+      totalHasCount = false;
+    }
+    groupTotals.set(group, total);
     if (listed.items.length > 0)
       entries.push({
         property,
         label: definition?.label ?? '',
-        group: definition?.group ?? 'other',
+        group,
         items: listed.items,
-        count: listed.count,
+        more: listed.more,
       });
   }
   if (failed === nodes.length) return <Failed slot="relation-groups" id={id} title={heading} locale={value.locale} />;
@@ -405,19 +431,18 @@ export function RelationGroups(props: Record<string, unknown>) {
     const members = entries.filter((entry) => entry.group === group);
     return members.length ? [{ group, members }] : [];
   });
-  const total: Count = {
-    value: entries.reduce((sum, entry) => sum + entry.count.value, 0),
-    exact: entries.every((entry) => entry.count.exact),
-  };
+  const total = totalHasCount ? { value: totalValue, exact: totalExact } : undefined;
   return (
     <section data-slot="relation-groups" aria-labelledby={`${id}-title`} className={sectionClass}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 id={`${id}-title`} lang={title.text ? title.lang : undefined} className={headingClass}>
           {heading}
         </h2>
-        <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
-          {countText(total, value.locale)}
-        </span>
+        {total && (
+          <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
+            {countText(total, value.locale)}
+          </span>
+        )}
       </div>
       {groups.map(({ group, members }) => {
         const items = members.flatMap((entry) =>
@@ -426,11 +451,9 @@ export function RelationGroups(props: Record<string, unknown>) {
             return { ...item, notes: [entry.label, year ?? ''].filter(Boolean) };
           }),
         );
-        const count: Count = {
-          value: members.reduce((sum, entry) => sum + entry.count.value, 0),
-          exact: members.every((entry) => entry.count.exact),
-        };
-        const more = members.filter((entry) => hasMore(entry.count, entry.items.length));
+        const total = groupTotals.get(group);
+        const count = total?.hasCount ? { value: total.value, exact: total.exact } : undefined;
+        const more = members.filter((entry) => entry.more);
         return (
           <div key={group} data-slot="relation-group" data-group={group} className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -438,7 +461,7 @@ export function RelationGroups(props: Record<string, unknown>) {
                 {groups.length > 1 && (
                   <h3 className="text-lg font-semibold tracking-tight">{GROUP_TITLES[group](options)}</h3>
                 )}
-                {groups.length > 1 && (
+                {groups.length > 1 && count && (
                   <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
                     {countText(count, value.locale)}
                   </span>
@@ -501,7 +524,7 @@ export function SubjectList(props: Record<string, unknown>) {
       title={title.text}
       titleLang={title.lang}
       count={listed.count}
-      more={hasMore(listed.count, listed.items.length)}
+      more={listed.more}
       href={viewHref(value, 'relations', typeof props.property === 'string' ? props.property : undefined)}
       locale={value.locale}
     >

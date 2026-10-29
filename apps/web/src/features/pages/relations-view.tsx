@@ -93,7 +93,7 @@ export function RelationsView({
       <ViewHeading
         label={fieldHeading}
         count={
-          listed && (
+          listed?.count && (
             <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
               {countText(listed.count, locale)}
             </span>

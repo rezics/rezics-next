@@ -1,9 +1,10 @@
 import { isView, planReads, platformRegistry, VIEWS, type CompositionDocument, type View } from '@rezics/composition';
 import { accountOf, viewIsPublic, type AccountProfile } from './account-read';
+import type { Count } from './overview';
 import { bestRank, isRecord, type Stmt } from './shared';
 
 /** One tab of a subject page: a view, and how many items its data has when that is known. */
-export type ViewTab = { view: View; count?: { value: number; exact: boolean } };
+export type ViewTab = { view: View; count?: Count };
 
 type Node = { type: string; props: Record<string, unknown> };
 type Read = { status: number; body: unknown };
@@ -92,17 +93,16 @@ function previewCount(
   node: Node,
   read: { kind: string; id?: string; limit?: number } | undefined,
   result: Read | undefined,
-): { items: number; count: { value: number; exact: boolean } } | undefined {
+): { items: number; count?: Count } | undefined {
   if (!read || result?.status !== 200 || !isRecord(result.body)) return;
   const body = result.body;
   if (read.kind === 'links' && Array.isArray(body.links)) {
     const count = isRecord(body.count) ? body.count : undefined;
     return {
       items: Math.min(body.links.length, previewLimit(node, read)),
-      count: {
-        value: typeof count?.value === 'number' ? Math.max(count.value, body.links.length) : body.links.length,
-        exact: count ? count.exact === true : true,
-      },
+      ...(typeof count?.value === 'number'
+        ? { count: { value: Math.max(count.value, body.links.length), exact: count.exact === true } }
+        : {}),
     };
   }
   if (read.kind === 'search' && Array.isArray(body.subjects)) {
@@ -182,12 +182,28 @@ export function subjectTabs(page: {
   }
   const sums = new Map<
     View,
-    { items: number; value: number; exact: boolean; previews: number; counted: number; fits: boolean }
+    {
+      items: number;
+      value: number;
+      exact: boolean;
+      previews: number;
+      counted: number;
+      fits: boolean;
+      hasCount: boolean;
+    }
   >();
   for (const node of walk(document.content)) {
     const view = previewedView(node);
     if (!view || !defined.has(view)) continue;
-    const sum = sums.get(view) ?? { items: 0, value: 0, exact: true, previews: 0, counted: 0, fits: true };
+    const sum = sums.get(view) ?? {
+      items: 0,
+      value: 0,
+      exact: true,
+      previews: 0,
+      counted: 0,
+      fits: true,
+      hasCount: true,
+    };
     sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
     const planned = key === undefined ? undefined : plan.reads[key];
@@ -195,9 +211,13 @@ export function subjectTabs(page: {
     if (counted) {
       sum.counted += 1;
       sum.items += counted.items;
-      sum.value += counted.count.value;
-      sum.exact = sum.exact && counted.count.exact;
-      sum.fits = sum.fits && counted.count.exact && counted.count.value === counted.items;
+      if (counted.count) {
+        sum.value += counted.count.value;
+        sum.exact = sum.exact && counted.count.exact;
+      } else {
+        sum.hasCount = false;
+      }
+      sum.fits = sum.fits && !!counted.count && counted.count.exact && counted.count.value === counted.items;
     } else {
       sum.fits = false;
     }
@@ -209,6 +229,6 @@ export function subjectTabs(page: {
     const sum = sums.get(view);
     if (!sum || sum.items === 0) return [];
     if (!ALWAYS.has(view) && sum.fits && sum.previews === sum.counted) return [];
-    return [{ view, count: { value: sum.value, exact: sum.exact } }];
+    return [{ view, ...(sum.hasCount ? { count: { value: sum.value, exact: sum.exact } } : {}) }];
   });
 }

@@ -93,6 +93,8 @@ type Fixtures = {
   summaries?: Record<string, Summary>;
   /** Accounts by handle; each is an agent, and `subject` names the subject it is verified as. */
   accounts?: FixtureAccount[];
+  /** Page reads whose relation total is unavailable in this fixture. */
+  linksWithoutCount?: { subject: string; property: string }[];
 };
 
 export type { Fixtures };
@@ -993,6 +995,20 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
                     : account && descriptor.kind === 'accountCollections'
                       ? { status: 200, body: accountListPage(account, 'collections', descriptor) }
                       : { status: 404, body: { code: 'not_found' } };
+  }
+  for (const [key, descriptor] of Object.entries(plan.reads)) {
+    if (
+      descriptor.kind !== 'links' ||
+      !fixtures.linksWithoutCount?.some(
+        (entry) => entry.subject === descriptor.id && entry.property === descriptor.property,
+      )
+    )
+      continue;
+    const read = reads[key];
+    if (read?.status !== 200 || !isRecord(read.body)) continue;
+    const body = { ...read.body };
+    delete body.count;
+    reads[key] = { status: 200, body };
   }
   return Response.json({
     ...(payload ? { subject: payload.subject.id } : {}),
