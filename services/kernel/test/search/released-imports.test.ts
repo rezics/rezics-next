@@ -120,7 +120,7 @@ test('the normal importer commits and adopts the pinned Book in the same native 
     }
     for (const selected of imported.selected) {
       const disclosed = subject.statements[selected.property]!.find((s) => s.id === selected.candidate);
-      expect(disclosed).toEqual(selected.statement);
+      expect<unknown>(disclosed).toEqual(selected.statement);
     }
     expect(imported.afterReplay.body).toEqual(imported.beforeReplay.body);
     expect(imported.afterReplay.body).toEqual(point.body);
