@@ -508,7 +508,6 @@
   "subject_ratings_realm_count": "{population} 내 평점 {count}개",
   "subject_ratings_remaining": "점수를 표시하려면 평점 {count}개가 더 필요합니다",
   "subject_ratings_reviews": "리뷰",
-  "subject_ratings_unavailable": "평점은 아직 열리지 않았습니다. 열리면 가장 먼저 평점을 남길 수 있습니다.",
   "subject_ratings_yours": "내 평점: {score}",
 
   "subject_reactions_unavailable": "반응을 불러오지 못했습니다.",

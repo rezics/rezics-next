@@ -508,7 +508,6 @@
   "subject_ratings_realm_count": "{population}での評価 {count}件",
   "subject_ratings_remaining": "スコアの表示まであと{count}件",
   "subject_ratings_reviews": "レビュー",
-  "subject_ratings_unavailable": "評価はまだ公開されていません。公開されたら、最初の評価をつけられます。",
   "subject_ratings_yours": "あなたの評価: {score}",
 
   "subject_reactions_unavailable": "リアクションを読み込めませんでした。",

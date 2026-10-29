@@ -11,31 +11,16 @@ export const RatingsContext = createContext<Ratings | null | undefined>(undefine
 /** Story fixtures can show each display state without adding another request to the subject page. */
 export const RatingsPreviewContext = createContext<Ratings | null | undefined>(undefined);
 
-function RatingsFailure({
-  id,
-  subject,
-  locale,
-  unavailable = false,
-}: {
-  id: string;
-  subject: string;
-  locale: string;
-  unavailable?: boolean;
-}) {
+function RatingsFailure({ id, subject, locale }: { id: string; subject: string; locale: string }) {
   const options = { locale: locale as never };
   const reviewsHref = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}/reviews`;
   return (
-    <section
-      data-slot="rating-summary"
-      data-state={unavailable ? 'unavailable' : 'failed'}
-      aria-labelledby={`${id}-title`}
-      className={sectionClass}
-    >
+    <section data-slot="rating-summary" data-state="failed" aria-labelledby={`${id}-title`} className={sectionClass}>
       <h2 id={`${id}-title`} className={headingClass}>
         {m.subject_ratings({}, options)}
       </h2>
       <p role="status" className="text-sm text-muted-foreground">
-        {unavailable ? m.subject_ratings_unavailable({}, options) : m.subject_section_failed({}, options)}
+        {m.subject_section_failed({}, options)}
       </p>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
         <a data-slot="retry" href="?" className={linkClass}>
@@ -55,7 +40,7 @@ export function RatingsSection({ id, subject, locale }: { id: string; subject: s
   const data = previewData === undefined ? routeData : previewData;
 
   if (data === null) return <RatingsFailure id={id} subject={subject} locale={locale} />;
-  if (data === undefined) return <RatingsFailure id={id} subject={subject} locale={locale} unavailable />;
+  if (data === undefined) return null;
 
   return <RatingsView data={data} id={id} subject={subject} locale={locale} />;
 }

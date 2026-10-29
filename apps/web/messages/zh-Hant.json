@@ -508,7 +508,6 @@
   "subject_ratings_realm_count": "{population}有 {count} 個評分",
   "subject_ratings_remaining": "還需 {count} 個評分才能顯示分數",
   "subject_ratings_reviews": "評論",
-  "subject_ratings_unavailable": "評分尚未開放。開放後，你可以成為第一個評分的人。",
   "subject_ratings_yours": "你的評分：{score}",
 
   "subject_reactions_unavailable": "暫時無法載入表態。",

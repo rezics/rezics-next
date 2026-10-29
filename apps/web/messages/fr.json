@@ -508,7 +508,6 @@
   "subject_ratings_realm_count": "{count} notes dans {population}",
   "subject_ratings_remaining": "Encore {count} notes pour afficher un score",
   "subject_ratings_reviews": "Critiques",
-  "subject_ratings_unavailable": "Les notes ne sont pas encore ouvertes. Dès qu’elles le seront, vous pourrez noter en premier.",
   "subject_ratings_yours": "Votre note : {score}",
 
   "subject_reactions_unavailable": "Les réactions n’ont pas pu être chargées.",
