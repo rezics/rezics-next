@@ -287,7 +287,7 @@ async function gateAt(
     results.length = 0;
     // A fresh worktree has no node_modules; only the root gate installs by itself, and a narrowed or acceptance
     // command would fail on every commit without this.
-    if (existsSync(join(tree, 'package.json'))) {
+    if (existsSync(join(tree, 'package.json')) && existsSync(join(tree, 'bun.lock'))) {
       const installed = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
       appendFileSync(
         logFor(0),

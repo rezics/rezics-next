@@ -113,6 +113,15 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   git(root, ['config', 'user.name', 'Fixture']);
   git(root, ['config', 'user.email', 'fixture@example.invalid']);
   writeFileSync(join(root, '.gitignore'), '.temp/\n');
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({ name: 'goal-fixture', private: true, workspaces: ['packages/*'], scripts: { typecheck: 'true' } }),
+  );
+  mkdirSync(join(root, 'packages/definitions'), { recursive: true });
+  writeFileSync(
+    join(root, 'packages/definitions/package.json'),
+    JSON.stringify({ name: '@fixture/definitions', private: true, scripts: { release: 'true' } }),
+  );
   writeFileSync(join(root, 'README.md'), 'Fixture\n');
   writeFileSync(
     join(root, 'fixture.test.ts'),
