@@ -132,9 +132,9 @@ An image whose own ratio is within 15% of the frame fills it (`object-fit: cover
 
 ### Typographic placeholder
 
-The placeholder is designed, not empty: the subject's title set in the Work title face, its principal creator or type label in the interface face, on a background chosen deterministically from the subject id alone. Its colour does not depend on the title, byline or type, so the same id always looks the same on every surface. It never shows a generic icon alone. Below 64 px a set title is unreadable, so a standalone cover represents it with its initials in the Work title face. A cover in a tile beside its visible title shows only the colour field; it does not repeat the title, byline or initials. Text stays legible against its background in both themes.
+The placeholder is designed, not empty: the subject's title set in the Work title face, its principal creator or type label in the interface face, on a background chosen deterministically from the subject id alone. Its colour does not depend on the title, byline or type, so the same id always looks the same on every surface. At 64 px and wider, every placeholder shows the title in the colour field, including tiles and list rows beside a visible title. Below 64 px it shows one centred neutral image icon on the colour field, with no text or initials. Titles wrap at normal word boundaries; CJK may break between characters. A word wider than the field reduces the type size instead of splitting, and longer titles are clamped with an ellipsis to the lines that fit. Text stays legible against its background in both themes.
 
-A suitability-withheld cover shows its decoded ThumbHash blurred behind the label and the reveal button, and requests no image byte until the viewer reveals it. `placeholder.color` is painted first, and the ThumbHash (decoded with the `thumbhash` package) over it while the image loads; a contained image keeps the colour alone as its backdrop. The placeholder colour is derived only from the subject id, and its light text keeps at least 5.5:1 contrast in both themes and at every size. On a standalone cover, the placeholder shows the title and, when available, the byline. The labels (`withheld`, `reveal`, `credit`, `via`) are English by default and the site passes translations in `labels`.
+A suitability-withheld cover shows its decoded ThumbHash blurred behind the label and the reveal button, and requests no image byte until the viewer reveals it. `placeholder.color` is painted first, and the ThumbHash (decoded with the `thumbhash` package) over it while the image loads; a contained image keeps the colour alone as its backdrop. The placeholder colour is derived only from the subject id, and its light text keeps at least 5.5:1 contrast in both themes and at every size. At 64 px and wider, the placeholder also shows the byline when available. The labels (`withheld`, `reveal`, `credit`, `via`) are English by default and the site passes translations in `labels`.
 
 ### Sizes and loading
 
@@ -163,7 +163,7 @@ mode, relation, edition and character tiles) follows one pattern:
   ellipsis.
 - Below the cover: the title clamped to two lines, then at most one line of secondary text (creator, year or
   relation label), then the item's one row of state (progress, status or score). Nothing else; details belong on
-  the subject page. The placeholder in a tile shows only its colour field because the title is already visible.
+  the subject page. The last row places state or progress first and the menu at the end, aligned with the cover’s right edge. It sits at the bottom of the full-height tile so tiles in a grid row line up. A menu alone stays at the end; with neither state, progress nor menu, no last row is rendered.
 - Every cover in a grid or row has the frame ratio rules of [Cover](#cover), so covers align across the row and
   text starts at the same height.
 - The whole card is one link to the subject; a site passes its client-side router link as `link`. Actions on the item (change status, remove, add to collection) live

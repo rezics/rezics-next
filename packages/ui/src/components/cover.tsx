@@ -1,10 +1,9 @@
-import { CopyrightIcon, EyeIcon } from 'lucide-react';
+import { CopyrightIcon, EyeIcon, ImageIcon } from 'lucide-react';
 import { useCallback, useState, type CSSProperties } from 'react';
 import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
 import { cn } from '../utils.ts';
-import { initials } from './avatar-initials.tsx';
 import {
   coverFallback,
   coverFit,
@@ -53,8 +52,6 @@ export interface CoverProps {
   ratio?: CoverRatio;
   /** An empty text alternative, for a repeat next to the visible title. */
   decorative?: boolean;
-  /** Keep only the colour field when the visible title is already beside this cover. */
-  showPlaceholderText?: boolean;
   /** The page's own cover: eager, with high fetch priority. */
   priority?: boolean;
   /** The viewer's setting for covers withheld for suitability. */
@@ -82,7 +79,6 @@ export function Cover({
   frameClassName,
   ratio,
   decorative = false,
-  showPlaceholderText = true,
   priority = false,
   suitability = 'blur',
   caption = false,
@@ -135,7 +131,7 @@ export function Cover({
         className={cn('@container overflow-hidden bg-muted ring-1 ring-foreground/10', coverRadius, frameClassName)}
       >
         {state === 'placeholder' ? (
-          <Placeholder subject={subject} size={size} colors={colors} showText={showPlaceholderText} />
+          <Placeholder subject={subject} size={size} colors={colors} ratio={frameRatio} />
         ) : (
           <>
             <div className="absolute inset-0" style={{ backgroundColor: image!.placeholder.color }} />
@@ -234,56 +230,60 @@ function Thumbhash({ hash, blurred }: { hash: string; blurred: boolean }) {
   );
 }
 
-/**
- * The typographic placeholder: the title in the Work title face and the byline in the interface face, on the
- * subject's own colour. A decorative repeat beside visible title text keeps only the colour field.
- */
+/** One placeholder on every surface: a title from 64 px, otherwise a neutral image icon. */
 function Placeholder({
   subject,
   size,
   colors,
-  showText,
+  ratio,
 }: {
   subject: CoverSubject;
   size: CoverSize;
   colors: { background: string; foreground: string };
-  showText: boolean;
+  ratio: CoverRatio;
 }) {
-  if (!showText) {
-    return (
-      <div className="absolute inset-0" style={{ backgroundColor: colors.background, color: colors.foreground }} />
-    );
-  }
-
-  const letters = (
-    <span
-      className={cn(
-        'font-work-title font-semibold leading-none',
-        size === 'fill' ? 'hidden @max-[63px]:flex' : 'flex',
-        'absolute inset-0 items-center justify-center',
-      )}
-      style={{ fontSize: '38cqw' }}
-    >
-      {initials(subject.title)}
-    </span>
+  // CJK permits character boundaries; other unbroken words must fit the field at one em per character.
+  const words = subject.title.split(/[\s\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}-]+/u);
+  const longest = words.reduce((length, word) => Math.max(length, Array.from(word).length), 1);
+  const titleSize = Math.min(10, 84 / longest);
+  // Reserve padding and the optional two-line byline; clamp only to whole lines that fit the frame.
+  const titleLines = Math.max(
+    1,
+    Math.floor((100 / ratioValue(ratio) - 16 - (subject.byline ? 32 : 0)) / (titleSize * 1.2)),
+  );
+  const icon = (
+    <div className={cn('absolute inset-0 flex items-center justify-center', size === 'fill' && '@min-[64px]:hidden')}>
+      <ImageIcon
+        data-slot="cover-placeholder-icon"
+        aria-hidden
+        className="size-[40cqw] max-h-6 max-w-6 text-muted-foreground"
+        style={{ color: colors.foreground, opacity: 0.75 }}
+      />
+    </div>
   );
   const title = (
     <div
       className={cn(
         'absolute inset-0 flex flex-col justify-between gap-[6cqw] p-[8cqw]',
-        size === 'fill' && '@max-[63px]:hidden',
+        size === 'fill' && '@max-[64px]:hidden',
       )}
     >
       <p
-        className="line-clamp-6 font-work-title leading-[1.2] font-semibold wrap-anywhere text-balance"
-        style={{ fontSize: 'clamp(0.75rem, 10cqw, 1.625rem)' }}
+        data-slot="cover-placeholder-title"
+        className="line-clamp-6 font-work-title leading-[1.2] font-semibold text-balance"
+        style={{
+          fontSize: `min(${titleSize}cqw, 1.625rem)`,
+          wordBreak: 'normal',
+          overflowWrap: 'normal',
+          WebkitLineClamp: titleLines,
+        }}
       >
         {subject.title}
       </p>
       {subject.byline ? (
         <p
-          className="line-clamp-2 border-t pt-[4cqw] font-sans font-medium wrap-anywhere"
-          style={{ fontSize: 'clamp(0.625rem, 6.5cqw, 0.9375rem)', borderColor: `${colors.foreground}66` }}
+          className="line-clamp-2 shrink-0 border-t pt-[4cqw] font-sans font-medium wrap-anywhere"
+          style={{ fontSize: 'min(6.5cqw, 0.9375rem)', borderColor: `${colors.foreground}66` }}
         >
           {subject.byline}
         </p>
@@ -291,12 +291,15 @@ function Placeholder({
     </div>
   );
   return (
-    <div className="absolute inset-0" style={{ backgroundColor: colors.background, color: colors.foreground }}>
+    <div
+      className="absolute inset-0"
+      style={{ backgroundColor: colors.background, color: colors.foreground, containerType: 'inline-size' }}
+    >
       {size === 'xs' ? (
-        letters
+        icon
       ) : size === 'fill' ? (
         <>
-          {letters}
+          {icon}
           {title}
         </>
       ) : (

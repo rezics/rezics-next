@@ -49,7 +49,7 @@ export interface CoverCardProps {
   progress?: { value: number | null; label: string };
   menu?: ReactNode;
   menuEntries?: MenuEntry[];
-  /** A caller-managed trigger placed at the start of the state row. */
+  /** A caller-managed trigger placed at the end of the last row. */
   menuTrigger?: ReactNode;
   menuLabel?: string;
   density?: CoverDensity;
@@ -122,14 +122,13 @@ export function CoverCard({
     <article
       onPointerDown={onPointerDown}
       data-slot="cover-card"
-      className="group relative min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring"
+      className="group relative flex h-full min-w-0 flex-col text-foreground focus-within:ring-2 focus-within:ring-ring"
     >
       <Cover
         {...cover}
         size="fill"
         {...(ratio ? { ratio } : {})}
         decorative
-        showPlaceholderText={false}
         frameClassName="bg-transparent ring-0"
         caption={false}
         className="w-full [&_button:not(.absolute)]:relative [&_button]:z-10"
@@ -167,7 +166,7 @@ export function CoverCard({
         </>
       )}
       {badge != null && <div className="pointer-events-none absolute top-2 right-2 z-10">{badge}</div>}
-      <div data-slot="cover-card-text" className="flex min-w-0 flex-col gap-1 p-2">
+      <div data-slot="cover-card-text" className="flex min-w-0 flex-1 flex-col gap-1 p-2">
         {selectable ? (
           <span
             data-slot="cover-card-title"
@@ -227,22 +226,22 @@ export function CoverCard({
             )}
           </div>
         )}
-        {progress != null ? (
-          <div data-slot="cover-card-state" className="min-w-0 pt-0.5 text-xs text-muted-foreground">
-            <ProgressRow value={progress.value} label={progress.label} menu={actions} />
-          </div>
-        ) : (
-          (state != null || actions != null) && (
-            <div
-              data-slot="cover-card-state"
-              className="flex min-w-0 items-center gap-1 pt-0.5 text-xs text-muted-foreground"
-            >
-              {actions}
-              {state != null && <div className="min-w-0 flex-1">{state}</div>}
-            </div>
-          )
-        )}
       </div>
+      {(progress != null || state != null || actions != null) && (
+        <div
+          data-slot="cover-card-actions-row"
+          className="mt-auto flex min-w-0 items-center justify-between gap-1 pt-0.5 pb-2 text-xs text-muted-foreground"
+        >
+          {(progress != null || state != null) && (
+            <div data-slot="cover-card-state" className="min-w-0 flex-1 pt-0.5">
+              <div data-slot="cover-card-state-content">
+                {progress != null ? <ProgressRow value={progress.value} label={progress.label} /> : state}
+              </div>
+            </div>
+          )}
+          {actions != null && <div className="ml-auto">{actions}</div>}
+        </div>
+      )}
     </article>
   );
 }

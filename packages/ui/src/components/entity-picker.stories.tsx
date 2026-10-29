@@ -254,8 +254,8 @@ export const LongTitlesAndMissingData: Story = {
     for (const row of rows) {
       await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
     }
-    // A subject with no cover shows its initials, one with no year or type label shows only what it has.
-    await expect(screen.getByRole('option', { name: /Untitled/ })).toHaveTextContent(/^U\s*Untitled$/);
+    // A missing cover has no avatar initials; missing year or type labels add no text.
+    await expect(screen.getByRole('option', { name: /Untitled/ })).toHaveTextContent(/^Untitled$/);
     await expect(screen.getByRole('option', { name: /無題の物語/ })).toHaveTextContent('Visual novel · 2011');
   },
 };

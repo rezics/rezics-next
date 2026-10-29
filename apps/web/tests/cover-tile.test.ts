@@ -167,7 +167,8 @@ test('cover cards have no surface and keep the edge-to-edge cover and padded tex
   expect(classOf(state)).toContain('pt-0.5');
   expect(classOf(progress)).toContain('flex');
   expect(html.indexOf('data-slot="cover-card-actions"')).toBeGreaterThan(html.indexOf('data-slot="cover-card-text"'));
-  expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(html.indexOf('role="progressbar"'));
+  expect(html.indexOf('>35%</span>')).toBeLessThan(html.indexOf('data-slot="cover-card-actions"'));
+  expect(classOf(tagWith(html, 'data-slot="cover-card-actions-row"'))).toContain('mt-auto');
   expect(html.indexOf('role="progressbar"')).toBeLessThan(html.indexOf('>35%</span>'));
   expect(classOf(actions)).not.toContain('absolute');
   expect(html).toContain('tabular-nums');

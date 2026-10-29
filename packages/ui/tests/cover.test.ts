@@ -161,7 +161,7 @@ test('the cover frame keeps its type’s ratio and named size before the image l
   await expectStories(['Frame Keeps Size']);
 }, 300_000);
 
-test('a missing, failed or taken-down cover renders the typographic placeholder with the title and byline, never an icon or a letter alone', async () => {
+test('a missing, failed or taken-down cover renders the title and byline from 64 px and an image icon below', async () => {
   for (const size of ['sm', 'md', 'lg', 'xl'] as const) {
     const html = render({ subject: book, cover: null, size });
     expect(html).toContain('The Wind-Up Bird Chronicle');
@@ -182,11 +182,12 @@ test('a missing, failed or taken-down cover renders the typographic placeholder 
     cover: null,
   });
   expect(cjk).toContain('吾輩は猫である 夏目漱石全集 第一巻');
-  // Below 64 px the placeholder shows the initials, with the title as the accessible name.
+  // Below 64 px the placeholder shows a neutral image icon, with the title as its accessible name.
   const small = render({ subject: book, cover: null, size: 'xs' });
-  expect(small).toContain('>TW<');
+  expect(small).toContain('data-slot="cover-placeholder-icon"');
+  expect(small).not.toContain('>TW<');
   expect(small).toContain('aria-label="The Wind-Up Bird Chronicle"');
-  expect(small).not.toContain('<svg');
+  expect(small).toContain('<svg');
   // A failed or taken-down image is the same placeholder: the story harness drives the error.
   await expectStories(['Image Fails', 'States']);
 }, 300_000);

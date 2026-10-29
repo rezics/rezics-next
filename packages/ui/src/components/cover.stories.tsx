@@ -1,5 +1,6 @@
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { ListRow } from './list-row.tsx';
 import { cn } from '../utils.ts';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Cover, sharedRatio, type CoverRatio, type CoverSize, type CoverSubject, type CoverSummary } from './cover.tsx';
@@ -206,7 +207,7 @@ const darkFrame: Decorator = (Story) => (
   </div>
 );
 
-/** A phone-width screen: six small covers in a row, and a grid whose `fill` frames shrink to initials. */
+/** A phone-width screen: six small covers in a row, and a grid whose `fill` frames show a neutral image icon. */
 export const Phone: Story = {
   parameters: { viewport: { defaultViewport: 'phone' } },
   decorators: [darkFrame],
@@ -214,7 +215,7 @@ export const Phone: Story = {
     const row = sharedRatio([book, person, album, recipe, game, classic].map((subject) => subject));
     return (
       <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-6 gap-2" data-row="initials">
+        <div className="grid grid-cols-6 gap-2" data-row="icons">
           {[book, person, album, recipe, game, classic].map((subject) => (
             <Cover key={subject.id} subject={subject} cover={null} size="fill" ratio={row} src={artSrc} />
           ))}
@@ -235,10 +236,10 @@ export const Phone: Story = {
     );
   },
   play: async ({ canvasElement }) => {
-    const first = canvasElement.querySelector('[data-row="initials"] [data-slot="cover"]')!;
-    // A frame under 64 px wide shows initials, not a set title.
+    const first = canvasElement.querySelector('[data-row="icons"] [data-slot="cover"]')!;
+    // A frame under 64 px wide shows only the neutral image icon.
     await waitFor(() => expect(first.getBoundingClientRect().width).toBeLessThan(64));
-    await waitFor(() => expect(within(first as HTMLElement).getByText('TW')).toBeVisible());
+    await waitFor(() => expect(first.querySelector('[data-slot=cover-placeholder-icon]')).toBeVisible());
   },
 };
 
@@ -499,5 +500,44 @@ export const PriorityAndDecorative: Story = {
     expect(image('repeat').getAttribute('alt')).toBe('');
     expect(image('other').loading).toBe('lazy');
     expect(image('other').alt).toBe('The Wind-Up Bird Chronicle');
+  },
+};
+
+/** Missing covers use the same field in a list and on their own at the exact small-cover widths. */
+export const PlaceholderWidths: Story = {
+  render: () => (
+    <div className="space-y-6">
+      {[48, 72, 96].map((width) => (
+        <section key={width} className="space-y-3">
+          <p>{width} px</p>
+          <div style={{ width }}>
+            <Cover subject={book} cover={null} size="fill" src={artSrc} />
+          </div>
+          <ul>
+            <ListRow className="flex items-center gap-3">
+              <div style={{ width }} className="shrink-0">
+                <Cover subject={book} cover={null} size="fill" src={artSrc} decorative />
+              </div>
+              <span>{book.title}</span>
+            </ListRow>
+          </ul>
+        </section>
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    for (const section of canvasElement.querySelectorAll('section')) {
+      const [bare, row] = section.querySelectorAll('[data-slot=cover]');
+      await expect(bare!.innerHTML).toBe(row!.innerHTML);
+      const icon = bare!.querySelector('[data-slot=cover-placeholder-icon]');
+      const title = bare!.querySelector('[data-slot=cover-placeholder-title]');
+      if (bare!.getBoundingClientRect().width < 64) {
+        await expect(icon).toBeVisible();
+        await expect(title).not.toBeVisible();
+      } else {
+        await expect(icon).not.toBeVisible();
+        await expect(title).toBeVisible();
+      }
+    }
   },
 };

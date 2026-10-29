@@ -47,10 +47,10 @@ test('the placeholder depends only on the subject ID: the same ID gives the same
   expect(otherId).not.toBe(first);
 });
 
-test('a placeholder inside a tile with a visible caption contains no title or byline text, and a cover without a caption keeps the typographic title', () => {
+test('a tile and a standalone cover keep the same typographic title and byline', () => {
   const html = tile();
-  expect(html.match(/The Wind-Up Bird Chronicle/g)).toHaveLength(1);
-  expect(html).not.toContain('Haruki Murakami');
+  expect(html.match(/The Wind-Up Bird Chronicle/g)).toHaveLength(2);
+  expect(html).toContain('Haruki Murakami');
   expect(html).not.toContain('>TW<');
 
   const standalone = cover();

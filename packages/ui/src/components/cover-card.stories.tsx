@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { sharedRatio } from './cover.tsx';
 import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
@@ -278,5 +278,94 @@ export const DensityWidths: Story = {
         await expect(getComputedStyle(grid).gridTemplateColumns.split(' ').length).toBe(counts[density]![index]);
       }
     }
+  },
+};
+
+const placeholderSubjects = [
+  { id: 'norwegian', title: 'Norwegian Wood', types: ['schema:Book'] },
+  { id: 'single-word', title: 'Supercalifragilisticexpialidocious', types: ['schema:Book'] },
+  subjects[0]!,
+  subjects[1]!,
+  subjects[2]!,
+  subjects[3]!,
+];
+const sampleImage =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="200" height="300" fill="#435c67"/><circle cx="100" cy="100" r="48" fill="#e2d3af"/></svg>',
+  );
+
+/** The phone grid widths, including the two word-boundary regressions and each last-row combination. */
+export const SharedPlaceholders: Story = {
+  render: () => (
+    <div className="w-[390px] max-w-full space-y-8">
+      {(['small', 'medium', 'large'] as const).map((density) => (
+        <section key={density} data-density={density} className="space-y-2">
+          <h2>{density}</h2>
+          <CoverGrid ratio="2:3" density={density} fixedDensity>
+            {placeholderSubjects.map((subject, index) => (
+              <CoverCard
+                key={subject.id}
+                title={subject.title}
+                href={`/${subject.id}`}
+                cover={{
+                  subject,
+                  cover:
+                    index === 4
+                      ? {
+                          media: 'sample',
+                          width: 200,
+                          height: 300,
+                          placeholder: { color: '#435c67', thumbhash: '' },
+                          variants: [{ format: 'webp', width: 320 }],
+                        }
+                      : null,
+                  src: () => sampleImage,
+                }}
+                meta={index % 2 === 0 ? 'Finished yesterday' : undefined}
+                state={index === 1 || index === 5 ? 'Reading' : undefined}
+                progress={index === 0 ? { value: 0.42, label: '42%' } : undefined}
+                menuEntries={index < 3 ? [{ label: 'Remove', onSelect: () => {} }] : undefined}
+              />
+            ))}
+          </CoverGrid>
+        </section>
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    await document.fonts.ready;
+    for (const section of canvasElement.querySelectorAll('section')) {
+      const tiles = [...section.querySelectorAll('article')];
+      for (const tile of tiles) {
+        const row = tile.querySelector('[data-slot=cover-card-actions-row]');
+        if (row)
+          await expect(Math.abs(row.getBoundingClientRect().bottom - tile.getBoundingClientRect().bottom)).toBeLessThan(
+            1,
+          );
+        const title = tile.querySelector<HTMLElement>('[data-slot=cover-placeholder-title]');
+        if (!title) continue;
+        await expect(getComputedStyle(title).wordBreak).toBe('normal');
+        await expect(getComputedStyle(title).overflowWrap).toBe('normal');
+        if (title.textContent === 'Norwegian Wood' || title.textContent === 'Supercalifragilisticexpialidocious') {
+          const range = document.createRange();
+          range.setStart(title.firstChild!, 0);
+          range.setEnd(title.firstChild!, title.textContent.indexOf(' ') < 0 ? title.textContent.length : 9);
+          const rects = [...range.getClientRects()];
+          await expect(rects.every((rect) => Math.abs(rect.top - rects[0]!.top) < 1)).toBe(true);
+          await expect(rects[0]!.width).toBeLessThanOrEqual(title.clientWidth + 1);
+        }
+      }
+      for (const tile of tiles) {
+        const top = tile.getBoundingClientRect().top;
+        const peers = tiles.filter((peer) => Math.abs(peer.getBoundingClientRect().top - top) < 1);
+        await expect(
+          peers.every(
+            (peer) => Math.abs(peer.getBoundingClientRect().bottom - tile.getBoundingClientRect().bottom) < 1,
+          ),
+        ).toBe(true);
+      }
+    }
+    await waitFor(() => expect(canvasElement.querySelector('[data-state=loading]')).toBeNull());
   },
 };
