@@ -656,7 +656,7 @@ test('remote slot wait heartbeats emitted by the runner reach the local check lo
   }
 });
 
-test('lighter classes, --local, and unreadable hosts files run locally under the memory lease', async () => {
+test('ordinary classes, --local, and unreadable hosts files run locally under the memory lease', async () => {
   for (const mode of ['light', 'local', 'unreadable'] as const) {
     const fixture = workerFixture();
     const old = { ...process.env };
@@ -689,6 +689,54 @@ test('lighter classes, --local, and unreadable hosts files run locally under the
       }
       rmSync(fixture.root, { recursive: true, force: true });
     }
+  }
+});
+
+test('a class with three sub-256 MiB peaks skips the memory lease and explains the percentile', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  try {
+    workerEnv(fixture);
+    const command = localCommand(fixture.localMarker);
+    const commandClass = checkClass(command, fixture.root);
+    for (const peak of [100, 120, 200]) recordPeak(fixture.memory, commandClass, peak * 2 ** 20);
+    expect(await runWorkerCheck(command, fixture.root)).toBe(0);
+    const logDirectory = join(fixture.root, '.temp/goal/checks');
+    const log = readFileSync(join(logDirectory, readdirSync(logDirectory)[0]!), 'utf8');
+    expect(log).toContain('local p90 200.0 MiB; skipping local memory lease');
+    expect(log).not.toContain('worker-check: waiting');
+  } finally {
+    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE']) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('a local memory lease wait is appended to the goal wait file while it is waiting', async () => {
+  const fixture = workerFixture();
+  const leaseDirectory = join(fixture.root, 'lease');
+  const waitFile = join(fixture.root, 'goal-wait');
+  const old = { ...process.env };
+  const holder = await acquireStackSlot('holder', { REZICS_STACK_SLOTS: '1', REZICS_STACK_LEASE_DIR: leaseDirectory });
+  try {
+    workerEnv(fixture);
+    process.env.REZICS_CHECK_MEMORY_DIR = leaseDirectory;
+    process.env.REZICS_CHECK_MEMORY_GIB = '1';
+    process.env.GOAL_CHECK_WAIT_FILE = waitFile;
+    const running = runWorkerCheck(localCommand(fixture.localMarker), fixture.root, false, undefined, 15);
+    await untilRecorded(() => existsSync(waitFile) && readFileSync(waitFile, 'utf8').trim().split('\n').some((line) => Number(line) > 0));
+    await holder.release();
+    expect(await running).toBe(0);
+    expect(readFileSync(waitFile, 'utf8').trim().split('\n').reduce((sum, line) => sum + Number(line), 0)).toBeGreaterThan(0);
+  } finally {
+    await holder.release();
+    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE', 'GOAL_CHECK_WAIT_FILE']) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+    rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 

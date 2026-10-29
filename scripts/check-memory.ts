@@ -57,10 +57,17 @@ export function checkClass(argv: readonly string[], cwd = process.cwd()): string
 }
 
 export function checkMemoryWeight(peaks: number[], capacity: number): number {
-  if (peaks.length < 3) return Math.min(4, capacity);
-  const recent = peaks.slice(-20).sort((a, b) => a - b);
-  const p90 = recent[Math.ceil(recent.length * 0.9) - 1]!;
+  const p90 = checkMemoryP90(peaks);
+  if (p90 === undefined) return Math.min(4, capacity);
+  if (p90 < 256 * 2 ** 20) return 0;
   return Math.max(1, Math.min(capacity, Math.ceil(p90 / 2 ** 30)));
+}
+
+/** 90th percentile over the same three-run warmup and last-20 window used for lease weight. */
+export function checkMemoryP90(peaks: number[]): number | undefined {
+  if (peaks.length < 3) return undefined;
+  const recent = peaks.slice(-20).sort((a, b) => a - b);
+  return recent[Math.ceil(recent.length * 0.9) - 1]!;
 }
 
 export function readPeaks(directory: string): Record<string, number[]> {

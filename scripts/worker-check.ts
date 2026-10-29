@@ -27,6 +27,7 @@ import { acquireStackSlot } from './stack-lease.ts';
 import {
   checkClass,
   checkMemoryCapacity,
+  checkMemoryP90,
   checkMemoryWeight,
   memoryLeaseDirectory,
   readPeaks,
@@ -221,6 +222,13 @@ export async function runWorkerCheck(
   const directory = memoryLeaseDirectory(env);
   const capacity = checkMemoryCapacity(env);
   const weight = checkMemoryWeight(readPeaks(directory)[commandClass] ?? [], capacity);
+  const p90 = checkMemoryP90(readPeaks(directory)[commandClass] ?? []);
+  const noMemoryLease = weight === 0;
+  if (noMemoryLease) {
+    const line = `worker-check: ${commandClass} local p90 ${(p90! / 2 ** 20).toFixed(1)} MiB; skipping local memory lease\n`;
+    process.stderr.write(line);
+    writeSync(descriptor, line);
+  }
   const remoteHostsFile = env.KERNEL_CHECK_REMOTE;
   let remoteEligible = false;
   if (!localOnly && env.KERNEL_CHECK_ON_REMOTE !== '1' && remoteHostsFile && weight >= 2) {
@@ -296,7 +304,6 @@ export async function runWorkerCheck(
     };
     remote.stdout?.on('data', saveRemote);
     remote.stderr?.on('data', saveRemote);
-    wait.begin();
     let remoteSignal: number | undefined;
     const remoteForwarders = Object.entries(SIGNALS).map(([signal, number]) => {
       const name = signal as keyof typeof SIGNALS;
@@ -360,7 +367,9 @@ export async function runWorkerCheck(
   delete leaseEnv.REZICS_STACK_LEASE;
   if (env.REZICS_CHECK_MEMORY === 'off') leaseEnv.REZICS_STACK_LEASE = 'off';
   if (env.REZICS_CHECK_MEMORY_LEASE !== undefined) leaseEnv.REZICS_STACK_SLOT = env.REZICS_CHECK_MEMORY_LEASE;
-  const lease = await acquireStackSlot(
+  const lease = noMemoryLease
+    ? undefined
+    : await acquireStackSlot(
     `worker-check: ${commandClass}`,
     {
       ...leaseEnv,
@@ -372,7 +381,7 @@ export async function runWorkerCheck(
     leaseWaitRepeatMs,
   );
   beginLedger(hostname(), 0);
-  env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
+  if (lease) env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
   let child: ReturnType<typeof spawn>;
   let scoped = false;
   const peakFile = join(directory, `peak.${process.pid}.${randomUUID()}.tmp`);
@@ -433,7 +442,7 @@ export async function runWorkerCheck(
     );
   } catch (error) {
     closeSync(descriptor);
-    await lease.release();
+    await lease?.release();
     throw error;
   }
 
@@ -483,7 +492,7 @@ export async function runWorkerCheck(
     for (const [name, forward] of forwarders) process.off(name, forward);
     wait.stop();
     closeSync(descriptor);
-    await lease.release();
+    await lease?.release();
   }
 
   if (scoped) {

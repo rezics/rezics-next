@@ -43,7 +43,10 @@ test('weight uses rounded-up 90th percentile of up to 20 peaks with a three-peak
       4,
     ),
   ).toBe(4);
-  expect(checkMemoryWeight([1, 2, 3], 1)).toBe(1);
+  expect(checkMemoryWeight([1, 2, 3].map((n) => n * 2 ** 30), 1)).toBe(1);
+  expect(checkMemoryWeight([100, 120, 200].map((n) => n * 2 ** 20), 16)).toBe(0);
+  expect(checkMemoryWeight([100, 120, 256].map((n) => n * 2 ** 20), 16)).toBe(1);
+  expect(checkMemoryWeight([100 * 2 ** 20, 120 * 2 ** 20], 16)).toBe(4);
 });
 
 test('records only the last 20 peaks and no more than 200 classes using atomic replacement', () => {
