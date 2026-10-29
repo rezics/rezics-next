@@ -144,6 +144,9 @@ if (script.includes('MemAvailable')) {
     process.on('SIGTERM', () => process.exit(143));
     setInterval(() => {}, 1000);
   } else process.exit(config.exit ?? 0);
+} else if (script.includes('REMOTE_CHECK_RETURNS')) {
+  log({ kind: 'returns', script });
+  for (const path of [...script.matchAll(/^# PATH (.+)$/gm)]) console.log('PRESENT ' + path[1]);
 } else {
   log({ kind: 'cleanup', script });
 }
@@ -341,6 +344,39 @@ test('stack-run passes --estimate-ms through to remote placement and refuses inv
   expect(refused.code).toBe(2);
   expect(refused.stderr).toContain('--estimate-ms');
   expect(missing.events()).toEqual([]);
+});
+
+test('growth profile: a root-relative profile is forwarded and returned with the run', async () => {
+  const { env, events } = scenario({ host: { available: 30e9 } });
+  const directory = workspace();
+  const profile = 'profile.jsonl';
+  writeFileSync(join(directory, profile), '{"earlier":true}\n');
+  const result = await stack({ ...env, GROWTH_PROFILE: join(directory, profile) }, local, [], directory);
+  expect(result.code).toBe(0);
+  const run = events().find((event) => event.kind === 'run')!;
+  expect(run.script).toContain(`GROWTH_PROFILE=${profile}`);
+  expect(run.script).toContain(profile);
+  const returns = events().find((event) => event.kind === 'returns')!;
+  expect(returns.script).toContain(`# PATH ${profile}`);
+  expect(readFileSync(join(directory, profile), 'utf8')).toBe('{"earlier":true}\n');
+});
+
+test('growth profile: an outside path is a usage error and never falls back locally', async () => {
+  const { env, events } = scenario({ host: { available: 30e9 } });
+  const directory = workspace();
+  const outside = join(directory, '..', 'outside-profile.jsonl');
+  const result = await stack({ ...env, GROWTH_PROFILE: outside }, local, [], directory);
+  expect(result.code).not.toBe(3);
+  expect(result.stderr).toContain(`GROWTH_PROFILE path is outside the run root: ${outside}`);
+  expect(events()).toEqual([]);
+});
+
+test('growth profile: an unset profile adds no command or returned file', async () => {
+  const { env, events } = scenario({ host: { available: 30e9 } });
+  const result = await stack(env, local);
+  expect(result.code).toBe(0);
+  const run = events().find((event) => event.kind === 'run')!;
+  expect(run.script).not.toContain('GROWTH_PROFILE=');
 });
 
 test('a stack run runs locally when no check host answers, and when no host has enough slots', async () => {

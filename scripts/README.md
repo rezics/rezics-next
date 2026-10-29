@@ -29,6 +29,9 @@ This section owns the operational rules. The implementation is in [remote-check.
 [stack-run.ts](stack-run.ts), [stack-lease.ts](stack-lease.ts),
 [provision-check-host.sh](provision-check-host.sh) and the [Docker wrapper](check-host/docker).
 Their adjacent tests exercise placement, admission, accounting and cleanup.
+`GROWTH_PROFILE`, when set to a file inside the workspace, is forwarded to stack runs on check hosts as a
+workspace-relative path and returned with the run result. Existing local profile lines are preserved when the
+returned file is merged.
 
 | Check        | Placement                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

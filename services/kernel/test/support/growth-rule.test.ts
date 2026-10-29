@@ -75,9 +75,14 @@ test('the series rule fails a series no allowed family explains with GrowthBound
 });
 
 test('the series rule fails dispersed evidence with GrowthEvidenceError', async () => {
-  await expect(
-    check('series uncertain repetitions', { rule: 'series', repetitions: 3, variable: true }),
-  ).rejects.toBeInstanceOf(GrowthEvidenceError);
+  try {
+    await check('series uncertain repetitions', { rule: 'series', repetitions: 3, variable: true });
+    throw new Error('expected insufficient evidence');
+  } catch (error) {
+    expect(error).toBeInstanceOf(GrowthEvidenceError);
+    expect((error as Error).message).toContain('Statement attribution:');
+    expect((error as Error).message).toContain('statements differing between lowest and highest repetition');
+  }
 });
 
 test('the step rule stays the default and GROWTH_RULE=series selects the series rule', async () => {

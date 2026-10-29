@@ -429,7 +429,9 @@ first-to-last-scale growth for each failing metric. Each statement line shows it
 every scale, and the plan node that used the most buffers (including its relation or index when present). Statements
 that appeared in only some repetitions are listed as intermittent with their repetition numbers. SQL literals and
 parameters are normalized together while leading SQL comments remain, so comments can identify a tagged statement.
-The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
+Set `GROWTH_PROFILE` to a file inside the workspace to collect profiles on local and remote check runs. Remote stack
+runs forward its workspace-relative path and return the file with the result; earlier local lines are retained when the
+returned profile is merged. The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
 blocks and count across measured repetitions.
 
 Each measured repetition starts from a settled state. Warm-ups and repetitions may write rows, including through

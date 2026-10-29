@@ -15,7 +15,7 @@
  * A host runs the same command in a copy of the workspace, with the caller's environment left behind. Stderr says
  * where the run went, and when it is waiting.
  */
-import { accessSync, constants } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
@@ -172,6 +172,18 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
   if (requestedPriority === 'landing' && isWorker(env)) {
     console.error('stack-run: worker environment ignores REMOTE_CHECK_PRIORITY=landing');
   }
+  let profile: string | undefined;
+  let priorProfile: Buffer | undefined;
+  if (env.GROWTH_PROFILE) {
+    const root = resolve(run.root);
+    const absolute = resolve(process.cwd(), env.GROWTH_PROFILE);
+    const path = relative(root, absolute);
+    if (path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path))
+      throw new Error(`Usage error: GROWTH_PROFILE path is outside the run root: ${env.GROWTH_PROFILE}`);
+    profile = path || '.';
+    const profileFile = join(root, profile);
+    if (existsSync(profileFile)) priorProfile = readFileSync(profileFile);
+  }
   const reason = localReason(run, env);
   if (typeof reason === 'string') {
     console.error(`stack-run: ${run.label} local, ${reason}`);
@@ -196,12 +208,14 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         hosts: readHosts(reason.hostsFile),
         workspace: run.root,
         cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
-        command: run.command,
+        command: profile ? ['env', `GROWTH_PROFILE=${profile}`, ...run.command] : run.command,
         ...(run.slots === undefined ? {} : { slots: run.slots }),
         ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
         ...(priority === undefined ? {} : { priority }),
         ...(interval === undefined ? {} : { pollMs: interval }),
-        ...(run.returns === undefined ? {} : { returns: run.returns }),
+        ...((run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined)
+          ? {}
+          : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
         answered: () => {
           answered = true;
         },
@@ -216,6 +230,14 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     if (outcome === null) {
       console.error(`stack-run: ${run.label} local, no check host answered`);
       return null;
+    }
+    if (profile && priorProfile) {
+      const profileFile = join(resolve(run.root), profile);
+      if (existsSync(profileFile)) {
+        const returned = readFileSync(profileFile);
+        if (!returned.subarray(0, priorProfile.length).equals(priorProfile))
+          writeFileSync(profileFile, Buffer.concat([priorProfile, returned]));
+      }
     }
     return outcome;
   } catch (error) {

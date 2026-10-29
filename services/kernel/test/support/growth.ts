@@ -527,9 +527,61 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           metric === 'blocks' ? (check.indexProbes ?? 0) : 0,
         );
         if (verdict.outcome === 'insufficient-evidence') {
-          throw new GrowthEvidenceError(
+          const error = new GrowthEvidenceError(
             `${check.name}: insufficient growth evidence for ${metric}; medians ${verdict.medians.join(', ')}, repetitions ${samples.map(({ repetitions }) => `[${repetitions.map((value) => value[metric]).join(', ')}]`).join('; ')}, uncertainties ${uncertainties.join(', ')}`,
           );
+          error.message += formatStatementAttribution(samples, [metric]);
+          const widest = samples.reduce((best, sample) => {
+            const totals = (repetition: StatementOccurrences) => {
+              const occurrences = [...repetition.statements, ...repetition.backgroundStatements];
+              return {
+                rows: occurrences.reduce((sum, item) => sum + item.rows, 0),
+                blocks: occurrences.reduce((sum, item) => sum + item.blocks, 0),
+              };
+            };
+            const spread = (repetitions: readonly StatementOccurrences[]) => {
+              const values = repetitions.map(totals);
+              return Math.max(
+                Math.max(...values.map(({ rows }) => rows)) - Math.min(...values.map(({ rows }) => rows)),
+                Math.max(...values.map(({ blocks }) => blocks)) - Math.min(...values.map(({ blocks }) => blocks)),
+              );
+            };
+            const scaleSpread = spread(sample.occurrenceRepetitions);
+            const bestSpread = spread(best.occurrenceRepetitions);
+            return scaleSpread > bestSpread ? sample : best;
+          });
+          const repetitions = widest.occurrenceRepetitions;
+          if (repetitions.length > 1) {
+            const occurrences = repetitions.map((repetition) => [
+              ...repetition.statements,
+              ...repetition.backgroundStatements,
+            ]);
+            const totals = occurrences.map((items) => ({
+              rows: items.reduce((sum, item) => sum + item.rows, 0),
+              blocks: items.reduce((sum, item) => sum + item.blocks, 0),
+            }));
+            const field =
+              Math.max(...totals.map(({ rows }) => rows)) - Math.min(...totals.map(({ rows }) => rows)) >=
+              Math.max(...totals.map(({ blocks }) => blocks)) - Math.min(...totals.map(({ blocks }) => blocks))
+                ? 'rows'
+                : 'blocks';
+            const highest = totals.reduce((best, value, index) => (value[field] > totals[best]![field] ? index : best), 0);
+            const lowest = totals.reduce((best, value, index) => (value[field] < totals[best]![field] ? index : best), 0);
+            const value = (index: number, statement: string, key: 'rows' | 'blocks') =>
+              occurrences[index]!.filter((item) => item.statement === statement).reduce((sum, item) => sum + item[key], 0);
+            const statements = [...new Set(occurrences.flatMap((items) => items.map(({ statement }) => statement)))];
+            const differing = statements.filter((statement) =>
+              (['rows', 'blocks'] as const).some(
+                (key) => value(lowest, statement, key) !== value(highest, statement, key),
+              ),
+            );
+            if (differing.length > 0)
+              error.message += `\nstatements differing between lowest and highest repetition at scale ${widest.scale}: ${differing
+                .slice(0, 20)
+                .map((statement) => `  ${statement}`)
+                .join('\n')}`;
+          }
+          throw error;
         }
         if (verdict.outcome === 'violation') {
           const error = new GrowthBoundError([], samples, check.byteBounds);
