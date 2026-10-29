@@ -113,3 +113,20 @@ Those historical failures do not establish a current blocker; the native retry a
 
 The nonempty artifact command is delivery only. No old recovery cases, whole media suite, full kernel/web check
 or root gate were run.
+
+### Current contract revalidation
+
+Preflight at base revision `c02c32e34c3dd1d824909ce938c812abf863664a` found the complete composed case
+and its passing evidence already present. Its frozen SHA-256 remains
+`751500e9c56f1b840f5f149d56b511537638867388976bcb245f55bedd72d171`; no assertion or helper edit is warranted.
+The actual factory still exports runtime, the three default URLs, importer, covers/listing/select, interrupted
+command/result/receipt, reopen/run and close. Defaults precede return; the actual boundary accepts
+`source(url, fault?, encodedBytes?)`, copies bounded owned input and replaces the exact URL registration.
+The interruption still occurs after durable local ACK and before deferred completion; reopen retains the same
+SQLite path. The current case already selects each actual candidate and decodes authorized storage bytes
+across the red, recovered green and subsequent blue journey.
+
+Decision: preserve the already frozen case and revalidate it once, together with the affected kernel typecheck
+and the nonempty artifact delivery command. Only this report changes; no outside-path files change.
+Current check results will be recorded after manager-delivered completion. Historical evidence above remains
+attributed to its original execution and is not presented as a new run.
