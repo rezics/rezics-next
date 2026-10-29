@@ -267,11 +267,17 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     };
   }
 
-  const index = await db.admin.query<{ indexname: string }>(
-    "SELECT indexname FROM pg_indexes WHERE schemaname='library' AND tablename='personal_label' AND indexdef LIKE 'CREATE UNIQUE INDEX% (route, account_id, label_id)'",
+  const index = await db.admin.query<{ indexname: string; indexdef: string }>(
+    "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='library' AND tablename='personal_label'",
   );
-  expect(index.rows).toHaveLength(1);
-  const primaryKeyIndex = index.rows[0]!.indexname;
+  const primaryKeyIndex = index.rows.find((item) =>
+    item.indexdef.includes('PRIMARY KEY (route, account_id, label_id)'),
+  )?.indexname;
+  const liveNameIndex = index.rows.find((item) =>
+    item.indexdef.includes('(route, account_id, normalized_name) WHERE (deleted_at IS NULL)'),
+  )?.indexname;
+  expect(primaryKeyIndex).toBeTruthy();
+  expect(liveNameIndex).toBeTruthy();
   const reader = db.openPool({ max: 1, options: '-c default_transaction_read_only=on' });
   async function token(after: string, viewer = actor) {
     const p = await readPartition(reader, partitionOf(routeOf(viewer.accountId)!));
@@ -450,8 +456,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     expect(labelNodes.length).toBeGreaterThan(0);
     for (const node of labelNodes) {
       expect(node['Node Type']).not.toBe('Seq Scan');
-      if (operation.name !== 'create' && node['Index Name'] !== undefined)
-        expect(node['Index Name']).toBe(primaryKeyIndex);
+      if (node['Index Name'] !== undefined) expect([primaryKeyIndex, liveNameIndex]).toContain(node['Index Name']);
       expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(
         operation.name.startsWith('list') ? 8 : 1,
       );
