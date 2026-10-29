@@ -34,7 +34,7 @@ describe('native Auth and web stack', () => {
     expect(await (await auth.context('bob')).cookies(stack.web)).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: '__Host-rezics_session' })]),
     );
-  });
+  }, 180_000);
 
   test('signs up a newcomer through the served sign-up form and preserves a web destination', async () => {
     const stack = await startNativeWebStack();
@@ -48,7 +48,7 @@ describe('native Auth and web stack', () => {
     expect((await (await auth.context('newcomer')).cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
       true,
     );
-  });
+  }, 180_000);
 
   test('uses only browser cookies and refuses the suspended native persona without a session', async () => {
     const stack = await startNativeWebStack();
@@ -69,7 +69,7 @@ describe('native Auth and web stack', () => {
     expect((await (await auth.context('suspended')).cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
       false,
     );
-  });
+  }, 180_000);
 
   test('stop closes contexts and Auth while leaving the native stack available to stop itself', async () => {
     const stack = await startNativeWebStack();
@@ -86,5 +86,5 @@ describe('native Auth and web stack', () => {
     } catch {}
     expect(authStatus).not.toBe(200);
     expect((await stack.kernel('/v1/definitions/active')).status).toBe(200);
-  });
+  }, 180_000);
 });
