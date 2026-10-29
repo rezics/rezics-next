@@ -1076,11 +1076,13 @@ export async function listSubjectLinks(
       break;
     }
     caughtUp = await linksCaughtUp(pool, options.seen, options.subject, freshnessDeadline, pendingMembers);
+    // Even an unready wait can outlive evidence or a grant. Recheck current
+    // source authority before returning either a fresh or an eventual page.
+    snapshot = await readPage();
     if (!caughtUp) {
       snapshot.page.freshness.caught_up = false;
       break;
     }
-    snapshot = await readPage();
     pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
   }
   const page = snapshot.page;
