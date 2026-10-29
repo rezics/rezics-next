@@ -60,7 +60,7 @@ test('ordinary Filter outcomes keep stable one-level order own-data access and m
     ...structuredClone(release.types['grow:Root']!),
     iri: 'https://construction.example/Deep',
     bases: [],
-    facets: ['schema:genre'],
+    facets: ['schema:datePublished'],
   };
   release.types['grow:Root']!.bases = ['grow:Base'];
   expect(facetProperties(release, ['grow:Root', 'grow:Base'])).toEqual([
@@ -117,11 +117,11 @@ test('raw mutable FilterRelease calls refresh patterns qualifiers typed facets a
     ...structuredClone(release.types['grow:Root']!),
     iri: 'https://construction.example/Base',
     bases: [],
-    facets: ['schema:genre'],
+    facets: ['schema:datePublished'],
   };
   release.types['grow:Root']!.bases = ['grow:Base'];
-  expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code', 'schema:genre']);
-  const untyped = { statement: { property: 'schema:genre', in: ['x'] } } as const;
+  expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code', 'schema:datePublished']);
+  const untyped = { statement: { property: 'schema:datePublished', range: { gte: 2000 } } } as const;
   expect(validateFilter(untyped, release, { saved: false })).toEqual([]);
   release.types['grow:Base']!.facets = [];
   expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code']);

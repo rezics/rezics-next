@@ -368,11 +368,11 @@ async function probe(): Promise<Evidence> {
         }
       state.qualifiers.add(release.properties[code]!.qualifiers);
       if (name === 'duplicate-unique-sites') {
+        state.uniqueArrays.add(release.curies);
         for (const type of Object.values(release.types))
           for (const list of [type.bases, type.mappings, type.facets]) state.uniqueArrays.add(list);
         for (const property of Object.values(release.properties)) {
-          for (const list of [property.mappings, property.qualifiers, property.targets, property.units])
-            if (list) state.uniqueArrays.add(list);
+          for (const list of [property.targets, property.units]) if (list) state.uniqueArrays.add(list);
           if (Array.isArray(property.relation?.filter)) state.uniqueArrays.add(property.relation.filter);
         }
       } else if (name.startsWith('duplicate-')) {

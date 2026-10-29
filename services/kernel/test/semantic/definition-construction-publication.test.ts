@@ -27,7 +27,7 @@ beforeAll(async () => {
     `
 const input = await Bun.stdin.json();
 if (input.original) {
-  const historicalSource = await Bun.file('${root}/services/kernel/test/semantic/fixtures/definitions-pre-caps.ts').text();
+  const historicalSource = await Bun.file('${root}/services/kernel/test/semantic/fixtures/definitions-pre-caps.source').text();
   Bun.plugin({ name: 'historical-publication-caller', setup(build) {
     build.onLoad({ filter: /\\/services\\/kernel\\/src\\/semantic\\/definitions\\.ts$/ }, () => ({
       contents: historicalSource, loader: 'ts'
