@@ -8,6 +8,7 @@ const workerCommands = [
   'dispatch',
   'status',
   'retry',
+  'priority',
   'stop',
   'cancel',
   'retarget',

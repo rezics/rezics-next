@@ -373,12 +373,35 @@ export class WorkerTasks {
   queueRetry(taskId: string, options: RetryOptions = {}): void {
     const task = this.store.task(taskId);
     if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt');
+    if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
+      throw new Error(`cannot retry ${task.state} task`);
+    const ref = { taskId, attempt: task.currentAttempt };
+    if (task.state === 'held') {
+      const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
+      if (!reshaped) throw new Error('a held task can only be retried with --brief');
+      if (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager)
+        throw new Error('a reshaped brief must keep the same goal and manager');
+      if (sameBriefText(reshaped.brief.markdown, task.brief.markdown)) throw new BriefContractUnchangedError();
+      const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`);
+      mkdirSync(dirname(briefPath), { recursive: true });
+      writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
+      this.store.updateHeldRetryTask(ref, (current) => {
+        current.brief = reshaped.brief;
+        current.briefPath = briefPath;
+        current.taskClass = reshaped.taskClass;
+        current.state = this.dependenciesMet({ brief: current.brief }) ? 'ready' : 'held';
+        current.pendingBriefChange = {
+          previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+          newBriefHash: briefHash(reshaped.brief.markdown),
+        };
+      }, { abandonPending: true });
+      return;
+    }
     const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
     if (reshaped && (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager))
       throw new Error('a reshaped brief must keep the same goal and manager');
     if (reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
       throw new BriefContractUnchangedError();
-    const ref = { taskId, attempt: task.currentAttempt };
     const briefPath = reshaped
       ? join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`)
       : undefined;
@@ -407,6 +430,19 @@ export class WorkerTasks {
       },
       retryOptions,
     );
+  }
+  setPriority(taskId: string, priority: 'critical' | 'normal'): Task {
+    const task = this.store.task(taskId);
+    const updated = this.store.updateTask({ taskId, attempt: task.currentAttempt }, (current) => {
+      current.brief.criticalPath = priority === 'critical';
+    });
+    this.writeTaskPriority(updated);
+    return updated;
+  }
+  private writeTaskPriority(task: Task): void {
+    const path = join(task.worktree, '.temp', 'goal', 'task-priority');
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, task.brief.criticalPath ? 'critical\n' : 'normal\n');
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
     await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)), taskId);
@@ -707,6 +743,7 @@ export class WorkerTasks {
         task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
           ? this.store.retryStopped(taskId, make, oldConfigDirectory)
           : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory);
+      this.writeTaskPriority(this.store.task(taskId));
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store
         .attempts(taskId)
