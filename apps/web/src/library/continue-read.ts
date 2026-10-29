@@ -188,6 +188,7 @@ export async function loadLegacyContinue(
         const subject = entry.subject as RawSubject | null | undefined;
         if (!subject) return [];
         const language = typeof subject.label === 'object' && subject.label ? subject.label.language : undefined;
+        const stateLabel = stateText(entry.state);
         return [
           readProgress(client, entry.subjectId, authorization).then((progress): ContinueEntry => ({
             subjectId: entry.subjectId,
@@ -195,7 +196,7 @@ export async function loadLegacyContinue(
             ...(language ? { language } : {}),
             summary: summaryOf(subject),
             progress,
-            ...(stateText(entry.state) ? { stateLabel: stateText(entry.state) } : {}),
+            ...(stateLabel ? { stateLabel } : {}),
           })),
         ];
       }),
