@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { run } from './cli.ts';
-import { MergeTrain } from './merge-train.ts';
+import { git } from './merge.ts';
 import { integrationHarness, markdown } from './test-support.ts';
 
 test('run() passes detached train mode to its runtime factory without changing the process environment', async () => {
@@ -28,48 +28,98 @@ test('run() passes detached train mode to its runtime factory without changing t
   }
 });
 
-async function controlPlaneOutcome(baseFails: boolean) {
+async function controlPlaneOutcome(
+  baseFails: boolean | string[],
+  files = ['tools/goal/src/fixtures/environment-probe.test.ts'],
+  baseFiles = files,
+) {
   const h = integrationHarness();
   try {
+    for (const file of baseFiles) {
+      mkdirSync(join(h.root, dirname(file)), { recursive: true });
+      writeFileSync(join(h.root, file), '// fixture test file on base\n');
+    }
+    if (baseFiles.length) {
+      git(h.root, 'add', '--', ...baseFiles);
+      git(h.root, 'commit', '-m', 'Add base test fixtures');
+    }
     h.ensureDev();
     const brief = join(h.settings.stateDirectory, 'control-plane.md');
     writeFileSync(brief, markdown
       .replace('goal: fixture', 'goal: control-plane')
-      .replace('paths: [result.txt]', 'paths: [tools/goal/src/change.ts]'));
+      .replace('paths: [result.txt]', 'paths: [tools/goal/src/change.ts]')
+      .replace('command: [bun, test]', 'command: ["true"]'));
     const task = h.tasks.dispatch(brief);
     mkdirSync(join(task.worktree, 'tools/goal/src'), { recursive: true });
     writeFileSync(join(task.worktree, 'tools/goal/src/change.ts'), 'change');
     mkdirSync(join(task.worktree, '.temp'), { recursive: true });
-    writeFileSync(join(task.worktree, '.temp/worker-plan.json'), '{}');
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: 'tools/goal/src/change.ts', content: 'change' }),
+    );
     await h.start(task);
-    const file = 'tools/goal/src/fixtures/environment-probe.test.ts';
-    const output = `FAIL ${file}\n`;
-    await new MergeTrain({
-      ...h.settings,
-      queue: h.queue,
-      fence: h.store,
-      sink: { onGateOutcome(outcome) { h.outcomes.push(outcome); h.job.onGateOutcome(outcome); } },
-      runGate: async (command, cwd) => {
-        if (JSON.stringify(command) === JSON.stringify(['bun', 'test', 'tools/goal/src']))
-          return { passed: false, output, timedOut: false };
-        if (JSON.stringify(command) === JSON.stringify(['bun', 'test', file])) {
-          const onBase = cwd.includes('control-plane-base-');
-          return { passed: onBase ? !baseFails : false, output: onBase && !baseFails ? '' : output, timedOut: false };
-        }
-        return { passed: true, output: '', timedOut: false };
-      },
-    }).run();
-    return h.outcomes[0];
+    const output = files.map((file) => `FAIL ${file}\n`).join('');
+    const commands: { command: string[]; cwd: string }[] = [];
+    await h.train(async (command, cwd) => {
+      commands.push({ command: [...command], cwd });
+      if (JSON.stringify(command) === JSON.stringify(['bun', 'test', 'tools/goal/src']))
+        return { passed: false, output, timedOut: false };
+      if (command[0] === 'bun' && command[1] === 'test' && files.includes(command[2]!)) {
+        const onBase = cwd.includes('control-plane-base-');
+        const baseFileFails = Array.isArray(baseFails) ? baseFails.includes(command[2]!) : baseFails;
+        const fails = onBase ? baseFileFails : true;
+        return { passed: !fails, output: fails ? `FAIL ${command[2]}\n` : '', timedOut: false };
+      }
+      return { passed: true, output: '', timedOut: false };
+    });
+    return { outcome: h.outcomes[0], commands };
   } finally { h.dispose(); }
 }
 
-test('the control-plane gate allows failures reproduced by the same test file on its base', async () => {
-  const outcome = await controlPlaneOutcome(true);
+test.serial('the control-plane gate allows failures reproduced by the same test file on its base', async () => {
+  const { outcome } = await controlPlaneOutcome(true);
   expect(outcome?.passed).toBe(true);
 });
 
-test('the control-plane gate refuses a test file that fails on the branch and passes on its base', async () => {
-  const outcome = await controlPlaneOutcome(false);
+test.serial('the control-plane gate refuses a test file that fails on the branch and passes on its base', async () => {
+  const { outcome } = await controlPlaneOutcome(false);
+  expect(outcome?.passed).toBe(false);
+  expect(outcome?.firstFailure?.assertion).toContain('Failures introduced on this branch');
+});
+
+test.serial('the control-plane gate compares each failing test file alone on branch and base', async () => {
+  const files = ['tools/goal/src/fixtures/one.test.ts', 'tools/goal/src/fixtures/two.test.ts'];
+  const { outcome, commands } = await controlPlaneOutcome([files[0]!], files);
+  const isolatedRuns = commands.filter(
+    ({ command }) => command[0] === 'bun' && command[1] === 'test' && files.includes(command[2]!),
+  );
+
+  expect(isolatedRuns.map(({ command }) => command)).toEqual([
+    ['bun', 'test', files[0]!],
+    ['bun', 'test', files[1]!],
+    ['bun', 'test', files[0]!],
+    ['bun', 'test', files[1]!],
+  ]);
+  expect(isolatedRuns[0]?.cwd).not.toContain('control-plane-base-');
+  expect(isolatedRuns[1]?.cwd).not.toContain('control-plane-base-');
+  expect(isolatedRuns[2]?.cwd).toContain('control-plane-base-');
+  expect(isolatedRuns[3]?.cwd).toContain('control-plane-base-');
+  expect(outcome?.passed).toBe(false);
+  expect(outcome?.firstFailure?.excerpt).toContain(files[1]);
+  expect(outcome?.firstFailure?.excerpt).not.toContain(files[0]);
+});
+
+test.serial('a failing control-plane test file added on the branch is a new failure', async () => {
+  const file = 'tools/goal/src/fixtures/branch-only.test.ts';
+  const { outcome, commands } = await controlPlaneOutcome([], [file], []);
+  const isolatedRuns = commands.filter(
+    ({ command }) => JSON.stringify(command) === JSON.stringify(['bun', 'test', file]),
+  );
+
+  expect(isolatedRuns.map(({ command }) => command)).toEqual([
+    ['bun', 'test', file],
+  ]);
+  expect(isolatedRuns[0]?.cwd).not.toContain('control-plane-base-');
   expect(outcome?.passed).toBe(false);
   expect(outcome?.firstFailure?.assertion).toContain('Failures introduced on this branch');
 });
