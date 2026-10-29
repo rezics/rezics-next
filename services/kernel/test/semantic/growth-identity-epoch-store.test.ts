@@ -5,7 +5,7 @@ import { accessCommandAuthorization } from '../../src/request/access.ts';
 import type { Access, AccountActor } from '../../src/request/access.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import { checkGrowth, openGrowthDatabase, settle, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from './real-access.ts';
