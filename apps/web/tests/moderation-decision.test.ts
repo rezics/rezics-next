@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
+import { mock } from 'bun:test';
+mock.module('cloudflare:workers', () => ({ env: {} }));
 import { loadDecisionPage, canAppealDecision } from '../src/moderation/decision-read';
 import { submitDecisionAppeal } from '../src/moderation/appeal';
+import { DecisionPageView } from '../src/moderation/decision-page';
 
 const decidedAt = '2026-01-01T12:00:00.000Z';
 const decision = {
@@ -32,17 +37,22 @@ test('decision page reads its decision and the applicable existing record once e
     },
   });
 
-  expect(page).toMatchObject({ decision, target: { id: 'post-1', title: 'The affected post' } });
+  expect(page).toMatchObject({ decision, target: { id: 'post-1', text: 'The affected post' } });
   expect(calls).toEqual(['decision:decision-1', 'post:post-1']);
   expect(calls).toHaveLength(2);
 });
 
 test('appeal access is inclusive of the deadline and limited to the author without an existing appeal', () => {
-  expect(canAppealDecision(decision, 'author-1', Date.parse(decision.appealDeadline))).toBe(true);
-  expect(canAppealDecision(decision, 'author-1', Date.parse(decision.appealDeadline) + 1)).toBe(false);
-  expect(canAppealDecision(decision, 'someone-else', Date.parse(decidedAt))).toBe(false);
+  expect(canAppealDecision(decision, 'author-1', 'author-1', Date.parse(decision.appealDeadline))).toBe(true);
+  expect(canAppealDecision(decision, 'author-1', 'author-1', Date.parse(decision.appealDeadline) + 1)).toBe(false);
+  expect(canAppealDecision(decision, 'author-1', 'someone-else', Date.parse(decidedAt))).toBe(false);
   expect(
-    canAppealDecision({ ...decision, appeal: { id: 'appeal-1', outcome: null } }, 'author-1', Date.parse(decidedAt)),
+    canAppealDecision(
+      { ...decision, appeal: { id: 'appeal-1', outcome: null } },
+      'author-1',
+      'author-1',
+      Date.parse(decidedAt),
+    ),
   ).toBe(false);
 });
 
@@ -93,4 +103,28 @@ test('decision route is signed-in, noindex and private, and refused reads become
   expect(route).toMatch(/beforeLoad:\s*requireSignedIn/);
   expect(route).toMatch(/noindex, nofollow/);
   expect(read).toMatch(/notFound\(/);
+});
+
+test('decision presentation shows reasons, target and times, with appeal UI only for the author before deadline', () => {
+  const page = {
+    decision,
+    viewerId: 'author-1',
+    target: { id: 'post-1', authorId: 'author-1', text: 'Affected post', href: '/threads/thread-1#post-1' },
+  };
+  const open = renderToStaticMarkup(createElement(DecisionPageView, { page, now: Date.parse(decidedAt) }));
+  expect(open).toContain(decision.statement);
+  expect(open).toContain('Affected post');
+  expect(open).toContain('datetime="' + decidedAt + '"');
+  expect(open).toContain('datetime="' + decision.appealDeadline + '"');
+  expect(open).toContain('appeal-statement');
+  expect(open).toContain('2,000');
+
+  const late = renderToStaticMarkup(
+    createElement(DecisionPageView, { page, now: Date.parse(decision.appealDeadline) + 1 }),
+  );
+  expect(late).not.toContain('appeal-statement');
+  const otherReader = renderToStaticMarkup(
+    createElement(DecisionPageView, { page: { ...page, viewerId: 'other' }, now: Date.parse(decidedAt) }),
+  );
+  expect(otherReader).not.toContain('appeal-statement');
 });

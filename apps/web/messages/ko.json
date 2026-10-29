@@ -596,5 +596,22 @@
   "nav_inbox": "받은 알림",
   "library_progress_locator_part_chapter": "제{part}부, {chapter}장",
   "library_progress_locator_chapter": "제{chapter}장",
-  "library_progress_update": "진행 상황 업데이트"
+  "library_progress_update": "진행 상황 업데이트",
+  "decision_heading": "콘텐츠 조정 결정",
+  "decision_reasons_heading": "결정 사유",
+  "decision_applies_heading": "적용 대상",
+  "decision_decided_label": "결정 시각",
+  "decision_appeal_heading": "이 결정에 이의 제기",
+  "decision_deadline_label": "이의 제기 마감",
+  "decision_appeal_prompt": "이의를 제기하는 이유를 작성하세요",
+  "decision_appeal_count": "{count} / 2,000자",
+  "decision_appeal_submit": "이의 제기 제출",
+  "decision_appeal_sending": "전송 중…",
+  "decision_appeal_pending": "이의 제기가 검토 대기 중입니다.",
+  "decision_appeal_reversed": "결정이 번복되었습니다.",
+  "decision_appeal_upheld": "결정이 유지되었습니다.",
+  "decision_appeal_expired": "이의 제기 기간이 지났습니다.",
+  "decision_appeal_too_long": "2,000자 이내로 작성하세요.",
+  "decision_appeal_unavailable": "이의 제기를 제출하지 못했습니다. 다시 시도하세요.",
+  "decision_target_fallback": "이 결정의 대상 {kind}"
 }

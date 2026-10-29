@@ -596,5 +596,22 @@
   "nav_inbox": "Notifications",
   "library_progress_locator_part_chapter": "Partie {part}, chapitre {chapter}",
   "library_progress_locator_chapter": "Chapitre {chapter}",
-  "library_progress_update": "Mettre à jour la progression"
+  "library_progress_update": "Mettre à jour la progression",
+  "decision_heading": "Décision de modération",
+  "decision_reasons_heading": "Motifs de la décision",
+  "decision_applies_heading": "Contenu concerné",
+  "decision_decided_label": "Décision prise",
+  "decision_appeal_heading": "Contester cette décision",
+  "decision_deadline_label": "Date limite de contestation",
+  "decision_appeal_prompt": "Expliquez pourquoi vous contestez cette décision",
+  "decision_appeal_count": "{count} / 2 000 caractères",
+  "decision_appeal_submit": "Envoyer la contestation",
+  "decision_appeal_sending": "Envoi…",
+  "decision_appeal_pending": "Votre contestation est en attente d’examen.",
+  "decision_appeal_reversed": "La décision a été annulée.",
+  "decision_appeal_upheld": "La décision a été confirmée.",
+  "decision_appeal_expired": "Le délai de contestation est dépassé.",
+  "decision_appeal_too_long": "Utilisez au maximum 2 000 caractères.",
+  "decision_appeal_unavailable": "Impossible d’envoyer votre contestation. Réessayez.",
+  "decision_target_fallback": "{kind} concerné par cette décision"
 }

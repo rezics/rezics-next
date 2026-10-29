@@ -596,5 +596,22 @@
   "nav_inbox": "收件匣",
   "library_progress_locator_part_chapter": "第{part}部，第{chapter}章",
   "library_progress_locator_chapter": "第{chapter}章",
-  "library_progress_update": "更新進度"
+  "library_progress_update": "更新進度",
+  "decision_heading": "內容處理決定",
+  "decision_reasons_heading": "決定理由",
+  "decision_applies_heading": "適用內容",
+  "decision_decided_label": "決定時間",
+  "decision_appeal_heading": "申訴此決定",
+  "decision_deadline_label": "申訴截止時間",
+  "decision_appeal_prompt": "請說明申訴理由",
+  "decision_appeal_count": "{count} / 2,000 個字元",
+  "decision_appeal_submit": "提交申訴",
+  "decision_appeal_sending": "正在提交…",
+  "decision_appeal_pending": "申訴正在等待審核。",
+  "decision_appeal_reversed": "決定已撤銷。",
+  "decision_appeal_upheld": "決定已維持。",
+  "decision_appeal_expired": "申訴期限已過。",
+  "decision_appeal_too_long": "請將內容控制在 2,000 個字元以內。",
+  "decision_appeal_unavailable": "無法提交申訴，請重試。",
+  "decision_target_fallback": "受此決定影響的{kind}"
 }

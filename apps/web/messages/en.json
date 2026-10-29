@@ -596,5 +596,22 @@
   "nav_inbox": "Inbox",
   "library_progress_locator_part_chapter": "Part {part}, chapter {chapter}",
   "library_progress_locator_chapter": "Chapter {chapter}",
-  "library_progress_update": "Update progress"
+  "library_progress_update": "Update progress",
+  "decision_heading": "Moderation decision",
+  "decision_reasons_heading": "Statement of reasons",
+  "decision_applies_heading": "What this applies to",
+  "decision_decided_label": "Decided",
+  "decision_appeal_heading": "Appeal this decision",
+  "decision_deadline_label": "Appeal deadline",
+  "decision_appeal_prompt": "Explain why you are appealing",
+  "decision_appeal_count": "{count} / 2,000 characters",
+  "decision_appeal_submit": "Submit appeal",
+  "decision_appeal_sending": "Sending…",
+  "decision_appeal_pending": "Your appeal is pending review.",
+  "decision_appeal_reversed": "The decision was reversed.",
+  "decision_appeal_upheld": "The decision was upheld.",
+  "decision_appeal_expired": "The deadline to appeal has passed.",
+  "decision_appeal_too_long": "Use no more than 2,000 characters.",
+  "decision_appeal_unavailable": "Your appeal could not be submitted. Try again.",
+  "decision_target_fallback": "{kind} affected by this decision"
 }

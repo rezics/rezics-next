@@ -596,5 +596,22 @@
   "nav_inbox": "Posteingang",
   "library_progress_locator_part_chapter": "Teil {part}, Kapitel {chapter}",
   "library_progress_locator_chapter": "Kapitel {chapter}",
-  "library_progress_update": "Fortschritt aktualisieren"
+  "library_progress_update": "Fortschritt aktualisieren",
+  "decision_heading": "Moderationsentscheidung",
+  "decision_reasons_heading": "Begründung",
+  "decision_applies_heading": "Betroffener Inhalt",
+  "decision_decided_label": "Entschieden",
+  "decision_appeal_heading": "Entscheidung anfechten",
+  "decision_deadline_label": "Frist für die Beschwerde",
+  "decision_appeal_prompt": "Begründe deine Beschwerde",
+  "decision_appeal_count": "{count} / 2.000 Zeichen",
+  "decision_appeal_submit": "Beschwerde einreichen",
+  "decision_appeal_sending": "Wird gesendet…",
+  "decision_appeal_pending": "Deine Beschwerde wird geprüft.",
+  "decision_appeal_reversed": "Die Entscheidung wurde aufgehoben.",
+  "decision_appeal_upheld": "Die Entscheidung wurde bestätigt.",
+  "decision_appeal_expired": "Die Frist für eine Beschwerde ist abgelaufen.",
+  "decision_appeal_too_long": "Verwende höchstens 2.000 Zeichen.",
+  "decision_appeal_unavailable": "Deine Beschwerde konnte nicht gesendet werden. Versuche es erneut.",
+  "decision_target_fallback": "{kind}, von dieser Entscheidung betroffen"
 }

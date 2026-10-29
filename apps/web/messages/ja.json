@@ -596,5 +596,22 @@
   "nav_inbox": "受信箱",
   "library_progress_locator_part_chapter": "第{part}部、第{chapter}章",
   "library_progress_locator_chapter": "第{chapter}章",
-  "library_progress_update": "進捗を更新"
+  "library_progress_update": "進捗を更新",
+  "decision_heading": "モデレーションの決定",
+  "decision_reasons_heading": "決定理由",
+  "decision_applies_heading": "対象",
+  "decision_decided_label": "決定日時",
+  "decision_appeal_heading": "この決定に異議を申し立てる",
+  "decision_deadline_label": "申立期限",
+  "decision_appeal_prompt": "異議申し立ての理由を記入してください",
+  "decision_appeal_count": "{count} / 2,000 文字",
+  "decision_appeal_submit": "異議を申し立てる",
+  "decision_appeal_sending": "送信中…",
+  "decision_appeal_pending": "異議申し立ては審査待ちです。",
+  "decision_appeal_reversed": "決定は取り消されました。",
+  "decision_appeal_upheld": "決定は維持されました。",
+  "decision_appeal_expired": "異議申し立ての期限が過ぎています。",
+  "decision_appeal_too_long": "2,000文字以内で入力してください。",
+  "decision_appeal_unavailable": "異議申し立てを送信できませんでした。もう一度お試しください。",
+  "decision_target_fallback": "この決定の対象となった{kind}"
 }

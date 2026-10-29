@@ -596,5 +596,22 @@
   "nav_inbox": "Notificaciones",
   "library_progress_locator_part_chapter": "Parte {part}, capítulo {chapter}",
   "library_progress_locator_chapter": "Capítulo {chapter}",
-  "library_progress_update": "Actualizar progreso"
+  "library_progress_update": "Actualizar progreso",
+  "decision_heading": "Decisión de moderación",
+  "decision_reasons_heading": "Motivos de la decisión",
+  "decision_applies_heading": "Contenido afectado",
+  "decision_decided_label": "Fecha de decisión",
+  "decision_appeal_heading": "Apelar esta decisión",
+  "decision_deadline_label": "Plazo para apelar",
+  "decision_appeal_prompt": "Explica por qué apelas esta decisión",
+  "decision_appeal_count": "{count} / 2.000 caracteres",
+  "decision_appeal_submit": "Enviar apelación",
+  "decision_appeal_sending": "Enviando…",
+  "decision_appeal_pending": "Tu apelación está pendiente de revisión.",
+  "decision_appeal_reversed": "La decisión fue revocada.",
+  "decision_appeal_upheld": "La decisión fue confirmada.",
+  "decision_appeal_expired": "El plazo para apelar ha terminado.",
+  "decision_appeal_too_long": "Usa un máximo de 2.000 caracteres.",
+  "decision_appeal_unavailable": "No se pudo enviar la apelación. Inténtalo de nuevo.",
+  "decision_target_fallback": "{kind} afectado por esta decisión"
 }
