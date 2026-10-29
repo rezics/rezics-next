@@ -244,7 +244,7 @@ async function runGrowth() {
       const operations = workflowIds.length
         ? await db.admin.query(
             `SELECT workflow_uuid,function_name FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs
-            WHERE workflow_uuid = ANY($1::uuid[]) ORDER BY workflow_uuid,function_id`,
+            WHERE workflow_uuid = ANY($1::text[]) ORDER BY workflow_uuid,function_id`,
             [workflowIds],
           )
         : { rows: [] };
