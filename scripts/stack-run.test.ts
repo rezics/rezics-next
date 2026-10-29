@@ -286,7 +286,7 @@ test("a stack run goes to a free check host and returns the command's exit code"
   const { env, lease, events } = scenario({ a: { available: 4e9 }, b: { available: 30e9, exit: 7 } });
   const result = await stack(env, local);
 
-  expect(result.code).toBe(7);
+  expect(result.code, result.stderr).toBe(7);
   expect(result.stderr).toContain('stack-run: the run on b');
   expect(result.stdout).not.toContain('local slot');
   const seen = events();
