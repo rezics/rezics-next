@@ -84,7 +84,7 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         await page.goto(`${base}index.html?path=/story/${storyId}${globals}`, { waitUntil: 'domcontentloaded' });
         const iframe = page.locator(scenario.composed ? '#storybook-ref-ui' : '#storybook-preview-iframe');
         await iframe.waitFor({ state: 'attached', timeout: 30_000 });
-        const frame = await iframe.contentFrame();
+        const frame = await (await iframe.elementHandle())?.contentFrame();
         if (!frame) throw new Error(`Story iframe did not load: ${storyId}`);
         await frame.locator('body').waitFor({ state: 'attached', timeout: 30_000 });
         const body = frame.locator('body');
