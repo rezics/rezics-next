@@ -1035,9 +1035,10 @@ if (import.meta.main) {
   try {
     const args = Bun.argv.slice(2);
     if (args[0] === '--wait' && args[1]) process.exitCode = await waitWorkerCheck(args[1]);
-    else if (args[0] === '--run' && args[1]) process.exitCode = await runRecordedCheck(args[1]);
+    else if (args[0] === '--run' && /^[0-9a-f-]{36}$/i.test(args[1] ?? ''))
+      process.exitCode = await runRecordedCheck(args[1]!);
     else {
-      const id = startWorkerCheck(parse(args));
+      const id = startWorkerCheck(parse(args[0] === '--run' ? args.slice(1) : args));
       process.stdout.write(`check: id ${id}\n`);
     }
   } catch (error) {
