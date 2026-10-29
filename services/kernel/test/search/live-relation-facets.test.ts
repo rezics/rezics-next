@@ -229,11 +229,11 @@ test('positive relation matches are checked live even within the sampled prefix'
     const env = await deployment(subjects);
     const before = await env.search(leaf());
     expect(ids(before)).toEqual(subjects.map((subject) => subject.id));
-    expect(before.total).toEqual({ value: 2, relation: degree <= 128 ? 'exact' : 'lower_bound' });
+    expect(before).not.toHaveProperty('total');
     env.hidden.add(id(1));
     const after = await env.search({ saved: 'books/live' });
     expect(ids(after)).toEqual([id(2)]);
-    expect(after.total).toEqual({ value: 1, relation: 'lower_bound' });
+    expect(after).not.toHaveProperty('total');
     expect(env.probes.flatMap((call) => call.points)).toEqual(
       subjects.map((subject) => ({ subject: subject.id, property: author, value: target })),
     );
@@ -255,11 +255,11 @@ test('live relation rejection refills and continues without revealing stale witn
     examined.push(...env.probes.flatMap((call) => call.points.map((point) => point.subject)));
     if (pages === 0) {
       expect(page.subjects).toEqual([]);
-      expect(page.total).toEqual({ value: 0, relation: 'lower_bound' });
+      expect(page).not.toHaveProperty('total');
       expect(env.calls).toHaveLength(3);
       expect(page.next).toEqual(expect.any(String));
     }
-    expect(page.total).toEqual({ value: page.subjects.length, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     found.push(...ids(page));
     cursor = page.next ?? undefined;
     expect(++pages).toBeLessThan(10);
@@ -275,11 +275,11 @@ test('continuation consumes trailing rejected candidates after filling the page'
   env.hidden.add(id(3));
   const first = await env.search(leaf(), { limit: 1 });
   expect(ids(first)).toEqual([id(1)]);
-  expect(first.total).toEqual({ value: 1, relation: 'lower_bound' });
+  expect(first).not.toHaveProperty('total');
   expect(first.next).toEqual(expect.any(String));
   const next = await env.search(leaf(), { limit: 1, cursor: first.next });
   expect(ids(next)).toEqual([id(4)]);
-  expect(next.total).toEqual({ value: 1, relation: 'lower_bound' });
+  expect(next).not.toHaveProperty('total');
   expect(env.calls[0]!.after).toEqual([id(3)]);
   expect(env.probes.flatMap((call) => call.points.map((point) => point.subject))).toEqual([id(4)]);
 });
@@ -355,7 +355,7 @@ test('a shared positive and negative leaf can reject a stale negative candidate 
     or: [{ and: [books, leaf()] }, { and: [{ type: { in: ['schema:Recipe'] } }, { not: leaf() }] }],
   });
   expect(ids(page)).toEqual([]);
-  expect(page.total).toEqual({ value: 0, relation: 'lower_bound' });
+  expect(page).not.toHaveProperty('total');
   expect(env.probes.flatMap((call) => call.points)).toEqual([{ subject: id(1), property: author, value: target }]);
 });
 

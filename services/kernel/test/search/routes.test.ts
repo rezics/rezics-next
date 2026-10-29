@@ -46,7 +46,7 @@ const service: SearchService = {
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
-    return { subjects: [result], total: { value: 1, relation: 'exact' }, next: null, as_of: asOf };
+    return { subjects: [result], next: null, as_of: asOf };
   },
   async facets(principal, request) {
     calls.push(['facets', principal, request]);
@@ -55,11 +55,9 @@ const service: SearchService = {
       facets: [
         {
           property: 'schema:author',
-          relation: 'exact',
-          values: [{ value: result.id, count: 1, labels: result.labels }],
+          values: [{ value: result.id, labels: result.labels }],
         },
       ],
-      total: { value: 1, relation: 'exact' },
       as_of: asOf,
     };
   },
@@ -104,7 +102,6 @@ test('search and suggest pass the caller, the body and the query to the service,
   expect(anonymous.response.status).toBe(200);
   expect(anonymous.body).toEqual({
     subjects: [{ ...result, summary: null }],
-    total: { value: 1, relation: 'exact' },
     next: null,
     as_of: asOf,
   });
@@ -243,9 +240,14 @@ test('facets forward principals and reject denied credentials and unknown fields
   checks.length = 0;
   const body = { facets: [{ property: 'schema:author', size: 1 }] };
   for (const token of [undefined, 'reader']) {
-    const result = await call(kernel, 'POST', '/v1/subjects:facets', { ...(token ? { token } : {}), body });
-    expect(result.response.status).toBe(200);
-    expect(result.body.facets[0].values[0].count).toBe(1);
+    const response = await call(kernel, 'POST', '/v1/subjects:facets', { ...(token ? { token } : {}), body });
+    expect(response.response.status).toBe(200);
+    expect(response.body).not.toHaveProperty('total');
+    expect(response.body.facets).toEqual([
+      { property: 'schema:author', values: [{ value: result.id, labels: { en: 'Kokoro' } }] },
+    ]);
+    expect(response.body.facets[0]).not.toHaveProperty('relation');
+    expect(response.body.facets[0].values[0]).not.toHaveProperty('count');
   }
   expect(calls).toEqual([
     ['facets', 'anonymous', body],

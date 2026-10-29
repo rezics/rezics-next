@@ -191,7 +191,7 @@ async function deployment(entries: IndexedSubject[]) {
 const ids = (page: { subjects: { id: string }[] }) => page.subjects.map((subject) => subject.id);
 
 test('not-proven relation points are dropped and refilled without becoming negative matches', async () => {
-  // No overflow marker: positive live uncertainty must still invalidate an exact engine total.
+  // No overflow marker: positive live uncertainty still cannot add public aggregate metadata.
   const entries = Array.from({ length: 9 }, (_, i) => entry(i + 1, 128));
   const env = await deployment(entries);
   env.answer((point) => (point.subject === id(4) || point.subject === id(9) ? true : 'not_proven'));
@@ -204,7 +204,7 @@ test('not-proven relation points are dropped and refilled without becoming negat
     env.snapshots.put({ ...entries[index]!, ...patch });
   const page = await env.search(leaf(), { limit: 2 });
   expect(ids(page)).toEqual([id(4), id(9)]);
-  expect(page.total).toEqual({ value: 2, relation: 'lower_bound' });
+  expect(page).not.toHaveProperty('total');
   expect(page.next).toBeNull();
   expect(env.calls).toHaveLength(3);
   expect(env.calls.slice(1).every((call) => call.after !== undefined)).toBe(true);
@@ -215,7 +215,7 @@ test('not-proven relation points are dropped and refilled without becoming negat
   negative.answer((point) => (point.subject === id(2) ? false : point.subject === id(3) ? true : 'not_proven'));
   const excluded = await negative.search({ and: [books, { not: leaf() }] });
   expect(ids(excluded)).toEqual([id(2)]);
-  expect(excluded.total).toEqual({ value: 1, relation: 'lower_bound' });
+  expect(excluded).not.toHaveProperty('total');
 });
 
 test('not-proven points preserve three-valued filter truth and keyset continuation', async () => {
@@ -247,7 +247,7 @@ test('not-proven points preserve three-valued filter truth and keyset continuati
   for (const [expression, proven] of cases) {
     const page = await env.search({ and: [books, expression] });
     expect(ids(page), JSON.stringify(expression)).toEqual(proven ? [id(1), id(2), id(3)] : []);
-    expect(page.total).toEqual({ value: proven ? 3 : 0, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     const points = env.probes.flat();
     expect(new Set(points.map((point) => JSON.stringify(point))).size).toBe(points.length);
   }
@@ -287,7 +287,7 @@ test('not-proven points preserve three-valued filter truth and keyset continuati
         .map((point) => point.subject),
     );
     found.push(...ids(page));
-    expect(page.total).toEqual({ value: page.subjects.length, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     cursor = page.next ?? undefined;
     expect(++count).toBeLessThan(10);
   } while (cursor);
@@ -302,7 +302,7 @@ test('not-proven points preserve three-valued filter truth and keyset continuati
   const allUnknown = await pages.search(a, { limit: 100 });
   expect(ids(allUnknown)).toEqual([]);
   expect(allUnknown.next).toBeNull();
-  expect(allUnknown.total).toEqual({ value: 0, relation: 'lower_bound' });
+  expect(allUnknown).not.toHaveProperty('total');
 });
 
 test('a repaired witness restores the result without an engine contract change', async () => {
@@ -350,7 +350,7 @@ test('not-proven search work stays constant at stored degrees 128 512 and 2048',
     env.answer((point) => (point.subject === id(2) ? true : 'not_proven'));
     const page = await env.search({ and: [leaf([targets[0]!, targets[0]!]), leaf()] }, { limit: 2 });
     expect(ids(page)).toEqual([id(2)]);
-    expect(page.total).toEqual({ value: 1, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     operations.push({
       requests: env.calls.length,
       reads: env.reads.length,

@@ -6,8 +6,8 @@ import { createSearchDriver } from './outcome-driver.ts';
 
 const bookFilter = { type: { in: ['schema:Book'] } };
 const properties = ['type', 'schema:inLanguage', 'schema:author'];
-type Count = { value: number; relation: 'exact' | 'lower_bound' };
-type Facet = { property: string; relation: Count['relation']; values: { value: string; count: number }[] };
+type FacetValue = { value: string; labels: Record<string, string> };
+type Facet = { property: string; values: FacetValue[] };
 const word = () =>
   `deletion${randomUUID()
     .replaceAll('-', '')
@@ -91,12 +91,12 @@ function successful(response: HttpResponse) {
   expect(asOf).toBeLessThanOrEqual(Date.now());
 }
 
-function count(actual: Count, visible: number, converged: boolean) {
-  expect(actual).toEqual({ value: expect.any(Number), relation: expect.stringMatching(/^(exact|lower_bound)$/) });
-  expect(Number.isSafeInteger(actual.value) && actual.value >= 0).toBe(true);
-  if (actual.relation === 'exact') expect(actual.value).toBe(visible);
-  else expect(actual.value).toBeLessThanOrEqual(visible);
-  if (converged) expect(actual).toEqual({ value: visible, relation: 'exact' });
+function expectedFacetValues(author: Subject, visible: boolean): Record<string, FacetValue[]> {
+  return {
+    type: visible ? [{ value: 'schema:Book', labels: { en: 'Book' } }] : [],
+    'schema:inLanguage': visible ? [{ value: 'en', labels: {} }] : [],
+    'schema:author': visible ? [{ value: author.id, labels: author.labels }] : [],
+  };
 }
 
 async function views(driver: SearchDriver, persona: Persona, marker: string) {
@@ -119,6 +119,7 @@ function safe(responses: HttpResponse[], removed: Subject, visible: Subject[], a
       return;
     }
     successful(response);
+    expect(response.body).not.toHaveProperty('total');
     const serialized = JSON.stringify(response.body);
     expect(serialized).not.toContain(removed.id);
     expect(serialized).not.toContain(removed.labels.en!);
@@ -127,27 +128,44 @@ function safe(responses: HttpResponse[], removed: Subject, visible: Subject[], a
       const subjects = response.body.subjects as { id: string }[];
       expect(subjects.map(({ id }) => id).sort()).toEqual(visible.map(({ id }) => id).sort());
     }
-    // Count expectations come from the fixture, independently of returned hits.
-    if (route !== 2) count(response.body.total as Count, visible.length, converged);
     if (route === 1) {
       const facets = response.body.facets as Facet[];
       expect(Array.isArray(facets)).toBe(true);
       expect(facets.map(({ property }) => property).sort()).toEqual([...properties].sort());
-      const values = ['schema:Book', 'en', author.id];
       for (const facet of facets) {
-        expect(facet.relation).toMatch(/^(exact|lower_bound)$/);
-        const expected = values[properties.indexOf(facet.property)]!;
+        expect(facet).not.toHaveProperty('relation');
+        const expected = expectedFacetValues(author, true)[facet.property];
+        expect(expected).toBeDefined();
         expect(Array.isArray(facet.values)).toBe(true);
         expect(new Set(facet.values.map(({ value }) => value)).size).toBe(facet.values.length);
-        for (const bucket of facet.values) {
-          expect(bucket.value).toBe(expected);
-          count({ value: bucket.count, relation: facet.relation }, visible.length, converged);
+        if (visible.length === 0 || converged) {
+          expect(facet.values).toEqual(visible.length > 0 ? expected : []);
+        } else {
+          expect(facet.values.length).toBeLessThanOrEqual(1);
+          for (const bucket of facet.values) expect(bucket).toEqual(expected[0]);
         }
-        if (converged && visible.length)
-          expect(facet.values).toContainEqual(expect.objectContaining({ value: expected, count: visible.length }));
+        for (const bucket of facet.values) expect(bucket).not.toHaveProperty('count');
       }
     }
   });
+}
+
+function complete(responses: HttpResponse[], visible: Subject[], author: Subject) {
+  if (responses.some((response) => response.status !== 200)) return false;
+  const expectedIds = visible.map(({ id }) => id).sort();
+  for (const route of [0, 2]) {
+    const subjects = responses[route]!.body.subjects as { id: string }[];
+    if (JSON.stringify(subjects.map(({ id }) => id).sort()) !== JSON.stringify(expectedIds)) return false;
+  }
+  const facets = responses[1]!.body.facets as Facet[];
+  if (JSON.stringify(facets.map(({ property }) => property).sort()) !== JSON.stringify([...properties].sort()))
+    return false;
+  const expected = expectedFacetValues(author, visible.length > 0);
+  return facets.every(
+    (facet) =>
+      JSON.stringify(facet.values.map(({ value }) => value)) ===
+      JSON.stringify(expected[facet.property]!.map(({ value }) => value)),
+  );
 }
 
 async function eventually(read: () => Promise<boolean>, detail: string) {
@@ -162,14 +180,14 @@ async function eventually(read: () => Promise<boolean>, detail: string) {
 
 for (const mode of ['hidden', 'taken_down'] as const) {
   for (const mixed of [false, true]) {
-    test(`${mode} source deletion immediately withholds ${mixed ? 'mixed visible/source' : 'hidden-only'} search totals and type/code/item facet counts`, async () => {
+    test(`${mode} source deletion immediately withholds ${mixed ? 'mixed visible/source' : 'hidden-only'} hits and facet values`, async () => {
       const driver = await createSearchDriver();
       try {
         const marker = word();
         const author = await create(driver, `${word()} Author`);
         const removed = await create(driver, `${marker} Removed`, author);
         const visible = mixed ? [await create(driver, `${marker} Visible`, author)] : [];
-        // The VALUE subject remains visible: the removed SOURCE contributed counts.
+        // The author target remains visible while the removed source contributes hits and facet values.
         for (const subject of [author, removed, ...visible]) {
           await eventually(async () => {
             const response = await driver.request('anonymous', 'POST', '/v1/subjects:search', {
@@ -191,23 +209,34 @@ for (const mode of ['hidden', 'taken_down'] as const) {
             return false;
           }
           successful(response);
-          const ids = (response.body.subjects as { id: string }[]).map(({ id }) => id);
-          return [removed, ...visible].every(({ id }) => ids.includes(id));
+          const ids = new Set((response.body.subjects as { id: string }[]).map(({ id }) => id));
+          const expected = [removed, ...visible].map(({ id }) => id);
+          return expected.every((id) => ids.has(id)) && [...ids].every((id) => expected.includes(id));
         }, 'Initial typeahead subjects were not indexed');
         const sessions = new Map<Persona, (string | null)[]>();
         for (const persona of ['anonymous', 'editor'] as const) {
           const initial = await views(driver, persona, marker);
           initial.forEach(successful);
-          // Prove the source supplied each bucket before deletion.
-          count(initial[0]!.body.total as Count, visible.length + 1, true);
-          count(initial[1]!.body.total as Count, visible.length + 1, true);
+          initial.forEach((response) => expect(response.body).not.toHaveProperty('total'));
+          const originalSearch = await driver.request(persona, 'POST', '/v1/subjects:search', {
+            text: marker,
+            filter: bookFilter,
+            limit: 20,
+          });
+          successful(originalSearch);
+          expect(originalSearch.body).not.toHaveProperty('total');
+          expect((originalSearch.body.subjects as { id: string }[]).map(({ id }) => id).sort()).toEqual(
+            [removed, ...visible].map(({ id }) => id).sort(),
+          );
+          expect(originalSearch.body.next).toBeNull();
+          // Prove the source supplied every original type, code and item value before deletion.
           const facets = initial[1]!.body.facets as Facet[];
           expect(facets.map(({ property }) => property).sort()).toEqual([...properties].sort());
-          for (const [index, property] of properties.entries()) {
-            expect(facets.find((facet) => facet.property === property)).toMatchObject({
-              relation: 'exact',
-              values: [{ value: ['schema:Book', 'en', author.id][index], count: visible.length + 1 }],
-            });
+          const originalValues = expectedFacetValues(author, true);
+          for (const facet of facets) {
+            expect(facet).not.toHaveProperty('relation');
+            expect(facet.values).toEqual(originalValues[facet.property]);
+            for (const value of facet.values) expect(value).not.toHaveProperty('count');
           }
           sessions.set(
             persona,
@@ -222,6 +251,7 @@ for (const mode of ['hidden', 'taken_down'] as const) {
             const value = await driver.request(persona, 'GET', `/v1/subjects/${author.id}`);
             expect(value.status).toBe(200);
             expect((value.body.subject as Subject).id).toBe(author.id);
+            expect((value.body.subject as Subject).labels).toEqual(author.labels);
           }
           for (const response of await views(driver, 'suspended', marker)) problem(response, 401);
         } finally {
@@ -232,20 +262,7 @@ for (const mode of ['hidden', 'taken_down'] as const) {
           for (const persona of ['anonymous', 'editor'] as const) {
             const responses = await views(driver, persona, marker);
             safe(responses, removed, visible, author, false);
-            const complete = responses.every(
-              (response, route) =>
-                response.status === 200 &&
-                (route !== 1 ||
-                  (response.body.facets as Facet[]).every(
-                    (facet) =>
-                      facet.relation === 'exact' &&
-                      (!visible.length || facet.values.some(({ count }) => count === visible.length)),
-                  )) &&
-                (route === 2 ||
-                  ((response.body.total as Count).relation === 'exact' &&
-                    (response.body.total as Count).value === visible.length)),
-            );
-            if (!complete) {
+            if (!complete(responses, visible, author)) {
               ready = false;
               continue;
             }
@@ -259,7 +276,7 @@ for (const mode of ['hidden', 'taken_down'] as const) {
             });
           }
           return ready;
-        }, 'Deletion did not converge to 200 with visible totals and buckets');
+        }, 'Deletion did not converge to exact visible hits and current facet values');
       } finally {
         await driver.close();
       }

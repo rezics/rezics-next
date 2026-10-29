@@ -227,9 +227,8 @@ test('real default lifecycle certifies its own worker population before pause an
     expect(await checkpoints(pool, ready.incarnation.consumer)).toEqual(pausedCheckpoints);
     expect((await readFreshness(pool, ready.incarnation.consumer)).behind).toBeGreaterThan(0);
     const withheld = await api();
+    expect(withheld.body).not.toHaveProperty('total');
     expect(disclosed(withheld)).toEqual([ids[0]!, ids[2]!]);
-    // Totals describe engine candidates; they are neither disclosure nor structural certification.
-    expect(withheld.body.total).toEqual({ value: 3, relation: 'exact' });
     expect(disclosed(await api({ limit: 1, cursor: token }))).not.toContain(ids[1]!);
     expect(await raw()).toEqual(before);
     expect(await readSubjectCoverage(config, { deadline: Date.now() + 30_000 })).toEqual(ready);
@@ -241,8 +240,9 @@ test('real default lifecycle certifies its own worker population before pause an
       () => readFreshness(pool!, ready.incarnation.consumer),
       (value) => value.behind === 0,
     );
-    expect(disclosed(await api())).toEqual([ids[0]!, ids[2]!]);
-    expect((await api()).body.total).toEqual({ value: 2, relation: 'exact' });
+    const converged = await api();
+    expect(converged.body).not.toHaveProperty('total');
+    expect(disclosed(converged)).toEqual([ids[0]!, ids[2]!]);
     expect(await readSubjectCoverage(config, { deadline: Date.now() + 30_000 })).toEqual(ready);
 
     // Snapshot native source facts, never rewrite them to make replay/certification succeed.

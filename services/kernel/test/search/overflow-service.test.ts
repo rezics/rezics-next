@@ -235,7 +235,7 @@ test('overflow search rechecks positive and negated candidates beyond the sample
   for (const { filter, kept, points, text } of cases) {
     const page = await env.search(filter, text ? { text } : {});
     expect(ids(page)).toEqual(kept.map((index) => entries[index]!.id));
-    expect(page.total).toEqual({ value: kept.length, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     expect(page.next).toBeNull();
     expect(page.subjects.every((s: { summary: unknown }) => s.summary === null)).toBe(true);
     expect(env.calls[0]!.params.overflow_properties).toEqual([author]);
@@ -247,7 +247,7 @@ test('overflow search rechecks positive and negated candidates beyond the sample
   expect(await unsupported.json()).toMatchObject({ code: 'unsupported_query' });
 });
 
-test('overflow search preserves keyset continuation and honest totals', async () => {
+test('overflow search preserves keyset continuation without aggregate metadata', async () => {
   const entries = Array.from({ length: 15 }, (_, n) => book(n + 1, [...filler(), by(n >= 12 ? target : id(9999))]));
   const env = await deployment(entries);
   const found: string[] = [];
@@ -256,7 +256,7 @@ test('overflow search preserves keyset continuation and honest totals', async ()
   let pages = 0;
   do {
     const page = await env.search(value(), { limit: 1, ...(cursor ? { cursor } : {}) });
-    expect(page.total).toEqual({ value: page.subjects.length, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     expect(env.reads).toHaveLength(env.calls.length); // One batched anchor read per round in this partition.
     const afters = env.calls.flatMap((call) => (call.params.after ? [call.params.after[0]!] : []));
     expect(afters).toEqual([...afters].sort());
@@ -273,7 +273,7 @@ test('overflow search preserves keyset continuation and honest totals', async ()
   expect(found).toEqual(entries.slice(12).map((entry) => entry.id));
   const negated = await env.search({ and: [booksOnly, { not: value() }] }, { limit: 100 });
   expect(ids(negated)).toEqual(entries.slice(0, 12).map((entry) => entry.id));
-  expect(negated.total).toEqual({ value: 12, relation: 'lower_bound' });
+  expect(negated).not.toHaveProperty('total');
   expect(env.calls[0]!.params.size).toBe(200);
   const changed = await env.request('search', { filter: value(), sort: 'id', limit: 2, cursor: firstCursor });
   expect(changed.status).toBe(400);
@@ -293,7 +293,7 @@ test('overflow search preserves keyset continuation and honest totals', async ()
   expect(await restarted.json()).toMatchObject({ code: 'search_restart_required' });
 });
 
-test('overflow facets exclude unresolved filter candidates and keep at-least counts', async () => {
+test('overflow facets exclude unresolved filter candidates without public counts', async () => {
   const env = await deployment([
     book(1, [by(target)]),
     book(2, [...filler(), by(target)]),
@@ -305,15 +305,18 @@ test('overflow facets exclude unresolved filter candidates and keep at-least cou
     const response = await env.request('facets', { filter, facets });
     expect(response.status).toBe(200);
     const page = await response.json();
-    expect(page.total).toEqual({ value: 1, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     expect(page.facets).toEqual([
       {
         property: 'type',
-        relation: 'lower_bound',
-        values: [{ value: 'schema:Book', count: 1, labels: { en: 'Book' } }],
+        values: [{ value: 'schema:Book', labels: { en: 'Book' } }],
       },
-      { property: author, relation: 'lower_bound', values: [{ value: target, count: 1, labels: { en: 'Target' } }] },
+      { property: author, values: [{ value: target, labels: { en: 'Target' } }] },
     ]);
+    for (const facet of page.facets) {
+      expect(facet).not.toHaveProperty('relation');
+      for (const value of facet.values) expect(value).not.toHaveProperty('count');
+    }
     expect(env.calls).toHaveLength(1);
     expect(env.probes).toEqual([]);
   }
@@ -322,10 +325,11 @@ test('overflow facets exclude unresolved filter candidates and keep at-least cou
     facets: [{ property: 'type' }],
   });
   expect(negative.status).toBe(200);
-  expect(await negative.json()).toMatchObject({
-    total: { value: 1, relation: 'lower_bound' },
-    facets: [{ relation: 'lower_bound', values: [{ count: 1 }] }],
-  });
+  const negativeBody = await negative.json();
+  expect(negativeBody).not.toHaveProperty('total');
+  expect(negativeBody.facets).toEqual([
+    { property: 'type', values: [{ value: 'schema:Book', labels: { en: 'Book' } }] },
+  ]);
   // A sampled value outranks rare values in the bounded top-k. Give it an anchor for disclosure.
   const sampled = id(10000, '00b0');
   env.fake.put(
@@ -334,12 +338,14 @@ test('overflow facets exclude unresolved filter candidates and keep at-least cou
   const typed = await env.request('facets', { filter: booksOnly, facets });
   expect(typed.status).toBe(200);
   const page = await typed.json();
-  expect(page.total).toEqual({ value: 4, relation: 'exact' });
-  expect(page.facets[0]).toMatchObject({ relation: 'exact', values: [{ count: 4 }] });
+  expect(page).not.toHaveProperty('total');
+  expect(page.facets[0]).toEqual({
+    property: 'type',
+    values: [{ value: 'schema:Book', labels: { en: 'Book' } }],
+  });
   expect(page.facets[1]).toEqual({
     property: author,
-    relation: 'lower_bound',
-    values: [{ value: sampled, count: 2, labels: { en: 'Sampled author' } }],
+    values: [{ value: sampled, labels: { en: 'Sampled author' } }],
   });
   expect(env.calls).toHaveLength(1);
   expect(env.calls[0]!.params.has_overflow).toBeUndefined();
@@ -402,7 +408,7 @@ test('overflow search fails the whole response closed when a point probe fails',
   }
 });
 
-test('search preserves exact totals without relevant overflow and sees off-page overflow metadata', async () => {
+test('search preserves visible hits without exposing engine totals or off-page overflow metadata', async () => {
   const env = await deployment([
     book(1, [by(target)]),
     book(2, [by(target)]),
@@ -411,14 +417,14 @@ test('search preserves exact totals without relevant overflow and sees off-page 
   ]);
   const page = await env.search(value(), { limit: 1 });
   expect(ids(page)).toEqual([id(1)]);
-  expect(page.total).toEqual({ value: 1, relation: 'lower_bound' });
+  expect(page).not.toHaveProperty('total');
   expect(env.reads.flatMap((read) => read.ids)).not.toContain(id(4));
   const typed = await env.search(booksOnly, { limit: 1 });
-  expect(typed.total).toEqual({ value: 4, relation: 'exact' });
+  expect(typed).not.toHaveProperty('total');
   expect(env.calls[0]!.params.has_overflow).toBe(false);
   expect(env.probes).toEqual([]);
   const exact = await deployment([book(1, [by(target)]), book(2, [by(target)])]);
-  expect((await exact.search(value(), { limit: 1 })).total).toEqual({ value: 2, relation: 'exact' });
+  expect(await exact.search(value(), { limit: 1 })).not.toHaveProperty('total');
   expect(exact.probes).toEqual([
     {
       partition: 10,
@@ -430,14 +436,14 @@ test('search preserves exact totals without relevant overflow and sees off-page 
   ]);
 });
 
-test('current checked overflow downgrades totals even when the indexed marker is absent', async () => {
+test('current checked overflow controls disclosed hits even when the indexed marker is absent', async () => {
   const entry = book(1, [by(target)]);
   const env = await deployment([entry]);
   for (const matches of [true, false]) {
     env.fake.put({ ...entry, statements: [...filler(), by(matches ? target : id(9999))] });
     const page = await env.search(value());
     expect(ids(page)).toEqual(matches ? [entry.id] : []);
-    expect(page.total).toEqual({ value: matches ? 1 : 0, relation: 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
   }
 });
 
@@ -448,7 +454,7 @@ test('overflow service work stays bounded at stored degrees 128, 512 and 2048', 
     const env = await deployment(entries);
     const page = await env.search({ and: [value(), value()] }, { limit: 2 });
     expect(ids(page)).toEqual(entries.slice(0, 2).map((entry) => entry.id));
-    expect(page.total).toEqual({ value: degree === 128 ? 3 : 2, relation: degree === 128 ? 'exact' : 'lower_bound' });
+    expect(page).not.toHaveProperty('total');
     expect(env.calls[0]!.params.overflow_properties).toEqual([author]);
     operations.push({
       rounds: env.calls.length,
@@ -462,10 +468,12 @@ test('overflow service work stays bounded at stored degrees 128, 512 and 2048', 
       facets: [{ property: 'type' }],
     });
     expect(response.status).toBe(200);
-    expect((await response.json()).total).toEqual({
-      value: degree === 128 ? 3 : 0,
-      relation: degree === 128 ? 'exact' : 'lower_bound',
-    });
+    const body = await response.json();
+    expect(body).not.toHaveProperty('total');
+    for (const facet of body.facets) {
+      expect(facet).not.toHaveProperty('relation');
+      for (const value of facet.values) expect(value).not.toHaveProperty('count');
+    }
     expect(env.calls).toHaveLength(1);
     expect(env.reads).toEqual([]);
     expect(env.probes).toEqual([]);

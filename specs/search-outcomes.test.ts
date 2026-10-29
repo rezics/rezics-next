@@ -96,7 +96,6 @@ function fixtureSummary(subject: Pick<Hit, 'id' | 'type' | 'labels'>): Hit['summ
 }
 interface Page {
   subjects: Hit[];
-  total: { value: number; relation: 'exact' | 'lower_bound' };
   next: string | null;
   as_of: string;
 }
@@ -126,12 +125,7 @@ function hits(response: HttpResponse, limit: number) {
 }
 function page(response: HttpResponse, limit = 20): Page {
   hits(response, limit);
-  expect(response.body.total).toEqual({
-    value: expect.any(Number),
-    relation: expect.stringMatching(/^(exact|lower_bound)$/),
-  });
-  const total = response.body.total as Page['total'];
-  expect(Number.isInteger(total.value) && total.value >= 0).toBe(true);
+  expect(response.body).not.toHaveProperty('total');
   expect(response.body.next === null || typeof response.body.next === 'string').toBe(true);
   return response.body as unknown as Page;
 }
@@ -237,8 +231,9 @@ test('Search is public for editor and anonymous while suspended credentials fail
   await indexed([book]);
   const anonymous = page(await search({ text: marker }));
   const editor = page(await search({ text: marker }, 'editor'));
+  expect(anonymous).not.toHaveProperty('total');
+  expect(editor).not.toHaveProperty('total');
   expect(editor.subjects).toEqual(anonymous.subjects);
-  expect(editor.total).toEqual(anonymous.total);
   expect(editor.subjects).toContainEqual(hit(book));
   expect(page(await search({ text: marker, sort: 'relevance' })).subjects).toEqual(anonymous.subjects);
   await eventually(
@@ -354,7 +349,7 @@ test('Committed takedown and hiding remove stale hits immediately and refill pag
   }
 });
 
-test('Name paging has exact totals stable ties and request principal and signature bound tokens', async () => {
+test('Name paging has stable ties and request principal and signature bound tokens', async () => {
   const first = await create({ aa: `${marker} Alpha`, en: `${marker} Zulu` });
   const tie = await create({ en: `${marker} ＡＬＰＨＡ` });
   const beta = await create('Beta');
@@ -369,7 +364,7 @@ test('Name paging has exact totals stable ties and request principal and signatu
   const two = page(await search({ ...body, cursor: one.next }), 2);
   expect(typeof two.next).toBe('string');
   const three = page(await search({ ...body, cursor: two.next }), 2);
-  for (const result of [one, two, three]) expect(result.total).toEqual({ value: 5, relation: 'exact' });
+  for (const result of [one, two, three]) expect(result).not.toHaveProperty('total');
   expect([one.subjects.length, two.subjects.length, three.subjects.length]).toEqual([2, 2, 1]);
   const all = [...one.subjects, ...two.subjects, ...three.subjects];
   expect(all).toEqual(expected.map(hit));
@@ -402,7 +397,7 @@ test('Rebuild invalidates old page tokens and preserves all visible subjects whi
   const fresh = page(await search({ text: marker, sort: 'id' }));
   expect(new Set(ids(fresh))).toEqual(new Set(subjects.slice(1).map((subject) => subject.id)));
   expect(ids(fresh)).not.toContain(subjects[0]!.id);
-  expect(fresh.total).toEqual({ value: 2, relation: 'exact' });
+  expect(fresh).not.toHaveProperty('total');
   expect(fresh.next).toBeNull();
   expect(hits(await suggest(marker), 8).map((item) => item.id)).not.toContain(subjects[0]!.id);
 });

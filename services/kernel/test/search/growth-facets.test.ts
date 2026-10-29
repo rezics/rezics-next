@@ -532,21 +532,18 @@ test('Facet counts stays within its bound as N grows', async () => {
         );
         expect(response.status).toBe(200);
         const answer = (await response.json()) as {
-          total: { value: number; relation: string };
           facets: {
             property: string;
-            relation: string;
-            values: { value: string; count: number; labels: Record<string, string> }[];
+            values: { value: string; labels: Record<string, string> }[];
           }[];
         };
-        expect(answer.total).toEqual({ value: 4, relation: 'exact' });
+        expect(answer).not.toHaveProperty('total');
         expect(answer.facets).toEqual([
           {
             property: 'schema:genre',
-            relation: 'exact',
             values: [
-              { value: authorIds[0]!, count: 3, labels: { en: 'Author A' } },
-              { value: authorIds[1]!, count: 2, labels: { en: 'Author B' } },
+              { value: authorIds[0]!, labels: { en: 'Author A' } },
+              { value: authorIds[1]!, labels: { en: 'Author B' } },
             ],
           },
         ]);
@@ -591,13 +588,14 @@ test('type facet stays within its bound as subjects grow', async () => {
           }),
         );
         expect(response.status).toBe(200);
-        expect((await response.json()).facets).toEqual([
+        const answer = await response.json();
+        expect(answer).not.toHaveProperty('total');
+        expect(answer.facets).toEqual([
           {
             property: 'type',
-            relation: 'exact',
             values: [
-              { value: 'schema:Book', count: 4, labels: {} },
-              { value: 'skos:Concept', count: 2, labels: {} },
+              { value: 'schema:Book', labels: {} },
+              { value: 'skos:Concept', labels: {} },
             ],
           },
         ]);
@@ -647,9 +645,8 @@ test('Search hit facts stay within their bound as N grows', async () => {
         expect(response.status).toBe(200);
         const answer = (await response.json()) as {
           subjects: { id: string; facts: Record<string, unknown[]> }[];
-          total: { value: number; relation: string };
         };
-        expect(answer.total).toEqual({ value: 4, relation: 'exact' });
+        expect(answer).not.toHaveProperty('total');
         expect(answer.subjects.map(({ id }) => id)).toEqual([bookIds[3]!, bookIds[0]!, bookIds[2]!, bookIds[1]!]);
         for (const hit of answer.subjects) {
           const authors = authorsByBook[bookIds.indexOf(hit.id)]!;

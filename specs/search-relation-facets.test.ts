@@ -209,7 +209,6 @@ test('an adopted author beyond the bounded relation sample matches positive and 
 
 interface Bucket {
   value: string;
-  count: number;
   labels: Labels;
 }
 async function facets(filter: unknown) {
@@ -223,22 +222,22 @@ async function facets(filter: unknown) {
   });
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toContain('application/json');
-  const result = response.body.facets as { property: string; relation: string; values: Bucket[] }[];
+  expect(response.body).not.toHaveProperty('total');
+  const result = response.body.facets as { property: string; values: Bucket[] }[];
   expect(Array.isArray(result)).toBe(true);
   expect(result.map((facet) => facet.property)).toEqual(['schema:author', 'type']);
+  for (const facet of result) {
+    expect(facet).not.toHaveProperty('relation');
+    for (const bucket of facet.values) expect(bucket).not.toHaveProperty('count');
+  }
   return result;
 }
 
-test('overflowing author facet counts stay honest lower bounds', async () => {
+test('overflowing author facet values retain their disclosed identities and labels', async () => {
   const { authors, included, other } = await overflowFixture();
-  const contributions = new Map([
-    [included.id, new Set(authors.slice(0, 129).map((author) => author.id))],
-    [other.id, new Set(authors.slice(1).map((author) => author.id))],
-  ]);
-  const check = async (filter: unknown, matching: Subject[]) => {
+  const check = async (filter: unknown) => {
     const result = await facets(filter);
     const authorFacet = result[0]!;
-    expect(authorFacet.relation).toBe('lower_bound');
     expect(authorFacet.values.length).toBeGreaterThan(0);
     expect(authorFacet.values.length).toBeLessThanOrEqual(20);
     expect(new Set(authorFacet.values.map((bucket) => bucket.value)).size).toBe(authorFacet.values.length);
@@ -246,24 +245,19 @@ test('overflowing author facet counts stay honest lower bounds', async () => {
       const known = authors.find((author) => author.id === bucket.value);
       expect(known).toBeDefined();
       expect(bucket.labels).toEqual(known!.labels);
-      expect(Number.isInteger(bucket.count) && bucket.count > 0).toBe(true);
-      const actual = matching.filter((book) => contributions.get(book.id)!.has(bucket.value)).length;
-      expect(bucket.count).toBeLessThanOrEqual(actual);
     }
     const types = result[1]!.values;
     expect(types).toHaveLength(1);
     expect(types[0]!.value).toBe('schema:Book');
-    expect(Number.isInteger(types[0]!.count) && types[0]!.count > 0).toBe(true);
-    expect(types[0]!.count).toBeLessThanOrEqual(matching.length);
   };
-  await check(bookType, [included, other]);
+  await check(bookType);
   // The full 130-predicate matrix covers omitted sample values on both overflowing Books.
-  // The end predicates also have an overflowing false-positive candidate. Even a
-  // bucket labelled lower_bound cannot count that nonmatching Book's contribution.
+  // The end predicates also have an overflowing false-positive candidate, so the hit checks
+  // continue to prove its exclusion while public aggregate metadata is absent.
   for (const [index, author] of authors.entries()) {
     const matching = index === 0 ? [included] : index === 129 ? [other] : [included, other];
     expectIds(await search(anchored(authorFilter(author))), matching);
-    await check(anchored(authorFilter(author)), matching);
+    await check(anchored(authorFilter(author)));
   }
 });
 
@@ -301,10 +295,10 @@ test('overflow rechecks keep hidden and taken-down source subjects out while ind
         expect(read.body.code).toBe('not_found');
       }
     }
-    // Protected relations cannot contribute public facet values/counts through stale index documents.
+    // Protected relations cannot contribute public facet values through stale index documents.
     const result = await facets(bookType);
     expect(result[0]!.values).toEqual([]);
-    expect(result[1]!.values).toMatchObject([{ value: 'schema:Book', count: 1 }]);
+    expect(result[1]!.values.map(({ value }) => value)).toEqual(['schema:Book']);
   } finally {
     await driver.indexing('running');
   }

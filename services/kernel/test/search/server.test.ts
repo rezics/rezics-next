@@ -155,7 +155,9 @@ test('a server answers search and suggest from the index the worker feeds', asyn
   try {
     const searched = await searchRequest(origin, { text: 'kokoro' });
     expect(searched.status).toBe(200);
-    expect(await searched.json()).toMatchObject({ subjects: [], total: { value: 0, relation: 'exact' }, next: null });
+    const searchBody = await searched.json();
+    expect(searchBody).toMatchObject({ subjects: [], next: null });
+    expect(searchBody).not.toHaveProperty('total');
     const suggested = await fetch(`${origin}/v1/subjects:suggest?q=Koko`);
     expect(suggested.status).toBe(200);
     expect(await suggested.json()).toMatchObject({ subjects: [] });
