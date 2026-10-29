@@ -44,9 +44,11 @@ if (script.includes('MemAvailable')) {
   if (config.down) process.exit(255);
   console.log(
     'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM ' + (config.available ?? 16 * 2 ** 30) +
+      '\\nAVAILABLE ' + (config.available ?? 16 * 2 ** 30) +
       '\\nPROCESSORS 16\\nSLICE_PROCESSORS ' + ((config.cpuQuotaPercent ?? 800) / 100) +
       '\\nLOAD 0\\nORDINARY_SLOTS_USED ' + ordinarySlotsUsed +
-      '\\nEXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0) + '\\nGATE_WAITING 0',
+      '\\nEXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0) + '\\nGATE_WAITING 0' +
+      '\\nMULTI_SLOT_WAITING_SLOTS 0\\nMULTI_SLOT_WAITING_ID -',
   );
 } else if (script.includes('REMOTE_CHECK_RESERVATION')) {
   const lock = dir + '/' + hostKey + '.reservation';
