@@ -393,6 +393,21 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   14 boundary cases passing, with root typecheck recorded separately. The two suites do not establish a
   crash-plus-distinct-pixels composition or generic source attribution. The newer composed recovery specification
   is registered but has no execution receipt.
+- **Scalar-feed CLI operator:** [`provider-cli-native.test.ts`](../../services/kernel/test/imports/provider-cli-native.test.ts)
+  freezes three separate native cases: `Bangumi account-key CLI imports refreshes reopens and safely stops the native scalar feed`,
+  `Open Library account-key CLI imports refreshes reopens and safely stops the native scalar feed`, and
+  `Wikidata account-key CLI imports refreshes reopens and safely stops the synthetic native scalar feed`.
+  The initial caller revision is `637f28a6d1`; execution is pending. The exact acceptance is
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts`,
+  with `bun scripts/worker-check.ts -- bun scripts/typecheck.ts` for the root typecheck.
+  These call production `runImportCli`, native key stage/approve/apply and native Auth/Access/public writes.
+  Inputs use `bangumi@3` without a native revision (types 1/2/4 imported, 3/6 present and skipped),
+  `open-library@3` edition revision 11 → 12 and `wikidata-3` synthetic Q571 revision 24681012 → 24681013.
+  Cases assert actual tuple claims, retrieved cited candidates, unchanged reopen, supported refresh, independent
+  community adoption, immutable bootstrap bytes/keys/receipts and malformed/truncated/mass-disappearance stops
+  preserving the completed baseline with zero public writes. Their exact byte/seal/effect observations are
+  emitted by the caller. Covers and unknown-licensed prose remain separate; no general metadata, words,
+  classification, VNDB archive/statistics or discovery-matrix closure is claimed.
 - **CLI Auth and lifecycle:** the exact native test is
   `the real CLI account-key and public-write journey is frozen against native Auth and Access` in
   [`cli-native-auth.test.ts`](../../services/kernel/test/imports/cli-native-auth.test.ts). The earlier missing-Origin

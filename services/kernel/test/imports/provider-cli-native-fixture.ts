@@ -4,7 +4,13 @@ import { mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import type { SourceId } from '@rezics/conversion';
-import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult, Source } from '@rezics/definitions/bulk';
+import type {
+  BatchCommand,
+  BatchStatement,
+  BatchWriteRequest,
+  BatchWriteResult,
+  Source,
+} from '@rezics/definitions/bulk';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
@@ -70,9 +76,22 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
     const api = 'https://provider-cli.import.test';
     const auth = new URL(runtime.identity.auth.verifier.jwksUrl).origin;
     const argv = [
-      '--source', source, '--dump', '-', '--state', state, '--api', api,
-      '--auth', auth, '--account-key', keyPath, '--account', runtime.identity.bulk.accountId,
-      '--client', runtime.identity.client.clientId,
+      '--source',
+      source,
+      '--dump',
+      '-',
+      '--state',
+      state,
+      '--api',
+      api,
+      '--auth',
+      auth,
+      '--account-key',
+      keyPath,
+      '--account',
+      runtime.identity.bulk.accountId,
+      '--client',
+      runtime.identity.client.clientId,
     ];
     const commands = new Map<string, BatchCommand>();
     const exchanges: Exchange[] = [];
@@ -89,9 +108,11 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
             claim: session.bindings.claim({ source, external_id }),
             baseline: session.store.key(source, external_id).baseline,
           })),
-          bootstraps: session.store.database.query(
-            'SELECT r.external_id,r.bootstrap_key,j.bytes,j.acknowledgement FROM binding_records r JOIN binding_journal j ON j.source=r.source AND j.external_id=r.external_id AND j.key=r.bootstrap_key WHERE r.source=? ORDER BY r.external_id LIMIT 16',
-          ).all(source),
+          bootstraps: session.store.database
+            .query(
+              'SELECT r.external_id,r.bootstrap_key,j.bytes,j.acknowledgement FROM binding_records r JOIN binding_journal j ON j.source=r.source AND j.external_id=r.external_id AND j.key=r.bootstrap_key WHERE r.source=? ORDER BY r.external_id LIMIT 16',
+            )
+            .all(source),
         };
       } finally {
         session.close();
@@ -103,7 +124,11 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
       const offset = exchanges.length;
       const authOffset = authPaths.length;
       const seals: { complete: boolean; result: Seal }[] = [];
-      let passes = 0, consumed = 0, observed = 0, peakRetainedBytes = 0, coordinators = 0;
+      let passes = 0,
+        consumed = 0,
+        observed = 0,
+        peakRetainedBytes = 0,
+        coordinators = 0;
       const result = await runImportCli(argv, {
         stdin: (async function* () {
           // Split UTF-8 and framing at actual byte boundaries.
@@ -114,9 +139,16 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
           }
         })(),
         observer: {
-          onInputPass() { passes++; },
-          onInputChunk(_kind, size, backing) { observed += size; expect(backing).toBe(size); },
-          onInputBuffer(size) { peakRetainedBytes = Math.max(peakRetainedBytes, size); },
+          onInputPass() {
+            passes++;
+          },
+          onInputChunk(_kind, size, backing) {
+            observed += size;
+            expect(backing).toBe(size);
+          },
+          onInputBuffer(size) {
+            peakRetainedBytes = Math.max(peakRetainedBytes, size);
+          },
           onAccountKey(path, observation) {
             expect(path).toBe(keyPath);
             expect(observation.regularFile).toBe(true);
@@ -127,7 +159,9 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
             expect(registration.sourceKind).toBe(source);
             expect(registration.source).toBe(source);
             expect(registration.converter_revision).toBe(converterRevision);
-            expect(converterModule).toBe(import.meta.resolve(`@rezics/conversion/${source === 'openlibrary' ? 'open-library' : source}`));
+            expect(converterModule).toBe(
+              import.meta.resolve(`@rezics/conversion/${source === 'openlibrary' ? 'open-library' : source}`),
+            );
             expect(decoderModule).toBe(import.meta.resolve('../../../importer/src/dumps.ts'));
             const store = importer.session.store;
             const seal = store.seal.bind(store);
@@ -166,8 +200,15 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
           }
           const response = await runtime.replay(request);
           const responseBytes = await response.clone().text();
-          exchanges.push({ url: request.url, method: request.method, headers: new Headers(request.headers), bytes,
-            status: response.status, responseHeaders: new Headers(response.headers), responseBytes });
+          exchanges.push({
+            url: request.url,
+            method: request.method,
+            headers: new Headers(request.headers),
+            bytes,
+            status: response.status,
+            responseHeaders: new Headers(response.headers),
+            responseBytes,
+          });
           if (url.pathname === '/v1/subjects:batchWrite' && response.status === 200) {
             for (const entry of (JSON.parse(responseBytes) as BatchWriteResult).results) {
               expect('value' in entry, JSON.stringify(entry)).toBe(true);
@@ -186,26 +227,38 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
       expect(bytes).toEqual(original);
       expect(authPaths.slice(authOffset).filter((path) => path === '/signin/key')).toHaveLength(1);
       expect(authPaths.slice(authOffset).filter((path) => path === '/token')).toHaveLength(1);
-      for (const name of await readdir(directory!)) expect((await stat(join(directory!, name))).mode & 0o777).toBe(0o600);
+      for (const name of await readdir(directory!))
+        expect((await stat(join(directory!, name))).mode & 0o777).toBe(0o600);
       const captured = exchanges.slice(offset);
-      return { ...result, seals, consumed, peakRetainedBytes, captured,
-        writes: captured.filter((exchange) => exchange.method !== 'GET') };
+      return {
+        ...result,
+        seals,
+        consumed,
+        peakRetainedBytes,
+        captured,
+        writes: captured.filter((exchange) => exchange.method !== 'GET'),
+      };
     }
     async function receipt(key: string) {
       const command = commands.get(key)!;
-      const route = command.op === 'create'
-        ? tupleRoute(runtime.identity.routeKey, command.source.source, command.source.external_id)
-        : routeOf(command.subject)!;
-      return (await runtime.database.admin.query(
-        'SELECT transaction_id,response FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3 AND command_kind=$4 AND idempotency_key=$5',
-        [partitionOf(route), 'account', runtime.identity.bulk.accountId, `subject.batch_${command.op}`, key],
-      )).rows;
+      const route =
+        command.op === 'create'
+          ? tupleRoute(runtime.identity.routeKey, command.source.source, command.source.external_id)
+          : routeOf(command.subject)!;
+      return (
+        await runtime.database.admin.query(
+          'SELECT transaction_id,response FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3 AND command_kind=$4 AND idempotency_key=$5',
+          [partitionOf(route), 'account', runtime.identity.bulk.accountId, `subject.batch_${command.op}`, key],
+        )
+      ).rows;
     }
     async function claim(externalId: string) {
-      return (await runtime.database.admin.query<{ subject_id: string }>(
-        'SELECT subject_id FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
-        [tupleRoute(runtime.identity.routeKey, source, externalId), source, externalId],
-      )).rows;
+      return (
+        await runtime.database.admin.query<{ subject_id: string }>(
+          'SELECT subject_id FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
+          [tupleRoute(runtime.identity.routeKey, source, externalId), source, externalId],
+        )
+      ).rows;
     }
     async function effects() {
       const subjects = [];
@@ -213,10 +266,30 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
         const parameters = [routeOf(id), id];
         subjects.push({
           id,
-          subject: (await runtime.database.admin.query('SELECT * FROM semantic.subject WHERE route=$1 AND subject_id=$2', parameters)).rows,
-          candidates: (await runtime.database.admin.query('SELECT * FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100', parameters)).rows,
-          retractions: (await runtime.database.admin.query('SELECT * FROM semantic.retraction WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100', parameters)).rows,
-          revisions: (await runtime.database.admin.query('SELECT * FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100', parameters)).rows,
+          subject: (
+            await runtime.database.admin.query(
+              'SELECT * FROM semantic.subject WHERE route=$1 AND subject_id=$2',
+              parameters,
+            )
+          ).rows,
+          candidates: (
+            await runtime.database.admin.query(
+              'SELECT * FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100',
+              parameters,
+            )
+          ).rows,
+          retractions: (
+            await runtime.database.admin.query(
+              'SELECT * FROM semantic.retraction WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100',
+              parameters,
+            )
+          ).rows,
+          revisions: (
+            await runtime.database.admin.query(
+              'SELECT * FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100',
+              parameters,
+            )
+          ).rows,
         });
       }
       const receipts = [];
@@ -224,9 +297,14 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
       return { subjects, receipts };
     }
     async function candidates(id: string, property: string, sameAs?: string) {
-      const response = await editor.http(`/v1/subjects/${id}/candidates?${new URLSearchParams({
-        property, context: GLOBAL_CONTEXT, limit: '100', ...(sameAs ? { sameAs } : {}),
-      })}`);
+      const response = await editor.http(
+        `/v1/subjects/${id}/candidates?${new URLSearchParams({
+          property,
+          context: GLOBAL_CONTEXT,
+          limit: '100',
+          ...(sameAs ? { sameAs } : {}),
+        })}`,
+      );
       expect(response.status, JSON.stringify(response.body)).toBe(200);
       expect(response.body.next).toBeNull();
       return response.body.candidates as unknown as Candidate[];
@@ -235,15 +313,20 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
       const grant = await editor.http('/v1/grants', {
         resource: { route: 0, id: GLOBAL_CONTEXT },
         subject: { kind: 'account', id: runtime.identity.governance.accountId },
-        actions: ['context:accept', 'context:adopt'], valid: '(,)',
+        actions: ['context:accept', 'context:adopt'],
+        valid: '(,)',
       });
       expect(grant.status).toBe(201);
       const accepted = await editor.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, {
-        context: GLOBAL_CONTEXT, expected_head: candidate.head,
+        context: GLOBAL_CONTEXT,
+        expected_head: candidate.head,
       });
       expect(accepted.status, JSON.stringify(accepted.body)).toBe(200);
       const adopted = await editor.http(`/v1/subjects/${id}:adopt`, {
-        context: GLOBAL_CONTEXT, property: candidate.statement.property.id, mode: 'replace', expected_head: null,
+        context: GLOBAL_CONTEXT,
+        property: candidate.statement.property.id,
+        mode: 'replace',
+        expected_head: null,
         selection: [{ candidate: candidate.id, rank: candidate.statement.rank ?? 'normal' }],
       });
       expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
@@ -251,15 +334,41 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
     async function anonymous(id: string) {
       const response = await runtime.request(`/v1/subjects/${id}`);
       expect(response.status).toBe(200);
-      return response.json() as Promise<{ subject: { id: string; type: string; labels: Record<string, string>; statements: Record<string, { id: string }[]> } }>;
+      return response.json() as Promise<{
+        subject: {
+          id: string;
+          type: string;
+          labels: Record<string, string>;
+          statements: Record<string, { id: string }[]>;
+        };
+      }>;
     }
-    return { runtime, editor, invoke, inspect, receipt, claim, effects, candidates, select, anonymous, commands,
+    return {
+      runtime,
+      editor,
+      invoke,
+      inspect,
+      receipt,
+      claim,
+      effects,
+      candidates,
+      select,
+      anonymous,
+      commands,
       async close() {
-        try { await runtime.close(); } finally { await rm(directory!, { recursive: true, force: true }); }
+        try {
+          await runtime.close();
+        } finally {
+          await rm(directory!, { recursive: true, force: true });
+        }
       },
     };
   } catch (error) {
-    try { await runtime.close(); } finally { if (directory) await rm(directory, { recursive: true, force: true }); }
+    try {
+      await runtime.close();
+    } finally {
+      if (directory) await rm(directory, { recursive: true, force: true });
+    }
     throw error;
   }
 }

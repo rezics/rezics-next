@@ -396,3 +396,40 @@ When deferred cover recovery finds a currently bound candidate whose exact comma
 
 Bound: Run-store and resolver descriptor validation examines O(K) own keys supplied by the caller, the changes side of the O(changes × log stored N) criterion; this work is independent of stored R/B/H and catalogue/history. Direct in-process callers pay for the objects their code builds, so validation does not reject an arbitrarily wide host object in constant time or cap its pre-validation allocation. External source records are guarded at 1 MiB (256 KiB default), parsed API responses at 1 MiB, and public envelopes and binding snapshots at 65,536 bytes. Private record plans remain capped at 2 MiB and are not public envelopes.
 The concrete media resolver bounds calls and scheduled waits per invocation, while injected coordinator providers and repeated run invocations have no lifetime API-call bound.
+
+## Native scalar-feed operator evidence
+
+`services/kernel/test/imports/provider-cli-native.test.ts` calls actual `runImportCli` with an account key provisioned
+through native Auth stage/approve/apply, native Access/public grants, the existing kernel runtime and its real worker.
+The three independently named cases are:
+
+- `Bangumi account-key CLI imports refreshes reopens and safely stops the native scalar feed`
+- `Open Library account-key CLI imports refreshes reopens and safely stops the native scalar feed`
+- `Wikidata account-key CLI imports refreshes reopens and safely stops the synthetic native scalar feed`
+
+They pin `bangumi@3` (unversioned), `open-library@3` (edition revision 11 → 12) and `wikidata-3` (synthetic Q571
+revision 24681012 → 24681013). Bangumi retains types 1/2/4 and complete skipped membership for 3/6. Open Library
+uses five-column TSV, an independent work and the pinned edition with unresolved native author/work keys. Each
+case checks actual tuple claims, retrieved cited candidates, immutable bootstrap bytes/keys/receipts, unchanged
+new invocations, a supported-value refresh, independent community adoption and preservation of the last completed
+baseline with zero public writes after malformed/truncated input and mass disappearance. Owned key/state files
+are mode 0600 on tmpfs; each CLI invocation and all fixture resources are closed.
+
+Run the native acceptance and root typecheck through the worker check queue:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts
+bun scripts/worker-check.ts -- bun scripts/typecheck.ts
+```
+
+The source cases were frozen at `637f28a6d1`; execution results are pending. The edition expectation follows the
+existing native field observation `bf:Instance`. The feed fixtures omit cover acquisition, retaining separate
+Bangumi CC-BY-SA summary rights and the omission of unknown-licensed Open Library prose. This proves the scalar
+operator entrypoint only; it does not add general SourceRecord metadata, words, form/classification, VNDB archive
+or statistics, or the deferred cross-surface discovery matrix.
+
+### Operate a permitted scalar source feed
+
+- Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.
+- Bound: existing source byte/field/page and command budgets; input consumed once after the actual acquisition rules. No catalogue/history scan or predicted native effects. The caller captures exact consumed bytes, actual seal accounting and independent committed rows/receipts under the existing fixture bounds.
+- Growth check: reuse the existing importer/native capture bounds and units. The new three-provider caller acceptance proves connected behaviour and retains raw observations; it claims no new growth measurement.
