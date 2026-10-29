@@ -4,9 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-import { readModerationReports, resolveReportTargets } from '../src/moderation/reports-read';
-import { dismissReport, takeDownReport } from '../src/moderation/actions';
-import { ModerationReportsView } from '../src/moderation/reports-page';
+const { readModerationReports, resolveReportTargets } = await import('../src/moderation/reports-read');
+const { dismissReport, takeDownReport } = await import('../src/moderation/actions');
+const { ModerationReportsView } = await import('../src/moderation/reports-page');
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 
