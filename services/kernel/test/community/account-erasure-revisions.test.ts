@@ -263,17 +263,20 @@ test("an account revision erasure page stays within its bound as other editors' 
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         const ids = Array.from({ length: scale - previous }, () => newId(route));
-        await database.admin.query(
-          `INSERT INTO community.realm_revision
-          (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
-          SELECT $1,$2,id,$3,'Other editor','Keep','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
-          [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.member.id, ids],
-        );
-        await database.admin.query(
-          `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
-          SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
-          [routeOf(fixture.member.id), fixture.member.id, route, realm.realmId, ids],
-        );
+        for (let offset = 0; offset < ids.length; offset += 256) {
+          const batch = ids.slice(offset, offset + 256);
+          await database.admin.query(
+            `INSERT INTO community.realm_revision
+            (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+            SELECT $1,$2,id,$3,'Other editor','Keep','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
+            [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.member.id, batch],
+          );
+          await database.admin.query(
+            `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
+            SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
+            [routeOf(fixture.member.id), fixture.member.id, route, realm.realmId, batch],
+          );
+        }
         const population = await database.admin.query(
           'SELECT count(*)::integer AS n FROM community.realm_revision WHERE route=$1 AND realm_id=$2 AND author=$3',
           [route, realm.realmId, fixture.member.id],
