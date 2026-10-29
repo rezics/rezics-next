@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver } from '../../../../specs/community-driver.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { eraseAccountRevisionsPage } from '../../src/community/account-erasure-revisions.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
@@ -35,6 +36,12 @@ async function setup() {
   const deletion = accountDeletionRuntime(system);
   const persona = await deletion.person();
   const owner = { id: persona.accountId, bearer: persona.bearer };
+  await system.database.pool.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+     SELECT $1, $2, $3, action, '(,)'::tstzrange, $3 FROM unnest($4::text[]) AS action
+     ON CONFLICT DO NOTHING`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, owner.id, ['space:create', 'realm:create']],
+  );
   const { space } = await call(driver, owner, 'POST', '/v1/spaces', {
     title: 'Original Space',
     summary: 'Space archive',
