@@ -37913,6 +37913,7 @@
           }
         ],
         "x-action": "definitions:publish",
+        "x-body-limit": 4259840,
         "x-exposure": "gate:definition_publication",
         "x-rate-limit": {
           "family": "write",
