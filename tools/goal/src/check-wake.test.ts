@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
@@ -156,6 +157,41 @@ test('a vanished check wakes a waiting attempt with the recovery fact', async ()
     await waitFor(join(task.worktree, '.temp/goal/resume-started'));
     const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
     expect(args.at(-1)).toContain('check check-b: run vanished or check host failed');
+    await recovery;
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a check whose start record shows a live runner keeps the attempt waiting; a dead runner wakes it', async () => {
+  const h = harness(waitingCli);
+  try {
+    const { task, ref } = await startWaitingAttempt(h);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
+    mkdirSync(resultDirectory, { recursive: true });
+    writeFileSync(
+      join(resultDirectory, 'check-a.json'),
+      JSON.stringify({ exitCode: 0, status: 'finished', log: 'a.log' }),
+    );
+    // The record worker-check writes when a check starts, with this test's own (live) process as the runner.
+    writeFileSync(
+      join(resultDirectory, 'check-b.json'),
+      JSON.stringify({ status: 'running', runnerPid: process.pid, runnerHost: hostname(), log: 'b.log' }),
+    );
+    await job.recoverOrphans();
+    expect(h.store.attempt(ref).state).toBe('waiting');
+    expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+
+    const dead = Bun.spawnSync(['true']).pid;
+    writeFileSync(
+      join(resultDirectory, 'check-b.json'),
+      JSON.stringify({ status: 'running', runnerPid: dead, runnerHost: hostname(), log: 'b.log' }),
+    );
+    const recovery = job.recoverOrphans();
+    await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    expect(args.at(-1)).toContain(`check check-b: run vanished (runner ${dead} exited without a result)`);
     await recovery;
   } finally {
     h.dispose();

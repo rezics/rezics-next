@@ -159,7 +159,11 @@ function command(options: AgentLaunchOptions): [string, string[]] {
             'web_search="disabled"',
           ]
         : []),
-      ...(options.resumeSession ? ['resume', options.resumeSession] : []),
+      // `exec resume` refuses -C and -s, which are exec options: they go before the subcommand (every check-wake
+      // resume failed with "unexpected argument '-C'" and looped each minute on 2026-10-29).
+      ...(options.resumeSession
+        ? ['-C', worktree, ...(options.readOnly ? ['-s', 'read-only'] : []), 'resume', options.resumeSession]
+        : []),
       '--json',
       '-m',
       profile.model,
@@ -183,12 +187,11 @@ function command(options: AgentLaunchOptions): [string, string[]] {
       'features.multi_agent_v2=false',
       ...mcp,
       ...(options.readOnly
-        ? ['-s', 'read-only', '-c', 'approval_policy="never"']
+        ? [...(options.resumeSession ? [] : ['-s', 'read-only']), '-c', 'approval_policy="never"']
         : ['--dangerously-bypass-approvals-and-sandbox']),
       ...(options.research ? ['-c', 'web_search="live"'] : []),
       ...(!options.readOnly ? ['--output-schema', join(import.meta.dir, '../../worker-result.schema.json')] : []),
-      '-C',
-      worktree,
+      ...(options.resumeSession ? [] : ['-C', worktree]),
       '--',
       prompt,
     ],

@@ -17,7 +17,7 @@ import { git } from './tasks.ts';
 /** Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. */
 export async function settle(
   tasks: WorkerTasks,
-  worker: Pick<RunningWorker, 'attempt' | 'exited'>,
+  worker: Pick<RunningWorker, 'attempt' | 'exited' | 'logStartOffset' | 'resuming'>,
   landing: LandingQueue,
   startTrain: () => Promise<void> = async () => {},
 ): Promise<void> {
@@ -29,6 +29,18 @@ export async function settle(
     code = -1;
   }
   const store = tasks.store;
+  const runEvent = store
+    .events(ref.taskId, ref.attempt)
+    .filter((event) => event.kind === 'worker-run-started')
+    .at(-1);
+  let runMetadata: { logStartOffset?: number; resuming?: boolean } = {};
+  try {
+    runMetadata = runEvent ? (JSON.parse(runEvent.body) as typeof runMetadata) : {};
+  } catch {
+    /* A malformed historical run marker does not prevent ordinary settlement. */
+  }
+  const logStartOffset = worker.logStartOffset ?? runMetadata.logStartOffset;
+  const resuming = worker.resuming ?? runMetadata.resuming === true;
   let lease;
   try {
     lease = acquireDirectoryLease(`${store.attempt(ref).logPath}.settle`);
@@ -44,6 +56,7 @@ export async function settle(
     const pendingChecks = readMeasurement(currentAttempt, {
       configDirectory: poolForAttempt?.configDirectory,
       maxLogBytes: 256 * 1024,
+      ...(logStartOffset !== undefined ? { logStartOffset } : {}),
     }).waitingChecks;
     if (!pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt);
     store.assertCurrent(ref);
@@ -64,6 +77,54 @@ export async function settle(
       const task = store.task(ref.taskId);
       const pool = tasks.settings.pools.find((p) => p.name === ref.pool);
       const current = store.attempt(ref);
+      const endedAt = new Date().toISOString();
+      const measurement = readMeasurement(
+        { ...current, endedAt },
+        {
+          configDirectory: pool?.configDirectory,
+          ...(logStartOffset !== undefined ? { logStartOffset } : {}),
+        },
+      );
+      if (
+        resuming &&
+        code !== 0 &&
+        !measurement.session &&
+        !measurement.failureKind &&
+        !measurement.blocker &&
+        !reportsSuccess(measurement.result, agentAdapter(current.profile.cli))
+      ) {
+        let stderr = '';
+        try {
+          stderr = readFileSync(`${current.logPath}.err`, 'utf8').trim();
+        } catch {
+          /* The CLI may have failed before creating its stderr stream. */
+        }
+        const detail = (
+          stderr ||
+          measurement.result ||
+          `Worker CLI exited with code ${code ?? 'unknown'} before starting a session`
+        )
+          .replace(/[\r\n]+/g, ' ')
+          .slice(0, 4000);
+        const errorLine = detail.split(/\r?\n/, 1)[0]!.slice(0, 1000);
+        const failures = store
+          .events(ref.taskId, ref.attempt)
+          .filter((event) => event.kind === 'waiting-resume-launch-failed').length;
+        store.updateAttempt(ref, (attempt) => {
+          attempt.state = 'waiting';
+          attempt.process = null;
+          attempt.driver = null;
+          attempt.exitCode = code;
+          attempt.result = detail;
+          attempt.failureKind = null;
+        });
+        store.event(ref, 'waiting-resume-launch-failed', {
+          count: failures + 1,
+          detail,
+          errorLine,
+        });
+        return;
+      }
       if (pendingChecks?.length) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
@@ -71,18 +132,21 @@ export async function settle(
           attempt.process = null;
           attempt.driver = null;
           attempt.exitCode = code;
-          attempt.session =
-            readMeasurement(current, { configDirectory: pool?.configDirectory }).session ?? attempt.session;
+          attempt.session = measurement.session ?? attempt.session;
         });
         return;
       }
       const attempt = store.updateAttempt(ref, (a) => {
         a.state = 'exited';
-        a.endedAt = new Date().toISOString();
+        a.endedAt = endedAt;
         a.exitCode = code;
         a.after = pool ? tasks.reader(pool) : null;
       });
-      const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory, maxLogBytes: 256 * 1024 });
+      const finalMeasurement = readMeasurement(attempt, {
+        configDirectory: pool?.configDirectory,
+        maxLogBytes: 256 * 1024,
+        ...(logStartOffset !== undefined ? { logStartOffset } : {}),
+      });
       if (pool)
         try {
           agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath));
@@ -92,10 +156,10 @@ export async function settle(
       // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
       // Preserve that launch failure on the attempt and keep it out of the landing queue.
       if (
-        !measurement.session &&
+        !finalMeasurement.session &&
         code !== null &&
         code !== 0 &&
-        !measurement.failureKind &&
+        !finalMeasurement.failureKind &&
         !git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])
           .trim()
           .match(/^[1-9]\d*$/)
@@ -107,31 +171,31 @@ export async function settle(
           /* No stderr stream was created. */
         }
         // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
-        measurement.failureKind = agentAdapter(attempt.profile.cli).signals?.(stderr).allowance
+        finalMeasurement.failureKind = agentAdapter(attempt.profile.cli).signals?.(stderr).allowance
           ? 'pool-exhausted'
           : 'tool';
-        measurement.result = stderr || `Worker CLI exited with code ${code} before starting a session`;
+        finalMeasurement.result = stderr || `Worker CLI exited with code ${code} before starting a session`;
       }
       // Only a worker's own final answer, a success report or a stated blocker, lets its branch land. A worker killed
       // mid-work gives none, and its partial worktree must not be committed and integrated as if it had passed.
       if (
-        !measurement.failureKind &&
-        !measurement.blocker &&
-        !reportsSuccess(measurement.result, agentAdapter(attempt.profile.cli))
+        !finalMeasurement.failureKind &&
+        !finalMeasurement.blocker &&
+        !reportsSuccess(finalMeasurement.result, agentAdapter(attempt.profile.cli))
       ) {
-        measurement.failureKind = 'tool';
-        measurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${measurement.result.slice(-500)}`;
+        finalMeasurement.failureKind = 'tool';
+        finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${finalMeasurement.result.slice(-500)}`;
       }
       store.updateAttempt(ref, (a) => {
-        a.session = measurement.session;
-        a.result = measurement.result;
-        a.blocker = measurement.blocker;
-        a.failureKind = measurement.failureKind;
-        a.approaches.push(...reportedApproaches(measurement.result, agentAdapter(attempt.profile.cli)));
+        a.session = finalMeasurement.session ?? a.session;
+        a.result = finalMeasurement.result;
+        a.blocker = finalMeasurement.blocker;
+        a.failureKind = finalMeasurement.failureKind;
+        a.approaches.push(...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli)));
       });
-      store.putRecord(makeRecord(task, attempt, measurement));
+      store.putRecord(makeRecord(task, attempt, finalMeasurement));
       evidenceBundle(task, store.attempt(ref));
-      if (measurement.failureKind) return;
+      if (finalMeasurement.failureKind) return;
       tasks.commitFinishedWork(task, ref.attempt);
       finished = true;
     });

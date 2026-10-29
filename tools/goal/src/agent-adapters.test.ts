@@ -42,6 +42,34 @@ describe('agent adapters', () => {
     expect(codex.environment(pool('codex'), {}).CODEX_HOME).toBe('/tmp/config');
   });
 
+  test('a Codex resume passes the exec-only -C and -s before the resume subcommand, which refuses them', () => {
+    for (const readOnly of [false, true]) {
+      const args = launchCommand({
+        profile: profile('codex'),
+        pool: pool('codex'),
+        worktree: '/work',
+        prompt: 'task',
+        resumeSession: 'thread-1',
+        ...(readOnly ? { readOnly } : {}),
+      })[1];
+      const resume = args.indexOf('resume');
+      expect(args.slice(resume, resume + 2)).toEqual(['resume', 'thread-1']);
+      expect(args.slice(0, resume)).toContain('-C');
+      expect(args[args.indexOf('-C') + 1]).toBe('/work');
+      expect(args.slice(resume)).not.toContain('-C');
+      expect(args.slice(resume)).not.toContain('-s');
+      if (readOnly) expect(args.slice(0, resume)).toContain('-s');
+    }
+    const fresh = launchCommand({
+      profile: profile('codex'),
+      pool: pool('codex'),
+      worktree: '/work',
+      prompt: 'task',
+    })[1];
+    expect(fresh).not.toContain('resume');
+    expect(fresh[fresh.indexOf('-C') + 1]).toBe('/work');
+  });
+
   test('a fake adapter can start, wait for a check, resume and finish a task', async () => {
     const events: string[] = [];
     const fake: AgentAdapter = {
