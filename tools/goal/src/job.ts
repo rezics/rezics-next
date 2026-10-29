@@ -534,7 +534,10 @@ export class WorkerJob implements GateOutcomeSink {
       store.write({ taskId: task.id, attempt: task.currentAttempt }, () => {
         const alreadyReported = store.events(task.id).some((record) => record.kind === 'cancelled-dependency-reported');
         if (alreadyReported) return;
-        store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', { cancelled, event });
+        store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', {
+          cancelled,
+          event,
+        });
         this.inbox.deliver(event);
       });
     }
