@@ -102,12 +102,33 @@ const batchRuns: {
 }[] = [];
 
 // Passive native auto_explain evidence from every client in the kernel/Access pool.
-// Keep the complete observed plan for each statement shape, plus every occurrence's
+// Keep the complete observed plan for each statement/plan shape, plus every occurrence's
 // work: relation totals alone cannot identify which lookup examined unrelated rows.
 type NativePlan = { 'Query Text': string; Plan: Record<string, unknown> };
 const nativeAgentScans: Record<string, unknown>[] = [];
 let nativeRun: Map<string, { plan: NativePlan; work: { rows: number; blocks: number }[] }> | undefined;
 const observedClients = new WeakSet<PoolClient>();
+function nativePlanShape(node: Record<string, unknown>): unknown {
+  const fields = [
+    'Node Type',
+    'Relation Name',
+    'Index Name',
+    'Join Type',
+    'Index Cond',
+    'Filter',
+    'Hash Cond',
+    'Merge Cond',
+    'Join Filter',
+  ];
+  return [
+    ...fields.map((field) =>
+      typeof node[field] === 'string'
+        ? node[field].replace(/'(?:''|[^'])*'|\$\d+|\b\d+(?:\.\d+)?\b/g, '?')
+        : node[field],
+    ),
+    ((node.Plans ?? []) as Record<string, unknown>[]).map(nativePlanShape),
+  ];
+}
 function observeNativeClient(client: PoolClient): void {
   if (observedClients.has(client)) return;
   observedClients.add(client);
@@ -115,11 +136,11 @@ function observeNativeClient(client: PoolClient): void {
     const marker = 'plan:\n';
     if (!nativeRun || !notice.message?.startsWith('duration:') || !notice.message.includes(marker)) return;
     const plan = JSON.parse(notice.message.slice(notice.message.indexOf(marker) + marker.length)) as NativePlan;
-    const statement = plan['Query Text'];
-    const entry = nativeRun.get(statement) ?? { plan, work: [] };
+    const shape = JSON.stringify([plan['Query Text'], nativePlanShape(plan.Plan)]);
+    const entry = nativeRun.get(shape) ?? { plan, work: [] };
     const { rows, blocks } = costOf({ statements: [], plans: [plan] });
     entry.work.push({ rows, blocks });
-    nativeRun.set(statement, entry);
+    nativeRun.set(shape, entry);
     const visit = (node: Record<string, unknown>) => {
       if (node['Relation Name'] === 'account_agent_subject') nativeAgentScans.push(node);
       for (const child of (node.Plans ?? []) as Record<string, unknown>[]) visit(child);
@@ -1249,5 +1270,17 @@ test('the native100 sourced batch probes account agents by route and subject key
     expect(node['Index Cond']).toMatch(/route =/);
     expect(node['Index Cond']).toMatch(/subject_id =/);
     expect(Number(node['Actual Rows']) + Number(node['Rows Removed by Filter'] ?? 0)).toBeLessThanOrEqual(1);
+  }
+});
+
+// The remote runner retains stdout even when series classification rejects the
+// report. Export the existing profile before its disposable workspace is removed.
+afterAll(async () => {
+  const path = process.env.GROWTH_PROFILE;
+  if (!path) return;
+  const profile = Bun.file(path);
+  if (!(await profile.exists())) return;
+  for (const line of (await profile.text()).trim().split('\n')) {
+    if (line) console.info(`SOURCED_GROWTH_PROFILE ${line}`);
   }
 });
