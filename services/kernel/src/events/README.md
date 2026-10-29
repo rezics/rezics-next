@@ -17,6 +17,17 @@ A task that emits a new event type registers its schema in that same task.
 Test-only types are registered by the kernel test preload; production code never
 imports those fixtures.
 
+## Shared-history erasure
+
+An outbox event locator identifies `(partition_no, position, event_seq)`. Its minimized storage form retains that
+stable identity, event type and schema version while removing payload and subject fields that carry account data.
+Readers must recognize a minimized-event marker and preserve contiguous log positions and event sequences; they must
+not invent a replacement payload. Delivery dispatch and business-effect completion are separate obligations:
+successful dispatch alone does not prove a registered effect finished. A source may remove payload only after every
+applicable downstream consumer has durably taken custody of its own payload or completed its effect and recorded
+the source handoff. Durable effect locator completion evidence is required by the erasure coordinator's open locator-
+work rule. Minimization, reader support, consumer proof and source handoff remain open gaps.
+
 ## Cost
 
 Shared event costs for relay discovery, batch log reads, checkpoint operations, effect enqueue and effect persistence are documented in the [Kernel service Cost table](../../README.md#cost).

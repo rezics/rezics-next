@@ -592,6 +592,20 @@ governance reach is included without writing use records. Commands keep `resourc
 
 ## Erasure consumers
 
+### Shared-history acknowledgement
+
+Accounts owns the shared-history participant that minimizes command receipts and outbox events and removes durable
+work. Its final acknowledgement occurs only after every sealed locator page across all 4,096 partitions is covered,
+all applicable artifacts are minimized or removed, and registered locator effects have completed under the
+coordinator's open locator-work rule. It reports `erased` if any artifact ever applied; `none` is valid only after
+complete sealed coverage and proof that zero artifacts applied. Missing coverage, pending effects, an incomplete
+page or failed removal keeps acknowledgement pending and erasure incomplete; none is never inferred from an empty
+page or a missing DBOS row. This shared-history acknowledgement path remains an open runtime gap.
+
+Shared-history cleanup covers operational receipts, event payloads and durable execution copies. It does not erase
+semantic provenance, whose owner retains its own attribution and evidence contract, or delivery custody for content,
+media storage and caches, which remains the delivery-custody participant's responsibility.
+
 Every deletion of an active account commits exactly one `com.rezics.access.account-tombstoned.v1` event,
 with `data.accountId`, in the deletion barrier's transaction envelope. This covers person deletion with or
 without a committed continuation, automated-account deletion by the operator's manager, and organization close.
@@ -1651,6 +1665,19 @@ or a pending bot handoff never delays the legal response. Product eligibility an
 privacy contact's response clock.
 
 ## Retention inventory
+
+### Shared-history stores
+
+The shared-history participant covers `command-receipt/v1`, `outbox-event/v1` and `durable-work/v1`. Receipt
+skeletons retain receipt identity, principal and command identity, request digest, transaction and observed position,
+and a versioned keyed-hash replay token; the raw idempotency key and response payload are removed. Event skeletons
+retain stable partition, position and event sequence plus type and schema version, with personal payload and subject
+removed. Durable-work history is canceled and deleted through supported DBOS APIs after native obligations are
+settled or transferred. Locator discovery is sealed to the committed `access.erasure` obligation and visits the
+fixed 4,096 partitions one at a time, seeking only the account prefix. These are required dispositions, not current
+runtime behavior: producer coverage, minimization, removal and the final shared-history acknowledgement remain open
+gaps. Semantic provenance has its own owner and retention rules; content and delivery custody, including media and
+caches, remain separate obligations.
 
 This inventory describes current storage and implemented cleanup, including account-linked ids, digests and
 payloads that remain personal data. A retention purpose describes the store's operational use, not a new legal

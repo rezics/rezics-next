@@ -126,6 +126,25 @@ hotspot beyond the fixed platform resource's intentional one-time installation.
 
 ## Durable work
 
+### Shared-history erasure
+
+The `shared-history` participant registers command receipts, outbox events and durable work as typed artifacts.
+Receipt skeletons preserve receipt identity, principal and command identity, request digest, transaction and observed
+log position, plus the versioned keyed-hash token used for idempotency replay. The raw caller key is never stored;
+the key ring must remain available for as long as receipts can be looked up. Outbox skeletons preserve partition,
+position, event sequence, event type and schema version. Locators are producer-declared typed account references,
+written in the artifact's physical partition in the same transaction as the artifact. Erasure seeks the account's
+prefix in each of the fixed 4,096 partitions, one per step, and never scans account-wide JSON or names. This is fixed
+discovery work at erasure, with no cross-partition locator write on the hot command path.
+
+Durable workflow arguments and results each have a 4096-byte UTF-8 budget; workflow history also requires fixed
+row and byte limits for every retained field and nested payload. Account-bearing durable work is canceled and deleted
+through supported DBOS APIs only after native obligations are settled or transferred. All durable work, its exact
+account scope and locators are enqueued with `enqueueIntent` on the producing transaction's connection in the same
+kernel database. Every direct workflow-start or client-enqueue producer must use this path. No relay transaction,
+second database handoff or second seal is part of the contract. These shared-history storage, locator, erasure and
+producer-coverage guarantees remain open gaps until implemented; no runtime guarantee is implied here.
+
 ### Bounded job steps
 
 | Limit                                    | Maximum                                                                           |

@@ -76,6 +76,20 @@ promises still hold.
 
 Each owner documents in its README which records it soft-deletes, how restore works, and its purge job's bound.
 
+### Shared-history participant
+
+Accounts owns the `shared-history` participant for `command-receipt/v1`, `outbox-event/v1` and `durable-work/v1`.
+Every producer declares typed account references for all copied roles and records exact locators in the artifact's
+physical partition in the transaction that creates the copy. This includes foreign-partition copies; there is no
+cross-partition write on the command path. The committed `access.erasure` obligation seals participant discovery.
+Discovery visits all 4,096 partitions, one partition per step, and seeks only the deleted account's locator prefix.
+This fixed discovery budget is paid during erasure. Receipt and event minimizers retain only their required skeletons;
+durable work is removed through supported DBOS cancellation and deletion after native obligations are settled or
+transferred. The participant acknowledges `erased` if any artifact was ever applied, and acknowledges `none` only
+after sealed complete coverage proves that no artifact applied. Until this protocol and complete producer coverage
+are implemented, shared-history acknowledgement remains an open gap. There is no production backfill; complete
+producer coverage is required before launch. The default thirty-day workflow-history sweep is not erasure.
+
 ### Access and Auth participants
 
 Neither participant can acknowledge yet: [Access's coordinator](../services/kernel/src/access/erasure.ts) supplies

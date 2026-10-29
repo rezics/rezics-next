@@ -8,6 +8,17 @@ admission remains an adopted contract with implementation and native schedule ga
 
 ## Existing execution and receipts
 
+### Shared-history erasure
+
+Every command result declares a typed account scope covering every account copied into the result or its events,
+including actor, human, delegate, operator and subject roles. Actor, human and delegate references are captured
+automatically from the command context. No-effect receipts declare and capture the same scope even when no domain
+write or event occurs. Receipt persistence stores a versioned keyed-hash token of the caller's idempotency key;
+callers continue to send the raw key, but raw keys are never persisted. The key ring stays available while receipts
+using it can be replayed. If a receipt has been minimized for erasure, a matching retry still returns the erased
+result from the retained receipt skeleton and never reconstructs the removed response. Typed scope capture,
+no-effect capture and erased-result replay remain open runtime gaps.
+
 `runCommand` validates native identity, partition, key and digest, prepares separately anchored authorization
 without holding the resource connection, and runs the final authorization inside each serializable attempt.
 Authorization precedes own-receipt lookup and body execution. A matching receipt replays before the body;
