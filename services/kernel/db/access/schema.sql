@@ -741,6 +741,27 @@ CREATE TABLE access.erasure_locator_work (
 
 
 --
+-- Name: erasure_progress; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_progress (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    store text NOT NULL,
+    role text NOT NULL,
+    partition_no integer NOT NULL,
+    cursor text[],
+    state text DEFAULT 'discovering'::text NOT NULL,
+    last_page integer DEFAULT '-1'::integer NOT NULL,
+    result jsonb,
+    CONSTRAINT erasure_progress_last_page_check CHECK ((last_page >= '-1'::integer)),
+    CONSTRAINT erasure_progress_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT erasure_progress_result_check CHECK ((octet_length((result)::text) <= 65536)),
+    CONSTRAINT erasure_progress_state_check CHECK ((state = ANY (ARRAY['discovering'::text, 'discovered'::text])))
+);
+
+
+--
 -- Name: exposure_opening; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -1112,12 +1133,27 @@ CREATE TABLE access.resource_denial (
     reason text NOT NULL,
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
+    erasure_key bigint NOT NULL,
     CONSTRAINT resource_denial_action_check CHECK ((action ~ '^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$'::text)),
     CONSTRAINT resource_denial_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT resource_denial_reason_check CHECK ((reason = ANY (ARRAY['resource'::text, 'suspension'::text, 'realm_ban'::text]))),
     CONSTRAINT resource_denial_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT resource_denial_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
     CONSTRAINT resource_denial_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: resource_denial_erasure_key_seq; Type: SEQUENCE; Schema: access; Owner: -
+--
+
+ALTER TABLE access.resource_denial ALTER COLUMN erasure_key ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME access.resource_denial_erasure_key_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -1134,6 +1170,7 @@ CREATE TABLE access.resource_grant (
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
     subject_kind text DEFAULT 'identity'::text NOT NULL,
+    erasure_key bigint NOT NULL,
     CONSTRAINT resource_grant_action_check CHECK ((action ~ '^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$'::text)),
     CONSTRAINT resource_grant_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT resource_grant_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -1141,6 +1178,20 @@ CREATE TABLE access.resource_grant (
     CONSTRAINT resource_grant_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['identity'::text, 'active_accounts'::text]))),
     CONSTRAINT resource_grant_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
     CONSTRAINT resource_grant_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: resource_grant_erasure_key_seq; Type: SEQUENCE; Schema: access; Owner: -
+--
+
+ALTER TABLE access.resource_grant ALTER COLUMN erasure_key ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME access.resource_grant_erasure_key_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -1172,6 +1223,7 @@ CREATE TABLE access.resource_role_grant (
     grant_role text NOT NULL,
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
+    erasure_key bigint NOT NULL,
     CONSTRAINT resource_role_grant_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT resource_role_grant_check1 CHECK ((((subject_kind = 'identity'::text) AND (subject_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((subject_kind = 'active_accounts'::text) AND (subject_id = '00000000-0000-0000-0000-000000000000'::uuid) AND (subject_role = ''::text)))),
     CONSTRAINT resource_role_grant_grant_role_check CHECK ((grant_role ~ '^[a-z][a-z0-9_.-]*$'::text)),
@@ -1179,6 +1231,20 @@ CREATE TABLE access.resource_role_grant (
     CONSTRAINT resource_role_grant_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['identity'::text, 'active_accounts'::text]))),
     CONSTRAINT resource_role_grant_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
     CONSTRAINT resource_role_grant_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: resource_role_grant_erasure_key_seq; Type: SEQUENCE; Schema: access; Owner: -
+--
+
+ALTER TABLE access.resource_role_grant ALTER COLUMN erasure_key ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME access.resource_role_grant_erasure_key_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -1191,9 +1257,24 @@ CREATE TABLE access.standing_parent_installation (
     resource_id uuid NOT NULL,
     actions text[] NOT NULL,
     transaction_id uuid NOT NULL,
+    erasure_key bigint NOT NULL,
     CONSTRAINT standing_parent_installation_actions_check CHECK ((cardinality(actions) > 0)),
     CONSTRAINT standing_parent_installation_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT standing_parent_installation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: standing_parent_installation_erasure_key_seq; Type: SEQUENCE; Schema: access; Owner: -
+--
+
+ALTER TABLE access.standing_parent_installation ALTER COLUMN erasure_key ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME access.standing_parent_installation_erasure_key_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -1377,6 +1458,14 @@ ALTER TABLE ONLY access.erasure
 
 
 --
+-- Name: erasure_progress erasure_progress_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_progress
+    ADD CONSTRAINT erasure_progress_pkey PRIMARY KEY (route, account_id, store, role);
+
+
+--
 -- Name: exposure_opening exposure_opening_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1529,11 +1618,27 @@ ALTER TABLE ONLY access.rating_counter_controller
 
 
 --
+-- Name: resource_denial resource_denial_erasure_key_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_denial
+    ADD CONSTRAINT resource_denial_erasure_key_key UNIQUE (erasure_key);
+
+
+--
 -- Name: resource_denial resource_denial_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
 ALTER TABLE ONLY access.resource_denial
     ADD CONSTRAINT resource_denial_pkey PRIMARY KEY (route, resource_id, subject_id, subject_role, action, reason, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: resource_grant resource_grant_erasure_key_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_grant
+    ADD CONSTRAINT resource_grant_erasure_key_key UNIQUE (erasure_key);
 
 
 --
@@ -1553,11 +1658,27 @@ ALTER TABLE ONLY access.resource_initialization
 
 
 --
+-- Name: resource_role_grant resource_role_grant_erasure_key_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_role_grant
+    ADD CONSTRAINT resource_role_grant_erasure_key_key UNIQUE (erasure_key);
+
+
+--
 -- Name: resource_role_grant resource_role_grant_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
 ALTER TABLE ONLY access.resource_role_grant
     ADD CONSTRAINT resource_role_grant_pkey PRIMARY KEY (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: standing_parent_installation standing_parent_installation_erasure_key_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.standing_parent_installation
+    ADD CONSTRAINT standing_parent_installation_erasure_key_key UNIQUE (erasure_key);
 
 
 --
@@ -1642,6 +1763,125 @@ CREATE INDEX committed_continuation_operator_latest ON access.committed_continua
 
 
 --
+-- Name: erasure_account_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_account_account_id ON access.account USING btree (account_id, route);
+
+
+--
+-- Name: erasure_account_controller_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_account_controller_id ON access.account USING btree (controller_id, route, account_id);
+
+
+--
+-- Name: erasure_account_operator_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_account_operator_account_id ON access.account USING btree (operator_account_id, route, account_id);
+
+
+--
+-- Name: erasure_account_preferences_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_account_preferences_account_id ON access.account_preferences USING btree (account_id, route);
+
+
+--
+-- Name: erasure_agent_page_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_page_account_id ON access.agent_page USING btree (account_id, route, subject_id);
+
+
+--
+-- Name: erasure_agent_verification_request_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_verification_request_account_id ON access.agent_verification_request USING btree (account_id, route, request_id);
+
+
+--
+-- Name: erasure_agent_verification_request_decided_by; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_verification_request_decided_by ON access.agent_verification_request USING btree (decided_by, route, request_id);
+
+
+--
+-- Name: erasure_agent_verification_request_requested_by; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_agent_verification_request_requested_by ON access.agent_verification_request USING btree (requested_by, route, request_id);
+
+
+--
+-- Name: erasure_committed_continuation_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_committed_continuation_account_id ON access.committed_continuation USING btree (account_id, route, continuation_id);
+
+
+--
+-- Name: erasure_committed_continuation_prior_operator_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_committed_continuation_prior_operator_account_id ON access.committed_continuation USING btree (prior_operator_account_id, route, continuation_id);
+
+
+--
+-- Name: erasure_credential_floor_receipt_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_credential_floor_receipt_account_id ON access.credential_floor_receipt USING btree (account_id, route, opening_receipt_id);
+
+
+--
+-- Name: erasure_erasure_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_erasure_account_id ON access.erasure USING btree (account_id, route);
+
+
+--
+-- Name: erasure_erasure_acknowledgement_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_erasure_acknowledgement_account_id ON access.erasure_acknowledgement USING btree (account_id, route, participant);
+
+
+--
+-- Name: erasure_governance_bootstrap_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_governance_bootstrap_account_id ON access.governance_bootstrap USING btree (account_id, route, resource_id);
+
+
+--
+-- Name: erasure_governance_reach_actor_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_governance_reach_actor_account_id ON access.governance_reach USING btree (actor_account_id, route, transaction_id, action, resource_id);
+
+
+--
+-- Name: erasure_governance_reach_resource_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_governance_reach_resource_id ON access.governance_reach USING btree (resource_id, route, transaction_id, action);
+
+
+--
+-- Name: erasure_handle_claim_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_handle_claim_account_id ON access.handle_claim USING btree (account_id, route, normalized_handle);
+
+
+--
 -- Name: erasure_late_item_open; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -1649,10 +1889,269 @@ CREATE INDEX erasure_late_item_open ON access.erasure_late_item USING btree (rou
 
 
 --
+-- Name: erasure_lifecycle_coordination_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_coordination_account_id ON access.lifecycle_coordination USING btree (account_id, route, reservation_id);
+
+
+--
+-- Name: erasure_lifecycle_coordination_related_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_coordination_related_account_id ON access.lifecycle_coordination USING btree (related_account_id, route, account_id, reservation_id);
+
+
+--
+-- Name: erasure_lifecycle_fence_receipt_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_fence_receipt_account_id ON access.lifecycle_fence_receipt USING btree (account_id, route, receipt_id);
+
+
+--
+-- Name: erasure_lifecycle_fence_receipt_operator_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_fence_receipt_operator_account_id ON access.lifecycle_fence_receipt USING btree (operator_account_id, route, account_id, receipt_id);
+
+
+--
+-- Name: erasure_lifecycle_fence_receipt_prior_operator_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_fence_receipt_prior_operator_account_id ON access.lifecycle_fence_receipt USING btree (prior_operator_account_id, route, account_id, receipt_id);
+
+
+--
+-- Name: erasure_lifecycle_handle_effect_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_handle_effect_account_id ON access.lifecycle_handle_effect USING btree (account_id, route, normalized_handle, reservation_id, operation_id, effect);
+
+
+--
+-- Name: erasure_lifecycle_handle_operation_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_handle_operation_account_id ON access.lifecycle_handle_operation USING btree (account_id, route, operation_id);
+
+
+--
+-- Name: erasure_lifecycle_membership_slot_member_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_membership_slot_member_account_id ON access.lifecycle_membership_slot USING btree (member_account_id, route, organization_id, reservation_id);
+
+
+--
+-- Name: erasure_lifecycle_membership_slot_organization_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_membership_slot_organization_id ON access.lifecycle_membership_slot USING btree (organization_id, route, member_account_id, reservation_id);
+
+
+--
+-- Name: erasure_lifecycle_registration_expiry_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_lifecycle_registration_expiry_account_id ON access.lifecycle_registration_expiry USING btree (account_id, route, reservation_id);
+
+
+--
 -- Name: erasure_locator_work_open; Type: INDEX; Schema: access; Owner: -
 --
 
 CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work USING btree (opened_at) WHERE ((state <> 'done'::text) AND (state <> 'resolved'::text));
+
+
+--
+-- Name: erasure_membership_inverse_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_membership_inverse_account_id ON access.membership_inverse USING btree (account_id, route, kind, group_id);
+
+
+--
+-- Name: erasure_membership_inverse_group_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_membership_inverse_group_id ON access.membership_inverse USING btree (group_id, route, account_id, kind);
+
+
+--
+-- Name: erasure_membership_inverse_terminal_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_membership_inverse_terminal_account_id ON access.membership_inverse_terminal USING btree (account_id, route, kind, group_id, reservation_id);
+
+
+--
+-- Name: erasure_membership_inverse_terminal_group_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_membership_inverse_terminal_group_id ON access.membership_inverse_terminal USING btree (group_id, route, account_id, kind, reservation_id);
+
+
+--
+-- Name: erasure_operator_opening_receipt_acting_human_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_operator_opening_receipt_acting_human_id ON access.operator_opening_receipt USING btree (acting_human_id, route, operator_account_id, receipt_id);
+
+
+--
+-- Name: erasure_operator_opening_receipt_operator_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_operator_opening_receipt_operator_account_id ON access.operator_opening_receipt USING btree (operator_account_id, route, receipt_id);
+
+
+--
+-- Name: erasure_operator_opening_receipt_subject_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_operator_opening_receipt_subject_account_id ON access.operator_opening_receipt USING btree (subject_account_id, route, operator_account_id, receipt_id);
+
+
+--
+-- Name: erasure_operator_relation_slot_operator_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_operator_relation_slot_operator_account_id ON access.operator_relation_slot USING btree (operator_account_id, route, subject_account_id, reservation_id);
+
+
+--
+-- Name: erasure_operator_relation_slot_subject_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_operator_relation_slot_subject_account_id ON access.operator_relation_slot USING btree (subject_account_id, route, reservation_id);
+
+
+--
+-- Name: erasure_organization_close_organization_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_organization_close_organization_id ON access.organization_close USING btree (organization_id, route);
+
+
+--
+-- Name: erasure_organization_member_member_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_organization_member_member_account_id ON access.organization_member USING btree (member_account_id, route, organization_id, valid);
+
+
+--
+-- Name: erasure_organization_member_organization_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_organization_member_organization_id ON access.organization_member USING btree (organization_id, route, member_account_id, valid);
+
+
+--
+-- Name: erasure_principal_assignment_assigned_actor_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_principal_assignment_assigned_actor_id ON access.principal_assignment USING btree (assigned_actor_id, route, principal_id, request_id);
+
+
+--
+-- Name: erasure_principal_assignment_creator_principal_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_principal_assignment_creator_principal_id ON access.principal_assignment USING btree (creator_principal_id, route, principal_id, request_id);
+
+
+--
+-- Name: erasure_principal_assignment_principal_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_principal_assignment_principal_id ON access.principal_assignment USING btree (principal_id, route, request_id);
+
+
+--
+-- Name: erasure_rating_counter_controller_account_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_rating_counter_controller_account_id ON access.rating_counter_controller USING btree (account_id, route, effective_at);
+
+
+--
+-- Name: erasure_rating_counter_controller_controller_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_rating_counter_controller_controller_id ON access.rating_counter_controller USING btree (controller_id, route, account_id, effective_at);
+
+
+--
+-- Name: erasure_resource_denial_resource_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_denial_resource_id ON access.resource_denial USING btree (resource_id, route, erasure_key);
+
+
+--
+-- Name: erasure_resource_denial_subject_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_denial_subject_id ON access.resource_denial USING btree (subject_id, route, erasure_key);
+
+
+--
+-- Name: erasure_resource_grant_resource_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_grant_resource_id ON access.resource_grant USING btree (resource_id, route, erasure_key);
+
+
+--
+-- Name: erasure_resource_grant_subject_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_grant_subject_id ON access.resource_grant USING btree (subject_id, route, erasure_key) WHERE (subject_kind = 'identity'::text);
+
+
+--
+-- Name: erasure_resource_initialization_creator_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_initialization_creator_id ON access.resource_initialization USING btree (creator_id, route, resource_id);
+
+
+--
+-- Name: erasure_resource_initialization_resource_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_initialization_resource_id ON access.resource_initialization USING btree (resource_id, route);
+
+
+--
+-- Name: erasure_resource_role_grant_resource_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_role_grant_resource_id ON access.resource_role_grant USING btree (resource_id, route, erasure_key);
+
+
+--
+-- Name: erasure_resource_role_grant_subject_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_resource_role_grant_subject_id ON access.resource_role_grant USING btree (subject_id, route, erasure_key) WHERE (subject_kind = 'identity'::text);
+
+
+--
+-- Name: erasure_standing_parent_installation_resource_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_standing_parent_installation_resource_id ON access.standing_parent_installation USING btree (resource_id, route, erasure_key);
+
+
+--
+-- Name: erasure_workflow_approval_actor_id; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_workflow_approval_actor_id ON access.workflow_approval USING btree (actor_id, route, approval_id);
 
 
 --
@@ -1908,6 +2407,14 @@ ALTER TABLE ONLY access.erasure_acknowledgement
 
 ALTER TABLE ONLY access.erasure_late_item
     ADD CONSTRAINT erasure_late_item_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: erasure_progress erasure_progress_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_progress
+    ADD CONSTRAINT erasure_progress_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
 
 
 --
