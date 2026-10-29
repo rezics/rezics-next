@@ -242,3 +242,14 @@ Decision: preserve this existing frozen witness and revalidate it once, with the
 typecheck and the delivery-only nonempty report command, using the current separator submission
 protocol. Prior queued IDs and historical results above are not results for this fresh validation.
 Only this report changes; no outside-path file, helper, product, dependency or frozen assertion changes.
+
+Submitted at revision `e489580f74` through `bun scripts/worker-check.ts --`:
+
+- `bun run --cwd services/kernel check test/imports/cover-recovery-pixels.test.ts`:
+  `8e83022f-605f-41d6-887f-fdd5810b265e`.
+- `bun run --cwd services/kernel typecheck`: `cccabd58-e247-4669-9db5-9836fcc69160`.
+- `test -s docs/research/imports-audit/cover-recovery-pixels.md`:
+  `3ae27b4b-9448-41cd-beaa-21f75a043477`.
+
+Submission succeeded; execution results are pending manager delivery. No polling or old-case rerun
+was performed. The native command/receipt and counts above remain historical until fresh results arrive.
