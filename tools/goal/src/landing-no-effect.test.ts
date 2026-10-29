@@ -69,6 +69,34 @@ test('a Markdown union that keeps only dev’s changed hunk is left for the work
   }
 });
 
+test('a JSON message deletion that conflicts with a dev edit is left unresolved for the worker', () => {
+  const h = integrationHarness();
+  try {
+    const file = 'apps/web/messages/en.json';
+    mkdirSync(join(h.root, '.temp'), { recursive: true });
+    mkdirSync(join(h.root, 'apps/web/messages'), { recursive: true });
+    writeFileSync(join(h.root, file), '{"shared":"unmerged"}\n');
+    const blobs = ['{"shared":"base"}\n', '{"shared":"dev"}\n', '{}\n'].map((content) => {
+      const path = join(h.root, '.temp/blob');
+      writeFileSync(path, content);
+      return git(h.root, 'hash-object', '-w', path);
+    });
+    const indexInfo = blobs
+      .map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`)
+      .join('\n');
+    const staged = spawnSync('git', ['update-index', '--index-info'], {
+      cwd: h.root,
+      encoding: 'utf8',
+      input: `${indexInfo}\n`,
+    });
+    expect(staged.status).toBe(0);
+    expect(resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toBe(false);
+    expect(git(h.root, 'diff', '--name-only', '--diff-filter=U')).toContain(file);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('an empty landing tree is not attributed to an existing dev commit', async () => {
   const h = integrationHarness();
   try {
