@@ -131,7 +131,7 @@ test('the worker protocol starts checks asynchronously and suspends until the ho
     } as unknown as Task;
     // The protocol is explicit even when this old fixture has no check runner file.
     const bare = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(bare).toContain('bun scripts/worker-check.ts --run -- <command...>');
+    expect(bare).toContain('bun scripts/worker-check.ts -- <command...>');
     expect(bare).toContain('{"status":"waiting","checks":["<id>",...]}');
     expect(bare).toContain('Never poll');
     mkdirSync(join(h.root, 'scripts'), { recursive: true });

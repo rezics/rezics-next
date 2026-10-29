@@ -173,7 +173,7 @@ test('worker instructions start detached checks, keep working, and return waitin
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(prompt).toContain('bun scripts/worker-check.ts --run -- <command...>');
+    expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).toContain('keep working while checks run');
     expect(prompt).toContain('{"status":"waiting","checks":["<id>",...]}');
     expect(prompt).toContain('Never poll');
