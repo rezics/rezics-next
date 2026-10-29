@@ -52,19 +52,31 @@ test('linear uniqueness diagnostics match the historical validator for malformed
 });
 
 for (const member of ['bases', 'mappings', 'qualifiers']) {
-  test(`invalid duplicate-heavy ${member} must have linear native diagnostics before TypeBox Errors copies`, async () => {
+  test(`invalid duplicate-heavy ${member} must have linear native hash and Set work`, async () => {
     const report = await constructionEvidence();
     const excessive: unknown[] = [];
     for (const scale of scales) {
       const row = report.rows.find((row) => row.name === `duplicate-${member}-${scale}`)!;
       expect(row.original).toEqual([{ pointer: duplicatePointer(member), code: 'invalid' }]);
-      // This is the replacement requirement, not an assertion blessing today's
-      // quadratic result. The counter observes actual spread element iteration.
+      const entries = row.axes.duplicates! + 1;
+      expect(row.counts.duplicateVisits, row.name).toBe(entries);
+      expect(row.counts.duplicateProbes, row.name).toBe(entries);
+      expect(row.counts.duplicateAppends, row.name).toBeGreaterThanOrEqual(entries);
       const linearAllowance = 8 * (row.shape.nodes + row.shape.edges);
-      if (row.counts.duplicateCopies > linearAllowance)
-        excessive.push({ name: row.name, counts: row.counts, linearAllowance });
+      for (const count of [
+        row.counts.duplicateVisits,
+        row.counts.duplicateProbes,
+        row.counts.duplicateAppends,
+        row.counts.hashNodes,
+        row.counts.hashBytes,
+      ])
+        if (count > linearAllowance) excessive.push({ name: row.name, counts: row.counts, linearAllowance });
+      console.log(
+        'linear uniqueness native counts',
+        JSON.stringify({ name: row.name, ...row.counts, linearAllowance }),
+      );
     }
-    expect(excessive, 'own linear uniqueness diagnostics must precede dependency error enumeration').toEqual([]);
+    expect(excessive, 'actual canonical hashing and Set membership must grow linearly').toEqual([]);
   }, 240_000);
 }
 

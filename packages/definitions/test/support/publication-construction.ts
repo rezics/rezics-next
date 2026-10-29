@@ -89,6 +89,7 @@ export function constructionFixture(
 
 type Counts = {
   duplicateVisits: number;
+  duplicateProbes: number;
   duplicateCopies: number;
   duplicateAppends: number;
   baseReads: number;
@@ -285,6 +286,11 @@ async function probe(): Promise<Evidence> {
     );
     construction = replaceOnce(
       construction,
+      'if (seen.has(hash)) add(pointer);',
+      `if ((${counter}.duplicateProbes++, seen.has(hash))) add(pointer);`,
+    );
+    construction = replaceOnce(
+      construction,
       'const hash = Hash(member);',
       `${counter}.duplicateVisits++;
           const hash = Hash(member);`,
@@ -329,6 +335,7 @@ async function probe(): Promise<Evidence> {
     function measure(name: string, mode: Row['mode'], release: Release, axes: Record<string, number>) {
       const state: ProbeState = {
         duplicateVisits: 0,
+        duplicateProbes: 0,
         duplicateCopies: 0,
         duplicateAppends: 0,
         baseReads: 0,
