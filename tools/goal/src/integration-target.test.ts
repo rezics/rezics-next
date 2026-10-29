@@ -157,7 +157,7 @@ test('a control-plane task with any changed file outside tools/goal integrates i
     expect(h.head('main')).toBe(main);
     expect(git(h.root, 'show', 'dev:tools/goal/src/mixed.ts')).toBe('tools/goal/src/mixed.ts');
     expect(git(h.root, 'show', 'dev:docs/control-plane-note.md')).toBe('outside control-plane path');
-    expect(checks).toEqual([['true'], ['task-acceptance']]);
+    expect(checks).toEqual([['task-acceptance']]);
     expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
     h.dispose();
@@ -180,7 +180,7 @@ test('a task from another goal continues to integrate into dev even when it chan
 
     expect(h.head('main')).toBe(main);
     expect(git(h.root, 'show', 'dev:tools/goal/src/other-goal.ts')).toBe('tools/goal/src/other-goal.ts');
-    expect(checks).toEqual([['true'], ['task-acceptance']]);
+    expect(checks).toEqual([['task-acceptance']]);
     expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
     h.dispose();
