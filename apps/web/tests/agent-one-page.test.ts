@@ -19,13 +19,30 @@ test('a subject read redirected to an account handle is treated as an agent redi
 });
 
 test('a followed subject redirect uses the handle returned by the page read', async () => {
-  const result = await loadSubjectPage(
-    redirectedClient({ subject: 'helper', reads: {} }),
-    '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80',
-    'reviews',
-    'zh-Hans',
-  );
+  const requests: unknown[] = [];
+  const client = {
+    pages: {
+      $read: {
+        post: async (request: unknown) => {
+          requests.push(request);
+          return {
+            status: 200,
+            data: {
+              subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80',
+              account: 'account-id',
+              document: { root: { props: {} }, content: [{ type: 'AccountIdentity', props: { id: 'account' } }] },
+              reads: {
+                account: { status: 200, body: { accounts: [{ id: 'account-id', state: 'active', handle: 'helper' }] } },
+              },
+            },
+          };
+        },
+      },
+    },
+  } as never;
+  const result = await loadSubjectPage(client, '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', 'reviews', 'zh-Hans');
   expect(result).toEqual({ kind: 'redirect', id: 'helper', target: 'account' });
+  expect(requests).toHaveLength(1);
 });
 
 test('an unfollowed 308 page response uses the handle in its redirect descriptor', async () => {
