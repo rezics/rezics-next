@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { dependencyKey, installShared, pruneStores } from './shared-dependencies.ts';
+import { dependencyKey, installShared, pruneStores, sealReadOnly } from './shared-dependencies.ts';
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'goal-deps-'));
@@ -249,6 +249,25 @@ test('pruning removes only unused stores older than 24 hours and keeps the newes
     expect(existsSync(join(root, stores[0]!))).toBe(true);
     expect(existsSync(join(root, stores[1]!))).toBe(false);
     expect(stores.filter((key) => existsSync(join(root, key)))).toHaveLength(4);
+  } finally {
+    h.close();
+  }
+});
+
+test('a sealed store keeps package binaries executable and refuses writes', () => {
+  const h = fixture();
+  try {
+    const bin = join(h.root, 'store', 'pkg', 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'tool'), '#!/bin/sh\necho ran\n');
+    chmodSync(join(bin, 'tool'), 0o755);
+    writeFileSync(join(bin, 'data.json'), '{}');
+    chmodSync(join(bin, 'data.json'), 0o644);
+    sealReadOnly(join(h.root, 'store'));
+    expect(lstatSync(join(bin, 'tool')).mode & 0o777).toBe(0o555);
+    expect(lstatSync(join(bin, 'data.json')).mode & 0o777).toBe(0o444);
+    expect(new TextDecoder().decode(Bun.spawnSync([join(bin, 'tool')]).stdout)).toBe('ran\n');
+    expect(() => writeFileSync(join(bin, 'data.json'), 'changed')).toThrow();
   } finally {
     h.close();
   }
