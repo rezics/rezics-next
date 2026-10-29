@@ -126,7 +126,13 @@ successful state write. Complete indexed owner plans and canonical/source/Conten
 Canonical indexes are keyed by canonical ID. Serialized durable identity maintenance marks the shared identity
 epoch pending, completes bounded mapping/index work, then publishes the epoch. Canonical reads return preparing
 while pending, and cursors restart on epoch change. No per-page sweep of identity homes or identity-basis protocol
-is required. Epoch maintenance reads `owner_write_seq` and re-keys only derived data; it never allocates a state-write
+is required. The SAME existing `library-private-follow-counts` participant covers EVERY Library canonical record,
+including the OWNER candidate/support directory and concurrent first-apply rekey custody. Its ACK must cover every
+prior removal/addition/fence and exact native transactionId/component/job/epoch/version/scope, current terminal/
+account/source fences and stale destination rejection; follow-only completion is insufficient. No third participant
+or independent ACK shortcut. The [native owner plan](library-owner-queries.md#shared-operational-identity-and-disclosure-producers)
+owns the shared STORE/control cutover and still-required native proof.
+Epoch maintenance reads `owner_write_seq` and re-keys only derived data; it never allocates a state-write
 sequence or rewrites originals. The counter is private ordering data, never permission, an account lifecycle
 generation, a membership witness database or an aggregate count to disclose. Current authorization still covers
 original support and terminal: a withheld original never becomes public because its terminal is readable.
