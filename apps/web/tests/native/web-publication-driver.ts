@@ -396,15 +396,24 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ text: data.search.query, languages: [data.search.locale], limit: 100 }),
           });
-          if (!response.ok) throw new Error(`Native search returned ${response.status}: ${await response.text()}`);
-          const result = (await response.json()) as { subjects: { type: string; labels: Record<string, string> }[] };
-          const titles = new Set(
-            result.subjects
-              .filter(({ type }) => type === 'schema:Book')
-              .map(({ labels }) => labels[data.search.locale]),
-          );
-          missingTitles = data.search.matchingBooks.filter((title) => !titles.has(title));
-          searchPending = missingTitles.length !== 0;
+          if (!response.ok) {
+            const body = await response.text();
+            if (response.status === 503 && responseProblem(body)?.code === 'index_not_ready') {
+              console.info('web-publication-driver-search: unavailable=index_not_ready');
+              searchPending = false;
+            } else {
+              throw new Error(`Native search returned ${response.status}: ${body}`);
+            }
+          } else {
+            const result = (await response.json()) as { subjects: { type: string; labels: Record<string, string> }[] };
+            const titles = new Set(
+              result.subjects
+                .filter(({ type }) => type === 'schema:Book')
+                .map(({ labels }) => labels[data.search.locale]),
+            );
+            missingTitles = data.search.matchingBooks.filter((title) => !titles.has(title));
+            searchPending = missingTitles.length !== 0;
+          }
         }
       } finally {
         console.info(`web-publication-driver-settle: round=${++round} unmet=${JSON.stringify(unmet())}`);

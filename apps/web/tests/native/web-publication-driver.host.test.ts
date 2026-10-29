@@ -109,6 +109,21 @@ describe('native web publication driver host', () => {
     const response = await driver.request('/robots.txt', 'anonymous', { 'x-driver-probe': 'preserved' });
     expect(response).toBeInstanceOf(Response);
     expect(response.status).toBe(200);
+    // Record the native request cost even while publication/search owners are
+    // still delivering these served surfaces. Their outcome cases stay separate.
+    const searchPage = await driver.request(fixture.searchZhHans);
+    console.info(`web-publication-driver-growth: search-page-status=${searchPage.status}`);
+    await searchPage.body?.cancel();
+    const sitemapIndex = await driver.request('/sitemap.xml');
+    const sitemapBody = await sitemapIndex.text();
+    const shard = sitemapIndex.ok ? /<loc>([^<]+)<\/loc>/.exec(sitemapBody)?.[1] : undefined;
+    if (shard) {
+      const sitemapShard = await driver.request(shard);
+      console.info(`web-publication-driver-growth: sitemap-shard-status=${sitemapShard.status}`);
+      await sitemapShard.body?.cancel();
+    } else {
+      console.info(`web-publication-driver-growth: sitemap-shard-unavailable index-status=${sitemapIndex.status}`);
+    }
     await driver.configurePublicOrigin(data.alternatePublicOrigin);
     const afterRestart = await driver.request(fixture.subjects.book, 'anonymous', { host: 'untrusted.invalid' });
     expect(afterRestart).toBeInstanceOf(Response);
