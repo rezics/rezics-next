@@ -74,7 +74,8 @@ recorded below; no native Auth or source-statistics suite is rerun.
 
 Baseline: `22ec9cb1cba1989612a0fa1026244930e49a4183`. SHA-256 hashes cover full file bytes before and after formatting.
 Each diff below is the complete source diff from that baseline, including the native
-binding as well as both reconciled portable files.
+binding as well as both reconciled portable files. Context lines use `|` instead of a
+space (`git diff --output-indicator-context='|'`) so formatting preserves empty context lines.
 
 ### `specs/imports-cli-driver.ts`
 
@@ -88,26 +89,26 @@ index dc2fa338ff..d63ad2e5c5 100644
 --- a/specs/imports-cli-driver.ts
 +++ b/specs/imports-cli-driver.ts
 @@ -2,7 +2,6 @@ import { isAbsolute } from 'node:path';
- import { pathToFileURL } from 'node:url';
- import type { BatchCommand } from '@rezics/definitions/bulk';
- import type { Entry } from './imports-vndb-tables-driver.ts';
+|import { pathToFileURL } from 'node:url';
+|import type { BatchCommand } from '@rezics/definitions/bulk';
+|import type { Entry } from './imports-vndb-tables-driver.ts';
 -import type { GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
-
- /**
-  * TEST ONLY: IMPORT_CLI_DRIVER exports createImportCliDriver({directory, fetch, clock}).
+|
+|/**
+| * TEST ONLY: IMPORT_CLI_DRIVER exports createImportCliDriver({directory, fetch, clock}).
 @@ -40,7 +39,7 @@ import type { GrowthSample } from '../services/kernel/test/support/growth-bound.
-  * and must never be called by the CLI. baseline is an opaque committed-generation
-  * fingerprint; pendingKeys are original durable journal command keys.
-  *
+| * and must never be called by the CLI. baseline is an opaque committed-generation
+| * fingerprint; pendingKeys are original durable journal command keys.
+| *
 - * Cost evidence covers ALL actual forwarded SQLite executions and returned rows,
 + * Counted evidence covers ALL actual forwarded SQLite executions and returned rows,
-  * including consumed iterators, transactions and reopened handles. The binding MUST
-  * use createSqliteProbe from services/importer/tests/support/sqlite-growth on
-  * synchronous real store operations and aggregate its actual samples, calling
+| * including consumed iterators, transactions and reopened handles. The binding MUST
+| * use createSqliteProbe from services/importer/tests/support/sqlite-growth on
+| * synchronous real store operations and aggregate its actual samples, calling
 @@ -48,9 +47,10 @@ import type { GrowthSample } from '../services/kernel/test/support/growth-bound.
-  * EVERY distinct executed statement; reject growing SCAN, TEMP B-TREE, AUTOMATIC
-  * indexes; require declared-index/INTEGER PRIMARY KEY SEARCH prefixes. Explicitly
-  * classify exact INSERT/control; SELECT/UPDATE/DELETE cannot be exempt by name.
+| * EVERY distinct executed statement; reject growing SCAN, TEMP B-TREE, AUTOMATIC
+| * indexes; require declared-index/INTEGER PRIMARY KEY SEARCH prefixes. Explicitly
+| * classify exact INSERT/control; SELECT/UPDATE/DELETE cannot be exempt by name.
 - * blocks:0 means unavailable SQLite buffer measurement, never zero physical IO.
 - * seed grows hot failed-run history and unrelated live keys/history with ONE seed
 - * at 1,8,64, leaving the measured source baseline empty; it uses real
@@ -115,18 +116,18 @@ index dc2fa338ff..d63ad2e5c5 100644
 + * buffer/physical IO. Missing capture is valid only for observed no-I/O preflight.
 + * seed grows failed runs under a separate hot-history source and unrelated live
 + * keys/history with ONE seed at 1,8,64, leaving the measured source baseline empty; it uses real
-  * stores and the same fixture API, outside measured invoke. No fabricated costs.
-  * Real HTTP/Auth/PostgreSQL growth is separately proved by imports-api.test.ts;
-  * core indexed store/concurrency proof is imports-run-store.test.ts. This suite
+| * stores and the same fixture API, outside measured invoke. No fabricated costs.
+| * Real HTTP/Auth/PostgreSQL growth is separately proved by imports-api.test.ts;
+| * core indexed store/concurrency proof is imports-run-store.test.ts. This suite
 @@ -78,7 +78,7 @@ export interface Execution {
-   requests: { url: string; authorization: string | null; bytes: number }[];
-   openHandles: number;
-   input: { bytes: number; passes: number; records: number; peakBufferedBytes: number; maxPageRecords: number };
+|  requests: { url: string; authorization: string | null; bytes: number }[];
+|  openHandles: number;
+|  input: { bytes: number; passes: number; records: number; peakBufferedBytes: number; maxPageRecords: number };
 -  cost: GrowthSample['cost'];
 +  counts: { 'sqlite statements': number; 'sqlite returned rows': number };
- }
- export interface CliDriver {
-   invoke(argv: string[], boundaries?: Invocation): Promise<Execution>;
+|}
+|export interface CliDriver {
+|  invoke(argv: string[], boundaries?: Invocation): Promise<Execution>;
 ```
 
 ### `specs/imports-cli.test.ts`
@@ -141,9 +142,9 @@ index c5f593e379..8c3159886d 100644
 --- a/specs/imports-cli.test.ts
 +++ b/specs/imports-cli.test.ts
 @@ -9,7 +9,12 @@ import {
-   type BatchWriteRequest,
-   type BatchWriteResult,
- } from '@rezics/definitions/bulk';
+|  type BatchWriteRequest,
+|  type BatchWriteResult,
+|} from '@rezics/definitions/bulk';
 -import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
 +import {
 +  countedSample,
@@ -151,13 +152,13 @@ index c5f593e379..8c3159886d 100644
 +  type CountedCheck,
 +  type CountedSample,
 +} from '../services/kernel/test/support/growth-counters.ts';
- import {
-   exit,
-   loadCliDriver,
+|import {
+|  exit,
+|  loadCliDriver,
 @@ -208,9 +213,10 @@ class Harness {
-     expect(result.openHandles).toBe(0);
-     expect(encode(result.stdout + result.stderr).length).toBeLessThanOrEqual(4096);
-     for (const marker of markers) expect(result.stdout + result.stderr).not.toContain(marker);
+|    expect(result.openHandles).toBe(0);
+|    expect(encode(result.stdout + result.stderr).length).toBeLessThanOrEqual(4096);
+|    for (const marker of markers) expect(result.stdout + result.stderr).not.toContain(marker);
 -    expect(result.cost.statements).toBe(result.sql.length);
 -    expect(result.cost.rows).toBe(result.sql.reduce((sum, statement) => sum + statement.rows, 0));
 -    expect(result.cost.blocks).toBe(0); // SQLite buffers unavailable.
@@ -165,13 +166,13 @@ index c5f593e379..8c3159886d 100644
 +      'sqlite statements': result.sql.length,
 +      'sqlite returned rows': result.sql.reduce((sum, statement) => sum + statement.rows, 0),
 +    });
-     for (const statement of result.sql) expect(statement.sql).not.toMatch(/\bCOUNT\s*\(|\bOFFSET\b/i);
-     for (const request of result.requests) {
-       expect(new URL(request.url).origin).toBe(origin);
+|    for (const statement of result.sql) expect(statement.sql).not.toMatch(/\bCOUNT\s*\(|\bOFFSET\b/i);
+|    for (const request of result.requests) {
+|      expect(new URL(request.url).origin).toBe(origin);
 @@ -493,8 +499,27 @@ test('overlapping same-source invocations report busy while a different source r
-
- test('fixed changes retain indexed bounded costs across three state scales and streaming stays proportional to supplied bytes', async () => {
-   await scenario(async (h) => {
+|
+|test('fixed changes retain indexed bounded costs across three state scales and streaming stays proportional to supplied bytes', async () => {
+|  await scenario(async (h) => {
 -    const fixed: GrowthSample[] = [];
 -    const streaming: GrowthSample[] = [];
 +    const fixedCheck: CountedCheck = {
@@ -195,31 +196,31 @@ index c5f593e379..8c3159886d 100644
 +    };
 +    const fixed: { scale: number; counted: CountedSample }[] = [];
 +    const streaming: { scale: number; counted: CountedSample }[] = [];
-     for (const scale of [1, 8, 64]) {
-       h.state = resolve(h.directory, `scale-${scale}.sqlite`);
-       await h.driver.seed(h.state, scale);
+|    for (const scale of [1, 8, 64]) {
+|      h.state = resolve(h.directory, `scale-${scale}.sqlite`);
+|      await h.driver.seed(h.state, scale);
 @@ -512,7 +537,7 @@ test('fixed changes retain indexed bounded costs across three state scales and s
-           expect(statement.plan.length).toBeGreaterThan(0);
-         }
-       }
+|          expect(statement.plan.length).toBeGreaterThan(0);
+|        }
+|      }
 -      fixed.push({ scale, cost: result.cost });
 +      fixed.push({ scale, counted: countedSample([fixedCheck.read(result, scale)]) });
-       const text = Array.from({ length: scale }, (_, i) => record('wikidata', 'Streaming title', 100 + i)).join('');
-       const stream = await h.run('wikidata', { stdin: chunks(text, scale) });
-       // A disjoint snapshot intentionally trips mass protection after the streaming pass.
+|      const text = Array.from({ length: scale }, (_, i) => record('wikidata', 'Streaming title', 100 + i)).join('');
+|      const stream = await h.run('wikidata', { stdin: chunks(text, scale) });
+|      // A disjoint snapshot intentionally trips mass protection after the streaming pass.
 @@ -520,9 +545,9 @@ test('fixed changes retain indexed bounded costs across three state scales and s
-       expect(stream.input).toMatchObject({ bytes: encode(text).length, records: scale, passes: 1 });
-       expect(stream.input.peakBufferedBytes).toBeLessThanOrEqual(65536 * 2);
-       expect(stream.input.maxPageRecords).toBeLessThanOrEqual(100);
+|      expect(stream.input).toMatchObject({ bytes: encode(text).length, records: scale, passes: 1 });
+|      expect(stream.input.peakBufferedBytes).toBeLessThanOrEqual(65536 * 2);
+|      expect(stream.input.maxPageRecords).toBeLessThanOrEqual(100);
 -      streaming.push({ scale, cost: { rows: stream.input.bytes, statements: stream.input.records, blocks: 0 } });
 +      streaming.push({ scale, counted: countedSample([streamingCheck.read(stream, scale)]) });
-     }
+|    }
 -    assertGrowth(fixed, { rows: 'constant', statements: 'constant', blocks: 'constant' });
 -    assertGrowth(streaming, { rows: 'linear', statements: 'linear', blocks: 'constant' });
 +    expect(countedViolations(fixedCheck, fixed)).toEqual([]);
 +    expect(countedViolations(streamingCheck, streaming)).toEqual([]);
-   });
- });
+|  });
+|});
 ```
 
 ### `services/importer/tests/cli-driver.ts`
@@ -234,27 +235,27 @@ index 9383cba198..c52af06efd 100644
 --- a/services/importer/tests/cli-driver.ts
 +++ b/services/importer/tests/cli-driver.ts
 @@ -27,7 +27,7 @@ type SqliteCapture = {
-   database: Database;
-   start(): void;
-   attachCoordinator(importer: Parameters<NonNullable<ImportCliObserver['onCoordinator']>>[0]['importer']): void;
+|  database: Database;
+|  start(): void;
+|  attachCoordinator(importer: Parameters<NonNullable<ImportCliObserver['onCoordinator']>>[0]['importer']): void;
 -  finish(): { sql: Execution['sql']; cost: Execution['cost'] };
 +  finish(): { sql: Execution['sql']; counts: Execution['counts'] };
- };
-
- function createSqliteCapture(database: Database): SqliteCapture {
+|};
+|
+|function createSqliteCapture(database: Database): SqliteCapture {
 @@ -37,7 +37,7 @@ function createSqliteCapture(database: Database): SqliteCapture {
-   let verified = false;
-   let verificationFailure: unknown;
-   const statementProxies = new WeakMap<object, object>();
+|  let verified = false;
+|  let verificationFailure: unknown;
+|  const statementProxies = new WeakMap<object, object>();
 -  let cachedFinish: { sql: Execution['sql']; cost: Execution['cost'] } | undefined;
 +  let cachedFinish: { sql: Execution['sql']; counts: Execution['counts'] } | undefined;
-
-   const measure = <T>(operation: () => T): T => {
-     if (!enabled || depth > 0) return operation();
+|
+|  const measure = <T>(operation: () => T): T => {
+|    if (!enabled || depth > 0) return operation();
 @@ -149,10 +149,9 @@ function createSqliteCapture(database: Database): SqliteCapture {
-         }));
-         cachedFinish = {
-           sql,
+|        }));
+|        cachedFinish = {
+|          sql,
 -          cost: {
 -            statements: sql.length,
 -            rows: sql.reduce((sum, statement) => sum + statement.rows, 0),
@@ -262,13 +263,13 @@ index 9383cba198..c52af06efd 100644
 +          counts: {
 +            'sqlite statements': sql.length,
 +            'sqlite returned rows': sql.reduce((sum, statement) => sum + statement.rows, 0),
-           },
-         };
-       }
+|          },
+|        };
+|      }
 @@ -366,6 +365,15 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
-       active.delete(pending);
-     }
-     const evidence = capture?.finish();
+|      active.delete(pending);
+|    }
+|    const evidence = capture?.finish();
 +    if (
 +      !evidence &&
 +      (fileWrites.size > 0 ||
@@ -278,19 +279,19 @@ index 9383cba198..c52af06efd 100644
 +        Object.values(input).some((value) => value !== 0))
 +    )
 +      throw new Error('Missing SQLite capture outside observed no-I/O preflight');
-     return {
-       code: result.code,
-       stdout: result.stdout,
+|    return {
+|      code: result.code,
+|      stdout: result.stdout,
 @@ -377,7 +385,8 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
-       requests,
-       openHandles: result.openHandles,
-       input,
+|      requests,
+|      openHandles: result.openHandles,
+|      input,
 -      cost: evidence?.cost ?? { rows: 0, statements: 0, blocks: 0 },
 +      // Only the observed no-I/O preflight above can have no capture.
 +      counts: evidence?.counts ?? { 'sqlite statements': 0, 'sqlite returned rows': 0 },
-     };
-   };
-
+|    };
+|  };
+|
 ```
 
 Unchanged wrapper SHA-256 (before and after): `10a3dc095365f8a94582e424961407d61cf62f75017f79cd24a05bb9622993ed`.
