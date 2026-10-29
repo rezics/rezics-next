@@ -32,7 +32,9 @@ const audience = 'https://default-kernel.api.test';
 const routeKey = new Uint8Array(32).fill(86);
 const referenceKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(87)]]) };
 const clock = () => new Date();
-const savedEnv = ['AUTH_ISSUER', 'AUTH_AUDIENCE', 'AUTH_JWKS_URL'].map((name) => [name, process.env[name]] as const);
+const savedEnv = ['AUTH_ISSUER', 'AUTH_AUDIENCE', 'AUTH_JWKS_URL', 'KERNEL_WRITE_RATE_SECRET'].map(
+  (name) => [name, process.env[name]] as const,
+);
 let db: GrowthDatabase;
 let auth: AuthService;
 let server: ReturnType<typeof Bun.serve>;
@@ -110,6 +112,7 @@ beforeAll(async () => {
   process.env.AUTH_ISSUER = issuer;
   process.env.AUTH_AUDIENCE = audience;
   process.env.AUTH_JWKS_URL = `${issuer}/.well-known/jwks.json`;
+  process.env.KERNEL_WRITE_RATE_SECRET = 'default-kernel-native-rate-secret-at-least-32-bytes';
   // No Access factory, action or rate override: exercise the default kernel.
   kernel = createKernel({ pool: db.pool, routeKey, tokens: referenceKeys });
   const mounted = actionCatalogue(kernel);
