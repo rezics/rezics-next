@@ -25,7 +25,7 @@ bun run --cwd apps/web storybook:deploy
 
 The smoke test opens a page deep link, a composed UI story, a Japanese dark-theme page and a page with its recorded
 cover image. It checks for browser errors and failed story images. A failed build or smoke test leaves the deployed
-version unchanged.
+version unchanged. Before Wrangler runs, deployment removes any leftover `apps/web/.cloudflare/output` directory.
 
 ## Version links and routing
 

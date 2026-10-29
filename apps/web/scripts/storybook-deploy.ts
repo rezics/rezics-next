@@ -1,8 +1,10 @@
+import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 type DeploymentOptions = {
   dryRun: boolean;
   commit?: string;
+  cloudflareOutputDir?: string;
   build: () => Promise<void>;
   smoke: () => Promise<void>;
   wrangler: (args: string[]) => Promise<string>;
@@ -13,6 +15,9 @@ type DeploymentOptions = {
 export async function runDeployment(options: DeploymentOptions): Promise<void> {
   await options.build();
   await options.smoke();
+  const cloudflareOutputDir = options.cloudflareOutputDir ?? resolve(import.meta.dir, '../.cloudflare/output');
+  rmSync(cloudflareOutputDir, { recursive: true, force: true });
+  options.print(`Removed leftover Cloudflare build output: ${cloudflareOutputDir}`);
   const config = resolve(import.meta.dir, '../storybook.wrangler.jsonc');
   const expectedCommit = options.commit;
   if (!options.dryRun && !expectedCommit)

@@ -19,7 +19,11 @@ function newestRouteChange(path: string): number {
 
 // Storybook omits TanStack's Vite plugin, so refresh its ignored route tree when it is absent or stale.
 if (!existsSync(routeTree) || newestRouteChange(routes) > statSync(routeTree).mtimeMs) {
-  const result = spawnSync('bun', ['run', 'generate:routes'], { cwd: app, stdio: 'inherit' });
+  const result = spawnSync('node', ['.storybook/generate-routes.ts'], {
+    cwd: app,
+    stdio: 'inherit',
+    env: { ...process.env, WEBSITE_CLIENT_KEY: process.env.WEBSITE_CLIENT_KEY ?? '{}' },
+  });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Could not generate the application route tree (exit ${result.status}).`);
 }
