@@ -97904,7 +97904,10 @@
                           },
                           "actor": {
                             "format": "uuid",
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "at": {
                             "type": "string"
@@ -99434,7 +99437,10 @@
                         },
                         "actor": {
                           "format": "uuid",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "at": {
                           "type": "string"

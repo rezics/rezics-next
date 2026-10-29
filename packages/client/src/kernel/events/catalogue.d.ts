@@ -672,6 +672,12 @@ declare const productEventTypes: {
         entitlementId: Type.TString;
         orderId: Type.TString;
     }>;
+    readonly 'com.rezics.community.party-locator.projected.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.account-records.erased.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
     readonly 'com.rezics.community.space.created.v1': Type.TObject<{
         spaceId: Type.TString;
         revisionId: Type.TString;
@@ -721,7 +727,7 @@ declare const productEventTypes: {
         realmId: Type.TString;
         accountId: Type.TString;
         reason: Type.TString;
-        actor: Type.TString;
+        actor: Type.TUnion<[Type.TString, Type.TNull]>;
         at: Type.TString;
         transactionId: Type.TString;
     }>;

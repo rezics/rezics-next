@@ -6934,7 +6934,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     ban: {
                                         accountId: string;
                                         reason: string;
-                                        actor: string;
+                                        actor: string | null;
                                         at: string;
                                         realmId: string;
                                         workflowId: string | null;
@@ -7305,7 +7305,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: {
                             accountId: string;
                             reason: string;
-                            actor: string;
+                            actor: string | null;
                             at: string;
                         }[];
                         next: string | null;
@@ -7314,7 +7314,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: {
                             accountId: string;
                             reason: string;
-                            actor: string;
+                            actor: string | null;
                             at: string;
                         }[];
                         next: string | null;
@@ -7325,7 +7325,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: {
                             accountId: string;
                             reason: string;
-                            actor: string;
+                            actor: string | null;
                             at: string;
                         }[];
                         next: string | null;
@@ -7342,7 +7342,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: import("typebox").TArray<import("typebox").TObject<{
                             accountId: import("typebox").TString;
                             reason: import("typebox").TString;
-                            actor: import("typebox").TString;
+                            actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -7351,7 +7351,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: import("typebox").TArray<import("typebox").TObject<{
                             accountId: import("typebox").TString;
                             reason: import("typebox").TString;
-                            actor: import("typebox").TString;
+                            actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -7481,7 +7481,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
             items: {
                 accountId: string;
                 reason: string;
-                actor: string;
+                actor: string | null;
                 at: string;
             }[];
             next: string | null;
@@ -7590,7 +7590,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
             items: {
                 accountId: string;
                 reason: string;
-                actor: string;
+                actor: string | null;
                 at: string;
             }[];
             next: string | null;
@@ -7712,7 +7712,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             items: {
                                 accountId: string;
                                 reason: string;
-                                actor: string;
+                                actor: string | null;
                                 at: string;
                             }[];
                             next: string | null;
@@ -7721,7 +7721,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             items: {
                                 accountId: string;
                                 reason: string;
-                                actor: string;
+                                actor: string | null;
                                 at: string;
                             }[];
                             next: string | null;
@@ -7732,7 +7732,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             items: {
                                 accountId: string;
                                 reason: string;
-                                actor: string;
+                                actor: string | null;
                                 at: string;
                             }[];
                             next: string | null;
@@ -7749,7 +7749,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             items: import("typebox").TArray<import("typebox").TObject<{
                                 accountId: import("typebox").TString;
                                 reason: import("typebox").TString;
-                                actor: import("typebox").TString;
+                                actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                                 at: import("typebox").TString;
                             }>>;
                             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -7758,7 +7758,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             items: import("typebox").TArray<import("typebox").TObject<{
                                 accountId: import("typebox").TString;
                                 reason: import("typebox").TString;
-                                actor: import("typebox").TString;
+                                actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                                 at: import("typebox").TString;
                             }>>;
                             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -7865,7 +7865,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
     items: {
         accountId: string;
         reason: string;
-        actor: string;
+        actor: string | null;
         at: string;
     }[];
     next: string | null;
@@ -7943,7 +7943,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: {
                             accountId: string;
                             reason: string;
-                            actor: string;
+                            actor: string | null;
                             at: string;
                         }[];
                         next: string | null;
@@ -7952,7 +7952,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: {
                             accountId: string;
                             reason: string;
-                            actor: string;
+                            actor: string | null;
                             at: string;
                         }[];
                         next: string | null;
@@ -7963,7 +7963,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: {
                             accountId: string;
                             reason: string;
-                            actor: string;
+                            actor: string | null;
                             at: string;
                         }[];
                         next: string | null;
@@ -7980,7 +7980,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: import("typebox").TArray<import("typebox").TObject<{
                             accountId: import("typebox").TString;
                             reason: import("typebox").TString;
-                            actor: import("typebox").TString;
+                            actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -7989,7 +7989,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         items: import("typebox").TArray<import("typebox").TObject<{
                             accountId: import("typebox").TString;
                             reason: import("typebox").TString;
-                            actor: import("typebox").TString;
+                            actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;

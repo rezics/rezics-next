@@ -31,6 +31,10 @@ CREATE FUNCTION community.guard_publication() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.actor IS NOT NULL AND NEW.actor IS NULL
+     AND (to_jsonb(NEW) - 'actor') = (to_jsonb(OLD) - 'actor') THEN
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'Publication records are append-only' USING ERRCODE = '23514';
 END;
 $$;
@@ -90,7 +94,21 @@ $$;
 CREATE FUNCTION community.guard_realm_membership_operation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE
+  attribution text[] := ARRAY['member_account_id', 'initiator_account_id', 'original_operator_account_id',
+    'actor_client_id', 'actor_scopes', 'actor_requested_by', 'actor_authn_epoch',
+    'original_minimum_authn_epoch', 'original_delegation_transaction_id', 'original_delegation_issued_valid'];
 BEGIN
+  IF TG_OP = 'UPDATE'
+     AND (to_jsonb(NEW) - attribution) = (to_jsonb(OLD) - attribution)
+     AND (NEW.member_account_id IS NULL OR NEW.member_account_id = OLD.member_account_id)
+     AND (NEW.initiator_account_id IS NULL OR NEW.initiator_account_id = OLD.initiator_account_id)
+     AND (NEW.original_operator_account_id IS NULL OR NEW.original_operator_account_id = OLD.original_operator_account_id)
+     AND NEW.actor_client_id IS NULL AND NEW.actor_scopes IS NULL AND NEW.actor_requested_by IS NULL
+     AND NEW.actor_authn_epoch IS NULL AND NEW.original_minimum_authn_epoch IS NULL
+     AND NEW.original_delegation_transaction_id IS NULL AND NEW.original_delegation_issued_valid IS NULL THEN
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'Realm membership operations are immutable' USING ERRCODE = '23514';
 END;
 $$;
@@ -218,6 +236,28 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: party_locator; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.party_locator (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    kind text NOT NULL,
+    due_at timestamp with time zone NOT NULL,
+    owner_route integer NOT NULL,
+    owner_id uuid NOT NULL,
+    key text NOT NULL,
+    CONSTRAINT party_locator_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT party_locator_check1 CHECK ((owner_route = ((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)))),
+    CONSTRAINT party_locator_due_at_check CHECK (isfinite(due_at)),
+    CONSTRAINT party_locator_key_check CHECK (((char_length(key) >= 1) AND (char_length(key) <= 100))),
+    CONSTRAINT party_locator_kind_check CHECK ((kind = ANY (ARRAY['ban_target'::text, 'ban_actor'::text, 'membership_operation'::text, 'verdict'::text]))),
+    CONSTRAINT party_locator_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT party_locator_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: publication; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -229,7 +269,7 @@ CREATE TABLE community.publication (
     verdict text NOT NULL,
     predecessor uuid,
     subject_revision_id uuid,
-    actor uuid NOT NULL,
+    actor uuid,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT publication_check CHECK ((predecessor <> publication_id)),
     CONSTRAINT publication_check1 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
@@ -296,7 +336,7 @@ CREATE TABLE community.realm_ban (
     account_id uuid NOT NULL,
     valid tstzrange NOT NULL,
     reason text NOT NULL,
-    actor uuid NOT NULL,
+    actor uuid,
     transaction_id uuid NOT NULL,
     CONSTRAINT realm_ban_check CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
     CONSTRAINT realm_ban_reason_check CHECK ((char_length(reason) <= 1024)),
@@ -351,18 +391,18 @@ CREATE TABLE community.realm_membership_operation (
     kind text NOT NULL,
     realm_id uuid NOT NULL,
     space_id uuid NOT NULL,
-    member_account_id uuid NOT NULL,
+    member_account_id uuid,
     reservation_id uuid,
     ban_id uuid,
-    initiator_account_id uuid NOT NULL,
-    actor_client_id text NOT NULL,
-    actor_scopes text[] NOT NULL,
+    initiator_account_id uuid,
+    actor_client_id text,
+    actor_scopes text[],
     actor_requested_by text,
-    actor_authn_epoch bigint NOT NULL,
+    actor_authn_epoch bigint,
     requested_at timestamp with time zone NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     source_digest text NOT NULL,
-    original_minimum_authn_epoch text CONSTRAINT realm_membership_operation_original_minimum_authn_epoc_not_null NOT NULL,
+    original_minimum_authn_epoch text,
     original_operator_account_id uuid,
     original_delegation_transaction_id uuid,
     original_delegation_issued_valid text,
@@ -484,6 +524,14 @@ CREATE TABLE community.space_revision (
     CONSTRAINT space_revision_summary_check CHECK ((char_length(summary) <= 4096)),
     CONSTRAINT space_revision_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 1024)))
 );
+
+
+--
+-- Name: party_locator party_locator_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.party_locator
+    ADD CONSTRAINT party_locator_pkey PRIMARY KEY (route, account_id, kind, due_at, owner_route, owner_id, key);
 
 
 --
