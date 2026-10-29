@@ -145,6 +145,41 @@ through normal worker-check admission with `TMPDIR=/dev/shm`; local `/dev/shm`
 and `/tmp` are actual tmpfs mounts. The previously passing artifact acceptance
 and affected root typecheck are retained without rerunning unchanged suites.
 
+Tested checkpoint: `b0a86cb4d4`. The single focused invocation used the exact
+native command above. Worker-check receipt
+`b9a78c59-b604-4484-ad44-be4fd4ffa962` reached terminal **exit 1**; its recorded
+status is finished. Log:
+`.temp/goal/checks/worker-check-2026-10-29T10-01-41.893Z-e55e9f9c.log`.
+Log SHA-256:
+`f90af449d1945fa48158515b18452e734c07dfcca021c3902a3159fbf1e20eb6`.
+
+Normal admission acquired host b after 3.147 seconds. The verified cached Bun
+ran as `1.4.4-canary.1 (a0cc096ce)` and installed dependencies successfully;
+the earlier TLS/archive failure did not recur. The kernel runner then failed
+during its pre-test schema-dump stage, at check.ts's schemaDumps call and
+database.ts's schemaDumpWith command. The exact first error line was:
+
+```text
+error: docker exec -e PGPASSWORD=rezics 6871eebd9c960ed1808e6d141b38f61f5d795197c827f92fd73b5158b4e2b7a3 pg_dump --schema-only --no-owner --no-privileges --schema=rating postgres://rezics:rezics@127.0.0.1:5432/rezics?sslmode=disable failed:
+```
+
+The command supplied no stderr detail. This is a new tool/setup failure, not a
+qualifier-loss assertion or evidence of changed admitted schema meaning. The
+wrapper printed its final exit status without an automatic rerun. No second
+native invocation was launched, preserving the continuation's single-run limit.
+No host, runtime, timeout, product or fixture repair was attempted.
+
+Native results remain **0 scenarios reached; no pass or product-red observed**.
+There is no first native assertion failure, native candidate observation or
+immutable native receipt result from this invocation. The receipt above is the
+check runner's receipt only. SQLite was requested on `/dev/shm`; no scenario
+opened its SQLite state before setup failed. Artifact delivery and the earlier
+passing affected typecheck remain valid, but cannot replace native execution.
+The test bytes, README, bundled release and converter remain unchanged; only
+this declared report path changed. No outside-path file changed. No started
+check remains running. Native verification is blocked on the schema-dump tool
+failure; converter repair and positive whole-holder evidence remain separate.
+
 ## Limits and decisions
 
 The actual bundle is consumed unchanged. No product, helper, definition, release
