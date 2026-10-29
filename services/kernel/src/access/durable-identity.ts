@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { DurableInitiatorUnavailableError } from './durable-initiator.ts';
 import { accessEvidence } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
@@ -76,7 +77,7 @@ const resource = (value: { route: number; id: string }) =>
   routeOf(value.id) !== null && routeOf(value.id) === value.route;
 const scopes = (value: readonly string[]) =>
   Array.isArray(value) &&
-  value.length <= 100 &&
+  value.length <= MAX_CONSENTED_SCOPES &&
   value.every((s) => typeof s === 'string' && /^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(s));
 
 /** The only mint path: actual owning-module read, exact native creation receipt,

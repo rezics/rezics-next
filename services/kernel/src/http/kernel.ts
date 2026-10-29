@@ -1,9 +1,10 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { assertInternalActionDeclarations, createAccess } from '../access/index.ts';
+import { accessActionCatalogue, assertInternalActionDeclarations, createAccess } from '../access/index.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -440,6 +441,11 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
+  const consentedScopeCount = accessActionCatalogue(actionCatalogue(zones)).size;
+  if (consentedScopeCount > MAX_CONSENTED_SCOPES)
+    throw new Error(
+      `Kernel action catalogue has ${consentedScopeCount} actions; consented scope bound is ${MAX_CONSENTED_SCOPES}`,
+    );
   compositionFinished = true;
   assertInternalActionDeclarations(actionCatalogue(zones));
   assertDeclaredResourceTypes(zones);

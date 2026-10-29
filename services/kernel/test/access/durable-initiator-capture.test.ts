@@ -20,7 +20,8 @@ import { nativeModule } from './durable-initiator.test.ts';
 /** Component issuer exercises real authentication/admission; nativeModule below
  * separately proves the committed writer/receipt/restorer lifecycle.
  */
-export async function captureFixture(db: GrowthDatabase, delegated: boolean) {
+export async function captureFixture(db: GrowthDatabase, delegated: boolean, scopes = ['subject:write']) {
+  const action = scopes[0]!;
   const id = newId(0x1234);
   const principal = newId(0x2345);
   const request = newId(0x2345);
@@ -41,21 +42,21 @@ export async function captureFixture(db: GrowthDatabase, delegated: boolean) {
     );
   await db.admin.query(
     `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-    SELECT $1,$2,id,'subject:write','(,)',$3 FROM unnest($4::uuid[]) id`,
-    [target.route, target.id, id, [id, principal]],
+    SELECT $1,$2,id,$5,'(,)',$3 FROM unnest($4::uuid[]) id`,
+    [target.route, target.id, id, [id, principal], action],
   );
   const keys = await generateKeyPair('ES256');
   const jwks = { keys: [{ ...(await exportJWK(keys.publicKey)), kid: 'capture', alg: 'ES256' }] };
   const issuer = 'https://capture.test';
   const access = createAccess({
-    actions: new Map([['subject:write', { anonymous: false }]]),
+    actions: new Map([[action, { anonymous: false }]]),
     auth: { issuer, audience: issuer, jwksUrl: `${issuer}/jwks`, fetch: async () => Response.json(jwks) },
   });
   const now = Math.floor(Date.now() / 1000);
   const token = await new SignJWT({
     sub: id,
     client_id: 'capture',
-    scope: 'subject:write',
+    scope: scopes.join(' '),
     authn_epoch: 10,
     auth_time: now,
     amr: ['pwd'],
@@ -69,7 +70,7 @@ export async function captureFixture(db: GrowthDatabase, delegated: boolean) {
     .sign(keys.privateKey);
   const context = { pool: db.pool, deadline: Date.now() + 180_000 };
   const actor = await access.authenticate(token, context);
-  return { db, access, actor, context, target, principal, request, transactionId };
+  return { db, access, actor, context, target, principal, request, transactionId, action };
 }
 
 type Fixture = Awaited<ReturnType<typeof captureFixture>>;
@@ -81,7 +82,7 @@ export async function captureAttempt(
   const authorization = resourceAuthorization({
     access: f.access,
     actor: f.actor,
-    action: 'subject:write',
+    action: f.action,
     anchor: { resource: f.target, validate: async () => true },
     context: { ...f.context, partition: partitionOf(f.target.route) },
   });

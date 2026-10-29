@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import type { IdentityExpiry } from './identity-expiry.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
@@ -129,7 +130,8 @@ function claims(payload: JWTPayload, config: AuthenticationConfig, at: Date, sco
     typeof payload.scope !== 'string' ||
     payload.scope.length > scopeClaimLimit ||
     (payload.scope !== '' &&
-      payload.scope.split(' ').some((scope) => !scope || scope.length > 128 || !scopePattern.test(scope))) ||
+      (payload.scope.split(' ').length > MAX_CONSENTED_SCOPES ||
+        payload.scope.split(' ').some((scope) => !scope || scope.length > 128 || !scopePattern.test(scope)))) ||
     !Number.isSafeInteger(payload.authn_epoch) ||
     (payload.authn_epoch as number) <= 0 ||
     !Number.isSafeInteger(payload.iat) ||
@@ -154,12 +156,8 @@ function claims(payload: JWTPayload, config: AuthenticationConfig, at: Date, sco
 }
 
 /** Each factory owns its key cache and its opaque, immutable request identities. */
-export function createAuthenticator(
-  configuration?: AuthenticationConfig,
-  clock: KernelClock = systemClock,
-  knownScopeCount = 100,
-) {
-  const scopeClaimLimit = knownScopeCount * 129;
+export function createAuthenticator(configuration?: AuthenticationConfig, clock: KernelClock = systemClock) {
+  const scopeClaimLimit = MAX_CONSENTED_SCOPE_OCTETS;
   const approvalScope = Object.freeze({});
   const durableScope = Object.freeze({});
   const identities = new WeakMap<AccountActor, Identity>();

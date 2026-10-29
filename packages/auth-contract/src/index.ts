@@ -1,3 +1,8 @@
+/** Maximum consented scopes in a session or durable actor snapshot. */
+export const MAX_CONSENTED_SCOPES = 512;
+/** Maximum joined ASCII scope bytes, including the single-space separators. */
+export const MAX_CONSENTED_SCOPE_OCTETS = 66_047;
+
 export interface AccessAccount {
   accountId: string;
   kind: 'actor' | 'organization';

@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 
 export type CurrentConsent = Readonly<{
@@ -23,7 +24,7 @@ export function validConsentInput(value: unknown): value is { actorAccountId: st
 export function validConsentScopes(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
-    value.length <= 100 &&
+    value.length <= MAX_CONSENTED_SCOPES &&
     value.every(
       (scope) => typeof scope === 'string' && scope.length <= 128 && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
     )

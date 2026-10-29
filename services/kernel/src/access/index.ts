@@ -153,8 +153,7 @@ function atTimeClient(client: AccessClient, at: string): AccessClient {
 export function createAccess(config: AccessConfig): Access {
   const actions = accessActionCatalogue(config.actions);
   const clock = config.clock ?? (() => new Date(Date.now()));
-  const knownScopeCount = new Set(['openid', 'offline_access', 'media:complete', ...config.actions.keys()]).size;
-  const authentication = createAuthenticator(config.auth, clock, knownScopeCount);
+  const authentication = createAuthenticator(config.auth, clock);
   const admission = createCommandAdmission(authentication.identity, clock);
   const prepared = new WeakMap<object, Prepared>();
   const permissions = permissionAccess({

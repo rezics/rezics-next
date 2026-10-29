@@ -458,6 +458,12 @@ admission still expires at the counter window boundary. Growth checks in
 
 ## Durable initiators
 
+Sessions and durable actor snapshots admit at most 512 consented scopes, each at most 128 ASCII bytes,
+with at most 66,047 bytes when joined by single spaces. Auth and Access share these bounds from
+`@rezics/auth-contract`. `createKernel` rejects a mounted plus internal action catalogue larger than
+512 at composition, reporting its count and the bound before serving requests. Snapshot capture retains
+the session's complete scope ceiling; it does not narrow it to the operation's actions.
+
 `readAuthConsentConfig(env)` in `auth-consent.ts` owns the shared configuration for every module that restores an initiator: `KERNEL_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`. The group is optional and all or nothing. The URL must be the exact private HTTPS `/internal/v1/consents:read` endpoint, without credentials, query or fragment. Values retain the visible-ASCII limit of 1024 characters. A partial or invalid group fails startup with a variable name, never its value. Content erasure and the Realm adapter use this same Access reader; the worker reports the consent group when absent.
 
 Successful restoration publishes rate identity from its existing anchored account

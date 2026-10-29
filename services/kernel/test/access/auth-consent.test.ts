@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { expect, test } from 'bun:test';
 import { createAuthConsentReader, readAuthConsentConfig } from '../../src/access/auth-consent.ts';
 import { ConfigError } from '../../src/commerce/config.ts';
@@ -35,13 +36,13 @@ test('missing/forged/malformed/oversized/error responses fail closed', async () 
     { ...consent, clientId: 'other' },
     { ...consent, email: 'private@example.test' },
     { ...consent, scopes: ['bad scope'] },
-    { ...consent, scopes: Array(101).fill('read') },
+    { ...consent, scopes: Array(MAX_CONSENTED_SCOPES + 1).fill('read') },
     { ...consent, scopes: ['x'.repeat(129)] },
   ]) {
     expect(await createAuthConsentReader({ ...config, fetch: async () => Response.json(value) })(input)).toBeNull();
   }
   for (const response of [
-    new Response('x'.repeat(32769)),
+    new Response('x'.repeat(MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 2 * 1024 + 129)),
     new Response('not JSON'),
     new Response(null, { status: 302, headers: { location: 'https://evil.test' } }),
     new Response('secret', { status: 503 }),
@@ -103,7 +104,7 @@ test('streamed oversized bodies and stalled JSON streams cancel within the deadl
   const oversized = new Response(
     new ReadableStream({
       start(controller) {
-        controller.enqueue(new Uint8Array(32769));
+        controller.enqueue(new Uint8Array(MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 2 * 1024 + 129));
       },
       cancel() {
         cancellations++;

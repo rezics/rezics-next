@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
@@ -34,7 +35,7 @@ for (let index = 0; index < 101; index++) {
 }
 const catalogue = actionCatalogue(app);
 const scopes = ['openid', 'offline_access', 'media:complete', ...catalogue.keys()];
-const bound = scopes.length * 129;
+const bound = MAX_CONSENTED_SCOPE_OCTETS;
 
 beforeAll(async () => {
   await pool.query(
@@ -63,8 +64,8 @@ async function request(scope: string) {
   );
 }
 
-function atBound(count: number) {
-  return ['a'.repeat(127), ...Array<string>(count - 1).fill('a'.repeat(128)), 'a'].join(' ');
+function atBound() {
+  return Array.from({ length: MAX_CONSENTED_SCOPES }, (_, index) => `scope:${index}:`.padEnd(128, 'a')).join(' ');
 }
 
 async function refused(scope: string) {
@@ -83,8 +84,8 @@ test('the kernel admits every known scope with more than 100 maximum-length moun
   expect(await response.json()).toMatchObject({ accountId, scopes });
 });
 
-test('the derived scope claim bound is inclusive and one character more is invalid credentials', async () => {
-  const scope = atBound(scopes.length);
+test('the shared scope claim bound is inclusive and one character more is invalid credentials', async () => {
+  const scope = atBound();
   expect(scope.length).toBe(bound);
   expect((await request(scope)).status).toBe(200);
   await refused(`${scope}a`);
@@ -99,11 +100,11 @@ test('each scope keeps its 128-character limit and original character rules', as
     await refused(scope);
 });
 
-test('an authenticator without a catalogue retains the inclusive 12,900-character bound', async () => {
+test('an authenticator without a catalogue uses the shared inclusive joined-length bound', async () => {
   const { authenticate } = createAuthenticator(auth);
-  const scope = atBound(100);
+  const scope = atBound();
   const context = () => ({ pool, deadline: Date.now() + 3000 });
-  expect(scope.length).toBe(12_900);
+  expect(scope.length).toBe(MAX_CONSENTED_SCOPE_OCTETS);
   expect(await authenticate(await signed(scope), context())).toMatchObject({ accountId });
   await expect(authenticate(await signed(`${scope}a`), context())).rejects.toMatchObject({
     status: 401,
@@ -111,11 +112,11 @@ test('an authenticator without a catalogue retains the inclusive 12,900-characte
   });
 });
 
-test('catalogue bounds belong to each factory and are fixed at creation', async () => {
+test('the consented scope bound is shared by factories regardless of catalogue size', async () => {
   const actions = new Map([['media:complete', { anonymous: false }]]);
   const access = createAccess({ actions, auth });
   for (const [action, metadata] of catalogue) actions.set(action, metadata);
-  const scope = atBound(3);
+  const scope = atBound();
   const context = () => ({ pool, deadline: Date.now() + 3000 });
   expect(await access.authenticate(await signed(scope), context())).toMatchObject({ accountId });
   await expect(access.authenticate(await signed(`${scope}a`), context())).rejects.toMatchObject({ status: 401 });

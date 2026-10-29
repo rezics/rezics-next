@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { ConfigError } from '../commerce/config.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 export type AuthConsentConfig = Readonly<{
@@ -62,17 +63,19 @@ function id(value: unknown): value is string {
 function scopes(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
-    value.length <= 100 &&
+    value.length <= MAX_CONSENTED_SCOPES &&
     value.every(
       (scope) => typeof scope === 'string' && scope.length <= 128 && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
     )
   );
 }
+// JSON adds two quotes per scope, punctuation, two bounded IDs and field names.
+const consentResponseOctets = MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 2 * 1024 + 128;
 async function boundedJson(response: Response, signal: AbortSignal): Promise<unknown> {
   if (
     !response.body ||
     response.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json' ||
-    Number(response.headers.get('content-length') ?? 0) > 32768
+    Number(response.headers.get('content-length') ?? 0) > consentResponseOctets
   )
     throw new Error('Unavailable');
   const reader = response.body.getReader();
@@ -88,7 +91,7 @@ async function boundedJson(response: Response, signal: AbortSignal): Promise<unk
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 32768) throw new Error('Unavailable');
+      if (size > consentResponseOctets) throw new Error('Unavailable');
       chunks.push(value);
     }
     const bytes = new Uint8Array(size);

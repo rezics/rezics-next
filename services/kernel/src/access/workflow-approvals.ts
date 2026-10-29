@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';
 import { accessClock } from './access-clock.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
@@ -133,7 +134,9 @@ const unavailableAdapters = {
 function operationSnapshot(value: NativeOperation): { operation: NativeOperation; descriptor: Descriptor } {
   requireAllowed(value && typeof value === 'object' && !Array.isArray(value));
   const encoded = canonicalize(value);
-  requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= 12000);
+  const encodedLimit =
+    value.kind === 'client-reduction' ? MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 2048 : 12000;
+  requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= encodedLimit);
   const operation = JSON.parse(encoded) as NativeOperation;
   // The requested workflow key is resolution metadata. Automated creation also
   // binds it in its business input, so retain it for that operation's digest.
@@ -158,7 +161,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
         text(operation.clientId, 1024) &&
           typeof operation.firstParty === 'boolean' &&
           Array.isArray(operation.scopes) &&
-          operation.scopes.length <= 100 &&
+          operation.scopes.length <= MAX_CONSENTED_SCOPES &&
           operation.scopes.every((scope) => text(scope, 128) && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope)),
       );
       fields = ['kind', 'clientId', 'firstParty', 'scopes', 'authorization'];

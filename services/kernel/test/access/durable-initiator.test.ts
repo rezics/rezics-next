@@ -42,7 +42,13 @@ const actions = new Map([
  * authorized native command with an immutable source and an exact core receipt.
  * Both Access and the private Auth listener use instrumented pools for growth.
  */
-export async function nativeModule() {
+export async function nativeModule(requestedAction = action) {
+  const action = requestedAction;
+  const catalogue = new Map([
+    [action, { anonymous: false }],
+    [extra, { anonymous: false }],
+    ['account:delegate', { anonymous: false }],
+  ]);
   const db = await openGrowthDatabase();
   db.pool.options.max = 1;
   migrate(db.url);
@@ -120,9 +126,9 @@ export async function nativeModule() {
       return handler(new Request(url, { ...init, headers }));
     },
   });
-  const nativeAccess = (catalogue = actions) =>
+  const nativeAccess = (mounted = catalogue) =>
     createAccess({
-      actions: catalogue,
+      actions: mounted,
       auth: {
         issuer,
         audience,
@@ -237,8 +243,16 @@ export async function nativeModule() {
       return null;
     return record;
   };
-  async function fixture(delegated = false) {
+  async function fixture(delegated = false, scopeSnapshot = [action, 'account:delegate']) {
     const p = await person();
+    if (scopeSnapshot.length > 2) {
+      await authPool.query('UPDATE auth_client SET scopes=$2 WHERE client_id=$1', [p.clientId, scopeSnapshot]);
+      await authPool.query('UPDATE auth_consent SET scopes=$3 WHERE account_id=$1 AND client_id=$2', [
+        p.id,
+        p.clientId,
+        scopeSnapshot,
+      ]);
+    }
     const principal = delegated ? await person(0x2345) : null;
     const target = { route: 0x5678, id: newId(0x5678) };
     await db.admin.query('INSERT INTO durable_test.authority(route,id) VALUES ($1,$2)', [target.route, target.id]);
@@ -273,7 +287,7 @@ export async function nativeModule() {
     const bearer = await new SignJWT({
       sub: p.id,
       client_id: p.clientId,
-      scope: `${action} account:delegate`,
+      scope: scopeSnapshot.join(' '),
       authn_epoch: 10,
       iat: now,
       exp,

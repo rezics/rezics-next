@@ -1,7 +1,8 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { captureDurableInitiator } from '../../src/access/index.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { measure, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { captureAttempt, captureFixture } from './durable-initiator-capture.test.ts';
 
 let db: GrowthDatabase;
@@ -57,3 +58,20 @@ for (const delegated of [false, true]) {
     expect(measured).toBe(true);
   }, 120_000);
 }
+
+test('capture keeps constant statements and rows at 16, 103 and 512 consented scopes', async () => {
+  const costs = [];
+  const complete = new Error('Measured before writes');
+  for (const count of [16, 103, MAX_CONSENTED_SCOPES]) {
+    const scopes = ['subject:write', ...Array.from({ length: count - 1 }, (_, i) => `scope:${i}`)];
+    const f = await captureFixture(db, false, scopes);
+    await expect(
+      captureAttempt(f, async (context) => {
+        const sample = await measure(db, () => captureDurableInitiator(context, f.actor));
+        costs.push([sample.cost.statements, sample.cost.rows]);
+        throw complete;
+      }),
+    ).rejects.toBe(complete);
+  }
+  expect(costs).toEqual([costs[0], costs[0], costs[0]]);
+});
