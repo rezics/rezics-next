@@ -59,6 +59,25 @@ const LOG_STALL_MS = 10 * 60 * 1000;
 const CPU_PROGRESS_INTERVAL_MS = 60_000;
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const WAIT_POLL_MS = 25;
+const priorityFileWarnings = new Set<string>();
+
+function applyTaskPriority(root: string, env: NodeJS.ProcessEnv): void {
+  if (!env.GOAL_TASK_ID) return;
+  const file = join(root, '.temp', 'goal', 'task-priority');
+  try {
+    const value = readFileSync(file, 'utf8').trim();
+    if (value !== 'critical' && value !== 'normal') throw new Error(`worker-check: ${file} must contain critical or normal`);
+    if (value === 'critical') env.REMOTE_CHECK_PRIORITY = 'critical';
+    else delete env.REMOTE_CHECK_PRIORITY;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('worker-check:')) throw error;
+    if (!priorityFileWarnings.has(file)) {
+      priorityFileWarnings.add(file);
+      process.stderr.write(`worker-check: ${file} unavailable; using normal priority\n`);
+    }
+    delete env.REMOTE_CHECK_PRIORITY;
+  }
+}
 
 type CheckMonitor = {
   stallMs?: number;
@@ -186,6 +205,7 @@ export async function runWorkerCheck(
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   wait.begin();
   const env = { ...process.env };
+  applyTaskPriority(root, env);
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
   const commandClass = checkClass(argv, root);

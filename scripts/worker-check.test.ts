@@ -83,6 +83,32 @@ test('nested worker checks start with default placement environment', () => {
   expect(environment.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
 });
 
+test('worker task priority is reread before each check and overrides inherited priority', async () => {
+  const directory = mkdtempSync(join(import.meta.dir, '.worker-priority-'));
+  dirs.push(directory);
+  mkdirSync(join(directory, '.temp/goal'), { recursive: true });
+  const file = join(directory, '.temp/goal/task-priority');
+  const log = join(directory, 'check.log');
+  const oldTask = process.env.GOAL_TASK_ID;
+  const oldPriority = process.env.REMOTE_CHECK_PRIORITY;
+  process.env.GOAL_TASK_ID = 'worker';
+  process.env.REMOTE_CHECK_PRIORITY = 'landing';
+  try {
+    writeFileSync(file, 'critical\n');
+    await runWorkerCheck(['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY)"], directory, false, log);
+    expect(readFileSync(log, 'utf8')).toContain('critical');
+    writeFileSync(file, 'normal\n');
+    writeFileSync(log, '');
+    await runWorkerCheck(['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY ?? 'normal')"], directory, false, log);
+    expect(readFileSync(log, 'utf8')).toContain('normal');
+  } finally {
+    if (oldTask === undefined) delete process.env.GOAL_TASK_ID;
+    else process.env.GOAL_TASK_ID = oldTask;
+    if (oldPriority === undefined) delete process.env.REMOTE_CHECK_PRIORITY;
+    else process.env.REMOTE_CHECK_PRIORITY = oldPriority;
+  }
+});
+
 test('ledger records each physical worker execution with logical id and rerun number', async () => {
   const root = mkdtempSync('/tmp/worker-check-ledger-');
   dirs.push(root);

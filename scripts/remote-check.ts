@@ -56,7 +56,7 @@ export type RemoteCheck = {
   /** Allows the promotion gate to use all but one slot of its host. */
   gate?: boolean;
   /** Admission class selected by REMOTE_CHECK_PRIORITY. */
-  priority?: 'landing';
+  priority?: 'landing' | 'critical';
   pollMs?: number;
   /** Test seam for retry backoff; defaults to 100 ms. */
   retryBackoffMs?: number;
@@ -513,7 +513,7 @@ function slotScript(
   shortRun: boolean,
   estimateMs: number | undefined,
   gate: boolean,
-  priority: 'landing' | undefined = undefined,
+  priority: 'landing' | 'critical' | undefined = undefined,
   multiWaiterId: string | undefined,
   memoryReservationBytes: number,
   landingWaiterId: string | undefined,
@@ -730,7 +730,7 @@ reserved_slots=
 ordinary_used=0
 # REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS
 ${countBusyOrdinary}
-if [ "$wait_behind_older_multi" -eq 1 ] || { [ "\${wait_behind_older_landing:-0}" -eq 1 ] && [ ${shortRun ? 0 : 1} -eq 1 ]; } || { [ ${priority === 'landing' ? 1 : 0} -eq 1 ] && [ "$gate_waiting" -eq 1 ]; }; then exit ${SLOT_BUSY}; fi
+if [ "$wait_behind_older_multi" -eq 1 ] || { [ "\${wait_behind_older_landing:-0}" -eq 1 ] && [ ${shortRun ? 0 : 1} -eq 1 ]; } || { [ ${priority !== undefined ? 1 : 0} -eq 1 ] && [ "$gate_waiting" -eq 1 ]; }; then exit ${SLOT_BUSY}; fi
 ${takeOrdinary}
 ${expressTake}
 ${countOtherOrdinary}
@@ -1188,7 +1188,7 @@ function rankHost(
   slots: number,
   estimateMs: number | undefined,
   gate: boolean,
-  priority: 'landing' | undefined = undefined,
+  priority: 'landing' | 'critical' | undefined = undefined,
   multiWaiterId?: string,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
   landingWaiterId?: string,
@@ -1218,7 +1218,7 @@ function rankHost(
           : ordinaryCapacity;
   const resourceSlots = probeCapacity(capacity);
   const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
-  const shortRun = priority !== 'landing' && isShortRun(slots, estimateMs, gate);
+  const shortRun = priority === undefined && isShortRun(slots, estimateMs, gate);
   let freeSlots: number;
   let slotLimit: number;
   if (shortRun) {
@@ -1499,7 +1499,7 @@ async function takeSlots(
   shortRun: boolean,
   estimateMs: number | undefined,
   gate: boolean,
-  priority: 'landing' | undefined = undefined,
+  priority: 'landing' | 'critical' | undefined = undefined,
   multiWaiterId: string | undefined,
   memoryReservationBytes: number,
   landingWaiterId: string | undefined,
@@ -1561,7 +1561,7 @@ async function rankedHosts(
   loggedSkips: Map<string, string> = new Map(),
   loggedSkipLines: Set<string> = new Set(),
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
-  priority: 'landing' | undefined = undefined,
+  priority: 'landing' | 'critical' | undefined = undefined,
   landingWaiterId?: string,
 ): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
@@ -1629,9 +1629,9 @@ async function acquireOnce(
   signal: AbortSignal,
   gate = false,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
-  priority: 'landing' | undefined = undefined,
+  priority: 'landing' | 'critical' | undefined = undefined,
 ): Promise<Lease | null> {
-  const landingWaiterId = priority === 'landing' ? randomUUID() : undefined;
+  const landingWaiterId = priority !== undefined ? randomUUID() : undefined;
   const ranked = await rankedHosts(
     hosts,
     signal,
@@ -1661,7 +1661,7 @@ async function acquireOnce(
     } else {
       const cap = requestedSlotCap(
         ranked,
-        priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate),
+        priority === undefined && isShortRun(requestedSlots, estimateMs, gate),
         requestedSlots,
       );
       if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
@@ -1676,7 +1676,7 @@ async function acquireOnce(
       slotLimit,
       ordinaryCapacity,
       ordinaryAdmissionLimit,
-      priority !== 'landing' && isShortRun(slots, estimateMs, gate),
+      priority === undefined && isShortRun(slots, estimateMs, gate),
       estimateMs,
       gate,
       priority,
@@ -1713,7 +1713,7 @@ async function acquire(
   gate = false,
   waitRepeatMs = 60_000,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
-  priority: 'landing' | undefined = undefined,
+  priority: 'landing' | 'critical' | undefined = undefined,
 ): Promise<Lease | null> {
   let answered = false;
   let slots = requestedSlots;
@@ -1722,11 +1722,11 @@ async function acquire(
   let markerHost: string | undefined;
   let landingMarker: SessionLease | undefined;
   let landingMarkerHost: string | undefined;
-  const landingWaiterId = priority === 'landing' && !gate ? randomUUID() : undefined;
+  const landingWaiterId = priority !== undefined && !gate ? randomUUID() : undefined;
   const landingArrivalOrder = landingWaiterId
     ? String(Math.floor((performance.timeOrigin + performance.now()) * 1_000))
     : undefined;
-  const multiWaiterId = !gate && priority !== 'landing' && slots > 1 ? randomUUID() : undefined;
+  const multiWaiterId = !gate && priority === undefined && slots > 1 ? randomUUID() : undefined;
   const priorityClass = gate ? 'gate' : (priority ?? (slots > 1 ? 'multi-slot' : 'ordinary'));
   const wait = checkWaitRecorder();
   const skippedHosts = new Map<string, string>();
@@ -1805,7 +1805,7 @@ async function acquire(
         } else {
           const cap = requestedSlotCap(
             ranked,
-            priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate),
+            priority === undefined && isShortRun(requestedSlots, estimateMs, gate),
             requestedSlots,
           );
           if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
@@ -1845,7 +1845,7 @@ async function acquire(
           slotLimit,
           ordinaryCapacity,
           ordinaryAdmissionLimit,
-          priority !== 'landing' && isShortRun(slots, estimateMs, gate),
+          priority === undefined && isShortRun(slots, estimateMs, gate),
           estimateMs,
           gate,
           priority,
@@ -2375,8 +2375,8 @@ function parse(argv: string[]): RemoteCheck {
   const hostsFile = process.env.KERNEL_CHECK_REMOTE;
   if (!hostsFile) throw new Error('KERNEL_CHECK_REMOTE must name the hosts file');
   const priorityValue = process.env.REMOTE_CHECK_PRIORITY;
-  if (priorityValue !== undefined && priorityValue !== 'landing') {
-    throw new Error(`REMOTE_CHECK_PRIORITY must be landing when set, received ${priorityValue}`);
+  if (priorityValue !== undefined && priorityValue !== 'landing' && priorityValue !== 'critical') {
+    throw new Error(`REMOTE_CHECK_PRIORITY must be landing or critical when set, received ${priorityValue}`);
   }
   let cwd: string | undefined;
   let slots: number | undefined;
@@ -2453,7 +2453,7 @@ function parse(argv: string[]): RemoteCheck {
     ...(estimateMs === undefined ? {} : { estimateMs }),
     ...(maxMs === undefined ? {} : { maxMs }),
     ...(gate ? { gate } : {}),
-    ...(priorityValue === undefined ? {} : { priority: 'landing' as const }),
+    ...(priorityValue === undefined ? {} : { priority: priorityValue as 'landing' | 'critical' }),
     ...(returns === undefined ? {} : { returns }),
     ...(pollMs === undefined ? {} : { pollMs }),
     ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),

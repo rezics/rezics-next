@@ -165,8 +165,8 @@ function localReason(run: StackRun, env: Environment): string | { hostsFile: str
 export async function runOnCheckHost(run: StackRun, env: Environment = process.env): Promise<number | null> {
   validateEstimateMs(run.estimateMs);
   const requestedPriority = env.REMOTE_CHECK_PRIORITY;
-  if (requestedPriority !== undefined && requestedPriority !== 'landing') {
-    throw new Error(`REMOTE_CHECK_PRIORITY must be landing when set, received ${requestedPriority}`);
+  if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical') {
+    throw new Error(`REMOTE_CHECK_PRIORITY must be landing or critical when set, received ${requestedPriority}`);
   }
   const priority = requestedPriority === 'landing' && isWorker(env) ? undefined : requestedPriority;
   if (requestedPriority === 'landing' && isWorker(env)) {

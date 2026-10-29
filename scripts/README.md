@@ -218,6 +218,7 @@ containers with that attempt label. Remote runs do not receive worker identity a
 
 Stderr reports `remote-check: slot wait`, `rsync`, `bun install` and `command`, each with seconds and host name.
 Set `REMOTE_CHECK_PRIORITY=landing` for a landing check to wait ahead of multi-slot and ordinary runs, while gates keep first priority.
+`.temp/goal/task-priority` is the control plane's per-worktree priority file (`critical` or `normal`), read at every worker check; the per-run record makes any other use visible.
 The `rsync` line also includes the bytes sent from rsync statistics. If zstd is unavailable, the run reports that it
 uses rsync's default compression. Returned outputs add `rsync back`. Slot wait includes probing and acquisition;
 rsync measures the upload.
