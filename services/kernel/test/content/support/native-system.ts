@@ -146,13 +146,10 @@ async function createNativeContentSystemWithOptions(
     let access: Access | undefined;
     const deferredAccess = new Proxy({} as Access, {
       get(_target, property) {
-        return (...args: unknown[]) => {
-          const resolved = access;
-          if (!resolved) throw new Error('Native fixture Access is not initialized');
-          const member = resolved[property as keyof Access];
-          if (typeof member !== 'function') return member;
-          return member.apply(resolved, args);
-        };
+        const resolved = access;
+        if (!resolved) throw new Error('Native fixture Access is not initialized');
+        const member = resolved[property as keyof Access];
+        return typeof member === 'function' ? member.bind(resolved) : member;
       },
     });
     // Kernel resolves Access on a live request, after all routes are mounted.
