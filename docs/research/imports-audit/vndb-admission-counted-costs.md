@@ -83,4 +83,19 @@ acceptance run and the importer-scoped typecheck; the specific contract excludes
 whole-workspace gates. SQLite files use the existing `os.tmpdir()` directory, and managed logs stay
 under `.temp/goal/checks/`.
 
-Terminal results will be recorded after both commands finish.
+Both commands tested executable revision `55bf3a9224`; only this report is amended afterward.
+
+| Managed command from the worktree root | Terminal result | Log |
+| --- | --- | --- |
+| `bun scripts/worker-check.ts -- bun test services/importer/tests/vndb-archive-limits-growth.test.ts` | Exit 0; 4 pass, 0 fail, 466 assertions, one file; 222 ms. | `.temp/goal/checks/worker-check-2026-10-29T13-32-09.049Z-4d5fb16f.log` |
+| `bun scripts/worker-check.ts -- bun run --cwd services/importer typecheck` | Exit 0; no type errors in 133 files, 367.66 ms; remote command 0.384 s, peak 235 MiB. | `.temp/goal/checks/worker-check-2026-10-29T13-32-15.196Z-515c5e85.log` |
+
+The focused run passed all four original scenarios: fixed rejection/ready SQL and buffers; independent
+entry/byte budgets; unsafe declarations/bodies/backings; and pre-schema option validation. The scoped
+typecheck queued for a shared remote slot. Intermediate wait status 75 meant still queued; the same
+check handle was awaited until terminal exit 0, without another check run or an infrastructure failure.
+Neither command was rerun, and no check remains live.
+
+The complete executable diff is 59 added and 25 removed lines in the existing test: named check
+declarations, actual async probe count aggregation, and all SQL/input/retention consumers. The only
+other changed file is this new report. All remaining original assertions and test scenarios are intact.
