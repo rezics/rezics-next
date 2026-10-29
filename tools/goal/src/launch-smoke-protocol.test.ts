@@ -9,7 +9,9 @@ test('fake-agent smoke wakes from an actual detached worker-check result and rej
   mkdirSync(join(root, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(root, '.temp/launch-smoke-protocol-'));
   const agent = join(directory, 'agent');
-  writeFileSync(agent, `#!/usr/bin/env bun
+  writeFileSync(
+    agent,
+    `#!/usr/bin/env bun
 import { readFileSync } from 'node:fs';
 const step = process.argv[2];
 const id = process.env.REZICS_SMOKE_CHECK_ID;
@@ -20,14 +22,16 @@ else if (step === 'wake') {
   if (record.status !== 'finished' || record.exitCode !== 0) process.exit(8);
   console.log('result passed');
 } else console.log(JSON.stringify({status:'success'}));
-`);
+`,
+  );
   chmodSync(agent, 0o755);
   try {
     const lines: string[] = [];
     await runLaunchSmoke(agent, { root, report: (line) => lines.push(line) });
     expect(lines).toEqual(['start: passed', 'wake: passed', 'success: passed']);
-    await expect(runLaunchSmoke(agent, { root, env: { REZICS_SMOKE_CHECK_EXIT: '7' }, report: () => {} }))
-      .rejects.toThrow('wake: worker-check result did not pass');
+    await expect(
+      runLaunchSmoke(agent, { root, env: { REZICS_SMOKE_CHECK_EXIT: '7' }, report: () => {} }),
+    ).rejects.toThrow('wake: worker-check result did not pass');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

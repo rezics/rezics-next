@@ -86,7 +86,12 @@ export async function runLaunchSmoke(agent?: string, options: SmokeOptions = {})
   return runRealSmoke(root, report);
 }
 
-async function runFakeSmoke(agent: string, root: string, report: Reporter, suppliedEnv: NodeJS.ProcessEnv): Promise<void> {
+async function runFakeSmoke(
+  agent: string,
+  root: string,
+  report: Reporter,
+  suppliedEnv: NodeJS.ProcessEnv,
+): Promise<void> {
   const directory = uuidPath(root, 'launch-smoke-test-');
   let checkId = '';
   const session = 'launch-smoke-fake-session';
@@ -131,12 +136,24 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
       if (!existsSync(workerCheckScript)) throw new Error('dev worktree has no scripts/worker-check.ts');
 
       // The fake agent protocol still receives a real worker-check UUID and result record.
-      const started = checked(process.execPath, [workerCheckScript, '--', '--local',
-        process.execPath, '-e', 'process.exit(Number(process.env.REZICS_SMOKE_CHECK_EXIT ?? 0))'], directory, 30_000, {
-        ...process.env,
-        ...suppliedEnv,
-        REZICS_CHECK_MEMORY: 'off',
-      });
+      const started = checked(
+        process.execPath,
+        [
+          workerCheckScript,
+          '--',
+          '--local',
+          process.execPath,
+          '-e',
+          'process.exit(Number(process.env.REZICS_SMOKE_CHECK_EXIT ?? 0))',
+        ],
+        directory,
+        30_000,
+        {
+          ...process.env,
+          ...suppliedEnv,
+          REZICS_CHECK_MEMORY: 'off',
+        },
+      );
       checkId = /check: id ([0-9a-f-]{36})/.exec(started)?.[1] ?? '';
       if (!CHECK_ID.test(checkId)) throw new Error('worker-check did not return a real check id');
       const startedCheckId = checkId;
@@ -144,7 +161,8 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
       baseEnv.REZICS_SMOKE_CHECK_ID = checkId;
       baseEnv.REZICS_SMOKE_RESULT = resultPath;
       const start = fakeStep(agent, 'start', baseEnv);
-      if (start.error || start.status !== 0) throw new Error(start.stderr || start.error?.message || `exit ${start.status}`);
+      if (start.error || start.status !== 0)
+        throw new Error(start.stderr || start.error?.message || `exit ${start.status}`);
       let waiting: Record<string, unknown> | undefined;
       try {
         waiting = parseJsonLine(start.stdout, 'start');
@@ -161,7 +179,8 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
           throw new Error('expected one worker-check id');
         checkId = waiting.checks[0];
         baseEnv.REZICS_SMOKE_CHECK_ID = checkId;
-        if (!CHECK_ID.test(checkId) || checkId !== startedCheckId) throw new Error('fake agent did not return the real worker-check id');
+        if (!CHECK_ID.test(checkId) || checkId !== startedCheckId)
+          throw new Error('fake agent did not return the real worker-check id');
       } else if (!/^worker-check-[\w-]+$/.test(checkId)) {
         throw new Error('fake worker-check id has an invalid shape');
       }
@@ -183,7 +202,8 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
 
     try {
       const success = fakeStep(agent, 'success', baseEnv);
-      if (success.error || success.status !== 0) throw new Error(success.stderr || success.error?.message || `exit ${success.status}`);
+      if (success.error || success.status !== 0)
+        throw new Error(success.stderr || success.error?.message || `exit ${success.status}`);
       let status = '';
       try {
         status = String(parseJsonLine(success.stdout, 'success').status ?? '');
@@ -230,10 +250,13 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
     };
     child.stdout.on('data', (chunk: Buffer) => forward(chunk, 'stdout'));
     child.stderr.on('data', (chunk: Buffer) => forward(chunk, 'stderr'));
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      setTimeout(() => child.kill('SIGKILL'), 3000).unref();
-    }, Math.max(1, timeoutMs));
+    const timer = setTimeout(
+      () => {
+        child.kill('SIGTERM');
+        setTimeout(() => child.kill('SIGKILL'), 3000).unref();
+      },
+      Math.max(1, timeoutMs),
+    );
     child.once('error', (error) => {
       clearTimeout(timer);
       reject(error);
@@ -281,7 +304,9 @@ async function runRealSmoke(root: string, report: Reporter): Promise<void> {
       maxBuffer: OUTPUT_LIMIT,
     });
     if (cloneResult.status !== 0)
-      throw new Error(cloneResult.stderr?.trim() || cloneResult.error?.message || `git clone exited ${cloneResult.status}`);
+      throw new Error(
+        cloneResult.stderr?.trim() || cloneResult.error?.message || `git clone exited ${cloneResult.status}`,
+      );
     const devRef = `refs/heads/${sourceSettings.integrationBranch}`;
     const remoteDev = `refs/remotes/origin/${sourceSettings.integrationBranch}`;
     try {
@@ -396,24 +421,34 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   const sourceRoot = resolve(process.env.REZICS_LAUNCH_SMOKE_SOURCE_ROOT ?? tree);
   const localFile = resolve(process.env.REZICS_LAUNCH_SMOKE_LOCAL_FILE ?? join(sourceRoot, '.temp/goal/local.json'));
   const stateDirectory = resolve(process.env.REZICS_LAUNCH_SMOKE_STATE ?? join(tree, '.temp/goal-launch-smoke-state'));
-  const worktreeRoot = resolve(process.env.REZICS_LAUNCH_SMOKE_WORKTREES ?? join(tree, '.temp/goal-launch-smoke-workers'));
+  const worktreeRoot = resolve(
+    process.env.REZICS_LAUNCH_SMOKE_WORKTREES ?? join(tree, '.temp/goal-launch-smoke-workers'),
+  );
   const branch = process.env.REZICS_LAUNCH_SMOKE_BRANCH ?? 'launch-smoke';
   const workerCheckScript = resolve(
     process.env.REZICS_LAUNCH_SMOKE_WORKER_CHECK ?? join(tree, 'scripts/worker-check.ts'),
   );
   const deadline = Number(process.env.REZICS_LAUNCH_SMOKE_DEADLINE ?? Date.now() + INNER_BUDGET_MS);
   const importModule = async <T>(path: string): Promise<T> => (await import(pathToFileURL(path).href)) as T;
-  const [{ loadSettings }, { readRouting }, { readRiskOwnership, parseBrief }, { openDb }, { WorkerStore }, { WorkerTasks }, { WorkerJob }, { reportsSuccess }] =
-    await Promise.all([
-      importModule<typeof import('../src/config.ts')>(join(tree, 'tools/goal/src/config.ts')),
-      importModule<typeof import('../src/routing.ts')>(join(tree, 'tools/goal/src/routing.ts')),
-      importModule<typeof import('../src/briefs.ts')>(join(tree, 'tools/goal/src/briefs.ts')),
-      importModule<typeof import('../src/db.ts')>(join(tree, 'tools/goal/src/db.ts')),
-      importModule<typeof import('../src/store.ts')>(join(tree, 'tools/goal/src/store.ts')),
-      importModule<typeof import('../src/tasks.ts')>(join(tree, 'tools/goal/src/tasks.ts')),
-      importModule<typeof import('../src/job.ts')>(join(tree, 'tools/goal/src/job.ts')),
-      importModule<typeof import('../src/records.ts')>(join(tree, 'tools/goal/src/records.ts')),
-    ]);
+  const [
+    { loadSettings },
+    { readRouting },
+    { readRiskOwnership, parseBrief },
+    { openDb },
+    { WorkerStore },
+    { WorkerTasks },
+    { WorkerJob },
+    { reportsSuccess },
+  ] = await Promise.all([
+    importModule<typeof import('../src/config.ts')>(join(tree, 'tools/goal/src/config.ts')),
+    importModule<typeof import('../src/routing.ts')>(join(tree, 'tools/goal/src/routing.ts')),
+    importModule<typeof import('../src/briefs.ts')>(join(tree, 'tools/goal/src/briefs.ts')),
+    importModule<typeof import('../src/db.ts')>(join(tree, 'tools/goal/src/db.ts')),
+    importModule<typeof import('../src/store.ts')>(join(tree, 'tools/goal/src/store.ts')),
+    importModule<typeof import('../src/tasks.ts')>(join(tree, 'tools/goal/src/tasks.ts')),
+    importModule<typeof import('../src/job.ts')>(join(tree, 'tools/goal/src/job.ts')),
+    importModule<typeof import('../src/records.ts')>(join(tree, 'tools/goal/src/records.ts')),
+  ]);
   const env = {
     ...process.env,
     GOAL_MAIN_CHECKOUT: clone,
@@ -450,9 +485,8 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
     routing.consultation,
   ].filter((profile) => profile.cli === 'codex');
   const codexPools = settings.pools.filter((pool) => pool.cli === 'codex');
-  const pinnedPoolClass = routing.classes.implementation.first.cli === 'codex'
-    ? routing.classes.implementation.first.poolClass
-    : 'codex';
+  const pinnedPoolClass =
+    routing.classes.implementation.first.cli === 'codex' ? routing.classes.implementation.first.poolClass : 'codex';
   const selected = profiles
     .filter(
       (profile) =>
@@ -514,15 +548,23 @@ Do not pass \`--wait\`, poll, or start another check. Return exactly the require
       await withDeadline(startPromise, deadline, 'start');
       const waitingTask = store.task(task.id);
       const waitingAttempt = store.attempt({ taskId: task.id, attempt: waitingTask.currentAttempt });
-      if (waitingAttempt.state !== 'waiting') throw new Error(`worker exited as ${waitingAttempt.state}, expected waiting`);
-      if (waitingAttempt.exitCode !== 0) throw new Error(`waiting worker exited with code ${String(waitingAttempt.exitCode)}`);
+      if (waitingAttempt.state !== 'waiting')
+        throw new Error(`worker exited as ${waitingAttempt.state}, expected waiting`);
+      if (waitingAttempt.exitCode !== 0)
+        throw new Error(`waiting worker exited with code ${String(waitingAttempt.exitCode)}`);
       if (!waitingAttempt.session) throw new Error('waiting attempt did not save its session id');
       if (!waitingAttempt.checks || waitingAttempt.checks.length !== 1 || !CHECK_ID.test(waitingAttempt.checks[0]!))
         throw new Error('waiting attempt did not save one real worker-check UUID');
-      if (waitingAttempt.profile.cli !== 'codex' || waitingAttempt.profile.model !== model || waitingAttempt.profile.effort !== 'low')
+      if (
+        waitingAttempt.profile.cli !== 'codex' ||
+        waitingAttempt.profile.model !== model ||
+        waitingAttempt.profile.effort !== 'low'
+      )
         throw new Error('worker did not use the selected low-effort Codex profile');
       if (launchErrors.some((line) => /Worker systemd scope unavailable; starting without a scope:/.test(line)))
-        throw new Error(launchErrors.find((line) => /Worker systemd scope unavailable; starting without a scope:/.test(line))!);
+        throw new Error(
+          launchErrors.find((line) => /Worker systemd scope unavailable; starting without a scope:/.test(line))!,
+        );
       report('start: passed');
 
       currentStep = 'wake';
@@ -537,13 +579,17 @@ Do not pass \`--wait\`, poll, or start another check. Return exactly the require
       const resumed = store.attempt({ taskId: task.id, attempt: resumedTask.currentAttempt });
       if (resumed.session !== originalSession) throw new Error('wake did not resume the same worker session');
       if (launchErrors.some((line) => /Worker systemd scope unavailable; starting without a scope:/.test(line)))
-        throw new Error(launchErrors.find((line) => /Worker systemd scope unavailable; starting without a scope:/.test(line))!);
+        throw new Error(
+          launchErrors.find((line) => /Worker systemd scope unavailable; starting without a scope:/.test(line))!,
+        );
       report('wake: passed');
 
       currentStep = 'success';
       if (resumed.exitCode !== 0) throw new Error(`resumed worker exited with code ${String(resumed.exitCode)}`);
       if (resumed.state !== 'exited' || resumed.failureKind || !reportsSuccess(resumed.result))
-        throw new Error(`resumed worker did not exit successfully: ${resumed.failureKind ?? resumed.result.slice(-400)}`);
+        throw new Error(
+          `resumed worker did not exit successfully: ${resumed.failureKind ?? resumed.result.slice(-400)}`,
+        );
       let exit: Record<string, unknown>;
       try {
         exit = JSON.parse(resumed.result) as Record<string, unknown>;
@@ -573,7 +619,11 @@ Do not pass \`--wait\`, poll, or start another check. Return exactly the require
               runnerPid?: number;
               runnerHost?: string;
             };
-            if (record.status === 'running' && record.runnerHost === hostname() && Number.isSafeInteger(record.runnerPid)) {
+            if (
+              record.status === 'running' &&
+              record.runnerHost === hostname() &&
+              Number.isSafeInteger(record.runnerPid)
+            ) {
               try {
                 process.kill(-record.runnerPid!, 'SIGTERM');
               } catch {
@@ -595,7 +645,11 @@ Do not pass \`--wait\`, poll, or start another check. Return exactly the require
       } catch {
         /* The outer disposable clone is removed after this process exits. */
       }
-      if (startPromise) await Promise.race([startPromise.catch(() => {}), new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000))]);
+      if (startPromise)
+        await Promise.race([
+          startPromise.catch(() => {}),
+          new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000)),
+        ]);
     }
     try {
       await job.drain();
