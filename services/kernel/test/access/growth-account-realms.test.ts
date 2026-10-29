@@ -126,6 +126,7 @@ test("account Realm pages stay bounded as this and other accounts' memberships g
     warmups: 1,
     async grow(database, scale, previous) {
       if (previous === 0) {
+        const inverseDecoys = Array.from({ length: 4096 }, (_, index) => id(accountRoute, 10_000 + index));
         await database.admin.query(
           `INSERT INTO access.account(route, account_id, kind, state, transaction_id, public_views,
              membership_inverse_complete)
@@ -133,6 +134,18 @@ test("account Realm pages stay bounded as this and other accounts' memberships g
              '{"posts":true,"reviews":true,"collections":true,"realms":true}'::jsonb, true
            FROM unnest($2::uuid[]) AS accounts(account_id)`,
           [accountRoute, [target, other, reader]],
+        );
+        await database.admin.query(
+          `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+           SELECT $1, account_id, 'actor', 'active', account_id
+           FROM unnest($2::uuid[]) AS decoys(account_id)`,
+          [accountRoute, inverseDecoys],
+        );
+        await database.admin.query(
+          `INSERT INTO access.membership_inverse(route, account_id, kind, group_id, reservation_id, transaction_id)
+           SELECT $1, account_id, 'realm', gen_random_uuid(), gen_random_uuid(), gen_random_uuid()
+           FROM unnest($2::uuid[]) AS decoys(account_id)`,
+          [accountRoute, inverseDecoys],
         );
         const initial = Array.from({ length: 21 }, (_, index) => realmFacts(index, false));
         await seedRealms(database, initial);

@@ -197,7 +197,7 @@ test('evaluator rows/statements are constant in G and blocks logarithmic at fixe
     scales: [1, 8, 64],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     rule: 'series',
-    indexProbes: 15,
+    indexProbes: 150,
     grow: (db, scale, previous) => population(db, f, scale * 256, 10, previous * 256),
     operation: () => operation(f, outage, staleTarget),
   });
