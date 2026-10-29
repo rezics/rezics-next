@@ -243,7 +243,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   const counts: Record<string, unknown> = {};
   async function grow(database: GrowthDatabase, scale: number) {
     if (scale > grownTo) {
-      await seed(database, population, { from: grownTo, to: scale });
+      await seed(database, population, { from: grownTo * 32, to: scale * 32 });
       grownTo = scale;
     }
     const expectedPerCategory = 32 * scale;
