@@ -25,7 +25,9 @@ export const routes: FakeRoute[] = [
     path: '/v1/libraryEntries',
     story: ({ request, recordings }) => {
       const url = new URL(request.url);
-      const recorded = recordings['library-entries'];
+      const recorded =
+        (url.searchParams.get('state') === 'in_progress' && recordings['library-continue-entries']) ||
+        recordings['library-entries'];
       if (!recorded || !Array.isArray(recorded.libraryEntries)) return undefined;
       // Keep the existing stories' subjects and states while exercising the new read field.
       const rows = recorded.libraryEntries.filter(
