@@ -1,0 +1,289 @@
+# Delivery tooling for the Goal control plane
+
+Research date: 2026-10-30. Evidence and recommendations, not an adopted architecture.
+Scope: a Bun/TypeScript monorepo, a few existing Linux check hosts, no new subscription budget,
+and checks that can start Postgres and OpenSearch. Prices are USD, before tax and infrastructure.
+Free tiers and product entitlements are observations on this date, not commitments from vendors.
+
+**Recommendation [I]: improve the existing check admission, result reuse and measurement first.**
+Adopt the execution and queueing patterns below before replacing the control plane with a CI vendor,
+a remote build system or a durable workflow platform. A scheduler cannot create memory or check capacity.
+Use fewer equivalent checks, then spend the released capacity on useful work.
+
+## Evidence and interpretation
+
+Unmarked descriptions below come from the linked primary documentation or inspected source.
+**[I]** marks an inference, proposed REZICS design, effort estimate or judgment rather than a measured result.
+All effort ranges assume one engineer familiar with this repository; they are implementation estimates,
+not vendor installation times. “Free self-hosted” excludes machines, storage, backups and operator time.
+Documentation was read directly; reference repositories were only cloned and read, never installed or run.
+The source ledger at the end records immutable revisions, paths and licences.
+
+The supplied operating scenario says workers wait 89–95% of their time and development landings are
+mechanical with a post-merge verifier. Treat that percentage as a premise, not a new measurement.
+The repository's [delivery-efficiency report](../reports/delivery-efficiency-20261029.md) explicitly lacks
+enough historical slot-wait logs for a complete split. It supports investigating wasted work, but does not
+independently establish that every observed worker delay is check-host queueing.
+
+### What exists already
+
+| Repository evidence | Current behavior | Consequence for this research [I] |
+| --- | --- | --- |
+| [Goal README](../README.md), [task dispatch](../src/tasks.ts) | Bun control plane, local SQLite, detached workers and durable attempt/lease records; worker scopes have low CPU/IO weights. | Preserve recovery and ownership semantics when changing scheduling. Low weight is not a memory limit. |
+| [Remote checks](../../../scripts/remote-check.ts) | SSH probes host headroom, takes host slot locks, rsyncs a unique run directory, installs dependencies and runs a systemd scope; busy hosts are polled rather than treated as failures. Multi-slot/exclusive requests exist. | A functioning small remote runner already exists. Improve its resource accounting and queue evidence before introducing another scheduler. |
+| [Stack lease](../../../scripts/stack-lease.ts) | Host-local FIFO flock admission; default capacity is the smaller of CPU/8 and memory GiB/7.5, with a floor of one. Child-pipe ownership releases locks on owner death. | This is a coarse safety heuristic, not a measured per-check resource model. Nested acquisition is already avoided. |
+| [Host provisioning](../../../scripts/provision-check-host.sh), [Docker wrapper](../../../scripts/check-host/docker) | Remote scopes and Docker containers use the host's capped `rezics-check.slice`; the wrapper inserts the cgroup parent for container creation. | Aggregate containment exists. Containers are siblings under a common slice, so a command-scope peak alone does not account for all of that check's services. Per-job isolation needs a common per-job parent. |
+| [Merge train](../src/merge-train.ts), [defaults](../defaults.json) | Separate dev/main train lanes; batches prepare combined trees. Acceptance successes are reused in memory by tree and command during relevant restarts. Explicit `devLandingChecks: false` permits mechanical ordinary dev landings. Checked-in defaults currently say `true`. | The stated deployment is a configuration scenario, not the checked-in default. Avoid claiming the train has no batching or reuse. A persistent receipt store would extend existing reuse. |
+| [Dev verifier](../src/dev-verifier.ts) | Detached verification of a dev snapshot, dependencies, root typecheck, affected checks and applicable landing acceptances; lease, infrastructure retry, suspect-prefix diagnosis and compare-and-swap advancement of `dev-verified`. | Keep mechanical dev separate from verified promotion. External merge queues must not silently change this boundary. |
+| [Affected tests](../src/affected-tests.ts), [kernel check](../../../services/kernel/scripts/check.ts) | Sibling-test selection outside the kernel; kernel-specific affected checking and database-aware test execution. | Extend dependency coverage and audit selection. Do not replace an existing kernel selector with a filename heuristic. |
+| [Flow events](../src/flow.ts) | SQLite stage events, queue age, p50/p90, efficiency and retry summaries, alarms. | Extend this ledger; a wholesale telemetry product is unnecessary initially. Distinguish nested stages and queueing from productive execution. |
+| [Root typecheck](../../../scripts/typecheck.ts), [compiler database](../../../scripts/compiler-database.ts) | Root typechecking starts its own compiler Postgres and migrations, then checks workspaces. | “Typecheck” is not necessarily a cheap, database-free task. Selection and cache keys must include schema inputs. |
+| [Kernel work registry](../../../services/kernel/src/work/registry.ts), [kernel package](../../../services/kernel/package.json) | Kernel already depends on DBOS, currently `5.4.6-preview`; Goal itself does not use that durable engine. | Reusing DBOS knowledge is plausible, but making Goal depend on a permanent control-plane Postgres is a new operational choice. |
+
+## Check execution and remote runners
+
+Remote execution of declared build actions is different from dispatching an arbitrary shell check with services.
+[Bazel RBE](https://bazel.build/remote/rbe) expects remote-compatible rules and declared inputs.
+Porting the shell command as one opaque action would retain most setup cost and give little fine-grained reuse [I].
+
+| System and primary evidence | Scheduling, memory and services | What it improves or replaces; effort and risk [I] | Cost and licence |
+| --- | --- | --- | --- |
+| **Bazel + BuildBuddy**: [platforms](https://www.buildbuddy.io/docs/rbe-platforms/), source `enterprise/server/scheduling/priority_task_scheduler/priority_task_scheduler.go` | Execution pools and estimated CPU/memory route and reserve actions; Docker/Firecracker isolation and configurable networking. Estimates must not be confused with a proven hard envelope for all sibling services. | Could replace remote action dispatch/cache after Bazel conversion; imitate resource classes now. A representative Bun/DB action pilot: 1–2 weeks; repository migration: many weeks. Docker-in-Docker, warm-state leakage and undeclared inputs need explicit tests. | [Personal tier](https://www.buildbuddy.io/pricing/) advertises free individual/small-team/OSS use, 100 GB cache transfer and up to 80 remote cores. Verify eligibility/limits. Core MIT; **enterprise RBE code has a separate subscription licence**, not unrestricted MIT self-hosting. |
+| **EngFlow**: [architecture](https://docs.engflow.com/re/index.html), [platform options](https://docs.engflow.com/re/client/platform-options-reference.html), [executor pools](https://docs.engflow.com/re/config/pools.html) | Schedulers send actions to configured pools; OS/ISA/pool-family routing. Container image digests, network policy and optional sibling Docker containers are explicit. Worker pool sizing and execution limits remain deployment configuration. | Same Bazel/action conversion burden. Pool routing and canonical image identity are useful patterns for `remote-check.ts`. Sibling-container access requires accounting and cleanup, not merely a label. | Commercial service/software; no durable zero-cost production entitlement established by the reviewed docs. Obtain a quote before any adoption; open client interfaces do not make the backend open source. |
+| **Buildbarn**: source `README.md`, `pkg/scheduler/in_memory_build_queue.go`, `pkg/builder/local_build_executor.go` | Separate scheduler, worker and runner roles; platform/size-class queues, invocation-aware scheduling and in-flight action deduplication. Runner configuration supplies the execution boundary; a scheduler size class is not itself a hard memory cap. | Apache implementation to study for fair scheduling, deduplication and worker reporting. Operating CAS, scheduler and runner fleet plus Bazel conversion is disproportionate here: several weeks. It does not automatically package Postgres/OpenSearch for shell tests. | Apache-2.0; no software fee, own hosts/storage/operations. Most credible fully open RBE backend in this shortlist for a later action-based build. |
+| **Buildkite agents**: [agent model](https://buildkite.com/docs/agent), source `agent/job_runner.go` | Agents poll queues; eligible available agents take work, with affinity toward warm agents. Queue tags/concurrency control dispatch, not RAM. Agent hooks or an outer systemd/container wrapper must bound a complete Bun/service job. | Could replace SSH polling/checkout/log transport while retaining the existing check entrypoints. 2–4 days for a pilot including cancellation and service cleanup. A second queue can hide existing slot waits unless one layer owns admission. | [Free](https://buildkite.com/pricing/): up to five users and ten concurrent jobs, with hosted-minute/test allowances; own agents still use own capacity. Agent MIT; hosted orchestration is proprietary. Paid growth is outside the budget. |
+| **GitHub Actions self-hosted runners**: [routing and lifecycle](https://docs.github.com/en/actions/reference/runners/self-hosted-runners) | Matches labels/groups to idle runners; requeues unclaimed jobs after 60 seconds, fails a job queued beyond 24 hours. Ephemeral runners accept one job, but the operator must dispose of the environment and retain logs. Docker service jobs require Linux/Docker. | Useful for an external PR boundary, not a direct replacement for Goal attempts. 2–4 days for ephemeral-runner supervisor, exact-revision checks and cancellation. Labels and runner count do not enforce memory; keep one resource-aware admission owner for services. | [Self-hosted execution is free](https://docs.github.com/en/billing/concepts/product-billing/github-actions); storage and other services have separate limits. Runner MIT, orchestration proprietary. Free execution is not free extra hardware. |
+| **Nix-based runners**: [distributed builds](https://nix.dev/manual/nix/stable/advanced-topics/distributed-builds.html), source `README.md`, `COPYING` | Derivations go over SSH to compatible builders; machine features, parallel-job limits and speed factors influence placement. Nix describes build inputs and sandboxing; it is not a complete shell-job/service scheduler. | First imitate pinned toolchains/images. A Nix development environment pilot: 2–5 days; fully sandboxed service-check derivations: weeks. Networked Postgres/OpenSearch and trusted remote builders need deliberate design. Wrapping `bun` in a Nix shell does not make its ambient inputs hermetic. | Nix LGPL-2.1; packages retain their own licences. No service fee for own builders; maintaining binary caches and expressions costs time/storage. |
+
+### Execution patterns worth retaining
+
+The shared pattern is **capability routing + admission + execution boundary + explicit result identity** [I].
+Buildkite/GitHub mostly supply job routing; RBE systems also expose a declared action/cache model;
+Nix supplies a reproducible dependency model. These are complementary layers, not substitutes for each other [I].
+
+For REZICS [I], record requested resource class and actual peak for setup, command and its containers together.
+Start with classes such as pure work, Postgres work and Postgres-plus-OpenSearch work, then size from observation.
+Reserve memory before starting a stack; include an OS/control-plane reserve and cap starvation with queue age.
+Keep CPU concurrency separate from memory admission. Preserve existing host exclusivity and lock cleanup.
+Use one per-run cgroup subtree for the process and all service containers before enforcing per-run limits.
+[systemd resource controls](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html)
+distinguish weighted CPU allocation from quotas and `MemoryHigh` pressure from `MemoryMax` containment.
+Do not merely increase slot counts to shorten a queue whose jobs already exhaust memory [I].
+
+## Merge queues
+
+A queue tests the candidate together with predecessors. **Batching** saves invocations by testing a group;
+**speculation** overlaps multiple prospective prefixes and can waste work after a failure.
+The distinction matters more than vendor throughput claims with only a few check slots [I].
+
+| Queue and primary evidence | Batching, failure isolation and speculation | REZICS fit, effort and risk [I] | Cost and licence |
+| --- | --- | --- | --- |
+| **GitHub merge queue**: [configuration and behavior](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) | Tests cumulative temporary groups, removes failing PRs and rebuilds affected descendants. Build concurrency is configurable. Merge-group size controls publication and does **not** itself combine CI builds. Actions must handle `merge_group`. | 1–2 days if eligible and using PRs; replaces the PR merge gate, not Goal's internal dev/verifier protocol. Cap concurrency against real slots. Exact group SHA and branch protection must be authoritative. | Proprietary GitHub feature: public organization repositories, or private organization repositories on Enterprise Cloud. Do not budget private availability as free without checking the repository plan. |
+| **Mergify**: [batches](https://docs.mergify.com/merge-queue/batches/) | Batch checks, bounded parallelism, recursive splitting of failed batches. Resolution limits can dequeue multiple candidates without isolating one culprit. Skipping intermediate results changes which intermediate states are certified. | Strong pattern source for adaptive small batches and failure isolation. 1–3 days at a future PR boundary; would duplicate `merge-train.ts` if put on internal dev. Preserve acceptance coverage when collapsing prefixes. | [Free](https://mergify.com/pricing/) for OSS and private teams up to five users includes queue functionality; paid tiers apply beyond eligibility. Proprietary hosted product; no assumption that historical public engine code licenses today's service. |
+| **Graphite**: [queue](https://graphite.com/docs/graphite-merge-queue), [optimizations](https://graphite.com/docs/merge-queue-optimizations) | Stack-aware fast-forward validation, batched stacks and speculative cumulative groups. Failed stacks invalidate dependent speculative runs. Testing only the stack tip certifies the final stack, not every intermediate PR. | 2–4 days for a PR pilot, more for introducing stacks. Imitate exact-tree reuse; do not replace existing worktree/Goal contracts merely to gain stacking. Speculation amplifies flake cost. | [Team](https://graphite.com/pricing/) lists merge queue at $40/user/month billed annually; Hobby is not a free queue entitlement. Proprietary queue. Its CLI and external-queue integration are separate capabilities. |
+| **Aviator MergeQueue**: [parallel mode](https://docs.aviator.co/mergequeue/concepts/parallel-mode) | Optimistically builds cumulative Draft PRs; failure rebuilds the suffix. Parallel-build limit bounds speculation; batching is a product capability. | 2–4 days for a PR pilot. Useful model for fencing stale results; little benefit if the same saturated hosts execute every prefix. “Parallel mode” is not independent testing of every branch. | [Team](https://www.aviator.co/pricing) $20/developer/month includes queue; Scale $50 adds capabilities including affected-target optimization. Free review tier is not free MergeQueue. Proprietary; self-hosted enterprise quote. Pricing supersedes older docs' plan names. |
+| **Trunk merge queue**: [queue](https://docs.trunk.io/merge-queue/merge-queue), [predictive testing](https://docs.trunk.io/merge-queue/optimizations/predictive-testing) | Speculative prefixes, batching and parallel lanes, with flake handling. Failure invalidates assumptions for dependent work; unrelated lanes require a sound independence model. | 2–4 days for a PR pilot. Free queue worth comparing with Mergify if PR automation becomes a need. Branch/target independence cannot be inferred only from non-overlapping edited files. | [Free](https://trunk.io/pricing) up to five committers includes merge queue and parallelism controls. Hosted proprietary product; verify current quota/eligibility before adoption. Do not rely on dynamically rendered paid-price placeholders. |
+| **Bors NG**: source `lib/worker/batcher/divider.ex`, [project status](https://bors.tech/) | Combines candidates and bisects failed batches; source also isolates conflicts/single-patch work. It is a useful transparent implementation of failure isolation rather than an unlimited speculative-prefix service. | Imitate the algorithm within existing train/verifier. Self-hosting adds an Elixir/Postgres bot and GitHub integration: roughly 1–2 weeks plus maintenance. Public hosted instance was phased out in favor of GitHub queues. | Apache-2.0; free self-hosted software, no free hosted service to assume. Maintenance/lifecycle risk argues against a new deployment. |
+| **Zuul**: source `doc/source/gating.rst` | Dependent pipeline manager tests prospective prefixes concurrently. Removing a failing predecessor restarts affected later jobs. Gating coordinates related changes across repositories. | Best source model for dependencies/speculative invalidation. Full scheduler/executor infrastructure is several weeks and excessive for this monorepo. Keep speculation below spare capacity; it is not a remedy for saturated hosts. | Apache-2.0; own infrastructure and operations. No licence fee, substantial integration and operator cost. |
+
+### Applying queue patterns without adding a second merge authority
+
+The existing dev lane plus `dev-verified` already resembles an asynchronous integration frontier [I].
+Keep one writer/lease per lane and make every successful receipt identify the tested tree and command.
+The verifier's final Git compare-and-swap is essential: a successful check on an old snapshot is not proof
+about a newer frontier. Durable workflow completion must never bypass that condition [I].
+
+Prefer small adaptive batches and reuse before speculative width [I]. Track saved invocations and wasted
+slot-seconds after failures; tune batch size against failure rate and diagnosis cost. Source Bors for splitting,
+Zuul for invalidation and Graphite for the distinction between intermediate and final-state guarantees.
+The verifier already has suspect-prefix diagnosis: extend it only where evidence shows missing coverage.
+An external PR queue should own only that PR boundary; do not have it and Goal race to update the same branch [I].
+
+## Caching and test selection
+
+Dependency-download caches, successful check receipts, build-output caches and predictive selection solve
+different problems [I]. A Bun package cache saves installation traffic, not an executed acceptance check.
+A content hash is meaningful only when every input that can change the outcome is represented [I].
+
+| Tool and primary evidence | Reusable identity or selection mechanism | Bun fit, integration and risk [I] | Cost and licence |
+| --- | --- | --- | --- |
+| **Nx**: [task caching](https://nx.dev/docs/features/cache-task-results), [remote cache](https://nx.dev/docs/features/ci-features/remote-cache), source `packages/nx/src/hasher/task-hasher.ts` | Hashes declared task inputs, dependencies, runtime/environment inputs and configuration; restores configured outputs/logs. Cacheable work must be deterministic. Cloud separates trusted and untrusted cache contexts. | Shell/Bun tasks can participate; project/task graph is useful beyond today's sibling selector. 3–5 days for pure-task pilot; 1–2 weeks for dependable graph coverage. Backend state and missing inputs can give false hits. | Core MIT. [Nx Cloud Hobby](https://nx.dev/pricing): 50,000 monthly credits, five contributors and ten CI connections. Usage/eligibility limits matter. Cloud and self-hosted storage offerings have separate terms; MIT core does not establish every adapter's licence. |
+| **Turborepo**: [hash model](https://turborepo.dev/docs/crafting-your-repository/caching), [remote cache](https://turborepo.dev/docs/core-concepts/remote-caching), source `crates/turborepo-task-hash/src/global_hash.rs` | Global and package/task fingerprints include relevant configuration, lockfile/dependencies, files, declared environment, arguments and task relationships. Remote artifacts can be HMAC-SHA256 signed. | Smaller first pilot for Bun workspace scripts: 2–4 days. Add Bun version, OS/architecture and service-image/schema identities explicitly. Signature verifies the writer, not completeness of inputs. Root schema typecheck needs particular caution. | MIT. Vercel remote caching is documented free on all plans even without hosting the app there; API allows a self-hosted cache. Own storage/egress/maintenance is not zero-cost infrastructure. |
+| **Bazel cache**: [action cache and CAS](https://bazel.build/remote/caching), source `LICENSE` | Action identity derives from declared inputs, command/environment and expected outputs; action cache maps hashes to results, CAS stores blobs. Trusted writers/read-only clients are configurable. | Strong conceptual model for receipts and artifacts. Full adoption requires target/rule conversion: weeks, not a Bun flag. Non-hermetic tools and ambient services undermine correctness even when the CAS is perfect. | Bazel Apache-2.0; backend choice adds its own licence and cost. Open protocol permits own storage. |
+| **Pants**: [remote caching/execution](https://www.pantsbuild.org/stable/docs/using-pants/remote-caching-and-execution), source `LICENSE` | Dependency/process graph, local process caches and remote cache/execution using REAPI. Cacheability depends on modeled inputs and process sandbox behavior. | Do not assume absence of JavaScript support; assess the actual Bun/service targets needed. Custom integration plus replacing current build graph is several weeks. Offers little immediate value for an opaque whole-check target. | Apache-2.0 core, own cache/executors or paid services. No cost-free hosted execution assumed. |
+| **Gradle build cache**: [cache model](https://docs.gradle.org/current/userguide/build_cache.html), source `LICENSE` | Task implementation/classpaths, named inputs and output properties contribute identity; outputs must be repeatable and relocatable. Supports remote cache and trusted CI writers. | Good input-model discipline to imitate. Adding JVM/Gradle solely to wrap Bun is weeks of unnecessary build-system ownership. Toolchain and schema declarations remain necessary. | Apache-2.0 core, no self-hosted licence fee; Develocity commercial capabilities are separate. |
+| **Launchable**: [confidence target](https://help.launchableinc.com/features/predictive-test-selection/requesting-and-running-a-subset-of-tests/choosing-a-subset-optimization-target/), [generic file runner](https://help.launchableinc.com/resources/integrations/using-the-generic-file-based-runner-integration/) | Learns from test history and changes; selects a subset to target the probability of catching a failing session. Generic integration exchanges test-file lists and JUnit results. This is statistical confidence, not dependency completeness. | Bun adapter is plausible, not verified: 3–5 days plus history collection/evaluation. Only shadow/non-gating use initially. Repository/file history leaves the host; no named acceptance may be silently omitted. | Proprietary hosted prediction; reviewed pricing did not establish a usable free production entitlement. Quote required; not budgeted. An open CLI would not make the prediction service free. |
+| **Datadog Test Impact Analysis**: [JavaScript setup](https://docs.datadoghq.com/tests/test_impact_analysis/setup/javascript/), [limitations](https://docs.datadoghq.com/tests/test_impact_analysis/) | Coverage-based changed-code mapping skips unaffected suites/files. External data, service dependencies and some instrumentation changes require unskippable tests or broader execution. | Published JS integration lists Jest, Mocha, Cucumber, Cypress and Vitest, not Bun. A drop-in Bun integration is unverified. Framework migration or custom coverage adapters would be high-risk, multi-week work. | Proprietary paid Test Optimization capability; no zero-budget production plan established. Agent/library source licences are separate from service entitlement. |
+| **Develocity predictive selection**: [current guide](https://docs.develocity.ai/2026.3/guides/predictive-test-selection/) | Historical predictive selection integrated with supported Gradle/Maven/JVM test execution; selection confidence trades saved execution against missed failures. | Not a Bun adapter. Do not introduce a JVM build system to access it. Useful only as a model for held-out evaluation and periodic full executions. | Commercial proprietary product, quote; distinct from the Apache-licensed Gradle cache. |
+
+### A safe REZICS result model [I]
+
+Begin with a conservative whole-tree success receipt extending the train's existing tree/command reuse.
+Coalesce concurrent identical requests **before** they acquire check slots. Persist receipts so train restarts,
+verifier passes and worker retries can discover the same completed work, subject to adopted gate policy.
+This report does not authorize skipping any currently required acceptance.
+
+The initial key should cover:
+
+1. Checked Git tree, submodules/generated inputs where applicable, and clean-worktree verification.
+2. Exact command/arguments, working directory, selection result and selector version, check implementation/configuration.
+3. Bun/compiler versions, lockfile, OS/CPU architecture and execution image/toolchain identity.
+4. Relevant environment values or non-secret version identifiers; never place secret values in public receipts.
+5. Database/search image digests, migrations, fixtures, index mappings and service configuration.
+6. Runner/isolation profile and a versioned cache policy, including any externally varying input.
+
+A receipt also needs exit status, start/end, tested base/tree, host class, logs/artifact digests and provenance.
+Keep the receipt separate from its artifacts. Write a completed success atomically; incomplete runs are not hits.
+Trust only controlled writers. A matching signature cannot repair an incomplete key.
+Do not reuse infrastructure failures, interrupted checks or outcomes known to depend on time/external services.
+Mark service checks uncacheable until their reset/isolation and input contract is demonstrated.
+
+Once whole-tree reuse is proven, derive narrower input closures for pure tasks. This should increase hits
+without making untracked changes invisible. Unknown paths/configuration or selector uncertainty fall back to
+the broader check. Audit deterministic affected selection against full runs on a controlled sample.
+For predictive tools, separately report false-negative failing sessions and saved slot-seconds on held-out data;
+a high percentage of tests skipped says nothing about missed failures. Do not use predictions as acceptance proof.
+
+## Long-running, suspendable workflow orchestration
+
+All five can model dispatch → wait → resume, but logical durability, worker-slot release and process-memory
+release are different guarantees [I]. None supplies check-host cgroup isolation or makes an SSH command,
+container start or Git update exactly once. A crash between an external effect and its recorded completion
+can replay the effect; use idempotency, ownership leases and conditional updates [I].
+
+| Engine and primary evidence | Waiting and recovery | What changes in Goal; effort and risk [I] | Cost and licence |
+| --- | --- | --- | --- |
+| **Temporal**: [TypeScript development](https://docs.temporal.io/develop/typescript), [message passing](https://docs.temporal.io/develop/typescript/workflows/message-passing), source SDK `packages/worker/src/worker-options.ts` | Deterministic workflow replay with Activities for side effects, signals/updates and timers. Workers poll task queues; workflow code/versioning and history are part of the programming model. | Can replace portions of dispatch/wait/retry state machines, not subprocess ownership or Git fencing. 1–2 week prototype, several-week migration/operations. TypeScript SDK's Node/native worker runtime is not evidence of supported Bun execution; a separate Node worker may be needed. | Server and TS SDK MIT; self-hosting needs server/persistence/operations. [Cloud](https://temporal.io/pricing) has usage pricing and trial credits, not an enduring zero-budget entitlement. |
+| **Restate**: [external events](https://docs.restate.dev/develop/ts/external-events), [Bun serving](https://docs.restate.dev/develop/ts/serving), source `LICENSE` | Journaled steps and durable signals/awakeables/promises; waiting invocations can suspend. Signals can precede the wait; awakeables are individually addressed one-shot resumptions. Bun serving is explicitly documented. | Natural dispatch/check callback keyed by attempt and candidate. 4–7 day prototype plus service operation. Journal/API versioning and duplicate external effects still matter. Strong Bun fit, weaker licence fit for a productized control plane. | Server **BSL-1.1**, not current OSI open source; allowed-use grant includes own applications but restricts a public platform letting third parties directly register/invoke their own services through Restate APIs. Apache-2.0 conversion after four years. Self-host within grant has no subscription fee; cloud price not budgeted. |
+| **Inngest**: [event waits](https://www.inngest.com/docs/durable-execution/primitives/step-waitforevent), source `LICENSE.md` | Durable step/event model; wait pauses without keeping a function process running. `waitForEvent` observes matching events after the wait begins, so launch-before-register can lose the desired event without another state check. | Event-first dispatch/resume is plausible: 4–7 day prototype including correlation and replay races. It replaces orchestration state, not host resource scheduling. Hosted retention and limits must meet recovery needs. | [Free cloud](https://www.inngest.com/pricing): 50,000 executions/month, five concurrent steps, three workers, 24-hour traces. Pro starts $99/month. Server **SSPL-1.0**, with future Apache-2.0 grant after three years; not permissively licensed current server code. |
+| **DBOS**: [workflow communication](https://docs.dbos.dev/typescript/tutorials/workflow-communication), source `src/dbos.ts`, `src/workflow.ts` | Durable workflow/step results; persisted messages addressed by workflow/topic, idempotent send option, receive/timeouts and durable sleeps. A message can arrive before `recv`. Logical waiting does not by itself establish that every live JS workflow releases memory. | Best first engine experiment because kernel already uses it: 3–5 days. Goal needs its own persistent control-plane Postgres, independent of ephemeral check DBs and product availability. Pin the installed preview API and measure dormant-worker memory; current docs may differ. | MIT self-hosted SDK; own Postgres/backups. [DBOS Pro](https://www.dbos.dev/dbos-pricing) starts $99/month; managed features are optional and outside the budget. Existing kernel use does not remove the plane's new database dependency. |
+| **Hatchet**: [durable waits](https://docs.hatchet.run/v1/durable-event-waits), [task eviction](https://docs.hatchet.run/v1/task-eviction), source `examples/typescript/durable_eviction/workflow.ts` | Durable tasks can wait and be evicted/replayed with TTL/capacity policies; this releases worker capacity. Ordinary async tasks do not acquire those semantics merely by awaiting. TS example explicitly configures eviction and event waits. | Best comparison for actual slot/memory-release semantics: 4–7 day prototype plus server deployment. SDK/Bun compatibility must be tested rather than inferred from TypeScript. Another scheduler/database and replay model may outweigh gains. | MIT server. [Cloud free](https://hatchet.run/pricing): one million task runs and events/month, up to 100 workers and seven-day retention; paid overages. Own-hosted operations still cost resources. |
+
+### Recommended orchestration boundary [I]
+
+Keep the existing SQLite state machine until check demand and repeated execution are addressed.
+If crash/restart coordination remains expensive, prototype DBOS for one waiter, not the entire plane.
+Represent the workflow as small durable transitions: reserve an attempt identity, dispatch idempotently,
+persist the external check receipt, release its resource lease, then resume the responsible worker once.
+The callback carries attempt, candidate tree and check identity; old callbacks cannot complete a new attempt.
+Waiting for a free host should consume a queue record, not a scarce check slot or a live coding-worker scope.
+
+An engine comparison must exercise: restart before/after SSH launch; callback before waiter registration;
+duplicate callback; lost connection after check success; stale candidate; cancellation while queued/running;
+lease expiry with a still-live remote process; and dormant-workflow memory at realistic WIP.
+Pass criteria are one authoritative receipt/resume and no unowned services, not “workflow returned success.”
+Never move ephemeral test databases into the workflow engine's persistence role.
+
+## Delivery-flow measurement
+
+[DORA now defines five delivery metrics](https://dora.dev/guides/dora-metrics/), with
+[history explaining the evolution](https://dora.dev/insights/dora-metrics-history/): change lead time,
+deployment frequency, failed-deployment recovery time, change fail rate and deployment rework rate.
+The first three describe throughput, the last two instability. A Goal landing is not automatically a production
+deployment. Count real service deployments, link artifacts to commits and incidents, and identify unplanned
+remedial deployments before calling a chart DORA. Do not substitute generic incident MTTR for failed-deployment recovery.
+
+The [Kanban Guide](https://kanbanguides.org/the-kanban-guide/2025.5/) defines WIP, throughput, work-item age
+and cycle time. For Goal [I], define the population and start/finish boundaries explicitly: accepted goal,
+worker attempt, check request, verified landing and production change are different populations.
+Efficiency should use the union of active intervals divided by elapsed cycle time; nested check/worker intervals
+must not be summed twice, and a worker alive while waiting for a slot is not productive execution.
+Track WIP/age alongside throughput to see whether dispatching more workers only lengthens queues.
+
+| Tool/standard and primary evidence | What it computes or supplies | REZICS integration, risk and effort [I] | Cost and licence |
+| --- | --- | --- | --- |
+| **Goal flow ledger**, source `tools/goal/src/flow.ts` | Stage timings, queue ages, percentile summaries, attempt counts and alarms already exist. | Add resource-wait and setup/run/cleanup events, outcome categories and disjoint efficiency accounting. 1–2 days first slice. Keep one event model and export views rather than a competing database of truth. | Repository AGPL-3.0-only; no external subscription or new persistent service. |
+| **OpenTelemetry CI/CD**: [spans](https://opentelemetry.io/docs/specs/semconv/cicd/cicd-spans/), [metrics](https://opentelemetry.io/docs/specs/semconv/cicd/cicd-metrics/) | Common pipeline/task/run/result attributes, duration/state and worker/system-error measurements; instrumentation conventions, not a DORA calculator. Current status is mixed: many CI/CD definitions are Release Candidate or Development, not universally stable. | Export a versioned view of existing events in 2–3 days. Keep run/tree/attempt IDs in traces or logs; do not make unbounded IDs default metric labels. Name extra slot-wait/resource metrics as REZICS extensions, not standard OTel fields. | Semantic-conventions source Apache-2.0, no subscription; collectors/backends have their own costs/licences. Existing storage plus optional export avoids a new monitoring bill. |
+| **Apache DevLake**: [DORA calculation docs](https://devlake.apache.org/docs/DORA/), source `backend/plugins/dora/tasks/change_lead_time_calculator.go` | Integrates development/deployment data and computes DORA-oriented measures. Source calculates lead-time stages using change/deployment relationships. Reviewed dashboard docs describe the traditional four, not automatic coverage of all five current DORA definitions. | Useful when production/deployment links exist; 3–5 days for a mapping pilot, additional service/database/dashboard operations. Do not ingest Goal task timestamps as production events just to fill the dashboard. | Apache-2.0; free self-hosted software. Hosting/maintenance competes with scarce check capacity. Defer deployment. |
+| **Buildkite analytics / Datadog Test Optimization**: [Buildkite pricing](https://buildkite.com/pricing/), [Datadog TIA](https://docs.datadoghq.com/tests/test_impact_analysis/) | Vendor test history, execution/failure/selection observations; these are useful execution measurements, not all delivery-flow or production-outcome metrics. | Use only if the runner/testing product is otherwise adopted. 1–3 days for adapters; retained history, vendor IDs and billing become dependencies. Do not buy a new platform just to compute queue percentiles. | Buildkite free includes a capped test-execution allowance; Datadog commercial. Hosted terms apply, regardless of agent source licence. |
+
+### Measurements that can settle the next decision [I]
+
+Record check requested → admitted → synchronized → dependencies ready → services ready → command finished
+→ cleanup finished → receipt consumed. Correlate these with existing dispatch, landing, verification and
+promotion events, without counting their overlapping wall times as separate active time.
+Persist host/resource class, outcome (test failure, infrastructure failure, cancellation, stale result), cache
+eligibility/hit, and the full-service memory peak. Report p50/p90 wait and run, oldest request, active WIP,
+saved and wasted slot-seconds, verifier lag, retries per verified tree and failure-isolation work.
+
+Use these records to test three hypotheses separately: admission is saturated; duplicate work consumes slots;
+or setup/services dominate the admitted time. The remedies are different. Sample complete full-check runs
+to audit selectors. Join actual deployment and incident data later for DORA; keep delivery and check dashboards distinct.
+
+## Shared patterns and ranked adoption tasks
+
+Across the source systems, five patterns recur [I]: immutable input/result identity; explicit queue ownership;
+bounded concurrency by capability; durable state with idempotent external effects; and measurements tied to
+defined transitions. Mature products still require accurate inputs, isolation and operator capacity.
+The recommendation is to implement these patterns in Bun/TypeScript and the existing Linux/SQLite stack,
+not copy their source or add every platform.
+
+Each row is a separately reviewable proposed task [I]. Ranks reflect expected benefit under the supplied
+slot bottleneck, not a benchmark. Advance to later work only when earlier measurements support it.
+
+| Rank | Task and completion evidence | Scope/effort [I] | Expected value, cost and main risk [I] |
+| --- | --- | --- | --- |
+| **1** | Add correlated queue/setup/service/run/cleanup events and disjoint efficiency views; show a complete representative attempt and weekly p50/p90 by resource class. | `scripts/remote-check.ts`, `scripts/stack-lease.ts`, `tools/goal/src/flow.ts`; 1–2 days. | Establish where the 89–95% goes. No subscription. Risk: double-counting nested intervals or missing Docker memory; publish definitions and missing-data counts. |
+| **2** | Add conservative persistent success receipts and in-flight duplicate coalescing; demonstrate hit/miss after restart, key change and stale candidate, with trusted-writer enforcement. | Existing train/verifier result handling and a shared check identity helper; 2–4 days. | Avoid repeated equivalent slot use. SQLite/files first, no new server. Risk: unsound reuse; opt in only checks with complete input/isolation contracts and adopted gate policy. |
+| **3** | Introduce measured resource classes and starvation limits; prove admission never exceeds the host envelope and the job plus services have one observable containment boundary. | Remote admission/provisioning/Docker parent configuration; 2–4 days. | Better safe utilization, fewer OOM/retry cascades. No subscription. Risk: wrong reservations and cgroup hierarchy; preserve exclusive jobs and own-resource cleanup. |
+| **4** | Audit/extend deterministic affected selection; compare selected vs full outcomes on a controlled sample and fall back on unknown inputs. | `affected-tests.ts` and existing kernel selector integration; 3–5 days. | Reduce demand before adding hosts. Risk: hidden dependency edges; no change to named acceptance coverage without an adopted contract change. |
+| **5** | Pilot **Turborepo** on one deterministic pure task, with signed remote artifacts or a bounded local shared cache; measure useful hits and saved slot-seconds. Evaluate Nx instead only if its project graph solves a demonstrated selection gap. | Workspace task configuration and runner environment; 2–4 days. | Zero-fee option with a small Bun fit experiment. Do not install both graph/cache layers. Risk: environment/schema omissions; leave service checks uncached initially. |
+| **6** | Tune existing small batches using saved/wasted work; extend existing failure isolation only where needed, and verify exact-tree/CAS publication under stale results. | `merge-train.ts`, `dev-verifier.ts`; 2–3 days. | Imitate Bors/Zuul/Graphite without new authority. No subscription. Risk: certifying a final batch while accidentally promising every intermediate state is green. |
+| **7** | Prototype one DBOS-backed waiter behind the current interface; exercise crash/race scenarios and compare dormant memory/recovery with SQLite. Retain or reject it from results. | Isolated prototype and independent control-plane Postgres; 3–5 days. | Reuse kernel familiarity. MIT but new persistent-service cost. Hatchet is the comparison if actual task eviction is the unmet requirement; no wholesale migration first. |
+| **8** | Export existing events using a pinned OTel CI/CD schema; add real deployment/incident associations before producing five-metric DORA views. | Flow exporter and deployment integration; 2–3 days plus deployment-data work. | Portable observability without buying CI analytics. Risk: evolving conventions and false production semantics. DevLake remains optional after data quality is adequate. |
+| **9** | If external PR gating becomes necessary, pilot GitHub queue when free/eligible, otherwise compare Mergify and Trunk free plans; use one ephemeral Actions/Buildkite runner adapter if needed. | PR boundary only; queue 1–3 days, runner 2–4 days. | Outsource mechanical PR integration, not internal Goal delivery. Risk: quota, queue duplication and plan changes. No paid adoption under current budget. |
+
+### Do not adopt now [I]
+
+- **Whole-repository Bazel/RBE, Pants or Gradle migration:** weeks of rule/input/service work before savings;
+  an opaque wrapper action preserves the bottleneck. Revisit after pure actions and measured cache misses dominate.
+- **BuildBuddy enterprise RBE or EngFlow purchase:** no assured zero-budget entitlement for this usage.
+  Buildbarn is genuinely open but adds infrastructure and does not eliminate build-model conversion.
+- **Unlimited speculative merge builds:** consume the same scarce slots and amplify flakes; bound speculation
+  to demonstrated spare capacity. Do not buy Graphite/Aviator to replace an already mechanical internal landing lane.
+- **New Bors/Zuul deployment:** valuable source patterns, disproportionate additional stack and lifecycle work.
+  Keep one integration authority and improve the existing verifier.
+- **Predictive selection as an acceptance gate:** Launchable/Develocity confidence is not proof; Datadog's
+  published integrations do not establish Bun support. Deterministic selection with audits comes first.
+- **A full Temporal/Restate/Inngest/Hatchet migration:** another recovery model and service before reducing
+  check demand. Temporal has a runtime/operations mismatch; Restate BSL and Inngest SSPL require product-use review.
+  Their licence restrictions matter even when the SDK is conveniently TypeScript.
+- **Nix as the entire runner scheduler or a Kubernetes runner fleet:** pinned environments can help, but neither
+  supplies extra memory. Avoid a new cluster for a few fixed hosts; adopt reproducibility incrementally.
+- **DevLake/paid analytics before event hygiene:** incomplete slot and deployment data produces polished but
+  misleading dashboards. Start with existing Goal events and make export optional.
+
+## Source ledger and reproducibility
+
+All external citations above are publisher documentation or project source; no comparison-site claims were used.
+Read repositories are retained under `/home/edge/projects/rezics/rezics-next/.reference/` and indexed there.
+Paths below are relative to the named clone; links pin the revision. Licences describe inspected code, not all
+dependencies, hosted-service contracts or permission to copy passages. Recommendations concern designs to implement.
+
+| Reference clone | Revision and inspected paths | Licence evidence |
+| --- | --- | --- |
+| `delivery-tooling/buildbuddy` | [f5e92dd403ad0654850e2056642068a6dd5eaf9d](https://github.com/buildbuddy-io/buildbuddy/tree/f5e92dd403ad0654850e2056642068a6dd5eaf9d): `README.md`, `enterprise/server/scheduling/priority_task_scheduler/priority_task_scheduler.go` | `LICENSE` MIT; `enterprise/LICENSE` separate subscription licence with development/testing grant. |
+| `delivery-tooling/bb-remote-execution` | [1fbffdc417797f6afdb7f67b1f0d5cc27352db43](https://github.com/buildbarn/bb-remote-execution/tree/1fbffdc417797f6afdb7f67b1f0d5cc27352db43): `README.md`, `pkg/scheduler/in_memory_build_queue.go`, `pkg/builder/local_build_executor.go` | `LICENSE`, Apache-2.0. |
+| `delivery-tooling/agent` | [075fef3b78de0e5b6d7c356863dfbb7ea1aa13eb](https://github.com/buildkite/agent/tree/075fef3b78de0e5b6d7c356863dfbb7ea1aa13eb): `agent/job_runner.go` | `LICENSE.txt`, MIT. |
+| `delivery-tooling/actions-runner` | [4197182ef8f39c719f66038c1bc9b34cd9e9ac9a](https://github.com/actions/runner/tree/4197182ef8f39c719f66038c1bc9b34cd9e9ac9a): `LICENSE` | MIT; GitHub service terms separate. |
+| `delivery-tooling/nix` | [f2f74064ce3e558dc7ab9192f00852412f927ec8](https://github.com/NixOS/nix/tree/f2f74064ce3e558dc7ab9192f00852412f927ec8): `README.md`, `COPYING` | LGPL-2.1. |
+| `delivery-tooling/bazel` | [209a1cc23fa835726c823f040f0dddaca07b649f](https://github.com/bazelbuild/bazel/tree/209a1cc23fa835726c823f040f0dddaca07b649f): `LICENSE`; behavior from linked official remote-execution/cache docs | Apache-2.0. |
+| `delivery-tooling/nx` | [97486838acdfd70a32329e6bf1f956cc7126a718](https://github.com/nrwl/nx/tree/97486838acdfd70a32329e6bf1f956cc7126a718): `packages/nx/src/hasher/task-hasher.ts`, `LICENSE` | MIT core; no inference about separately licensed cloud/storage products. |
+| `delivery-tooling/turborepo` | [e158e859f804019fa48dd1af15bc247e4759d81e](https://github.com/vercel/turborepo/tree/e158e859f804019fa48dd1af15bc247e4759d81e): `crates/turborepo-task-hash/src/global_hash.rs`, `LICENSE` | MIT. |
+| `delivery-tooling/pants` | [9f52888ea592a22942d10f6b7c1f0b8330c70a4d](https://github.com/pantsbuild/pants/tree/9f52888ea592a22942d10f6b7c1f0b8330c70a4d): `LICENSE`; behavior from linked official cache docs | Apache-2.0. |
+| `delivery-tooling/gradle` | [90ebf2b42272605ec0ec60e6da43330895500a9c](https://github.com/gradle/gradle/tree/90ebf2b42272605ec0ec60e6da43330895500a9c): `LICENSE`; behavior from linked official cache docs | Apache-2.0. |
+| `merge-queues/bors-ng` (reused) | [ca725797e53a88e954998de0bbb14a8a5acb13ab](https://github.com/bors-ng/bors-ng/tree/ca725797e53a88e954998de0bbb14a8a5acb13ab): `README.md`, `lib/worker/batcher/divider.ex` | `LICENSE-APACHE`, Apache-2.0. |
+| `merge-queues/zuul` (reused) | [f45f2864704d324deb9515c1d36999000244372d](https://opendev.org/zuul/zuul/src/commit/f45f2864704d324deb9515c1d36999000244372d): `doc/source/gating.rst` | `LICENSE`, Apache-2.0. |
+| `delivery-tooling/temporal` | [3eb5fb80523443d8583bcec463843275908f1bbc](https://github.com/temporalio/temporal/tree/3eb5fb80523443d8583bcec463843275908f1bbc): `LICENSE`; behavior from linked official docs | MIT. |
+| `delivery-tooling/sdk-typescript` | [6c837b2a92b5b8acb333ead32657fb1d8e1efc77](https://github.com/temporalio/sdk-typescript/tree/6c837b2a92b5b8acb333ead32657fb1d8e1efc77): `packages/worker/src/worker-options.ts`, `LICENSE` | MIT. |
+| `delivery-tooling/restate` | [5b48a7d6f8f1fc15f03ca5d84f4dd18b808da55c](https://github.com/restatedev/restate/tree/5b48a7d6f8f1fc15f03ca5d84f4dd18b808da55c): `LICENSE` | BSL-1.1, additional-use grant; four-year change to Apache-2.0. |
+| `delivery-tooling/inngest` | [47f874130d65a17fff58d9a1cd4f353affbc078c](https://github.com/inngest/inngest/tree/47f874130d65a17fff58d9a1cd4f353affbc078c): `LICENSE.md` | SSPL-1.0; additional future Apache-2.0 grant after three years. |
+| `search-worker-outcome-harness/dbos-transact-ts` (reused) | [980dc55095f445b189aecb59e7f3334345179f65](https://github.com/dbos-inc/dbos-transact-ts/tree/980dc55095f445b189aecb59e7f3334345179f65): `src/dbos.ts`, `src/workflow.ts`, `LICENSE` | MIT. |
+| `delivery-tooling/hatchet` | [8a2768801336e7d1a47fe2741947934f232a48b7](https://github.com/hatchet-dev/hatchet/tree/8a2768801336e7d1a47fe2741947934f232a48b7): `examples/typescript/durable_eviction/workflow.ts`, `LICENSE` | MIT. |
+| `delivery-tooling/devlake` | [625e512a49966a5814793276474c812204c825ef](https://github.com/apache/incubator-devlake/tree/625e512a49966a5814793276474c812204c825ef): `backend/plugins/dora/tasks/change_lead_time_calculator.go`, `LICENSE` | Apache-2.0. |
+| `delivery-tooling/semantic-conventions` | [7b31585fe9661d855b7f1745722aa20979eaf847](https://github.com/open-telemetry/semantic-conventions/tree/7b31585fe9661d855b7f1745722aa20979eaf847): `docs/cicd/cicd-metrics.md`, `docs/cicd/cicd-spans.md`, `LICENSE` | Apache-2.0. |
+
+Documentation-only proprietary entries have no cloned backend source or implied open-source licence.
+Their behavior/price evidence is linked in their rows. OTel conventions and the DORA/Kanban definitions are
+measurement references, not permission to reuse a vendor implementation. No topic was moved from
+`rezics-next-discussion`; this is new research evidence, with adoption left to the owning documents.
