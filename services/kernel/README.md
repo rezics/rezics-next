@@ -365,7 +365,8 @@ they combine matching SQL across runs and must not be split by attempt.
 Checks may declare `attempts: { commands }` to count top-level transaction attempts per backend. Reports retain
 inclusive statement, row and block totals and the failed-statement SQLSTATE ledger, while also listing committed and
 aborted attempts by SQLSTATE for each scale and repetition. With attempts declared, each statement fingerprint's rows
-and blocks per execution must meet the check's growth bounds; committed attempts must have the same statement count
+and blocks per execution must meet the check's growth bounds, using its most expensive measured execution at each
+scale. Missing executions and failures without plans provide no row or block measurement. Committed attempts must have the same statement count
 across scales and repetitions, and aborted attempts may run no more statements. Executed attempts per declared command
 form a separate series: contention may fall as data grows but may not rise. The owner sets any absolute retry-rate
 ceiling. Checks without `attempts` keep their existing bounds.
@@ -379,7 +380,10 @@ are set apart without a bound: Reylo repeats them by time and concurrency, never
 statements are counted apart, with one allowed per distinct non-catalog query text across the measured run; a
 statement that also reads data counts in full.
 
-A statement that fails still counts as a statement, in the operation's or the background count, and its SQLSTATE is recorded in `statementErrors` or `backgroundStatementErrors`; reports list failed attempts by SQLSTATE. PostgreSQL produces no plan for it, so its rows and blocks are not measured; a path that fails statements as part of normal work (a conflict it retries) should use a form that completes, such as `ON CONFLICT`, where its cost must be measured.
+A statement that fails still counts as a statement, in the operation's or the background count, and its SQLSTATE is
+recorded in `statementErrors` or `backgroundStatementErrors`; reports list failed attempts by SQLSTATE. PostgreSQL
+produces no plan for it, so its rows and blocks are not measured. Completed statements earlier in an aborted attempt
+retain all their measured work; the harness assigns no estimated cost to a failed statement.
 
 Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
 capture runs; workflows started by a schedule and their children, and loops started outside both, are reported as

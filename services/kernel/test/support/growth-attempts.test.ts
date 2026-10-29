@@ -280,3 +280,71 @@ test('attempt ledger: without a declaration inclusive statement growth still fai
     }),
   ).rejects.toThrow(/statements/);
 });
+
+test('attempt ledger: intermittent retry statements are judged only on executed work', () => {
+  const samples = [1, 4, 16].map((scale) => {
+    const sample = reportSample(scale, [
+      [attempt('aborted:40001', 1), attempt('committed', 1)],
+      [attempt('committed', 1)],
+    ]);
+    const committed = sample.occurrenceRepetitions[0]!;
+    const retryStatement = {
+      ...committed.statements[0]!,
+      index: 1,
+      statement: 'SELECT retry_work',
+      rows: 100,
+      blocks: 100,
+    };
+    return {
+      ...sample,
+      occurrenceRepetitions: [{ ...committed, statements: [...committed.statements, retryStatement] }, committed],
+    };
+  });
+  expect(() => validateAttemptSamples(attemptCheck, samples)).not.toThrow();
+  // Contention can disappear at the largest scale, including the retry-only statement itself.
+  const last = samples[2]!;
+  const fewerRetries = reportSample(16, [[attempt('committed', 1)], [attempt('committed', 1)]]);
+  expect(() => validateAttemptSamples(attemptCheck, [samples[0]!, samples[1]!, fewerRetries])).not.toThrow();
+  expect(last.occurrenceRepetitions[0]!.statements[1]!.rows).toBe(100);
+});
+
+test('attempt ledger: failures without plans do not turn bounded executions into noisy row and block evidence', () => {
+  const samples = [1, 4, 16].map((scale) => {
+    const sample = reportSample(
+      scale,
+      [[attempt('aborted:40001', 1), attempt('committed', 1)], [attempt('committed', 1)]],
+      100,
+    );
+    const success = sample.occurrenceRepetitions[0]!;
+    const failed = {
+      ...success.statements[0]!,
+      error: { code: '40001', message: 'serialization failure' },
+      rows: 0,
+      blocks: 0,
+    };
+    return {
+      ...sample,
+      occurrenceRepetitions: [
+        { ...success, statements: [failed] },
+        { ...success, statements: [{ ...success.statements[0]!, blocks: 100 }] },
+      ],
+    };
+  });
+  expect(() => validateAttemptSamples(attemptCheck, samples)).not.toThrow();
+});
+
+test('attempt ledger: one expensive execution cannot be hidden by cheaper repetitions', () => {
+  for (const metric of ['rows', 'blocks'] as const) {
+    const samples = [1, 4, 16].map((scale) => {
+      const sample = reportSample(scale, [[attempt('committed', 1)], [attempt('committed', 1)]]);
+      const cheap = sample.occurrenceRepetitions[0]!;
+      return {
+        ...sample,
+        occurrenceRepetitions: [cheap, { ...cheap, statements: [{ ...cheap.statements[0]!, [metric]: scale * 100 }] }],
+      };
+    });
+    expect(() => validateAttemptSamples(attemptCheck, samples)).toThrow(
+      `statement SELECT 1 ${metric} violates constant growth bound`,
+    );
+  }
+});

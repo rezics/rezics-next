@@ -264,22 +264,34 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
       ),
     );
     for (const fingerprint of fingerprints) {
-      const points = samples.map((sample) => ({
-        scale: sample.scale,
-        repetitions: sample.occurrenceRepetitions.map(({ statements }) =>
-          Math.max(0, ...statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric])),
-        ),
-        uncertainty: Math.max(
-          GROWTH_UNCERTAINTY[metric].absolute,
-          GROWTH_UNCERTAINTY[metric].relative *
-            Math.max(
-              0,
-              ...sample.occurrenceRepetitions.flatMap(({ statements }) =>
-                statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric]),
-              ),
-            ),
-        ),
-      }));
+      const points = samples.flatMap((sample) => {
+        const executions = sample.occurrenceRepetitions.flatMap(({ statements }) =>
+          statements.filter((item) => item.statement === fingerprint && (item.error === null || item.plans.length > 0)),
+        );
+        // A missing execution (or a failure without a plan) is not a measured zero. Compare the most expensive
+        // execution at each scale so retry incidence cannot change the verdict or hide an expensive repetition.
+        if (executions.length === 0) return [];
+        const maximum = Math.max(...executions.map((item) => item[metric]));
+        return [
+          {
+            scale: sample.scale,
+            repetitions: [maximum],
+            uncertainty: Math.max(GROWTH_UNCERTAINTY[metric].absolute, GROWTH_UNCERTAINTY[metric].relative * maximum),
+          },
+        ];
+      });
+      if (points.length < 3) {
+        // Intermittent retry-only SQL can have fewer than three observed scales. A common constant interval is
+        // sufficient for every allowed family; otherwise more executions are needed to establish its growth.
+        const lower = Math.max(0, ...points.map((point) => point.repetitions[0]! - point.uncertainty));
+        const upper = Math.min(...points.map((point) => point.repetitions[0]! + point.uncertainty));
+        if (lower <= upper) continue;
+        if (check.bounds[metric] === 'constant')
+          fail(`statement ${fingerprint} ${metric} violates constant growth bound across attempts`);
+        throw new GrowthEvidenceError(
+          `${check.name}: insufficient observed scales for statement ${fingerprint} ${metric} per execution`,
+        );
+      }
       const verdict = classifySeries(points, check.bounds[metric], metric === 'blocks' ? (check.indexProbes ?? 0) : 0);
       if (verdict.outcome === 'violation')
         fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
