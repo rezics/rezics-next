@@ -457,11 +457,13 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
     GOAL_WORKTREE_ROOT: worktreeRoot,
   };
   const settings = loadSettings({ cwd: tree, env, localFile });
+  // Tracked configuration comes from the candidate; local, untracked files (routing.local.json) exist only in the
+  // source checkout, and remapping them failed every smoke at setup with ENOENT.
   const remap = (path: string): string => {
     const relativePath = relative(sourceRoot, resolve(path));
-    return relativePath === '..' || relativePath.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)
-      ? path
-      : resolve(tree, relativePath);
+    if (relativePath === '..' || relativePath.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)) return path;
+    const candidate = resolve(tree, relativePath);
+    return existsSync(candidate) ? candidate : path;
   };
   settings.mainCheckout = clone;
   settings.mainBranch = branch;
