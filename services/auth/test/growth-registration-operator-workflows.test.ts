@@ -344,7 +344,9 @@ test('Expired registration pages seek through equal expiry times and send both m
   const f = await fixture();
   const send = spyOn(DBOS, 'send');
   try {
-    await seed(f.db, history('release-page-history'), { from: 0, to: 512 });
+    // Keep retained history large enough that the final short page naturally
+    // uses the seek, rather than preferring a scan of a tiny relation.
+    await seed(f.db, history('release-page-history'), { from: 0, to: 8192 });
     const registrations = [];
     for (let i = 0; i < 67; i++)
       registrations.push(await f.workflows.beginRegistration({ key: `page-${i}`, handle: `page-${i}` }));
