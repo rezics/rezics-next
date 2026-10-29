@@ -17,7 +17,7 @@ for (const size of [1, 4]) {
       databases.push(db);
       db.pool.options.max = 1;
       const f = await actorFixture(db.pool, db.admin);
-      const access = admittedAccess({ actions: f.config.actions, resourceRoles: f.config.resourceRoles });
+      const access = admittedAccess({ actions: f.config.actions, resourceRoles: f.config.resourceRoles! });
       const ids = [f.resource.id, ...Array.from({ length: size - 1 }, () => newId(f.resource.route))];
       for (const id of ids.slice(1)) await f.grant(f.actorId, '', { ...f.resource, id });
       if (outcome === 'denied') await f.deny(f.actorId, '');

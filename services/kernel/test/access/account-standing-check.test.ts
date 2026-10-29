@@ -25,7 +25,7 @@ async function fixture() {
   let realmReader: ReturnType<typeof createRealmMembership>['roleReader'] | undefined;
   const access = admittedAccess({
     actions,
-    resourceRoles: f.config.resourceRoles,
+    resourceRoles: f.config.resourceRoles!,
     realmRoleReader: (client, input) => realmReader!(client, input),
   });
   realmReader = createRealmMembership({ pool, access }).roleReader;
