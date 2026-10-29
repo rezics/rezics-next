@@ -130,6 +130,10 @@ test('a restarted controller adopts such a worker and settles it only after it h
     const attempt = await launchThenKillLauncher(h, task.id);
     const ref = { taskId: task.id, attempt: attempt.attempt };
     const worktree = h.store.task(task.id).worktree;
+    // The helper's in-process recovery stands in for a host that has since restarted.
+    h.store.updateAttempt(ref, (current) => {
+      delete current.driver;
+    });
     let done = false;
     const recovery = new WorkerJob(h.tasks, { enqueue: (r) => requests.push(r) }, { deliver() {} })
       .recoverOrphans()
