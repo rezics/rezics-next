@@ -9,7 +9,8 @@ export const PROPOSED_ANALYSIS_MAX = 16_384;
 
 // authenticate.ts accepts at most 1024 UTF-16 client-id units; JSON control
 // escapes cost six bytes/unit. requestedByPattern fixes two 36-byte UUIDs.
-// These are size witnesses, not Actors or authorization fixtures.
+// These are size witnesses, not Actors or authorization fixtures. Full receipt
+// overhead excludes only canonical BODY bytes, charging its prefix once here.
 export function digestContextDiagnostic() {
   const requestedBy = `urn:rezics:request:${'00000000-0000-0000-0000-000000000000'}:${'00000000-0000-0000-0000-000000000000'}`;
   const maximum = { operation: 'definitions.publish', client_id: '\u0000'.repeat(1024), requested_by: requestedBy };
@@ -18,8 +19,11 @@ export function digestContextDiagnostic() {
     clientUnits: maximum.client_id.length,
     clientContentBytes: 6 * maximum.client_id.length,
     requestedByBytes: Buffer.byteLength(requestedBy),
-    framingAndOperationBytes: canonicalBytes(empty),
-    contextMaxBytes: canonicalBytes(maximum),
+    framingAndOperationBytes: canonicalBytes({ body: null, ...empty }) - canonicalBytes(null),
+    anonymousBytes:
+      canonicalBytes({ body: null, operation: maximum.operation, client_id: null, requested_by: null }) -
+      canonicalBytes(null),
+    contextMaxBytes: canonicalBytes({ body: null, ...maximum }) - canonicalBytes(null),
   };
 }
 

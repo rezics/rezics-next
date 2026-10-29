@@ -149,6 +149,7 @@ test('checkpoint-only proposal retains the full catalogue at three changed-input
   expect(context.clientUnits).toBe(1024);
   expect(context.requestedByBytes).toBe(92);
   expect(context.framingAndOperationBytes).toBe(76);
+  expect(context.anonymousBytes).toBe(80);
   expect(context.contextMaxBytes).toBe(76 + 6 * 1024 + 92);
   expect(context.contextMaxBytes).toBe(6312);
   console.log('definition-publication-work context bound', JSON.stringify(context));
