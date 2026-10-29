@@ -1152,6 +1152,9 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   history. Whole captured rows/statements stay constant and blocks logarithmic, including nested storage work;
   source/counter probes use indexes. Synthetic negative growth cardinality and isolated rollback/overflow/DDL
   invariants are primitive-only, separate from native positive fixture/HTTP/owner-command evidence.
+  Recorded follow/unfollow captures examined 31 rows in 34 statements at all three scales, with 195, 194 and
+  197 shared hit/read blocks respectively. Each capture examined two source rows and two owner rows, with
+  zero sequential scans on either relation. All three focused native tests passed with 102 assertions.
 
 ### Follow read
 
