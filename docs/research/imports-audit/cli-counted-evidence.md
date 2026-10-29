@@ -314,49 +314,49 @@ All 13 scenario names are byte-for-byte unchanged:
 
 ## Terminal results
 
-The focused wrapper ran at committed revision `372d553019` and exited 1:
+Both required commands passed at committed revision `501284961b91270b9ea910cde3699775395b9d57`.
+The retry audit confirmed that every full source diff and SHA-256 above still matches,
+that the 13 portable scenario names are identical to the baseline, that the wrapper's
+bytes are unchanged, and that only the two documented consumers import the exported
+CLI observation. No source correction was needed in this attempt. The only subsequent
+change is this evidence record; no files outside the four declared paths changed.
+
+The focused wrapper was submitted once and its same check handle was waited to completion,
+including three queued wait returns. It acquired a slot after 1857.214 seconds and its
+remote command completed in 0.805 seconds. The unchanged wrapper's five assertions prove
+child exit 0, the actual 13-pass count, zero failures and no skipped/todo scenarios.
+Its full test result and terminal result were:
 
 ```text
 bun test v1.4.4-canary.1 (a0cc096ce)
 
 services/importer/tests/cli-outcomes.test.ts:
-killed 1 dangling process
-(fail) all import CLI outcomes pass with real source pipeline [120030.41ms]
-  ^ this test timed out after 120000ms.
+(pass) all import CLI outcomes pass with real source pipeline [772.22ms]
 
- 0 pass
- 1 fail
- 1 expect() calls
-Ran 1 test across 1 file. [120.05s]
-```
-
-Local complete log: `.temp/goal/checks/worker-check-2026-10-29T13-32-33.925Z-9c3cf4af.log`.
-The wrapper did not return its child's output before its unchanged timeout, so none of the
-13 child results is claimed as passing. There was no runtime rerun or timeout/host change.
-Subsequent source review corrected only the reader parameter annotations to the shared
-`CountedCheck` default (`unknown`, narrowed to `Execution`); this erases to the same runtime
-JavaScript. The full diffs and hashes above describe that final source, not an earlier variant.
-Root typecheck exited 0. It waited 550.412 seconds for its slot, then transferred the
-worktree after the final reader correction was committed as `f7ea9f8a03` and ran all
-13 workspace typechecks. The remote command completed in 75.151 seconds; no rerun or
-infrastructure error was reported. Its terminal result was:
-
-```text
+ 1 pass
+ 0 fail
+ 5 expect() calls
+Ran 1 test across 1 file. [799.00ms]
+remote-check: command 0.805 s on b
+remote-check: run used 2.238 CPU seconds over 1.919 s (1.17 cores), peak memory 176 MiB on b
+worker-check: bun test services/importer peak 0.2 GiB (weight 2)
 check: exit status 0
-check: log .temp/goal/checks/worker-check-2026-10-29T13-32-57.734Z-83a88bd7.log
+check: log .temp/goal/checks/worker-check-2026-10-29T14-02-30.869Z-71508044.log
 ```
 
-The focused wrapper terminal result was:
+Root typecheck was submitted once, waited 377.896 seconds for its slot, then completed
+all 13 workspace typechecks. Its terminal result was:
 
 ```text
-check: exit status 1
-check: failure summary
-(fail) all import CLI outcomes pass with real source pipeline [120030.41ms]
-1 fail
-check: log .temp/goal/checks/worker-check-2026-10-29T13-32-33.925Z-9c3cf4af.log
+remote-check: command 59.385 s on a
+remote-check: run used 180.841 CPU seconds over 60.154 s (3.01 cores), peak memory 3783 MiB on a
+worker-check: bun scripts/typecheck.ts peak 3.7 GiB (weight 5)
+check: exit status 0
+check: log .temp/goal/checks/worker-check-2026-10-29T14-03-21.402Z-c86dbb8a.log
 ```
 
-Both recorded checks are terminal; none remains running. Acceptance remains unproved
-because the existing wrapper timed out. No passing base result is claimed, and no
-business or timeout policy was changed to force a pass. The only subsequent changes
-are this evidence record. No files outside the four declared paths changed.
+The earlier local wrapper timeout was not reproduced. No timeout, runtime, host-placement
+setting, business assertion or frozen helper was changed. Placement remained under the
+existing managed runner. Both checks are terminal, with no automatic rerun or infrastructure
+failure. This passing acceptance covers the named local units and existing fixture axes
+above; native Auth, source-statistics and other suites were not rerun.
