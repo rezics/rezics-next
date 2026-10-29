@@ -137,8 +137,11 @@ export function SpacePage({ page }: { page: SpacePageData }) {
   const colors = placeholderColors({ id: page.space.id, types: [] });
   const banner = page.space.banner;
   const bannerVariant = banner?.variants.find((variant) => variant.format === 'webp') ?? banner?.variants.at(-1);
+  const previewSrc =
+    banner && 'previewSrc' in banner && typeof banner.previewSrc === 'string' ? banner.previewSrc : null;
   const bannerSrc =
-    banner && bannerVariant ? coverSrc(banner.media, bannerVariant.format, bannerVariant.width) : undefined;
+    previewSrc ??
+    (banner && bannerVariant ? coverSrc(banner.media, bannerVariant.format, bannerVariant.width) : undefined);
   return (
     <article className="max-w-5xl space-y-10 text-foreground">
       <header
