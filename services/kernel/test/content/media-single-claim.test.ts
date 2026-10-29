@@ -140,7 +140,6 @@ test('erasing a post erases only the media that post claimed', async () => {
   const first = await post([firstImage]);
   const second = await post([secondImage]);
   const { system } = currentMediaScenario();
-  const route = driver.containers.thread.route;
   // A retained reference from before single ownership must not grant erasure authority.
   await historicalReference(system.database.pool, first.revisionId, [firstImage, secondImage], '2025-01-01');
   const before = await row(secondImage);
