@@ -4,7 +4,6 @@ import { afterAll } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rateIdentity } from '../../src/access/write-rate-identity.ts';
@@ -581,7 +580,7 @@ export async function openApiRuntime(
         }
       }) as typeof fetch,
     });
-    directory = await mkdtemp(`${tmpdir()}/import-api-`);
+    directory = await mkdtemp(`${evidenceRoot}/import-api-`);
     const path = `${directory}/state.sqlite`;
     function openImporter(serial = false) {
       const next = new Importer({
