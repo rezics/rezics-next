@@ -1,12 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
-import { mock } from 'bun:test';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-import { loadDecisionPage, canAppealDecision } from '../src/moderation/decision-read';
-import { submitDecisionAppeal } from '../src/moderation/appeal';
-import { DecisionPageView } from '../src/moderation/decision-page';
+const { loadDecisionPage, canAppealDecision } = await import('../src/moderation/decision-read');
+const { submitDecisionAppeal } = await import('../src/moderation/appeal');
+const { DecisionPageView } = await import('../src/moderation/decision-page');
 
 const decidedAt = '2026-01-01T12:00:00.000Z';
 const decision = {
