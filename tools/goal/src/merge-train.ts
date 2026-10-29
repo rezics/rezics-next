@@ -426,10 +426,14 @@ function pathsChangedByTaskButUnchangedOnDev(
   return taskPaths.filter((path) => compare(dev, taskTip, path) && !compare(dev, candidate, path));
 }
 
-function refuseNoEffect(result: GateOutcome, paths: readonly string[], logPath: string): void {
+function refuseNoEffect(
+  result: GateOutcome,
+  paths: readonly string[],
+  logPath: string,
+  reason = `Change had no effect on dev: ${paths.join(', ')}`,
+): void {
   result.stage = 'merge';
   result.conflictedFiles = [...paths];
-  const reason = `Change had no effect on dev: ${paths.join(', ')}`;
   result.firstFailure = firstFailure(reason);
   appendFileSync(logPath, `${reason}\n`);
 }
@@ -442,32 +446,48 @@ function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean 
 }
 
 class WorkerConflictError extends Error {
-  constructor(readonly path: string, detail = '') {
+  constructor(
+    readonly path: string,
+    readonly detail = '',
+  ) {
     super(`Worker change conflicts with dev in ${path}${detail ? `: ${detail}` : ''}`);
   }
 }
 
-/** Lines removed by the task, excluding any line it also inserted elsewhere. */
-function taskDeletedLines(base: string, task: string): string[] {
-  const baseCounts = new Map<string, number>();
-  const taskCounts = new Map<string, number>();
-  for (const line of base.split(/\r?\n/)) baseCounts.set(line, (baseCounts.get(line) ?? 0) + 1);
-  for (const line of task.split(/\r?\n/)) taskCounts.set(line, (taskCounts.get(line) ?? 0) + 1);
-  return [...baseCounts].flatMap(([line, count]) => Array(Math.max(0, count - (taskCounts.get(line) ?? 0))).fill(line));
-}
-
-function assertTaskDeletionsAbsent(file: string, base: string, task: string, result: string): void {
-  const remaining = new Map<string, number>();
-  for (const line of result.split(/\r?\n/)) remaining.set(line, (remaining.get(line) ?? 0) + 1);
-  const conflicts: string[] = [];
-  for (const line of taskDeletedLines(base, task)) {
-    const count = remaining.get(line) ?? 0;
-    if (count) {
-      conflicts.push(line);
-      remaining.set(line, count - 1);
+/** Inspect the actual diff: an unchanged duplicate is not an addition, while a moved line is. */
+function assertTaskDeletionsAbsent(cwd: string, file: string, base: string, task: string, result: string): void {
+  mkdirSync(join(cwd, '.temp'), { recursive: true });
+  const scratch = mkdtempSync(join(cwd, '.temp', 'union-deletions-'));
+  try {
+    const basePath = join(scratch, 'base');
+    const taskPath = join(scratch, 'task');
+    writeFileSync(basePath, base);
+    writeFileSync(taskPath, task);
+    const diff = spawnSync(
+      'git',
+      ['diff', '--no-index', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0', '--', basePath, taskPath],
+      { cwd, encoding: 'utf8' },
+    );
+    if (diff.status !== 0 && diff.status !== 1)
+      throw new Error(diff.stderr.trim() || `Cannot read task diff for ${file}`);
+    const deleted = new Set<string>();
+    const added = new Set<string>();
+    let inHunk = false;
+    for (const line of diff.stdout.split(/\r?\n/)) {
+      if (line.startsWith('@@')) inHunk = true;
+      else if (inHunk && line.startsWith('-')) deleted.add(line.slice(1));
+      else if (inHunk && line.startsWith('+')) added.add(line.slice(1));
     }
+    const remaining = new Set(result.split(/\r?\n/));
+    const conflicts = [...deleted].filter((line) => !added.has(line) && remaining.has(line));
+    if (conflicts.length)
+      throw new WorkerConflictError(
+        file,
+        `task-deleted lines remain: ${conflicts.map((line) => JSON.stringify(line)).join(', ')}`,
+      );
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
-  if (conflicts.length) throw new WorkerConflictError(file, `task-deleted lines remain: ${conflicts.map((line) => JSON.stringify(line)).join(', ')}`);
 }
 
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
@@ -495,6 +515,8 @@ export function resolveMechanicalConflicts(
   paths: readonly string[],
   formatCommand?: readonly string[],
   markdown: 'insertions' | 'union' = 'insertions',
+  // Index stage holding the task; callers replaying it during a rebase must select stage 3.
+  taskStage: 2 | 3 = 2,
 ): string[] | false {
   const resolved = new Map<string, string>();
   const unionResolved: string[] = [];
@@ -548,8 +570,7 @@ export function resolveMechanicalConflicts(
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
         if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
           throw new WorkerConflictError(file);
-        // During rebase, stage 2 is the new base (dev) and stage 3 is the replayed task commit.
-        if (markdown === 'union') assertTaskDeletionsAbsent(file, base!, theirs!, text);
+        if (markdown === 'union') assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text);
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -575,16 +596,8 @@ export function resolveMechanicalConflicts(
         comparableJson(theirs) !== comparableJson(base)
       )
         throw new WorkerConflictError(file);
-      // Stage 3 is the task being replayed; stage 2 is dev. Reject any mechanically merged result
-      // that restores a message value the task removed or replaced.
-      const deletedOrReplaced = Object.keys(base ?? {}).filter(
-        (key) => Object.hasOwn(base!, key) && (!Object.hasOwn(theirs!, key) || comparableJson(base![key]) !== comparableJson(theirs![key])),
-      );
-      const stale = deletedOrReplaced.filter(
-        (key) => Object.hasOwn(merged.value, key) && comparableJson(merged.value[key]) === comparableJson(base![key]),
-      );
-      if (stale.length) throw new WorkerConflictError(file, `task-replaced message lines remain: ${stale.map((key) => `${JSON.stringify(key)}=${JSON.stringify(base![key])}`).join(', ')}`);
       text = `${JSON.stringify(merged.value, null, 2)}\n`;
+      assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text);
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
     resolved.set(path, text);
@@ -674,7 +687,7 @@ function rebaseWithDerivedFiles(
       const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
       // Validate all ordinary conflicts before choosing a generated side or running a generator.
       if (textConflicts.length) {
-        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union');
+        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union', 3);
         if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts) ?? rebaseError;
         const markdownUnion = unionResolved.length ? `; Markdown union: ${unionResolved.join(', ')}` : '';
         appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${textConflicts.join(', ')}${markdownUnion}\n`);
@@ -1150,7 +1163,7 @@ export class MergeTrain {
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
             if (error instanceof WorkerConflictError) {
-              refuseNoEffect(result, [error.path], logPath);
+              refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
               localOutcomes.set(entry.id, result);
               try {
                 git(trainTree, 'rebase', '--abort');
@@ -1814,7 +1827,7 @@ export class MergeTrain {
             rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             if (!(error instanceof WorkerConflictError)) throw error;
-            refuseNoEffect(result, [error.path], logPath);
+            refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
             return finish();
           }
         }

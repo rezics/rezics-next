@@ -66,3 +66,83 @@ test('a conflicting JSON message replacement remains unresolved for the worker',
     h.dispose();
   }
 });
+
+test('a train returns a union that preserves replaced task lines to its worker with the lines named', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const task = h.dispatch('README.md');
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: 'README.md', content: 'Updated fixture\n' }),
+    );
+    await h.start(task);
+    const dev = h.advanceDev('README.md', 'Fixture\nDev note\n');
+
+    await h.train();
+
+    const outcome = h.outcomes[0]!;
+    expect(outcome.passed).toBe(false);
+    expect(outcome.conflictedFiles).toEqual(['README.md']);
+    expect(outcome.firstFailure?.assertion).toContain('task-deleted lines remain: "Fixture"');
+    expect(readFileSync(outcome.logPath, 'utf8')).toContain('task-deleted lines remain: "Fixture"');
+    expect(outcome.mergedCommit).toBeUndefined();
+    expect(h.store.task(task.id).currentAttempt).toBeGreaterThan(1);
+    expect(h.store.task(task.id).state).not.toBe('integrated');
+    expect(h.head('dev')).toBe(dev);
+  } finally {
+    h.dispose();
+  }
+}, 30_000);
+
+test('a JSON-message union rejects deleted lines retained elsewhere in the result', () => {
+  const h = integrationHarness();
+  try {
+    const file = 'apps/web/messages/deleted-lines.json';
+    mkdirSync(join(h.root, 'apps/web/messages'), { recursive: true });
+    const base = '{\n  "obsolete": {\n    "text": "old"\n  },\n  "keep": {\n    "text": "old"\n  }\n}\n';
+    const task = '{\n  "keep": {\n    "text": "old"\n  }\n}\n';
+    const dev =
+      '{\n  "obsolete": {\n    "text": "old"\n  },\n  "keep": {\n    "text": "old"\n  },\n  "new": "dev"\n}\n';
+    conflictStages(h.root, file, base, dev, task);
+
+    expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toThrow(
+      `Worker change conflicts with dev in ${file}: task-deleted lines remain:`,
+    );
+    expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toThrow(JSON.stringify('    "text": "old"'));
+    expect(readFileSync(join(h.root, file), 'utf8')).toBe('unmerged content\n');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a union of independent JSON-message insertions still integrates', () => {
+  const h = integrationHarness();
+  try {
+    const file = 'apps/web/messages/independent.json';
+    mkdirSync(join(h.root, 'apps/web/messages'), { recursive: true });
+    conflictStages(h.root, file, '{}\n', '{\n  "dev": "addition"\n}\n', '{\n  "task": "addition"\n}\n');
+
+    expect(resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toEqual([]);
+    expect(JSON.parse(readFileSync(join(h.root, file), 'utf8'))).toEqual({ task: 'addition', dev: 'addition' });
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a task line deleted and also added elsewhere is allowed even when its count decreases', () => {
+  const h = integrationHarness();
+  try {
+    const file = '.temp/moved-lines.md';
+    const context = 'unchanged context\n'.repeat(10);
+    const base = `head\nsame\nleft\n${context}right\nsame\ntail\n`;
+    const task = `head\nleft\n${context}right\ntail\nsame\n`;
+    const dev = `head\nsame\ndev note\nleft\n${context}right\nsame\ntail\n`;
+    conflictStages(h.root, file, base, dev, task);
+
+    expect(resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toEqual([file]);
+    expect(readFileSync(join(h.root, file), 'utf8')).toContain('dev note');
+  } finally {
+    h.dispose();
+  }
+});
