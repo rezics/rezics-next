@@ -169,8 +169,14 @@ async function expireIssuedProof(observer: SqlObserver, waitStarted: string) {
   const expires = Date.parse(issued?.executedAt ?? waitStarted) + 1100;
   while (Date.now() < expires) await Bun.sleep(Math.min(20, expires - Date.now()));
 }
-async function held<T>(observer: SqlObserver, statement: string, run: () => Promise<T>, during: () => Promise<void>) {
-  const barrier = observer.hold({ statement }, 'after');
+async function held<T>(
+  observer: SqlObserver,
+  statement: string,
+  run: () => Promise<T>,
+  during: () => Promise<void>,
+  boundary: 'before' | 'after' = 'after',
+) {
+  const barrier = observer.hold({ statement }, boundary);
   const result = run();
   try {
     const boundary = await Promise.race([
@@ -259,6 +265,9 @@ for (const kind of ['links', 'relations'] as const) {
             });
           }),
         () => catchUp(part),
+        // Dispatch the real probe after catch-up. Holding an already stale result
+        // past the reserved wait ceiling correctly reports caught_up=false.
+        'before',
       );
       if ('links' in result) expect(result.links).toHaveLength(1);
       else expect(result.relations).toHaveLength(1);
