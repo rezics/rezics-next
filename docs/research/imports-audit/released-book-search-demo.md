@@ -33,6 +33,8 @@ The separate scoped importer gets only create, batch-write, propose and fence-re
 native registration and Global grant administration. The four existing personas and grants are unchanged.
 Only retrieved, acknowledged source candidates are accepted and adopted; unresolved authors retain their
 source identities and citations. No replacement editorial facts are proposed.
+The caller lists and adopts each unresolved author's existing `sameAs` relation slot separately,
+using the exact external IRI in the acknowledged proposal; a property-only candidate page does not list these slots.
 
 Acceptance: `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/search/released-imports.test.ts`.
 The case queries `Example Volume` anonymously through real `POST /v1/subjects:search` and allows the existing

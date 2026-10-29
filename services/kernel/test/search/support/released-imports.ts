@@ -206,8 +206,30 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
       const subjectId = initial.binding.subject;
       const commands = initial.batches.flatMap((b) => b.request.commands).filter((c) => c.op === 'propose');
       const selected: ReleasedBookReceipt['selected'] = [];
-      for (const property of new Set(commands.map((c) => c.statement.property.id))) {
+      const slots = new Map<string, { property: string; sameAs?: string; count: number }>();
+      for (const command of commands) {
+        let sameAs: string | undefined;
+        if (command.statement.value.type === 'somevalue') {
+          for (const qualifier of command.statement.qualifiers ?? []) {
+            if (
+              qualifier.property.id === 'schema:sameAs' &&
+              qualifier.value.type === 'value' &&
+              typeof qualifier.value.content === 'string'
+            )
+              sameAs = qualifier.value.content;
+          }
+        }
+        // Unresolved authors occupy external-IRI relation slots, not the property-level slot.
+        const address = { property: command.statement.property.id, ...(sameAs === undefined ? {} : { sameAs }) };
+        const key = JSON.stringify(address);
+        const slot = slots.get(key);
+        if (slot) slot.count++;
+        else slots.set(key, { ...address, count: 1 });
+      }
+      for (const { property, sameAs, count } of slots.values()) {
+        const address = sameAs === undefined ? {} : { sameAs };
         const query = new URLSearchParams({ property, context: semantic.globalContext, limit: '100' });
+        if (sameAs !== undefined) query.set('sameAs', sameAs);
         const listing = await request('editor', `/v1/subjects/${subjectId}/candidates?${query}`);
         if (listing.body.next) throw new Error('Pinned Book exceeded the single candidate-page bound');
         const candidates = (listing.body.candidates as NativeCandidate[]).filter(
@@ -217,8 +239,8 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
             c.source.external_id === owner.external_id &&
             c.retracted === null,
         );
-        if (candidates.length !== commands.filter((c) => c.statement.property.id === property).length)
-          throw new Error(`Native source candidate mismatch: ${property}: ${JSON.stringify(listing.body)}`);
+        if (candidates.length !== count)
+          throw new Error(`Native source candidate mismatch: ${query}: ${JSON.stringify(listing.body)}`);
         const acceptances = new Map<string, WireResponse>();
         for (const candidate of candidates) {
           acceptances.set(
@@ -232,6 +254,7 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
         const adoption = await request('acceptor', `/v1/subjects/${subjectId}:adopt`, {
           context: semantic.globalContext,
           property,
+          ...address,
           mode: 'replace',
           selection: candidates.map((c) => ({ candidate: c.id, rank: c.statement.rank })),
           expected_head: (listing.body.adoption as { head: number } | null)?.head ?? null,
