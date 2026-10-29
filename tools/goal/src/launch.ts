@@ -1,5 +1,5 @@
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
@@ -322,7 +322,7 @@ export function capacityAvailable(store: WorkerStore, stateDirectory: string): b
   } catch {
     /* Defaults. */
   }
-  const running = store.runningAttemptsCount();
+  const running = store.runningAttemptsCount() + admittedStarts(store, stateDirectory);
   return hasCapacity(running, availableMiB(), capacity);
 }
 /** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
@@ -363,9 +363,15 @@ export async function awaitHostCapacity(
       } catch {
         /* Defaults. */
       }
+      const admitted = admittedStarts(store, stateDirectory);
       const running = store.runningAttemptsCount();
       const ahead = waitersAhead(queue, ticket);
-      if (hasCapacity(running + ahead, availableMiB(), capacity)) return;
+      if (hasCapacity(running + admitted + ahead, availableMiB(), capacity)) {
+        const reservation = join(queue, `${ticket}.admitted`);
+        renameSync(join(queue, ticket), reservation);
+        releaseWhenStarted(store, stateDirectory, reservation, taskId);
+        return;
+      }
       if (!reported)
         console.error(
           `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
@@ -376,6 +382,46 @@ export async function awaitHostCapacity(
   } finally {
     rmSync(join(queue, ticket), { force: true });
   }
+}
+function admittedStarts(store: WorkerStore, stateDirectory: string): number {
+  const queue = join(stateDirectory, 'capacity-queue');
+  try {
+    return readdirSync(queue).filter((name) => name.endsWith('.admitted') && liveTicket(queue, name)).length;
+  } catch {
+    return 0;
+  }
+}
+function liveTicket(queue: string, name: string): boolean {
+  const [, rawPid] = name.replace(/\.admitted$/, '').split('-');
+  const identity = processIdentity(Number(rawPid));
+  if (identity && sameProcess(identity)) return true;
+  rmSync(join(queue, name), { force: true });
+  return false;
+}
+function releaseWhenStarted(store: WorkerStore, stateDirectory: string, reservation: string, taskId?: string): void {
+  if (!taskId) return;
+  const queue = dirname(reservation);
+  const [, rawPid] = reservation.split('-');
+  const identity = processIdentity(Number(rawPid));
+  const timer = setInterval(() => {
+    if (!identity || !sameProcess(identity)) {
+      clearInterval(timer);
+      rmSync(reservation, { force: true });
+      return;
+    }
+    try {
+      const attempts = store.attempts(taskId);
+      const current = attempts.at(-1);
+      if (current && current.state !== 'pending' && current.state !== 'waiting') {
+        clearInterval(timer);
+        rmSync(reservation, { force: true });
+      }
+    } catch {
+      clearInterval(timer);
+      rmSync(reservation, { force: true });
+    }
+  }, 250);
+  timer.unref();
 }
 /** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
 export function capacityWaiters(stateDirectory: string): Set<string> {
@@ -388,7 +434,7 @@ export function capacityWaiters(stateDirectory: string): Set<string> {
   }
   const live = new Set<string>();
   for (const name of names) {
-    const [, pid, ...rest] = name.split('-');
+    const [, pid, ...rest] = name.replace(/\.admitted$/, '').split('-');
     const identity = processIdentity(Number(pid));
     if (identity && sameProcess(identity)) live.add(rest.join('-'));
   }
@@ -403,8 +449,9 @@ export function waitersAhead(queue: string, ticket: string): number {
     return 0;
   }
   return names.filter((name) => {
-    if (name >= ticket) return false;
-    const pid = Number(name.split('-')[1]);
+    const baseName = name.replace(/\.admitted$/, '');
+    if (baseName >= ticket || name.endsWith('.admitted')) return false;
+    const pid = Number(baseName.split('-')[1]);
     try {
       process.kill(pid, 0);
       return true;

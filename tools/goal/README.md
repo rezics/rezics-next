@@ -251,8 +251,11 @@ reported as unknown rather than inferred.
 ### Host-capacity admission
 
 Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count running
-attempts through the `worker_attempts_state` expression index. Each poll issues one `COUNT(*)` query and does not
-decode attempt bodies. The existing 15-second polling interval and ticket ordering are unchanged.
+attempts through the `worker_attempts_state` expression index. An admitted start keeps its queue ticket in an admitted
+state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is recorded
+running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting check-wake
+attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path half-hour
+head start are unchanged.
 
 #### Cost: running-attempt count
 
