@@ -226,7 +226,7 @@ test(`locator success adds one batch insert and stays bounded as kept rows and D
       );
       expect(inserts).toHaveLength(1);
       expect(inserts[0]!.count).toBe(1);
-      if (phase === 'success') {
+      {
         const updates = statements.filter(({ statement }) =>
           statement.startsWith('UPDATE access.erasure_locator_work'),
         );
