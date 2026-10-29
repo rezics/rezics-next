@@ -40,6 +40,7 @@ export type PersonalLibraryEntry = {
   subjectId: string;
   state: LibraryEntryStateRead;
   revision: number;
+  incarnationId?: string | null;
   createdAt: string;
   updatedAt: string;
   activeProgressSession?: ProgressLabelInput | null;
@@ -72,6 +73,7 @@ export type SavedLibraryEntry = {
   subjectId: string;
   state: LibraryEntryStateRead;
   revision: number;
+  incarnationId?: string | null;
   updatedAt: string;
 };
 
@@ -85,13 +87,15 @@ export type LibraryMutationResult =
 export type LibraryChangeInput = {
   subjectId: string;
   state: LibraryEntryStateWrite;
-  revision: number;
+  revision?: number;
+  incarnationId?: string | null;
   idempotencyKey: string;
 };
 
 export type LibraryRemoveInput = {
   subjectId: string;
   revision: number;
+  incarnationId?: string | null;
   idempotencyKey: string;
 };
 
@@ -99,6 +103,7 @@ type RawEntry = {
   subjectId: string;
   state: LibraryEntryStateRead;
   revision: number;
+  incarnationId?: string | null;
   createdAt: string;
   updatedAt: string;
   activeProgressSession?: ProgressLabelInput | null;
@@ -110,12 +115,34 @@ function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
     subjectId: entry.subjectId,
     state: entry.state,
     revision: entry.revision,
+    ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     activeProgressSession: entry.activeProgressSession ?? null,
     subject: subjectOf(entry.subject),
   };
 }
+
+// Waits for the generated client update from commerce's incarnation-guard contract.
+type IncarnationLibraryClient = {
+  libraryEntries: (params: { subjectId: string }) => {
+    put: (
+      body: { state: LibraryEntryStateWrite; revision?: number; incarnationId?: string },
+      options: { headers: { authorization: string; 'idempotency-key': string } },
+    ) => Promise<{
+      status?: number;
+      error?: { status?: number; value?: unknown } | null;
+      data?: { libraryEntry: RawEntry } | null;
+    }>;
+    delete: (
+      body: undefined,
+      options: {
+        query: { revision: number; incarnationId?: string };
+        headers: { authorization: string; 'idempotency-key': string };
+      },
+    ) => Promise<{ status?: number; error?: { status?: number; value?: unknown } | null }>;
+  };
+};
 
 function statusOf(result: { status?: number; error?: { status?: number } | null }): number | undefined {
   if (typeof result.status === 'number') return result.status;
@@ -186,7 +213,10 @@ export async function loadPersonalLibrary(
       signedIn: true,
       state: null,
       sections: shelfSectionOrder
-        .map((section, index) => ({ state: section, entries: presentShelfEntries(pages[index]!.libraryEntries) }))
+        .map((section, index) => ({
+          state: section,
+          entries: presentShelfEntries(pages[index]!.libraryEntries as RawEntry[]),
+        }))
         .filter((section) => section.entries.length > 0),
     };
   }
@@ -197,7 +227,7 @@ export async function loadPersonalLibrary(
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await readEntryPage(client, authorization, undefined, state, SHELF_TAB_LIMIT);
   }
-  return { signedIn: true, state, entries: presentShelfEntries(page.libraryEntries), next: page.next };
+  return { signedIn: true, state, entries: presentShelfEntries(page.libraryEntries as RawEntry[]), next: page.next };
 }
 
 async function reloadEntry(
@@ -211,7 +241,7 @@ async function reloadEntry(
   });
   if (result.error || result.data == null)
     return { ok: false, reason: statusOf(result) === 404 ? 'missing' : 'unavailable' };
-  return { ok: true, entry: presentEntry(result.data.libraryEntry) };
+  return { ok: true, entry: presentEntry((result.data as { libraryEntry: RawEntry }).libraryEntry) };
 }
 
 async function explainConflict(
@@ -236,20 +266,25 @@ export async function changePersonalLibraryEntry(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (!authorization) return { ok: false, reason: 'signed-out' };
-    const result = await client
+    const entryClient = (client as unknown as IncarnationLibraryClient)
       .libraryEntries({ subjectId: input.subjectId })
       .put(
-        { state: input.state, revision: input.revision },
+        {
+          state: input.state,
+          ...(input.revision === undefined ? {} : { revision: input.revision }),
+          ...(typeof input.incarnationId === 'string' ? { incarnationId: input.incarnationId } : {}),
+        },
         { headers: writeHeaders(authorization, input.idempotencyKey) },
       );
     if (!result.error && result.data) {
-      const saved = result.data.libraryEntry;
+      const saved = (result.data as { libraryEntry: RawEntry }).libraryEntry;
       return {
         ok: true,
         entry: {
           subjectId: saved.subjectId,
           state: saved.state,
           revision: saved.revision,
+          ...(saved.incarnationId === undefined ? {} : { incarnationId: saved.incarnationId }),
           updatedAt: saved.updatedAt,
         },
       };
@@ -274,8 +309,12 @@ export async function removePersonalLibraryEntry(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (!authorization) return { ok: false, reason: 'signed-out' };
-    const result = await client.libraryEntries({ subjectId: input.subjectId }).delete(undefined, {
-      query: { revision: input.revision },
+    const entryClient = client as unknown as IncarnationLibraryClient;
+    const result = await entryClient.libraryEntries({ subjectId: input.subjectId }).delete(undefined, {
+      query: {
+        revision: input.revision,
+        ...(typeof input.incarnationId === 'string' ? { incarnationId: input.incarnationId } : {}),
+      },
       headers: writeHeaders(authorization, input.idempotencyKey),
     });
     const status = statusOf(result);

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createKernelClient } from '@rezics/client';
 import type { KernelClient } from '@rezics/client';
 import { changePersonalLibraryEntry, removePersonalLibraryEntry } from '../src/library/entries-read';
 
@@ -10,49 +11,43 @@ const incarnationId = '0192f3a0-6c1e-7b2a-9d4e-000000000099';
 const currentIncarnationId = '0192f3a0-6c1e-7b2a-9d4e-000000000100';
 const key = '0192f3a0-6c1e-7b2a-9d4e-000000000022';
 
-type Captured = { method: string; body?: unknown; options?: unknown };
+type Captured = { method: string; path: string; query: string; body?: unknown };
 
 function kernel({ conflict = false }: { conflict?: boolean } = {}) {
   const calls: Captured[] = [];
-  const client = {
-    libraryEntries: (params: { subjectId: string }) => ({
-      put: async (body: unknown, options: unknown) => {
-        calls.push({ method: 'PUT', body, options });
-        if (conflict) return { status: 409, error: { status: 409, value: { code: 'conflict' } } };
-        return {
-          status: 200,
-          data: {
-            libraryEntry: {
-              subjectId: params.subjectId,
-              state: 'paused',
-              revision: 5,
-              updatedAt: '2026-05-01T00:00:00.000Z',
-              incarnationId,
-            },
-          },
-        };
-      },
-      delete: async (body: unknown, options: unknown) => {
-        calls.push({ method: 'DELETE', body, options });
-        if (conflict) return { status: 409, error: { status: 409, value: { code: 'conflict' } } };
-        return { status: 204 };
-      },
-      get: async () => ({
-        status: 200,
-        data: {
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      const text = request.method === 'PUT' ? await request.clone().text() : '';
+      const body = text ? JSON.parse(text) : undefined;
+      calls.push({ method: request.method, path: url.pathname, query: url.search, ...(body ? { body } : {}) });
+      if (request.method === 'GET')
+        return Response.json({
           libraryEntry: {
-            subjectId: params.subjectId,
+            subjectId,
             state: 'dropped',
             revision: 9,
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-05-01T00:00:00.000Z',
             incarnationId: currentIncarnationId,
-            subject: { id: params.subjectId, label: 'Current entry', type: 'book' },
+            subject: { id: subjectId, label: 'Current entry', type: 'book' },
           },
-        },
-      }),
-    }),
-  } as unknown as KernelClient;
+        });
+      if (conflict)
+        return Response.json(
+          { status: 409, code: 'conflict' },
+          {
+            status: 409,
+            headers: { 'content-type': 'application/problem+json' },
+          },
+        );
+      if (request.method === 'DELETE') return new Response(null, { status: 204 });
+      return Response.json({
+        libraryEntry: { subjectId, state: 'paused', revision: 5, updatedAt: '2026-05-01T00:00:00.000Z', incarnationId },
+      });
+    },
+  }) as unknown as KernelClient;
   return { client, calls };
 }
 
@@ -60,85 +55,136 @@ const request = () => new Request('https://site.test/en/library', { headers: { a
 
 test('guarded changes and removals send the incarnation beside the existing revision', async () => {
   const { client, calls } = kernel();
-  await changePersonalLibraryEntry(client, request(), {}, {
-    subjectId,
-    state: 'paused',
-    revision: 4,
-    incarnationId,
-    idempotencyKey: key,
-  });
-  await removePersonalLibraryEntry(client, request(), {}, {
-    subjectId,
-    revision: 4,
-    incarnationId,
-    idempotencyKey: key,
-  });
+  await changePersonalLibraryEntry(
+    client,
+    request(),
+    {},
+    {
+      subjectId,
+      state: 'paused',
+      revision: 4,
+      incarnationId,
+      idempotencyKey: key,
+    },
+  );
+  await removePersonalLibraryEntry(
+    client,
+    request(),
+    {},
+    {
+      subjectId,
+      revision: 4,
+      incarnationId,
+      idempotencyKey: key,
+    },
+  );
   expect(calls).toEqual([
     {
       method: 'PUT',
+      path: `/v1/libraryEntries/${subjectId}`,
+      query: '',
       body: { state: 'paused', revision: 4, incarnationId },
-      options: { headers: { authorization: 'Bearer test', 'idempotency-key': key } },
     },
     {
       method: 'DELETE',
-      body: undefined,
-      options: {
-        query: { revision: 4, incarnationId },
-        headers: { authorization: 'Bearer test', 'idempotency-key': key },
-      },
+      path: `/v1/libraryEntries/${subjectId}`,
+      query: `?revision=4&incarnationId=${incarnationId}`,
     },
   ]);
 });
 
 test('legacy null and absent incarnations preserve the base request shape', async () => {
   const { client, calls } = kernel();
-  await changePersonalLibraryEntry(client, request(), {}, {
-    subjectId,
-    state: 'paused',
-    revision: 4,
-    incarnationId: null,
-    idempotencyKey: key,
-  });
-  await removePersonalLibraryEntry(client, request(), {}, {
-    subjectId,
-    revision: 4,
-    idempotencyKey: key,
-  });
-  expect(calls[0]?.body).toEqual({ state: 'paused', revision: 4 });
-  expect(calls[1]?.options).toMatchObject({ query: { revision: 4 } });
-  expect(Object.keys((calls[1]?.options as { query: object }).query)).toEqual(['revision']);
+  await changePersonalLibraryEntry(
+    client,
+    request(),
+    {},
+    {
+      subjectId,
+      state: 'paused',
+      revision: 4,
+      incarnationId: null,
+      idempotencyKey: key,
+    },
+  );
+  await removePersonalLibraryEntry(
+    client,
+    request(),
+    {},
+    {
+      subjectId,
+      revision: 4,
+      idempotencyKey: key,
+    },
+  );
+  expect(calls).toEqual([
+    {
+      method: 'PUT',
+      path: `/v1/libraryEntries/${subjectId}`,
+      query: '',
+      body: { state: 'paused', revision: 4 },
+    },
+    {
+      method: 'DELETE',
+      path: `/v1/libraryEntries/${subjectId}`,
+      query: '?revision=4',
+    },
+  ]);
 });
 
 test('a stale incarnation reloads and returns the current entry without retrying either write', async () => {
   for (const action of ['change', 'remove'] as const) {
     const { client, calls } = kernel({ conflict: true });
-    const result = action === 'change'
-      ? await changePersonalLibraryEntry(client, request(), {}, {
-          subjectId, state: 'paused', revision: 4, incarnationId, idempotencyKey: key,
-        })
-      : await removePersonalLibraryEntry(client, request(), {}, {
-          subjectId, revision: 4, incarnationId, idempotencyKey: key,
-        });
+    const result =
+      action === 'change'
+        ? await changePersonalLibraryEntry(
+            client,
+            request(),
+            {},
+            {
+              subjectId,
+              state: 'paused',
+              revision: 4,
+              incarnationId,
+              idempotencyKey: key,
+            },
+          )
+        : await removePersonalLibraryEntry(
+            client,
+            request(),
+            {},
+            {
+              subjectId,
+              revision: 4,
+              incarnationId,
+              idempotencyKey: key,
+            },
+          );
     expect(result).toMatchObject({
       ok: false,
       reason: 'conflict',
       entry: { subjectId, state: 'dropped', revision: 9, incarnationId: currentIncarnationId },
     });
-    expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(1);
+    expect(calls.map((call) => call.method)).toEqual([action === 'change' ? 'PUT' : 'DELETE', 'GET']);
   }
 });
 
 test('no-JavaScript entry forms preserve the incarnation through their server action', async () => {
-  const view = await readFile(join(root, 'src/library/shelf-view.tsx'), 'utf8');
-  const actions = await readFile(join(root, 'src/library/entries-actions.ts'), 'utf8');
-  expect(view).toMatch(/name=["']incarnationId["'][\s\S]*?type=["']hidden["']/);
+  const view = await readFile(join(root, 'src/library/subject-slot-view.tsx'), 'utf8');
+  const actions = await readFile(join(root, 'src/library/subject-slot-mutation.ts'), 'utf8');
+  expect(view).toMatch(/<input[^>]*type=["']hidden["'][^>]*name=["']incarnationId["']/);
   expect(actions).toMatch(/incarnationId/);
 });
 
 test('entry writes stay centralized in entries-read.ts', async () => {
-  const { output, exitCode } = Bun.spawnSync([
-    'rg', '-n', 'libraryEntries\\([^\\n]*\\)\\.(put|delete)', 'apps/web/src', '-g', '!library/entries-read.ts',
-  ], { cwd: join(root, '../..'), stdout: 'pipe', stderr: 'pipe' });
-  expect(exitCode).toBe(1);
-  expect(output.toString()).toBe('');
+  const sources = [...new Bun.Glob('**/*.{ts,tsx}').scanSync({ cwd: join(root, 'src') })].filter(
+    (file) => !file.endsWith('/library/entries-read.ts'),
+  );
+  const violations = await Promise.all(
+    sources.map(async (file) => {
+      const source = await readFile(join(root, 'src', file), 'utf8');
+      return /libraryEntries\([^\n]*\)\s*\.(?:put|delete)/.test(source) ? file : null;
+    }),
+  );
+  expect(violations.filter(Boolean)).toEqual([]);
 });

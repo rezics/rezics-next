@@ -21,7 +21,7 @@ export function useHydrated(): boolean {
 /**
  * The entries of one shelf, with the writes that change them. A status change keeps the entry where it is and shows
  * its new status; a conflict replaces it with the entry as it now is; a removal drops it. Each write carries the
- * revision and the idempotency key the entry holds, and takes a fresh key once it has been answered.
+ * revision, incarnation and idempotency key the entry holds, and takes a fresh key once it has been answered.
  */
 export function useShelfRows(initial: PersonalLibraryEntry[]) {
   const [rows, setRows] = useState<ShelfRow[]>(() =>
@@ -51,7 +51,13 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
       try {
         const { entry } = row;
         const result = await savePersonalLibraryEntry({
-          data: { subjectId, state, revision: entry.revision, idempotencyKey: entry.changeKey },
+          data: {
+            subjectId,
+            state,
+            revision: entry.revision,
+            ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
+            idempotencyKey: entry.changeKey,
+          },
           headers: csrfHeaders(),
         });
         if (result.ok && result.entry) {
@@ -61,6 +67,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
               ...current.entry,
               state: saved.state,
               revision: saved.revision,
+              ...(saved.incarnationId === undefined ? {} : { incarnationId: saved.incarnationId }),
               updatedAt: saved.updatedAt,
               changeKey: crypto.randomUUID(),
             },
@@ -95,7 +102,12 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
     try {
       const { entry } = row;
       const result = await deletePersonalLibraryEntry({
-        data: { subjectId, revision: entry.revision, idempotencyKey: entry.removeKey },
+        data: {
+          subjectId,
+          revision: entry.revision,
+          ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
+          idempotencyKey: entry.removeKey,
+        },
         headers: csrfHeaders(),
       });
       if (result.ok || result.reason === 'missing') {

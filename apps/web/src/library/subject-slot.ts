@@ -13,6 +13,7 @@ export type SubjectSlotEntry = {
   subjectId: string;
   state: LibraryEntryStateRead;
   revision: number;
+  incarnationId?: string | null;
 };
 
 export function subjectSlotStateLabel(state: LibraryEntryStateRead): string {
@@ -63,6 +64,7 @@ export type SubjectLibraryMutation = {
   action?: 'save' | 'clear';
   state?: LibraryEntryStateWrite;
   revision?: number;
+  incarnationId?: string | null;
   collectionId?: string;
   idempotencyKey: string;
 };
@@ -111,7 +113,8 @@ async function readEntry(
     headers: { authorization },
   });
   if (result.status === 404) return null;
-  return readLibraryResult<EntryResult>(result as never).libraryEntry;
+  const entry = readLibraryResult<EntryResult>(result as never).libraryEntry as SubjectSlotEntry;
+  return entry;
 }
 
 async function readPublicCollections(client: KernelClient, subjectId: string): Promise<PublicCollectionsResult> {

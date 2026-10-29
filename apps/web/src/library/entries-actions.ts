@@ -33,7 +33,7 @@ function validateRead(input: unknown): { state?: string; cursor?: string } {
 
 function readIdentity(
   value: Record<string, unknown>,
-): { subjectId: string; revision: number; idempotencyKey: string } | undefined {
+): { subjectId: string; revision: number; idempotencyKey: string; incarnationId?: string | null } | undefined {
   if (
     typeof value.subjectId !== 'string' ||
     value.subjectId.length === 0 ||
@@ -42,10 +42,18 @@ function readIdentity(
     !Number.isInteger(value.revision) ||
     value.revision < 0 ||
     typeof value.idempotencyKey !== 'string' ||
-    !uuid.test(value.idempotencyKey)
+    !uuid.test(value.idempotencyKey) ||
+    (value.incarnationId !== undefined &&
+      value.incarnationId !== null &&
+      (typeof value.incarnationId !== 'string' || !uuid.test(value.incarnationId)))
   )
     return undefined;
-  return { subjectId: value.subjectId, revision: value.revision, idempotencyKey: value.idempotencyKey };
+  return {
+    subjectId: value.subjectId,
+    revision: value.revision,
+    idempotencyKey: value.idempotencyKey,
+    ...(value.incarnationId === undefined ? {} : { incarnationId: value.incarnationId as string | null }),
+  };
 }
 
 function validateChange(input: unknown): LibraryChangeInput {

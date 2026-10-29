@@ -3,9 +3,9 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { libraryFullQuery } from './reads';
+import { changePersonalLibraryEntry, removePersonalLibraryEntry } from './entries-read';
 import { libraryEntryStatesWrite, type LibraryEntryStateWrite } from './subject-slot';
-import type { SubjectLibraryMutation, SubjectLibraryMutationResponse, SubjectSlotEntry } from './subject-slot';
+import type { SubjectLibraryMutation, SubjectLibraryMutationResponse } from './subject-slot';
 
 const writableEntryStates = new Set<LibraryEntryStateWrite>(libraryEntryStatesWrite);
 
@@ -16,73 +16,63 @@ function problemCode(value: unknown): string | undefined {
   return typeof detail.code === 'string' ? detail.code : undefined;
 }
 
-/** A stale revision leaves the stored entry unchanged, so the caller can show what is there now. */
-async function reloadEntry(
-  client: KernelClient,
-  subjectId: string,
-  authorization: string,
-): Promise<SubjectSlotEntry | null | undefined> {
-  const loaded = await client.libraryEntries({ subjectId }).get({
-    query: libraryFullQuery(),
-    headers: { authorization },
-  });
-  if (loaded.status === 404) return null;
-  if (loaded.error || loaded.data == null) return undefined;
-  const entry = loaded.data.libraryEntry;
-  return { subjectId: entry.subjectId, state: entry.state, revision: entry.revision };
-}
-
-async function explainConflict(
-  client: KernelClient,
-  subjectId: string,
-  authorization: string,
-): Promise<SubjectLibraryMutationResponse> {
-  const current = await reloadEntry(client, subjectId, authorization);
-  if (current === undefined) return { result: 'unavailable' };
-  return { result: 'conflict', entry: current };
-}
-
 export async function applySubjectLibraryMutation(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: SubjectLibraryMutation,
 ): Promise<SubjectLibraryMutationResponse> {
   try {
+    if (input.intent === 'entry') {
+      const client = kernelClient();
+      if (input.action === 'clear') {
+        if (!Number.isSafeInteger(input.revision) || !input.revision || input.revision < 1)
+          return { result: 'unavailable' };
+        const removed = await removePersonalLibraryEntry(client, request, sessionEnv, {
+          subjectId: input.subjectId,
+          revision: input.revision,
+          ...(input.incarnationId === undefined ? {} : { incarnationId: input.incarnationId }),
+          idempotencyKey: input.idempotencyKey,
+        });
+        if (removed.ok) return { result: 'cleared', entry: null };
+        if (removed.reason === 'conflict')
+          return {
+            result: 'conflict',
+            entry: {
+              subjectId: removed.entry.subjectId,
+              state: removed.entry.state,
+              revision: removed.entry.revision,
+              ...(removed.entry.incarnationId === undefined ? {} : { incarnationId: removed.entry.incarnationId }),
+            },
+          };
+        return { result: removed.reason === 'closed' ? 'closed' : 'unavailable' };
+      }
+      if (!input.state || !writableEntryStates.has(input.state)) return { result: 'unavailable' };
+      const saved = await changePersonalLibraryEntry(client, request, sessionEnv, {
+        subjectId: input.subjectId,
+        state: input.state,
+        ...(input.revision === undefined ? {} : { revision: input.revision }),
+        ...(input.incarnationId === undefined ? {} : { incarnationId: input.incarnationId }),
+        idempotencyKey: input.idempotencyKey,
+      });
+      if (saved.ok && saved.entry) return { result: 'saved', entry: saved.entry as SubjectSlotEntry };
+      if (saved.ok) return { result: 'unavailable' };
+      if (saved.reason === 'conflict')
+        return {
+          result: 'conflict',
+          entry: {
+            subjectId: saved.entry.subjectId,
+            state: saved.entry.state,
+            revision: saved.entry.revision,
+            ...(saved.entry.incarnationId === undefined ? {} : { incarnationId: saved.entry.incarnationId }),
+          },
+        };
+      return { result: saved.reason === 'closed' ? 'closed' : 'unavailable' };
+    }
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (!authorization) return { result: 'unavailable' };
     const client = kernelClient();
     const headers = { authorization, 'idempotency-key': input.idempotencyKey };
-    if (input.intent === 'entry') {
-      if (input.action === 'clear') {
-        if (!Number.isSafeInteger(input.revision) || !input.revision || input.revision < 1)
-          return { result: 'unavailable' };
-        const removed = await client
-          .libraryEntries({ subjectId: input.subjectId })
-          .delete({}, { query: { revision: input.revision }, headers: headers as never });
-        if (removed.error) {
-          if (isPlatformClosedProblem(removed.status, removed.error.value)) return { result: 'closed' };
-          if (removed.status === 409 && problemCode(removed.error) === 'conflict')
-            return explainConflict(client, input.subjectId, authorization);
-          return { result: 'unavailable' };
-        }
-        return { result: 'cleared', entry: null };
-      }
-      if (!input.state || !writableEntryStates.has(input.state)) return { result: 'unavailable' };
-      const saved = await client
-        .libraryEntries({ subjectId: input.subjectId })
-        .put(
-          { state: input.state, ...(input.revision === undefined ? {} : { revision: input.revision }) },
-          { headers: headers as never },
-        );
-      if (saved.error) {
-        if (isPlatformClosedProblem(saved.status, saved.error.value)) return { result: 'closed' };
-        if (saved.status === 409 && problemCode(saved.error) === 'conflict')
-          return explainConflict(client, input.subjectId, authorization);
-        return { result: 'unavailable' };
-      }
-      return { result: 'saved', entry: saved.data.libraryEntry };
-    }
     if (!input.collectionId) return { result: 'unavailable' };
     const added = await client
       .collections({ collectionId: input.collectionId })

@@ -175,6 +175,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
           intent: 'entry',
           action: 'clear',
           revision: entry.revision,
+          ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
           idempotencyKey: crypto.randomUUID(),
         },
         previous,
@@ -193,6 +194,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         action: 'save',
         state: next,
         ...(entry ? { revision: entry.revision } : {}),
+        ...(entry?.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
         idempotencyKey: crypto.randomUUID(),
       },
       previous,
@@ -245,6 +247,11 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             onSubmit={(event) => event.preventDefault()}
             className="flex flex-wrap items-center gap-2"
           >
+            <input type="hidden" name="subjectId" value={subject.id} />
+            {entry ? <input type="hidden" name="revision" value={entry.revision} /> : null}
+            {typeof entry?.incarnationId === 'string' ? (
+              <input type="hidden" name="incarnationId" value={entry.incarnationId} />
+            ) : null}
             <LibraryStateSelect
               busy={pending}
               disabled={!hydrated || pending}

@@ -13,6 +13,7 @@ import {
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const incarnationIdPattern = idempotencyKeyPattern;
 const writableEntryStates = new Set<LibraryEntryStateWrite>(libraryEntryStatesWrite);
 
 function validateMutation(input: unknown): SubjectLibraryMutation {
@@ -43,6 +44,13 @@ function validateMutation(input: unknown): SubjectLibraryMutation {
     'revision' in input &&
     input.revision !== undefined &&
     (!Number.isSafeInteger(input.revision) || (input.revision as number) < 1)
+  )
+    throw new Error('Invalid subject library action');
+  if (
+    'incarnationId' in input &&
+    input.incarnationId !== undefined &&
+    input.incarnationId !== null &&
+    (typeof input.incarnationId !== 'string' || !incarnationIdPattern.test(input.incarnationId))
   )
     throw new Error('Invalid subject library action');
   if (
