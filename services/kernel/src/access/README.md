@@ -693,8 +693,9 @@ workflow in its batch. Deterministic workflow ids and `ON CONFLICT DO NOTHING` p
 Each row's `opened_at` is the database millisecond clock when the relay commits it, using the same expression as
 `workflow_until`. The delivered checkpoint frontier remains a delivery barrier: its timestamp fences every row
 opened for an envelope delivered before the snapshot, including old failed work on a partition absent from the
-frontier. Completion and status probe only the partial index of open rows with `opened_at <= workflow_until`, never
-DBOS history. Later traffic cannot hold the erasure.
+frontier. Completion and status read the earliest key of the partial open-row index and compare it with
+`workflow_until`. The indexed minimum keeps even an empty probe selective before table statistics refresh; no kept
+row or DBOS history is scanned. Later traffic cannot hold the erasure.
 
 After `effect.run` succeeds, the durable `effect.locator.done` step marks only its own workflow id done. Failures,
 cancellation, exhausted recovery and retention leave the row open, holding every subsequent erasure because custody
