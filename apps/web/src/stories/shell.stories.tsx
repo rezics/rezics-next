@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
@@ -14,7 +14,7 @@ async function accountMenu(context: { canvasElement: HTMLElement }) {
     window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
       ? await within(document.body).findByRole('dialog', { name: m.account_menu() })
       : await within(document.body).findByRole('menu');
-  await expect(content).toBeVisible();
+  await waitFor(() => expect(content).toBeVisible());
   return content;
 }
 export const SignedIn: Story = {

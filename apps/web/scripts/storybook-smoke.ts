@@ -4,6 +4,9 @@ import { chromium, type Browser } from 'playwright';
 
 type Entry = { id: string; title: string; name: string; type: string };
 type Index = { entries: Record<string, Entry> };
+type StoryPreview = {
+  __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
+};
 
 export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser): Promise<void> {
   const app = resolve(import.meta.dir, '..');
@@ -29,13 +32,16 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
   const pageStory = Object.values(webIndex.entries).find(
     (entry) => entry.type === 'story' && entry.title === 'Pages/Shell' && entry.name === 'Signed Out',
   );
+  const signedInStory = Object.values(webIndex.entries).find(
+    (entry) => entry.type === 'story' && entry.title === 'Pages/Shell' && entry.name === 'Signed In',
+  );
   const uiStory = Object.values(uiIndex.entries).find(
     (entry) => entry.type === 'story' && entry.title === 'Rezics UI/Cover Card',
   );
   const coverStory = Object.values(webIndex.entries).find(
     (entry) => entry.type === 'story' && entry.title === 'Pages/Subject',
   );
-  if (!pageStory || !uiStory || !coverStory) {
+  if (!pageStory || !signedInStory || !uiStory || !coverStory) {
     const summaries = {
       pages: Object.values(webIndex.entries)
         .filter((entry) => entry.type === 'story' && entry.title.startsWith('Pages/'))
@@ -49,13 +55,14 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
 
   const scenarios = [
     { id: pageStory.id, globals: '', composed: false, requiresCover: false },
+    { id: signedInStory.id, globals: '', composed: false, requiresCover: false },
     { id: uiStory.id, globals: '', composed: true, requiresCover: false },
     { id: pageStory.id, globals: 'locale:ja;theme:dark', composed: false, requiresCover: false },
     { id: coverStory.id, globals: '', composed: false, requiresCover: true },
   ];
   try {
     for (const scenario of scenarios) {
-      const page = await browser.newPage();
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on('pageerror', (error) => {
         // A composed ref keeps an unused root preview iframe alive; check the active ref frame below.
@@ -97,6 +104,20 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         }
         if (rendered === 'error') {
           throw new Error(`Story ${storyId} failed to render: ${(await errorOverlay.innerText()).slice(0, 2_000)}`);
+        }
+        const phase = await frame.waitForFunction(
+          (id) => {
+            const render = (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender;
+            return render?.id === id && (render.phase === 'finished' || render.phase === 'errored') && render.phase;
+          },
+          scenario.id,
+          { timeout: 30_000 },
+        );
+        if ((await phase.jsonValue()) !== 'finished') {
+          throw new Error(`Story ${storyId} failed its play function: ${errors.join('; ')}`);
+        }
+        if (scenario.id === pageStory.id || scenario.id === signedInStory.id) {
+          await frame.getByRole('menu').waitFor({ state: 'visible', timeout: 10_000 });
         }
         if (scenario.globals) {
           await frame.locator('html[lang="ja"].dark').waitFor({ state: 'attached', timeout: 30_000 });
