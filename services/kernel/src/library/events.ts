@@ -18,6 +18,7 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.follow.updated.v1': Type.Object({ targetId: id }, { additionalProperties: false }),
   'com.rezics.library.entry.updated.v1': Type.Object({ subjectId: id }, { additionalProperties: false }),
   'com.rezics.library.entry.deleted.v1': Type.Object({ subjectId: id }, { additionalProperties: false }),
+  'com.rezics.library.label.changed.v1': Type.Object({ labelId: id }, { additionalProperties: false }),
   'com.rezics.library.progress_session.updated.v1': Type.Object({ sessionId: id }, { additionalProperties: false }),
   'com.rezics.library.copy.updated.v1': Type.Object({ copyId: id }, { additionalProperties: false }),
   'com.rezics.library.copy.deleted.v1': Type.Object({ copyId: id }, { additionalProperties: false }),
