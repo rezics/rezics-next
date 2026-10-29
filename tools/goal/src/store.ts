@@ -215,12 +215,12 @@ export class WorkerStore implements AttemptFence {
       return structuredClone(attempt);
     });
   }
-  /** Pending, running and exited attempts are the only attempts needed for host recovery. */
+  /** Pending, running, waiting and exited attempts are the only attempts needed for host recovery. */
   activeAttempts(): Attempt[] {
     this.refreshSnapshot();
     return this.db
       .query(
-        "SELECT task_id, attempt, body FROM worker_attempts WHERE json_extract(body, '$.state') IN ('pending','running','exited') ORDER BY task_id, attempt",
+        "SELECT task_id, attempt, body FROM worker_attempts WHERE json_extract(body, '$.state') IN ('pending','running','waiting','exited') ORDER BY task_id, attempt",
       )
       .all()
       .map((row) => {
@@ -266,7 +266,7 @@ export class WorkerStore implements AttemptFence {
         FROM worker_tasks AS t
         JOIN worker_attempts AS a ON a.task_id = t.id AND a.attempt = t.current_attempt
         WHERE json_extract(t.body, '$.state') = 'running'
-          AND json_extract(a.body, '$.state') IN ('running', 'exited')
+          AND json_extract(a.body, '$.state') IN ('running', 'waiting', 'exited')
       `)
       .all()
       .map((row) => {

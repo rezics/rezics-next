@@ -45,12 +45,20 @@ export async function settle(
   }
   try {
     // This is the common completion path for normal exits, stops, timeouts and orphan recovery.
-    removeAttemptContainers(ref.taskId, ref.attempt);
     // Stopped or superseded attempts still need Docker cleanup even though they no longer settle records.
+    const currentAttempt = store.attempt(ref);
+    const poolForAttempt = tasks.settings.pools.find((p) => p.name === ref.pool);
+    const pendingChecks = readMeasurement(currentAttempt, {
+      configDirectory: poolForAttempt?.configDirectory,
+      maxLogBytes: 256 * 1024,
+    }).waitingChecks;
+    if (!pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt);
     store.assertCurrent(ref);
     await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
-    if (!store.task(ref.taskId).workspace)
-      await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
+    if (!pendingChecks?.length) {
+      if (!store.task(ref.taskId).workspace)
+        await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
+    }
     let queued = false;
     let finished = false;
     store.write(ref, () => {
@@ -62,6 +70,19 @@ export async function settle(
       }
       const task = store.task(ref.taskId);
       const pool = tasks.settings.pools.find((p) => p.name === ref.pool);
+      const current = store.attempt(ref);
+      if (pendingChecks?.length) {
+        store.updateAttempt(ref, (attempt) => {
+          attempt.state = 'waiting';
+          attempt.checks = pendingChecks;
+          attempt.process = null;
+          attempt.driver = null;
+          attempt.exitCode = code;
+          attempt.session =
+            readMeasurement(current, { configDirectory: pool?.configDirectory }).session ?? attempt.session;
+        });
+        return;
+      }
       const attempt = store.updateAttempt(ref, (a) => {
         a.state = 'exited';
         a.endedAt = new Date().toISOString();

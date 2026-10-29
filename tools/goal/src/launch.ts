@@ -19,6 +19,7 @@ export type LaunchOptions = {
   readOnly?: boolean;
   research?: boolean;
   codex?: Settings['codex'];
+  resumeSession?: string;
 };
 export function launchCommand(options: LaunchOptions): [string, string[]] {
   const { profile, pool, worktree, prompt } = options;
@@ -59,6 +60,7 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
         '--output-format',
         'stream-json',
         '--verbose',
+        ...(options.resumeSession ? ['--resume', options.resumeSession] : []),
         '--strict-mcp-config',
         '--settings',
         JSON.stringify({ disableAllHooks: true }),
@@ -99,6 +101,7 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
     pool.command,
     [
       'exec',
+      ...(options.resumeSession ? ['resume', options.resumeSession] : []),
       '--json',
       '-m',
       profile.model,
@@ -202,11 +205,7 @@ export function workerPrompt(
     task.workspace
       ? `Peers edit this tree at the same time. There are no path reservations or holds. Commit your own work often with git add <your paths> (never -A or .). Use path-limited commits (git commit --only -- <your paths>) so a peer's staged files stay theirs. Every commit must have the subject '${task.workspace.taskName}: <message>' and a 'Goal-Task: ${task.id}' trailer. Task name is the brief's file name without .md: ${task.workspace.taskName}. Never reset, checkout, stash, clean or rebase. A failure in files you did not touch is a peer's work in progress: rerun later or check only your own tests.`
       : '',
-    // A stabilize base can predate the check wrapper (dev tooling reaches stabilize at a cut); without it every check
-    // failed with 'Module not found' before acceptance (2026-10-28).
-    existsSync(join(task.worktree, 'scripts/worker-check.ts'))
-      ? 'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit, plus the root typecheck. Run each as one foreground command through `bun scripts/worker-check.ts -- <command...>` from the worktree root. The wrapper writes live output under `.temp/goal/checks/` and stays silent until exit, then prints the exit status, a short failure summary when needed, and the log path. If the command returns before the check ends (Codex hands back a session, or a wait ends), wait on that same check with `bun scripts/worker-check.ts --wait <id>` (the id it printed at start) again and again until it prints an exit status; never start a second run of it, and never finish your attempt while a check you started is still running. `--wait` returns after at most 10 minutes; exit status 75 with `check: still running` means wait on the same id again. An infrastructure line after the one automatic rerun is a `tool` blocker. Run a whole-workspace check (a workspace check with no files named, or a full web check) only when the contract names one, never to obtain a success summary or after the acceptance passed; an extra check you choose names at most 12 test files, those closest to your change.'
-      : 'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit, plus the root typecheck, each as one foreground command from the worktree root. This base has no scripts/worker-check.ts; do not add one. A command that waits for a test slot is queued, not stuck: let it finish and read its exit status.',
+    'Check slots are the scarce shared resource: start each check with `bun scripts/worker-check.ts --run -- <command...>` from the worktree root. It returns a check id immediately; keep working while checks run. When only waiting remains, finish this turn with `{"status":"waiting","checks":["<id>",...]}`. Never poll, use `--wait`, or return waiting a second time. The manager host will resume this same session with each check result, including exit status, failure summary and log path. An infrastructure line after the one automatic rerun is a `tool` blocker. Run a whole-workspace check (a workspace check with no files named, or a full web check) only when the contract names one; an extra check you choose names at most 12 test files, those closest to your change.',
     'You have the authority to finish. Your declared paths are where the work is expected, not a fence: change any other file the acceptance or a defect blocking it needs, including a defect another Goal left in your base, keep such changes minimal, and list each file outside your paths with its reason in your summary. Your landing runs only your own acceptance, so run the tests that cover every file you change outside your paths before you finish (in services/kernel, `bun run --cwd services/kernel check` without file arguments runs the tests your changes affect); the Goal that owns such a file is told of your change. Files in a risk area your contract does not declare stay closed.',
     'Decide ambiguities yourself from the contract, the specs, the code and the tests, and record each decision in your summary. Report a blocker only when the acceptance tests contradict each other or the specs, when the work needs a product decision the contract does not make, or when a tool or access you need fails.',
     'When a tool or infrastructure failure blocks the work (SSH or rsync to a check host, network, out of disk or memory, file watchers, a service that will not start), retry it at most twice, then finish with a `tool` blocker whose detail starts with the exact error line; do not work around it by weakening the check.',
@@ -421,6 +420,7 @@ export async function launch(
   pool: Pool,
   prompt: string,
   codex?: Settings['codex'],
+  resumeSession?: string,
 ): Promise<RunningWorker> {
   store.assertCurrent(attempt);
   recordFlow(store.db, {
@@ -434,13 +434,14 @@ export async function launch(
   const exitPath = workerExitPath(attempt.logPath),
     pidPath = `${attempt.logPath}.pid`;
   for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
-  const out = openSync(attempt.logPath, 'w'),
+  const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
   const [program, args] = launchCommand({
     profile: attempt.profile,
     pool,
     worktree: task.worktree,
     prompt,
+    ...(resumeSession ? { resumeSession } : {}),
     logPath: attempt.logPath,
     ...(codex ? { codex } : {}),
     // Research clones and reads reference projects and lands its report, so it needs the same access as other work.
