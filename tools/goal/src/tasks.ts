@@ -389,16 +389,20 @@ export class WorkerTasks {
       const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`);
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
-      this.store.updateHeldRetryTask(ref, (current) => {
-        current.brief = reshaped.brief;
-        current.briefPath = briefPath;
-        current.taskClass = reshaped.taskClass;
-        current.state = this.dependenciesMet({ brief: current.brief }) ? 'ready' : 'held';
-        current.pendingBriefChange = {
-          previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
-          newBriefHash: briefHash(reshaped.brief.markdown),
-        };
-      }, { abandonPending: true });
+      this.store.updateHeldRetryTask(
+        ref,
+        (current) => {
+          current.brief = reshaped.brief;
+          current.briefPath = briefPath;
+          current.taskClass = reshaped.taskClass;
+          current.state = this.dependenciesMet({ brief: current.brief }) ? 'ready' : 'held';
+          current.pendingBriefChange = {
+            previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+            newBriefHash: briefHash(reshaped.brief.markdown),
+          };
+        },
+        { abandonPending: true },
+      );
       return;
     }
     const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);

@@ -15,9 +15,13 @@ test('retry --brief on a held task replaces its brief and keeps it held until de
       current.state = 'held';
       current.brief.after = [dependency.id];
     });
-    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => { attempt.state = 'stopped'; });
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
+      attempt.state = 'stopped';
+    });
     const amended = join(h.root, '.temp/goal/amended.md');
-    const amendedText = markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`).concat('\nAmended while held.\n');
+    const amendedText = markdown
+      .replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`)
+      .concat('\nAmended while held.\n');
     writeFileSync(amended, amendedText);
 
     h.tasks.queueRetry(task.id, { brief: amended });
@@ -39,7 +43,9 @@ test('a refused retry writes no brief file', async () => {
     const task = h.tasks.dispatch(h.briefFile);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
-    h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => { current.state = 'integrated'; });
+    h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
+      current.state = 'integrated';
+    });
     const amended = join(h.root, '.temp/goal/amended.md');
     writeFileSync(amended, `${markdown}\nRefused amendment.\n`);
     const briefs = join(h.settings.stateDirectory, 'briefs');
