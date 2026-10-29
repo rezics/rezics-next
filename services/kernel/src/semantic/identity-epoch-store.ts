@@ -176,28 +176,118 @@ export const identityEpochStore: IdentityEpochStore = {
   },
   async readMapping(tx, original) {
     const originalRoute = route(original);
-    const owner = await readPartition(tx, partitionOf(originalRoute));
-    if (!owner) return { state: 'unavailable', reason: 'missing-owner' };
-    if (owner.writeState !== 'active')
-      return { state: 'unavailable', reason: owner.writeState === 'moved' ? 'moved-owner' : 'bootstrap' };
-    const row = (
-      await tx.query(
-        `SELECT m.terminal,m.epoch,m.origin,g.pending_job,g.pending_epoch,
-      EXISTS(SELECT 1 FROM semantic.redirect r WHERE r.route=s.route AND r.subject_id=s.subject_id) redirected
-      FROM semantic.subject s
-      LEFT JOIN semantic.identity_epoch_mapping m ON (m.route,m.original)=(s.route,s.subject_id)
-      LEFT JOIN semantic.identity_epoch_home_gate g ON (g.route,g.destination,g.original)=(s.route,s.subject_id,s.subject_id)
-      WHERE s.route=$1 AND s.subject_id=$2`,
-        [originalRoute, original],
+    const sourcePartition = partitionOf(originalRoute);
+    const observeSource = async (client: CommandTransaction) => {
+      const owner = await readPartition(client, sourcePartition);
+      if (!owner) return { result: { state: 'unavailable', reason: 'missing-owner' } as const };
+      if (owner.writeState !== 'active')
+        return {
+          result: {
+            state: 'unavailable',
+            reason: owner.writeState === 'moved' ? ('moved-owner' as const) : ('bootstrap' as const),
+          } as const,
+        };
+      const row = (
+        await client.query(
+          `SELECT s.recorded_transaction_id AS source_transaction,m.terminal,m.epoch,m.origin,
+            m.recorded_transaction_id AS mapping_transaction,g.pending_job,g.pending_epoch,
+            r.target AS current_target,
+            EXISTS(SELECT 1 FROM semantic.identity_epoch_dirty d
+              WHERE (d.route,d.original)=(s.route,s.subject_id) AND d.revision>d.captured_revision) dirty,
+            EXISTS(SELECT 1 FROM semantic.identity_epoch_member_dirty d
+              WHERE d.original=s.subject_id AND d.revision>d.captured_revision) member_dirty
+          FROM semantic.subject s
+          LEFT JOIN semantic.identity_epoch_mapping m ON (m.route,m.original)=(s.route,s.subject_id)
+          LEFT JOIN semantic.identity_epoch_home_gate g ON (g.route,g.destination,g.original)=(s.route,s.subject_id,s.subject_id)
+          LEFT JOIN LATERAL (SELECT target FROM semantic.redirect
+            WHERE route=s.route AND subject_id=s.subject_id ORDER BY sequence DESC LIMIT 1) r ON true
+          WHERE s.route=$1 AND s.subject_id=$2`,
+          [originalRoute, original],
+        )
+      ).rows[0];
+      if (!row) return { owner, result: { state: 'absent' } as const };
+      const basis = [
+        owner.epoch,
+        owner.position,
+        owner.writeState,
+        row.source_transaction,
+        row.mapping_transaction,
+        row.terminal,
+        row.epoch,
+        row.origin,
+        row.pending_job,
+        row.pending_epoch,
+        row.current_target,
+        row.dirty,
+        row.member_dirty,
+      ];
+      if (row.pending_job)
+        return {
+          owner,
+          basis,
+          result: {
+            state: 'pending',
+            original,
+            job: { jobId: row.pending_job, epoch: BigInt(row.pending_epoch) },
+          } as const,
+        };
+      if (
+        !row.terminal ||
+        !row.mapping_transaction ||
+        row.mapping_transaction !== row.source_transaction ||
+        (row.origin !== 'creation' && row.dirty) ||
+        row.member_dirty ||
+        (row.terminal === original ? row.current_target !== null : row.current_target !== row.terminal)
       )
-    ).rows[0];
-    if (!row) return { state: 'absent' };
-    if (row.pending_job)
-      return { state: 'pending', original, job: { jobId: row.pending_job, epoch: BigInt(row.pending_epoch) } };
-    // Unwired legacy structural writers can invalidate an initialized self; never keep reporting it as self.
-    if (!row.terminal || (row.origin === 'creation' && row.redirected))
-      return { state: 'unavailable', reason: 'bootstrap' };
-    return { state: 'mapped', original, terminal: row.terminal, epoch: BigInt(row.epoch) };
+        return { owner, basis, result: { state: 'unavailable', reason: 'bootstrap' } as const };
+      return {
+        owner,
+        basis,
+        result: { state: 'mapped', original, terminal: row.terminal, epoch: BigInt(row.epoch) } as const,
+      };
+    };
+
+    // The source snapshot is released before touching control. Revisit the same source afterward so
+    // an admission between snapshots, a moved owner, or a newer pending descriptor cannot look current.
+    const source = await withConnection(tx, observeSource);
+    if (source.result.state === 'unavailable' || source.result.state === 'absent') return source.result;
+    const controlObservation = await withConnection(tx, async (client) => {
+      const owner = await readPartition(client, IDENTITY_EPOCH_CONTROL_PARTITION);
+      if (!owner) return { unavailable: 'missing-owner' as const };
+      if (owner.writeState !== 'active')
+        return { unavailable: owner.writeState === 'moved' ? ('moved-owner' as const) : ('bootstrap' as const) };
+      const row = (
+        await client.query(
+          `SELECT c.pending_job,c.pending_epoch,j.state,
+            EXISTS(SELECT 1 FROM semantic.identity_epoch_change x
+              WHERE x.job_id=c.pending_job AND x.original=$1) affected
+          FROM semantic.identity_epoch_control c
+          LEFT JOIN semantic.identity_epoch_job j ON j.job_id=c.pending_job
+          WHERE c.partition_no=0`,
+          [original],
+        )
+      ).rows[0];
+      if (!row) return { unavailable: 'bootstrap' as const };
+      return {
+        unavailable: null,
+        pending: row.pending_job && row.state === 'pending' && row.affected,
+        job: row.pending_job && row.state === 'pending' && row.affected
+          ? { jobId: row.pending_job, epoch: BigInt(row.pending_epoch) }
+          : null,
+      };
+    });
+    if (controlObservation.unavailable)
+      return { state: 'unavailable', reason: controlObservation.unavailable };
+    const current = await withConnection(tx, observeSource);
+    if (current.result.state === 'unavailable' || current.result.state === 'absent') return current.result;
+    if (current.basis?.map(String).join('\u0000') !== source.basis?.map(String).join('\u0000'))
+      return current.result.state === 'pending' && controlObservation.job?.jobId === current.result.job.jobId
+        ? current.result
+        : { state: 'unavailable', reason: 'bootstrap' };
+    if (source.result.state === 'pending')
+      return controlObservation.job?.jobId === source.result.job.jobId ? source.result : { state: 'unavailable', reason: 'bootstrap' };
+    if (controlObservation.pending) return { state: 'pending', original, job: controlObservation.job! };
+    return current.result;
   },
   async admit(tx, { receipt }) {
     const command = control(tx);
