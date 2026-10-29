@@ -8,11 +8,7 @@ import { createAuthService } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { AUTH_MAINTENANCE_SCHEDULE, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
 import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
-import {
-  checkGrowth,
-  GrowthSettleInfrastructureError,
-  openGrowthDatabase,
-} from '../../kernel/test/support/growth.ts';
+import { checkGrowth, GrowthSettleInfrastructureError, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 if (process.argv.includes('--growth-child')) {
   void runGrowth();
