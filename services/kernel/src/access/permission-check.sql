@@ -55,6 +55,11 @@ WITH input AS NOT MATERIALIZED (
           AND g.action = i.action AND g.subject_kind = k.subject_kind
           AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
           AND g.valid <= tstzrange((SELECT at FROM authority), NULL, '[)')
+          AND ROW(g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid)
+            >= ROW(k.subject_kind, k.subject_id, k.subject_role, i.action, 'empty'::tstzrange)
+          AND ROW(g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid)
+            <= ROW(k.subject_kind, k.subject_id, k.subject_role, i.action,
+                   tstzrange((SELECT at FROM authority), NULL, '[)'))
         ORDER BY g.subject_kind DESC, g.subject_id DESC, g.subject_role DESC,
                  g.action DESC, g.valid DESC LIMIT 1
       ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0

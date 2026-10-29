@@ -820,7 +820,7 @@ Bearer scope claims are bounded once at authenticator creation to 129 characters
 
 The Global grant B-tree companion orders subject kind/id/role, action and validity; its partial predicate fixes
 route/resource, which are included for covering reads. Each probe binds the full key, seeks the greatest `valid <= [T,infinity)`, then checks
-`valid @> T` after `LIMIT 1`. All stored finite starts are inclusive and intervals never overlap, so this
+`valid @> T` after `LIMIT 1`. Full-key row bounds also supply the B-tree start and stop keys. All stored finite starts are inclusive and intervals never overlap, so this
 predecessor is the only range that could contain T, including unbounded endpoints. Gaps and exclusive ends
 still deny. Neither other subjects/resources nor the key's expired/future intervals are enumerated. The same
 probe is used in `permission-candidates.sql` and `governance-reach-candidates.sql`; the temporal primary key
