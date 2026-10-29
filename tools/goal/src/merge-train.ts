@@ -33,8 +33,9 @@ import {
   type GateRunner,
 } from './merge.ts';
 
-import type { AffectedTestResult } from './types.ts';
+import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
+import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 
 export type DerivedFile = {
   path: string;
@@ -551,15 +552,17 @@ function rebaseWithDerivedFiles(
   originalBase: string,
   logPath: string,
   files: readonly DerivedFile[],
-): unknown | undefined {
+): unknown | boolean {
   try {
     git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
-    return undefined;
+    return false;
   } catch (initialError) {
     let rebaseError: unknown = initialError;
     for (;;) {
       const conflicts = unmergedFiles(cwd);
       if (!conflicts.length) throw rebaseError;
+      // bun.lock is an integration-stage derived file: keep the integration lockfile, regenerate from the
+      // merged manifests, and commit that result as part of the rebased landing.
       const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files).length > 0);
       const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
       // Validate all ordinary conflicts before choosing a generated side or running a generator.
@@ -584,12 +587,13 @@ function rebaseWithDerivedFiles(
         if (result.status !== 0)
           throw new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`);
       }
+      const regeneratedLockfile = derivedConflicts.includes('bun.lock');
       const stageFiles = new Set(derivedConflicts);
       for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files).length) stageFiles.add(path);
       stagePaths(cwd, stageFiles);
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
-        return undefined;
+        return regeneratedLockfile;
       } catch (continueError) {
         if (!unmergedFiles(cwd).length) throw continueError;
         rebaseError = continueError;
@@ -616,7 +620,7 @@ export function rebaseOnto(
   logPath: string,
   files: readonly DerivedFile[] = defaultDerivedFiles,
   allowedPaths?: readonly string[],
-): void {
+): boolean {
   const upstream = rebaseUpstream(cwd, base, originalBase);
   const head = git(cwd, 'rev-parse', 'HEAD');
   // Files the worker's own commits touched: a squash may change these outside the allowed paths, never a file only
@@ -624,7 +628,7 @@ export function rebaseOnto(
   const own = new Set(git(cwd, 'log', '--name-only', '--format=', `${base}..${head}`).split('\n').filter(Boolean));
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
   const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
-  if (initialConflict === undefined) return;
+  if (typeof initialConflict === 'boolean') return initialConflict;
 
   git(cwd, 'rebase', '--abort');
   git(cwd, 'reset', '--soft', upstream);
@@ -648,7 +652,8 @@ export function rebaseOnto(
   }
 
   const squashedConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
-  if (squashedConflict !== undefined) throw squashedConflict;
+  if (squashedConflict !== undefined && typeof squashedConflict !== 'boolean') throw squashedConflict;
+  return squashedConflict === true;
 }
 
 export type TrainOptions = {
@@ -772,6 +777,7 @@ export class MergeTrain {
       acquired = true;
       const roundHead = this.integrationHead();
       const deferred = new Set<number>();
+      let processedEntry = false;
       try {
         if (o.codeIsCurrent && !o.codeIsCurrent()) {
           await handOff();
@@ -784,6 +790,7 @@ export class MergeTrain {
           }
           const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
           if (!entry) break;
+          processedEntry = true;
           try {
             if (entry.outcome) {
               o.sink.onGateOutcome(entry.outcome);
@@ -884,7 +891,9 @@ export class MergeTrain {
             retryDeferred.delete(entry.id);
           }
         }
-        await o.beforeRelease?.();
+        // The main and dev lanes drain concurrently. A hook intended to observe a finished landing must not
+        // be consumed by the idle lane before the lane with queued work reaches its handoff.
+        if (processedEntry) await o.beforeRelease?.();
       } finally {
         lease.release();
       }
@@ -1195,8 +1204,42 @@ export class MergeTrain {
         const integrationChecks = configuredChecks.filter((check) =>
           changed.some((path) => matchesPath(path, check.paths)),
         );
-        let failedBatch: { output: string; timedOut: boolean; failedCommand?: readonly string[] } | undefined;
+        let failedBatch:
+          | { kind: 'acceptance' | 'integration'; output: string; timedOut: boolean; failedCommand?: readonly string[] }
+          | undefined;
         let batchBaselineOutput = '';
+        // A batch is a sequence of cumulative candidates. Run each member's own acceptance command against the
+        // candidate at the point where that member would land; if one fails, single-land the batch so the failure is
+        // attributed to that task and the remaining members can still proceed.
+        for (const member of prepared) {
+          const command = member.entry.request.gate;
+          git(trainTree, 'reset', '--hard', member.candidate);
+          appendFileSync(
+            member.result.logPath,
+            `\nAcceptance on ${member.candidate}, dev ${base}: ${command.join(' ')}\n`,
+          );
+          const accepted = await (o.runGate ?? gateRunner())(command, trainTree, member.result.logPath);
+          for (const entry of pending) o.fence.assertCurrent(entry.request);
+          if (target() !== base) {
+            retry = true;
+            break;
+          }
+          if (
+            !accepted.passed ||
+            git(trainTree, 'rev-parse', 'HEAD') !== member.candidate ||
+            spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0
+          ) {
+            failedBatch = {
+              kind: 'acceptance',
+              output: accepted.output || 'Acceptance command changed the candidate commit',
+              timedOut: accepted.timedOut,
+              failedCommand: command,
+            };
+            break;
+          }
+        }
+        if (retry) continue;
+        git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
         if (integrationChecks.length) {
           const commands = integrationChecks.map((check) =>
             check.command.join(' ').includes('scripts/typecheck.ts')
@@ -1268,7 +1311,7 @@ export class MergeTrain {
             const addedErrors = baseline.passed
               ? ['candidate failed while dev passed']
               : newErrorLines(checked.output, baseline.output);
-            if (addedErrors.length) failedBatch = checked;
+            if (addedErrors.length) failedBatch ??= { ...checked, kind: 'integration' };
             else
               for (const member of prepared)
                 appendFileSync(
@@ -1279,7 +1322,9 @@ export class MergeTrain {
         }
 
         if (failedBatch) {
-          const note = `Batch integration check failed; falling back to single landings.\n${failedBatch.output}\n`;
+          const note =
+            `Batch ${failedBatch.kind} failed${failedBatch.failedCommand ? ` (${failedBatch.failedCommand.join(' ')})` : ''}; ` +
+            `falling back to single landings.\n${failedBatch.output}\n`;
           let savedBaseline = false;
           for (const entry of pending) {
             if (deferred.has(entry.id)) continue;
@@ -1685,18 +1730,26 @@ export class MergeTrain {
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
-        const affectedResults = workspace
-          ? await Promise.all(
-              (o.affectedTests ?? defaults.affectedTests)
-                .filter((check) => result.changedFiles.some((path) => matchesPath(path, check.paths)))
-                .map((check) =>
-                  runAffectedTest(check.command, trainTree, logPath, {
-                    ...gateEnvironment(process.env, o.stateDirectory),
-                    KERNEL_CHECK_AFFECTED: base,
-                  }),
-                ),
+        const affectedChecks: AffectedTestCheck[] = workspace
+          ? (o.affectedTests ?? defaults.affectedTests).filter((check) =>
+              result.changedFiles.some((path) => matchesPath(path, check.paths)),
             )
-          : (request.affectedTests ?? []);
+          : [];
+        const priorAffectedResults: AffectedTestResult[] = workspace ? [] : [...(request.affectedTests ?? [])];
+        const siblings = siblingTestCommand(
+          siblingTestFiles(result.changedFiles, trainTree),
+          defaults.siblingTests.command,
+        );
+        if (siblings) affectedChecks.push({ paths: [], command: siblings });
+        const landingAffectedResults = await Promise.all(
+          affectedChecks.map((check) =>
+            runAffectedTest(check.command, trainTree, logPath, {
+              ...gateEnvironment(process.env, o.stateDirectory),
+              KERNEL_CHECK_AFFECTED: base,
+            }),
+          ),
+        );
+        const affectedResults = [...priorAffectedResults, ...landingAffectedResults];
         for (const checked of affectedResults) {
           if (checked.status === 'unverified') {
             appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);
@@ -1943,6 +1996,12 @@ export class MergeTrain {
             appendFileSync(logPath, 'dev already fails the integration check, with the same errors\n');
           }
         }
+        // A failed check may leave the train tree on the dev baseline for comparison. Acceptance must always run on
+        // the merged candidate, even when dev already has the same integration-check failure.
+        if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) {
+          git(trainTree, 'reset', '--hard', candidate);
+          git(trainTree, 'clean', '-fdx');
+        }
         if (workspace) {
           stage = 'gate';
           let failed = false;
@@ -1969,18 +2028,21 @@ export class MergeTrain {
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
             throw new Error('Acceptance changed the candidate commit');
         }
-        if (!integratesIntoDev && !controlPlane) {
+        if ((!controlPlane || integratesIntoDev) && !workspace) {
           stage = 'gate';
-          appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
+          appendFileSync(
+            logPath,
+            `\nAcceptance on ${candidate}, ${integratesIntoDev ? 'dev' : 'main'} ${base}: ${request.gate.join(' ')}\n`,
+          );
           const gated = await runGate(request.gate, trainTree, logPath);
-          // A gate on an old main is never authoritative, including a red gate.
+          // A gate on an old target is never authoritative, including a red gate.
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
           if (!gated.passed) {
             result.timedOut = gated.timedOut;
             result.firstFailure = firstFailure(gated.output);
             result.failedCommand = [...request.gate];
-            const key = JSON.stringify([o.gateIdentity ?? '', request.gate]);
+            const key = `acceptance:${JSON.stringify([o.gateIdentity ?? '', request.gate])}`;
             let baseline = o.queue.baseline(base, key);
             if (!baseline) {
               git(trainTree, 'reset', '--hard', base);
@@ -1992,11 +2054,17 @@ export class MergeTrain {
             if (target() !== base) continue;
             result.failsOnMain =
               !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
+            if (result.failsOnMain)
+              appendFileSync(
+                logPath,
+                `${integratesIntoDev ? 'Acceptance failure is pre-existing on dev' : 'Acceptance failure is pre-existing on main'}\n`,
+              );
             result.stage = stage;
             return finish();
           }
-          // Gates may write files but may not replace the commit that was validated.
-          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Gate changed the candidate commit');
+          // Acceptance commands may inspect but not replace or modify the candidate that was validated.
+          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
+            throw new Error('Acceptance command changed the candidate commit');
           git(trainTree, 'diff', '--quiet', 'HEAD', '--');
         }
         stage = 'merge';

@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task } from './types.ts';
 import { acquireDirectoryLease, LeaseHeldError, type DirectoryLease } from './lease.ts';
+import { pruneStores } from './shared-dependencies.ts';
 
 export const IO_PRESSURE_LIMIT = 20;
 export type LifetimeRuntime = {
@@ -90,6 +91,7 @@ export async function removeFinishedWorktree(
         }
       }
       io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
+      pruneStores(join(dirname(candidate.worktree), '..', 'dependency-stores'), settings.worktreeRoot);
       return candidate.id;
     } finally {
       taskLease?.release();

@@ -10,6 +10,9 @@
       "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
     }
   ],
+  "siblingTests": {
+    "command": ["bun", "test"]
+  },
   "integrationChecks": [
     {
       "paths": [

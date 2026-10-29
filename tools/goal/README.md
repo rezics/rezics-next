@@ -24,6 +24,12 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
+Every landing also runs the sibling test for each changed source file that has one: `<name>.test.ts` beside the source,
+or `tests/<name>.test.ts` at the workspace root when no same-directory test exists. The command prefix is configured by
+`siblingTests.command` in `defaults.json` and receives the selected test paths. If a sibling test fails on the candidate,
+the train reruns the failing test files on the landing base; a failure already present there is recorded as pre-existing.
+Kernel changes continue to use the kernel affected-test command, which selects its own affected tests.
+
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. Rebase conflicts regenerate declared
 files from either stage, including on dev landings and retries. Promotion-stage files may declare `inputs`; a dev
 landing that changes one of those inputs runs the declared generator against the rebased candidate and includes changed
@@ -332,13 +338,26 @@ watchdog does not probe when no hosts file is present and does not include the c
 ## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
-`bun run check` from an isolated checkout. Task acceptance commands are saved with the task for promotion. Integration
-rebases onto the integration branch, checks declared paths, formats changes and fast-forwards that branch; it does not
-run task acceptance gates or move `main`. The `integrationChecks` setting lists `{ paths, command }` checks. After
+`bun run check` from an isolated checkout. Task acceptance commands are saved with the task and run on the merged
+candidate before either dev integration or promotion to `main`, using configured remote check hosts like other train
+checks. A failed dev acceptance refuses that landing and records the command and first failure. The train runs the same
+command on the dev base and marks an identical fingerprint as pre-existing. Batched landings run each entry's
+acceptance against its cumulative candidate; a failed batch acceptance falls back to single landings so the failing
+task is identified and other entries can proceed. Integration rebases onto
+the integration branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+The `integrationChecks` setting lists `{ paths, command }` checks. After
 formatting and scope validation, each check runs in order only when a changed file matches its paths. By default,
 changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` install dependencies and construct the
 kernel. Set it to `[]` to disable the check. Other repositories can override the local `gate` command. Gates and
 dependency installation never run in the main checkout or the worker's checkout.
+
+Task worktrees with the same dependency key share one read-only Bun install under the configured dependency-store root
+(default `<worktree root>/../dependency-stores`). Each tree keeps its own small `node_modules` skeleton and workspace
+links; only `.bun` points at the shared store. The key covers the Bun version, root and workspace manifests, `bun.lock`
+and `bunfig.toml`. Store builds use `--backend=copyfile`; the `.bun` tree is made read-only before publication. Run
+`bun tools/goal/src/cli.ts deps private` before changing a manifest or lockfile. A five-directory host-c comparison
+created 69,426 `node_modules` entries per private install (median 4.956 s) versus 27 per shared worktree (median
+0.016 s), after building one shared store.
 
 The `affectedTests` setting independently lists `{ paths: string[], command: string[] }` checks, overridable in
 local settings (use `[]` to disable them). After a successful worker report, settlement commits any remaining work
@@ -379,11 +398,7 @@ target. Tasks from other Goals continue to integrate into the integration branch
 New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
 landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork
 from `main`. If the integration branch does not exist, the controller creates it from `main`.
-`retry --brief` records a held task's amended brief while holding its task lease, before it waits for host capacity. If
-the amended `after:` dependencies remain unmet, the task stays held and the command returns; otherwise the task becomes
-ready and enters ordinary capacity admission before its worker starts. Capacity waits release the task lease and use
-the latest stored brief when admitted, so another amendment can hold the task again while it queues. Held tasks become
-ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
+Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
 cancelled worktrees one at a time, under idle I/O priority, after `/proc/pressure/io` reports `some avg10` at or below
@@ -419,6 +434,7 @@ failures block immediately. A passing gate publishes `main` from that head and m
 starting the next window. Deleting the branch returns promotion to gating dev.
 
 `defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown, an already supported import-only conflict, or a configured flat JSON message catalog; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Configured `jsonMessageConflicts` patterns use a three-way key merge, retain the checked-out catalog's order and append keys introduced by the worker, and format the result with the repository formatter. A key changed to different values on both sides remains a conflict and the error names that key. Other non-generated conflicts stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
+`defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. This includes `bun.lock`: the train keeps the integration lockfile and runs `bun install` against the merged manifests, stages the regenerated lockfile and continues. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown or an already supported import-only conflict; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Other non-generated conflicts stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left
@@ -480,7 +496,11 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 ```
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
-`cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope.
+`cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. Tasks held
+after it remain held because cancellation does not satisfy `after`; each manager that owns those held tasks receives one
+instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
+dependency that predates this notification is reported once to its manager. The manager decides whether to revise the
+dependency.
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 

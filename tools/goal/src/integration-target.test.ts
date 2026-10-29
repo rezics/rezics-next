@@ -8,12 +8,18 @@ import { integrationHarness, markdown } from './test-support.ts';
 
 const success: GateRunner = async () => ({ passed: true, output: '', timedOut: false });
 
-function dispatch(h: ReturnType<typeof integrationHarness>, file: string, goal = 'control-plane', manager?: string) {
+function dispatch(
+  h: ReturnType<typeof integrationHarness>,
+  file: string,
+  goal = 'control-plane',
+  manager?: string,
+  acceptance = ['true'],
+) {
   const briefFile = join(h.settings.stateDirectory, `brief-${crypto.randomUUID()}.md`);
   const text = markdown
     .replace('goal: fixture', `goal: ${goal}${manager ? `\nmanager: ${manager}` : ''}`)
     .replace('paths: [result.txt]', `paths: [${file}]`)
-    .replace('command: [bun, test]', 'command: ["true"]');
+    .replace('command: [bun, test]', `command: ${JSON.stringify(acceptance)}`);
   writeFileSync(briefFile, text);
   const task = h.tasks.dispatch(briefFile);
   mkdirSync(dirname(join(task.worktree, file)), { recursive: true });
@@ -135,7 +141,7 @@ test('a control-plane task with any changed file outside tools/goal integrates i
   try {
     h.ensureDev();
     const main = h.head('main');
-    const task = dispatch(h, 'tools/goal/src/mixed.ts');
+    const task = dispatch(h, 'tools/goal/src/mixed.ts', 'control-plane', undefined, ['task-acceptance']);
     await h.start(task);
     mkdirSync(join(task.worktree, 'docs'), { recursive: true });
     writeFileSync(join(task.worktree, 'docs/control-plane-note.md'), 'outside control-plane path\n');
@@ -151,7 +157,7 @@ test('a control-plane task with any changed file outside tools/goal integrates i
     expect(h.head('main')).toBe(main);
     expect(git(h.root, 'show', 'dev:tools/goal/src/mixed.ts')).toBe('tools/goal/src/mixed.ts');
     expect(git(h.root, 'show', 'dev:docs/control-plane-note.md')).toBe('outside control-plane path');
-    expect(checks).toEqual([]);
+    expect(checks).toEqual([['task-acceptance']]);
     expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
     h.dispose();
@@ -163,7 +169,7 @@ test('a task from another goal continues to integrate into dev even when it chan
   try {
     h.ensureDev();
     const main = h.head('main');
-    const task = dispatch(h, 'tools/goal/src/other-goal.ts', 'fixture');
+    const task = dispatch(h, 'tools/goal/src/other-goal.ts', 'fixture', undefined, ['task-acceptance']);
     await h.start(task);
     const checks: string[][] = [];
 
@@ -174,7 +180,7 @@ test('a task from another goal continues to integrate into dev even when it chan
 
     expect(h.head('main')).toBe(main);
     expect(git(h.root, 'show', 'dev:tools/goal/src/other-goal.ts')).toBe('tools/goal/src/other-goal.ts');
-    expect(checks).toEqual([]);
+    expect(checks).toEqual([['task-acceptance']]);
     expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
     h.dispose();
