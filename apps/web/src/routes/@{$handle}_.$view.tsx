@@ -1,11 +1,23 @@
-import { isView } from '@rezics/composition';
-import { createFileRoute, notFound, useRouter } from '@tanstack/react-router';
-import { readAgentPage } from '../features/pages/agent-actions';
-import { agentPath } from '../features/pages/agent';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { createFileRoute, notFound } from '@tanstack/react-router';
+import { createIsomorphicFn } from '@tanstack/react-start';
+import { env } from 'cloudflare:workers';
+import { agentPageHead, agentPagePaths, agentPathView, agentViewAvailable } from '../features/pages/agent-page';
+import { agentReaderQuery, agentViewQuery } from '../features/pages/agent-queries';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { SubjectPage } from '../features/pages/subject';
+import { personalRead } from '../kernel/query';
+import { useSession } from '../session/query';
+import { defaultReader } from '../subject/reader';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { validatePublicOrigin } from '../shell/origin';
+
+const publicOrigin = createIsomorphicFn()
+  .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
+  .client(() =>
+    validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
+  );
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -29,43 +41,58 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 2048 ? { cursor: search.cursor } : {}),
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ params, deps }) => {
-    // The overview is the agent's own address, not a view address.
-    if (!isView(params.view) || params.view === 'overview') throw notFound();
-    return readAgentPage({
-      data: { handle: params.handle, locale: getLocale(), view: params.view, cursor: deps.cursor },
-    });
+  // readAgentPage(...) is called by the public view query factory; this loader only seeds its query cache.
+  loader: async ({ params, deps, context }) => {
+    const view = agentPathView(params.view);
+    if (!view) throw notFound();
+    const locale = getLocale();
+    const page = await context.queryClient.ensureQueryData(agentViewQuery(params.handle, locale, view, deps.cursor));
+    if (!agentViewAvailable(page.tabs, view)) throw notFound();
+    return { ...page, paths: agentPagePaths(params.handle, view) };
   },
-  head: ({ loaderData }) => ({
-    meta: [
-      {
-        title: loaderData
-          ? [loaderData.title, viewLabel[loaderData.view]()].filter(Boolean).join(' · ')
-          : m.not_found_heading(),
-      },
-    ],
-  }),
+  head: ({ loaderData }) =>
+    loaderData
+      ? agentPageHead(
+          loaderData.overview,
+          getLocale(),
+          publicOrigin(),
+          loaderData.paths,
+          loaderData.view,
+          loaderData.cursor,
+        )
+      : { meta: [{ title: m.not_found_heading() }] },
   component: AgentViewRoute,
 });
 
 function AgentViewRoute() {
-  const { page, reader, relations, tabs, title, view, handle } = Route.useLoaderData();
-  const nonce = useRouter().options.ssr?.nonce;
+  const { handle, view: rawView } = Route.useParams();
+  const view = agentPathView(rawView);
+  if (!view || view === 'overview') throw notFound();
+  const { cursor } = Route.useSearch();
   const locale = getLocale();
+  const { data } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor));
+  const { state: session } = useSession();
+  const { data: reader } = useQuery({
+    ...agentReaderQuery(handle, locale),
+    enabled: personalRead.enabled && session === 'signed-in',
+  });
   return (
     <SubjectPage
-      page={page}
+      page={data.page}
       locale={locale}
       messages={subjectPageMessages()}
-      reader={reader}
-      relations={relations}
+      reader={reader ?? defaultReader}
+      relations={data.relations}
       link={SubjectLink}
       view={view}
-      tabs={tabs}
+      tabs={data.tabs}
       tabLabels={viewTabLabels()}
-      base={agentPath(locale, handle)}
-      heading={{ title, label: viewLabel[view](), href: agentPath(locale, handle) }}
-      {...(nonce !== undefined ? { nonce } : {})}
+      base={`/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`}
+      heading={{
+        title: data.title,
+        label: viewLabel[view](),
+        href: `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`,
+      }}
       renderJsonLd={false}
     />
   );

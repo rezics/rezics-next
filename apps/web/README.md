@@ -921,6 +921,11 @@ language through the client's `accept-language`.
   (4 in the overview, at most 20 posts, 20 reviews or 24 collections in a view), so the page is O(limit × lists)
   whatever the account's history; 0 R/A
 - **Growth check:** `tests/agent-pages-cost.test.ts`: `an agent page reads and renders what its limits bound at 1, 10 and 100 threads, posts and collections`
+- **Routing and metadata:** `agentPageQuery` and `agentViewQuery` are public reads ensured by the route loaders and
+  reused with `useSuspenseQuery`. The reader's preferences use `agentReaderQuery` with `personalRead`, start in the
+  browser after hydration, and keep the server render session-free. The overview and each view supply their own
+  locale paths; `pageHead()` describes the public identity with the localized summary, profile card and one
+  `ProfilePage` plus `BreadcrumbList` graph.
 
 ### Subject library slot
 

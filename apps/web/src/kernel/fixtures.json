@@ -889,6 +889,21 @@
         "focalPoint": null,
         "credit": { "rightsHolder": "REZICS fixtures", "license": "CC0 1.0" }
       }
+    },
+    "0192f3a0-6c1e-7b2a-f001-000000000001": {
+      "id": "0192f3a0-6c1e-7b2a-f001-000000000001",
+      "type": "schema:Person",
+      "types": ["schema:Person", "schema:Thing"],
+      "label": { "value": "Mira Okabe", "language": "en" },
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-a001-000000000003",
+        "width": 512,
+        "height": 512,
+        "placeholder": { "thumbhash": "", "color": "#70556c" },
+        "variants": [{ "format": "webp", "width": 320 }],
+        "focalPoint": null,
+        "credit": null
+      }
     }
   },
   "types": {

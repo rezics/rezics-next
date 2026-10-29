@@ -117,6 +117,14 @@ export type FixtureAccount = {
 
 export type KernelRecording = { status: number; [key: string]: unknown };
 
+/** A fake-kernel request summary for bounded-read and anonymous-render tests. */
+export type FakeKernelCall = {
+  method: string;
+  path: string;
+  authorization: string | null;
+  cookie: string | null;
+};
+
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
 const reviewFakeRecordings: Record<string, KernelRecording> = {
   'subject-page': subjectPageRecording,
@@ -989,7 +997,7 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
   });
 }
 
-export function createFakeKernelFetch(given: Fixtures): typeof fetch {
+export function createFakeKernelFetch(given: Fixtures, observe?: (call: FakeKernelCall) => void): typeof fetch {
   // Fixtures that name no accounts get the demo cast, so every agent address in the dev site answers.
   const fixtures: Fixtures = given.accounts
     ? given
@@ -1005,6 +1013,12 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
     const exposure = exposureResponse(request, given.admitted);
     if (exposure) return exposure;
     const url = new URL(request.url);
+    observe?.({
+      method: request.method,
+      path: url.pathname,
+      authorization: request.headers.get('authorization'),
+      cookie: request.headers.get('cookie'),
+    });
     const moduleRecording = await answerFakeRoute('fixture', request, undefined, fixtures);
     if (moduleRecording) return recordedResponse(moduleRecording);
     if (request.method === 'GET') {

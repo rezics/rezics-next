@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import agentPageRecording from '../kernel/recorded/agent-page.json';
+import agentPageReaderRecording from '../kernel/recorded/agent-page-reader.json';
 import { PageStory, pageReady } from './page';
 
 const meta = { title: 'Pages/Agent', parameters: { layout: 'fullscreen' } } satisfies Meta;
@@ -9,11 +11,21 @@ type Story = StoryObj<typeof meta>;
 export const VerifiedPerson: Story = {
   name: 'Verified person',
   play: pageReady,
-  render: () => <PageStory visitor="Signed Out" path="/@haruka" />,
+  render: () => <PageStory visitor="Signed Out" path={`/@${agentPageRecording.handle}`} />,
+};
+export const VerifiedPersonSignedIn: Story = {
+  name: 'Verified person, signed in',
+  play: pageReady,
+  render: () => <PageStory visitor="Signed In" path={`/@${agentPageRecording.handle}`} />,
 };
 /** A reader's account: its own agent node, a placeholder avatar and only the activity views. */
 export const Reader: Story = {
   name: 'Reader',
   play: pageReady,
-  render: () => <PageStory visitor="Signed Out" path="/@mira" />,
+  render: () => <PageStory visitor="Signed Out" path={`/@${agentPageReaderRecording.handle}`} />,
+};
+export const ReaderSignedIn: Story = {
+  name: 'Reader, signed in',
+  play: pageReady,
+  render: () => <PageStory visitor="Signed In" path={`/@${agentPageReaderRecording.handle}`} />,
 };

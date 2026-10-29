@@ -7,6 +7,7 @@ import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { relationLabels } from '../../subject/definitions';
 import { loadReader } from '../../subject/load-reader';
+import type { Reader } from '../../subject/reader';
 import { continueAgentList, loadAgentPage, agentTitle } from './agent';
 import { pageRelationProperties } from './subject';
 import { subjectTabs } from './views';
@@ -23,13 +24,11 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
     return { handle, locale, view: view as View | undefined, cursor: cursor as string | undefined };
   })
   .handler(async ({ data }) => {
-    setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
     const view = data.view && data.view !== 'overview' ? data.view : undefined;
-    const [result, overview, reader] = await Promise.all([
+    const [result, overview] = await Promise.all([
       loadAgentPage(client, data.handle, view, data.locale),
       view ? loadAgentPage(client, data.handle, undefined, data.locale) : undefined,
-      loadReader(client, getRequest(), env as Partial<SessionEnv>),
     ]);
     // The same not-found page for every handle the kernel does not answer, whatever the reason.
     if (result.kind === 'missing' || overview?.kind === 'missing') throw notFound();
@@ -39,9 +38,24 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
       view: view ?? ('overview' as View),
       handle: data.handle,
       page,
-      reader,
+      overview: shown.page,
+      ...(data.cursor ? { cursor: data.cursor } : {}),
       relations: await relationLabels(pageRelationProperties(shown.page), data.locale),
       tabs: subjectTabs(shown.page),
       title: agentTitle(shown.page),
     };
+  });
+
+/** Reader preferences are loaded by the browser after hydration; they never affect public HTML. */
+export const readAgentReader = createServerFn({ method: 'GET', strict: false })
+  .validator((input: unknown) => {
+    const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+    const { handle, locale } = record;
+    if (typeof handle !== 'string' || handle.length === 0 || handle.length > 128) throw notFound();
+    if (typeof locale !== 'string' || locale.length > 35) throw notFound();
+    return { handle, locale };
+  })
+  .handler(async ({ data }): Promise<Reader> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadReader(kernelClient(data.locale), getRequest(), env as Partial<SessionEnv>);
   });
