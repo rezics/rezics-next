@@ -98,7 +98,7 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
           <Button
             variant="outline"
             size="lg"
-            className="w-full sm:w-auto"
+            className="w-full disabled:opacity-100 sm:w-auto"
             disabled={!admitted || session === 'unknown'}
             onClick={() => void start()}
           >
@@ -107,7 +107,7 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
         ) : phase === 'closed' ? null : (
           <Button
             size="lg"
-            className="w-full sm:w-auto"
+            className="w-full disabled:opacity-100 sm:w-auto"
             disabled={!admitted || phase !== 'ready' || session === 'unknown'}
             onClick={() => void start()}
           >
