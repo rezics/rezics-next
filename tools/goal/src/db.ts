@@ -3,6 +3,31 @@ import { Database } from 'bun:sqlite';
 /** One schema step owned by one module. A module's migrations must not reference another module's tables. */
 export type Migration = { module: string; version: number; sql: string };
 
+export const workspaceMigrations: readonly Migration[] = [
+  {
+    module: 'workspace',
+    version: 1,
+    sql: `
+CREATE TABLE module_workspaces (module TEXT PRIMARY KEY, body TEXT NOT NULL);
+CREATE TABLE workspace_owners (token TEXT PRIMARY KEY, module TEXT NOT NULL, task TEXT NOT NULL, attempt INTEGER NOT NULL, state TEXT NOT NULL, body TEXT NOT NULL);
+CREATE UNIQUE INDEX workspace_attempt ON workspace_owners(module, task, attempt);
+CREATE INDEX workspace_active ON workspace_owners(module, state);
+CREATE INDEX workspace_task_active ON workspace_owners(task, state);
+CREATE TABLE workspace_operations (id TEXT PRIMARY KEY, module TEXT NOT NULL, state TEXT NOT NULL, body TEXT NOT NULL);
+CREATE INDEX workspace_pending_operations ON workspace_operations(module, state);
+CREATE TABLE workspace_prepared (task TEXT NOT NULL, attempt INTEGER NOT NULL, module TEXT NOT NULL, source_commit TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task, attempt));
+CREATE INDEX workspace_prepared_module ON workspace_prepared(module);
+`,
+  },
+  {
+    module: 'workspace',
+    version: 2,
+    sql: `DROP TABLE workspace_owners;
+DROP TABLE workspace_operations;
+DROP TABLE workspace_prepared;`,
+  },
+];
+
 /** Opens the control-plane store: SQLite in WAL mode, independent of any product database. */
 export function openDb(path: string): Database {
   const db = new Database(path, { create: true, strict: true });

@@ -19,7 +19,7 @@ bun tools/goal/src/cli.ts attempts --json
 ```
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit on separate branches and do not rebase, merge or change acceptance tests.
+must have main checked out. Workers commit on their assigned branches and do not rebase, merge or change acceptance tests.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
@@ -45,6 +45,54 @@ queue to current code before it can take another request. Pumps used by short co
 another process holds the lane lease.
 Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
 A stale manager host restarts after finishing its active request and recovers persisted sessions.
+
+## Shared module workspaces (opt in)
+
+Isolated worktrees remain the default. Local settings can name modules as path globs:
+
+```json
+{
+  "sharedWebModules": {
+    "library": [
+      "apps/web/src/library/**",
+      "apps/web/src/stories/library-*.stories.tsx",
+      "apps/web/tests/library*.test.ts"
+    ]
+  }
+}
+```
+
+A task whose declared paths all fit one configured module uses that module's single worktree at
+`<worktreeRoot>/modules/<module>`, on `ws/<module>`, created from dev on first use. Matching includes exact paths,
+identical globs and subtrees under a configured `/**` root; unproved glob containment, mixed-module and unmatched
+tasks keep isolated worktrees. Stabilize-target tasks also keep their existing isolated workflow. Module mappings
+cannot overlap. Explicit brief dependencies still apply; overlapping paths introduce no dependencies, reservations,
+worker cap or holds. Several workers run in the same module at once.
+
+Peers edit the tree at the same time. Workers commit their own work often with `git add <your paths>` (never `-A`
+or `.`), then a path-limited `git commit --only ... -- <your paths>` to leave a peer's staged files alone. The subject
+is `<task name>: <message>`; task name is the original brief's file name without `.md`. Every worker commit carries
+`Goal-Task: <task id>` as a Git trailer. Attribution uses Git's trailer parser, never subject text or the entire branch
+diff. Workers never reset, checkout, stash, clean or rebase. A failure in files they did not touch is a peer's work in
+progress: rerun later or check only their own tests. The controller never sweeps shared leftovers into a commit or
+stops processes merely because their working directory is shared. Frozen acceptance inputs retain their usual
+protection and controller commits; undeclared risk areas remain closed.
+
+When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
+worktree. It runs the usual affected checks and task acceptance on that combined candidate before advancing dev
+with its usual expected-head check. Source commits remain intact. Each task's trailer commits determine which
+changes belong to it and whether all its commits are on dev; those tasks become integrated. A task with no trailer
+commits cannot finish by claiming a peer's work. A failing landing returns to the tasks identified by the failing
+acceptance or changed files. Main promotion retains its existing workflow.
+
+The controller merges dev into the workspace only while no worker runs there, under the same short lease used for
+launch. Pending launches also block that merge. Dirty work is preserved and defers the merge until a later idle
+opportunity; no checkpoint, stash, reset or snapshot machinery is used. Landing can proceed while peers keep editing.
+The shared worktree persists across completed tasks. Shared retries skip isolated cleanup and rebasing.
+
+Acceptance: `bun test tools/goal/src/workspace.test.ts`. Before landing executable control-plane changes, run the
+whole tools/goal suite and its typecheck. The [research report](../../docs/research/web-shared-workspace.md) retains
+historical measurements and source evidence; this README owns the adopted protocol.
 
 ## Direct check-host routes
 

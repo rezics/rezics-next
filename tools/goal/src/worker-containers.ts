@@ -22,7 +22,7 @@ export function removeAttemptContainers(taskId: string, attempt: number): void {
     }
     const ids = listed.stdout.trim().split(/\s+/).filter(Boolean);
     if (!ids.length) return;
-    const removed = spawnSync('docker', ['rm', '-f', ...ids], { encoding: 'utf8' });
+    const removed = spawnSync('docker', ['rm', '-f', '-v', ...ids], { encoding: 'utf8' });
     if (removed.error || removed.status !== 0)
       logRemovalError(
         `Could not remove worker containers for ${label}: ${removed.error ?? removed.stderr ?? removed.status}`,

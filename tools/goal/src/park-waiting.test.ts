@@ -18,10 +18,11 @@ test.skipIf(!hasWorkerCheck)(
     mkdirSync(join(root, '.temp'), { recursive: true });
     const waitFile = join(root, '.temp', 'check-wait');
     let child: ReturnType<typeof Bun.spawn> | undefined;
+    let start: ReturnType<typeof Bun.spawn> | undefined;
     let output = '';
     let stderr = '';
     try {
-      child = Bun.spawn(
+      start = Bun.spawn(
         [
           process.execPath,
           join(repository, 'scripts/worker-check.ts'),
@@ -38,10 +39,10 @@ test.skipIf(!hasWorkerCheck)(
           stderr: 'pipe',
         },
       );
-      const stdoutStream = child.stdout;
-      const stderrStream = child.stderr;
-      if (!stdoutStream || typeof stdoutStream === 'number' || !stderrStream || typeof stderrStream === 'number') {
-        throw new Error('The worker check did not expose piped output streams');
+      const startStdout = start.stdout;
+      const startStderr = start.stderr;
+      if (!startStdout || typeof startStdout === 'number' || !startStderr || typeof startStderr === 'number') {
+        throw new Error('The worker check launcher did not expose piped output streams');
       }
       const collect = async (stream: ReadableStream<Uint8Array>, append: (value: string) => void): Promise<void> => {
         const reader = stream.getReader();
@@ -52,6 +53,28 @@ test.skipIf(!hasWorkerCheck)(
           if (done) break;
         }
       };
+      let startOutput = '';
+      let startErrors = '';
+      const startStdoutDone = collect(startStdout, (value) => (startOutput += value));
+      const startStderrDone = collect(startStderr, (value) => (startErrors += value));
+      expect(await start.exited).toBe(0);
+      await Promise.all([startStdoutDone, startStderrDone]);
+      expect(startErrors).toBe('');
+      const id = startOutput.match(/check: id ([0-9a-f-]+)/)?.[1];
+      expect(id).toBeDefined();
+
+      child = Bun.spawn([process.execPath, join(repository, 'scripts/worker-check.ts'), '--wait', id!], {
+        cwd: root,
+        env: { ...process.env, GOAL_CHECK_WAIT_FILE: waitFile },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const stdoutStream = child.stdout;
+      const stderrStream = child.stderr;
+      if (!stdoutStream || typeof stdoutStream === 'number' || !stderrStream || typeof stderrStream === 'number') {
+        throw new Error('The worker check waiter did not expose piped output streams');
+      }
       const stdout = collect(stdoutStream, (value) => (output += value));
       const errors = collect(stderrStream, (value) => (stderr += value));
 
@@ -71,7 +94,7 @@ test.skipIf(!hasWorkerCheck)(
       expect(output).toContain('check: failure summary');
       expect(output).toContain('FAIL: check assertion failed');
       expect(output).toContain('check: log .temp/goal/checks/worker-check-');
-      expect(output).not.toContain('worker check running');
+      expect(output).not.toContain('\nworker check running\n');
     } finally {
       if (child?.exitCode === null) {
         child.kill();
@@ -117,9 +140,11 @@ test('the worker protocol tells workers to run checks in the foreground and neve
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('one foreground command');
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
-    // One 300 s tool wait was the whole budget: workers ended attempts while their checks ran (2026-10-28).
     expect(prompt).toContain('again and again until it prints an exit status');
     expect(prompt).toContain('never finish your attempt while a check you started is still running');
+    expect(prompt).toContain('exit status 75 with `check: still running`');
+    expect(prompt).toContain('after the one automatic rerun');
+    expect(prompt).not.toContain('one blocking wait');
   } finally {
     h.dispose();
   }

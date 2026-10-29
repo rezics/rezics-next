@@ -1,5 +1,14 @@
 import { expect, test } from 'bun:test';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -88,7 +97,7 @@ test.serial('attempt cleanup lists by the exact attempt label and removes only r
     process.env.WORKER_CONTAINER_RM_LOG = rmLog;
     process.env.WORKER_CONTAINER_TRACE = join(box.directory, 'trace');
     removeAttemptContainers('task-7', 3);
-    expect(readFileSync(rmLog, 'utf8').trim()).toBe('rm -f owned-a owned-b');
+    expect(readFileSync(rmLog, 'utf8').trim()).toBe('rm -f -v owned-a owned-b');
     expect(readFileSync(process.env.WORKER_CONTAINER_TRACE, 'utf8').trim()).toBe(
       'ps -aq --filter label=rezics.worker.attempt=task-7/3',
     );
@@ -140,10 +149,10 @@ test.serial(
         }
       }
       expect(readFileSync(rmLog, 'utf8').trim().split('\n')).toEqual([
-        'rm -f owned',
-        'rm -f owned',
-        'rm -f owned',
-        'rm -f owned',
+        'rm -f -v owned',
+        'rm -f -v owned',
+        'rm -f -v owned',
+        'rm -f -v owned',
       ]);
     } finally {
       if (previousPath === undefined) delete process.env.PATH;

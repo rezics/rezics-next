@@ -48,6 +48,8 @@ export type Settings = {
   mainCheckout: string;
   stateDirectory: string;
   worktreeRoot: string;
+  /** Opt in locally. Each module has its own ws/<module> branch and persistent shared checkout. */
+  sharedWebModules?: Record<string, string[]>;
   notes?: readonly import('./notes.ts').Note[];
   mainBranch: string;
   integrationBranch: string;
@@ -129,6 +131,7 @@ export type Task = {
   worktree: string;
   branch: string;
   base: string;
+  workspace?: { module: string; taskName: string };
   taskClass: TaskClass;
   currentAttempt: number;
   createdAt: string;

@@ -11,7 +11,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
+import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
@@ -27,6 +27,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
+import { webModule, WorkspaceController } from './workspace.ts';
 
 type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
 function normalizedBriefText(markdown: string): string {
@@ -58,6 +59,7 @@ function commitFrozenFiles(
   files: readonly FrozenFile[],
   formatCommand: readonly string[],
   previous: readonly Pick<FrozenFile, 'path' | 'hash'>[] = [],
+  shared = false,
 ): FrozenCommit {
   const current = new Map(files.map((file) => [file.path, file]));
   const touched = new Set([...previous.map((file) => file.path), ...current.keys()]);
@@ -107,8 +109,11 @@ function commitFrozenFiles(
   if (existing.length) git(worktree, ['add', '-A', '--', ...existing]);
   const removed = previous.map((file) => file.path).filter((path) => !current.has(path));
   if (removed.length) git(worktree, ['add', '-u', '--', ...removed]);
-  const status = spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: worktree });
-  if (status.status !== 0) git(worktree, ['commit', '-m', 'test: frozen acceptance files']);
+  const status = spawnSync('git', ['diff', '--cached', '--quiet', ...(shared ? ['--', ...touched] : [])], {
+    cwd: worktree,
+  });
+  if (status.status !== 0)
+    git(worktree, ['commit', '-m', 'test: frozen acceptance files', ...(shared ? ['--only', '--', ...touched] : [])]);
   return { files: committedFiles, ...(formatterError ? { formatterError } : {}) };
 }
 
@@ -239,6 +244,7 @@ export class WorkerTasks {
   private commitRetryLeftovers(task: Task, attempt: number): void {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
     // rebases from the branch tip again and hands the worker the conflicted files, so the old operation is dropped.
+    if (task.workspace) return;
     const gitPath = (name: string) => resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]));
     // A git process killed under load leaves its index lock behind. The attempt has ended and this retry holds the
     // task's lease, so a lock a minute old belongs to nobody.
@@ -274,6 +280,7 @@ export class WorkerTasks {
   }
   /** A worker's acceptance runs on its worktree, so what lands is that worktree: commit what the worker left out. */
   commitFinishedWork(task: Task, attempt: number): boolean {
+    if (task.workspace) return false;
     for (const state of ['rebase-merge', 'rebase-apply', 'MERGE_HEAD'])
       if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state])))) return false;
     if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return false;
@@ -305,6 +312,27 @@ export class WorkerTasks {
     // When managers dispatched together, the 30-second default failed dispatches before their tasks existed.
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
     try {
+      const module = webModule(submittedBrief, this.settings);
+      if (module) {
+        const controller = new WorkspaceController(this.settings, this.store);
+        const firstUse = !this.store.db.query('SELECT module FROM module_workspaces WHERE module=?').get(module);
+        const workspace = controller.open(module, this.taskBaseHead(submittedBrief));
+        mkdirSync(dirname(briefPath), { recursive: true });
+        writeFileSync(briefPath, submittedBrief.markdown, { flag: 'wx' });
+        const task = this.store.createTask(
+          submittedBrief,
+          { branch: workspace.branch, worktree: workspace.worktree, briefPath, base: workspace.base },
+          taskClass,
+          id,
+        );
+        this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
+          current.workspace = { module, taskName: basename(briefFile, '.md') };
+          if (current.state === 'ready' && !this.dependenciesMet(current)) current.state = 'held';
+        });
+        if (firstUse) installWorktreeDependencies(workspace.worktree);
+        this.prepareSharedFrozen(this.store.task(id));
+        return this.store.task(id);
+      }
       const brief = submittedBrief;
       const base = this.taskBaseHead(brief);
       const files = parseFrozenFiles(brief.markdown, brief.paths);
@@ -325,6 +353,20 @@ export class WorkerTasks {
     } finally {
       lease.release();
     }
+  }
+  private prepareSharedFrozen(task: Task): void {
+    const files = parseFrozenFiles(task.brief.markdown, task.brief.paths);
+    const prior = frozenFiles(task);
+    if (
+      files.length === prior.length &&
+      files.every((file) => prior.some((p) => p.path === file.path && p.hash === file.hash))
+    )
+      return;
+    const frozen = commitFrozenFiles(task.worktree, files, this.settings.formatCommand, prior, true);
+    this.store.updateTask({ taskId: task.id, attempt: task.currentAttempt }, (current) => {
+      (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
+    });
+    reportFrozenFormatError(frozen.formatterError);
   }
   /** Patterns of the risk areas a brief did not declare, which a worker may not change outside its declared paths. */
   protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
@@ -354,6 +396,11 @@ export class WorkerTasks {
   private async startReleasedTask(taskId: string): Promise<RunningWorker> {
     let task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
+    if (task.workspace) {
+      const worker = await this.retryTask(taskId, {}, true);
+      if (!worker) throw new Error('released task was unexpectedly held again');
+      return worker;
+    }
     this.ensureWorktree(task);
     this.commitRetryLeftovers(task, task.currentAttempt);
     const integration = this.taskBaseHead(task.brief);
@@ -630,6 +677,24 @@ export class WorkerTasks {
       let setupStep = 'checking worktree leftovers';
       let retryPrepared = false;
       try {
+        if (task.workspace) {
+          if (webModule(task.brief, this.settings) !== task.workspace.module)
+            throw new Error('reshape outside a shared module requires a new isolated task');
+          const controller = new WorkspaceController(this.settings, this.store);
+          return await controller.withLaunch(task.workspace.module, async () => {
+            controller.syncIdle(task.workspace!.module, task.id);
+            this.prepareSharedFrozen(task);
+            const prompt = workerPrompt(
+              this.store.task(taskId),
+              options.evidence,
+              options.consultation,
+              [],
+              this.settings.mainCheckout,
+            );
+            retryPrepared = true;
+            return await this.launcher(this.store, this.store.task(taskId), next, pool, prompt, this.settings.codex);
+          });
+        }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
         setupStep = 'committing frozen acceptance files';
         const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);

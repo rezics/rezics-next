@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import type { DerivedFile, Pool, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
+import { readWebModules } from './workspace.ts';
 
 import type { Database } from 'bun:sqlite';
 import { openDb } from './db.ts';
@@ -124,6 +125,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'mainCheckout',
       'stateDirectory',
       'worktreeRoot',
+      'sharedWebModules',
       'mainBranch',
       'integrationBranch',
       'stabilizeBranch',
@@ -235,6 +237,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     mainCheckout: main,
     stateDirectory,
     worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT),
+    ...(local.sharedWebModules === undefined ? {} : { sharedWebModules: readWebModules(local.sharedWebModules) }),
     localFile,
     mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'),
     branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),

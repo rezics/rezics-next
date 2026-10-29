@@ -4,14 +4,22 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
-import { matchesPath } from './briefs.ts';
+import { matchesPath, readRiskOwnership } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage, LandingRequest } from './contracts.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import type { IntegrationTarget } from './types.ts';
+import type { IntegrationTarget, Task } from './types.ts';
+import { WorkerStore } from './store.ts';
+import {
+  WorkspaceController,
+  isAncestor as workspaceAncestor,
+  taskCommits,
+  taskChangedPaths,
+  workspaceCommits,
+} from './workspace.ts';
 import {
   changedFiles,
   diffLineCount,
@@ -270,7 +278,7 @@ function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; 
 function taskIntegrationTarget(
   stateDirectory: string,
   taskId: string,
-): { target?: string; manager?: string; goal?: string; base?: string } {
+): { target?: string; manager?: string; goal?: string; base?: string; workspace?: Task['workspace'] } {
   const path = join(stateDirectory, 'goal.sqlite');
   if (!existsSync(path)) return {};
   const db = new Database(path, { readonly: true, strict: true });
@@ -280,10 +288,12 @@ function taskIntegrationTarget(
     if (!row) return {};
     const task = JSON.parse(row.body) as {
       base?: unknown;
+      workspace?: Task['workspace'];
       brief?: { target?: unknown; manager?: unknown; goal?: unknown };
     };
     const brief = task.brief;
     return {
+      ...(task.workspace ? { workspace: task.workspace } : {}),
       ...(typeof brief?.target === 'string' ? { target: brief.target } : {}),
       ...(typeof brief?.manager === 'string' ? { manager: brief.manager } : {}),
       ...(typeof brief?.goal === 'string' ? { goal: brief.goal } : {}),
@@ -475,6 +485,8 @@ export type TrainOptions = {
   stateDirectory: string;
   worktreeRoot: string;
   formatCommand?: string[];
+  riskAreasFile?: string;
+  affectedTests?: import('./types.ts').AffectedTestCheck[];
   /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
   integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
   /** Batched dev landings; absent integration settings retain one-at-a-time behavior. */
@@ -525,6 +537,7 @@ type SpawnTextResult = {
 type SpawnText = (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => SpawnTextResult;
 
 export class MergeTrain {
+  private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
 
   async run(): Promise<void> {
@@ -651,6 +664,39 @@ export class MergeTrain {
               }
             } else {
               const outcome = await this.integrate(entry);
+              const workspaceFailures = this.workspaceFailures.get(entry.id);
+              this.workspaceFailures.delete(entry.id);
+              if (workspaceFailures) {
+                for (const failure of workspaceFailures) {
+                  if (failure.taskId === entry.request.taskId) continue;
+                  const store = o.fence as WorkerStore;
+                  try {
+                    store.assertCurrent(failure);
+                  } catch (error) {
+                    if (error instanceof StaleAttemptError) continue;
+                    throw error;
+                  }
+                  if (store.record(failure)) o.sink.onGateOutcome(failure);
+                  else {
+                    const task = store.task(failure.taskId);
+                    new SqliteManagerInbox(store.db, o.inboxDirectory ?? join(o.stateDirectory, 'inboxes')).deliver({
+                      managerId: task.brief.manager,
+                      taskId: task.id,
+                      kind: 'instruction',
+                      summary:
+                        `Shared workspace landing failed in your work: ${failure.firstFailure?.assertion ?? failure.stage}. See ${failure.logPath}`.replace(
+                          /[\r\n]+/g,
+                          ' ',
+                        ),
+                    });
+                  }
+                }
+                if (!workspaceFailures.some((failure) => failure.taskId === entry.request.taskId)) {
+                  deferred.add(entry.id);
+                  continue;
+                }
+              }
+
               if (retryDeferred.has(entry.id) && outcome.stage === 'rebase' && outcome.conflictedFiles?.length) {
                 deferred.add(entry.id);
                 continue;
@@ -709,7 +755,7 @@ export class MergeTrain {
     if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
     if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
     const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId);
-    return recorded.target !== 'stabilize' && recorded.goal !== 'control-plane';
+    return !recorded.workspace && recorded.target !== 'stabilize' && recorded.goal !== 'control-plane';
   }
 
   private async integrateBatch(entries: readonly LandingEntry[]): Promise<BatchLandingResult> {
@@ -1196,6 +1242,21 @@ export class MergeTrain {
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
     const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId);
+    const sharedStore = recorded.workspace && o.fence instanceof WorkerStore ? o.fence : undefined;
+    const workspace = sharedStore
+      ? new WorkspaceController(
+          {
+            mainCheckout: o.mainCheckout,
+            stateDirectory: o.stateDirectory,
+            worktreeRoot: o.worktreeRoot,
+            integrationBranch: o.integrationBranch ?? 'dev',
+          },
+          sharedStore,
+        )
+      : undefined;
+    let sharedTasks: Task[] = [];
+    let sharedSource = '';
+
     let integrationTarget: IntegrationTarget =
       recorded.target === 'stabilize'
         ? 'stabilize'
@@ -1226,6 +1287,22 @@ export class MergeTrain {
       changedFiles: [],
       diffLines: 0,
     };
+    const attributeFailure = (failed: GateOutcome, owners?: Task[]) => {
+      if (!workspace || !sharedStore || !sharedTasks.length) return;
+      const named = failingTestFiles(failed.firstFailure?.excerpt ?? '');
+      const matched = named.length
+        ? sharedTasks.filter((task) => taskChangedPaths(task, sharedSource).some((path) => named.includes(path)))
+        : [];
+      const responsible = owners ?? (matched.length ? matched : sharedTasks);
+      this.workspaceFailures.set(
+        entry.id,
+        responsible.map((task) => ({ ...failed, taskId: task.id, attempt: task.currentAttempt })),
+      );
+    };
+    const finish = () => {
+      if (!result.passed && !this.workspaceFailures.has(entry.id)) attributeFailure(result);
+      return result;
+    };
     let stage: GateStage = 'setup';
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
@@ -1241,6 +1318,7 @@ export class MergeTrain {
       result.passed = true;
       result.stage = 'merge';
       result.mergedCommit = entry.candidate;
+      if (workspace) workspace.integrated(recorded.workspace!.module, target());
       if (controlPlane) this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
@@ -1254,13 +1332,44 @@ export class MergeTrain {
       o.fence.assertCurrent(request);
       if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      if (recoverAlreadyIntegrated()) return result;
+      if (recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      if (workspace && sharedStore) {
+        sharedSource = tip;
+        const task = sharedStore.task(request.taskId);
+        const own = taskCommits(task, tip);
+        if (!own.length)
+          throw new Error('No Goal-Task trailer commits for this task: commit your own work before finishing');
+        if (own.every((commit) => workspaceAncestor(o.mainCheckout, commit, target()))) {
+          workspace.integrated(recorded.workspace!.module, target());
+          result.passed = true;
+          result.stage = 'merge';
+          result.mergedCommit = target();
+          await workspace.withLaunch(recorded.workspace!.module, () => workspace.syncIdle(recorded.workspace!.module));
+          return finish();
+        }
+        const attribution = workspaceCommits(task.worktree, workspace.workspace(recorded.workspace!.module).base, tip);
+        sharedTasks = sharedStore
+          .tasks()
+          .filter(
+            (candidate) =>
+              candidate.workspace?.module === recorded.workspace!.module &&
+              !['cancelled', 'merged'].includes(candidate.state) &&
+              attribution.has(candidate.id) &&
+              attribution.get(candidate.id)!.some((commit) => !workspaceAncestor(o.mainCheckout, commit, target())),
+          );
+      }
+
       // A worker branch starts on dev and a retry moves it onto a newer dev, so its own changes are those after its
       // fork from dev. The recorded base counted every landing in between: thousands of paths overflowed the diff and
       // other goals' files kept every retried control-plane task off main. Only the commits after the fork replay.
       let controlPlaneFork: string | undefined;
-      if (recorded.goal === 'control-plane' && recorded.target !== 'stabilize' && o.integrationBranch !== undefined) {
+      if (
+        !workspace &&
+        recorded.goal === 'control-plane' &&
+        recorded.target !== 'stabilize' &&
+        o.integrationBranch !== undefined
+      ) {
         const fork = git(o.mainCheckout, 'merge-base', tip, `refs/heads/${o.integrationBranch}`);
         const taskChanges = changedPathsBetween(o.mainCheckout, fork, tip);
         controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
@@ -1274,7 +1383,7 @@ export class MergeTrain {
         integratesIntoDev = false;
       }
       // Recover an advance that committed before its outcome was saved.
-      if (recoverAlreadyIntegrated()) return result;
+      if (recoverAlreadyIntegrated()) return finish();
       const originalBase = controlPlaneFork ?? git(o.mainCheckout, 'merge-base', tip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
@@ -1304,8 +1413,16 @@ export class MergeTrain {
           throw new Error(
             'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
           );
-        rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
-        const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
+        if (workspace) {
+          git(trainTree, 'reset', '--hard', base);
+          git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
+        } else rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
+        const frozen = workspace
+          ? sharedStore!
+              .tasks()
+              .filter((task) => task.workspace?.module === recorded.workspace!.module)
+              .flatMap((task) => frozenFilesForTask(o.stateDirectory, task.id))
+          : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
         if (changedFrozen.length) {
           stage = 'rebase';
@@ -1316,10 +1433,16 @@ export class MergeTrain {
           const mutable = o.fence as AttemptFence & {
             updateAttempt?: (ref: AttemptRef, update: (attempt: { escalation: string | null }) => void) => unknown;
           };
-          mutable.updateAttempt?.(request, (attempt) => {
-            attempt.escalation = 'rebase-conflict';
-          });
-          return result;
+          if (workspace) {
+            const owners = sharedTasks.filter((task) =>
+              taskChangedPaths(task, tip).some((path) => changedFrozen.includes(path)),
+            );
+            attributeFailure(result, owners.length ? owners : undefined);
+          } else
+            mutable.updateAttempt?.(request, (attempt) => {
+              attempt.escalation = 'rebase-conflict';
+            });
+          return finish();
         }
         stage = 'scope';
         result.changedFiles = changedFiles(trainTree, base);
@@ -1327,7 +1450,30 @@ export class MergeTrain {
         result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const scopeCheckedFiles = result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length);
-        this.checkScope(scopeCheckedFiles, request, logPath);
+        if (workspace) {
+          const ownership = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
+          for (const task of sharedTasks) {
+            const protectedPaths = Object.entries(ownership.areas)
+              .filter(([area]) => !task.brief.riskAreas.includes(area))
+              .flatMap(([, paths]) => paths);
+            try {
+              this.checkScope(
+                taskChangedPaths(task, tip).filter((path) => !derivedForPath(path, derivedFiles).length),
+                {
+                  ...request,
+                  declaredPaths: task.brief.paths,
+                  protectedPaths,
+                },
+                logPath,
+              );
+            } catch (error) {
+              result.stage = 'scope';
+              result.firstFailure = firstFailure(String(error));
+              attributeFailure(result, [task]);
+              return finish();
+            }
+          }
+        } else this.checkScope(scopeCheckedFiles, request, logPath);
         if (integratesIntoDev || controlPlane) {
           const formatCommand = o.formatCommand ?? [
             resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'),
@@ -1359,13 +1505,25 @@ export class MergeTrain {
             const formattedScopeCheckedFiles = result.changedFiles.filter(
               (path) => !derivedForPath(path, derivedFiles).length,
             );
-            this.checkScope(formattedScopeCheckedFiles, request, logPath);
+            if (!workspace) this.checkScope(formattedScopeCheckedFiles, request, logPath);
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
-        for (const checked of request.affectedTests ?? []) {
+        const affectedResults = workspace
+          ? await Promise.all(
+              (o.affectedTests ?? defaults.affectedTests)
+                .filter((check) => result.changedFiles.some((path) => matchesPath(path, check.paths)))
+                .map((check) =>
+                  runAffectedTest(check.command, trainTree, logPath, {
+                    ...gateEnvironment(process.env, o.stateDirectory),
+                    KERNEL_CHECK_AFFECTED: base,
+                  }),
+                ),
+            )
+          : (request.affectedTests ?? []);
+        for (const checked of affectedResults) {
           if (checked.status === 'unverified') {
             appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);
             continue;
@@ -1467,7 +1625,7 @@ export class MergeTrain {
           };
           result.failsOnMain = false;
           result.stage = 'gate';
-          return result;
+          return finish();
         }
         if (controlPlane) {
           stage = 'gate';
@@ -1551,7 +1709,7 @@ export class MergeTrain {
             result.firstFailure = firstFailure(checked.output);
             if (checked.failedCommand) result.failedCommand = [...checked.failedCommand];
             result.stage = stage;
-            return result;
+            return finish();
           }
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
             throw new Error('Control-plane checks changed the candidate commit');
@@ -1597,7 +1755,7 @@ export class MergeTrain {
             if (baseline.passed) {
               result.failsOnMain = false;
               result.stage = stage;
-              return result;
+              return finish();
             }
             const added = newErrorLines(checked.output, baseline.output);
             if (added.length) {
@@ -1606,10 +1764,36 @@ export class MergeTrain {
               result.firstFailure = firstFailure(report);
               result.failsOnMain = false;
               result.stage = stage;
-              return result;
+              return finish();
             }
             appendFileSync(logPath, 'dev already fails the integration check, with the same errors\n');
           }
+        }
+        if (workspace) {
+          stage = 'gate';
+          let failed = false;
+          for (const task of sharedTasks) {
+            appendFileSync(
+              logPath,
+              `Shared workspace acceptance for ${task.id}: ${task.brief.acceptance.command.join(' ')}\n`,
+            );
+            const checked = await runGate(task.brief.acceptance.command, trainTree, logPath);
+            o.fence.assertCurrent(request);
+            if (target() !== base) break;
+            if (!checked.passed) {
+              result.stage = 'gate';
+              result.firstFailure = firstFailure(checked.output);
+              result.failedCommand = task.brief.acceptance.command;
+              result.timedOut = checked.timedOut;
+              attributeFailure(result, [task]);
+              failed = true;
+              break;
+            }
+          }
+          if (target() !== base) continue;
+          if (failed) return finish();
+          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
+            throw new Error('Acceptance changed the candidate commit');
         }
         if (!integratesIntoDev && !controlPlane) {
           stage = 'gate';
@@ -1635,7 +1819,7 @@ export class MergeTrain {
             result.failsOnMain =
               !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
             result.stage = stage;
-            return result;
+            return finish();
           }
           // Gates may write files but may not replace the commit that was validated.
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Gate changed the candidate commit');
@@ -1648,7 +1832,12 @@ export class MergeTrain {
         const planner = o.fence as AttemptFence & {
           planIntegration?: (ref: AttemptRef, base: string, commit: string, commits: readonly string[]) => void;
         };
-        planner.planIntegration?.(request, base, candidate, integrationCommits);
+        planner.planIntegration?.(
+          request,
+          base,
+          candidate,
+          workspace ? taskCommits(sharedStore!.task(request.taskId), tip) : integrationCommits,
+        );
         o.queue.candidate(entry.id, candidate);
         if (target() !== base) continue;
         if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
@@ -1677,13 +1866,25 @@ export class MergeTrain {
           return candidate;
         });
         if (!advanced) continue;
+        if (workspace) {
+          workspace.integrated(recorded.workspace!.module, candidate);
+          try {
+            await workspace.withLaunch(recorded.workspace!.module, () =>
+              workspace.syncIdle(recorded.workspace!.module),
+            );
+          } catch (error) {
+            appendFileSync(logPath, `Idle workspace dev merge deferred: ${error}\n`);
+          }
+        }
         result.passed = true;
         result.stage = 'merge';
         result.mergedCommit = candidate;
         this.notifyOwnersOfOutsideChanges(
           request,
           outsideScope(
-            (result.changedFiles ?? []).filter((path) => !derivedForPath(path, derivedFiles).length),
+            (workspace ? taskChangedPaths(sharedStore!.task(request.taskId), tip) : (result.changedFiles ?? [])).filter(
+              (path) => !derivedForPath(path, derivedFiles).length,
+            ),
             request.declaredPaths,
           ),
           candidate,
@@ -1693,7 +1894,7 @@ export class MergeTrain {
         if (controlPlane) this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
         else if (stabilize)
           this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
-        return result;
+        return finish();
       }
     } catch (error) {
       if (error instanceof StaleAttemptError) throw error;
@@ -1702,7 +1903,7 @@ export class MergeTrain {
       result.stage = stage;
       if (stage === 'rebase' && added) result.conflictedFiles = unmergedFiles(trainTree);
       result.firstFailure = firstFailure(message);
-      return result;
+      return finish();
     } finally {
       result.hostMs = Date.now() - started;
       if (added) {
