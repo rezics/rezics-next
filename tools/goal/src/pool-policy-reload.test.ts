@@ -17,7 +17,7 @@ test('a long-running control-plane process chooses with the current local pool p
     const pool = changed[0]!;
     expect(pool.policy.reservePercent).toBe(12);
     const selection = () => choosePoolWithFallback(
-      { cli: 'codex', model: 'sol' }, [], changed, [reading(pool, 88)], { now: Date.now() },
+      { cli: 'codex', model: 'sol', effort: 'medium', poolClass: 'codex' }, [], changed, [reading(pool, 88)], { now: Date.now() },
     );
     expect(selection).toThrow('no allowed pool available');
     local.pools[0].policy.reservePercent = 0;
@@ -25,7 +25,7 @@ test('a long-running control-plane process chooses with the current local pool p
     utimesSync(h.settings.localFile, new Date(Date.now() + 4000), new Date(Date.now() + 4000));
     const latest = reloader.read();
     expect(choosePoolWithFallback(
-      { cli: 'codex', model: 'sol' }, [], latest, [reading(latest[0]!, 88)], { now: Date.now() },
+      { cli: 'codex', model: 'sol', effort: 'medium', poolClass: 'codex' }, [], latest, [reading(latest[0]!, 88)], { now: Date.now() },
     ).pool.name).toBe(pool.name);
   } finally {
     h.dispose();
