@@ -802,8 +802,6 @@ function stableRecording(value: unknown, previous: unknown): unknown {
   if (!value || typeof value !== 'object' || !previous || typeof previous !== 'object') return previous;
   const current = value as Record<string, unknown>;
   const before = previous as Record<string, unknown>;
-  const sharedSubject =
-    typeof current.id === 'string' ? storySubjects.find((subject) => subject.id === current.id) : null;
   const oldIds = Object.keys(before).filter((key) => key.match(uuid));
   const newIds = Object.keys(current).filter((key) => key.match(uuid));
   return Object.fromEntries([
@@ -820,8 +818,22 @@ function stableRecording(value: unknown, previous: unknown): unknown {
         ],
       ];
     }),
-    ...(sharedSubject ? [['cover', sharedSubject.cover ?? null]] : []),
   ]);
+}
+
+/** Recorded story rows use the shared subject entry's cover, including its explicit placeholder choice. */
+function applyStorySubjectCovers(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(applyStorySubjectCovers);
+  if (!value || typeof value !== 'object') return value;
+  const result = Object.fromEntries(
+    Object.entries(value).map(([name, child]) => [name, applyStorySubjectCovers(child)]),
+  ) as Record<string, unknown>;
+  const subject =
+    typeof result.id === 'string' && typeof result.type === 'string' && (result.labels || result.label)
+      ? storySubjects.find((entry) => entry.id === result.id)
+      : undefined;
+  if (subject) result.cover = subject.cover ?? null;
+  return result;
 }
 
 /**
@@ -1771,7 +1783,7 @@ async function main(): Promise<void> {
     // Definitions are generated snapshots; retaining old strings would preserve stale digests and ratios.
     const generated = name === 'definitions-active' || name === 'definitions-release';
     const previous = !generated && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
-    await writeFile(file, JSON.stringify(stableRecording(body, previous)));
+    await writeFile(file, JSON.stringify(applyStorySubjectCovers(stableRecording(body, previous))));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
   if (written.length) {
