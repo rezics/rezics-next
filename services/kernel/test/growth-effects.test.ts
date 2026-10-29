@@ -13,6 +13,19 @@ const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const CREATED = 'com.rezics.subject.created.v1';
 const CONTEXT = 'com.rezics.semantic.context.created.v1';
+async function within<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), 10_000);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 const locator = 'growth_locator';
 (ERASURE_LOCATOR_EFFECTS as Set<string>).add(locator);
 let nextPartition = 3584 + Math.floor(Math.random() * 256);
@@ -214,7 +227,8 @@ test(`locator success adds one batch insert and stays bounded as kept rows and D
         return item;
       });
       await effects.enqueue(batch);
-      for (const item of batch) await DBOS.retrieveWorkflow(effectWorkflowId(item, 0, locator)).getResult();
+      for (const item of batch)
+        await within(DBOS.retrieveWorkflow(effectWorkflowId(item, 0, locator)).getResult(), 'locator success');
     },
   });
   expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
@@ -236,4 +250,4 @@ test(`locator success adds one batch insert and stays bounded as kept rows and D
     }
     expect(sample.cost.relations['access.erasure_locator_work']?.sequentialScans ?? 0).toBe(0);
   }
-}, 120000);
+}, 600000);

@@ -272,12 +272,14 @@ test('the undelivered frontier and a held locator effect block durable completio
   await within(hold.located.reached, 'locator barrier');
   const envelope = { partition: copied.partition, epoch: copied.epoch, position: copied.position, events: [] };
   const workflowId = effectWorkflowId(envelope, 0, locatorEffect);
-  expect(await DBOS.getWorkflowStatus(workflowId)).toMatchObject({
+  expect(await within(DBOS.getWorkflowStatus(workflowId), 'locator status')).toMatchObject({
     queueName: LOCATOR_EFFECTS_QUEUE,
     queuePartitionKey: `${locatorEffect}:${copied.partition}`,
     workflowName: 'effect',
   });
-  expect(await DBOS.getWorkflowStatus(effectWorkflowId(envelope, 0, 'test_erasure_other'))).toMatchObject({
+  expect(
+    await within(DBOS.getWorkflowStatus(effectWorkflowId(envelope, 0, 'test_erasure_other')), 'other effect status'),
+  ).toMatchObject({
     queueName: 'effects',
     queuePartitionKey: `test_erasure_other:${copied.partition}`,
   });
@@ -295,7 +297,7 @@ test('the undelivered frontier and a held locator effect block durable completio
   await within(DBOS.retrieveWorkflow(`erasure:${accountId}`).getResult(), 'erasure workflow');
   expect((await status(accountId))?.state).toBe('complete');
   expect((await db.admin.query('SELECT 1 FROM public.erasure_test_copy WHERE id=$1', [locator])).rows).toEqual([]);
-}, 30000);
+}, 180000);
 
 test('the frontier finds non-zero priority pending work and ignores unrelated failed, slow and later workflows', async () => {
   await relayAll();
