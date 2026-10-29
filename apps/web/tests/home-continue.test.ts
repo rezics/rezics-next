@@ -419,7 +419,7 @@ async function inspectHome(path: string, cookie: string, width: number, openMenu
     await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
     await page.waitForLoadState('networkidle');
     if (openMenu) {
-      await page.getByRole('button', { name: 'More actions for Newest read' }).first().click();
+      await page.locator('[data-slot="cover-card-actions"] button').first().click();
       await page.locator('[data-slot="drawer-content"]').waitFor();
     }
     return await page.evaluate(() => {
@@ -520,7 +520,7 @@ test(
       const body = main(page.html);
       expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
       // Cards are plain titles when the progress-session operation is not exposed in this fixture.
-      expect((row ?? '').match(/Newest read/g)).toHaveLength(2);
+      expect((row ?? '').match(/Newest read/g)).toHaveLength(6);
       // The same responsive cards are drawn for phone and desktop, without independent title links.
       const hrefs = linksIn(row ?? '').map((link) => link.href);
       expect(hrefs).toHaveLength(0);
