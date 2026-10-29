@@ -28,6 +28,11 @@ export function MineCollectionsPageView({ page }: { page: MineCollectionsPage })
           </a>
         </Exposure>
       </header>
+      <Exposure operation="library_label.list">
+        <a href={`/${getLocale()}/library/labels`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+          {m.library_nav_labels()}
+        </a>
+      </Exposure>
       {page.collections.length ? (
         <CoverGrid
           ratio={sharedRatio(

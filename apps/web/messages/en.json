@@ -714,5 +714,21 @@
   "moderation_action_failed": "The moderation action could not be completed.",
   "action_cancel": "Cancel",
   "moderation_target_deleted": "This post was deleted.",
-  "moderation_target_withheld": "This content is withheld."
+  "moderation_target_withheld": "This content is withheld.",
+  "library_labels_heading": "Labels",
+  "library_label_name": "Name",
+  "library_label_create": "Create label",
+  "library_label_rename": "Rename",
+  "library_label_delete": "Delete",
+  "library_labels_empty": "You have no labels yet.",
+  "library_label_more": "Next page",
+  "library_label_deleted": "Deleted {name}",
+  "library_label_stale": "This label changed elsewhere. The current version is shown.",
+  "library_label_invalid": "The label name could not be used.",
+  "library_label_restore_stale": "This label changed after it was deleted.",
+  "library_label_restore_expired": "The undo period has ended.",
+  "library_label_restore_occupied": "Another label now uses this name.",
+  "library_labels_private": "Labels are visible only to you.",
+  "library_labels_unavailable": "Labels are not available right now.",
+  "library_label_undo": "Undo"
 }

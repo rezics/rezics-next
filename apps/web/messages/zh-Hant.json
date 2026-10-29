@@ -713,5 +713,21 @@
   "moderation_action_failed": "無法完成審核操作。",
   "action_cancel": "取消",
   "moderation_target_deleted": "此貼文已刪除。",
-  "moderation_target_withheld": "此內容已被隱去。"
+  "moderation_target_withheld": "此內容已被隱去。",
+  "library_labels_heading": "標籤",
+  "library_label_name": "名稱",
+  "library_label_create": "建立標籤",
+  "library_label_rename": "重新命名",
+  "library_label_delete": "刪除",
+  "library_labels_empty": "你還沒有標籤。",
+  "library_label_more": "下一頁",
+  "library_label_deleted": "已刪除 {name}",
+  "library_label_stale": "此標籤已變更，現在顯示目前版本。",
+  "library_label_invalid": "無法使用此標籤名稱。",
+  "library_label_restore_stale": "此標籤已變更，無法還原。",
+  "library_label_restore_expired": "復原期限已過。",
+  "library_label_restore_occupied": "同名標籤已存在。",
+  "library_labels_private": "這些標籤只有你看得到。",
+  "library_labels_unavailable": "目前無法使用標籤，請稍後再試。",
+  "library_label_undo": "復原"
 }

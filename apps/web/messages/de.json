@@ -713,5 +713,21 @@
   "moderation_action_failed": "Die Moderationsaktion konnte nicht abgeschlossen werden.",
   "action_cancel": "Abbrechen",
   "moderation_target_deleted": "Dieser Beitrag wurde gelöscht.",
-  "moderation_target_withheld": "Dieser Inhalt wird zurückgehalten."
+  "moderation_target_withheld": "Dieser Inhalt wird zurückgehalten.",
+  "library_labels_heading": "Schlagwörter",
+  "library_label_name": "Name",
+  "library_label_create": "Schlagwort erstellen",
+  "library_label_rename": "Umbenennen",
+  "library_label_delete": "Löschen",
+  "library_labels_empty": "Du hast noch keine Schlagwörter.",
+  "library_label_more": "Nächste Seite",
+  "library_label_deleted": "{name} gelöscht",
+  "library_label_stale": "Dieses Schlagwort wurde geändert. Die aktuelle Version wird angezeigt.",
+  "library_label_invalid": "Dieser Name kann nicht verwendet werden.",
+  "library_label_restore_stale": "Dieses Schlagwort wurde geändert und kann nicht wiederhergestellt werden.",
+  "library_label_restore_expired": "Die Frist zum Rückgängigmachen ist abgelaufen.",
+  "library_label_restore_occupied": "Ein Schlagwort mit diesem Namen existiert bereits.",
+  "library_labels_private": "Nur du kannst deine Labels sehen.",
+  "library_labels_unavailable": "Labels sind gerade nicht verfügbar. Bitte versuche es später erneut.",
+  "library_label_undo": "Rückgängig"
 }

@@ -713,5 +713,21 @@
   "moderation_action_failed": "No se pudo completar la acción de moderación.",
   "action_cancel": "Cancelar",
   "moderation_target_deleted": "Esta publicación se eliminó.",
-  "moderation_target_withheld": "Este contenido está oculto."
+  "moderation_target_withheld": "Este contenido está oculto.",
+  "library_labels_heading": "Etiquetas",
+  "library_label_name": "Nombre",
+  "library_label_create": "Crear etiqueta",
+  "library_label_rename": "Cambiar nombre",
+  "library_label_delete": "Eliminar",
+  "library_labels_empty": "Aún no tienes etiquetas.",
+  "library_label_more": "Página siguiente",
+  "library_label_deleted": "Se eliminó {name}",
+  "library_label_stale": "La etiqueta cambió. Se muestra la versión actual.",
+  "library_label_invalid": "No se puede usar ese nombre de etiqueta.",
+  "library_label_restore_stale": "La etiqueta cambió y no se puede restaurar.",
+  "library_label_restore_expired": "El plazo para deshacer ha expirado.",
+  "library_label_restore_occupied": "Ya existe una etiqueta con ese nombre.",
+  "library_labels_private": "Solo tú puedes ver tus etiquetas.",
+  "library_labels_unavailable": "Las etiquetas no están disponibles en este momento. Vuelve a intentarlo más tarde.",
+  "library_label_undo": "Deshacer"
 }

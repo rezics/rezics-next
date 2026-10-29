@@ -82,7 +82,7 @@ export async function csrfTokenFromRequest(request: Request): Promise<string | n
   const header = request.headers.get('X-CSRF-Token');
   if (header !== null) return header;
   if (
-    !/^\/(?:auth\/sign-out|(?:(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)\/)?library\/copies)$/.test(
+    !/^\/(?:auth\/sign-out|(?:(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)\/)?library\/(?:copies|labels))$/.test(
       new URL(request.url).pathname,
     )
   )

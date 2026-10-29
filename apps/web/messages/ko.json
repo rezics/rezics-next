@@ -713,5 +713,21 @@
   "moderation_action_failed": "검토 작업을 완료할 수 없습니다.",
   "action_cancel": "취소",
   "moderation_target_deleted": "이 게시물은 삭제되었습니다.",
-  "moderation_target_withheld": "이 콘텐츠는 공개되지 않습니다."
+  "moderation_target_withheld": "이 콘텐츠는 공개되지 않습니다.",
+  "library_labels_heading": "라벨",
+  "library_label_name": "이름",
+  "library_label_create": "라벨 만들기",
+  "library_label_rename": "이름 변경",
+  "library_label_delete": "삭제",
+  "library_labels_empty": "아직 라벨이 없습니다.",
+  "library_label_more": "다음 페이지",
+  "library_label_deleted": "{name} 삭제됨",
+  "library_label_stale": "라벨이 변경되었습니다. 현재 버전을 표시합니다.",
+  "library_label_invalid": "이 라벨 이름은 사용할 수 없습니다.",
+  "library_label_restore_stale": "라벨이 변경되어 복원할 수 없습니다.",
+  "library_label_restore_expired": "되돌리기 기간이 만료되었습니다.",
+  "library_label_restore_occupied": "같은 이름의 라벨이 이미 있습니다.",
+  "library_labels_private": "라벨은 나에게만 표시됩니다.",
+  "library_labels_unavailable": "지금은 라벨을 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  "library_label_undo": "실행 취소"
 }

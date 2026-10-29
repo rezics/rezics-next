@@ -9,6 +9,7 @@ import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { deletedOrganizationThreadId } from '../kernel/fake';
 import { searchFacetStoryPaths } from '../kernel/fake/search-facets';
+import { selectLabelStory } from '../kernel/fake/library-labels';
 import { selectRatingsFixture, type RatingsFixtureName } from '../kernel/fake/ratings';
 import { threadHref } from '../threads/thread-href';
 import { RatingsPreviewContext } from '../features/pages/subject-ratings-view';
@@ -76,6 +77,7 @@ export const pagePaths = {
   'search-empty-query': searchFacetStoryPaths.emptyQuery,
   'library-entries': '/library',
   'library-collections': '/library/collections',
+  'library-labels': '/library/labels',
   'library-copies': '/library/copies',
   'library-following': '/library/following',
   'library-progress': `/library/progress?subjectId=${libraryProgressSessionsRecording.progressSessions[0]?.subjectId}`,
@@ -119,17 +121,20 @@ export function PageStory({
   credentialMode = anonymousReadMode,
   ratings,
   ratingsFixture,
+  labelsFixture,
 }: {
   visitor: 'Signed In' | 'Signed Out';
   path: string;
   credentialMode?: ReadCredentialMode;
   ratings?: Ratings;
   ratingsFixture?: RatingsFixtureName;
+  labelsFixture?: Parameters<typeof selectLabelStory>[0];
 }) {
   const entry = localizedEntry(path);
   selectRatingsFixture(ratingsFixture);
   setStoryRequestContext({ visitor, url: entry });
   const { router, queryClient } = useMemo(() => {
+    if (labelsFixture) selectLabelStory(labelsFixture);
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
     const router = createRouter({
       routeTree,
@@ -141,7 +146,7 @@ export function PageStory({
       rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
     });
     return { router, queryClient };
-  }, [entry]);
+  }, [entry, labelsFixture]);
   return (
     <RatingsPreviewContext.Provider value={ratings}>
       <QueryClientProvider client={queryClient}>

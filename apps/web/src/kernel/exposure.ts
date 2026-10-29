@@ -16,6 +16,11 @@ export const operationGroups = {
   'collection_member.delete': 'collections',
   'collection_member.update': 'collections',
   'collection_member.move': 'collections',
+  // Provisional operation-specific exposure until the generated catalogue operations land.
+  'library_label.list': 'library_label.list',
+  'library_label.create': 'library_label.create',
+  'library_label.rename': 'library_label.rename',
+  'library_label.delete': 'library_label.delete',
   'copy.list': 'personal_library',
   'copy.create': 'personal_library',
   'copy.delete': 'personal_library',

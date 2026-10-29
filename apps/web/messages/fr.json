@@ -713,5 +713,21 @@
   "moderation_action_failed": "L’action de modération n’a pas abouti.",
   "action_cancel": "Annuler",
   "moderation_target_deleted": "Cette publication a été supprimée.",
-  "moderation_target_withheld": "Ce contenu est masqué."
+  "moderation_target_withheld": "Ce contenu est masqué.",
+  "library_labels_heading": "Étiquettes",
+  "library_label_name": "Nom",
+  "library_label_create": "Créer une étiquette",
+  "library_label_rename": "Renommer",
+  "library_label_delete": "Supprimer",
+  "library_labels_empty": "Vous n’avez pas encore d’étiquettes.",
+  "library_label_more": "Page suivante",
+  "library_label_deleted": "{name} supprimée",
+  "library_label_stale": "Cette étiquette a changé. La version actuelle est affichée.",
+  "library_label_invalid": "Ce nom d’étiquette ne peut pas être utilisé.",
+  "library_label_restore_stale": "Cette étiquette a changé et ne peut pas être restaurée.",
+  "library_label_restore_expired": "Le délai d’annulation a expiré.",
+  "library_label_restore_occupied": "Une étiquette portant ce nom existe déjà.",
+  "library_labels_private": "Vous seul pouvez voir vos étiquettes.",
+  "library_labels_unavailable": "Les étiquettes sont indisponibles pour le moment. Réessayez plus tard.",
+  "library_label_undo": "Annuler"
 }

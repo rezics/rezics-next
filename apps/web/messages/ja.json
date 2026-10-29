@@ -713,5 +713,21 @@
   "moderation_action_failed": "モデレーション操作を完了できませんでした。",
   "action_cancel": "キャンセル",
   "moderation_target_deleted": "この投稿は削除されました。",
-  "moderation_target_withheld": "このコンテンツは非表示です。"
+  "moderation_target_withheld": "このコンテンツは非表示です。",
+  "library_labels_heading": "ラベル",
+  "library_label_name": "名前",
+  "library_label_create": "ラベルを作成",
+  "library_label_rename": "名前を変更",
+  "library_label_delete": "削除",
+  "library_labels_empty": "ラベルはまだありません。",
+  "library_label_more": "次のページ",
+  "library_label_deleted": "{name}を削除しました",
+  "library_label_stale": "ラベルが変更されました。現在の内容を表示しています。",
+  "library_label_invalid": "このラベル名は使用できません。",
+  "library_label_restore_stale": "ラベルが変更されたため復元できません。",
+  "library_label_restore_expired": "取り消し期限が切れました。",
+  "library_label_restore_occupied": "同じ名前のラベルがすでにあります。",
+  "library_labels_private": "ラベルは自分だけに表示されます。",
+  "library_labels_unavailable": "現在ラベルを利用できません。しばらくしてからお試しください。",
+  "library_label_undo": "元に戻す"
 }

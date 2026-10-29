@@ -50,6 +50,11 @@ function Tabs({ state, locale, display }: { state: LibraryEntryStateWrite | null
           {m.library_nav_collections()}
         </a>
       </Exposure>
+      <Exposure operation="library_label.list">
+        <a href={`/${locale}/library/labels`} className={tabClass}>
+          {m.library_nav_labels()}
+        </a>
+      </Exposure>
     </nav>
   );
 }

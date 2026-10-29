@@ -714,5 +714,21 @@
   "moderation_action_failed": "无法完成审核操作。",
   "action_cancel": "取消",
   "moderation_target_deleted": "此帖子已删除。",
-  "moderation_target_withheld": "此内容已被隐去。"
+  "moderation_target_withheld": "此内容已被隐去。",
+  "library_labels_heading": "标签",
+  "library_label_name": "名称",
+  "library_label_create": "创建标签",
+  "library_label_rename": "重命名",
+  "library_label_delete": "删除",
+  "library_labels_empty": "你还没有标签。",
+  "library_label_more": "下一页",
+  "library_label_deleted": "已删除 {name}",
+  "library_label_stale": "此标签已更改，现显示当前版本。",
+  "library_label_invalid": "无法使用此标签名称。",
+  "library_label_restore_stale": "此标签已更改，无法恢复。",
+  "library_label_restore_expired": "撤销期限已过。",
+  "library_label_restore_occupied": "同名标签已存在。",
+  "library_labels_private": "只有你能看到这些标签。",
+  "library_labels_unavailable": "暂时无法使用标签，请稍后再试。",
+  "library_label_undo": "撤销"
 }
