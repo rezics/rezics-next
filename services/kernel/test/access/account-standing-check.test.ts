@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { accountStandingCheck, createResourcePublicEligibility } from '../../src/access/index.ts';
+import { readAccount } from '../../src/access/account-data.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createRealmMembership } from '../../src/community/membership.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -441,4 +442,23 @@ test('invalid pages are rejected before account lookup and unregistered actions 
       context: context(),
     }),
   ).toEqual(Object.fromEntries(f.ids.map((id) => [id, false])));
+});
+
+test('the session preparation port cannot accept a caller-supplied standing account through extra arguments', async () => {
+  const f = await fixture();
+  await f.grant();
+  const sessionOnly = f.f.permissions({ accountEvidence: () => null });
+  const account = await readAccount(pool, routeOf(f.f.actorId)!, f.f.actorId);
+  const principal = { kind: 'account', accountId: f.f.actorId };
+  const evidence = await Reflect.apply(sessionOnly.prepare!, sessionOnly, [
+    principal,
+    action,
+    f.f.resource,
+    context(),
+    undefined,
+    account,
+  ]);
+  expect(
+    await Reflect.apply(sessionOnly.authorize, sessionOnly, [pool, principal, action, f.f.resource, evidence]),
+  ).toBe(false);
 });

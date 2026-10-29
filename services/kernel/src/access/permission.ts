@@ -745,7 +745,7 @@ export function createAccess(config: PermissionConfig): Access {
       (async () => {
         throw new AuthenticationError(401, 'Bearer error="invalid_token"');
       }),
-    prepare: preparePermission,
+    prepare: (actor, action, resource, context) => preparePermission(actor, action, resource, context),
     preparePage(actor, action, input, context) {
       const page = resourcePage(input);
       return preparePermission(actor, action, { route: page.route, id: page.ids[0]! }, context, page);
