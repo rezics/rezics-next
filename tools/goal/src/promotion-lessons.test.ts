@@ -15,10 +15,13 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
     await promote({
       settings: h.settings,
       job: h.job,
-      runGate: async () => (++gates === 1 ? failure : success),
+      runGate: async () => {
+        gates++;
+        return failure;
+      },
     });
     await h.job.drain();
-    expect(gates).toBe(1);
+    expect(gates).toBe(2); // tip, then its first-parent fallback
     expect(git(h.root, 'branch', '--list', 'stabilize')).toBe('');
 
     await h.promote(async () => {
