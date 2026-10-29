@@ -113,7 +113,7 @@ test('worker instructions start detached checks, keep working, and return waitin
     expect(prompt).toContain('keep working while checks run');
     expect(prompt).toContain('{"status":"waiting","checks":["<id>",...]}');
     expect(prompt).toContain('Never poll');
-    expect(prompt).not.toContain('--wait');
+    expect(prompt).not.toContain('wait on that same check');
   } finally {
     h.dispose();
   }
