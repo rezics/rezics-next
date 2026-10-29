@@ -39,7 +39,7 @@ async function startImportsWorker() {
     env: {
       ...process.env,
       DATABASE_URL: databaseUrl,
-      KERNEL_WORKER_POOL_SIZE: '4',
+      KERNEL_WORKER_POOL_SIZE: '20',
       KERNEL_EXECUTOR_ID: `imports-erasure-${crypto.randomUUID()}`,
     },
     stdout: 'pipe',
