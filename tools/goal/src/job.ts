@@ -756,7 +756,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (++sweepItems % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     };
     if (adoptRunning) {
-      for (const candidate of tasks.filter((task) => task.state === 'landing' && task.currentAttempt > 0)) {
+      for (const candidate of store.orphanedLandingCandidates()) {
         await yieldSweep();
         const ref = { taskId: candidate.id, attempt: candidate.currentAttempt };
         let taskLease: DirectoryLease;

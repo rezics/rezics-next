@@ -158,6 +158,39 @@ export class WorkerStore implements AttemptFence {
         return structuredClone(task);
       });
   }
+  /** Current landing requests whose queue entry is missing; synthetic or legacy landing rows without a request are ignored. */
+  orphanedLandingCandidates(): Task[] {
+    this.refreshSnapshot();
+    const queueExists = this.db
+      .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='landing_queue'")
+      .get();
+    if (!queueExists) return [];
+    return this.db
+      .query(`
+        SELECT t.id, t.body
+        FROM worker_tasks AS t
+        WHERE json_extract(t.body, '$.state') = 'landing'
+          AND t.current_attempt > 0
+          AND EXISTS (
+            SELECT 1 FROM worker_events AS e
+            WHERE e.task_id=t.id AND e.attempt=t.current_attempt AND e.kind='landing-requested'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM landing_queue AS l
+            WHERE l.task=t.id AND l.attempt=t.current_attempt AND l.delivered=0
+          )
+        ORDER BY t.sequence
+      `)
+      .all()
+      .map((row) => {
+        const value = row as { id: string; body: string };
+        const cached = this.taskSnapshot.get(value.id);
+        if (cached) return structuredClone(cached);
+        const task = this.taskBody(value)!;
+        this.taskSnapshot.set(value.id, task);
+        return structuredClone(task);
+      });
+  }
   taskIds(): string[] {
     return this.db
       .query('SELECT id FROM worker_tasks ORDER BY sequence')
