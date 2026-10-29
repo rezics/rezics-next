@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
@@ -18,6 +17,8 @@ export type DevServerOptions = {
   budgets?: Partial<typeof phaseBudgets>;
   pollIntervalMs?: number;
   onPhase?: (timing: PhaseTiming) => void;
+  /** A clock seam for deterministic budget tests; timers still use the remaining phase budget. */
+  now?: () => number;
 };
 
 function freePort(): Promise<number> {
@@ -37,6 +38,8 @@ export async function startDevServer(
 ): Promise<{ origin: string; stop: () => Promise<void> }> {
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
+  const now = options.now ?? Date.now;
+  const spawnedAt = now();
   const command = options.command?.({ port, origin }) ?? [
     'bun',
     'run',
@@ -49,7 +52,6 @@ export async function startDevServer(
   ];
   const budgets = { ...phaseBudgets, ...options.budgets };
   const firstPath = options.firstPath ?? '/en';
-  const spawnedAt = Date.now();
   let readyAt: number | undefined;
   let output = '';
   let phase: Phase = 'ready';
@@ -58,33 +60,46 @@ export async function startDevServer(
   let lastError: unknown = new Error('Vite ready line has not been printed');
   let browser: Browser | undefined;
   let stopped: Promise<void> | undefined;
-  const child = spawn(command[0]!, command.slice(1), {
-    cwd: options.cwd ?? join(import.meta.dir, '../..'),
-    env: { ...process.env, ...options.env },
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>;
+  try {
+    child = Bun.spawn(command, {
+      cwd: options.cwd ?? join(import.meta.dir, '../..'),
+      env: { ...process.env, ...options.env },
+      detached: true,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+  } catch (error) {
+    throw new Error(
+      `dev server ready failed for ${path}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
+    );
+  }
   let ready!: () => void;
   const readiness = new Promise<void>((resolve) => {
     ready = resolve;
   });
-  const keep = (chunk: Buffer) => {
-    const combined = output + chunk.toString();
+  const keep = (chunk: Uint8Array) => {
+    const combined = output + Buffer.from(chunk).toString();
     output = combined.slice(-8000);
-    if (readyAt === undefined && /\bready in\s+[\d.]+\s*(?:ms|s)\b/i.test(combined.replace(/\x1b\[[0-9;]*m/g, ''))) {
-      readyAt = Date.now();
+    if (
+      readyAt === undefined &&
+      /\bVITE\s+v\S+\s+ready in\s+[\d.]+\s*(?:ms|s)\b/i.test(combined.replace(/\x1b\[[0-9;]*m/g, ''))
+    ) {
+      readyAt = now();
       ready();
     }
   };
-  child.stdout!.on('data', keep);
-  child.stderr!.on('data', keep);
-  const exited = new Promise<Error>((resolve) => {
-    child.once('error', (error) => resolve(error));
-    child.once('exit', (code, signal) => resolve(new Error(`dev server exited with ${code ?? signal}`)));
-  });
-  const closed = new Promise<void>((resolve) => {
-    child.once('close', () => resolve());
-  });
+  async function capture(stream: ReadableStream<Uint8Array>) {
+    try {
+      for await (const chunk of stream) keep(chunk);
+    } catch (error) {
+      keep(Buffer.from(`\nOutput capture error: ${String(error)}\n`));
+    }
+  }
+  const captured = Promise.all([capture(child.stdout), capture(child.stderr)]);
+  // Native Bun process completion does not wait for inherited output pipes to close.
+  const exited = child.exited.then((code) => new Error(`dev server exited with ${code}`));
   const exitFailure = exited.then((error) => {
     throw error;
   });
@@ -120,13 +135,14 @@ export async function startDevServer(
         clearTimeout(timer);
         // A leader may exit while a descendant still owns a listener or ignores SIGTERM.
         signalGroup('SIGKILL');
-        await closed;
+        await exited;
+        await captured;
       }
       if (browserError) throw browserError;
     })());
 
   const record = (started: number) => {
-    const timing = { phase, path, elapsedMs: Date.now() - started };
+    const timing = { phase, path, elapsedMs: now() - started };
     console.info(`[dev-server] ${phase} ${path}: ${timing.elapsedMs} ms`);
     options.onPhase?.(timing);
   };
@@ -135,10 +151,10 @@ export async function startDevServer(
     operation: (remaining: () => number, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
     const controller = new AbortController();
-    const remaining = () => Math.max(1, deadline - Date.now());
+    const remaining = () => Math.max(1, deadline - now());
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (Date.now() >= deadline) throw new Error('phase budget exhausted');
+      if (now() >= deadline) throw new Error('phase budget exhausted');
       return await Promise.race([
         operation(remaining, controller.signal),
         exitFailure,
@@ -196,7 +212,7 @@ export async function startDevServer(
           const page = await context.newPage();
           for (const warmUpPath of options.warmUpPaths) {
             path = warmUpPath;
-            const began = Date.now();
+            const began = now();
             lastError = new Error(`navigation to ${path} has not completed`);
             const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle', timeout: remaining() });
             if (!response || response.status() >= 500)
@@ -216,10 +232,15 @@ export async function startDevServer(
     }
     return { origin, stop };
   } catch (error) {
-    const elapsed = Date.now() - phaseStart;
-    await stop();
+    const elapsed = now() - phaseStart;
+    let cleanup = '';
+    try {
+      await stop();
+    } catch (cleanupError) {
+      cleanup = `\nCleanup error: ${String(cleanupError)}`;
+    }
     throw new Error(
-      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
+      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${output}${cleanup}`,
     );
   }
 }

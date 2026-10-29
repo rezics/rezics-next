@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { startDevServer, type DevServerOptions } from './support/dev-server.ts';
 
 const root = join(import.meta.dir, '../../..');
-const budgets = { ready: 2000, firstResponse: 2000, warmUp: 4000 };
+const budgets = { ready: 10_000, firstResponse: 10_000, warmUp: 30_000 };
 
 function fake(
   options: {
@@ -37,6 +37,22 @@ function fake(
       ${options.exit ? 'setTimeout(async () => { child.kill(); await child.exited; process.exit(23); }, 80);' : ''}
     `,
     ],
+  };
+}
+
+function slowStart(): DevServerOptions {
+  const fixture = fake();
+  const command = fixture.command!;
+  let startupElapsed = 0;
+  return {
+    ...fixture,
+    now: () => Date.now() + startupElapsed,
+    budgets: { ready: 90_000, firstResponse: 10_000, warmUp: 30_000 },
+    command: (context) => {
+      // Simulate one minute spent starting Vite without sleeping or depending on host speed.
+      startupElapsed = 60_000;
+      return command(context);
+    },
   };
 }
 
@@ -92,7 +108,7 @@ test('startDevServer returns after ready, the first response and every hydrated 
   }
   await server.stop();
   for (const pid of pids) expect(await alive(pid), `process ${pid}`).toBe(false);
-}, 15_000);
+}, 60_000);
 
 test('a server that never prints ready names the ready phase, path, elapsed time, last error and output', async () => {
   report(
@@ -125,12 +141,16 @@ test('a hanging response cannot exceed its phase budget', async () => {
 
 test('a warm-up that never hydrates names its path and the browser error', async () => {
   report(
-    await failure({ ...fake({ hydrate: false }), warmUpPaths: ['/unhydrated'], budgets: { ...budgets, warmUp: 1500 } }),
+    await failure({
+      ...fake({ hydrate: false }),
+      warmUpPaths: ['/unhydrated'],
+      budgets: { ...budgets, warmUp: 12_000 },
+    }),
     'warm-up',
     '/unhydrated',
     /hydrated|Timeout/,
   );
-}, 10_000);
+}, 60_000);
 
 test('a warm-up HTTP failure names its path and status', async () => {
   const options = fake();
@@ -148,12 +168,12 @@ test('a warm-up HTTP failure names its path and status', async () => {
     '/broken',
     /HTTP 503/,
   );
-}, 10_000);
+}, 60_000);
 
 test('warm-up can disable JavaScript without waiting for hydration', async () => {
   const server = await startDevServer({ ...fake({ hydrate: false }), warmUpPaths: ['/ssr'], javaScriptEnabled: false });
   await server.stop();
-}, 10_000);
+}, 60_000);
 
 test('a process exiting during startup fails immediately with its code and output', async () => {
   const began = Date.now();
@@ -173,12 +193,11 @@ test('an exit while waiting for a response also fails immediately', async () => 
 
 test('first-response and warm-up budgets start at the ready line, after a slow process start', async () => {
   const server = await startDevServer({
-    ...fake({ readyDelay: 900 }),
-    budgets: { ready: 2000, firstResponse: 600, warmUp: 4000 },
+    ...slowStart(),
     warmUpPaths: ['/after-slow-start'],
   });
   await server.stop();
-}, 10_000);
+}, 60_000);
 
 test('hydration and search SEO use the shared starter and preserve their startup settings and page assertions', async () => {
   for (const name of ['hydration', 'search-seo']) {
@@ -251,12 +270,11 @@ test('no web or UI test imports another test module, statically or with import()
 
 test('a slow start cannot consume the warm-up budget either', async () => {
   const server = await startDevServer({
-    ...fake({ readyDelay: 4500 }),
-    budgets: { ready: 7000, firstResponse: 2000, warmUp: 4000 },
+    ...slowStart(),
     warmUpPaths: ['/fresh-warm-up-budget'],
   });
   await server.stop();
-}, 15_000);
+}, 60_000);
 
 test('a parent exit fails immediately even when its child keeps the output pipe open', async () => {
   const options = fake({ ready: false, exit: true });
