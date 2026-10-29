@@ -230,7 +230,19 @@ test('the undelivered frontier and a held locator effect block durable completio
     ]);
     return {
       value: null,
-      events: [{ type: 'com.rezics.access.account-tombstoned.v1', subject: accountId, data: { accountId } }],
+      events: [
+        {
+          type: 'com.rezics.access.account-tombstoned.v1',
+          subject: accountId,
+          data: {
+            accountId,
+            receiptId: newId(0x7351),
+            minimumAuthnEpoch: 2,
+            kind: 'tombstone',
+            priorOperatorAccountId: null,
+          },
+        },
+      ],
     };
   });
   await acknowledgeAll(accountId);
