@@ -225,28 +225,32 @@ async function libraryToken(account: string, scope = libraryScopes): Promise<str
     .sign(privateJwk);
 }
 
-const librarySubjects = [
+const librarySubjectSeeds = [
   {
     key: 'kokoro',
-    labels: storySubjects.find(({ labels }) => labels.en === 'Kokoro')!.labels,
+    id: '01a17a3b-6b89-748f-a486-33c354ef3c9a',
   },
   {
     key: 'norwegian-wood',
-    labels: storySubjects.find(({ labels }) => labels.en === 'Norwegian Wood')!.labels,
+    id: '01a17a3b-6bab-705b-935e-d6dc0cacd82d',
   },
   {
     key: 'genji',
-    labels: storySubjects.find(({ labels }) => labels.en === 'The Tale of Genji')!.labels,
+    id: '01a17a3b-6bc3-764f-8727-7872d197bd93',
   },
   {
     key: 'cat',
-    labels: storySubjects.find(({ labels }) => labels.en === 'I Am a Cat')!.labels,
+    id: '01a17a3b-6bd9-706f-b395-987536454933',
   },
   {
     key: 'snow-country',
-    labels: storySubjects.find(({ labels }) => labels.en === 'Snow Country')!.labels,
+    id: '01a17a3b-6c01-77c8-94fd-810a3ae73369',
   },
-] as const;
+].map(({ key, id }) => {
+  const subject = storySubjects.find((entry) => entry.id === id);
+  if (!subject) throw new Error(`Library story subject ${id} is missing from story-subjects.ts.`);
+  return { key, labels: subject.labels };
+});
 
 type ValidatedDocument = { canonicalBytes: Uint8Array; searchText: string; subjectIds: readonly string[] };
 
@@ -506,7 +510,7 @@ async function recordLibrary(input: {
     await call(`open ${group}`, tokens.me, 'POST', `/v1/platform/exposure/${group}:open`, 200);
 
   const subjects: Record<string, string> = { prince: princeId };
-  for (const subject of librarySubjects)
+  for (const subject of librarySubjectSeeds)
     subjects[subject.key] = idOf(
       await call(`subject ${subject.key}`, tokens.me, 'POST', '/v1/subjects', 201, {
         type: 'schema:Book',
@@ -807,9 +811,10 @@ function stableRecording(value: unknown, previous: unknown): unknown {
   const newIds = Object.keys(current).filter((key) => key.match(uuid));
   return Object.fromEntries([
     ...Object.entries(current).filter(([name]) => !Object.hasOwn(before, name) && !newIds.includes(name)),
-    ...Object.entries(before).map(([name, item]) => {
+    ...Object.entries(before).flatMap(([name, item]) => {
+      if (name === 'cover' && !Object.hasOwn(current, name)) return [];
       const recordedName = oldIds.includes(name) ? (newIds[oldIds.indexOf(name)] ?? name) : name;
-      return [name, stableRecording(current[recordedName], item)];
+      return [name, name === 'cover' ? current[recordedName] : stableRecording(current[recordedName], item)];
     }),
   ]);
 }
