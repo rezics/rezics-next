@@ -145,7 +145,7 @@ test('global body parser restores JSON schemas and preserves raw request content
   });
 
   const rawBody = withHookDocument.paths['/v1/raw-body']!.post!.requestBody!;
-  expect(Object.keys(rawBody.content!)).toEqual(['text/plain', 'application/octet-stream']);
+  expect(Object.keys(rawBody.content!)).toEqual(['application/octet-stream', 'text/plain']);
 });
 
 test('generation refuses an error response that is not a problem and an unknown security scheme', () => {
