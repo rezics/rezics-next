@@ -389,15 +389,15 @@ test("an account revision erasure page stays within its bound as other editors' 
       },
       system.database.pool,
     );
-    const baseLocators = (
+    const locatorCount = (
       await boundedFixtureQuery<{ n: number }>(
         admin,
-        'count pre-existing owner revision locators',
+        'count owner revision locators before deletion',
         'SELECT count(*)::integer AS n FROM community.revision_locator WHERE route=$1 AND account_id=$2',
         [routeOf(owner.id), owner.id],
       )
     ).rows[0]!.n;
-    expect(baseLocators).toBeGreaterThan(0);
+    expect(locatorCount).toBeGreaterThan(50);
     const deletion = accountDeletionRuntime(system);
     await nativeStage(
       true,
@@ -415,7 +415,8 @@ test("an account revision erasure page stays within its bound as other editors' 
       () => drainEffects(system.database.pool, partitionOf(routeOf(owner.id)!)),
       system.database.pool,
     );
-    await nativeStage(true, 'deletion settle', () => driver.settle(), system.database.pool);
+    // The terminal workflow stays open until this fixture invokes the participant's revision phase below.
+    // Waiting for every workflow here blocks on that expected open obligation.
     await nativeStage(true, 'worker.stop', () => worker.stop(), system.database.pool);
     db = await nativeStage(
       true,
@@ -522,7 +523,7 @@ test("an account revision erasure page stays within its bound as other editors' 
     expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
     expect(after).not.toBeNull();
     const continuation = await eraseAccountRevisionsPage({ pool: db.pool }, owner.id, after);
-    expect(continuation).toEqual({ found: baseLocators, pending: 0, next: null });
+    expect(continuation).toEqual({ found: locatorCount - 50, pending: 0, next: null });
     expect(await eraseAccountRevisionsPage({ pool: db.pool }, owner.id, continuation.next)).toEqual({
       found: 0,
       pending: 0,
