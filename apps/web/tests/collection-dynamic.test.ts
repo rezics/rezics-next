@@ -182,7 +182,7 @@ test('preparing rereads the same cursor no more than three times and unavailable
   expect('preparing' in page && page.preparing).toBe(true);
   for (let retry = 0; retry < 3; retry++) await loadDynamicMembers(client, id, 'next-cursor');
   expect(paths.filter((path) => path.includes('/members'))).toEqual(
-    Array(4).fill(`/v1/collections/${id}/members?cursor=next-cursor&limit=100&view=FULL`),
+    Array(4).fill(`/v1/collections/${id}/members?view=FULL&limit=100&cursor=next-cursor`),
   );
   expect(paths.filter((path) => path === `/v1/collections/${id}`)).toHaveLength(1);
 });
