@@ -31,10 +31,15 @@ export const Route = createFileRoute('/collections/$id')({
 
 function CollectionRoute() {
   const page = Route.useLoaderData() as CollectionPageResult;
+  const search = Route.useSearch();
   return 'preparing' in page ? (
     <DynamicCollectionPage
       page={page}
-      readMembers={(id, cursor) => readDynamicCollectionMembers({ data: { id, ...(cursor ? { cursor } : {}) } })}
+      readMembers={(id, cursor) =>
+        readDynamicCollectionMembers({
+          data: { id, ...(cursor ? { cursor } : {}), ...(search.filters ? { search: search.filters } : {}) },
+        })
+      }
     />
   ) : (
     <CollectionPage page={page} />

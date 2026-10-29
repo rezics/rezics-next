@@ -57,10 +57,11 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
   .handler(async ({ data }): Promise<CollectionPageResult> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const configuredFilters = (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS;
     const filtersOn =
-      import.meta.env.DEV ||
-      (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS === true ||
-      (env as { COLLECTION_FILTERS?: string }).COLLECTION_FILTERS === 'true';
+      configuredFilters === undefined
+        ? import.meta.env.DEV
+        : configuredFilters === true || configuredFilters === 'true';
     let filter: ReturnType<typeof readCollectionFilterParams> | undefined;
     let filterProperties: { id: string; label: string; datatype: string; unit?: string }[] = [];
     const requested = data.search ?? {};
@@ -128,9 +129,19 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
       ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string')
     )
       throw notFound();
+    const search: Record<string, string | string[]> = {};
+    if ('search' in input && input.search && typeof input.search === 'object') {
+      for (const [key, value] of Object.entries(input.search).slice(0, 16))
+        if (
+          /^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key) &&
+          (typeof value === 'string' || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
+        )
+          search[key] = value as string | string[];
+    }
     return {
       id: input.id,
       ...('cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
+      ...(Object.keys(search).length ? { search } : {}),
     };
   })
   .handler(async ({ data }) => {
@@ -141,11 +152,33 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
       () => true,
     );
     const authorization = signedOut ? null : viewerCredential(request);
+    let filter;
+    const configuredFilters = (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS;
+    const filtersOn =
+      configuredFilters === undefined
+        ? import.meta.env.DEV
+        : configuredFilters === true || configuredFilters === 'true';
+    if (filtersOn && data.search) {
+      try {
+        filter = readCollectionFilterParams(
+          new URLSearchParams(
+            Object.entries(data.search).flatMap(([key, value]) =>
+              (Array.isArray(value) ? value : [value]).map((entry) => [key, entry] as [string, string]),
+            ),
+          ),
+          await readRelease(),
+          'schema:Book',
+        ).document;
+      } catch {
+        /* An unavailable definitions release keeps the member read unfiltered. */
+      }
+    }
     return loadDynamicMembers(
       kernelClient(),
       data.id,
       data.cursor,
       authorization ? { headers: { authorization } } : {},
+      filter,
     );
   });
 

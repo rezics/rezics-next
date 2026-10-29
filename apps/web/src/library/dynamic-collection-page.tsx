@@ -9,6 +9,8 @@ import { subjectHref } from '../subject/subject-href';
 import { rowRatio } from './subject-row';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import type { DynamicMembersResult } from './collection-load';
+import { CollectionFilters } from './collection-filters';
+import { collectionFilterAddress } from './collection-filter-params';
 
 export function DynamicCollectionPage({
   page,
@@ -61,6 +63,18 @@ export function DynamicCollectionPage({
         <PageHeading>{current.title}</PageHeading>
         {current.description ? <p className="mt-3 whitespace-pre-wrap">{current.description}</p> : null}
       </header>
+      {current.filterProperties && current.filterParams ? (
+        <CollectionFilters
+          id={current.id}
+          type={current.filterType ?? 'schema:Book'}
+          properties={current.filterProperties}
+          params={current.filterParams}
+        />
+      ) : null}
+      {current.filterIgnored?.length ? (
+        <p role="status">{m.collection_filter_ignored({ filter: current.filterIgnored.join(', ') })}</p>
+      ) : null}
+      {current.filterStatus === 'unsupported' ? <p role="status">{m.collection_filter_unsupported()}</p> : null}
       {current.preparing ? (
         <p role="status">{m.library_dynamic_preparing()}</p>
       ) : current.unavailable ? (
@@ -85,8 +99,18 @@ export function DynamicCollectionPage({
           })}
         </CoverGrid>
       ) : current.preparing || current.unavailable ? null : (
-        <p className="text-muted-foreground">{empty}</p>
+        <p className="text-muted-foreground">
+          {current.filter && current.filterStatus !== 'unsupported' ? m.collection_filter_no_match() : empty}
+        </p>
       )}
+      {current.filter && !current.preparing && !current.unavailable && current.members.length === 0 ? (
+        <a
+          className="inline-flex min-h-10 items-center rounded-lg border border-border px-3"
+          href={collectionFilterAddress(getLocale(), current.id, {}, {})}
+        >
+          {m.collection_filter_clear()}
+        </a>
+      ) : null}
       {current.preparing && retries >= 3 ? (
         <div>
           <p>{m.library_dynamic_try_later()}</p>

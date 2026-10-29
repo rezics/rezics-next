@@ -1,5 +1,8 @@
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
+import type { FilterDocument } from '@rezics/filter';
+import type { CollectionFilterProperty } from './collection-filters';
+import type { CollectionFilterParams } from './collection-filter-params';
 
 export type DynamicBuiltinKind = 'everything' | 'state' | 'liked' | (string & {});
 export type DynamicCollectionRead = {
@@ -38,6 +41,12 @@ export type DynamicCollectionPage = {
   preparing: boolean;
   retryAfterMs: number;
   unavailable: boolean;
+  filter?: FilterDocument;
+  filterIgnored?: string[];
+  filterType?: string;
+  filterStatus?: 'unsupported' | 'preparing' | 'failed';
+  filterProperties?: CollectionFilterProperty[];
+  filterParams?: CollectionFilterParams;
 };
 
 export function dynamicCollectionTitle(

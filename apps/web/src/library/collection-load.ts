@@ -29,7 +29,8 @@ export type CollectionPageResult = EditableCollectionPage | DynamicCollectionPag
 export type DynamicMembersResult = Pick<
   DynamicCollectionPage,
   'members' | 'next' | 'preparing' | 'retryAfterMs' | 'unavailable'
->;
+> &
+  Pick<DynamicCollectionPage, 'filterStatus'>;
 type CuratedMemberPage = {
   members: {
     id: string;
@@ -97,20 +98,29 @@ export async function loadDynamicMembers(
   id: string,
   cursor?: string,
   headers: { headers: { authorization: string } } | Record<string, never> = {},
+  filter?: FilterDocument,
 ): Promise<DynamicMembersResult> {
   let result: unknown;
   try {
     result = await client
       .collections({ collectionId: id })
-      .members.get({ query: libraryListQuery(cursor), ...headers });
+      .members.get({ query: { ...libraryListQuery(cursor), ...collectionFilterQuery(filter) } as never, ...headers });
   } catch (error) {
     if (resultStatus(error) !== 202 && resultStatus(error) !== 503) throw error;
     result = error;
   }
   const status = resultStatus(result);
-  if (status === 202)
+  let filterStatus: DynamicCollectionPage['filterStatus'];
+  if (filter && (status === 400 || status === 422)) {
+    filterStatus = 'unsupported';
+    result = await client
+      .collections({ collectionId: id })
+      .members.get({ query: libraryListQuery(cursor), ...headers });
+  }
+  const finalStatus = resultStatus(result);
+  if (finalStatus === 202)
     return { members: [], next: null, preparing: true, retryAfterMs: retryAfterMs(result), unavailable: false };
-  if (status === 503) return { members: [], next: null, preparing: false, retryAfterMs: 1000, unavailable: true };
+  if (finalStatus === 503) return { members: [], next: null, preparing: false, retryAfterMs: 1000, unavailable: true };
   const page = generatedClientDTO<DynamicMembersPage>(
     readLibraryResult(result as Parameters<typeof readLibraryResult>[0]),
   );
@@ -120,6 +130,7 @@ export async function loadDynamicMembers(
     preparing: false,
     retryAfterMs: 1000,
     unavailable: false,
+    ...(filterStatus ? { filterStatus } : {}),
   };
 }
 
@@ -222,6 +233,30 @@ export async function loadEditableCollectionPage(
   // One boundary cast carries the documented union until the generated client supports it.
   const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
   if (collection.membershipKind === 'dynamic') {
+    const filterFields = {
+      ...(input.filter ? { filter: input.filter } : {}),
+      ...(input.filterIgnored ? { filterIgnored: input.filterIgnored } : {}),
+      ...(input.filterType ? { filterType: input.filterType } : {}),
+      ...(filterStatus ? { filterStatus } : {}),
+      ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
+      ...(input.filterParams ? { filterParams: input.filterParams } : {}),
+    };
+    if (filterStatus === 'preparing') {
+      return {
+        id: collection.id,
+        title: dynamicCollectionTitle(collection, getLocale()),
+        builtinKind: collection.builtinKind,
+        description: collection.description ?? null,
+        curator: accountOf(collection.curator),
+        members: [],
+        next: null,
+        preparing: true,
+        retryAfterMs: 1000,
+        unavailable: false,
+        ...filterFields,
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+      };
+    }
     const status = first.stale ? 200 : resultStatus(membersResult);
     if (!first.stale && status === 202) {
       return {
@@ -236,6 +271,7 @@ export async function loadEditableCollectionPage(
         retryAfterMs: retryAfterMs(membersResult),
         unavailable: false,
         ...(input.cursor ? { cursor: input.cursor } : {}),
+        ...filterFields,
       };
     }
     if (!first.stale && status === 503) {
@@ -251,6 +287,7 @@ export async function loadEditableCollectionPage(
         retryAfterMs: 1000,
         unavailable: true,
         ...(input.cursor ? { cursor: input.cursor } : {}),
+        ...filterFields,
       };
     }
     const page = generatedClientDTO<DynamicMembersPage>(
@@ -273,6 +310,7 @@ export async function loadEditableCollectionPage(
       curator: accountOf(collection.curator),
       ...dynamicMembers,
       ...(input.cursor ? { cursor: input.cursor } : {}),
+      ...filterFields,
     };
   }
   const curatedCollection = collection as CuratedCollectionRead;

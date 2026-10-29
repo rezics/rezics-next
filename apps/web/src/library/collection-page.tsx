@@ -488,7 +488,9 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
           </div>
         ) : page.filterStatus === 'preparing' ? null : (
           <p className="text-muted-foreground">
-            {page.filter ? m.collection_filter_no_match() : m.library_collection_empty()}
+            {page.filter && page.filterStatus !== 'unsupported'
+              ? m.collection_filter_no_match()
+              : m.library_collection_empty()}
           </p>
         )}
         {page.filter && page.filterStatus !== 'preparing' && members.length === 0 ? (
