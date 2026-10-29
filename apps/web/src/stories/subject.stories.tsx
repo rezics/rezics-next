@@ -19,7 +19,6 @@ export const SignedOut: Story = {
   render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
 };
 
-<<<<<<< HEAD
 async function heroReady(context: { canvasElement: HTMLElement }, reveal: boolean) {
   await pageReady(context);
   const view = within(within(context.canvasElement).getByRole('main'));
