@@ -9,6 +9,7 @@ import { advanceErasureCompletion, recordLateErasureItem, resolveLateErasureItem
 import { runCommand } from '../../src/command/command.ts';
 import { LOCATOR_EFFECTS_QUEUE } from '../../src/work/queues.ts';
 import frontierWork from '../../src/access/erasure-frontier-work.sql';
+import statusFrontier from '../../src/access/erasure-status.sql';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
@@ -284,13 +285,20 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
     const accountId = newId(route);
     const partition = partitionOf(route);
     const workflowId = `erasure-growth-held:${accountId}`;
-    const explainFrontier = async () => {
-      const input: Record<string, unknown> = { queue: LOCATOR_EFFECTS_QUEUE, route, account_id: accountId };
+    const explainFrontier = async (query = frontierWork) => {
+      const input: Record<string, unknown> = { queue: LOCATOR_EFFECTS_QUEUE, workflow_until: '1000' };
       const { rows } = await db.admin.query(
-        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${frontierWork.sql}`,
-        frontierWork.params.map((name) => input[name]),
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query.sql}`,
+        query.params.map((name) => input[name]),
       );
       return JSON.stringify(rows[0]);
+    };
+    const assertIndexed = (plan: string) => {
+      expect(plan).toContain('idx_workflow_status_in_flight_v2');
+      expect(plan).not.toContain('Seq Scan');
+      const searches = Array.from(plan.matchAll(/"Index Searches":(\d+)/g), (match) => Number(match[1]));
+      expect(searches.length).toBeGreaterThan(0);
+      expect(searches.reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual(8);
     };
     const report = await checkGrowth(db, {
       name: `erasure completion ${phase}`,
@@ -354,6 +362,22 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
           FROM generate_series($2::integer+1,$3::integer) n`,
           [accountId, previous, scale, LOCATOR_EFFECTS_QUEUE],
         );
+        // Capture both plans before asserting either: retain the pre/post-statistics evidence on failure.
+        const before = {
+          completion: await explainFrontier(),
+          status: await explainFrontier(statusFrontier),
+        };
+        await database.admin.query('ANALYZE dbos.workflow_status');
+        const after = {
+          completion: await explainFrontier(),
+          status: await explainFrontier(statusFrontier),
+        };
+        try {
+          for (const plans of [before, after]) for (const plan of Object.values(plans)) assertIndexed(plan);
+        } catch (error) {
+          console.error(`Erasure frontier plans (${phase}, scale ${scale}): ${JSON.stringify({ before, after })}`);
+          throw error;
+        }
       },
       async operation(database) {
         expect((await advanceErasureCompletion({ pool: database.pool }, accountId)).value).toBe(false);

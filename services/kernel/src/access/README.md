@@ -655,9 +655,12 @@ frozen database timestamp bounds every delivered enqueue.
 
 DBOS 5.4.6-preview owns `idx_workflow_status_in_flight_v2` on `(queue_name, status, priority, created_at)`, partial on
 `ENQUEUED` and `PENDING`. The probe constrains queue and status, leaves priority unrestricted, and bounds
-`created_at`. PostgreSQL 19's B-tree skip scan costs one descent per distinct priority on this dedicated queue.
-The native growth test requires that index, no sequential scan and bounded `Index Searches`; the kernel issues
-no DDL in the DBOS schema.
+`created_at`. Both completion and status first read the frozen timestamp, then pass it as a parameter to an ordered
+lookup with `ORDER BY queue_name, status, priority, created_at LIMIT 1`. This preserves the index's order and avoids
+the sequential-scan early-termination estimate of a correlated `EXISTS`. PostgreSQL 19's B-tree skip scan costs one
+descent per distinct priority on this dedicated queue. At every scale, the native growth test requires that index,
+no sequential scan and at most eight `Index Searches`, before and after `ANALYZE dbos.workflow_status`. The kernel
+issues no DDL in the DBOS schema.
 
 Internal/test-only `readErasureStatus(client, accountId)` returns version, T, `completedAt`, participant outcomes
 and retained exceptions with `resolvedAt` and `overdue`. `outstanding.lateItems` and
@@ -723,9 +726,29 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 
 ### Erasure status read
 
-- Touches: one point read and one key-range read of at most P acknowledgements and their exceptions in one snapshot.
-- Bound: O(P·X + log A).
+- Touches: one statement reads the erasure record, at most P acknowledgements and their exceptions in one snapshot,
+  and probes the open-late-item partial index. An unfinished erasure with a delivered frontier adds one ordered DBOS
+  lookup using the frozen timestamp as a parameter; completed erasures need no workflow lookup.
+- Bound: at most two statements; O(P·X + log A + D·log W), D the distinct locator-queue priorities and W its in-flight
+  workflows. Neither outbox history nor unrelated queues are read.
 - Growth check: `test/access/growth-erasure-coordinator.test.ts`, the same three scales; statements and rows stay constant.
+
+### Record or resolve a late erasure item
+
+- Touches: one primary-key erasure probe and one primary-key late-item insert or update in the account's home;
+  recording shares the caller's locator transaction, resolution uses one platform command.
+- Bound: constant statements and rows; logarithmic blocks as unrelated accounts, erasures and late items grow.
+- Growth check: `test/access/growth-erasure-coordinator.test.ts`, fixed record and resolve keys at three scales.
+
+### Advance erasure completion
+
+- Touches: one locked erasure key; once per erasure, one frontier snapshot statement over the fixed partition map;
+  one keyed checkpoint probe per stored frontier partition; one ordered DBOS locator-queue lookup through
+  `idx_workflow_status_in_flight_v2`; one open-late-item existence probe and the bounded acknowledgement count.
+- Bound: constant statements and rows in account data and unrelated history; logarithmic blocks. The snapshot and
+  stored frontier are bounded by the fixed partition map; the DBOS lookup costs one descent per distinct priority.
+- Growth check: `test/access/growth-erasure-coordinator.test.ts`, fixed undelivered, locator and late-item frontiers
+  as outbox history, unrelated workflows, erasures and late items grow through three scales.
 
 ### Active account page
 

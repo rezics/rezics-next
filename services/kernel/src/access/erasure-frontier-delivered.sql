@@ -10,4 +10,4 @@ WHERE route = :route::integer AND account_id = :account_id::uuid
         AND c.position >= (f->>'position')::bigint
     )
   )
-RETURNING workflow_until;
+RETURNING workflow_until::text AS "workflowUntil";

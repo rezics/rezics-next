@@ -17,7 +17,8 @@ import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import lock from './erasure-lock.sql';
 import acknowledge from './erasure-acknowledge.sql';
 import complete from './erasure-complete.sql';
-import status from './erasure-status.sql';
+import status from './erasure-status-record.sql';
+import statusFrontier from './erasure-status.sql';
 import resolve from './erasure-resolve.sql';
 import recordLate from './erasure-late-record.sql';
 import resolveLate from './erasure-late-resolve.sql';
@@ -147,9 +148,13 @@ export async function acknowledgeErasure(
         throw new LifecycleDeniedError();
       const value = { accountId, participant, outcome };
       if (!row.inserted) return noEffect(value);
-      const pending =
-        record.workflowUntil !== null ? await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE }) : null;
-      if (pending && !pending.pending)
+      if (
+        record.workflowUntil !== null &&
+        (await pendingLocator.run(tx, {
+          queue: LOCATOR_EFFECTS_QUEUE,
+          workflow_until: record.workflowUntil,
+        })) === null
+      )
         await complete.run(tx, {
           ...key,
           participants: [...participants(record.version)],
@@ -203,9 +208,15 @@ export async function readErasureStatus(client: AccessClient, accountId: string)
   const row = await status.run(client, {
     route: accountRoute(accountId),
     account_id: accountId,
-    queue: LOCATOR_EFFECTS_QUEUE,
   });
   if (!row) return null;
+  const effectsFrontier =
+    row.completedAt === null &&
+    (row.workflowUntil === null ||
+      (await statusFrontier.run(client, {
+        queue: LOCATOR_EFFECTS_QUEUE,
+        workflow_until: row.workflowUntil,
+      })) !== null);
   const outcomes = row.outcomes as Record<
     string,
     { outcome: string; retained: StoredException[]; resolutions: Record<string, string> }
@@ -243,7 +254,7 @@ export async function readErasureStatus(client: AccessClient, accountId: string)
     version: row.version,
     at: new Date(row.at).toISOString(),
     participants: recorded,
-    outstanding: { lateItems: row.lateItems, effectsFrontier: row.effectsFrontier },
+    outstanding: { lateItems: row.lateItems, effectsFrontier },
     completedAt: row.completedAt === null ? null : new Date(row.completedAt).toISOString(),
   };
 }
@@ -321,14 +332,17 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
         changed = true;
       }
       const delivered = await deliverFrontier.run(tx, key);
-      const newlyDelivered = Array.isArray(delivered) ? delivered.length > 0 : delivered !== null;
+      const newlyDelivered = delivered.length > 0;
       changed ||= newlyDelivered;
-      const pending =
-        record.workflowUntil !== null || newlyDelivered
-          ? await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE })
-          : null;
+      const workflowUntil = record.workflowUntil ?? delivered[0]?.workflowUntil ?? null;
       let done = false;
-      if (pending && !pending.pending) {
+      if (
+        workflowUntil !== null &&
+        (await pendingLocator.run(tx, {
+          queue: LOCATOR_EFFECTS_QUEUE,
+          workflow_until: workflowUntil,
+        })) === null
+      ) {
         const completed = await complete.run(tx, {
           ...key,
           participants: [...participants(record.version)],
