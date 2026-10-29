@@ -159,6 +159,12 @@ No failures. Receipt `137dd644-1fc6-49e6-8124-ba47fa760910`; measurement log
 `.temp/goal/checks/worker-check-2026-10-29T05-01-55.673Z-0e8ce797.log`. CLI pair complete.
 Next: previous `importer-reconciliation-growth`, then canary; pipeline pair remains UNEXECUTED.
 
-Previous `importer-reconciliation-growth` completed exit 0: 2 direct pass, 0 fail, 20 expectations.
+Previous `importer-reconciliation-growth` completed exit 0: 2 direct pass, 0 fail, 177 expectations.
 No failures. Receipt `9c72e449-a74c-47dd-80b2-511303ad9811`; measurement log
 `.temp/goal/checks/worker-check-2026-10-29T05-02-04.608Z-94c892ec.log`. Next: canary half.
+
+Canary `importer-reconciliation-growth` completed exit 0: 2 direct pass, 0 fail, 177 expectations.
+No failures. Receipt `162b84f4-6fee-48dd-b7ed-ad0559d9c94f`; measurement log
+`.temp/goal/checks/worker-check-2026-10-29T05-02-15.938Z-093afc71.log`. Reconciliation pair complete.
+Both scenarios pass: actual coordinator fixed-work/linear-command growth and EOF-before-effects acquisition.
+Next: canary `pipeline-outcomes`, then previous, the final pair.
