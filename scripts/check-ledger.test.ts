@@ -20,7 +20,7 @@ describe('ledger', () => {
     const entry: CheckLedgerEntry = { runId: 'r', argv: ['bun', 'test', 'scripts/a.test.ts'], start: '2026-10-29T00:00:00Z', terminalStatus: 'running', memoryGiBSeconds: 7200, samplingIntervalSeconds: 5, sampleCount: 10 };
     const result = summarize([entry], new Date('2026-10-29T00:00:05Z'), new Date('2026-10-29T00:00:10Z')) as any;
     expect(result.byCommandClass['script and control-plane tests'].checkHours).toBeCloseTo(5 / 3600);
-    expect(result.byCommandClass['script and control-plane tests'].memoryGiBHours).toBeCloseTo(1 / 3600);
+    expect(result.byCommandClass['script and control-plane tests'].memoryGiBHours).toBeCloseTo(1);
     expect(result.limits.samplingIntervalSeconds).toBe(5);
   });
 });
