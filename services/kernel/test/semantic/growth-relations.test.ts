@@ -89,6 +89,7 @@ let people: string[] = [];
 let peopleLabels: Fact[][] = [];
 let relationFacts: Fact[] = [];
 let population: Population;
+let historyPositionBase = 1_000;
 let growthHead: SessionComponent | undefined;
 
 function createPopulation(): Population {
@@ -216,7 +217,7 @@ function historyPopulation(): Population {
       const envelopes = transactions.map((transaction_id, index) => ({
         partition_no: partitionOf(BASE_ROUTE),
         epoch: 1,
-        position: 2 + 2 * ordinal + index,
+        position: historyPositionBase + 2 * ordinal + index,
         transaction_id,
         principal_kind: 'account',
         principal_id: actor.accountId,
@@ -313,7 +314,7 @@ function historyPopulation(): Population {
     },
     finish: async (admin, range) => {
       // These fixture projections are already materialized; keep their source position and checkpoint coherent.
-      const position = 2 * range.to + 1;
+      const position = historyPositionBase + 2 * range.to + 1;
       await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
         partitionOf(BASE_ROUTE),
         position,
@@ -512,10 +513,7 @@ async function setCheckpoint(database: GrowthDatabase, position: bigint): Promis
   );
 }
 
-beforeAll(async () => {
-  db = await openGrowthDatabase(databaseUrl);
-  await bootstrapRelease(db.pool, bundledRelease);
-  await activeRelease(db.pool);
+async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise<void> {
   anchor = newId(BASE_ROUTE);
   anchorRoute = routeOf(anchor)!;
   await createSubject(db.pool, {
@@ -523,20 +521,29 @@ beforeAll(async () => {
     target: { route: anchorRoute, id: anchor },
     idempotencyKey: randomUUID(),
     digest,
-    item: { type: 'schema:Book', labels: { en: 'Relation growth anchor' } },
+    item: { type: 'schema:Book', labels: { en: label } },
     release: { digest: bundledDigest, release: bundledRelease },
     authorize: async () => true,
   });
+  const head = await actualHead(db);
+  historyPositionBase = Number(head.position) + 1_000;
   people = Array.from({ length: 4_096 }, () => newId(anchorRoute));
   peopleLabels = people.map((id, index) => rowsFor(id, { labels: { en: `Author ${String(index).padStart(4, '0')}` } }));
   relationFacts = people.map((id) =>
     rowsFor(
       anchor,
-      { labels: { en: 'Relation growth anchor' }, statements: { 'schema:author': [statement(id)] } },
+      { labels: { en: label }, statements: { 'schema:author': [statement(id)] } },
       bundledRelease,
     ).find((fact) => fact.kind === 'statement')!,
   );
   population = createPopulation();
+}
+
+beforeAll(async () => {
+  db = await openGrowthDatabase(databaseUrl);
+  await bootstrapRelease(db.pool, bundledRelease);
+  await activeRelease(db.pool);
+  await initializeGrowthAnchor();
 }, 60_000);
 
 afterAll(async () => {
@@ -544,6 +551,7 @@ afterAll(async () => {
 });
 
 test('A subject read examines the same rows whatever the number of relations it holds under series with derived logarithmic blocks indexProbes and production-shaped initial access', async () => {
+  const plannedScales = new Set<number>();
   const report = await checkGrowth(db, {
     name: 'A subject read examines the same rows whatever the number of relations it holds',
     scales: [64, 512, 4096],
@@ -553,17 +561,20 @@ test('A subject read examines the same rows whatever the number of relations it 
     rule: 'series',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     indexProbes,
-    warmup: async (database, scale) => {
+    warmup: operation,
+    grow,
+    prepare: async (database, scale) => {
+      if (plannedScales.has(scale)) return;
       const measured = await capture(database, () => operation(database, scale), { includeBackends: true });
       try {
         assertPlans(measured.capture, scale);
+        plannedScales.add(scale);
       } catch (error) {
         // Remote check workspaces are disposable; preserve the owner's raw failure in the returned log too.
         console.error('Native relation-growth plan failure', JSON.stringify({ scale, raw: measured.capture }));
         throw error;
       }
     },
-    grow,
     operation,
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
@@ -623,27 +634,7 @@ async function operation(database: GrowthDatabase, scale: number) {
 }
 
 test('a genuinely waiting link freshness probe has constant work per poll across relation growth', async () => {
-  anchor = newId(BASE_ROUTE);
-  anchorRoute = routeOf(anchor)!;
-  await createSubject(db.pool, {
-    actor,
-    target: { route: anchorRoute, id: anchor },
-    idempotencyKey: randomUUID(),
-    digest,
-    item: { type: 'schema:Book', labels: { en: 'Waiting relation growth anchor' } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  people = Array.from({ length: 4_096 }, () => newId(anchorRoute));
-  peopleLabels = people.map((id, index) => rowsFor(id, { labels: { en: `Author ${String(index).padStart(4, '0')}` } }));
-  relationFacts = people.map((id) =>
-    rowsFor(
-      anchor,
-      { labels: { en: 'Waiting relation growth anchor' }, statements: { 'schema:author': [statement(id)] } },
-      bundledRelease,
-    ).find((fact) => fact.kind === 'statement')!,
-  );
-  population = createPopulation();
+  await initializeGrowthAnchor('Waiting relation growth anchor');
   growthHead = await actualHead(db);
 
   const waitBudget = FRESHNESS_WAIT_MS;
