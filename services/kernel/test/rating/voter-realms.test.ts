@@ -370,19 +370,9 @@ test('membership join and promotion cost constant rows and statements as other v
         ...population,
         rows: (input) => {
           const voterId = key(1_000_000 + input.ordinal);
-          const transactionId = newId(route);
           const nextPosition = position + input.ordinal - from + 1;
           return {
             ...population.rows!(input),
-            'core.receipt': [
-              {
-                ...receipt,
-                principal_id: voterId,
-                idempotency_key: createHash('sha256').update(`membership-history-${input.ordinal}`).digest('hex'),
-                position: nextPosition,
-                transaction_id: transactionId,
-              },
-            ],
             'core.outbox': [
               {
                 ...event,
@@ -395,6 +385,20 @@ test('membership join and promotion cost constant rows and statements as other v
           };
         },
         finish: async (admin, range) => {
+          // Copy JSON null in SQL and let PostgreSQL compute actor_account_id.
+          await admin.query(
+            `INSERT INTO core.receipt
+               (partition_no, principal_kind, principal_id, command_kind, idempotency_key,
+                request_digest, epoch, position, transaction_id, response, created_at)
+             SELECT o.partition_no, r.principal_kind, o.subject::uuid, r.command_kind,
+                    encode(sha256(uuid_send(o.id)), 'hex'), r.request_digest,
+                    o.epoch, o.position, o.id, r.response, r.created_at
+             FROM core.outbox o CROSS JOIN core.receipt r
+             WHERE o.partition_no = $1 AND o.position > $2 AND o.position <= $3
+               AND r.partition_no = $1 AND r.principal_id = $4
+               AND r.command_kind = 'rating.voter-realm.membership'`,
+            [partitionOf(route), position, position + range.to - range.from, historyVoter],
+          );
           await admin.query('UPDATE core.partition SET position = $2 WHERE partition_no = $1', [
             partitionOf(route),
             position + range.to - range.from,
