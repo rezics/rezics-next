@@ -26,6 +26,10 @@ export type PromotionOptions = {
 // The root gate runs every workspace, and the kernel's check alone takes about 45 minutes; the runner's ten-minute
 // default stopped every full gate before it could pass.
 export const PROMOTION_GATE_TIMEOUT_MS = 2 * 60 * 60_000;
+const STABILIZE_QUICK_GATE = [
+  ['bun', 'run', 'typecheck'],
+  ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
+] as const;
 const ref = (branch: string) => `refs/heads/${branch}`;
 function isAncestor(cwd: string, older: string, newer: string): boolean {
   try {
@@ -893,7 +897,7 @@ function mergeIntoMain(options: PromotionOptions, main: string, snapshot: string
   }
 }
 
-function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): boolean {
+async function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): Promise<boolean> {
   const settings = options.settings,
     checkout = settings.mainCheckout,
     target = run.promoteHead!;
@@ -908,6 +912,7 @@ function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionR
     );
     return true;
   }
+  if (!(await stabilizeQuickGate(options, dev))) return true;
   try {
     git(checkout, 'update-ref', ref(settings.stabilizeBranch), dev, target);
   } catch {
@@ -957,7 +962,7 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
         `Published main at ${target}, but main does not merge into ${settings.stabilizeBranch}.`,
       );
   }
-  const stabilized = advanceStabilizeAfterPublish(options, run);
+  const stabilized = await advanceStabilizeAfterPublish(options, run);
   store.clearPromotion();
   return stabilized;
 }
@@ -965,6 +970,46 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
 // A local switch: while dev is known to be red, gating and bisecting it only spends the machine.
 function pausedAt(settings: Settings): boolean {
   return existsSync(join(settings.stateDirectory, 'promotion.paused'));
+}
+
+/** Create the next frozen candidate only from a dev snapshot that passes the short preflight. */
+async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promise<boolean> {
+  const { settings } = options;
+  const checkout = settings.mainCheckout;
+  const tree = join(settings.worktreeRoot, `promotion-quick-${randomUUID()}`);
+  mkdirSync(settings.worktreeRoot, { recursive: true });
+  git(checkout, 'worktree', 'add', '--detach', tree, dev);
+  try {
+    if (existsSync(join(tree, 'package.json'))) {
+      const installed = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
+      if (installed.status !== 0) return false;
+    }
+    for (const command of STABILIZE_QUICK_GATE) {
+      const result = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(
+        command,
+        tree,
+        join(settings.stateDirectory, `promotion-quick-${dev}-${command[command.length - 1]}.log`),
+      );
+      if (!result.passed || git(tree, 'rev-parse', 'HEAD') !== dev || git(tree, 'status', '--porcelain')) return false;
+    }
+    return head(checkout, settings.integrationBranch) === dev;
+  } finally {
+    git(checkout, 'worktree', 'remove', '--force', tree);
+  }
+}
+
+async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Promise<boolean> {
+  const { settings } = options;
+  const checkout = settings.mainCheckout;
+  if (!(await stabilizeQuickGate(options, dev)) || optionalHead(checkout, settings.stabilizeBranch) !== undefined)
+    return false;
+  if (head(checkout, settings.integrationBranch) !== dev) return false;
+  try {
+    git(checkout, 'update-ref', ref(settings.stabilizeBranch), dev, '0000000000000000000000000000000000000000');
+    return true;
+  } catch {
+    return optionalHead(checkout, settings.stabilizeBranch) !== undefined;
+  }
 }
 
 /** Gate integrated work, publish passing commits on main, or isolate the first failing task on dev. */
@@ -992,6 +1037,10 @@ export async function promote(options: PromotionOptions): Promise<void> {
         return;
       }
       const stabilize = optionalHead(settings.mainCheckout, settings.stabilizeBranch);
+      if (stabilize === undefined) {
+        if (!(await cutStabilizeCandidate(options, dev))) return;
+        continue;
+      }
       const stabilization = stabilize !== undefined;
       const candidateBranch = stabilization ? settings.stabilizeBranch : settings.integrationBranch;
       let candidate = stabilize ?? dev;
