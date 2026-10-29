@@ -68,55 +68,59 @@ test('sorted pattern checkpoint observation freezes same-pattern defect versus f
   const exhaustion = report.patterns.find((row) => row.source === '^[ab]{32}a[ab]*$')!;
   expect(exhaustion.original).toEqual({ safe: false, steps: 8193 });
   const unsafe = report.patterns.find((row) => row.source === '^(a+)+$')!;
-  expect(unsafe.original.safe).toBe(false);
-  expect(unsafe.original.steps).toBeGreaterThan(0);
+  expect(unsafe.original).toEqual({ safe: false, steps: 156 });
+  expect(unsafe.native).toEqual([{ status: 'vulnerable', checker: 'automaton' }]);
   const unknown = report.patterns.find((row) => row.source === '^[ab]*a[ab]{32}$')!;
-  expect(unknown.original.safe).toBe(false);
+  expect(unknown.original).toEqual({ safe: false, steps: 457 });
+  expect(unknown.native).toEqual([{ status: 'exception-or-unknown', steps: 457 }]);
+  expect(exhaustion.native).toEqual([{ status: 'exception-or-unknown', steps: 8193 }]);
   const safe = report.patterns.find((row) => row.source === '^A$')!;
-  expect(safe.original.safe).toBe(true);
-  // This is a test observation of the proposed method, not a callable publication
-  // API or a substitute HTTP verdict. Each pattern executes the real checker.
-  // Vary the aggregate boundary by one checkpoint around the SAME native defect.
-  for (const defect of [unsafe, exhaustion, unknown]) {
-    const preceding = analyzePattern('!');
-    expect(preceding.safe).toBe(true);
-    const sorted = ['!', defect.source].sort();
-    expect(sorted).toEqual(['!', defect.source]);
+  expect(safe.original).toEqual({ safe: true, steps: 7 });
+  expect(safe.native).toEqual([{ status: 'safe', checker: 'automaton' }]);
+  // Fixture construction uses observed native literal costs. The admission
+  // observation below executes every selected source again and sums actual steps.
+  const singleSources = ['!', '"', '#', '%', '&', ',', '-', '/', ':'];
+  for (const source of singleSources) expect(analyzePattern(source)).toEqual({ safe: true, steps: 4 });
+  expect(analyzePattern('!0000')).toEqual({ safe: true, steps: 9 });
+  for (const defect of [unsafe, exhaustion, unknown])
     for (const delta of [-1, 0, 1]) {
-      const limit = preceding.steps + defect.original.steps + delta;
+      const prefixTarget = candidateAnalysisMax - defect.original.steps + delta;
+      const singles = Array.from({ length: 9 }, (_, index) => index).find(
+        (count) => (prefixTarget - 4 * count) % 9 === 0,
+      )!;
+      const literals = (prefixTarget - 4 * singles) / 9;
+      const sorted = [
+        ...singleSources.slice(0, singles),
+        ...Array.from({ length: literals }, (_, index) => `!${String(index).padStart(4, '0')}`),
+        defect.source,
+      ].sort();
+      expect(sorted.at(-1)).toBe(defect.source);
       let executed = 0;
-      const observations: { source: string; safe: boolean; excess: boolean; steps: number }[] = [];
+      let prefixSteps = 0;
+      let last: { source: string; safe: boolean; excess: boolean; steps: number } | undefined;
       for (const source of sorted) {
         const actual = analyzePattern(source);
         executed += actual.steps;
-        observations.push({ source, safe: actual.safe, excess: executed > limit, steps: actual.steps });
-        if (!actual.safe || executed > limit) break;
+        last = { source, safe: actual.safe, excess: executed > candidateAnalysisMax, steps: actual.steps };
+        if (!actual.safe || last.excess) break;
+        prefixSteps = executed;
       }
-      const last = observations.at(-1)!;
-      expect(last.source).toBe(defect.source);
-      expect(last.safe).toBe(false);
-      expect(last.excess).toBe(delta < 0);
-      expect(executed).toBeLessThanOrEqual(limit + 8193);
-      console.log('same-pattern native boundary', JSON.stringify({ limit, delta, observations }));
+      expect(prefixSteps).toBe(prefixTarget);
+      expect(last!.source).toBe(defect.source);
+      expect(last!.safe).toBe(false);
+      expect(last!.excess).toBe(delta > 0);
+      expect(executed).toBe(candidateAnalysisMax + delta);
+      expect(executed).toBeLessThanOrEqual(candidateAnalysisMax + 8193);
+      console.log(
+        'same-pattern native boundary',
+        JSON.stringify({
+          limit: candidateAnalysisMax,
+          remaining: candidateAnalysisMax - prefixSteps,
+          delta,
+          prefixSteps,
+          executed,
+          last,
+        }),
+      );
     }
-  }
-  // Exercise a fixed candidate aggregate with actual sorted native executions,
-  // including the costly defect after a safe prefix. No synthesized step debit.
-  const sources = Array.from({ length: 900 }, (_, index) => `!${String(index).padStart(4, '0')}`);
-  sources.push(exhaustion.source);
-  let executed = 0;
-  let reachedDefect = false;
-  for (const source of [...new Set(sources)].sort()) {
-    const actual = analyzePattern(source);
-    executed += actual.steps;
-    if (!actual.safe) {
-      reachedDefect = source === exhaustion.source;
-      break;
-    }
-    if (executed > candidateAnalysisMax) break;
-  }
-  expect(reachedDefect).toBe(true);
-  expect(executed).toBeGreaterThan(candidateAnalysisMax);
-  expect(executed).toBeLessThanOrEqual(candidateAnalysisMax + 8193);
-  console.log('candidate aggregate native boundary', JSON.stringify({ executed, reachedDefect }));
 }, 240_000);
