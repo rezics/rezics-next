@@ -93,6 +93,7 @@ if (script.includes('/proc/loadavg')) {
     ? (config.cpuQuotaPercent ?? 800) / 100
     : (config.sliceProcessors ?? (config.cpuQuotaPercent ?? 800) / 100);
   const load = config.load ?? 0;
+  const available = config.available ?? 16 * 2 ** 30;
   const slots = config.slots ?? 2;
   const ordinaryCapacity = Math.max(0, slots - 1);
   const ordinarySlotsUsed = Array.from({ length: ordinaryCapacity }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
@@ -125,6 +126,7 @@ if (script.includes('/proc/loadavg')) {
   console.log('PROCESSORS ' + processors);
   console.log('SLICE_PROCESSORS ' + sliceProcessors);
   console.log('LOAD ' + load);
+  console.log('AVAILABLE ' + available);
   console.log('ORDINARY_SLOTS_USED ' + ordinarySlotsUsed);
   console.log('EXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0));
   console.log('GATE_WAITING ' + (gateWaiting ? 1 : 0));
@@ -827,7 +829,7 @@ test('the package cache failure lists at most ten changed run-relative paths', (
 });
 
 test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally and runs them on the host with the most free capacity', async () => {
-  const { env, events } = scenario({ a: { available: 4e9 }, b: { available: 30e9 } });
+  const { env, events } = scenario({ a: { available: 4.5e9 }, b: { available: 30e9 } });
   const result = await kernelCheck(env);
   if (onCheckHost(kernel)) {
     expect(result.code).not.toBe(0);
@@ -859,7 +861,7 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   expect(kinds.slice(-2)).toEqual(['cleanup', 'release']);
 });
 
-test('a host admits runs by free slots and memory headroom whatever its load average', async () => {
+test('among hosts that pass load and available-memory admission, free slots and memory headroom choose the host', async () => {
   const { env, events } = scenario({
     memory: {
       available: 64 * 2 ** 30,
@@ -881,12 +883,12 @@ test('a host admits runs by free slots and memory headroom whatever its load ave
       ordinaryBusy: 1,
     },
     ready: {
-      available: 1,
+      available: 4 * 2 ** 30,
       memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
       memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
       cpuQuotaPercent: 400,
       processors: 16,
-      load: 1000,
+      load: 0,
       slots: 4,
     },
   });
@@ -1050,12 +1052,12 @@ test('acquisition prefers the host with the most free capacity', async () => {
       slots: 4,
     },
     b: {
-      available: 1,
+      available: 4 * 2 ** 30,
       memoryMax: 4 * CHECK_SLOT_MEMORY_BYTES,
       memoryHeadroom: 4 * CHECK_SLOT_MEMORY_BYTES,
       cpuQuotaPercent: 800,
       processors: 16,
-      load: 1000,
+      load: 0,
       slots: 4,
     },
   });
@@ -1067,6 +1069,48 @@ test('acquisition prefers the host with the most free capacity', async () => {
   const granted = events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted);
   expect(granted).toHaveLength(2);
   expect(new Set(granted.map((event) => event.call)).size).toBe(1);
+});
+
+test('a host over 1.5 times its slice processors in load is skipped and logged with its load limit', async () => {
+  const { env, events } = scenario({
+    loaded: { available: 16 * 2 ** 30, load: 13, sliceProcessors: 8 },
+    ready: { available: 16 * 2 ** 30, load: 0 },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+  expect(result.stderr).toContain('skipped loaded: load 13 exceeds limit 12');
+});
+
+test('a host with less than 4 GiB MemAvailable is skipped and logged with its available memory', async () => {
+  const { env, events } = scenario({
+    low: { available: 3 * 2 ** 30, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30 },
+    ready: { available: 16 * 2 ** 30 },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+  expect(result.stderr).toContain(`skipped low: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
+});
+
+test('when every host is skipped for load or memory the check waits and names both reasons', async () => {
+  const { env, events } = scenario({
+    loaded: { available: 16 * 2 ** 30, load: 13, sliceProcessors: 8 },
+    low: { available: 3 * 2 ** 30, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30 },
+  });
+  const waitFile = join(env.FAKE_DIR!, 'admission-wait-ms');
+  env.GOAL_CHECK_WAIT_FILE = waitFile;
+  const run = startRemote(env, workspace(), ['true']);
+  await waitFor(() => existsSync(waitFile) && events().filter((event) => event.kind === 'probe').length >= 2);
+  run.child.kill('SIGTERM');
+  const [, , stderr] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
+
+  expect(stderr).toContain('every check slot is busy; waiting for a free one');
+  expect(stderr).toContain('loaded: load 13 exceeds limit 12');
+  expect(stderr).toContain(`low: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
+  expect(events().some((event) => event.kind === 'slot')).toBe(false);
 });
 
 test('non-gate runs prefer any startable non-fallback host over a fallback host', async () => {
@@ -1140,7 +1184,7 @@ test('gate runs ignore the fallback preference', async () => {
 test('an unreadable check slice memory limit falls back to MemAvailable', async () => {
   const { env, events } = scenario({
     a: {
-      available: CHECK_SLOT_MEMORY_BYTES,
+      available: 4 * 2 ** 30,
       memoryUnreadable: true,
       cpuQuotaPercent: 800,
       processors: 16,
@@ -1153,7 +1197,7 @@ test('an unreadable check slice memory limit falls back to MemAvailable', async 
   expect(events().find((event) => event.kind === 'probe')).toMatchObject({
     memoryCurrent: '-',
     memoryMaximum: '-',
-    memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
+    memoryHeadroom: 4 * 2 ** 30,
   });
   expect(events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
 });
@@ -1448,7 +1492,7 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
 });
 
 test('a host with no free slot is skipped and with none free the check waits', async () => {
-  const skipped = scenario({ a: { available: 4e9 }, b: { available: 30e9, busy: 1000 } });
+  const skipped = scenario({ a: { available: 4.5e9 }, b: { available: 30e9, busy: 1000 } });
   const first = await remote(skipped.env, workspace());
   expect(first.code).toBe(0);
   expect(first.stderr).not.toContain('waiting');
@@ -1460,7 +1504,7 @@ test('a host with no free slot is skipped and with none free the check waits', a
       .map(({ kind, granted }) => ({ kind, granted })),
   ).toEqual([{ kind: 'slot', granted: false }]);
 
-  const waiting = scenario({ a: { available: 4e9, busy: 3 }, b: { available: 30e9, busy: 3 } });
+  const waiting = scenario({ a: { available: 4.5e9, busy: 3 }, b: { available: 30e9, busy: 3 } });
   const second = await remote(waiting.env, workspace());
   expect(second.code).toBe(0);
   expect(second.stderr.match(/waiting/gi)?.length).toBe(1);
@@ -1470,14 +1514,14 @@ test('a host with no free slot is skipped and with none free the check waits', a
 });
 
 test('a host that cannot be reached is skipped', async () => {
-  const { env, events } = scenario({ a: { available: 4e9 }, b: { down: true } });
+  const { env, events } = scenario({ a: { available: 4.5e9 }, b: { down: true } });
   const result = await remote(env, workspace());
   expect(result.code).toBe(0);
   expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
 });
 
 test('all ssh and rsync connections to a host share one control master', async () => {
-  const { env, events } = scenario({ a: { available: 4e9, exit: 255, present: ['result.txt'] } });
+  const { env, events } = scenario({ a: { available: 4.5e9, exit: 255, present: ['result.txt'] } });
   expect(controlSocketDirectoryPath(undefined, 124)).toBe('/tmp/rezics-ssh-124');
   expect(controlSocketDirectoryPath(undefined, undefined, 124)).toBe('/tmp/rezics-ssh-124');
   expect(controlSocketDirectoryPath(env.XDG_RUNTIME_DIR, 124)).toBe(join(env.XDG_RUNTIME_DIR!, 'rezics-ssh'));
@@ -1522,7 +1566,7 @@ test('all ssh and rsync connections to a host share one control master', async (
 });
 
 test('a control master session refusal falls back to its own connection', async () => {
-  const { env, events } = scenario({ a: { available: 4e9, refuseControlSession: true } });
+  const { env, events } = scenario({ a: { available: 4.5e9, refuseControlSession: true } });
   const result = await remote(env, workspace(), ['true']);
 
   expect(result.code).toBe(0);
@@ -1803,7 +1847,7 @@ test('provision-check-host validates every penalty exemption CIDR before connect
 });
 
 test('SIGTERM stops the run, removes its directory and releases the slot', async () => {
-  const { env, events } = scenario({ a: { available: 4e9, hang: true } });
+  const { env, events } = scenario({ a: { available: 4.5e9, hang: true } });
   const child = Bun.spawn(['bun', remoteCheck, workspace(), '--', 'bun', 'test'], {
     cwd: repository,
     env,
@@ -1865,8 +1909,8 @@ test('containers started on a check host run under its capped cgroup slice', () 
 test('a remote run takes all requested slots in one session on one host and releases them all', async () => {
   // b and a have one resource-backed slot each; c has enough resources after three failed takes.
   const { env, events } = scenario({
-    a: { available: 4e9, slots: 4 },
-    b: { available: 4e9, slots: 4 },
+    a: { available: 4.5e9, slots: 4 },
+    b: { available: 4.5e9, slots: 4 },
     c: { available: 30e9, slots: 4, busy: 3 },
   });
   const result = await remote(env, workspace(), ['bun', 'test'], ['--slots', '2']);
@@ -1893,10 +1937,10 @@ test('a remote run takes all requested slots in one session on one host and rele
   expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
 
   // Without the flag a run holds one slot, and a count no host can serve is refused rather than waited for.
-  const single = scenario({ a: { available: 4e9 } });
+  const single = scenario({ a: { available: 4.5e9 } });
   expect((await remote(single.env, workspace())).code).toBe(0);
   expect(single.events().filter((event) => event.kind === 'slot')).toHaveLength(1);
-  const tooMany = scenario({ a: { available: 4e9 } });
+  const tooMany = scenario({ a: { available: 4.5e9 } });
   const refused = await remote(tooMany.env, workspace(), ['bun', 'test'], ['--slots', '3']);
   expect(refused.code).toBe(64);
   expect(refused.stderr).toContain("lower the run's concurrency to match");
@@ -2555,7 +2599,7 @@ writeFileSync(stateFile, JSON.stringify(state));
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line)),
-    execute: (script: string, env: Record<string, string> = {}) =>
+    execute: (script: string, env: Record<string, string> = {}, input = '') =>
       spawnSync(
         'sh',
         [
@@ -2574,7 +2618,7 @@ writeFileSync(stateFile, JSON.stringify(state));
             PATH: `${bin}:${process.env.PATH}`,
             RUN_FIXTURE: directory,
           },
-          input: '',
+          input,
           encoding: 'utf8',
           timeout: 10_000,
         },
@@ -2670,6 +2714,45 @@ test('cleaning up a run removes its containers and their volumes', async () => {
   // Retrying cleanup with no matching containers is harmless.
   expect(fixture.execute(scripts.cleanup).status).toBe(0);
   expect(fixture.state().volumes).toEqual(['unrelated']);
+});
+
+test("a slot holder cleans its run's systemd units and labelled containers before its lock session ends", async () => {
+  const { run, slot } = await generatedRun();
+  const id = run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
+  const fixture = runFixture();
+  const directory = join(fixture.directory, 'runs', id);
+  mkdirSync(directory, { recursive: true });
+  expect(fixture.execute(run).status).toBe(7);
+  rmSync(join(directory, 'exit-status'));
+  const result = fixture.execute(slot, {}, `${id}\n`);
+
+  expect(result.status, result.stderr).toBe(0);
+  const events = fixture.events();
+  const scopeStop = events.findIndex((event) => event.command === 'systemctl' && event.args[0] === 'stop');
+  const removals = events.filter((event) => event.command === 'docker' && event.args[0] === 'rm');
+  const sliceStop = events.findIndex(
+    (event) => event.command === 'systemctl' && event.args[0] === 'stop' && event.args[1]?.endsWith('.slice'),
+  );
+  expect(scopeStop).toBeGreaterThanOrEqual(0);
+  expect(removals).toHaveLength(2);
+  expect(sliceStop).toBeGreaterThan(events.indexOf(removals.at(-1)!));
+  expect(existsSync(directory)).toBe(false);
+  expect(fixture.state().containers).toEqual([{ id: 'unrelated', run: 'other-run' }]);
+});
+
+test('a slot holder whose run already wrote exit-status leaves normal cleanup alone', async () => {
+  const { run, slot } = await generatedRun();
+  const id = run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
+  const fixture = runFixture();
+  const directory = join(fixture.directory, 'runs', id);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, 'exit-status'), '0\n');
+
+  const result = fixture.execute(slot, {}, `${id}\n`);
+  expect(result.status, result.stderr).toBe(0);
+  expect(fixture.events().filter((event) => event.command === 'systemctl' && event.args[0] === 'stop')).toEqual([]);
+  expect(fixture.events().filter((event) => event.command === 'docker' && event.args[0] === 'rm')).toEqual([]);
+  expect(existsSync(directory)).toBe(true);
 });
 
 test("a stale run directory's containers are removed with it", async () => {
@@ -2804,7 +2887,7 @@ test("a run that passes its deadline is stopped and the client exits with the de
 });
 
 test('every container a check host run starts is in its run slice', () => {
-  const { env, events } = scenario({ a: { available: 4e9 } });
+  const { env, events } = scenario({ a: { available: 4.5e9 } });
   const wrapper = join(checkHost, 'docker');
   const docker = (...args: string[]) =>
     spawnSync(wrapper, args, {
@@ -2960,7 +3043,7 @@ test('the returns probe runs under bash with nothing on stderr and lists present
 });
 
 test('the docker wrapper calls the docker behind it, not a shim that called the wrapper', () => {
-  const { env, events } = scenario({ a: { available: 4e9 } });
+  const { env, events } = scenario({ a: { available: 4.5e9 } });
   const shims = join(root, 'shims');
   mkdirSync(shims, { recursive: true });
   const shim = join(shims, 'docker');
@@ -2979,7 +3062,7 @@ test('the docker wrapper calls the docker behind it, not a shim that called the 
 });
 
 test('a remote run puts the docker wrapper first on the path', async () => {
-  const { env, events } = scenario({ a: { available: 4e9 } });
+  const { env, events } = scenario({ a: { available: 4.5e9 } });
   await remote(env, workspace());
   const script = events().find((event) => event.kind === 'run')!.script as string;
   const path = script.match(/export PATH=(\S+)/)![1];
@@ -2988,7 +3071,7 @@ test('a remote run puts the docker wrapper first on the path', async () => {
 });
 
 test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', async () => {
-  const { env, events } = scenario({ a: { available: 4e9 } });
+  const { env, events } = scenario({ a: { available: 4.5e9 } });
   const local = { ...env };
   delete local.KERNEL_CHECK_REMOTE;
   const result = await kernelCheck(local);
@@ -3000,13 +3083,13 @@ test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', asyn
   expect(seen.filter((event) => event.kind !== 'docker' && event.kind !== 'probe')).toEqual([]);
 
   // An unreadable hosts file does not fall back and does not hand off.
-  const missing = scenario({ a: { available: 4e9 } });
+  const missing = scenario({ a: { available: 4.5e9 } });
   await kernelCheck({ ...missing.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') });
   expect(missing.events().some((event) => event.kind === 'docker')).toBe(true);
   expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
 
   // The flag does not itself force local placement; actual check-host location still takes precedence.
-  const onRemote = scenario({ a: { available: 4e9 } });
+  const onRemote = scenario({ a: { available: 4.5e9 } });
   const placed = await kernelCheck({ ...onRemote.env, KERNEL_CHECK_ON_REMOTE: '1' });
   if (onCheckHost(kernel)) {
     expect(placed.code).not.toBe(0);

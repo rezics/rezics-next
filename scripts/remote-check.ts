@@ -94,6 +94,8 @@ const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
 export const CHECK_SLOT_PROCESSORS = 2;
+export const CHECK_HOST_MIN_AVAILABLE_BYTES = 4 * 2 ** 30;
+export const CHECK_HOST_MAX_LOAD_PER_PROCESSOR = 1.5;
 const MAX_WAIT_RECORD_MS = 60_000;
 export const BASE_REFRESH_INTERVAL_SECONDS = 30 * 60;
 export const BASE_RETENTION_SECONDS = 2 * 60 * 60;
@@ -285,6 +287,7 @@ else
   [ -n "$available" ] || exit 1
   printf 'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM %s\\n' "$available"
 fi
+printf 'AVAILABLE %s\\n' "\${available:--}"
 slice_processors=
 set -- $cpu_max
 if [ "$#" -eq 2 ]; then
@@ -574,7 +577,23 @@ for base in ${ROOT}/bases/*; do
 done
 flock -u 9
 echo "SLOTS ${count}"
-exec cat >/dev/null`;
+run_id=
+run_directory=
+run_slice=
+if IFS= read -r run_id; then
+  case "$run_id" in ''|*[!a-zA-Z0-9-]*) run_id= ;; esac
+  if [ -n "$run_id" ]; then
+    run_directory=${ROOT}/runs/$run_id
+    run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+  fi
+fi
+cleanup_orphan() {
+  if [ -n "$run_id" ] && [ -n "$run_directory" ] && [ ! -e "$run_directory/exit-status" ]; then
+    ${cleanupCommands()}
+  fi
+}
+trap cleanup_orphan EXIT
+cat >/dev/null`;
 }
 
 const dockerWrapper = readFileSync(join(import.meta.dir, 'check-host/docker'), 'utf8');
@@ -769,7 +788,7 @@ export function workspaceFiles(workspace: string): string[] {
   });
 }
 
-type Lease = { host: Host; release: () => Promise<void> };
+type Lease = { host: Host; release: () => Promise<void>; registerRun?: (id: string) => Promise<void> };
 type SessionLease = Lease & { exited: Promise<number>; isActive: () => boolean };
 
 /** The promise's value, or null once the time is up; the timer never outlives the wait. */
@@ -847,6 +866,7 @@ type HostProbe = {
   processors: number;
   sliceProcessors: number;
   load: number;
+  availableMemory: number;
   memoryHeadroom: number;
   memoryMaximum: number | null;
   ordinarySlotsUsed: number;
@@ -974,10 +994,12 @@ function parseProbe(output: string): HostProbe | null {
   const processorValue = value('PROCESSORS');
   const sliceProcessorValue = value('SLICE_PROCESSORS');
   const loadValue = value('LOAD');
+  const availableValue = value('AVAILABLE');
   const headroomValue = value('MEMORY_HEADROOM');
   const processors = Number(processorValue);
   const sliceProcessors = Number(sliceProcessorValue);
   const load = Number(loadValue);
+  const availableMemory = Number(availableValue);
   const memoryHeadroom = Number(headroomValue);
   const ordinarySlotsUsedValue = value('ORDINARY_SLOTS_USED') ?? value('SLOTS_USED');
   const ordinarySlotsUsed = Number(ordinarySlotsUsedValue);
@@ -997,6 +1019,7 @@ function parseProbe(output: string): HostProbe | null {
     processorValue === null ||
     sliceProcessorValue === null ||
     loadValue === null ||
+    availableValue === null ||
     headroomValue === null ||
     !Number.isSafeInteger(processors) ||
     processors < 1 ||
@@ -1004,6 +1027,8 @@ function parseProbe(output: string): HostProbe | null {
     sliceProcessors < 0 ||
     !Number.isFinite(load) ||
     load < 0 ||
+    !Number.isSafeInteger(availableMemory) ||
+    availableMemory < 0 ||
     !Number.isSafeInteger(memoryHeadroom) ||
     memoryHeadroom < 0 ||
     ordinarySlotsUsedValue === null ||
@@ -1026,6 +1051,7 @@ function parseProbe(output: string): HostProbe | null {
     processors,
     sliceProcessors,
     load,
+    availableMemory,
     memoryHeadroom,
     memoryMaximum: sliceMemory ? Number(maximum) : null,
     ordinarySlotsUsed,
@@ -1057,6 +1083,10 @@ function sessionLease(host: Host, holder: Bun.Subprocess<'pipe', 'pipe', 'ignore
     host,
     exited,
     isActive: () => !ended,
+    registerRun: async (id: string) => {
+      holder.stdin.write(`${id}\n`);
+      await holder.stdin.flush();
+    },
     release: async () => {
       if (released) return;
       released = true;
@@ -1181,12 +1211,33 @@ async function rankedHosts(
   gate: boolean,
   preferUngated = false,
   multiWaiterId?: string,
+  loggedSkips: Map<string, string> = new Map(),
+  loggedSkipLines: Set<string> = new Set(),
 ): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
+  const skipped: Array<{ host: Host; probe: HostProbe }> = [];
+  for (const entry of probes) {
+    const probe = entry.probe;
+    if (probe === null) continue;
+    const limit = probe.sliceProcessors * CHECK_HOST_MAX_LOAD_PER_PROCESSOR;
+    const reason = probe.load > limit
+      ? `${entry.host.name}: load ${probe.load} exceeds limit ${limit}`
+      : probe.availableMemory < CHECK_HOST_MIN_AVAILABLE_BYTES
+        ? `${entry.host.name}: MemAvailable ${probe.availableMemory} bytes is under ${CHECK_HOST_MIN_AVAILABLE_BYTES} bytes`
+        : undefined;
+    if (!reason) continue;
+    skipped.push({ host: entry.host, probe });
+    loggedSkips.set(entry.host.name, reason);
+    if (!loggedSkipLines.has(entry.host.name)) {
+      console.error(`remote-check: skipped ${reason}`);
+      loggedSkipLines.add(entry.host.name);
+    }
+  }
   return (
     probes
       .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
+      .filter(({ host, probe }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
       .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate, multiWaiterId))
       // Equal slot counts prefer the host with more measured slice memory headroom.
       .sort(
@@ -1279,13 +1330,18 @@ async function acquire(
   let markerHost: string | undefined;
   const multiWaiterId = !gate && slots > 1 ? randomUUID() : undefined;
   const wait = checkWaitRecorder();
+  const skippedHosts = new Map<string, string>();
+  const loggedSkipLines = new Set<string>();
   let waitingHosts: RankedHost[] = [];
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   const printWaiting = (): void => {
     const state = waitingHosts.length
       ? waitingHosts.map(({ host, freeSlots, slotLimit }) => `${host.name} ${freeSlots}/${slotLimit} free`).join(', ')
       : 'no responding hosts';
-    console.error(`remote-check: every check slot is busy; waiting for a free one (${state})`);
+    const reasons = [...skippedHosts.values()];
+    console.error(
+      `remote-check: every check slot is busy; waiting for a free one (${state})${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
+    );
   };
   const announceWait = (ranked: RankedHost[]): void => {
     wait.begin();
@@ -1301,7 +1357,17 @@ async function acquire(
         marker = undefined;
         markerHost = undefined;
       }
-      const ranked = await rankedHosts(hosts, signal, slots, estimateMs, gate, slots === 1, multiWaiterId);
+      const ranked = await rankedHosts(
+        hosts,
+        signal,
+        slots,
+        estimateMs,
+        gate,
+        slots === 1,
+        multiWaiterId,
+        skippedHosts,
+        loggedSkipLines,
+      );
       if (multiWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
         if (marker) await marker.release();
         marker = undefined;
@@ -1562,6 +1628,7 @@ async function runLeased(
   const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   const directory = `${ROOT}/runs/${id}`;
   try {
+    await lease.registerRun?.(id);
     const base = await baseState(host);
     if (signal.aborted) throw new Aborted();
     const useZstd = base.zstd && localRsyncSupportsZstd();

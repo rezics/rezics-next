@@ -46,7 +46,7 @@ Otherwise both groups use the original hosts file. Admission still checks actual
 Once a host answers, a busy run queues. Later probe silence does not send it back locally.
 With no answering host, it runs locally and explains placement on stderr.
 A run already under `/srv/rezics-check/runs/` executes there without another placement.
-The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. Each run has a 3-hour default deadline, configurable with `--max-ms <n>`; expiration stops the run slice, prints the deadline and exits with code 124, distinct from transport failure code 75.
+The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. The slot holder also stops its run's systemd scope and slice and removes that run's labelled containers if its SSH input ends before the run writes `exit-status`. The slot and its processes therefore end together; the stale-file sweep remains a backstop. Each run has a 3-hour default deadline, configurable with `--max-ms <n>`; expiration stops the run slice, prints the deadline and exits with code 124, distinct from transport failure code 75.
 
 Runs that keep files stay local unless they declare workspace-relative return paths.
 A person can also choose `REZICS_STACK_REMOTE=off` or inherit `REZICS_STACK_SLOT` to stay local.
@@ -100,10 +100,9 @@ G = max(0, O - 1)        gate capacity
 
 Slice processors are the quota divided by the period in `cpu.max`.
 Slice memory is `memory.max`; configured values supply the fallbacks above.
-Admission also needs 2.5 GiB of current memory headroom for each requested slot.
+Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute load exceeds 1.5 times its slice processors or its machine `MemAvailable` is below 4 GiB. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity.
 Headroom is `max(0, memory.max - memory.current)` in the shared slice.
 When slice memory cannot be read, it uses the machine's `MemAvailable` instead.
-Load average is probed but never ranks a host or limits admission.
 Slots reserve admission capacity. They do not impose a separate CPU or memory cap on each run.
 
 One slot is express capacity. Only a non-gate, one-slot run with an explicit estimate of at most
