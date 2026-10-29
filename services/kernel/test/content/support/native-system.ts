@@ -229,9 +229,7 @@ async function createNativeContentSystemWithOptions(
     // Auth validates both the issued consent and the registered client ceiling
     // when a durable step restores its initiator.
     const registeredOrdinaryScopes = Object.freeze(
-      ordinaryScopes
-        ? [...ordinaryScopes]
-        : [...actions.keys()].filter((action) => action !== 'media:complete').sort(),
+      ordinaryScopes ? [...ordinaryScopes] : [...actions.keys()].filter((action) => action !== 'media:complete').sort(),
     );
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
