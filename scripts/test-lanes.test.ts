@@ -81,10 +81,17 @@ test('capture prints split UTF-8 intact and preserves each child stream', async 
   const stderr = process.stderr.write.bind(process.stderr);
   let printedOut = '';
   let printedErr = '';
-  process.stdout.write = ((chunk: string | Uint8Array) => { printedOut += String(chunk); return true; }) as typeof process.stdout.write;
-  process.stderr.write = ((chunk: string | Uint8Array) => { printedErr += String(chunk); return true; }) as typeof process.stderr.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    printedOut += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    printedErr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
   try {
-    const script = "process.stdout.write(Buffer.from([0xe2])); setTimeout(() => { process.stderr.write('err1\\n'); process.stdout.write(Buffer.from([0x82,0xac])); process.stderr.write('err2\\n'); }, 20)";
+    const script =
+      "process.stdout.write(Buffer.from([0xe2])); setTimeout(() => { process.stderr.write('err1\\n'); process.stdout.write(Buffer.from([0x82,0xac])); process.stderr.write('err2\\n'); }, 20)";
     const result = await capture('bun', ['-e', script], process.env, root);
     expect(result.status).toBe(0);
     expect(printedOut).toBe('€');
@@ -98,11 +105,17 @@ test('capture prints split UTF-8 intact and preserves each child stream', async 
 test('a running file emits a heartbeat with elapsed time, bounds and silence', async () => {
   const stderr = process.stderr.write.bind(process.stderr);
   let printed = '';
-  process.stderr.write = ((chunk: string | Uint8Array) => { printed += String(chunk); return true; }) as typeof process.stderr.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    printed += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
   try {
     await capture(
       'bun',
-      ['-e', "console.log('started'); setInterval(() => console.log('tick'), 20); setTimeout(() => process.exit(0), 180)"],
+      [
+        '-e',
+        "console.log('started'); setInterval(() => console.log('tick'), 20); setTimeout(() => process.exit(0), 180)",
+      ],
       process.env,
       root,
       { file: 'test/heartbeat.test.ts', silence: 1, wall: 2, progressInterval: 0.05, killGraceMs: 50 },
@@ -110,15 +123,22 @@ test('a running file emits a heartbeat with elapsed time, bounds and silence', a
   } finally {
     process.stderr.write = stderr;
   }
-  const heartbeats = printed.match(/test file test\/heartbeat\.test\.ts: elapsed \d+ s; silence bound 1 s; wall bound 2 s; since output \d+ s/g);
+  const heartbeats = printed.match(
+    /test file test\/heartbeat\.test\.ts: elapsed \d+ s; silence bound 1 s; wall bound 2 s; since output \d+ s/g,
+  );
   expect(heartbeats?.length).toBeGreaterThanOrEqual(2);
 });
 
 test('the process group is killed after the leader exits and capture completes', async () => {
   const started = Date.now();
-  const script = "const { spawn } = require('node:child_process'); const child = spawn('/bin/sh', ['-c', \"trap '' TERM; while :; do sleep 1; done\"], { stdio: 'inherit' }); console.log(child.pid); process.exit(0)";
+  const script =
+    "const { spawn } = require('node:child_process'); const child = spawn('/bin/sh', ['-c', \"trap '' TERM; while :; do sleep 1; done\"], { stdio: 'inherit' }); console.log(child.pid); process.exit(0)";
   const result = await capture('bun', ['-e', script], process.env, root, {
-    file: 'test/orphan.test.ts', silence: 0.15, wall: 2, progressInterval: 60, killGraceMs: 100,
+    file: 'test/orphan.test.ts',
+    silence: 0.15,
+    wall: 2,
+    progressInterval: 60,
+    killGraceMs: 100,
   });
   expect(result.status).toBe(124);
   expect(Date.now() - started).toBeLessThan(1_000);
@@ -151,7 +171,8 @@ test('a file stopped at a bound is never classified for load or growth rerun', (
     '(fail) a [1ms]\nAccess unavailable: overloaded',
   ]) {
     const outcome = {
-      file: 'test/stopped.test.ts', database: 'fixture',
+      file: 'test/stopped.test.ts',
+      database: 'fixture',
       error: new Error(`test file test/stopped.test.ts printed nothing for 600 s; Last output lines:\n${tail}`),
     };
     expect(classifyLoadInducedFailures(outcome, undefined)).toBeNull();
@@ -162,9 +183,13 @@ test('a file stopped at a bound is never classified for load or growth rerun', (
 test('a file stopped at a bound keeps its previously recorded timings', () => {
   const previous = timing(45);
   const fresh = { ...timing(600), tests: [{ name: 'partial', time: 600 }] };
-  expect(retainStoppedTimings({ 'test/stopped.test.ts': fresh }, { 'test/stopped.test.ts': previous }, new Set(['test/stopped.test.ts']))[
-    'test/stopped.test.ts'
-  ]).toEqual(previous);
+  expect(
+    retainStoppedTimings(
+      { 'test/stopped.test.ts': fresh },
+      { 'test/stopped.test.ts': previous },
+      new Set(['test/stopped.test.ts']),
+    )['test/stopped.test.ts'],
+  ).toEqual(previous);
 });
 
 function laneEnvironment(directory: string, concurrency: number): NodeJS.ProcessEnv {
@@ -231,9 +256,9 @@ test('a service timing directory set by the remote command applies to a scoped e
   const previous = process.env.AUTH_CHECK_TIMINGS;
   process.env.AUTH_CHECK_TIMINGS = '/remote/auth/timings';
   try {
-    expect(timingsDirectory('auth', '/remote/checkout/services/auth', { KERNEL_CHECK_TIMINGS: '/kernel/timings' })).toBe(
-      '/remote/auth/timings',
-    );
+    expect(
+      timingsDirectory('auth', '/remote/checkout/services/auth', { KERNEL_CHECK_TIMINGS: '/kernel/timings' }),
+    ).toBe('/remote/auth/timings');
   } finally {
     if (previous === undefined) delete process.env.AUTH_CHECK_TIMINGS;
     else process.env.AUTH_CHECK_TIMINGS = previous;
