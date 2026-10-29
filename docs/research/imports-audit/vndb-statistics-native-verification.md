@@ -264,6 +264,63 @@ already present in the assigned checkout were retained. No production/shared
 helper outside the declared paths was edited by this repair. Broad regression
 and promoted-revision checks remain the landing batch's responsibility.
 
+## Landing retry verification
+
+The declared acceptance was rerun once on `a0589d4aefeec1605047e872db25b8b9dd9e0321`
+without another implementation change. Check `54c1ce5a-5a7d-4e2d-b7b5-9cb3d0f52e8b`
+exited 0. Its log is
+`.temp/goal/checks/worker-check-2026-10-29T23-23-20.424Z-6d604724.log`.
+The same check was retained through admission waiting; no duplicate submission or
+load rerun occurred. The six frozen names above all passed: six child tests,
+91 assertions, zero failures and child exit 0. The wrapper passed five assertions;
+the CLI test passed 249 assertions. Both frozen SHA256 values remain exact.
+
+Before submission, edited-file formatting passed, the direct importer compiler
+passed 136 files, and the six focused local regressions passed with 95 assertions
+and 22 unrelated tests filtered out. No root typecheck or broader regression run
+was submitted for this retry.
+
+The native log also reports `src/commerce/stripe.ts(101,41): error TS2379` for
+passing `signal: AbortSignal | undefined` to an exact optional `signal?: AbortSignal`.
+An isolated direct compiler invocation exits 2 with that diagnostic:
+
+```sh
+node_modules/.bin/tsc --ignoreConfig --noEmit --strict --exactOptionalPropertyTypes \
+  --noUncheckedIndexedAccess --module preserve --moduleResolution bundler \
+  --target esnext --allowImportingTsExtensions --skipLibCheck --types bun \
+  services/kernel/src/commerce/stripe.ts
+```
+
+The Stripe
+caller, transport, model, settlement and compiler configurations are byte-identical
+to the assigned base `6ecc2fa97ca029f24c58119616ee8ca0dc02f50f`; none was edited
+by this implementation. This is the base-owned diagnostic reported by the landing
+retry, distinct from the successful native tests and wrapper exit status. No clean
+kernel typecheck or successful derived-file regeneration is claimed. The passing
+declared acceptance is reported with this limitation, as required for a base-owned
+failure; no Stripe production repair or outside-path edit was made.
+
+The rerun used the same pinned Bun `v1.4.4-canary.1 (a0cc096ce)`, bundle version
+`1.0.0`, digest
+`sha256:943ceadcf70fe1bd71382c2f88ca782cbf946a2c1c1097d748d273482eb7b318`,
+converter `vndb@7`, native entry revision 7 and source date 2026-10-25. The actual
+CLI observations again record three archive passes, 21,504 bytes, 57 chunks, six
+successful Auth exchanges, maintained baseline generation `3` with two records,
+zero native vote rows and ten unchanged bulk receipt identities. This rerun's
+independent native anchors are:
+
+- Current statistic transaction: `01a18a12-5ef1-7463-94a1-7596802c5ced`.
+- Historical statistic events: `01a18a12-5c9b-748d-9ac0-de054cd762cc` and
+  `01a18a12-5ef2-7499-bb3d-460bec86a2e2`.
+- Two composite statistic receipts at partition `2457`, principal kind `account`,
+  principal ID `764ada75-62ac-8c41-a37c-7c868c0cfe2a` and command kind
+  `rating.source_statistic.write`, retaining the two exact idempotency keys recorded
+  above. These are this run's captured receipt anchors, not fixture labels or PUT
+  body mirrors.
+
+The same receipt/journal and native-growth limits below apply. Broad regression
+and landing compiler ownership remain separate from this passing two-file proof.
+
 ## Cost and limits
 
 ### Statistic-only completion and retry
