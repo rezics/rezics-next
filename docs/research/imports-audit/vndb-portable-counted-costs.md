@@ -140,7 +140,7 @@ index 10d2661953..691ae4fb71 100644
    const before = await Promise.all(['v123', 'v124'].map((key) => d.baseline(key)));
 @@ -555,8 +566,8 @@ test('keyset enumeration enforces the fixed page cap and emits each VN exactly o
  });
- 
+
  test('one grouped record uses indexed seeks and constant returned rows and statements at 32 128 and 512 unrelated keys', async () => {
 -  const costs: GrowthSample[] = [];
 -  const staging: GrowthSample[] = [];
@@ -158,6 +158,6 @@ index 10d2661953..691ae4fb71 100644
 +  expect(countedViolations(sqliteCounts, costs)).toEqual([]);
 +  expect(countedViolations(sqliteCounts, staging)).toEqual([]);
  });
- 
+
  test('supported child cardinality grows only with supplied rows through the hard cap and rejects above it', async () => {
 ```
