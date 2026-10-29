@@ -186,9 +186,14 @@ this authority; it lacks the protected-Realm ban check.
 
 Then use `community/publication.ts`'s actual
 `readPublication(deps, realmId, subjectId, {actor,deadline})`. It returns the current adopted `PublicationHead` or
-null and rechecks Realm and subject readability in its own snapshot. Null conflates no slot, withdraw, reject,
-denied, unknown and unreadable. It certifies neither permission nor unpublished status. After a readable Realm and
-null publication, independently authorize a current Global subject read. A denied Global subject remains concealed.
+null and rechecks Realm and subject readability in its own snapshot. Its protected-Realm check delegates
+`realmReadEligibility`: a current ban throws `ProblemError(not_found)`; the snapshot rolls back and rethrows.
+`readRealm` catches its internal `RealmReadDeniedError` into null, but `readPublication` does not. A thrown
+`not_found` from either reader conceals the whole page with standard 404, never Global fallback. Other native
+deadline or unavailable errors retain their typing; no catch-all conversion to null is permitted. Genuine null
+publication conflates missing or unreadable slots, withdraw and reject; it certifies neither permission nor
+unpublished status. Only after a readable Realm and genuine null publication may the page independently authorize
+a current Global subject read. A denied Global subject remains concealed.
 Never carry Realm labels into that fallback.
 
 A publication pointer and a Realm grant do not authorize the Context. For a Realm result use actual `readContext`,
@@ -198,9 +203,18 @@ suppress semantics. An operation locator or old Context id supplies no current a
 
 These reads use separate snapshots. Before any Realm response, re-read the actual `realm.ts` Realm and compare its
 current Context and head revision. Denial conceals; a change requires bounded retry or readiness failure, never a
-successful stale Context A response after a change to B. Publication withdrawal, rejection and reductions in
-readability must also stay current. Reuse the existing deadline and retry policy without a new numerical allowance
-or a clock bypass.
+successful stale Context A response after a change to B. Comparing both `contextId` and `headRevisionId` is necessary but insufficient: publication withdrawal,
+rejection and a protected ban can leave both unchanged. Revalidate current publication and protected-ban authority
+after selected subject and links execution and before returning Realm output. A late withdrawal or rejection
+requires independently authorized current Global subject and links with exact Global metadata, or a truthful typed
+503 with no result and standard Retry-After. A later healthy read must return current Global, not permanent
+preparing. A late protected ban requires standard whole-page 404 without context, reads, Realm metadata, selected
+facts or private reason, even while the independent Realm read grant remains. The same concealment applies when
+a ban commits after the initial delegated Realm read but before publication: publication's thrown `not_found`
+never becomes Global 200. Reuse the existing deadline and retry policy without a new numerical allowance
+or a clock bypass. Final authority work remains charged inside the same bounds; this specification supplies
+no runtime growth pass. Runtime growth evidence must include late authority paths at the existing geometric
+scales and current owner populations, including final guard costs.
 
 Internal subject and links descriptors carry only the server-resolved current Context. That Context participates
 in actual probe reuse, descriptor deduplication, dispatched requests and session binding. Subject and links must
@@ -209,8 +223,8 @@ substitution, special permission header, second client request or profile/cache 
 existing 16 distinct reads, 128 read-cost slots, concurrency and request deadline bounds; charge actual Realm,
 publication and Context points as well as subject and links work within those bounds.
 
-Use one sticky `withPublicStatementReader` scope from Semantic's public statement audience producer for the whole
-aggregate. Its sole purpose is to exclude publisher-private candidates and related ids from public page output.
+Use the delivered sticky `withPublicStatementReader` export from `semantic/statement-disclosure.ts` for the whole
+aggregate. `presentation/reads.ts` applies it to actual probe and planned dispatch through `readPage`. Its sole purpose is to exclude publisher-private candidates and related ids from public page output.
 It does not resolve Realm or publication, grant Context access or make protected Realm metadata globally public.
 Standalone permitted private hydration retains the same current caller and its existing behavior. The frozen
 [aggregate authority suite](../services/kernel/test/presentation/aggregate-authority-user-cases.test.ts) remains
@@ -222,14 +236,18 @@ The [native Realm page cases](../services/kernel/test/presentation/realm-context
 Semantic driver and its real composed kernel, Auth and Access. They freeze public subjects, distinct Context A/B
 facts, actual protected readable Realms and publication, Global fallback without Realm disclosure, current bans,
 lifecycle, candidate audience, subject/links/session consistency, validation, agent canonical behavior and the
-Context A-to-B race. A suspended account uses its genuine pre-suspension bearer: 401 `invalid_credentials` with
+Context A-to-B race. Four additional during-read schedules cover an early protected ban, late publication
+withdrawal and rejection separately, and a late protected ban. Late barriers hold the actual links completion only
+after both selected subject and links responses succeeded; they never hold the subject probe waiting for links.
+Mutations use native writes outside page observation, with unchanged Realm Context/head controls for late schedules.
+All authorization delegates real Access with the same opaque native time, actor, evidence and session. A suspended account uses its genuine pre-suspension bearer: 401 `invalid_credentials` with
 `Bearer error="invalid_token"`, never a manufactured bearer.
 
 | Surface                                        | Binding status                                                                                                         |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Subject facts, links and current Context label | Request/response and native acceptance frozen here; production Realm wire still required                               |
 | Native Context deletion lifecycle              | NOT YET FROZEN: existing lifecycle acceptance requires DELETE, but the composed Context routes expose only create/read |
-| Sticky public statement audience               | Required Semantic producer; NOT YET FROZEN until its actual export is available to the aggregate                       |
+| Sticky public statement audience               | Delivered `statement-disclosure.ts` export; `presentation/reads.ts` wraps actual probe and planned dispatch            |
 | Realm rating figures                           | NOT YET FROZEN: require Rating's actual question/population binding and current authority                              |
 | Realm reviews                                  | NOT YET FROZEN: require Content's actual Context/population read export                                                |
 | Realm discussion                               | NOT YET FROZEN: require Content's actual Context/population thread export                                              |
