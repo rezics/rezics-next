@@ -153,3 +153,20 @@ and isolated child differ from original admission.
 | `specs/terminal-erasure-outcomes.test.ts` | `1d398bd9119e0e31c632daaffb427d44c3ae8f77f8454ee4d6c0a0025b35d0e7` | `1d398bd9119e0e31c632daaffb427d44c3ae8f77f8454ee4d6c0a0025b35d0e7` |
 | `specs/imports-vndb-tables-driver.ts` | `8bbb39e5f2482bd703f1fa1abb97a6426218902b46b4e3ba9e93a42cf852e11f` | `8bbb39e5f2482bd703f1fa1abb97a6426218902b46b4e3ba9e93a42cf852e11f` |
 | `specs/imports-vndb-tables.test.ts` | `97d91eecee9860906c474eb9955253cffe6a04523cb72e5d6c07c48dfd3e98a6` | `97d91eecee9860906c474eb9955253cffe6a04523cb72e5d6c07c48dfd3e98a6` |
+
+## Landing reconciliation
+
+Completed the control-plane-started rebase onto `97a002b5d2` by resolving the README conflict explicitly.
+Preserved the current bounded partial-source-reduction Cost subsection and all unrelated current guidance.
+Removed only the obsolete erasure Cost table, retaining exactly one erasure subsection with Touches, Bound
+and Growth check bullets. The earlier Markdown union had retained the deleted table alongside these bullets;
+that landing conflict was not a native acceptance failure.
+
+The acceptance and child are byte-identical to the previously passing formatted proof. Runtime, default
+registration, native support and frozen files in the hash inventory remain unchanged on this base. Current
+RunStore additionally persists source/record-keyed reference signatures; these contain resolution digests,
+not an account ownership relation or new account-owned payload. The `none` rationale remains applicable.
+The existing README measurement adoption, source policies and numerical bounds are preserved. No external
+reference source or outside-path edit is needed. The affected typecheck already passed; unchanged proof
+code requires no repeated typecheck. The focused native acceptance is resubmitted for the reconciled base,
+with its terminal outcome recorded separately below when available.
