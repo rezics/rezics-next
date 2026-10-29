@@ -871,13 +871,18 @@ function controlPlaneOnly(checkout: string, main: string, snapshot: string): boo
   return changed.length > 0 && changed.every((path) => CONTROL_PLANE_PATHS.some((prefix) => path.startsWith(prefix)));
 }
 
-/** Merge a gated snapshot onto main's newer control-plane commits; undefined when they conflict. */
-function mergeIntoMain(options: PromotionOptions, main: string, snapshot: string): string | undefined {
+/** Merge main's newer control-plane commits into the gated candidate; undefined when they conflict. */
+function mergeMainIntoCandidate(
+  options: PromotionOptions,
+  main: string,
+  snapshot: string,
+  branch: string,
+): string | undefined {
   const settings = options.settings,
     checkout = settings.mainCheckout;
-  const tree = join(settings.worktreeRoot, `promotion-main-${randomUUID()}`);
+  const tree = join(settings.worktreeRoot, `promotion-candidate-${randomUUID()}`);
   mkdirSync(settings.worktreeRoot, { recursive: true });
-  git(checkout, 'worktree', 'add', '--detach', tree, main);
+  git(checkout, 'worktree', 'add', '--detach', tree, snapshot);
   try {
     const merged = spawnSync(
       'git',
@@ -886,12 +891,19 @@ function mergeIntoMain(options: PromotionOptions, main: string, snapshot: string
         '--no-ff',
         '--no-edit',
         '-m',
-        `Merge promoted ${settings.stabilizeBranch} into ${settings.mainBranch}`,
-        snapshot,
+        `Merge ${settings.mainBranch} into ${settings.stabilizeBranch}`,
+        main,
       ],
       { cwd: tree, encoding: 'utf8' },
     );
-    return merged.status === 0 ? git(tree, 'rev-parse', 'HEAD') : undefined;
+    if (merged.status !== 0) return undefined;
+    const candidate = git(tree, 'rev-parse', 'HEAD');
+    try {
+      git(checkout, 'update-ref', ref(branch), candidate, snapshot);
+      return candidate;
+    } catch {
+      return undefined;
+    }
   } finally {
     git(checkout, 'worktree', 'remove', '--force', tree);
   }
@@ -933,7 +945,9 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
   if (now !== target && !isAncestor(checkout, target, now) && !isAncestor(checkout, now, target)) {
     // Control-plane fixes land on main directly while a snapshot is gated; they do not touch what the gate checked, so
     // the snapshot is published merged with them. Any other commit on main drops the run for a fresh gate.
-    const merged = controlPlaneOnly(checkout, now, target) ? mergeIntoMain(options, now, target) : undefined;
+    const merged = controlPlaneOnly(checkout, now, target)
+      ? mergeMainIntoCandidate(options, now, target, settings.stabilizeBranch)
+      : undefined;
     if (!merged) {
       store.clearPromotion();
       return false;

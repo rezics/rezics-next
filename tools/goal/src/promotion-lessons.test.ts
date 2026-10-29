@@ -21,11 +21,19 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
     expect(gates).toBe(1);
     expect(git(h.root, 'branch', '--list', 'stabilize')).toBe('');
 
-    await h.promote(async () => {
-      gates++;
-      return success;
+    const commands: string[][] = [];
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      runGate: async (command) => {
+        commands.push([...command]);
+        return success;
+      },
     });
-    expect(gates).toBe(2); // the candidate root and task acceptance gates
+    expect(commands.slice(0, 2)).toEqual([
+      ['bun', 'run', 'typecheck'],
+      ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
+    ]);
     expect(h.head('stabilize')).toBe(h.head('dev'));
   } finally {
     h.dispose();
@@ -57,6 +65,7 @@ test('a passing candidate finishes its gate across control-plane main commits an
     expect(gated).toEqual([candidate]);
     expect(git(h.root, 'merge-base', '--is-ancestor', mainFix, h.head('main'))).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', candidate, h.head('main'))).toBe('');
+    expect(git(h.root, 'merge-base', '--is-ancestor', mainFix, h.head('stabilize'))).toBe('');
   } finally {
     h.dispose();
   }
