@@ -432,8 +432,8 @@ function rebaseWithDerivedFiles(
     for (;;) {
       const conflicts = unmergedFiles(cwd);
       if (!conflicts.length) throw rebaseError;
-      // bun.lock is an integration-stage derived file: preserve the target's manifests as the source of truth,
-      // regenerate the lockfile from them, and commit that result as part of the rebased landing.
+      // bun.lock is an integration-stage derived file: keep the integration lockfile, regenerate from the
+      // merged manifests, and commit that result as part of the rebased landing.
       const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files).length > 0);
       const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
       // A generated-file regeneration is safe only when it accounts for every conflict. A mixed conflict
