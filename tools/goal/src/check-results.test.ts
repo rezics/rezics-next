@@ -32,7 +32,10 @@ beforeEach(async () => {
   command('init', '-q');
   write('package.json', JSON.stringify({ name: 'fixture', dependencies: { '@fixture/a': 'workspace:*' } }));
   write('bun.lock', 'lock one');
-  write('apps/app/package.json', JSON.stringify({ name: '@fixture/app', dependencies: { '@fixture/a': 'workspace:*' } }));
+  write(
+    'apps/app/package.json',
+    JSON.stringify({ name: '@fixture/app', dependencies: { '@fixture/a': 'workspace:*' } }),
+  );
   write('packages/a/package.json', JSON.stringify({ name: '@fixture/a' }));
   write('packages/a/src.ts', 'export const a = 1;');
   write('apps/app/src.ts', 'export const app = 1;');
@@ -41,12 +44,30 @@ beforeEach(async () => {
   const { WorkerStore } = await import('./store.ts');
   results = new WorkerStore(db).checkResults;
 });
-afterEach(() => { db.close(); rmSync(root, { recursive: true, force: true }); });
+afterEach(() => {
+  db.close();
+  rmSync(root, { recursive: true, force: true });
+});
 
 describe('check result reuse keys', () => {
   test('a passing check records its result under command, allowlisted environment, workspace closure, global inputs, and toolchain', () => {
-    const k = checkResultKey({ root, cwd: join(root, 'apps/app'), command: ['bun', 'test'], env: { PATH: '/bin', SECRET: 'ignored' } });
-    results.record({ key: k.key, unit: k.unit, passed: true, producer: 'test', host: 'host', duration: 3, logPath: 'pass.log', time: Date.now(), schemaVersion: 1 });
+    const k = checkResultKey({
+      root,
+      cwd: join(root, 'apps/app'),
+      command: ['bun', 'test'],
+      env: { PATH: '/bin', SECRET: 'ignored' },
+    });
+    results.record({
+      key: k.key,
+      unit: k.unit,
+      passed: true,
+      producer: 'test',
+      host: 'host',
+      duration: 3,
+      logPath: 'pass.log',
+      time: Date.now(),
+      schemaVersion: 1,
+    });
     expect(results.lookup(k.key)?.unit).toContain('packages/a');
     expect(results.lookup(k.key)?.passed).toBe(true);
   });
@@ -55,16 +76,33 @@ describe('check result reuse keys', () => {
     const first = key(join(root, 'apps/app'));
     expect(key(join(root, 'apps/app'))).toBe(first);
     expect(key(join(root, 'apps/app'), process.env, ['bun', 'run', 'typecheck'])).not.toBe(first);
-    write('packages/a/src.ts', 'export const a = 2;'); commit();
+    write('packages/a/src.ts', 'export const a = 2;');
+    commit();
     const closureChanged = key(join(root, 'apps/app'));
     expect(closureChanged).not.toBe(first);
-    write('bun.lock', 'lock two'); commit();
+    write('bun.lock', 'lock two');
+    commit();
     const lockChanged = key(join(root, 'apps/app'));
     expect(lockChanged).not.toBe(closureChanged);
-    write('tsconfig.json', '{}'); commit();
+    write('tsconfig.json', '{}');
+    commit();
     expect(key(join(root, 'apps/app'))).not.toBe(lockChanged);
-    expect(checkResultKey({ root, cwd: join(root, 'apps/app'), command: ['bun', 'test'], env: { ...process.env, PATH: '/different' } }).key).not.toBe(key(join(root, 'apps/app')));
-    expect(checkResultKey({ root, cwd: join(root, 'apps/app'), command: ['bun', 'test'], toolchain: { bunRevision: 'other' } }).key).not.toBe(key(join(root, 'apps/app')));
+    expect(
+      checkResultKey({
+        root,
+        cwd: join(root, 'apps/app'),
+        command: ['bun', 'test'],
+        env: { ...process.env, PATH: '/different' },
+      }).key,
+    ).not.toBe(key(join(root, 'apps/app')));
+    expect(
+      checkResultKey({
+        root,
+        cwd: join(root, 'apps/app'),
+        command: ['bun', 'test'],
+        toolchain: { bunRevision: 'other' },
+      }).key,
+    ).not.toBe(key(join(root, 'apps/app')));
   });
 
   test('failed, timed-out, infrastructure-failed, dirty-tree, mutating, and external-state checks never write reusable results', async () => {
@@ -89,11 +127,26 @@ describe('check result reuse keys', () => {
   test('shadow mode logs hits, runs fresh checks, and alerts once when a hit fails', async () => {
     const freshCommand = ['sh', '-c', 'echo fresh; exit 1'];
     const k = checkResultKey({ root, cwd: root, command: freshCommand, env: process.env });
-    results.record({ key: k.key, unit: k.unit, passed: true, producer: 'prior', host: 'host', duration: 2, logPath: 'cached.log', time: Date.now(), schemaVersion: 1 });
+    results.record({
+      key: k.key,
+      unit: k.unit,
+      passed: true,
+      producer: 'prior',
+      host: 'host',
+      duration: 2,
+      logPath: 'cached.log',
+      time: Date.now(),
+      schemaVersion: 1,
+    });
     const alerts: string[] = [];
     const log = join(root, 'shadow.log');
     let runs = 0;
-    const runner = gateRunner(1000, undefined, { root, results, shadow: true, alert: message => alerts.push(message) });
+    const runner = gateRunner(1000, undefined, {
+      root,
+      results,
+      shadow: true,
+      alert: (message) => alerts.push(message),
+    });
     const actual = await runner(freshCommand, root, log);
     runs++;
     expect(actual.passed).toBe(false);
