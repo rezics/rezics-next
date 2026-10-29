@@ -225,7 +225,9 @@ test('quota boundary serializes concurrent 33rd and 34th definitions, preserves 
   const f = await native.fixture();
   const episodes = [];
   for (let ordinal = 0; ordinal < 32; ordinal++)
-    episodes.push((await f.store.reserve(f.actor, f.collectionId, [definition(ordinal)])).episodes[0]!);
+    episodes.push(
+      (await f.store.reserve(await native.actor(f.owner), f.collectionId, [definition(ordinal)])).episodes[0]!,
+    );
   native.advance(1);
   expect(await f.store.touch(f.actor, episodes[0]!.locator)).toBe(true);
   const initial = await native.rows(f.owner);
@@ -261,7 +263,8 @@ test('quota boundary serializes concurrent 33rd and 34th definitions, preserves 
 
 test('one composed two-read admission has one batch intent, including quota retirement cleanup, without a second enqueue', async () => {
   const f = await native.fixture();
-  for (let ordinal = 0; ordinal < 32; ordinal++) await f.store.reserve(f.actor, f.collectionId, [definition(ordinal)]);
+  for (let ordinal = 0; ordinal < 32; ordinal++)
+    await f.store.reserve(await native.actor(f.owner), f.collectionId, [definition(ordinal)]);
   const result = await capture(native.db, () =>
     f.store.reserve(f.actor, f.collectionId, [definition(32), definition(33), definition(32)]),
   );
@@ -423,7 +426,7 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
       const anchor = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
       if (operation === 'quota-full retirement')
         for (let ordinal = 1; ordinal < 32; ordinal++)
-          await f.store.reserve(f.actor, f.collectionId, [definition(ordinal)]);
+          await f.store.reserve(await native.actor(f.owner), f.collectionId, [definition(ordinal)]);
       let measuredActor = f.actor;
       const second = operation === 'forced-one-contention-retry' ? native.db.openPool({ max: 1 }) : null;
       let competingActor = f.actor;
@@ -452,7 +455,7 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
         );
         if (operation === 'quota-full retirement')
           for (let ordinal = 0; ordinal < 32; ordinal++)
-            await f.store.reserve(f.actor, f.collectionId, [definition(ordinal)]);
+            await f.store.reserve(await native.actor(f.owner), f.collectionId, [definition(ordinal)]);
       };
       const report = await checkGrowth(native.db, {
         name: `Library reservation ${operation} / ${axis}`,
@@ -472,7 +475,7 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
         },
         async operation() {
           if (operation === 'duplicate') {
-            await f.store.reserve(f.actor, f.collectionId, [definition()]);
+            await f.store.reserve(measuredActor, f.collectionId, [definition()]);
             return;
           }
           if (operation === 'forced-one-contention-retry') {
