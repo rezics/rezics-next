@@ -8,7 +8,7 @@ import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
-import { checkGrowth, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, costOf, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
@@ -393,6 +393,13 @@ test('native source hook rows and statements stay constant with logarithmic bloc
     for (const run of runs.filter(({ repetition }) => repetition % 6 !== 0))
       expect(run.plans.length).toBeGreaterThan(0);
   } catch (error) {
+    for (const { scale, repetition, target, plans } of runs) {
+      const { rows, blocks, relations } = costOf({ statements: [], plans });
+      console.info(
+        'Native follow source plan diagnostics:',
+        JSON.stringify({ scale, repetition, target, rows, blocks, relations }),
+      );
+    }
     if (error instanceof GrowthBoundError) {
       await Bun.write(
         new URL('growth.json', evidence),
