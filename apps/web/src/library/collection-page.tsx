@@ -421,7 +421,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
                 : m.library_subject_unavailable();
               const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
               return (
-                <ListRow key={member.id} className="space-y-3 rounded-xl p-2">
+                <ListRow key={member.id} className="list-none space-y-3 rounded-xl p-2">
                   <ListRowLink href={href ?? '#'}>{title}</ListRowLink>
                   <CoverCard
                     {...(href ? { href } : {})}
