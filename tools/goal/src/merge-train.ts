@@ -1602,13 +1602,14 @@ export class MergeTrain {
           ? (o.affectedTests ?? defaults.affectedTests).filter((check) =>
               result.changedFiles.some((path) => matchesPath(path, check.paths)),
             )
-          : [...(request.affectedTests ?? [])];
+          : [];
+        const priorAffectedResults: AffectedTestResult[] = workspace ? [] : [...(request.affectedTests ?? [])];
         const siblings = siblingTestCommand(
           siblingTestFiles(result.changedFiles, trainTree),
           defaults.siblingTests.command,
         );
         if (siblings) affectedChecks.push({ paths: [], command: siblings });
-        const affectedResults = await Promise.all(
+        const landingAffectedResults = await Promise.all(
           affectedChecks.map((check) =>
             runAffectedTest(check.command, trainTree, logPath, {
               ...gateEnvironment(process.env, o.stateDirectory),
@@ -1616,6 +1617,7 @@ export class MergeTrain {
             }),
           ),
         );
+        const affectedResults = [...priorAffectedResults, ...landingAffectedResults];
         for (const checked of affectedResults) {
           if (checked.status === 'unverified') {
             appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);
