@@ -33,7 +33,11 @@ const registration: typeof nativeRegistration = {
     return nativeRegistration.convert(input, context);
   },
 };
+let tracedDatabases = 0;
 function countWork(database: Database): Database {
+  const trace = process.env.IMPORTER_PREPARE_TRACE === '1';
+  const databaseNumber = trace ? ++tracedDatabases : 0;
+  let prepareEvent = 0;
   const prepare = database.prepare.bind(database);
   const count = (sql: string) => {
     if (/^\s*BEGIN\b/i.test(sql)) pipelineWork.transactions++;
@@ -42,6 +46,10 @@ function countWork(database: Database): Database {
   database.prepare = ((sql: string, ...rest: unknown[]) => {
     pipelineWork.prepares++;
     count(sql);
+    // Opt-in cold-cache evidence only: bounded literal SQL, never bound parameters.
+    if (trace && ++prepareEvent <= 128 && sql.length <= 16_384) {
+      console.info('importer prepare trace:', JSON.stringify({ database: databaseNumber, event: prepareEvent, sql }));
+    }
     const statement = (prepare as (sql: string, ...rest: unknown[]) => Statement)(sql, ...rest);
     for (const method of ['run', 'get', 'all'] as const) {
       const execute = statement[method].bind(statement) as (...args: unknown[]) => unknown;
