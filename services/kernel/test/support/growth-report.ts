@@ -27,8 +27,11 @@ function planEntries(document: unknown): { queryText?: string; plan: PlanNode }[
 
 function planCost(root: PlanNode): { rows: number; blocks: number; node?: string } {
   let rows = 0;
-  let blocks = 0;
   let costliest = { blocks: -1, rows: -1, name: undefined as string | undefined };
+  let costliestNamed = { blocks: -1, rows: -1, name: undefined as string | undefined };
+  const blocks =
+    (typeof root['Shared Hit Blocks'] === 'number' ? root['Shared Hit Blocks'] : 0) +
+    (typeof root['Shared Read Blocks'] === 'number' ? root['Shared Read Blocks'] : 0);
   const visit = (node: PlanNode) => {
     const type = typeof node['Node Type'] === 'string' ? node['Node Type'] : 'Unknown';
     const relation =
@@ -59,15 +62,24 @@ function planCost(root: PlanNode): { rows: number; blocks: number; node?: string
       (typeof node['Shared Hit Blocks'] === 'number' ? node['Shared Hit Blocks'] : 0) +
       (typeof node['Shared Read Blocks'] === 'number' ? node['Shared Read Blocks'] : 0);
     rows += nodeRows;
-    blocks += nodeBlocks;
     if (nodeBlocks > costliest.blocks || (nodeBlocks === costliest.blocks && nodeRows > costliest.rows)) {
       costliest = { blocks: nodeBlocks, rows: nodeRows, name: `${type}${relation ? ` ${relation}` : ''}` };
+    }
+    if (
+      relation &&
+      (nodeBlocks > costliestNamed.blocks || (nodeBlocks === costliestNamed.blocks && nodeRows > costliestNamed.rows))
+    ) {
+      costliestNamed = { blocks: nodeBlocks, rows: nodeRows, name: `${type} ${relation}` };
     }
     if (Array.isArray(node.Plans))
       for (const child of node.Plans) if (typeof child === 'object' && child !== null) visit(child as PlanNode);
   };
   visit(root);
-  return { rows, blocks, ...(costliest.name ? { node: costliest.name } : {}) };
+  return {
+    rows,
+    blocks,
+    ...((costliestNamed.name ?? costliest.name) ? { node: costliestNamed.name ?? costliest.name } : {}),
+  };
 }
 
 export function statementAttributions(capture: Capture): StatementAttribution[] {
