@@ -1175,7 +1175,10 @@ async function runSourcedBatch(scale: number, repetition: number): Promise<unkno
   try {
     answer = await batch(commands);
   } finally {
-    console.info(`SOURCED_NATIVE_PLANS ${JSON.stringify({ scale, repetition, statements: [...nativeRun.values()] })}`);
+    // Lossless compression keeps complete native plans and every occurrence's work
+    // in the remote log without spending the result transport on repeated SQL text.
+    const evidence = JSON.stringify({ scale, repetition, statements: [...nativeRun.values()] });
+    console.info(`SOURCED_NATIVE_PLANS_GZIP ${Buffer.from(Bun.gzipSync(Buffer.from(evidence))).toString('base64')}`);
     nativeRun = undefined;
   }
   // Preserve native failures (including every rejected command) for owner diagnosis.
