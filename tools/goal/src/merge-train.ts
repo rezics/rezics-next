@@ -1629,18 +1629,69 @@ export class MergeTrain {
           stage = 'gate';
           appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${base}\n`);
           let checked = await runIntegrationChecks(CONTROL_PLANE_CHECKS, trainTree, logPath, runGate);
-          // The suite runs on the train's host beside every worker, and a timing test can fail under that load: two
-          // landings of one task failed on two different tests that pass alone. As the kernel check does, failing
-          // test files rerun alone once, and the check passes only if they pass alone.
+          // Suite failures are compared one file at a time against the landing's base. A suite-only failure that
+          // passes alone is load-sensitive; a failure also present on base does not block an unrelated landing.
           const suite = CONTROL_PLANE_CHECKS.at(-1)!;
           if (!checked.passed && !checked.timedOut && JSON.stringify(checked.failedCommand) === JSON.stringify(suite)) {
             const files = failingTestFiles(checked.output);
             if (files.length) {
               appendFileSync(logPath, `Rerunning failed control-plane test files alone: ${files.join(' ')}\n`);
-              const alone = await runIntegrationChecks([['bun', 'test', ...files]], trainTree, logPath, runGate);
-              if (alone.passed) {
+              const branchFailures: { file: string; result: Awaited<ReturnType<typeof runIntegrationChecks>> }[] = [];
+              for (const file of files) {
+                const result = await runIntegrationChecks([['bun', 'test', file]], trainTree, logPath, runGate);
+                if (!result.passed) branchFailures.push({ file, result });
+              }
+              if (!branchFailures.length) {
                 appendFileSync(logPath, 'Load-sensitive control-plane tests passed alone\n');
-                checked = alone;
+                checked = { ...checked, passed: true, timedOut: false };
+              } else {
+                const baselineTree = resolve(o.worktreeRoot, `control-plane-base-${randomUUID()}`);
+                git(o.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
+                try {
+                  appendFileSync(
+                    logPath,
+                    `Rerunning branch-failing control-plane test files alone on base ${base}: ${branchFailures.map(({ file }) => file).join(' ')}\n`,
+                  );
+                  const installed = await runIntegrationChecks(
+                    [
+                      ['bun', 'install', '--frozen-lockfile'],
+                      ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
+                    ],
+                    baselineTree,
+                    logPath,
+                    runGate,
+                  );
+                  if (!installed.passed) {
+                    checked = installed;
+                  } else {
+                    const newFailures: typeof branchFailures = [];
+                    for (const failure of branchFailures) {
+                      if (!existsSync(join(baselineTree, failure.file))) {
+                        newFailures.push(failure);
+                        continue;
+                      }
+                      const baseline = await runIntegrationChecks(
+                        [['bun', 'test', failure.file]],
+                        baselineTree,
+                        logPath,
+                        runGate,
+                      );
+                      if (baseline.passed) newFailures.push(failure);
+                    }
+                    if (newFailures.length) {
+                      const report = `Failures introduced on this branch:\n${newFailures.map(({ file }) => file).join('\n')}`;
+                      checked = {
+                        ...newFailures[0]!.result,
+                        output: `${report}\n${newFailures.map(({ result }) => result.output).join('')}`,
+                      };
+                    } else {
+                      appendFileSync(logPath, 'Control-plane test failures also occur on base; allowing landing\n');
+                      checked = { ...branchFailures[0]!.result, passed: true, timedOut: false };
+                    }
+                  }
+                } finally {
+                  git(o.mainCheckout, 'worktree', 'remove', '--force', baselineTree);
+                }
               }
             }
           }
