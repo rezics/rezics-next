@@ -1,4 +1,11 @@
-import { publicationLimits, releaseAdmission, releaseDigest, validateRelease, type Release, type ReleaseViolation } from '@rezics/definitions';
+import {
+  publicationLimits,
+  releaseAdmission,
+  releaseDigest,
+  validateRelease,
+  type Release,
+  type ReleaseViolation,
+} from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { systemClock } from '../clock.ts';

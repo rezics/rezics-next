@@ -41,11 +41,11 @@ caller's original graph changes. No WeakMap of arbitrary mutable inputs supplies
 
 The adopted NEW-publication caps count submitted entries, including duplicates:
 
-| Collection | Maximum | Refusal pointer |
-| --- | ---: | --- |
-| Each type's bases | 4096 | `/types/<escaped-key>/bases` |
-| Each type/property's mappings | 256 | Corresponding `mappings` pointer |
-| Each property's qualifiers | 4096 | Corresponding `qualifiers` pointer |
+| Collection                    | Maximum | Refusal pointer                    |
+| ----------------------------- | ------: | ---------------------------------- |
+| Each type's bases             |    4096 | `/types/<escaped-key>/bases`       |
+| Each type/property's mappings |     256 | Corresponding `mappings` pointer   |
+| Each property's qualifiers    |    4096 | Corresponding `qualifiers` pointer |
 
 `publicationLimits` is bounded admission, not a historical flag or a changed release format. New publications
 and fresh bootstrap enforce these limits with existing `limit` diagnostics (HTTP 400 `out_of_range`). Caps never

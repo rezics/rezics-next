@@ -33,9 +33,18 @@ function walker(node: Schema): (value: unknown, pointer: string, add: (pointer: 
   let run: ReturnType<typeof walker>;
   const visit: ReturnType<typeof walker> = (value, pointer, add) => run(value, pointer, add);
   walks.set(node, visit);
-  const ref = node.$ref ? walker(node.$ref.split('/').slice(1).reduce((part: any, key) => part[key], schema)) : undefined;
+  const ref = node.$ref
+    ? walker(
+        node.$ref
+          .split('/')
+          .slice(1)
+          .reduce((part: any, key) => part[key], schema),
+      )
+    : undefined;
   const properties = Object.entries(node.properties ?? {}).map(([key, child]) => [key, walker(child)] as const);
-  const patterns = Object.entries(node.patternProperties ?? {}).map(([key, child]) => [new RegExp(key), walker(child)] as const);
+  const patterns = Object.entries(node.patternProperties ?? {}).map(
+    ([key, child]) => [new RegExp(key), walker(child)] as const,
+  );
   const items = node.items ? walker(node.items) : undefined;
   const alternatives = (node.anyOf ?? []).map(walker);
   run = (value, pointer, add) => {
@@ -56,9 +65,10 @@ function walker(node: Schema): (value: unknown, pointer: string, add: (pointer: 
     } else if (value !== null && typeof value === 'object') {
       const fields = value as Record<string, unknown>;
       for (const [key, child] of properties) if (Object.hasOwn(fields, key)) child(fields[key], at(pointer, key), add);
-      if (patterns.length) for (const key of Object.keys(fields)) {
-        for (const [pattern, child] of patterns) if (pattern.test(key)) child(fields[key], at(pointer, key), add);
-      }
+      if (patterns.length)
+        for (const key of Object.keys(fields)) {
+          for (const [pattern, child] of patterns) if (pattern.test(key)) child(fields[key], at(pointer, key), add);
+        }
     }
   };
   return visit;
@@ -77,12 +87,14 @@ export function publicationLimits(value: unknown): { pointer: string; code: 'lim
     for (const key of Object.keys(definitions)) {
       const definition = Object.getOwnPropertyDescriptor(definitions, key)?.value;
       if (!definition || typeof definition !== 'object') continue;
-      for (const member of collection === 'types' ? ['bases', 'mappings'] as const : ['qualifiers', 'mappings'] as const) {
+      for (const member of collection === 'types'
+        ? (['bases', 'mappings'] as const)
+        : (['qualifiers', 'mappings'] as const)) {
         const list = Object.getOwnPropertyDescriptor(definition, member)?.value;
         if (Array.isArray(list) && list.length > PUBLICATION_LIMITS[member])
           violations.push({ pointer: at(at(`/${collection}`, key), member), code: 'limit' });
       }
     }
   }
-  return violations.sort((a, b) => a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0).slice(0, 64);
+  return violations.sort((a, b) => (a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0)).slice(0, 64);
 }

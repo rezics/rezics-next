@@ -235,11 +235,11 @@ async function probe(): Promise<Evidence> {
       'const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;');
     filter = replaceOnce(filter, 'if (!declaredQualifiers.has(qualifier.property) || !qualifierDefinition)',
       `if ((${counter}.qualifierVisits++, !declaredQualifiers.has(qualifier.property)) || !qualifierDefinition)`);
-    filter = replaceOnce(filter, 'if (value === null || typeof value !== 'object') return value;',
+    filter = replaceOnce(filter, "if (value === null || typeof value !== 'object') return value;",
       `${counter}.snapshotVisits++;
   if (value === null || typeof value !== 'object') return value;`);
-    filter = replaceOnce(filter, 'const allowedFacet = (property: string) => selectedFacets.some((facets) => facets.has(property));',
-      `const allowedFacet = (property: string) => selectedFacets.some((facets) => { ${counter}.facetProbes++; return facets.has(property); });`);
+    filter = replaceOnce(filter, 'selectedFacets.some((facets) => facets.has(property))',
+      `selectedFacets.some((facets) => { ${counter}.facetProbes++; return facets.has(property); })`);
     copy('filter', filterPath, filter, join(directory, 'filter.ts'));
     let definitions = imports(read(definitionsPath), dirname(definitionsPath));
     definitions = definitions.replace(

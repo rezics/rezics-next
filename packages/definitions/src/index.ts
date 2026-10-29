@@ -284,7 +284,10 @@ function exceedsSize(value: unknown): boolean {
     const entry = pending.pop()!;
     const item = entry.value;
     if (item !== null && typeof item === 'object') {
-      if (entry.exit) { ancestors.delete(item); continue; }
+      if (entry.exit) {
+        ancestors.delete(item);
+        continue;
+      }
       if (ancestors.has(item)) throw new TypeError('Expected acyclic JSON');
       ancestors.add(item);
       pending.push({ value: item, exit: true });
@@ -502,8 +505,10 @@ export function releaseAdmission(value: unknown): ReleaseViolation[] {
     const oversized = exceedsSize(value);
     collectionLimits(value, (pointer, code) => violations.push({ pointer, code }));
     if (!violations.length && oversized) violations.push({ pointer: '', code: 'limit' });
-  } catch { violations.push({ pointer: '', code: 'invalid' }); }
-  return violations.sort((a,b) => a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0).slice(0,64);
+  } catch {
+    violations.push({ pointer: '', code: 'invalid' });
+  }
+  return violations.sort((a, b) => (a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0)).slice(0, 64);
 }
 
 export function validateRelease(value: unknown): ReleaseViolation[] {

@@ -458,13 +458,19 @@ function snapshotData(value: unknown, ancestors = new Set<object>()): unknown {
   if (value === null || typeof value !== 'object') return value;
   if (ancestors.has(value)) return undefined;
   ancestors.add(value);
-  const copy: Record<string, unknown> | unknown[] = Array.isArray(value) ? new Array(value.length) : Object.create(null);
+  const copy: Record<string, unknown> | unknown[] = Array.isArray(value)
+    ? new Array(value.length)
+    : Object.create(null);
   for (const key of Object.getOwnPropertyNames(value)) {
     if (Array.isArray(value) && key === 'length') continue;
     const field = ownData(value, key);
-    if (field.found) Object.defineProperty(copy, key, {
-      value: snapshotData(field.value, ancestors), enumerable: true, configurable: true, writable: true,
-    });
+    if (field.found)
+      Object.defineProperty(copy, key, {
+        value: snapshotData(field.value, ancestors),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
   }
   ancestors.delete(value);
   return copy;
@@ -502,11 +508,12 @@ function buildConstruction(release: FilterRelease): Construction {
   const qualifiers = new Map<string, ReadonlySet<string>>();
   const units = new Map<string, ReadonlySet<string>>();
   const properties = dataField(release, 'properties');
-  if (isRecord(properties)) for (const property of Object.getOwnPropertyNames(properties)) {
-    const definition = ownRecordValue(properties, property);
-    qualifiers.set(property, new Set(ownStringList(definition, 'qualifiers')));
-    units.set(property, new Set(ownStringList(definition, 'units')));
-  }
+  if (isRecord(properties))
+    for (const property of Object.getOwnPropertyNames(properties)) {
+      const definition = ownRecordValue(properties, property);
+      qualifiers.set(property, new Set(ownStringList(definition, 'qualifiers')));
+      units.set(property, new Set(ownStringList(definition, 'units')));
+    }
   return { facets, all, qualifiers, units, patterns: new Map() };
 }
 
@@ -545,7 +552,11 @@ function codePattern(definition: object, construction: Construction): RegExp | n
   const source = isRecord(value) ? dataField(value, 'pattern') : undefined;
   let compiled: RegExp | null = null;
   if (typeof source === 'string' && source.length > 0) {
-    try { compiled = new RegExp(source, 'u'); } catch { compiled = null; }
+    try {
+      compiled = new RegExp(source, 'u');
+    } catch {
+      compiled = null;
+    }
   }
   construction.patterns.set(definition, compiled);
   return compiled;
@@ -628,9 +639,12 @@ function admitConstructed(
     }
   }
 
-  const selectedFacets = returnable === undefined
-    ? [construction.all]
-    : returnable.filter((type) => hasOwnMapKey(types, type)).map((type) => construction.facets.get(type) ?? emptyFacets);
+  const selectedFacets =
+    returnable === undefined
+      ? [construction.all]
+      : returnable
+          .filter((type) => hasOwnMapKey(types, type))
+          .map((type) => construction.facets.get(type) ?? emptyFacets);
   const allowedFacet = (property: string) => selectedFacets.some((facets) => facets.has(property));
 
   let expandedLeaves = 0;
@@ -910,10 +924,18 @@ function validateConstructed(
 }
 
 /** Raw mutable releases are indexed anew for every public call. */
-export function admitFilter(filter: FilterDocument, release: FilterRelease, options?: FilterAdmissionOptions): FilterDocument {
+export function admitFilter(
+  filter: FilterDocument,
+  release: FilterRelease,
+  options?: FilterAdmissionOptions,
+): FilterDocument {
   return admitConstructed(filter, release, options, constructionFor(release));
 }
 
-export function validateFilter(input: unknown, release: FilterRelease, options?: FilterAdmissionOptions): FilterValidationError[] {
+export function validateFilter(
+  input: unknown,
+  release: FilterRelease,
+  options?: FilterAdmissionOptions,
+): FilterValidationError[] {
   return validateConstructed(input, release, options, constructionFor(release));
 }
