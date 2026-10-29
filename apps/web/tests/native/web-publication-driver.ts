@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { subjectHref, subjectViewHref } from '../../src/subject/subject-href';
+import { slug } from '@rezics/definitions/slug';
 import { startNativeWebStack } from './stack';
 import type { WebPublicationDriver, PublicationFixture, SitemapKind } from '../../../../specs/web-publication-driver';
 
@@ -19,6 +19,8 @@ const titleOf = (value: unknown): string => {
     return String(value);
   return value.title;
 };
+const subjectPath = (id: string, label: string, locale = 'en') =>
+  `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug(label)}`;
 
 function assertReleasedDefinitions(): void {
   const types = bundledRelease.types as Record<string, unknown>;
@@ -87,13 +89,13 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
       if (!subject) throw new Error(`Fixture subject ${key} was not created`);
-      return new URL(subjectHref({ id: subject.id, label: subject.label }, locale).href, publicOrigin).href;
+      return new URL(subjectPath(subject.id, subject.label, locale), publicOrigin).href;
     };
     const subjects = Object.fromEntries([...created.keys()].map((key) => [key, urlFor(key)])) as PublicationFixture['subjects'];
     const views = Object.fromEntries(
       (['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const).map((name) => [
         name,
-        new URL(subjectViewHref({ id: created.get('book')!.id, label: created.get('book')!.label }, 'en', name), publicOrigin).href,
+        new URL(`${subjectPath(created.get('book')!.id, created.get('book')!.label)}/${name}`, publicOrigin).href,
       ]),
     ) as PublicationFixture['views'];
     const sitemap = Object.fromEntries(
