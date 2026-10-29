@@ -6,6 +6,8 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+import { browserSessionToken } from './session-token';
+import { closeAccountMenu, openAccountMenu } from './support/account-menu';
 
 const app = join(import.meta.dir, '..');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
@@ -543,9 +545,37 @@ test.serial(
       const navigation = page.getByRole('navigation', { name: own.shell_navigation!, exact: true });
       const link = (await navigation.getByRole('link', { name: own.nav_library!, exact: true }).textContent())!;
       expect(link.toLowerCase(), locale).toContain(term);
+      await openAccountMenu(page);
       const account = await page.locator('#account-menu a[href$="/library"]').textContent();
       expect(account?.toLowerCase(), `${locale} account`).toContain(term);
+      await closeAccountMenu(page);
       await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test.serial(
+  'the personal library uses one term in the account menu at phone and desktop widths',
+  async () => {
+    const session = await signedInState();
+    const own = await messages('en');
+    for (const viewport of [phone, desktop]) {
+      const page = await open(board_('en'), { storageState: session, viewport });
+      try {
+        expect(await page.locator('#account-menu').count()).toBe(0);
+        const menu = await openAccountMenu(page);
+        await openAccountMenu(page);
+        expect(await menu.locator('a[href$="/library"]').textContent()).toBe(own.nav_library!);
+        const token = await browserSessionToken(page);
+        expect(await page.locator('#account-menu').count()).toBe(0);
+        const reopened = await openAccountMenu(page);
+        expect(await reopened.locator('input[name="csrf_token"]').inputValue()).toBe(token);
+        await closeAccountMenu(page);
+        expect(await page.locator('#account-menu').count()).toBe(0);
+      } finally {
+        await page.context().close();
+      }
     }
   },
   timeout,

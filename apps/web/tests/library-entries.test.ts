@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page } from 'playwright';
+import { closeAccountMenu, openAccountMenu } from './support/account-menu';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -494,9 +495,11 @@ async function open(path: string, cookie: string): Promise<Page> {
 async function accountMenuHtml(path: string, cookie: string): Promise<string> {
   const page = await open(path, cookie);
   try {
+    await openAccountMenu(page);
     await page.locator('#account-menu input[name="csrf_token"]').waitFor({ state: 'attached' });
     return await page.locator('#account-menu').innerHTML();
   } finally {
+    await closeAccountMenu(page);
     await page.context().close();
   }
 }

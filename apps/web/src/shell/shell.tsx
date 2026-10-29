@@ -373,7 +373,6 @@ function LanguageControl() {
           ]}
           trigger={
             <Button
-              aria-label={m.shell_language()}
               className={cn(
                 headerControlClass,
                 'max-w-32 bg-transparent px-3 hover:bg-accent/60 max-md:w-9 max-md:justify-center max-md:px-0',
@@ -383,6 +382,7 @@ function LanguageControl() {
               disabled={!hydrated}
             >
               <Globe aria-hidden="true" />
+              <span className="sr-only">{m.shell_language()} </span>
               <span className="hidden md:inline">{names[locale]}</span>
             </Button>
           }

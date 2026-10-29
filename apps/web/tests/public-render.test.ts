@@ -10,6 +10,7 @@ import space from '../src/kernel/recorded/space-address.json';
 import board from '../src/kernel/recorded/board.json';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+import { closeAccountMenu, openAccountMenu } from './support/account-menu';
 
 const app = join(import.meta.dir, '..');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
@@ -396,7 +397,9 @@ test(
       await client.waitForLoadState('networkidle');
       if (signedIn) {
         await client.locator('#account-menu-button').waitFor();
+        await openAccountMenu(client);
         expect(await client.locator('input[name="csrf_token"]').inputValue()).not.toBe('');
+        await closeAccountMenu(client);
       } else {
         await slot.locator('a[href^="/auth/sign-in?return_to="]').waitFor();
       }

@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
+import { closeAccountMenu, openAccountMenu } from './support/account-menu';
 
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
@@ -291,8 +292,10 @@ async function page(signedIn = false): Promise<Page> {
     await page.goto(`${origin}/auth/sign-in?return_to=/en`);
     await page.locator('html[data-hydrated]').waitFor();
     expect((await context.cookies()).some((cookie) => cookie.name === sessionCookie)).toBe(true);
+    await openAccountMenu(page);
     await page.locator('form[action="/auth/sign-out"]').waitFor({ state: 'attached' });
     expect(await page.locator('form[action="/auth/sign-out"]').count()).toBe(1);
+    await closeAccountMenu(page);
   }
   return page;
 }
