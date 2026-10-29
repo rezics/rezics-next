@@ -8,6 +8,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -156,7 +157,15 @@ export function checkWaitMs(logPath: string): number {
     return 0;
   }
 }
-export type RunningWorker = { child?: ChildProcess; exited: Promise<WorkerExit>; attempt: Attempt };
+export type RunningWorker = {
+  child?: ChildProcess;
+  exited: Promise<WorkerExit>;
+  attempt: Attempt;
+  /** Byte offset in the appended run log where this process began writing. */
+  logStartOffset?: number;
+  /** Whether this process resumed the previous agent session. */
+  resuming?: boolean;
+};
 /**
  * A manager's tool sandbox kills the whole process tree of the command that launched a worker, and a new process
  * group does not leave that tree. The wrapper forks twice, so the worker is reparented away from its launcher, and
@@ -415,6 +424,8 @@ export async function launch(
   const exitPath = workerExitPath(attempt.logPath),
     pidPath = `${attempt.logPath}.pid`;
   for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
+  const resuming = Boolean(resumeSession);
+  const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
   const [program, args] = launchCommand({
@@ -438,6 +449,7 @@ export async function launch(
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {
+      store.event(attempt, 'worker-run-started', { logStartOffset, resuming });
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
       // The wrapper cannot report a missing program to the launcher, so refuse it here.
@@ -477,5 +489,5 @@ export async function launch(
   const saved = store.attempt(attempt);
   const exited = waitForWorkerExit(saved.process, attempt.logPath);
   void exited.catch(() => {});
-  return { exited, attempt: saved };
+  return { exited, attempt: saved, logStartOffset, resuming };
 }

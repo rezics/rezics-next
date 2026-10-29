@@ -110,6 +110,8 @@ export const USAGE_LIMIT_RETRY_PAUSE_MS = 3 * 60_000;
 /** Repeated ambiguous refusals temporarily route work away from one pool. */
 export const USAGE_LIMIT_REFUSAL_WINDOW_MS = 60 * 60_000;
 export const REPEATED_USAGE_LIMIT_EXHAUSTION_MS = 60 * 60_000;
+/** A waiting attempt gets its first resume plus two retries when the CLI cannot start. */
+const MAX_WAITING_RESUME_LAUNCH_FAILURES = 3;
 /** A worker whose CLI writes nothing this long never started a session: it is stopped, and its exit retries it. */
 export const START_GRACE_MS = 10 * 60_000;
 /** A running worker with no run-log activity for this long is stopped and retried. */
@@ -396,13 +398,6 @@ export class WorkerJob implements GateOutcomeSink {
     if (!pool) throw new Error(`Waiting attempt refers to missing pool ${attempt.pool}`);
     const adapter = agentAdapter(attempt.profile.cli);
     const canResume = adapter.canResume && !!attempt.session;
-    const releaseCapacity = await awaitHostCapacity(
-      this.tasks.store,
-      this.tasks.settings.stateDirectory,
-      startsFirst(task),
-      task.id,
-      attempt.attempt,
-    );
     const prompt = [
       ...(!canResume
         ? [workerPrompt(task, attempt.evidencePath, undefined, [], this.tasks.settings.mainCheckout)]
@@ -410,22 +405,92 @@ export class WorkerJob implements GateOutcomeSink {
       `The checks you started have finished or could not be found. ${message}`,
       'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
-    let worker: RunningWorker;
-    try {
-      worker = await launch(
+    const failureCount = () =>
+      this.tasks.store
+        .events(attempt.taskId, attempt.attempt)
+        .filter((event) => event.kind === 'waiting-resume-launch-failed').length;
+    const lastFailure = () => {
+      const event = this.tasks.store
+        .events(attempt.taskId, attempt.attempt)
+        .filter((value) => value.kind === 'waiting-resume-launch-failed')
+        .at(-1);
+      if (!event) return 'Worker CLI failed to resume the waiting session';
+      try {
+        const value = JSON.parse(event.body) as { detail?: string; errorLine?: string };
+        return value.errorLine ?? value.detail ?? 'Worker CLI failed to resume the waiting session';
+      } catch {
+        return 'Worker CLI failed to resume the waiting session';
+      }
+    };
+    for (;;) {
+      const before = failureCount();
+      const releaseCapacity = await awaitHostCapacity(
         this.tasks.store,
-        task,
-        attempt,
-        pool,
-        prompt,
-        this.tasks.settings.codex,
-        canResume ? attempt.session! : undefined,
+        this.tasks.settings.stateDirectory,
+        startsFirst(task),
+        task.id,
+        attempt.attempt,
       );
-    } finally {
-      releaseCapacity();
-    }
+      let worker: RunningWorker | undefined;
+      try {
+        worker = await launch(
+          this.tasks.store,
+          task,
+          attempt,
+          pool,
+          prompt,
+          this.tasks.settings.codex,
+          canResume ? attempt.session! : undefined,
+        );
+      } catch (error) {
+        const detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
+          .replace(/[\r\n]+/g, ' ')
+          .slice(0, 4000);
+        const errorLine = detail.split(/\r?\n/, 1)[0]!.slice(0, 1000);
+        let count = 0;
+        this.tasks.store.write({ taskId: attempt.taskId, attempt: attempt.attempt }, () => {
+          count = failureCount() + 1;
+          this.tasks.store.updateAttempt({ taskId: attempt.taskId, attempt: attempt.attempt }, (current) => {
+            current.state = 'waiting';
+            current.process = null;
+            current.driver = null;
+            current.result = detail;
+            current.failureKind = null;
+          });
+          this.tasks.store.event({ taskId: attempt.taskId, attempt: attempt.attempt }, 'waiting-resume-launch-failed', {
+            count,
+            detail,
+            errorLine,
+          });
+        });
+        if (count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
+          await this.endAsEnvironment(
+            { taskId: attempt.taskId, attempt: attempt.attempt },
+            new Error(errorLine),
+            false,
+            true,
+          );
+          return;
+        }
+        continue;
+      } finally {
+        releaseCapacity();
+      }
 
-    await this.follow(worker);
+      if (!worker) return;
+      await this.follow(worker);
+      const count = failureCount();
+      if (count === before) return;
+      if (count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
+        await this.endAsEnvironment(
+          { taskId: attempt.taskId, attempt: attempt.attempt },
+          new Error(lastFailure()),
+          false,
+          true,
+        );
+        return;
+      }
+    }
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     try {
@@ -583,7 +648,12 @@ export class WorkerJob implements GateOutcomeSink {
       if (fact) this.onAttemptExit(ref);
     }
   }
-  private async endAsEnvironment(ref: AttemptRef, error: unknown, leaseHeld = false): Promise<void> {
+  private async endAsEnvironment(
+    ref: AttemptRef,
+    error: unknown,
+    leaseHeld = false,
+    reportToSupermanager = false,
+  ): Promise<void> {
     if (error instanceof StaleAttemptError) return;
     const lease = leaseHeld
       ? undefined
@@ -602,6 +672,18 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       const task = store.task(ref.taskId),
         pool = this.tasks.settings.pools.find((candidate) => candidate.name === current.pool);
+      const runEvent = store
+        .events(ref.taskId, ref.attempt)
+        .filter((event) => event.kind === 'worker-run-started')
+        .at(-1);
+      let logStartOffset: number | undefined;
+      try {
+        const parsed = runEvent ? (JSON.parse(runEvent.body) as { logStartOffset?: unknown }) : undefined;
+        if (typeof parsed?.logStartOffset === 'number' && Number.isFinite(parsed.logStartOffset))
+          logStartOffset = parsed.logStartOffset;
+      } catch {
+        /* Legacy attempts have no run boundary marker. */
+      }
       let detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
         .replace(/[\r\n]+/g, ' ')
         .slice(0, 4000);
@@ -617,10 +699,19 @@ export class WorkerJob implements GateOutcomeSink {
       const ended = { ...current, endedAt };
       let measurement: ReturnType<typeof readMeasurement>;
       try {
-        measurement = readMeasurement(ended, { configDirectory: pool?.configDirectory });
+        measurement = readMeasurement(ended, {
+          configDirectory: pool?.configDirectory,
+          ...(logStartOffset !== undefined ? { logStartOffset } : {}),
+        });
       } catch (measurementError) {
         detail = `${detail}; run log measurement failed: ${String(measurementError)}`.slice(0, 4000);
-        measurement = readMeasurement({ ...ended, startedAt: endedAt }, { configDirectory: pool?.configDirectory });
+        measurement = readMeasurement(
+          { ...ended, startedAt: endedAt },
+          {
+            configDirectory: pool?.configDirectory,
+            ...(logStartOffset !== undefined ? { logStartOffset } : {}),
+          },
+        );
       }
       let after: typeof current.after = null;
       try {
@@ -653,7 +744,7 @@ export class WorkerJob implements GateOutcomeSink {
           /* The failure event still carries the driver error. */
         }
         const event = {
-          managerId: task.brief.manager,
+          managerId: reportToSupermanager ? this.tasks.settings.integration.supermanager : task.brief.manager,
           taskId: task.id,
           kind: 'environment' as const,
           summary: `environment: driver exception: ${detail}`.slice(0, 1000),

@@ -33,6 +33,43 @@ export function readLogTail(path: string, maxBytes = ATTEMPT_LOG_TAIL_BYTES): st
     if (fd !== undefined) closeSync(fd);
   }
 }
+/** Read output appended after a particular run began, optionally keeping only its bounded suffix. */
+export function readLogFromOffset(
+  path: string,
+  offset: number,
+  maxBytes = Number.POSITIVE_INFINITY,
+): string {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, 'r');
+    const size = fstatSync(fd).size;
+    const start = Math.max(0, Math.min(size, Math.floor(offset)));
+    const readStart = Math.max(start, size - maxBytes);
+    const length = size - readStart;
+    const buffer = Buffer.alloc(length);
+    let read = 0;
+    while (read < length) {
+      const count = readSync(fd, buffer, read, length - read, readStart + read);
+      if (!count) break;
+      read += count;
+    }
+    let text = buffer.subarray(0, read).toString('utf8');
+    const startsMidLine = readStart > 0 && (readStart > start || readStart === start);
+    if (startsMidLine) {
+      const previous = Buffer.alloc(1);
+      const gotPrevious = readSync(fd, previous, 0, 1, readStart - 1);
+      if (gotPrevious && previous[0] !== 10) {
+        const newline = text.indexOf('\n');
+        text = newline < 0 ? '' : text.slice(newline + 1);
+      }
+    }
+    return text;
+  } catch {
+    return '';
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
 export const emptySteps = (): Record<StepClass, number> => ({
   decision: 0,
   read: 0,
@@ -275,7 +312,11 @@ export function makeRecord(
     },
   };
 }
-export type MeasurementOptions = { baseline?: Tokens; configDirectory?: string | undefined };
+export type MeasurementOptions = {
+  baseline?: Tokens;
+  configDirectory?: string | undefined;
+  logStartOffset?: number;
+};
 /**
  * The agent session an attempt ran in. A superseded attempt's session is recorded only when it is finalized, after its
  * retry has chosen how to start, so the head of its run log names it instead; without this every retry of a superseded
@@ -312,7 +353,9 @@ export function readMeasurement(
   options: MeasurementOptions & { maxLogBytes?: number } = {},
 ): LogMeasurement {
   let text = '';
-  if (options.maxLogBytes !== undefined) text = readLogTail(attempt.logPath, options.maxLogBytes);
+  if (options.logStartOffset !== undefined)
+    text = readLogFromOffset(attempt.logPath, options.logStartOffset, options.maxLogBytes);
+  else if (options.maxLogBytes !== undefined) text = readLogTail(attempt.logPath, options.maxLogBytes);
   else
     try {
       text = readFileSync(attempt.logPath, 'utf8');
