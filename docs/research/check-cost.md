@@ -2,15 +2,17 @@
 
 Research snapshot: 2026-10-29. Window: **2026-10-28 06:50:00 through
 2026-10-29 06:50:00 UTC**, or 14:50 through 14:50 in Asia/Shanghai.
-This report proposes work; it does not change the check policy.
+This report proposes work; it does not change the check policy. The retry retains
+the original collection cutoff so that every table describes the same 24 hours.
+It does not relabel the retained cohort as a newer rolling window.
 
 The recovered remote accounting reports **141.002 check-hours** inside run slices.
 Multiplying each slice's elapsed time by its peak memory gives **496.263 peak-GiB-hours**.
 These are observed costs in the recovered cohort, not a complete host census.
-Peak-GiB-hours are a capacity envelope, **not measured memory consumption integrated over time**.
+Peak-GiB-hours are a peak-duration proxy, **not measured memory consumption integrated over time**.
 The available logs cannot supply the requested complete phase-level GiB-hour ledger.
 
-The largest measured exposure is compilation: root typecheck alone accounts for
+Compilation reuse is the leading resource experiment: root typecheck alone accounts for
 33.919 slice-hours and 109.498 peak-GiB-hours. Dependency provisioning reports
 7.873 hours; outbound synchronization reports another 5.178 hours.
 Postgres startup cannot yet be ranked by saved hours: its duration is not separated
@@ -73,8 +75,9 @@ log was retained. Its log SHA-256 is
 Full remote journal retrieval failed despite authenticated small-tail queries
 succeeding. Bounded full-window and filtered systemd queries exhausted the retries;
 the final errors were `b journal query timed out after 55 seconds` and
-`a journal query timed out after 55 seconds`. Partial filtered streams cover only
-the first several hours. The current remote configuration offers a and b, not c.
+`a journal query timed out after 55 seconds`. Retained filtered streams reach
+18:29:28 UTC on a and 13:46:30 UTC on b on October 28, leaving the rest of the
+window uncovered. The collection-time remote configuration offers a and b, not c.
 Partial journal entries were not extrapolated into daily totals or added to wrapper
 measurements, which would risk counting the same scopes twice.
 
@@ -88,7 +91,11 @@ peak-GiB-hours = sum(d * p) / (3600 * 2^30)
 actual GiB-hours = integral(memory.current(t) / 2^30, dt / 3600)
 ```
 
-The last quantity was not recorded. Linux documents `memory.peak` as a maximum,
+The last quantity was not recorded. The runner prints integer MiB by rounding
+down, so the peak-duration proxy is not even a strict upper bound. For the
+1,788 recorded scopes, adding less than 0.138 GiB-hours covers that rounding
+error; it does not resolve the much larger unknown gap between peak and integral.
+Linux documents `memory.peak` as a maximum,
 whereas `memory.current` is current usage including descendants. A peak cannot
 recover an integral or swap pressure. See the official
 [cgroup v2 memory documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html).
@@ -107,7 +114,7 @@ commands remain visible rather than being assigned to a convenient class.
 ## Measured command-class costs
 
 Hours below are sums of concurrently running work, not wall-clock coverage.
-The memory column is the peak envelope defined above; actual GiB-hours are unknown
+The memory column is the peak-duration proxy defined above; actual GiB-hours are unknown
 for **every** class. Queue time is waiting, not execution savings.
 
 | Command class | Log artifacts | Timed scopes | Slice check-h | Peak-GiB-h | Rsync h | Provision h | Command h | Queue h |
@@ -135,18 +142,18 @@ size full gates, whose observed peaks exceed 5 GiB.
 | Phase | Observations | Elapsed work h | Median s | Maximum s | Memory attribution |
 | --- | ---: | ---: | ---: | ---: | --- |
 | Outbound rsync | 2,343 | 5.178 | 4.895 | 358.859 | Outside measured slice; unavailable |
-| Runtime provisioning and `bun install` | 2,061 | 7.873 | 2.801 | 914.932 | Paired subset: at most 11.798 peak-GiB-h |
+| Runtime provisioning and `bun install` | 2,061 | 7.873 | 2.801 | 914.932 | Paired subset: 11.798 peak-GiB-h proxy |
 | Container start and migrations | Not separated | Unknown | Unknown | Unknown | Inside command; unavailable |
 | Typecheck | Partial workspace timings | See below | Not comparable | Not comparable | Inside command; unavailable |
 | Tests | 12,505 process summaries | 159.536 process-h | Not comparable | Not comparable | Inside command; unavailable |
-| Whole command | 1,788 | 135.126 | 144.398 | 8,309.231 | Paired subset: at most 470.210 peak-GiB-h |
+| Whole command | 1,788 | 135.126 | 144.398 | 8,309.231 | Paired subset: 470.210 peak-GiB-h proxy |
 | Teardown | Not timed | Unknown | Unknown | Unknown | After accounting; unavailable |
 | Return rsync | 45 | 0.044 | 2.531 | 29.926 | Unavailable |
 | Slot wait | 2,343 | 15.064 | 3.648 | 2,719.999 | Not measured as run execution |
 
-The install bound uses 1,758 logs with exactly one scope and one install phase,
-covering 5.168 hours. The command bound uses 1,775 such pairs, covering 131.980
-hours. Each assigns the whole slice peak to every second of that phase; neither
+The install proxy uses 1,758 logs with exactly one scope and one install phase,
+covering 5.168 hours. The command proxy uses 1,775 such pairs, covering 131.980
+hours. Each assigns the rounded whole-slice peak to every second of that phase; neither
 is its actual integral. They omit unpaired observations and cannot be extrapolated.
 
 In 420 unambiguous root-typecheck scopes, summing the longest reported workspace
@@ -161,6 +168,34 @@ waiting in `create`. Its 8.848 summed create-hours across 780 entries are theref
 neither daily database-start hours nor pure database-clone cost. Similarly,
 `/tmp/rezics-check-memory/peaks.json` is a rolling peak sample without timestamps
 or elapsed durations, not a 24-hour ledger.
+
+### Paired phase attribution by command class
+
+The following subset joins a phase to memory only when its log has exactly one
+scope and exactly one occurrence of that phase. Memory values remain peak-duration
+proxies; no class has an actual phase memory integral. Startup/migration, compilation,
+tests and teardown cannot be split by class from these records. Missing attribution
+is unknown rather than zero. The command columns contain those phases together.
+
+| Class | Provision h | Provision peak-GiB-h | Command h | Command peak-GiB-h |
+| --- | ---: | ---: | ---: | ---: |
+| Kernel check | 1.594 | 4.558 | 75.413 | 287.635 |
+| Root typecheck | 1.816 | 5.269 | 31.926 | 103.685 |
+| Web check/browser | 0.769 | 1.198 | 16.299 | 64.593 |
+| Docs/utility/unknown | 0.313 | 0.293 | 2.913 | 8.318 |
+| Control-plane/script tests | 0.452 | 0.278 | 2.718 | 1.129 |
+| Workspace typecheck | 0.042 | 0.079 | 1.488 | 3.738 |
+| Auth check | 0.149 | 0.116 | 1.157 | 1.090 |
+| Other tests | 0.024 | 0.006 | 0.051 | 0.018 |
+| Install | 0.008 | 0.002 | 0.015 | 0.003 |
+| **Total, before row rounding** | **5.168** | **11.798** | **131.980** | **470.210** |
+
+These are subsets of the preceding tables, not additional costs. The retained
+`final-rows.json` has SHA-256
+`83cfe7eb64de8e741d63fa89ecbb13f96f55a7f6a880366163ca95a7d40c3375`.
+To reproduce: group rows by `class`; for phase `k`, retain rows where both
+`len(stats)` and `len(phases[k])` equal one; sum `phases[k][0] / 3600`
+and `phases[k][0] * stats[0].peak / 3600`. `peak` is already in GiB.
 
 ## Infrastructure failure share
 
@@ -179,6 +214,11 @@ result, so 9.65% is not a proven infrastructure fraction. Another 1,149 nonzero
 checks remain unclassified. Even 201 successful checks contain the expansion
 warning: searching warning text alone would overstate terminal failures.
 
+The known terminal denominators by class are kernel 571, root typecheck 526,
+web 293, utility/unknown 138, script tests 507, workspace typecheck 64, auth 33,
+other tests 35 and install 40. These sum to 2,207; their proven terminal
+infrastructure numerators are respectively 23, 23, 9, 1, 2, 2, 1, 1 and 0.
+
 The exact daily infrastructure share remains unknown without a complete terminal
 ledger and explicit failure attribution. Neither worker-attempt counts nor the
 incident's historical failure count is a substitute denominator.
@@ -192,7 +232,7 @@ be summed. Require an equal-result comparison before adopting a saving estimate.
 | Rank | Change | Measured exposure / saving ceiling in recovered cohort | Risk and proof required |
 | --- | --- | --- | --- |
 | 1 | Reuse compilation or typecheck once per landing dependency closure | Root typecheck: 33.919 slice-h, 109.498 peak-GiB-h; its command phase 31.926 h. Retained landing checks and cache misses reduce savings. Kernel compilation is additional but unmeasured. | High correctness risk: SQL content mapping and generated inputs. Compare cold/warm diagnostics and exit codes across schema, mapper, dependency and config changes; keep a full landing oracle. |
-| 2 | Cache verified runtime and an assembled dependency tree per host | Provision phase: 7.873 h, with 11.798 peak-GiB-h envelope in the smaller paired subset. Current cache already avoids many downloads; remaining savings need measurement. | Medium risk: stale hooks, patches, ABI or writable shared files. Compare cold/warm trees and checks; invalidate every relevant key and test concurrent readers plus interrupted publication. |
+| 2 | Publish an assembled dependency tree per host | Provision phase: 7.873 h, with 11.798 peak-GiB-h proxy in the smaller paired subset. Current cache already avoids many downloads; remaining savings need measurement. | Medium risk: stale hooks, patches, ABI or writable shared files. Compare cold/warm trees and checks; invalidate every relevant key and test concurrent readers plus interrupted publication. |
 | 3 | Reduce outbound workspace synchronization | 5.178 h of rsync exposure; no measured GiB-h saving. Existing delta transfer means this is an upper ceiling, not an expectation. | Medium risk: stale, deleted, executable or symlinked files. Verify remote tree equivalence after branch changes, deletion, renames and failed transfers; benchmark bytes and elapsed time. |
 | 4 | Plan documentation-only typechecks before placement | 18 timed scopes among 31 checks on tasks declaring only concrete Markdown paths: 1.795 slice-h and 5.568 peak-GiB-h. Actual diffs must confirm the inference. This is a subset of rank 1. | Low risk with an exact diff/dependency planner. Assert documentation selects no compiler database; SQL, generator and config changes still select all dependants. |
 | Unranked pending timings | One long-lived Postgres per host, with migrated template databases | Startup/migration saving is unknown. The 77.959 kernel slice-h and 294.119 peak-GiB-h include much more than Postgres; assigning them to this proposal would be false. | High shared-state risk. Prove parallel isolation, template invalidation, no active template connections, failed-run cleanup, role/config isolation and equivalent migrations/schema. OpenSearch remains separately provisioned. |
@@ -206,7 +246,12 @@ Use immutable published entries and private writable copies; invalidate on missi
 inputs. First benchmark whole-kernel compilation separately from services and tests.
 
 For rank 2, the runner already sets a shared `BUN_INSTALL_CACHE_DIR`, and installs
-with hardlinks. Bun's [global-cache documentation](https://bun.com/docs/pm/global-cache)
+with hardlinks. The retry base also contains verified pinned-runtime reuse in
+commit `8c6a3c0708c228d834d308ef40fe88c5cc875682`; that change is already implemented
+and cannot be counted as a new recommendation or an achieved saving in this window.
+The 7.873-hour historical provision exposure combines runtime download/verification
+and dependency installation, so the remaining dependency-tree opportunity is smaller
+by an unmeasured amount. Bun's [global-cache documentation](https://bun.com/docs/pm/global-cache)
 and installer source distinguish cached packages from installation verification and
 tree materialization. Cache keys need the lockfile, manifests, patches, exact Bun
 revision, platform/architecture/libc and relevant hook environment. The current
@@ -264,7 +309,7 @@ and resource admission still caps aggregate memory. Extend
 
 ## Recommendation and measurement prerequisite
 
-Adopt compilation reuse as the first resource experiment, runtime/dependency
+Adopt compilation reuse as the first resource experiment, dependency-tree
 publication second, and two-lane browser scheduling as a separately budgeted latency
 experiment. Defer a Postgres migration until phase measurements establish its return.
 Fix proven infrastructure failures as reliability work, without inventing saved hours.
@@ -285,6 +330,35 @@ Implement these designs in the existing Bun/TypeScript/Postgres tooling; no sour
 files or long passages need to be copied. Changes belong in owning contracts only
 after adoption. The incomplete host census and absent memory integrals remain open
 measurement limitations, not evidence of zero cost.
+
+## Recovery limit and adoption condition
+
+The source explains why another log parser cannot complete the missing ledger:
+`runScript` in `scripts/remote-check.ts` emits install, command and total-slice
+elapsed time, reads `cpu.stat` and `memory.peak`, then later cleanup removes the
+run slice. Its `memory.current` read in the admission probe is host-level headroom,
+not a retained per-run time series. `cleanupCommands` has no teardown timer.
+Neither a peak nor CPU seconds determines the memory integral. A brief allocation
+and a sustained allocation can have the same peak and different GiB-hours.
+Restoring journal access would improve coverage, but would not create absent
+per-phase samples retroactively.
+
+The journal retries recorded in the retained attempt already exhausted the allowed
+retry budget. They are not repeated in this retry. The retained partial systemd
+streams contain 1,215 JSON records for a and 956 for b; their SHA-256 digests are
+`c0cdc14ca2b60b30ce8de787f3269aa149e480491dcad366352f5cf5179f693e`
+and `ccc7373191b606e1dfe1c4486f85225b834121acee69478e00702f9bccc61a48`.
+They cannot establish complete terminal outcomes or the missing memory integrals.
+
+Adopt the ranking as an order of experiments only. No source demonstrates an
+achieved saving for these proposed changes on this workload. A measured-saving
+ranking and the complete requested daily phase ledger remain unavailable. First
+collect the missing telemetry over a new full window, including each host and
+retry; then compare matched cold/warm runs at controlled concurrency, reporting
+both execution-hours and memory integrals with equal diagnostics and test results.
+Do not convert the exposure ceilings or browser scheduling model into claimed
+savings. The nonempty-file acceptance command verifies report presence only;
+it cannot prove those unavailable measurements.
 
 ## Reference source provenance
 
