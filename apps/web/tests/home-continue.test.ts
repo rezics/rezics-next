@@ -519,11 +519,12 @@ test(
       // The row sits after the search box, and holds only entries in progress, newest first.
       const body = main(page.html);
       expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
-      // Cards are plain titles when the progress-session operation is not exposed in this fixture.
+      // Cards keep titles in CoverCard and expose their subject destination only through the menu.
       expect((row ?? '').match(/Newest read/g)).toHaveLength(6);
-      // The same responsive cards are drawn for phone and desktop, without independent title links.
       const hrefs = linksIn(row ?? '').map((link) => link.href);
-      expect(hrefs).toHaveLength(0);
+      expect(hrefs).toHaveLength(6);
+      expect(new Set(hrefs).size).toBe(3);
+      expect(hrefs.every((href) => !href.includes('/library/progress'))).toBe(true);
       expect(row).toContain('Newest read');
       expect(row).not.toContain('Only planned');
       expect(row).not.toContain('Already finished');
