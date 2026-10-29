@@ -406,7 +406,7 @@ async function readPage(path: string, cookie?: string) {
   }
 }
 
-async function inspectHome(path: string, cookie: string, width: number) {
+async function inspectHome(path: string, cookie: string, width: number, openMenu = false) {
   const origin = await site();
   const browser = await chromium.launch();
   try {
@@ -418,6 +418,10 @@ async function inspectHome(path: string, cookie: string, width: number) {
     await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
     await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
     await page.waitForLoadState('networkidle');
+    if (openMenu) {
+      await page.getByRole('button', { name: 'More actions for Newest read' }).first().click();
+      await page.locator('[data-slot="drawer-content"]').waitFor();
+    }
     return await page.evaluate(() => {
       const personal = document.querySelector<HTMLElement>('[data-slot="personal"]');
       const row = personal?.querySelector<HTMLElement>('[data-slot="cover-row"]');
@@ -445,8 +449,19 @@ async function inspectHome(path: string, cookie: string, width: number) {
         titlesInCovers: cards.map((card) => card.querySelector('[data-slot="cover"]')?.textContent?.trim() ?? ''),
         captionCount: personal?.querySelectorAll('[data-slot="cover-caption"]').length ?? 0,
         progressCount: personal?.querySelectorAll('[data-slot="progress-row"]').length ?? 0,
+        placeholderGlyphCount: [...(personal?.querySelectorAll('[data-slot="cover"]') ?? [])].filter((cover) =>
+          cover.textContent?.includes('…'),
+        ).length,
+        drawerOpen: !!document.querySelector('[data-slot="drawer-content"]'),
         menuButtons: [...(personal?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? [])].map((button) =>
           button.getAttribute('aria-label'),
+        ),
+        controlVisibility: Object.fromEntries(
+          [
+            ...(personal?.querySelectorAll<HTMLButtonElement>(
+              'button[aria-label="Next Continue items"], button[aria-label="Previous Continue items"]',
+            ) ?? []),
+          ].map((button) => [button.getAttribute('aria-label'), getComputedStyle(button).display !== 'none']),
         ),
         scrollWidth: document.documentElement.scrollWidth,
       };
@@ -504,15 +519,11 @@ test(
       // The row sits after the search box, and holds only entries in progress, newest first.
       const body = main(page.html);
       expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
-      // The cards are drawn for the phone row and desktop grid, so links appear in both responsive layouts.
-      const subjects = [
-        ...(row ?? '').matchAll(new RegExp(`href="/${locale}/library/progress\\?subjectId=([^"]+)"`, 'g')),
-      ].map((m) => m[1]);
-      expect(subjects).toEqual([id(23), id(25), id(21), id(23), id(25), id(21)]);
-      // Each card is one link; the card holds no second link to the subject.
+      // Cards are plain titles when the progress-session operation is not exposed in this fixture.
+      expect((row ?? '').match(/Newest read/g)).toHaveLength(2);
+      // The same responsive cards are drawn for phone and desktop, without independent title links.
       const hrefs = linksIn(row ?? '').map((link) => link.href);
-      expect(hrefs).toHaveLength(6);
-      for (const n of [23, 25, 21]) expect(hrefs).toContain(`/${locale}/library/progress?subjectId=${id(n)}`);
+      expect(hrefs).toHaveLength(0);
       expect(row).toContain('Newest read');
       expect(row).not.toContain('Only planned');
       expect(row).not.toContain('Already finished');
@@ -528,9 +539,26 @@ test(
     }
     reset(crowded());
     const crowd = personal((await readPage('/en', cookie)).html) ?? '';
-    expect([...crowd.matchAll(/href="\/en\/library\/progress\?subjectId=/g)]).toHaveLength(12);
+    expect([...crowd.matchAll(/Crowded [1-9]/g)]).toHaveLength(12);
     expect(crowd).toContain('Crowded 9');
     expect(crowd).not.toContain('Crowded 3<');
+  },
+  timeout,
+);
+
+test(
+  'fine pointer carousel controls follow the scroll position and the tile menu opens as a phone sheet',
+  async () => {
+    const cookie = await alice();
+    reset(crowded());
+    const view = await inspectHome('/en', cookie, 390, true);
+    expect(view.drawerOpen).toBe(true);
+    expect(view.menuButtons).toContain('Next Continue items');
+    expect(view.menuButtons).toContain('Previous Continue items');
+    expect(view.controlVisibility).toEqual({
+      'Previous Continue items': false,
+      'Next Continue items': true,
+    });
   },
   timeout,
 );
@@ -545,8 +573,9 @@ test(
     expect(view.titlesInCovers.every((title) => title === '')).toBe(true);
     expect(view.captionCount).toBe(0);
     expect(view.progressCount).toBe(6);
+    expect(view.placeholderGlyphCount).toBe(0);
     expect(view.personalClass).not.toMatch(/min-h-/);
-    expect(view.personal && view.next && view.next.top - view.personal.bottom).toBeLessThan(100);
+    expect(view.personal && view.next && view.next.top - view.personal.bottom).toBeLessThan(40);
   },
   timeout,
 );

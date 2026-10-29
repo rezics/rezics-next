@@ -85,6 +85,8 @@
   "home_continue_minute": "{amount}分",
   "home_continue_minute_of": "{amount}/{total}分",
   "home_continue_open_subject": "作品ページを開く",
+  "home_continue_previous": "前の作品",
+  "home_continue_next": "次の作品",
   "home_continue_page": "{amount}ページ",
   "home_continue_page_of": "{amount}/{total}ページ",
   "home_continue_percent": "{amount}%",

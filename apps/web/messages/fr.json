@@ -85,6 +85,8 @@
   "home_continue_minute": "{amount} min",
   "home_continue_minute_of": "{amount}/{total} min",
   "home_continue_open_subject": "Ouvrir la page du sujet",
+  "home_continue_previous": "Titres précédents",
+  "home_continue_next": "Titres suivants",
   "home_continue_page": "p. {amount}",
   "home_continue_page_of": "p. {amount}/{total}",
   "home_continue_percent": "{amount}%",

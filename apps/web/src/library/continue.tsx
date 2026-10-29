@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
-import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
+import { Button } from '@rezics/ui/shadcn/button';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
 import { m } from '../paraglide/messages.js';
@@ -20,6 +22,9 @@ import type { ContinueEntry } from './continue-read';
  */
 export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
   const admitted = useOperation('progress_session.list');
+  const rowHost = useRef<HTMLDivElement>(null);
+  const [canScrollBack, setCanScrollBack] = useState(false);
+  const [canScrollForward, setCanScrollForward] = useState(false);
   const options = { locale: locale as Locale };
   const subjects = entries.map((entry) => ({
     entry,
@@ -46,21 +51,71 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
           label: progress?.text ?? m.home_continue_in_progress({}, options),
         }}
         menuLabel={m.home_continue_actions({ title }, options)}
-        menu={
-          <DropdownMenuItem render={<a href={subjectHref({ id: entry.subjectId, label: title }, locale).href} />}>
-            {m.home_continue_open_subject({}, options)}
-          </DropdownMenuItem>
-        }
+        menuEntries={[
+          {
+            type: 'link',
+            label: m.home_continue_open_subject({}, options),
+            href: subjectHref({ id: entry.subjectId, label: title }, locale).href,
+          },
+        ]}
       />
     );
   });
+  useEffect(() => {
+    const row = rowHost.current?.querySelector<HTMLElement>('[data-slot="cover-row"]');
+    if (!row) return;
+    const update = () => {
+      setCanScrollBack(row.scrollLeft > 1);
+      setCanScrollForward(row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+    };
+    update();
+    row.addEventListener('scroll', update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(row);
+    return () => {
+      row.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, [entries.length]);
   return (
     <>
       <SectionHeading>{m.home_continue_heading()}</SectionHeading>
-      <div className="sm:hidden">
+      <div ref={rowHost} className="relative sm:hidden">
         <CoverRow ratio={ratio} label={m.home_continue_heading()}>
           {cards}
         </CoverRow>
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon-sm"
+          aria-label={m.home_continue_previous()}
+          aria-hidden={!canScrollBack}
+          data-available={canScrollBack}
+          tabIndex={canScrollBack ? 0 : -1}
+          disabled={!canScrollBack}
+          onClick={() =>
+            rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: -240, behavior: 'smooth' })
+          }
+          className="pointer-fine:flex pointer-coarse:hidden absolute top-1/2 left-1 z-20 hidden -translate-y-1/2 shadow-md data-[available=false]:hidden"
+        >
+          <ChevronLeft aria-hidden />
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon-sm"
+          aria-label={m.home_continue_next()}
+          aria-hidden={!canScrollForward}
+          data-available={canScrollForward}
+          tabIndex={canScrollForward ? 0 : -1}
+          disabled={!canScrollForward}
+          onClick={() =>
+            rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: 240, behavior: 'smooth' })
+          }
+          className="pointer-fine:flex pointer-coarse:hidden absolute top-1/2 right-1 z-20 hidden -translate-y-1/2 shadow-md data-[available=false]:hidden"
+        >
+          <ChevronRight aria-hidden />
+        </Button>
       </div>
       <div className="hidden sm:block">
         <CoverGrid ratio={ratio}>{cards}</CoverGrid>
@@ -71,9 +126,5 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
 
 /** Keep the signed-in slot's final height while the browser waits for personal library data. */
 export function ContinueSection({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
-  return (
-    <div className="min-h-[20rem] sm:min-h-[24rem]">
-      {entries.length > 0 ? <ContinueRow entries={entries} locale={locale} /> : null}
-    </div>
-  );
+  return entries.length > 0 ? <ContinueRow entries={entries} locale={locale} /> : null;
 }

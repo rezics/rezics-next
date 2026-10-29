@@ -85,6 +85,8 @@
   "home_continue_minute": "{amount}분",
   "home_continue_minute_of": "{amount}/{total}분",
   "home_continue_open_subject": "작품 페이지 열기",
+  "home_continue_previous": "이전 작품",
+  "home_continue_next": "다음 작품",
   "home_continue_page": "{amount}쪽",
   "home_continue_page_of": "{amount}/{total}쪽",
   "home_continue_percent": "{amount}%",

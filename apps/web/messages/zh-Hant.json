@@ -85,6 +85,8 @@
   "home_continue_minute": "{amount} 分鐘",
   "home_continue_minute_of": "{amount}/{total} 分鐘",
   "home_continue_open_subject": "開啟條目頁面",
+  "home_continue_previous": "上一個繼續閱讀條目",
+  "home_continue_next": "下一個繼續閱讀條目",
   "home_continue_page": "第{amount}頁",
   "home_continue_page_of": "{amount}/{total} 頁",
   "home_continue_percent": "{amount}%",

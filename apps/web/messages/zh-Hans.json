@@ -85,6 +85,8 @@
   "home_continue_minute": "{amount} 分钟",
   "home_continue_minute_of": "{amount}/{total} 分钟",
   "home_continue_open_subject": "打开条目页面",
+  "home_continue_previous": "上一个继续阅读条目",
+  "home_continue_next": "下一个继续阅读条目",
   "home_continue_page": "第{amount}页",
   "home_continue_page_of": "{amount}/{total} 页",
   "home_continue_percent": "{amount}%",

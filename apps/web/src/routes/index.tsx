@@ -39,7 +39,7 @@ export const Route = createFileRoute('/')({
 function Home() {
   const { data: loaded } = useSuspenseQuery(homePageQuery(getLocale()));
   const { state } = useSession();
-  const { data: resume = [], isPending } = useQuery({
+  const { data: resume = [] } = useQuery({
     ...homeContinueQuery(getLocale(), () => readHomeContinue()),
     enabled: personalRead.enabled && state === 'signed-in',
   });
@@ -52,7 +52,7 @@ function Home() {
       heading={m.home_heading()}
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}
-      {...(state === 'signed-in' && (isPending || resume.length > 0)
+      {...(state === 'signed-in' && resume.length > 0
         ? { personal: <ContinueSection entries={resume} locale={getLocale()} /> }
         : {})}
       messages={{
