@@ -1,18 +1,6 @@
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import defaults from '../defaults.json';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { processIdentity, sameProcess, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
@@ -20,133 +8,30 @@ import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import { recordFlow } from './flow.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
+import { agentAdapter, cleanAgentEnvironment } from './agents.ts';
 
 export type LaunchOptions = {
   profile: Profile;
   pool: Pool;
   worktree: string;
   prompt: string;
-  logPath: string;
+  logPath?: string;
   readOnly?: boolean;
   research?: boolean;
+  consultation?: boolean;
   codex?: Settings['codex'];
   resumeSession?: string;
 };
-export function launchCommand(options: LaunchOptions): [string, string[]] {
-  const { profile, pool, worktree, prompt } = options;
-  if (!['codex', 'grok', 'cursor', 'claude'].includes(profile.cli)) throw new Error('unsupported worker CLI');
+export function launchCommand(
+  options: LaunchOptions,
+  resolveAdapter: typeof agentAdapter = agentAdapter,
+): [string, string[]] {
+  const { profile, pool } = options;
   if (pool.cli !== profile.cli) throw new Error('profile and pool CLI disagree');
-  if (profile.cli === 'grok')
-    return [
-      pool.command,
-      [
-        '-m',
-        profile.model,
-        '--reasoning-effort',
-        profile.effort,
-        // No --json-schema: with it Grok answers in structured form only and stops using tools, so the parser reads its
-        // status object out of free text instead.
-        '--permission-mode',
-        'bypassPermissions',
-        '--no-subagents',
-        '--output-format',
-        'json',
-        '--cwd',
-        worktree,
-        `--single=${prompt}`,
-      ],
-    ];
-  // Workers share the managers' Claude configuration; its hooks and MCP servers belong to the managers' sessions.
-  if (profile.cli === 'claude')
-    return [
-      pool.command,
-      [
-        '-p',
-        '--model',
-        profile.model,
-        '--effort',
-        profile.effort,
-        '--permission-mode',
-        'bypassPermissions',
-        '--output-format',
-        'stream-json',
-        '--verbose',
-        ...(options.resumeSession ? ['--resume', options.resumeSession] : []),
-        '--strict-mcp-config',
-        '--settings',
-        JSON.stringify({ disableAllHooks: true }),
-        '--',
-        prompt,
-      ],
-    ];
-  if (profile.cli === 'cursor')
-    return [
-      pool.command,
-      [
-        '-p',
-        '--model',
-        `${profile.model}-${profile.effort}`,
-        '--force',
-        '--trust',
-        '--sandbox',
-        'disabled',
-        '--output-format',
-        'json',
-        '--workspace',
-        worktree,
-        '--',
-        prompt,
-      ],
-    ];
-  const codex = options.codex ?? defaults.codex;
-  const mcp: string[] = [];
-  const config = join(pool.configDirectory, 'config.toml');
-  if (existsSync(config)) {
-    const servers = (Bun.TOML.parse(readFileSync(config, 'utf8')) as { mcp_servers?: Record<string, unknown> })
-      .mcp_servers;
-    // A dotted `-c` path keeps the quotes in the key, defining a new server without a transport; an inline table merges.
-    const disabled = Object.keys(servers ?? {}).map((name) => `${JSON.stringify(name)}={enabled=false}`);
-    if (disabled.length) mcp.push('-c', `mcp_servers={${disabled.join(',')}}`);
-  }
-  return [
-    pool.command,
-    [
-      'exec',
-      ...(options.resumeSession ? ['resume', options.resumeSession] : []),
-      '--json',
-      '-m',
-      profile.model,
-      '-c',
-      `model_reasoning_effort=${profile.effort}`,
-      '-c',
-      `model_auto_compact_token_limit=${profile.model.includes('luna') ? codex.compactTokens.luna : codex.compactTokens.sol}`,
-      '-c',
-      `tool_output_token_limit=${codex.toolOutputTokens}`,
-      '-c',
-      'features.unified_exec=true',
-      '-c',
-      `background_terminal_max_timeout=${codex.backgroundTerminalMaxTimeoutMs}`,
-      '-c',
-      // Only settings choose the tier: Fast spends included allowance 2.5 times as fast, so neither a routing profile nor
-      // the profile a retry keeps from an earlier attempt can select it.
-      `service_tier=${JSON.stringify(codex.serviceTier)}`,
-      ...(profile.model.includes('sol') ? ['-c', `model_context_window=${codex.solContextWindow}`] : []),
-      '-c',
-      'features.multi_agent=false',
-      '-c',
-      'features.multi_agent_v2=false',
-      ...mcp,
-      ...(options.readOnly
-        ? ['-s', 'read-only', '-c', 'approval_policy="never"']
-        : ['--dangerously-bypass-approvals-and-sandbox']),
-      ...(options.research ? ['-c', 'web_search="live"'] : []),
-      ...(!options.readOnly ? ['--output-schema', join(import.meta.dir, '../worker-result.schema.json')] : []),
-      '-C',
-      worktree,
-      '--',
-      prompt,
-    ],
-  ];
+  const adapter = resolveAdapter(profile.cli);
+  if (options.resumeSession && adapter.canResume) return adapter.resume({ ...options, session: options.resumeSession });
+  const { resumeSession: _session, ...fresh } = options;
+  return adapter.start(fresh);
 }
 export function workerEnvironment(
   pool: Pool,
@@ -156,33 +41,11 @@ export function workerEnvironment(
 ): NodeJS.ProcessEnv {
   const env = { ...parent };
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
-  for (const key of [
-    'GOAL_MANAGER',
-    'CODEX_SESSION_ID',
-    'CODEX_THREAD_ID',
-    'CLAUDE_CODE_SESSION_ID',
-    'CLAUDECODE',
-    'CLAUDE_CODE_ENTRYPOINT',
-    'CODEX_HOME',
-    'GROK_HOME',
-    'GROK_CONFIG_DIR',
-    'CURSOR_CONFIG_DIR',
-    'CLAUDE_CONFIG_DIR',
-  ])
-    delete env[key];
-  const key =
-    pool.cli === 'codex'
-      ? 'CODEX_HOME'
-      : pool.cli === 'grok'
-        ? 'GROK_HOME'
-        : pool.cli === 'claude'
-          ? 'CLAUDE_CONFIG_DIR'
-          : 'CURSOR_CONFIG_DIR';
-  // With CLAUDE_CONFIG_DIR set, Claude Code looks for .claude.json inside it, not beside the default ~/.claude.
-  const result: NodeJS.ProcessEnv =
-    pool.cli === 'claude' && resolve(pool.configDirectory) === join(homedir(), '.claude')
-      ? { ...env, ...NO_COMPILE_CACHE, ...extra }
-      : { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
+  const result = agentAdapter(pool.cli).environment(pool, {
+    ...cleanAgentEnvironment(env),
+    ...NO_COMPILE_CACHE,
+    ...extra,
+  });
   const wrapperDirectory = worktree && join(worktree, 'scripts', 'check-host');
   if (wrapperDirectory && existsSync(join(wrapperDirectory, 'docker')))
     result.PATH = [wrapperDirectory, result.PATH].filter(Boolean).join(':');
@@ -529,6 +392,7 @@ export async function launch(
   codex?: Settings['codex'],
   resumeSession?: string,
 ): Promise<RunningWorker> {
+  if (!agentAdapter(attempt.profile.cli).canResume) resumeSession = undefined;
   store.assertCurrent(attempt);
   recordFlow(store.db, {
     taskId: attempt.taskId,

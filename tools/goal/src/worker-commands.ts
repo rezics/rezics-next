@@ -1,3 +1,4 @@
+import { agentAdapter } from './agents.ts';
 import { mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadSettings, createRuntime, type Runtime } from './config.ts';
@@ -198,7 +199,7 @@ export async function runWorkerCommand(
       if (flags.outcome && !['passed', 'gate-failed', 'stopped', 'cancelled', 'pending-gate'].includes(flags.outcome))
         throw new Error('invalid import outcome');
       const pool = settings.pools.find((p) => p.name === flags.pool);
-      if (!pool || pool.cli === 'claude') throw new Error('unknown worker import pool');
+      if (!pool || agentAdapter(pool.cli).canImport === false) throw new Error('unknown worker import pool');
       const profile = {
         cli: pool.cli,
         model: flags.model!,

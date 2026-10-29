@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { choosePool } from './allowance.ts';
+import { agentAdapter } from './agents.ts';
 import { launchCommand, workerEnvironment } from './launch.ts';
 import { measureLog } from './records.ts';
 import { readRouting } from './routing.ts';
@@ -24,9 +25,7 @@ export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: st
   const logPath = join(tasks.settings.stateDirectory, 'runs', ref.taskId, `${ref.attempt}.consultation.jsonl`);
   mkdirSync(join(tasks.settings.stateDirectory, 'runs', ref.taskId), { recursive: true });
   const fd = openSync(logPath, 'w');
-  const [command, args] = launchCommand({ profile, pool, worktree: directory, prompt, logPath, readOnly: true, codex: tasks.settings.codex });
-  // Evidence lives outside Git worktrees; do not discover or load the project's instructions.
-  args.splice(1, 0, '--skip-git-repo-check', '--ignore-user-config', '-c', 'project_doc_max_bytes=0', '-c', 'web_search="disabled"');
+  const [command, args] = launchCommand({ profile, pool, worktree: directory, prompt, logPath, readOnly: true, consultation: true, codex: tasks.settings.codex });
   const startedAt = new Date().toISOString();
   let child: ReturnType<typeof spawn>;
   try {
@@ -48,7 +47,7 @@ export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: st
     })]);
     store.assertCurrent(ref);
     const endedAt = new Date().toISOString();
-    const measurement = measureLog(readFileSync(logPath, 'utf8'));
+    const measurement = measureLog(readFileSync(logPath, 'utf8'), { adapter: agentAdapter(profile.cli) });
     writeFileSync(join(directory, 'consultation.md'), measurement.result);
     store.event(ref, 'consultation-completed', { profile, pool: pool.name, startedAt, endedAt, tokens: measurement.tokens, after: tasks.reader(pool) });
     return measurement.result;

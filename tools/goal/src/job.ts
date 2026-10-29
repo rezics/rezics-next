@@ -20,15 +20,7 @@ import { classifyFailure } from './failures.ts';
 import { matchesPath } from './briefs.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
-import {
-  isUsageLimitRefusal,
-  makeRecord,
-  readMeasurement,
-  readLogTail,
-  reportedApproaches,
-  CHECK_HOST_TRANSPORT,
-  MODEL_AT_CAPACITY,
-} from './records.ts';
+import { makeRecord, readMeasurement, readLogTail, reportedApproaches, CHECK_HOST_TRANSPORT } from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
 import { firstFailure } from './merge.ts';
@@ -44,6 +36,7 @@ import type { Attempt, Task } from './types.ts';
 import type { RunningWorker } from './launch.ts';
 import { capacityWaiters, checkWaitMs, launch, workerPrompt } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch.ts';
+import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree } from './worktree-lifetime.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
@@ -59,36 +52,8 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
   return [...files];
 }
 
-function loggedCommands(logPath: string): string[] {
-  try {
-    return readLogTail(logPath)
-      .split(/\r?\n/)
-      .flatMap((line) => {
-        try {
-          const event = JSON.parse(line) as Record<string, any>;
-          const payload = event.payload ?? event;
-          const item = event.item ?? payload;
-          if (item.type === 'command_execution' && typeof item.command === 'string') return [item.command];
-          if (event.type === 'assistant')
-            return (event.message?.content ?? [])
-              .filter(
-                (part: Record<string, any>) => part.type === 'tool_use' && typeof part.input?.command === 'string',
-              )
-              .map((part: Record<string, any>) => part.input.command as string);
-          if (payload.type === 'function_call') {
-            const input = payload.arguments ?? payload.input;
-            const args = typeof input === 'string' ? JSON.parse(input) : input;
-            const command = args?.cmd ?? args?.command;
-            return typeof command === 'string' ? [command] : [];
-          }
-        } catch {
-          return [];
-        }
-        return [];
-      });
-  } catch {
-    return [];
-  }
+function loggedCommands(attempt: Attempt): string[] {
+  return agentCommands(readLogTail(attempt.logPath), agentAdapter(attempt.profile.cli));
 }
 
 function checkStarted(task: Task, attempt: Attempt): boolean {
@@ -122,7 +87,7 @@ function checkStarted(task: Task, attempt: Attempt): boolean {
 }
 
 function reranFailingCommand(task: Task, attempt: Attempt, previous: Attempt): boolean {
-  const commands = loggedCommands(attempt.logPath).join('\n');
+  const commands = loggedCommands(attempt).join('\n');
   const expected = previous.failureCommand?.join(' ') || task.brief.acceptance.command.join(' ');
   return Boolean(expected && commands.includes(expected));
 }
@@ -405,6 +370,8 @@ export class WorkerJob implements GateOutcomeSink {
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
     const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
     if (!pool) throw new Error(`Waiting attempt refers to missing pool ${attempt.pool}`);
+    const adapter = agentAdapter(attempt.profile.cli);
+    const canResume = adapter.canResume && !!attempt.session;
     const releaseCapacity = await awaitHostCapacity(
       this.tasks.store,
       this.tasks.settings.stateDirectory,
@@ -413,8 +380,11 @@ export class WorkerJob implements GateOutcomeSink {
       attempt.attempt,
     );
     const prompt = [
+      ...(!canResume
+        ? [workerPrompt(task, attempt.evidencePath, undefined, [], this.tasks.settings.mainCheckout)]
+        : []),
       `The checks you started have finished or could not be found. ${message}`,
-      'Continue the same task and session. Do not wait or poll for these checks again. Finish with the required exit object.',
+      'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
     let worker: RunningWorker;
     try {
@@ -425,11 +395,12 @@ export class WorkerJob implements GateOutcomeSink {
         pool,
         prompt,
         this.tasks.settings.codex,
-        attempt.session ?? undefined,
+        canResume ? attempt.session! : undefined,
       );
     } finally {
       releaseCapacity();
     }
+
     await this.follow(worker);
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
@@ -540,7 +511,7 @@ export class WorkerJob implements GateOutcomeSink {
           store.assertCurrent(ref);
           const attempt = store.attempt(ref);
           // Only CLIs that stream their log can be judged by it; Cursor's agent writes its log once, at the end.
-          if (!['codex', 'claude'].includes(attempt.profile.cli)) return;
+          if (!agentAdapter(attempt.profile.cli).streamsLog) return;
           if (attempt.state !== 'running' || (statSync(ref.logPath, { throwIfNoEntry: false })?.size ?? 0) > 0) return;
           console.error(`Worker ${ref.taskId} attempt ${ref.attempt} wrote nothing; stopping it so it is retried.`);
           void terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs).catch(() => {});
@@ -1080,7 +1051,9 @@ export class WorkerJob implements GateOutcomeSink {
           configDirectory: this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.configDirectory,
         });
         usageLimitRefusal =
-          measurement.usageLimitRefusal || isUsageLimitRefusal(`${attempt.result}\n${attempt.blocker ?? ''}`);
+          measurement.usageLimitRefusal ||
+          agentAdapter(attempt.profile.cli).signals?.(`${attempt.result}\n${attempt.blocker ?? ''}`).usageLimit ===
+            true;
         if (usageLimitRefusal && !existingRefusal) {
           const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
           const now = Date.now();
@@ -1163,7 +1136,9 @@ export class WorkerJob implements GateOutcomeSink {
       } else {
         // A provider capacity refusal is not the task's failure: continue after a pause, however often it repeats.
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
-        capacity = kind === 'tool' && (MODEL_AT_CAPACITY.test(detail) || CHECK_HOST_TRANSPORT.test(detail));
+        capacity =
+          kind === 'tool' &&
+          (agentAdapter(attempt.profile.cli).signals?.(detail).capacity || CHECK_HOST_TRANSPORT.test(detail));
         if (
           kind === 'tool' &&
           previous?.failureKind === 'tool' &&

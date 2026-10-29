@@ -1,3 +1,4 @@
+import { agentAdapter, isAgentCli, pinnedModelProfile } from './agents.ts';
 import { readFileSync } from 'node:fs';
 import type { Brief, Profile, TaskClass } from './types.ts';
 
@@ -13,7 +14,7 @@ export function readRouting(file: string): RoutingTable {
   const table = JSON.parse(readFileSync(file, 'utf8')) as RoutingTable;
   if (!table.version || !Array.isArray(table.experiments)) throw new Error('invalid routing table');
   const profile = (p: Profile) => {
-    if (!p || !['codex', 'grok', 'cursor', 'claude'].includes(p.cli) || !p.model || !p.poolClass
+    if (!p || !isAgentCli(p.cli) || !p.model || !p.poolClass
       || !['low', 'medium', 'high', 'xhigh', 'max'].includes(p.effort)) throw new Error('invalid routing profile');
     if (p.serviceTier !== undefined && p.serviceTier !== 'default') throw new Error('routing profiles cannot choose a service tier other than default; the tier is a setting');
   };
@@ -25,7 +26,7 @@ export function readRouting(file: string): RoutingTable {
     (route.fallbacks ?? []).forEach(profile);
   }
   profile(table.consultation);
-  if (table.consultation.cli !== 'codex' || !table.consultation.model.includes('sol') || table.consultation.effort !== 'medium') throw new Error('consultation must use Codex Sol medium');
+  if (agentAdapter(table.consultation.cli).supportsConsultation?.(table.consultation) === false) throw new Error('consultation must use Codex Sol medium');
   const open = new Set<TaskClass>();
   for (const experiment of table.experiments) {
     if (!experiment.profiles.length) throw new Error('empty experiment');
@@ -59,12 +60,7 @@ export function routeTask(brief: Brief, sequence: number, table: RoutingTable): 
   if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error('invalid task sequence');
   // A brief may pin its Codex model and effort, for example a deep research question on Sol max beside a Terra copy.
   if (brief.model !== undefined) {
-    if (!/^gpt-[a-z0-9.-]+$/.test(brief.model)) throw new Error(`brief model must be a Codex model: ${brief.model}`);
-    const effort = (brief.effort ?? 'high') as Profile['effort'];
-    if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) throw new Error(`invalid brief effort: ${effort}`);
-    const route = table.classes[taskClass].first;
-    const profile: Profile = { cli: 'codex', model: brief.model, effort, poolClass: route.cli === 'codex' ? route.poolClass : 'codex',
-      ...(route.serviceTier ? { serviceTier: route.serviceTier } : {}) };
+    const profile = pinnedModelProfile(brief.model, brief.effort, table.classes[taskClass].first);
     return { taskClass, profile, tableVersion: table.version, experiment: null };
   }
   const experiment = table.experiments.find(e => e.open && e.class === taskClass);
