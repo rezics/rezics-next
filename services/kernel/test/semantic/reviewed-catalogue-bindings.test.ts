@@ -48,7 +48,7 @@ async function candidates(subject: CreatedSubject, property: string): Promise<Na
       `/v1/subjects/${subject.id}/candidates?property=${encodeURIComponent(property)}`,
     ),
     200,
-  ).candidates;
+  ).candidates as NativeCandidateObservation[];
 }
 function values(item: Item, property: string) {
   return (item.statements[property] ?? []).map((s) => (s.value.type === 'value' ? s.value.content : s.value.type));
