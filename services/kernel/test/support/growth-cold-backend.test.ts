@@ -52,20 +52,12 @@ test('an operation that creates a new backend every run fails after four cold di
       bounds,
       warmup: async (growthDb) => {
         const pool = growthDb.openPool({ max: 1 });
-        try {
-          await pool.query('SELECT 4 AS warm');
-        } finally {
-          await pool.end();
-        }
+        await pool.query('SELECT 4 AS warm');
       },
       grow: async () => {},
       operation: async (growthDb) => {
         const pool = growthDb.openPool({ max: 1 });
-        try {
-          await pool.query('SELECT 5 AS cold');
-        } finally {
-          await pool.end();
-        }
+        await pool.query('SELECT 5 AS cold');
       },
     }),
   ).rejects.toMatchObject({
