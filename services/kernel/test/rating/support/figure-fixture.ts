@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { decodeJwt } from 'jose';
 import type { Account, Command } from '../../../../../specs/community-driver.ts';
 import { GLOBAL_CONTEXT } from '../../../src/access/gates/catalogue.ts';
 import type { PublicFigureView } from '../../../src/rating/public-figure-http.ts';
@@ -49,7 +50,18 @@ export async function createFigureFixture(
     };
     const database = (cleanupDatabase = await openGrowthDatabase(system.database.pool.options.connectionString));
     let closed = false;
+    const voterIds = new Set<string>();
+    const scopes = [...system.actions.keys()].filter((action) => action !== 'media:complete');
+    const freshen = async (account: Account | null) => {
+      if (account && voterIds.has(account.id) && (decodeJwt(account.bearer).exp ?? 0) * 1000 <= Date.now() + 30_000) {
+        // Large native publication fixtures outlive access tokens. Sign in again through real Auth.
+        account.bearer = (
+          await system.auth.issue({ accountId: account.id, clientId: system.auth.ordinaryClient.id, scopes })
+        ).bearer;
+      }
+    };
     const checked = async (command: Command) => {
+      await freshen(command.actor);
       const response = await driver.request({
         ...command,
         ...(['GET', 'HEAD'].includes(command.method) ? {} : { key: JSON.stringify(randomUUID()) }),
@@ -58,7 +70,10 @@ export async function createFigureFixture(
         throw new Error(`${command.method} ${command.path}: ${response.status} ${await response.text()}`);
       return response;
     };
-    const request = (path: string, actor: Account | null = null) => driver.request({ method: 'GET', path, actor });
+    const request = async (path: string, actor: Account | null = null) => {
+      await freshen(actor);
+      return driver.request({ method: 'GET', path, actor });
+    };
     const voters: Account[] = [];
     // Accounts and their credentials are permitted setup. Each password is the native fixture's password;
     // sign-in, consent, token issuance and verification still run in the real Auth service.
@@ -81,8 +96,9 @@ export async function createFigureFixture(
       const credential = await system.auth.issue({
         accountId: id,
         clientId: system.auth.ordinaryClient.id,
-        scopes: [...system.actions.keys()].filter((action) => action !== 'media:complete'),
+        scopes,
       });
+      voterIds.add(id);
       voters.push({ id, bearer: credential.bearer });
     }
     const globalVoters = voters.slice(5);
