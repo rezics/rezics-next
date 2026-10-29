@@ -154,8 +154,8 @@ export class WorkerStore implements AttemptFence {
     return (this.db.query("SELECT json_extract(body, '$.state') AS state FROM worker_tasks WHERE id=?").get(id) as { state?: string } | null)?.state;
   }
   dependency(id: string): { state: string; target?: string; commit?: string } | undefined {
-    return this.db.query("SELECT json_extract(body, '$.state') AS state, json_extract(body, '$.brief.target') AS target, coalesce(json_extract(body, '$.integratedCommit'), json_extract(body, '$.mergedCommit')) AS commit FROM worker_tasks WHERE id=?")
-      .get(id) as { state: string; target?: string; commit?: string } | undefined;
+    return this.db.query("SELECT json_extract(body, '$.state') AS state, json_extract(body, '$.brief.target') AS target, coalesce(json_extract(body, '$.integratedCommit'), json_extract(body, '$.mergedCommit')) AS task_commit FROM worker_tasks WHERE id=?")
+      .get(id) as { state: string; target?: string; task_commit?: string } | undefined;
   }
   attempt(ref: AttemptRef): Attempt {
     this.refreshSnapshot();

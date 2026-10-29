@@ -204,7 +204,10 @@ export class WorkerTasks {
       const loaded = byId?.get(id);
       const dependency = loaded
         ? { state: loaded.state, target: loaded.brief.target, commit: loaded.integratedCommit ?? loaded.mergedCommit }
-        : this.store.dependency(id);
+        : (() => {
+            const value = this.store.dependency(id);
+            return value && { state: value.state, target: value.target, commit: value.task_commit };
+          })();
       if (!dependency || !['integrated', 'merged'].includes(dependency.state)) return false;
       if (dependency.target === task.brief.target) return true;
       const commit = dependency.commit;
