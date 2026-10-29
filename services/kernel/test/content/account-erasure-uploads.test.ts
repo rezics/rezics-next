@@ -67,12 +67,13 @@ async function grant(persona: Persona, id: string, actions: string[]) {
   });
 }
 async function website(persona: Persona): Promise<Persona> {
-  const scopes = [...productionActions().keys()];
+  const actions = [...productionActions().keys()];
+  const scopes = ['openid', 'offline_access', ...actions];
   const signed = await auth.request('/signin', {
     account_id: persona.accountId,
     password,
     client_id: 'uploads-login',
-    scope: scopes.filter((a) => a !== 'media:complete'),
+    scope: actions.filter((a) => a !== 'media:complete'),
   });
   expect(signed.status).toBe(200);
   const verifier = randomBytes(48).toString('base64url');
@@ -296,7 +297,7 @@ beforeAll(async () => {
     } as PublicJwks,
     redirectUris: [`${issuer}/uploads/callback`],
     postLogoutRedirectUris: [`${issuer}/`],
-    scopes,
+    scopes: ['openid', 'offline_access', ...scopes],
   });
   png = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#123456' } })
     .png()
