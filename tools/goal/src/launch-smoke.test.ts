@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { runLaunchSmoke } from '../scripts/launch-smoke.ts';
+import { main, runLaunchSmoke } from '../scripts/launch-smoke.ts';
 import { launchSmokeRequired } from './merge-train.ts';
 
 test('smoke drives start, waiting, wake result and success with a fake agent', async () => {
@@ -76,6 +76,27 @@ test('smoke reports which fake-agent step fails', async () => {
           report: (line) => lines.push(line),
         }),
       ).rejects.toThrow(`${step}:`);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]!.startsWith(`${step}: failed:`)).toBe(true);
+    }
+  } finally {
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test('script exits nonzero and names each failed fake-agent step', async () => {
+  const fixture = structuredFakeAgent();
+  try {
+    for (const step of ['start', 'wake', 'success']) {
+      const lines: string[] = [];
+      const exitCode = await main(() =>
+        runLaunchSmoke(fixture.agent, {
+          root,
+          env: { REZICS_SMOKE_FAIL_STEP: step },
+          report: (line) => lines.push(line),
+        }),
+      );
+      expect(exitCode).toBe(1);
       expect(lines).toHaveLength(1);
       expect(lines[0]!.startsWith(`${step}: failed:`)).toBe(true);
     }

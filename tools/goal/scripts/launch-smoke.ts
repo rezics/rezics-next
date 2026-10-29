@@ -555,17 +555,18 @@ Do not pass \`--wait\`, poll, or start another check. Return exactly the require
   }
 }
 
-async function main(): Promise<void> {
+export async function main(runSmoke: () => Promise<void> = runLaunchSmoke): Promise<number> {
   try {
     if (process.argv.includes('--inner')) await runInnerSmoke(reportLine);
-    else await runLaunchSmoke();
+    else await runSmoke();
+    return 0;
   } catch (error) {
     const detail = message(error);
-    if (/^(?:candidate|setup|start|wake|success): failed:/.test(detail)) return;
+    if (/^(?:candidate|setup|start|wake|success): failed:/.test(detail)) return 1;
     if (process.argv.includes('--inner')) reportLine(`setup: failed: ${detail}`);
     else process.stderr.write(`launch-smoke: ${detail}\n`);
-    process.exitCode = 1;
+    return 1;
   }
 }
 
-if (import.meta.main) await main();
+if (import.meta.main) process.exitCode = await main();
