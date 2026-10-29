@@ -16,9 +16,13 @@ mock.module('../../src/events/effects.ts', () => ({
     return productionRelay(pool, {
       async enqueue(envelopes) {
         for (const envelope of envelopes) {
-          if (envelope.events.some((event) =>
-            event.type === 'com.rezics.access.account-tombstoned.v1' &&
-            event.subject === process.env.IMPORTS_ERASURE_ACCOUNT)) {
+          if (
+            envelope.events.some(
+              (event) =>
+                event.type === 'com.rezics.access.account-tombstoned.v1' &&
+                event.subject === process.env.IMPORTS_ERASURE_ACCOUNT,
+            )
+          ) {
             if (observed && observed.position !== envelope.position)
               throw new Error('More than one native tombstone envelope');
             observed = envelope;
@@ -38,9 +42,11 @@ process.on('message', async (message: unknown) => {
     if (message !== 'observe' && message !== 'redeliver') throw new Error('Unknown fixture request');
     if (++requests !== (message === 'observe' ? 1 : 2) || !observed)
       throw new Error('Expected one observation followed by one native redelivery');
-    const eventSeq = observed.events.findIndex((event) =>
-      event.type === 'com.rezics.access.account-tombstoned.v1' &&
-      event.subject === process.env.IMPORTS_ERASURE_ACCOUNT);
+    const eventSeq = observed.events.findIndex(
+      (event) =>
+        event.type === 'com.rezics.access.account-tombstoned.v1' &&
+        event.subject === process.env.IMPORTS_ERASURE_ACCOUNT,
+    );
     const workflowId = effects.effectWorkflowId(observed, eventSeq, 'imports_erasure');
     if (message === 'redeliver') await enqueue([observed]);
     const handle = DBOS.retrieveWorkflow(workflowId);

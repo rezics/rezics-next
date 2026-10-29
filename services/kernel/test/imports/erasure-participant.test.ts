@@ -165,13 +165,18 @@ test('registered imports erasure effect preserves the exact native acknowledgeme
   expect(delivered?.participants.imports?.outcome).toBe('none');
   observeOwners(delivered);
   expect(first.envelope.partition).toBe(partition);
-  expect(first.workflowId).toBe(`fx:${first.envelope.epoch}:${partition}:${first.envelope.position}:${first.eventSeq}:imports_erasure`);
+  expect(first.workflowId).toBe(
+    `fx:${first.envelope.epoch}:${partition}:${first.envelope.position}:${first.eventSeq}:imports_erasure`,
+  );
   const committed = eventRows.rows[0]!;
   expect(first.envelope.epoch).toBe(committed.epoch);
   expect(first.envelope.position).toBe(committed.position);
   expect(first.eventSeq).toBe(committed.event_seq);
   expect(first.envelope.events[first.eventSeq]).toMatchObject({
-    id: committed.id, type: committed.type, subject: committed.subject, data: committed.data,
+    id: committed.id,
+    type: committed.type,
+    subject: committed.subject,
+    data: committed.data,
   });
 
   const acknowledgement = await pool.query<{
@@ -185,7 +190,10 @@ test('registered imports erasure effect preserves the exact native acknowledgeme
   );
   expect(acknowledgement.rows).toHaveLength(1);
   expect(acknowledgement.rows[0]?.acknowledgement).toMatchObject({
-    outcome: 'none', retained: [], participant: 'imports', account_id: person.accountId,
+    outcome: 'none',
+    retained: [],
+    participant: 'imports',
+    account_id: person.accountId,
   });
   const immutableRow = acknowledgement.rows[0];
   const redelivered = await workerRequest('redeliver');

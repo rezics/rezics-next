@@ -113,8 +113,10 @@ The current authorized public submission commands are:
 - `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/erasure-participant.test.ts`
 - `bun scripts/worker-check.ts -- bun run --cwd services/kernel typecheck`
 
-The meaningful acceptance amendments are committed before submission. Native acceptance and typecheck evidence
-remain pending their terminal results; no cleanup, integration or promotion is inferred from this artifact.
+The meaningful acceptance amendments are committed before submission. Kernel typecheck completed successfully. The focused acceptance stopped at the formatter before native
+execution: `Format issues found in above 1 files. Run without `--check` to fix.` The acceptance and child
+were formatted without changing assertions or runtime behavior, and that repair is committed before the
+focused check is resubmitted. Native acceptance remains unproven until its terminal result; no cleanup, integration or promotion is inferred from this artifact.
 Only declared files change, with no production API, frozen assertion or unrelated default edits. No reference
 project is named for this surface or needed. The full committed diff is the reviewable patch. The predecessor's
 live worker is neither restarted nor edited.
@@ -131,8 +133,8 @@ and isolated child differ from original admission.
 | `services/kernel/src/work/client.ts` | `62acfad2c4c811f55b34e49aa76b72e6e0a5c4d7fd2b9129392b8c876b55d04d` | `62acfad2c4c811f55b34e49aa76b72e6e0a5c4d7fd2b9129392b8c876b55d04d` |
 | `services/kernel/src/work/modules.ts` | `97f1507626e687162128144141cb5c85e9c99ac0f64899da9100bcb899d2accb` | `97f1507626e687162128144141cb5c85e9c99ac0f64899da9100bcb899d2accb` |
 | `services/kernel/src/imports/erasure.ts` | `48de6c92146a0068f226fa6ab49e62730794c7527193b15df0a7ae832d569ad6` | `48de6c92146a0068f226fa6ab49e62730794c7527193b15df0a7ae832d569ad6` |
-| `services/kernel/test/imports/erasure-participant.test.ts` | `1c020cbd57c6032406a5a88f5818a995b388a79a2461d445b2a34e571242f32e` | `a01a7d3d9b52cee91346542b98f3a110fa27e5e123505f523af2679ff290f119` |
-| `services/kernel/test/imports/erasure-participant-worker.ts` | `69c5136fb701fb7a6592109c950e063afe60daa83a29ae899d325c28dbc190f0` | `33596b42bc46b593ea9b5d2ecd3bee732a725d204861234ed9329f6c74d6e9b0` |
+| `services/kernel/test/imports/erasure-participant.test.ts` | `1c020cbd57c6032406a5a88f5818a995b388a79a2461d445b2a34e571242f32e` | `5b710f57e26200f94e12436556a06a02c7b6418a28c55a54ef4302fa3102c240` |
+| `services/kernel/test/imports/erasure-participant-worker.ts` | `69c5136fb701fb7a6592109c950e063afe60daa83a29ae899d325c28dbc190f0` | `bd47ab904dd0d6543eb749355e5466ab8f5fcdf32807ec823849752fd7d2c076` |
 | `services/kernel/test/support/account-deletion.ts` | `130834b8dfb8a1a55b0dafae4cde8e1b1b732155451c27c80ddac0e4db6c3dad` | `130834b8dfb8a1a55b0dafae4cde8e1b1b732155451c27c80ddac0e4db6c3dad` |
 | `services/kernel/test/access/native-account-bindings-fixture.ts` | `43d4649bb7509cc8a415f6b862348e7e329893a3eb0317abfd46a2d512490c76` | `43d4649bb7509cc8a415f6b862348e7e329893a3eb0317abfd46a2d512490c76` |
 | `specs/erasure-operation-driver.ts` | `c1e9cb6d68919ae1eb9e2be062ad09c2c8f8b6769530ba5831dafd5941671f24` | `c1e9cb6d68919ae1eb9e2be062ad09c2c8f8b6769530ba5831dafd5941671f24` |
