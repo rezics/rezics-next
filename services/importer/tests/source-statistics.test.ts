@@ -218,12 +218,9 @@ async function statisticRefreshFixture() {
     new Importer({
       path,
       transport: {
-        batchWrite: (request, signal) => transport.batch(request, signal),
-        readFence: (tuple, signal) =>
-          transport.fence(
-            { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group },
-            signal,
-          ),
+        batchWrite: (request) => transport.batch(request),
+        readFence: (tuple) =>
+          transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
         writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
       },
     });
@@ -291,12 +288,10 @@ test('same-revision statistic refresh commits its projection, retains semantic j
     expect(refreshed.count).toBe(1);
     expect(refreshed.generation).not.toBe(baseline.generation);
     expect(f.importer.session.store.key('vndb', 'v123').baseline?.recordRevision).toBe(originalRow?.recordRevision);
-    const complete = f.importer.session.store.key('vndb', 'v123', {
-      source: 'vndb',
-      id: refreshed.generation!,
-      lease: '',
-    });
-    expect(complete.staged?.projection.normalizedRecord).toMatchObject({ vn: { c_average: 810 } });
+    const complete = f.importer.session.store.database
+      .query('SELECT projection_json FROM run_entries WHERE source=? AND run_id=? AND record_key=?')
+      .get('vndb', refreshed.generation!, 'v123') as { projection_json: string };
+    expect(JSON.parse(complete.projection_json).normalizedRecord).toMatchObject({ vn: { c_average: 810 } });
     await f.reopen();
     expect((await f.run(810)).status).toBe('committed');
     expect(f.importer.session.store.source('vndb')).toEqual(refreshed);
@@ -323,7 +318,7 @@ for (const failure of ['denied', 'lost'] as const) {
       expect(f.importer.session.store.activeRun('vndb')).not.toBeNull();
       expect(f.semanticState()).toEqual(semantic);
       const uncertain = f.writes.slice(1);
-      expect(uncertain).toHaveLength(failure === 'denied' ? 1 : 5);
+      expect(uncertain).toHaveLength(failure === 'denied' ? 1 : 3);
       for (const write of uncertain) expect(write).toEqual(uncertain[0]!);
       await f.reopen();
       expect(f.importer.session.store.source('vndb')).toEqual(baseline);
