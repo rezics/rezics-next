@@ -52,6 +52,18 @@ async function bootstrapHome(partition: number) {
     expect(progress.work.statements).toBeGreaterThan(0);
     expect(progress.work.bytes).toBeGreaterThan(0);
     expect(progress.native.transactionId).toBeString();
+    if (page < 2 || progress.state === 'caught-up') {
+      console.info(
+        'native identity bootstrap observation',
+        JSON.stringify({
+          partition,
+          generation: progress.generation.toString(),
+          state: progress.state,
+          work: progress.work,
+          native: { ...progress.native, position: progress.native.position.toString() },
+        }),
+      );
+    }
     if (progress.state === 'caught-up') return;
   }
   throw new Error('Bounded bootstrap did not finish the finite fixture');
@@ -187,7 +199,7 @@ test('same native creation transaction initializes exact self and rolls back wit
     runCommand(f.pool, options, async (tx, { transactionId }) => {
       const result = await writeSubject(tx, transactionId, {
         target: { route: routeOf(original)!, id: original },
-        item: { type: 'schema:Person' },
+        item: { type: 'schema:Person', labels: { en: 'Exact self creation' } },
         release,
       });
       await store.initializeSubject(tx, original);
