@@ -122,6 +122,16 @@ CREATE FUNCTION community.guard_realm_revision() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF current_setting('community.erasure_account', true) = OLD.author::text
+       AND NEW.title = '' AND NEW.summary = ''
+       AND (to_jsonb(NEW) - 'title' - 'summary') = (to_jsonb(OLD) - 'title' - 'summary')
+       AND EXISTS (SELECT 1 FROM community.realm
+                   WHERE route = OLD.route AND realm_id = OLD.realm_id
+                     AND head_revision_id <> OLD.revision_id) THEN
+      RETURN NEW;
+    END IF;
+  END IF;
   RAISE EXCEPTION 'Realm revisions are append-only' USING ERRCODE = '23514';
 END;
 $$;
@@ -152,6 +162,16 @@ CREATE FUNCTION community.guard_space_revision() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF current_setting('community.erasure_account', true) = OLD.author::text
+       AND NEW.title = '' AND NEW.summary = ''
+       AND (to_jsonb(NEW) - 'title' - 'summary') = (to_jsonb(OLD) - 'title' - 'summary')
+       AND EXISTS (SELECT 1 FROM community.space
+                   WHERE route = OLD.route AND space_id = OLD.space_id
+                     AND head_revision_id <> OLD.revision_id) THEN
+      RETURN NEW;
+    END IF;
+  END IF;
   RAISE EXCEPTION 'Space revisions are append-only' USING ERRCODE = '23514';
 END;
 $$;
@@ -457,9 +477,30 @@ CREATE TABLE community.realm_revision (
     CONSTRAINT realm_revision_check3 CHECK ((route = ((get_byte(uuid_send(predecessor), 10) * 256) + get_byte(uuid_send(predecessor), 11)))),
     CONSTRAINT realm_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT realm_revision_summary_check CHECK ((char_length(summary) <= 4096)),
-    CONSTRAINT realm_revision_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 1024))),
+    CONSTRAINT realm_revision_title_check CHECK (((char_length(title) >= 0) AND (char_length(title) <= 1024))),
     CONSTRAINT realm_revision_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'protected'::text]))),
     CONSTRAINT realm_revision_votes_check CHECK (community.realm_votes_allowed(votes))
+)
+WITH (fillfactor='50');
+
+
+--
+-- Name: revision_locator; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.revision_locator (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    kind text NOT NULL COLLATE pg_catalog."C",
+    owner_route integer NOT NULL,
+    owner_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    CONSTRAINT revision_locator_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT revision_locator_check1 CHECK ((owner_route = ((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)))),
+    CONSTRAINT revision_locator_check2 CHECK ((owner_route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT revision_locator_kind_check CHECK ((kind = ANY (ARRAY['realm'::text, 'space'::text]))),
+    CONSTRAINT revision_locator_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT revision_locator_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -522,8 +563,9 @@ CREATE TABLE community.space_revision (
     CONSTRAINT space_revision_check3 CHECK ((route = ((get_byte(uuid_send(predecessor), 10) * 256) + get_byte(uuid_send(predecessor), 11)))),
     CONSTRAINT space_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT space_revision_summary_check CHECK ((char_length(summary) <= 4096)),
-    CONSTRAINT space_revision_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 1024)))
-);
+    CONSTRAINT space_revision_title_check CHECK (((char_length(title) >= 0) AND (char_length(title) <= 1024)))
+)
+WITH (fillfactor='50');
 
 
 --
@@ -628,6 +670,14 @@ ALTER TABLE ONLY community.realm_revision
 
 ALTER TABLE ONLY community.realm
     ADD CONSTRAINT realm_route_space_id_key UNIQUE (route, space_id);
+
+
+--
+-- Name: revision_locator revision_locator_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.revision_locator
+    ADD CONSTRAINT revision_locator_pkey PRIMARY KEY (route, account_id, kind, owner_route, owner_id, revision_id);
 
 
 --

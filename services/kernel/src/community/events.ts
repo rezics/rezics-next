@@ -12,6 +12,7 @@ const spaceRevision = Type.Object({ spaceId: id, revisionId: id }, { additionalP
 const realmRevision = Type.Object({ realmId: id, revisionId: id }, { additionalProperties: false });
 const addressOnly = Type.Object({ spaceId: id, address }, { additionalProperties: false });
 const addressRevision = Type.Object({ spaceId: id, revisionId: id, address }, { additionalProperties: false });
+const revisionWork = Type.Object({ accountId: id, found: Type.Integer({ minimum: 0, maximum: 50 }) }, { additionalProperties: false });
 
 function publication(verdict: 'adopt' | 'withdraw' | 'reject') {
   return Type.Object(
@@ -32,6 +33,9 @@ function publication(verdict: 'adopt' | 'withdraw' | 'reject') {
 export const COMMUNITY_EVENTS = {
   'com.rezics.community.party-locator.projected.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
   'com.rezics.community.account-records.erased.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
+  'com.rezics.community.revision-locator.indexed.v1': revisionWork,
+  'com.rezics.community.revision-locators.removed.v1': revisionWork,
+  'com.rezics.community.revisions.erased.v1': revisionWork,
   'com.rezics.community.space.created.v1': spaceRevision,
   'com.rezics.community.space.updated.v1': spaceRevision,
   'com.rezics.community.space.address-claim-pending.v1': addressOnly,
