@@ -40,7 +40,7 @@ export const ManyCopies: Story = {
     if (!image?.getAttribute('src')?.includes(`/media/${coverMedia}/`)) {
       throw new Error('The recorded Kokoro copy cover did not render from its /media/ fixture.');
     }
-    await userEvent.hover(canvas.getByText('The Little Prince'));
+    await userEvent.hover(kokoro);
   },
 };
 export const AddFormOpen: Story = {
