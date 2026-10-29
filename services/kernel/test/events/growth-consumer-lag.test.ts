@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, test } from 'bun:test';
 import { readConsumerLag } from '../../src/events/consumer-lag.ts';
 import upsertConsumerLag from '../../src/events/upsert-consumer-lag.sql';
-import {
-  checkGrowth,
-  openGrowthDatabase,
-  settle,
-  type GrowthDatabase,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, settle, type GrowthDatabase } from '../support/growth.ts';
 
 const scales = [64, 512, 4096] as const;
 let db: GrowthDatabase;
