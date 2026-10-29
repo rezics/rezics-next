@@ -85,8 +85,15 @@ function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
     let output = '';
+    const spawnedAt = Date.now();
+    let readyAt = 0;
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-8000);
+      console.info('[measure search-seo output]', chunk.toString());
+      if (!readyAt && /ready in/.test(output)) {
+        readyAt = Date.now();
+        console.info('[measure search-seo] spawn to ready', readyAt - spawnedAt);
+      }
     };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
@@ -111,7 +118,10 @@ function site(): Promise<string> {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
         const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
+        if (response.status < 500) {
+          console.info('[measure search-seo] ready to first /en', Date.now() - readyAt);
+          return origin;
+        }
       } catch {}
       if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
       await Bun.sleep(500);
