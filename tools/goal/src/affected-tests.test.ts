@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadSettings } from './config.ts';
+import defaults from '../defaults.json';
 import { failingTestFiles } from './merge-train.ts';
 import { settle } from './settle.ts';
 import { integrationHarness } from './test-support.ts';
@@ -30,60 +31,25 @@ function failureCheck(h: Harness, file: string, output: string, shared = false) 
   return { runs, argv };
 }
 
-test('a finished attempt runs the configured affected-test commands in its own worktree before it requests landing, and records each result', async () => {
+test('workers defer configured affected checks until landing', async () => {
   const h = integrationHarness();
-  const started = join(h.settings.stateDirectory, 'started');
-  const release = join(h.settings.stateDirectory, 'release');
-  let running: Promise<void>[] = [];
   try {
     h.ensureDev();
-    writeFileSync(join(h.settings.stateDirectory, 'remote-check-hosts.json'), '{}');
-    const checks = [0, 1].map((index) => ({
-      paths: ['**'],
-      command: command(`
-      const fs = require('node:fs');
-      fs.appendFileSync(${JSON.stringify(started)}, JSON.stringify({index: ${index}, cwd: process.cwd(),
-        base: process.env.KERNEL_CHECK_AFFECTED, task: process.env.GOAL_TASK_ID,
-        attempt: process.env.GOAL_ATTEMPT, hosts: process.env.KERNEL_CHECK_REMOTE,
-        config: process.env.CODEX_HOME, cleanup: process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP}) + '\\n');
-      while (!fs.existsSync(${JSON.stringify(release)})) await Bun.sleep(10);
-      ${index === 0 ? "console.error('Kernel tests failed for 1 file(s):\\ntest/access.test.ts'); process.exit(1);" : "console.log('passed');"}
-    `),
-    }));
-    h.settings.affectedTests = [...checks, { paths: ['unrelated/**'], command: ['false'] }];
-    const tasks = [h.dispatch('first'), h.dispatch('second')];
-    running = tasks.map((task) => h.job.start(task.id));
-    await until(() => lines(started).length === 4);
-    expect(h.queue.next()).toBeUndefined();
-    for (const observation of lines(started).map((line) => JSON.parse(line))) {
-      const task = tasks.find((task) => task.id === observation.task)!;
-      expect(observation.cwd).toBe(task.worktree);
-      expect(observation.base).toBe(task.base);
-      expect(observation.attempt).toBe('1');
-      expect(observation.hosts).toBe(join(h.settings.stateDirectory, 'remote-check-hosts.json'));
-      expect(observation.config).toBe(h.settings.pools[0]!.configDirectory);
-      expect(observation.cleanup).toBe('1');
-    }
-    writeFileSync(release, 'go');
-    await Promise.all(running);
-    await h.job.drain();
-    for (const task of tasks) {
-      const attempt = h.store.attempt({ taskId: task.id, attempt: 1 });
-      expect(attempt.affectedTests).toHaveLength(2);
-      const failed = attempt.affectedTests!.find((result) => result.status === 'failed')!;
-      expect(failed.command).toEqual(checks[0]!.command);
-      expect(failed.failingFiles).toEqual(['test/access.test.ts']);
-      expect(failed.durationMs).toBeGreaterThan(0);
-      expect(attempt.affectedTests!.find((result) => result.status === 'passed')!.failingFiles).toEqual([]);
-      expect(h.store.events(task.id).filter((event) => event.kind === 'landing-requested')).toHaveLength(1);
-      await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, h.queue);
-    }
-    expect(h.queue.next()!.request.affectedTests).toHaveLength(2);
-    expect(lines(started)).toHaveLength(4);
+    const runs = join(h.settings.stateDirectory, 'affected-runs');
+    const { argv } = failureCheck(h, 'absent', 'unused');
+    h.settings.affectedTests = [
+      { paths: ['**'], command: command(`require('node:fs').appendFileSync(${JSON.stringify(runs)}, 'run\\n')`) },
+    ];
+    const task = h.dispatch('feature');
+    await h.start(task);
+    expect(lines(runs)).toHaveLength(0);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
+    expect(h.queue.next()!.request.affectedTests).toBeUndefined();
+    await h.train(undefined, false);
+    expect(lines(runs)).toHaveLength(1);
+    expect(h.outcomes[0]!.passed).toBe(true);
+    void argv;
   } finally {
-    writeFileSync(release, 'go');
-    await Promise.all(running);
-    await h.job.drain();
     h.dispose();
   }
 }, 60_000);
@@ -104,8 +70,9 @@ test('a landing whose affected tests fail where its base passes is refused with 
       const task = h.dispatch('broken');
       await h.start(task);
       const dev = h.head();
-      expect(lines(runs)).toHaveLength(1);
+      expect(lines(runs)).toHaveLength(0);
       await h.train(undefined, false);
+      expect(lines(runs)).toHaveLength(2);
       expect(h.outcomes[0]!.passed).toBe(shared);
       if (shared) {
         expect(h.head()).toBe(h.head(task.branch));
@@ -251,8 +218,8 @@ test('a check-host transport failure is retried once, then lands unverified with
     ];
     const task = h.dispatch('feature');
     await h.start(task);
-    expect(lines(runs)).toHaveLength(2);
-    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests![0]!.status).toBe('unverified');
+    expect(lines(runs)).toHaveLength(0);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(lines(runs)).toHaveLength(2);
     expect(h.outcomes[0]!.passed).toBe(true);
@@ -286,11 +253,7 @@ test('kernel database storage exhaustion is recorded unverified without failing 
       JSON.stringify({ file: 'package.json', content: packageJson }),
     );
     await h.start(task);
-    const result = h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests![0]!;
-    expect(result.status).toBe('unverified');
-    expect(result.failingFiles).toEqual([]);
-    expect(result.output).toContain(failureLine);
-    expect(result.output).toContain('exited with code 75');
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
     expect(lines(runs)).toHaveLength(1);
@@ -374,9 +337,7 @@ test('a successful transport retry records the verified result without stale fai
     ];
     const task = h.dispatch('feature');
     await h.start(task);
-    const result = h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests![0]!;
-    expect(result.status).toBe('passed');
-    expect(result.output).toBe('passed after retry\n');
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
   } finally {
@@ -392,9 +353,7 @@ test('an unplaceable affected selection is recorded unverified from its announce
     h.settings.affectedTests = [{ paths: ['**'], command: command(`console.log(${JSON.stringify(announcement)})`) }];
     const task = h.dispatch('feature');
     await h.start(task);
-    const result = h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests![0]!;
-    expect(result.status).toBe('unverified');
-    expect(result.output).toContain(announcement);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
   } finally {
@@ -406,12 +365,7 @@ test('affected-test settings use defaults, accept local overrides and reject mal
   const h = integrationHarness();
   try {
     const settings = () => loadSettings({ cwd: h.root, env: {} });
-    expect(settings().affectedTests).toEqual([
-      {
-        paths: ['services/kernel/**'],
-        command: ['env', 'KERNEL_CHECK_AFFECTED_MAX=60', 'bun', 'run', '--cwd', 'services/kernel', 'check'],
-      },
-    ]);
+    expect(settings().affectedTests).toEqual(defaults.affectedTests);
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
     local.affectedTests = [{ paths: ['**'], command: ['true'] }];
     writeFileSync(h.settings.localFile, JSON.stringify(local));
@@ -444,7 +398,7 @@ test('passed affected checks never add a train run, and the train still checks i
     settings.integrationChecks = [{ paths: ['**'], command: ['sh', '-c', 'test -f feature'] }];
     const task = h.dispatch('feature');
     await h.start(task);
-    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests![0]!.status).toBe('passed');
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
     expect(lines(runs)).toHaveLength(1);
@@ -506,11 +460,12 @@ test('settlement recovery reuses recorded checks after an interrupted landing re
       }),
     ).rejects.toThrow('Interrupted enqueue');
     expect(h.queue.next()).toBeUndefined();
-    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toHaveLength(1);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await settle(h.tasks, worker, h.queue);
-    expect(lines(runs)).toHaveLength(1);
-    expect(h.queue.next()!.request.affectedTests).toHaveLength(1);
+    expect(lines(runs)).toHaveLength(0);
+    expect(h.queue.next()!.request.affectedTests).toBeUndefined();
     await h.train(undefined, false);
+    expect(lines(runs)).toHaveLength(1);
     expect(h.outcomes[0]!.passed).toBe(true);
   } finally {
     h.dispose();

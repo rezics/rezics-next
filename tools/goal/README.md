@@ -29,11 +29,22 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
-Every landing also runs the sibling test for each changed source file that has one: `<name>.test.ts` beside the source,
-or `tests/<name>.test.ts` at the workspace root when no same-directory test exists. The command prefix is configured by
-`siblingTests.command` in `defaults.json` and receives the selected test paths. If a sibling test fails on the candidate,
-the train reruns the failing test files on the landing base; a failure already present there is recorded as pre-existing.
-Kernel changes continue to use the kernel affected-test command, which selects its own affected tests.
+Workers run only their acceptance command, once after their last relevant edit. When the branch has
+`scripts/worker-check.ts`, the command runs through that wrapper; otherwise it runs in the foreground from the worktree
+root. Workers do not run the root typecheck, affected checks or other regression checks. The task's acceptance command
+defines when its work is done.
+
+The dev landing train runs regression checks against the combined batch candidate. It runs the root typecheck once,
+each configured affected check whose path patterns match any changed path once, and matching sibling tests once. The
+sibling command prefix is configured by `siblingTests.command` in `defaults.json`; it receives the selected test paths.
+Affected checks come from local settings when configured, otherwise from `defaults.json`, whose tracked list keeps only
+the kernel entry. This lets workspace owners configure their checks locally without making train fixtures run costly
+workspace scripts. If a batch regression fails, no member lands; the train retries members one at a time with each
+member's own checks. A regression found during landing returns to the worker as a retry with the failing log. Promotion
+runs the full gate on the candidate before advancing `main`.
+
+Batching avoids repeating the same typecheck and affected checks for every worker in the batch. Historical check counts
+and costs are recorded in [the check cost report](../../docs/research/check-cost.md).
 
 Every landing command runs in its own process group, including acceptance, integration, affected, sibling and derived
 regeneration commands. The train kills the whole group when a command exits, times out, or the train stops, so a command
@@ -68,13 +79,9 @@ one per ten minutes. Requests retry transient socket absence during handoff, and
 small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
 of an attempt log, beginning at a complete line boundary; the recent commands and final failure events remain visible.
 
-Workers start checks with `worker-check --run`, keep working while check slots are queued, and end their turn with a
-`waiting` result containing the check ids when only checks remain. A waiting attempt keeps its worktree and session but
-does not count toward the worker cap. The manager host watches the durable check results in that worktree and resumes
-the same session when all checks finish, passing their exit statuses, failure summaries and log paths; a missing run or
-failed check host also wakes the session with that fact. Waiting time remains part of the long-attempt limit. This
-avoids the measured polling cost: in 342 attempts, 3,001 of 18,639 tool calls were waits, rereading about 230k tokens
-each, or roughly 690M input tokens; waiting workers also held slots while only two or three of 44 workers did work.
+Check slots remain shared across workers and the landing train. A queued check stays in the foreground until it
+finishes, so workers do not poll or return while a check is still running. Landing checks are grouped around the batch
+candidate to avoid duplicate regression runs while preserving acceptance as each task's definition of done.
 
 Each launch records the byte offset where its output starts in the appended attempt log. Exit-result parsing uses only
 the current run from that offset, so a resumed CLI that fails before writing a new exit object cannot reuse the
@@ -448,12 +455,17 @@ and `bunfig.toml`. Store builds use `--backend=copyfile`; the `.bun` tree is mad
 created 69,426 `node_modules` entries per private install (median 4.956 s) versus 27 per shared worktree (median
 0.016 s), after building one shared store.
 
-The `affectedTests` setting independently lists `{ paths: string[], command: string[] }` checks, overridable in
-local settings (use `[]` to disable them). After a successful worker report, settlement commits any remaining work
-and runs matching commands in that attempt's worktree before requesting landing. Commands and other attempts run
-in parallel, outside the serial train. The default checks `services/kernel/**` with
-`bun run --cwd services/kernel check`, using `KERNEL_CHECK_AFFECTED=<task base>` and the worker's environment,
-including configured remote check hosts. Kernel is currently the only workspace with an affected check mode.
+Workers run only their acceptance command after the last relevant edit. The dev landing batch runs the root typecheck,
+each configured affected check matching any changed path in the batch once, and the matching sibling tests. If a
+regression appears, the batch lands nothing and its members are retried individually with their own checks; the failing
+log returns with the retry. Infrastructure-classified batch failures retry the same batch once before individual
+fallback. Promotion continues to run the full gate. This moves repeated worker and batch regression runs into one
+batch-level check pass, while keeping acceptance as the worker's definition of done.
+
+The `affectedTests` setting lists `{ paths: string[], command: string[] }` checks and is overridable in local settings
+(use `[]` to disable them). Defaults cover only `services/kernel/**` with its affected test mode. The supermanager adds per-workspace `check`
+commands to local settings when this lands. Configured affected checks run once on the batch candidate with the root
+typecheck and sibling tests.
 
 Each command's status (`passed`, `failed`, or `unverified`), failing test files, duration in milliseconds and output
 are saved on the attempt and carried with its landing request. Completed results survive settlement recovery.

@@ -4,11 +4,7 @@ import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSu
 import { agentAdapter } from './agents.ts';
 import { evidenceBundle } from './evidence.ts';
 import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
-import { attemptEnvironment, workerEnvironment, type RunningWorker } from './launch.ts';
-import { matchesPath } from './briefs.ts';
-import { changedFiles } from './merge.ts';
-import { taskChangedPaths } from './workspace.ts';
-import { runAffectedTest } from './merge-train.ts';
+import { type RunningWorker } from './launch.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { WorkerTasks } from './tasks.ts';
@@ -201,45 +197,11 @@ export async function settle(
     });
     if (finished) {
       const task = store.task(ref.taskId);
-      const pool = tasks.settings.pools.find((p) => p.name === ref.pool)!;
-      const files = task.workspace ? taskChangedPaths(task) : changedFiles(task.worktree, task.base);
-      const checks = (task.workspace ? [] : (tasks.settings.affectedTests ?? [])).filter((check) =>
-        files.some((file) => matchesPath(file, check.paths)),
-      );
-      // The checks wait outside SQLite's write transaction, so other attempts can finish at the same time.
-      await Promise.all(
-        checks.map(async (check, index) => {
-          if (
-            store
-              .attempt(ref)
-              .affectedTests?.some((result) => JSON.stringify(result.command) === JSON.stringify(check.command))
-          )
-            return;
-          const result = await runAffectedTest(
-            check.command,
-            task.worktree,
-            `${store.attempt(ref).logPath}.affected-${index}.log`,
-            workerEnvironment(
-              pool,
-              {
-                ...attemptEnvironment(task, ref, tasks.settings.stateDirectory),
-                KERNEL_CHECK_SKIP_STALE_CLEANUP: '1',
-              },
-              process.env,
-              task.worktree,
-            ),
-          );
-          store.updateAttempt(ref, (attempt) => {
-            (attempt.affectedTests ??= []).push(result);
-          });
-        }),
-      );
       store.write(ref, () => {
         evidenceBundle(task, store.attempt(ref));
         store.updateTask(ref, (t) => {
           t.state = 'landing';
         });
-        const affectedTests = store.attempt(ref).affectedTests ?? [];
         store.landing(
           {
             taskId: task.id,
@@ -249,7 +211,6 @@ export async function settle(
             declaredPaths: task.brief.paths,
             protectedPaths: tasks.protectedPaths(task.brief),
             gate: task.brief.acceptance.command,
-            ...(affectedTests.length ? { affectedTests } : {}),
           },
           (request) => landing.enqueue(request),
         );
