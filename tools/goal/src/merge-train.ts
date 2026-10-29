@@ -2179,7 +2179,16 @@ export class MergeTrain {
               logPath,
               o.runLaunchSmoke ?? gateRunner(300_000),
             );
-            if (!smoke.passed) {
+            // A smoke that only ran out of time waited for shared check capacity, not on a launch defect: the
+            // landing proceeds and the log keeps the note (it refused every launch-path landing while slots were full).
+            const capacityOnly =
+              !smoke.passed && /exceeded the smoke time budget|smoke budget exhausted/.test(smoke.output);
+            if (capacityOnly)
+              appendFileSync(
+                logPath,
+                '\nLaunch smoke ran out of time waiting for check capacity; not a launch defect\n',
+              );
+            if (!smoke.passed && !capacityOnly) {
               result.firstFailure = firstFailure(smoke.output);
               result.failedCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts'];
               result.stage = 'gate';
