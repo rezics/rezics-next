@@ -258,12 +258,18 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     const total = await database.admin.query<{ count: string }>(
       'SELECT count(*)::text AS count FROM library.personal_label',
     );
+    const bytes = await database.admin.query<{ tableBytes: string; totalBytes: string }>(
+      `SELECT pg_relation_size('library.personal_label')::text AS "tableBytes",
+              pg_total_relation_size('library.personal_label')::text AS "totalBytes"`,
+    );
     counts[String(scale)] = {
       perOrdinal: 3,
       ordinals: scale,
       backgroundPerCategory: expectedPerCategory,
       backgroundTotal: expectedPerCategory * names.length,
       personalLabelRows: Number(total.rows[0]!.count),
+      tableBytes: Number(bytes.rows[0]!.tableBytes),
+      totalBytes: Number(bytes.rows[0]!.totalBytes),
     };
   }
 
@@ -461,7 +467,12 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       );
       const removed = Number(node['Rows Removed by Filter'] ?? 0) * Number(node['Actual Loops']);
       if (removed !== 0)
-        throw new Error(`${operation.name} examined unrelated personal labels: ${JSON.stringify(node)}`);
+        throw new Error(
+          `${operation.name} examined unrelated personal labels: ${JSON.stringify({
+            node,
+            profile: counts[String(scale)],
+          })}`,
+        );
     }
     if (operation.name !== 'create')
       expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
