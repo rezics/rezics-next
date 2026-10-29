@@ -28,9 +28,17 @@ export type Persona = 'anonymous' | 'editor' | 'acceptor' | 'steward' | 'suspend
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Release = { [key: string]: Json };
 export type Labels = Record<string, string>;
-export interface Value { type: 'value'; content: Json }
-export interface Part { property: { id: string }; value: Value }
-export interface Reference { parts: Part[] }
+export interface Value {
+  type: 'value';
+  content: Json;
+}
+export interface Part {
+  property: { id: string };
+  value: Value;
+}
+export interface Reference {
+  parts: Part[];
+}
 export interface StatementInput extends Part {
   rank?: 'normal' | 'preferred' | 'deprecated';
   qualifiers?: Part[];
@@ -74,12 +82,21 @@ export interface HttpResponse {
   headers: Headers;
   body: ResponseBody;
 }
-export interface Revision { revision: number; partition: number; transactionId: string }
+export interface Revision {
+  revision: number;
+  partition: number;
+  transactionId: string;
+}
 export interface SemanticDriver {
   readonly globalContext: string;
   /** Suite supplies structured-field Idempotency-Key headers for all writes. */
-  request(persona: Persona, method: 'GET' | 'POST' | 'PUT', path: string,
-    body?: unknown, headers?: Record<string, string>): Promise<HttpResponse>;
+  request(
+    persona: Persona,
+    method: 'GET' | 'POST' | 'PUT',
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<HttpResponse>;
   /**
    * Use @rezics/definitions, including its bundled core.yaml, book.yaml,
    * recipe.yaml and rezics.yaml in the source map. root is a schema filename;
@@ -88,11 +105,17 @@ export interface SemanticDriver {
    * so bundled terms keep their labels.
    * Never import product code from the suite or hand-build compiler output.
    */
-  compile(root: string, schemas: Record<string, string>, presentation: Record<string, {
-    types?: Record<string, string>;
-    properties?: Record<string, string>;
-  }>):
-    Promise<{ digest: string; release: Release }>;
+  compile(
+    root: string,
+    schemas: Record<string, string>,
+    presentation: Record<
+      string,
+      {
+        types?: Record<string, string>;
+        properties?: Record<string, string>;
+      }
+    >,
+  ): Promise<{ digest: string; release: Release }>;
   /** Fixture setup through accounts grant administration, never fake Access. */
   grant(persona: Persona, actions: string[], resourceId: string): Promise<void>;
   /** Pause/resume the actual production inbound-link projection runner. */
