@@ -75,7 +75,7 @@ test('failed growth reports normalized statement costs, plan nodes, and intermit
   expect(failure!.message).toContain('Statements growing most for rows:');
   expect(failure!.message).toContain('/* growth-tag */ SELECT id FROM');
   expect(failure!.message).toContain('growth_attribution_test.rows');
-  expect(failure!.message).toContain('Intermittent at scale 1: SELECT 1 AS occasional_value_1 ran in repetitions 1, 3');
+  expect(failure!.message).toContain('Intermittent at scale 1: SELECT ? AS occasional_value_1 ran in repetitions 1, 3');
 
   for (const scale of [1, 8, 64]) {
     const prepareIndices = eventsSeen.flatMap((event, index) => (event.startsWith(`prepare:${scale}:`) ? [index] : []));
