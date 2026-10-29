@@ -122,12 +122,36 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
     const pending = await withConnection(pool, (client) => readConsumerLag(client, consumer));
     expect(pending?.oldestPendingAt).toEqual(expected.rows[0]?.oldest);
     expect(pending?.observedAt).toBeInstanceOf(Date);
+
+    release();
+    await admin.query(
+      `UPDATE core.consumer_checkpoint AS checkpoint
+       SET epoch = CASE WHEN partition.position = 0 THEN NULL ELSE partition.epoch END,
+           position = partition.position
+       FROM core.partition AS partition
+       WHERE checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = $1`,
+      [consumer],
+    );
+    await until(
+      async () => (await withConnection(pool, (client) => readConsumerLag(client, consumer)))?.oldestPendingAt === null,
+      10_000,
+      errors,
+      'relay did not record that pending work was caught up',
+    );
+    await relay.stop();
+    expect(errors).toEqual([]);
+    const stopped = await withConnection(pool, (client) => readConsumerLag(client, consumer));
+    expect(stopped).not.toBeNull();
+    const maxLagMs = 5 * 60_000;
+    const expiresAt = stopped!.observedAt.getTime() + maxLagMs;
+    expect(consumerReady(stopped, { maxLagMs, now: new Date(expiresAt) })).toBe(true);
+    expect(consumerReady(stopped, { maxLagMs, now: new Date(expiresAt + 1) })).toBe(false);
   } finally {
     release();
     await relay.stop();
     errorSpy.mockRestore();
   }
-}, 40_000);
+}, 50_000);
 
 test('consumer readiness requires a row and fresh observation and pending time', () => {
   const now = new Date('2026-01-01T00:10:00.000Z');
@@ -147,4 +171,24 @@ test('consumer readiness requires a row and fresh observation and pending time',
 test('readConsumerLag returns null for an unseen consumer', async () => {
   const consumer = freshConsumer();
   expect(await withConnection(pool, (client) => readConsumerLag(client, consumer))).toBeNull();
+});
+
+test('readConsumerLag returns the selected consumer row from a point read', async () => {
+  const consumer = freshConsumer();
+  const other = freshConsumer();
+  const oldestPendingAt = new Date('2026-01-01T00:00:00.000Z');
+  const observedAt = new Date('2026-01-01T00:01:00.000Z');
+  await admin.query(
+    `INSERT INTO core.consumer_lag (consumer, oldest_pending_at, observed_at)
+     VALUES ($1, $3, $4), ($2, NULL, $4)`,
+    [consumer, other, oldestPendingAt, observedAt],
+  );
+  expect(await withConnection(pool, (client) => readConsumerLag(client, consumer))).toEqual({
+    oldestPendingAt,
+    observedAt,
+  });
+  expect(await withConnection(pool, (client) => readConsumerLag(client, other))).toEqual({
+    oldestPendingAt: null,
+    observedAt,
+  });
 });
