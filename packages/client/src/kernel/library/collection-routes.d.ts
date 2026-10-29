@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { TSchema } from 'typebox';
+import type { Static, TSchema } from 'typebox';
 import type { KernelClock } from '../clock.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -9,6 +9,41 @@ type Dependencies = {
     access: () => Access;
     tokens: KeyRing;
     clock: KernelClock;
+};
+export declare const collectionSchema: import("typebox").TObject<{
+    id: import("typebox").TString;
+    curatorAccountId: import("typebox").TString;
+    title: import("typebox").TString;
+    description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
+    revision: import("typebox").TInteger;
+    memberCount: import("typebox").TInteger;
+    createdAt: import("typebox").TString;
+    updatedAt: import("typebox").TString;
+}>;
+/** Validate original JSON without Elysia's removal of undeclared body properties. */
+export declare function strict<S extends TSchema>(schema: S): {
+    '~standard': {
+        version: 1;
+        vendor: string;
+        types: {
+            input: Static<S>;
+            output: Static<S>;
+        } | undefined;
+        validate(value: unknown): {
+            value: Static<S>;
+            issues?: never;
+        } | {
+            value?: never;
+            issues: {
+                message: string;
+            }[];
+        };
+        jsonSchema: {
+            input: () => S;
+            output: () => S;
+        };
+    };
 };
 /** Transport only: the merged commands and reads own authorization, privacy and ordering. */
 export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {

@@ -461,6 +461,24 @@ CREATE TABLE library.collection_member (
 
 
 --
+-- Name: collection_pins; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_pins (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    collection_ids uuid[] NOT NULL,
+    revision bigint NOT NULL,
+    CONSTRAINT collection_pins_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT collection_pins_collection_ids_check CHECK ((cardinality(collection_ids) <= 100)),
+    CONSTRAINT collection_pins_collection_ids_check1 CHECK (((cardinality(collection_ids) = 0) OR ((array_ndims(collection_ids) = 1) AND (array_lower(collection_ids, 1) = 1)))),
+    CONSTRAINT collection_pins_collection_ids_check2 CHECK ((array_position(collection_ids, NULL::uuid) IS NULL)),
+    CONSTRAINT collection_pins_revision_check CHECK (((revision >= 1) AND (revision <= '9007199254740991'::bigint))),
+    CONSTRAINT collection_pins_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: copy; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -1251,6 +1269,14 @@ ALTER TABLE ONLY library.collection_member
 
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_pkey PRIMARY KEY (route, collection_id, member_id);
+
+
+--
+-- Name: collection_pins collection_pins_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_pins
+    ADD CONSTRAINT collection_pins_pkey PRIMARY KEY (route, account_id);
 
 
 --
