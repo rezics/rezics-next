@@ -746,7 +746,7 @@ async function visibilityDetails(database: GrowthDatabase, relations: readonly s
   if (installed.rows[0]?.installed) {
     for (const relation of relations) {
       const blocks = await database.admin.query(
-        `SELECT blkno,all_visible,all_frozen FROM pg_visibility_map($1::regclass) WHERE NOT all_visible ORDER BY blkno`,
+        `SELECT blkno,all_visible,all_frozen,pd_all_visible FROM pg_visibility($1::regclass) WHERE NOT all_visible ORDER BY blkno`,
         [relation],
       );
       const check = await database.admin.query(`SELECT * FROM pg_check_visible($1::regclass)`, [relation]);
