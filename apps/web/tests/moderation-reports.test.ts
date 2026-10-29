@@ -197,6 +197,33 @@ test('withheld and deleted report targets use the existing content placeholders'
   expect(markup).toContain('data-slot="tombstone"');
 });
 
+test('reported post documents are extracted from the block profile read shape', () => {
+  const markup = renderToStaticMarkup(
+    createElement(ModerationReportsView, {
+      reports: [report(1, { kind: 'post', id: id(50) })],
+      targets: [
+        {
+          key: `post:${id(50)}`,
+          kind: 'post',
+          value: {
+            post: {
+              body: {
+                profile: 'blocks',
+                doc: {
+                  type: 'doc',
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reported block post text' }] }],
+                },
+              },
+            },
+          },
+        },
+      ],
+      next: null,
+    }),
+  );
+  expect(markup).toContain('Reported block post text');
+});
+
 test('the reports route is signed-in, noindex, private, and maps a refused read to not found', async () => {
   const route = await Bun.file(new URL('../src/routes/boards/$id_.moderation.tsx', import.meta.url)).text();
   const read = await Bun.file(new URL('../src/moderation/reports-read.ts', import.meta.url)).text();
