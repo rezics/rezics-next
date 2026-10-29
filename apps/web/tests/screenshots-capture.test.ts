@@ -5,8 +5,9 @@ import { join } from 'node:path';
 const source = readFileSync(join(import.meta.dir, '../scripts/screenshots.ts'), 'utf8');
 
 function extracted<T>(startName: string, endName: string, ending = `\nreturn ${startName};`): T {
+  const asyncStart = source.indexOf(`async function ${startName}(`);
   const ordinaryStart = source.indexOf(`function ${startName}(`);
-  const start = ordinaryStart < 0 ? source.indexOf(`async function ${startName}(`) : ordinaryStart;
+  const start = asyncStart >= 0 ? asyncStart : ordinaryStart;
   const asyncEnd = source.indexOf(`\nasync function ${endName}(`, start);
   const ordinaryEnd = source.indexOf(`\nfunction ${endName}(`, start);
   const end = asyncEnd < 0 ? ordinaryEnd : ordinaryEnd < 0 ? asyncEnd : Math.min(asyncEnd, ordinaryEnd);

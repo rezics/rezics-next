@@ -284,7 +284,8 @@ async function captureJobs(
 function reportCaptureResults(files: string[], failures: CaptureFailure[], write: (text: string) => void): number {
   for (const file of files) write(`${file}\n`);
   write(`${files.length}\n`);
-  for (const { job, error } of failures) write(`${job.id} ${job.locale} ${job.theme}: ${error}\n`);
+  for (const { job, error } of failures)
+    write(`${job.id} ${job.locale} ${job.theme}: ${error.replace(/\s+/g, ' ').trim()}\n`);
   return failures.length === 0 ? 0 : 1;
 }
 
