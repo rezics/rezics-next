@@ -349,6 +349,58 @@ test('Run omission check stays within its bound as R grows', async () => {
   );
 }, 120_000);
 
+test('prepared omission handoff returns the durable strongest proof without changing request bytes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'run-store-omission-handoff-'));
+  const store = new RunStore(`${directory}/runs.sqlite`);
+  try {
+    const run = store.begin(FIXTURE_SOURCE);
+    if (run === 'busy') throw new Error('Unexpected busy');
+    const staged = record('omission-handoff', 1);
+    store.stage(run, staged);
+    expect(store.seal(run, { complete: true }).status).toBe('ready');
+    const original = command(staged);
+    store.prepare(run, staged.row.recordKey, { commands: [original] });
+    const stored = store.database
+      .prepare(
+        'SELECT bytes,keys_json FROM run_envelopes WHERE source=? AND run_id=? AND record_key=? AND envelope_index=0',
+      )
+      .get(FIXTURE_SOURCE, run.id, staged.row.recordKey) as { bytes: string; keys_json: string };
+
+    const first = store.prepareWithOmissions(run, staged.row.recordKey, {
+      commands: [],
+      omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: '9' }],
+    });
+    expect(first).toEqual({
+      kind: 'new',
+      omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: '9' }],
+    });
+    const next = store.prepareWithOmissions(run, staged.row.recordKey, {
+      commands: [],
+      omissions: [
+        { field_group: 'facts', disposition: 'fenced', securityRevision: '8' },
+        { field_group: 'cover', disposition: 'fenced', securityRevision: '10' },
+      ],
+    });
+    expect(next.omissions).toEqual([
+      { field_group: 'facts', disposition: 'fenced', securityRevision: '9' },
+      { field_group: 'cover', disposition: 'fenced', securityRevision: '10' },
+    ]);
+    expect(
+      store.database
+        .prepare(
+          'SELECT bytes,keys_json FROM run_envelopes WHERE source=? AND run_id=? AND record_key=? AND envelope_index=0',
+        )
+        .get(FIXTURE_SOURCE, run.id, staged.row.recordKey),
+    ).toEqual(stored);
+    expect(() =>
+      store.prepareWithOmissions({ ...run, lease: 'b'.repeat(48) }, staged.row.recordKey, { commands: [] }),
+    ).toThrow('Run capability is stale or terminal');
+  } finally {
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('Run finalize stays within its bound as R grows', async () => {
   await measureRunGrowth('Run finalize', (store) => store.finalize(FIXTURE_RUN, 8), true);
 }, 120_000);

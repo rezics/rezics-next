@@ -473,8 +473,10 @@ export class Importer {
     const omissions = await this.fences(owner, signal);
     // An empty commands argument augments only omission proof, retaining the
     // original immutable journal and each of its public operation bodies.
-    this.session.store.prepare(run, pending.recordKey, { commands: [], omissions });
-    const proved = this.session.store.key(run.source, pending.recordKey, run).omissions;
+    const { omissions: proved } = this.session.store.prepareWithOmissions(run, pending.recordKey, {
+      commands: [],
+      omissions,
+    });
     const original = JSON.parse(pending.bytes) as BatchWriteRequest;
     const commands = original.commands.filter(
       (command) => !proved.some((o) => o.field_group === command.source.field_group),

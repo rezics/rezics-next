@@ -681,7 +681,7 @@ export class RunStore<Projection = BatchStatement[]> {
     this.write('UPDATE run_generations SET resolved=resolved+1 WHERE source=? AND id=?', run.source, run.id);
   }
   classify(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
-    return this.plan(run, key, input, false);
+    return this.plan(run, key, input, false).kind;
   }
   referenceSignature(source: string, key: string): string | null {
     sourceId(source);
@@ -743,6 +743,14 @@ export class RunStore<Projection = BatchStatement[]> {
     key: string,
     input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
   ): Kind {
+    return this.plan(run, key, input, true).kind;
+  }
+  /** @internal Prepare a dispatch omission proof and return its durable union in the same transaction. */
+  prepareWithOmissions(
+    run: Run,
+    key: string,
+    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
+  ): { kind: Kind; omissions: Omission[] } {
     return this.plan(run, key, input, true);
   }
   private plan(
@@ -750,7 +758,7 @@ export class RunStore<Projection = BatchStatement[]> {
     key: string,
     input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
     multi: boolean,
-  ): Kind {
+  ): { kind: Kind; omissions: Omission[] } {
     keyId(key);
     exact(input, ['commands'], ['omissions', 'deferredCover']);
     if (input.deferredCover !== undefined && typeof input.deferredCover !== 'boolean') fail();
@@ -972,7 +980,7 @@ export class RunStore<Projection = BatchStatement[]> {
         );
       }
       if (e.bytes || e.kind === 'unchanged' || saved.length) this.resolve(run, e);
-      return e.kind;
+      return { kind: e.kind, omissions: saved };
     });
   }
   pageDeferredCovers(run: Run, page: { after?: string; limit: number }): DeferredCover<Projection>[] {
