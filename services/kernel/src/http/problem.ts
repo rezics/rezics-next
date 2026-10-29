@@ -90,6 +90,7 @@ export class ProblemError extends Error {
   readonly detail: string | undefined;
   readonly errors: readonly FieldError[] | undefined;
   readonly headers: Record<string, string> | undefined;
+  readonly extensions: Readonly<Record<string, unknown>> | undefined;
   readonly effectStatus: 'not_applicable' | 'not_applied' | undefined;
 
   constructor(
@@ -99,6 +100,7 @@ export class ProblemError extends Error {
       errors?: readonly FieldError[];
       headers?: Record<string, string>;
       effectStatus?: 'not_applicable' | 'not_applied';
+      extensions?: Readonly<Record<string, unknown>>;
     } = {},
   ) {
     super(options.detail ?? PROBLEMS[code].title);
@@ -108,6 +110,7 @@ export class ProblemError extends Error {
     this.errors = options.errors;
     this.headers = options.headers;
     this.effectStatus = options.effectStatus;
+    this.extensions = options.extensions;
   }
 }
 
@@ -135,6 +138,27 @@ function fieldErrorSchema() {
   );
 }
 
+const reservedMembers = {
+  type: true,
+  title: true,
+  status: true,
+  detail: true,
+  instance: true,
+  errors: true,
+  code: true,
+  retryable: true,
+  effect_status: true,
+  request_id: true,
+} as const;
+
+function extensionMembers<T extends Readonly<Record<string, unknown>>>(
+  extensions: T,
+): Omit<T, keyof typeof reservedMembers> {
+  return Object.fromEntries(
+    Object.entries(extensions).filter(([name]) => !Object.hasOwn(reservedMembers, name)),
+  ) as Omit<T, keyof typeof reservedMembers>;
+}
+
 function schemaFor(codes: readonly ProblemCode[], status: number) {
   return t.Object(
     {
@@ -152,11 +176,32 @@ function schemaFor(codes: readonly ProblemCode[], status: number) {
   );
 }
 
-export function problemSchema<const Codes extends readonly [ProblemCode, ...ProblemCode[]]>(...codes: Codes) {
+function extendedSchema<Extensions extends Record<string, TSchema>>(
+  codes: readonly ProblemCode[],
+  status: number,
+  extensions: Extensions,
+) {
+  return t.Object(
+    { ...schemaFor(codes, status).properties, ...extensionMembers(extensions) },
+    { additionalProperties: false },
+  );
+}
+
+export function problemSchema<const Codes extends readonly [ProblemCode, ...ProblemCode[]]>(
+  ...codes: Codes
+): ReturnType<typeof schemaFor>;
+export function problemSchema<
+  const Codes extends readonly [ProblemCode, ...ProblemCode[]],
+  const Extensions extends Record<string, TSchema>,
+>(...codesAndExtensions: [...Codes, Extensions]): ReturnType<typeof extendedSchema<Extensions>>;
+export function problemSchema(...codesAndExtensions: (ProblemCode | Record<string, TSchema>)[]) {
+  const last = codesAndExtensions.at(-1);
+  const codes = (typeof last === 'object' ? codesAndExtensions.slice(0, -1) : codesAndExtensions) as ProblemCode[];
   if (codes.length === 0) throw new TypeError('At least one problem code is required');
   const statuses = new Set(codes.map((code) => PROBLEMS[code].status));
   if (statuses.size !== 1) throw new TypeError('Problem response alternatives must share one status');
-  return schemaFor(codes, statuses.values().next().value!);
+  const status = statuses.values().next().value!;
+  return typeof last === 'object' ? extendedSchema(codes, status, last) : schemaFor(codes, status);
 }
 
 function validationFieldErrors(error: ValidationError): FieldError[] {
@@ -284,6 +329,7 @@ export function problemResponse(error: unknown, context: { method: string; id: s
     request_id: context.id,
     ...(detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),
+    ...(error instanceof ProblemError ? extensionMembers(error.extensions ?? {}) : {}),
   };
 
   headers.set('content-type', 'application/problem+json');

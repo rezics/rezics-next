@@ -7936,6 +7936,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             pointer: string;
                             code: never;
                         }[];
+                        readonly existingThreadId?: string;
                     };
                     413: {
                         type: unknown;

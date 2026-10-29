@@ -155922,6 +155922,10 @@
                       "maxItems": 16,
                       "type": "array"
                     },
+                    "existingThreadId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
                     "request_id": {
                       "type": "string"
                     },

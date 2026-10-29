@@ -29,7 +29,8 @@ export declare class RevisionPreconditionError extends Error {
     constructor();
 }
 export declare class ReviewConflictError extends Error {
-    constructor();
+    readonly existingThreadId?: string | undefined;
+    constructor(existingThreadId?: string | undefined);
 }
 export declare function threadTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource;
 export declare function createThread(dependencies: ContentCommandDependencies, actor: Actor, input: ThreadCreationInput, context: RequestContext): Promise<CommandOutcome<ContentCommandValue>>;

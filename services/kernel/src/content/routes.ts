@@ -252,7 +252,10 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
     if (error instanceof InvalidSitemapCursorError) throw new ProblemError('invalid_cursor');
     if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
     if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
-    if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
+    if (error instanceof ReviewConflictError)
+      throw new ProblemError('conflict', {
+        extensions: error.existingThreadId === undefined ? {} : { existingThreadId: error.existingThreadId },
+      });
     if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
     if (
       error instanceof TypeError &&
@@ -487,7 +490,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: {
           201: withHeaders(threadResponse, { ...sessionHeader, location: t.String() }),
           ...writeFailures,
-          409: problemSchema('conflict', 'media_unavailable'),
+          409: problemSchema('conflict', 'media_unavailable', {
+            existingThreadId: t.Optional(t.String({ format: 'uuid' })),
+          }),
         },
         detail: {
           operationId: 'thread.create',
