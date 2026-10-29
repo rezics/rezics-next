@@ -21,7 +21,12 @@ const homeAdmissions = [
   'collections',
 ];
 
-function home(visitor: 'Signed In' | 'Signed Out', size: number, viewport: keyof typeof viewports, menu = false): Story {
+function home(
+  visitor: 'Signed In' | 'Signed Out',
+  size: number,
+  viewport: keyof typeof viewports,
+  menu = false,
+): Story {
   return {
     name: `${visitor} · ${size} Continue · ${viewports[viewport].name}${menu ? ' · menu open' : ''}`,
     parameters: {
