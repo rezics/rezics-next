@@ -86,6 +86,12 @@ adopted projection is claimed, so no synthetic adoption is used to mask rejectio
 
 ## Verification record
 
+Continuation preflight at `72de651b22` found all three frozen native scenarios
+and both owner rules already present. The test, bundled release and converter
+hashes above remain unchanged. Preserve those acceptance assertions unchanged;
+retry native verification against this actual base rather than manufacturing a
+new fixture or treating the previous infrastructure failure as a scenario result.
+
 Frozen test revision: `edc7800dde`. The artifact acceptance is
 `test -s docs/research/imports-audit/exact-quantity-qualifiers.md`; its execution
 result accompanies the final handoff and proves specification delivery only.
