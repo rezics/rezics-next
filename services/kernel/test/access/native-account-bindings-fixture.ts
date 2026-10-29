@@ -9,7 +9,7 @@ import {
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -44,6 +44,16 @@ export const scopes = [
   'account:manage',
   'access:grant',
 ];
+
+export function actionDeclarations(actions: readonly string[]) {
+  return new Map(
+    actions.map(
+      (action) =>
+        [action, INTERNAL_ACTIONS.get(action) ?? LIFECYCLE_ACTIONS.get(action) ?? { anonymous: false }] as const,
+    ),
+  );
+}
+
 export const cookies = (response: Response) =>
   new Headers({
     cookie: response.headers
@@ -71,7 +81,8 @@ export async function nativeFixture(
   let authPool: Pool;
   const actions = new Map([
     ...LIFECYCLE_ACTIONS,
-    ...scopes.map((scope) => [scope, { anonymous: false }] as const),
+    ...INTERNAL_ACTIONS,
+    ...actionDeclarations(scopes),
     ...(existing?.actions ?? []),
   ]);
   const access = createAccess({

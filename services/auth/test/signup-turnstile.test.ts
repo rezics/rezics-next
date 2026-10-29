@@ -74,8 +74,8 @@ const ports: AccountWorkflowPorts = {
     registrationOrder.push('reserve-handle');
     if (takenHandles.has(input.handle)) {
       const error = new Error('handle unavailable');
-      error.name = 'LifecycleDeniedError';
-      throw error;
+      // Native workflow ports expose the translated refusal status to Auth.
+      throw Object.assign(error, { status: 403 });
     }
     return {
       value: {
@@ -367,5 +367,36 @@ test('signup answers 503 when Turnstile configuration is absent', async () => {
     expect(await stageCount('no-turnstile-config')).toBe(0);
   } finally {
     if (configured) options.turnstile = configured;
+  }
+});
+
+test('a taken handle refuses promptly after Turnstile without account effects or retained credentials', async () => {
+  resetSiteverify();
+  const key = 'taken-handle-without-effects';
+  const input = body(key);
+  takenHandles.add(input.handle);
+  try {
+    const startedAt = Date.now();
+    const response = await signup(input);
+    expect(Date.now() - startedAt).toBeLessThan(5000);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'handle_unavailable' });
+    expect(siteverifyCalls).toBe(1);
+    expect(registrationOrder).toEqual(['registration-target', 'reserve-handle']);
+    const accountId = `signup-account-${key}`;
+    expect(accounts.has(accountId)).toBe(false);
+    expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [accountId])).rows).toHaveLength(0);
+    expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', [accountId])).rows).toHaveLength(0);
+    const staged = (
+      await pool.query(
+        'SELECT ciphertext,expired_at,completed_at FROM auth_registration_stage WHERE request_key=$1',
+        [key],
+      )
+    ).rows;
+    expect(staged).toHaveLength(1);
+    expect(staged[0]).toMatchObject({ ciphertext: null, completed_at: null });
+    expect(staged[0].expired_at).not.toBeNull();
+  } finally {
+    takenHandles.delete(input.handle);
   }
 });

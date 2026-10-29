@@ -371,3 +371,22 @@ test('removing the operator relation before consumption refuses the opening', as
   expect((await attempt(approval, subject, manager.headers))?.ok ?? false).toBe(false);
   await untouched(subject);
 });
+
+test('a later approved opening restores its bound consent while tokens below the advanced floor remain invalid', async () => {
+  const subject = await automated();
+  const first = await open(owner, subject);
+  const oldToken = await issued(first);
+  expect(await accepted(oldToken)).toBe(true);
+
+  expect((await reduce(first, ['account:manage'])).status).toBe(200);
+  expect(await consentOf(subject)).toEqual({ scopes: ['account:manage'], pending_scopes: null });
+  expect(await sessions(subject)).toBe(0);
+  expect(await accepted(oldToken)).toBe(false);
+
+  const authorization = await approve(owner, subject);
+  const response = await attempt(authorization, subject, owner.headers);
+  expect(response?.status).toBe(200);
+  expect(await consentOf(subject)).toEqual({ scopes: sessionScope, pending_scopes: null });
+  expect(await accepted(await issued(k.cookies(response!)))).toBe(true);
+  expect(await accepted(oldToken)).toBe(false);
+});

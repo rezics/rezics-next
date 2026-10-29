@@ -502,6 +502,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         const row = await read(input.registrationId);
         const reserved = await reservePublicRegistration(row);
         if ('error' in reserved) {
+          await expired(input.registrationId);
           await DBOS.setEvent('pending', reserved);
           return { accountId: row.account_id, error: reserved.error };
         }
