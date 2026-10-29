@@ -55,9 +55,30 @@ resolution, empty native observations are empty, without invented effect proof.
 
 ## Verification state
 
-Implementation is ready for the two declared native files and required root
-typecheck. No pass is claimed before those managed checks return. Child output
-is retained in the native check log, including actual counts and first failure.
+Implementation was committed before submitting both managed checks at code
+revision `efc2a94c69`:
+
+- Native acceptance: `bf8c1266-33e7-48c2-bf83-5d4bd3ae39fe`, command
+  `bun run --cwd services/kernel check test/imports/vndb-statistics-outcomes.test.ts test/imports/vndb-cli-native.test.ts`.
+  Log: `.temp/goal/checks/worker-check-2026-10-29T18-43-06.755Z-25b9cf8b.log`.
+- Required root typecheck: `54086601-21a1-4f38-bfa6-1421c7e2a89b`, command
+  `bun scripts/typecheck.ts`.
+  Log: `.temp/goal/checks/worker-check-2026-10-29T18-43-06.563Z-1891e585.log`.
+
+The completion handoff reported each as `exit status running; check failed without
+a summary`, while stating all checks had finished. Both supplied logs contain
+only admission queue/load messages, with no child suite output, terminal exit
+status, pass/fail count, typecheck diagnostic or first reached assertion.
+Admission waiting itself is queued work, not a test failure. The concrete tool
+blocker is a completion handoff without terminal results; the maintainer required
+finishing without another wait, poll or duplicate check submission.
+
+No native pass, reached product failure, receipt/state observation or root
+typecheck result is claimed. The source inspection pins catalogue version 1.0.0,
+converter `vndb@7`, source date 2026-10-25 and synthetic native entry revision 7;
+runtime bundle digest and actual native receipt/event/transaction evidence remain
+unobserved until the queued native caller executes. Its intended output records
+those values, without treating them as already observed.
 
 An independent authorization/disclosure/rights review found no blocking defect in
 the binding. It confirmed the expected PUT retry-policy mismatch and clarified
