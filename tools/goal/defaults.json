@@ -96,6 +96,7 @@
     "tmuxCommand": "tmux",
     "tmuxSession": "goal",
     "managerCompactTokens": 300000,
+    "checkResultReuse": false,
     "supermanager": "supermanager",
     "managerLimits": {
       "turns": 100,

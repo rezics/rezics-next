@@ -98,6 +98,7 @@ export type Settings = {
     tmuxCommand: string;
     tmuxSession: string;
     managerCompactTokens: number;
+    checkResultReuse: boolean;
   };
 };
 export type Brief = {

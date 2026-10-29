@@ -325,12 +325,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
   const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+  const checkResultOptions = { root: settings.mainCheckout, results: store.checkResults, shadow: !settings.integration.checkResultReuse, enabled: settings.integration.checkResultReuse, alert: (summary: string) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'instruction', summary: `Check result reuse alert: ${summary}` }) };
   // Landing checks unblock every other task, so remote checks admit them before workers' checks (promotion uses --gate).
-  const execute = gateRunner(settings.integration.gateTimeoutMs, undefined, LANDING_CHECK_ENVIRONMENT);
+  const execute = gateRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, LANDING_CHECK_ENVIRONMENT, checkResultOptions);
   const runGate: GateRunner = options.runGate ?? execute;
   // Promotion runs the full root gate, which outlasts the integration gate's limit.
   const promotionGate: GateRunner =
-    options.runGate ?? gateRunner(Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS));
+    options.runGate ?? gateRunner(Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS), settings.stateDirectory, {}, checkResultOptions);
   // The dev verifier gates promotion, so its checks are admitted with landing checks, before workers' checks.
   const verifierGate: GateRunner =
     options.runGate ??
@@ -338,6 +339,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS),
       undefined,
       LANDING_CHECK_ENVIRONMENT,
+      checkResultOptions,
     );
   let train!: MergeTrain;
   const pump = () => train.pump();
