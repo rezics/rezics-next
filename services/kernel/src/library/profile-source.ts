@@ -42,9 +42,14 @@ async function readSource(deps: Dependencies, subjectId: string): Promise<Librar
     if (accountRoute === null) return null;
     const account = await readAccount(deadlineClient(pool, deadline), accountRoute, actor.accountId);
     if (
-      !account || account.kind !== 'actor' || account.state !== 'active' || account.fenced ||
-      actor.authnEpoch === undefined || BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
-    ) return null;
+      !account ||
+      account.kind !== 'actor' ||
+      account.state !== 'active' ||
+      account.fenced ||
+      actor.authnEpoch === undefined ||
+      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+    )
+      return null;
   }
   const visited = new Set<string>();
   while (true) {
