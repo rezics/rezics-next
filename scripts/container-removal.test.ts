@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 
 type Leak = { line: number };
@@ -65,13 +65,37 @@ function trackedSources(): string[] {
     ['-C', root, 'ls-files', '--', 'scripts', 'tools', 'services/*/scripts', 'apps/*/scripts'],
     { encoding: 'utf8' },
   );
-  if (listed.status !== 0) throw new Error(`git ls-files failed: ${listed.stderr}`);
+  if (listed.status === 0) return listed.stdout.split('\n').filter(Boolean).filter(isSource);
 
-  return listed.stdout
-    .split('\n')
-    .filter(Boolean)
-    .filter((file) => /\.(?:[cm]?tsx?|sh|bash|zsh)$/.test(file))
-    .filter((file) => !/(?:^|\/)(?:test|tests)(?:\/|$)/.test(file) && !/\.test\.[^.]+$/.test(file));
+  // Remote check copies omit .git. Their source tree contains the tracked files from the checkout.
+  if (existsSync(join(root, '.git'))) throw new Error(`git ls-files failed: ${listed.stderr}`);
+  const roots = ['scripts', 'tools'];
+  for (const parent of ['services', 'apps']) {
+    for (const entry of readdirSync(join(root, parent), { withFileTypes: true })) {
+      if (entry.isDirectory()) roots.push(`${parent}/${entry.name}/scripts`);
+    }
+  }
+
+  const files: string[] = [];
+  const visit = (directory: string): void => {
+    const absolute = join(root, directory);
+    if (!existsSync(absolute)) return;
+    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+      const file = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) visit(file);
+      else if (entry.isFile() && isSource(file)) files.push(relative(root, join(root, file)));
+    }
+  };
+  for (const directory of roots) visit(directory);
+  return files;
+}
+
+function isSource(file: string): boolean {
+  return (
+    /\.(?:[cm]?tsx?|sh|bash|zsh)$/.test(file) &&
+    !/(?:^|\/)(?:test|tests)(?:\/|$)/.test(file) &&
+    !/\.test\.[^.]+$/.test(file)
+  );
 }
 
 describe('Docker container removal volume cleanup', () => {
