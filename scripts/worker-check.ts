@@ -652,6 +652,7 @@ export async function runWorkerCheck(
         return { files: fileHeader ? [fileHeader] : [], reasons: [`HTTP 503 ${reason}`] };
       })();
     if (overload) {
+      endLedger(code);
       const rerunCommand = overloadRerunCommand(command, overload.files, root);
       const filesLabel = rerunCommand
         ? overload.files.join(', ')
