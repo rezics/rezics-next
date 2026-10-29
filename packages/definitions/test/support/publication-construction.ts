@@ -214,32 +214,59 @@ async function probe(): Promise<Evidence> {
     const originalFilterPath = join(directory, 'original-filter.ts');
     writeFileSync(originalFilterPath, imports(originalSource('packages/filter/src/filter.ts'), dirname(filterPath)));
     const originalDefinitionsPath = join(directory, 'original-definitions.ts');
-    writeFileSync(originalDefinitionsPath, imports(originalSource('packages/definitions/src/index.ts'), dirname(definitionsPath))
-      .replace(Bun.resolveSync('@rezics/filter', dirname(definitionsPath)), originalFilterPath));
-    const originalDefinitions = await import(originalDefinitionsPath) as typeof import('../../src/index.ts');
-    const originalFilter = await import(originalFilterPath) as typeof import('../../../filter/src/filter.ts');
+    writeFileSync(
+      originalDefinitionsPath,
+      imports(originalSource('packages/definitions/src/index.ts'), dirname(definitionsPath)).replace(
+        Bun.resolveSync('@rezics/filter', dirname(definitionsPath)),
+        originalFilterPath,
+      ),
+    );
+    const originalDefinitions = (await import(originalDefinitionsPath)) as typeof import('../../src/index.ts');
+    const originalFilter = (await import(originalFilterPath)) as typeof import('../../../filter/src/filter.ts');
     let filter = imports(read(filterPath), dirname(filterPath));
-    filter = replaceOnce(filter, 'const item = ownData(value, index);',
+    filter = replaceOnce(
+      filter,
+      'const item = ownData(value, index);',
       `if (${counter}.bases.has(value)) ${counter}.baseReads++;
        if (${counter}.qualifiers.has(value)) ${counter}.qualifierVisits++;
-       const item = ownData(value, index);`);
-    filter = replaceOnce(filter, "for (const base of ownStringList(definition, 'bases')) {",
+       const item = ownData(value, index);`,
+    );
+    filter = replaceOnce(
+      filter,
+      "for (const base of ownStringList(definition, 'bases')) {",
       `for (const base of ownStringList(definition, 'bases')) {
-        if (${counter}.types.has(definition)) ${counter}.baseVisits++;`);
-    filter = replaceOnce(filter, 'ancestors.delete(value);', `
+        if (${counter}.types.has(definition)) ${counter}.baseVisits++;`,
+    );
+    filter = replaceOnce(
+      filter,
+      'ancestors.delete(value);',
+      `
       if (${counter}.bases.has(value)) ${counter}.bases.add(copy);
       if (${counter}.types.has(value)) ${counter}.types.add(copy);
       if (${counter}.qualifiers.has(value)) ${counter}.qualifiers.add(copy);
-      ancestors.delete(value);`);
-    filter = replaceOnce(filter, 'const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;',
-      'const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;');
-    filter = replaceOnce(filter, 'if (!declaredQualifiers.has(qualifier.property) || !qualifierDefinition)',
-      `if ((${counter}.qualifierVisits++, !declaredQualifiers.has(qualifier.property)) || !qualifierDefinition)`);
-    filter = replaceOnce(filter, "if (value === null || typeof value !== 'object') return value;",
+      ancestors.delete(value);`,
+    );
+    filter = replaceOnce(
+      filter,
+      'const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;',
+      'const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;',
+    );
+    filter = replaceOnce(
+      filter,
+      'if (!declaredQualifiers.has(qualifier.property) || !qualifierDefinition)',
+      `if ((${counter}.qualifierVisits++, !declaredQualifiers.has(qualifier.property)) || !qualifierDefinition)`,
+    );
+    filter = replaceOnce(
+      filter,
+      "if (value === null || typeof value !== 'object') return value;",
       `${counter}.snapshotVisits++;
-  if (value === null || typeof value !== 'object') return value;`);
-    filter = replaceOnce(filter, 'selectedFacets.some((facets) => facets.has(property))',
-      `selectedFacets.some((facets) => { ${counter}.facetProbes++; return facets.has(property); })`);
+  if (value === null || typeof value !== 'object') return value;`,
+    );
+    filter = replaceOnce(
+      filter,
+      'selectedFacets.some((facets) => facets.has(property))',
+      `selectedFacets.some((facets) => { ${counter}.facetProbes++; return facets.has(property); })`,
+    );
     copy('filter', filterPath, filter, join(directory, 'filter.ts'));
     let definitions = imports(read(definitionsPath), dirname(definitionsPath));
     definitions = definitions.replace(
@@ -252,18 +279,41 @@ async function probe(): Promise<Evidence> {
     );
     const constructionPath = join(root, 'packages/definitions/src/publication-construction.ts');
     let construction = imports(read(constructionPath), dirname(constructionPath));
-    construction = construction.replace(Bun.resolveSync('typebox/value', dirname(constructionPath)), join(directory, 'typebox/build/value/index.mjs'));
-    construction = replaceOnce(construction, 'const hash = Hash(member);', `${counter}.duplicateVisits++;
-          const hash = Hash(member);`);
-    construction = replaceOnce(construction, 'seen.add(hash);', `${counter}.duplicateAppends++;
-          seen.add(hash);`);
+    construction = construction.replace(
+      Bun.resolveSync('typebox/value', dirname(constructionPath)),
+      join(directory, 'typebox/build/value/index.mjs'),
+    );
+    construction = replaceOnce(
+      construction,
+      'const hash = Hash(member);',
+      `${counter}.duplicateVisits++;
+          const hash = Hash(member);`,
+    );
+    construction = replaceOnce(
+      construction,
+      'seen.add(hash);',
+      `${counter}.duplicateAppends++;
+          seen.add(hash);`,
+    );
     copy('construction', constructionPath, construction, join(directory, 'construction.ts'));
     definitions = definitions.replace(constructionPath, join(directory, 'construction.ts'));
     const hashingPath = join(typeboxPath, 'build/system/hashing/hash.mjs');
     let hashing = read(hashingPath);
-    hashing = replaceOnce(hashing, 'function FromValue(value) {', `function FromValue(value) { ${counter}.hashNodes++;`);
-    hashing = replaceOnce(hashing, 'function FNV1A64_OP(byte) {', `function FNV1A64_OP(byte) { ${counter}.hashBytes++;`);
-    hashing = replaceOnce(hashing, 'InstanceKeys(value).sort()', `InstanceKeys(value).sort((a,b) => { ${counter}.hashSortComparisons++; return a < b ? -1 : a > b ? 1 : 0; })`);
+    hashing = replaceOnce(
+      hashing,
+      'function FromValue(value) {',
+      `function FromValue(value) { ${counter}.hashNodes++;`,
+    );
+    hashing = replaceOnce(
+      hashing,
+      'function FNV1A64_OP(byte) {',
+      `function FNV1A64_OP(byte) { ${counter}.hashBytes++;`,
+    );
+    hashing = replaceOnce(
+      hashing,
+      'InstanceKeys(value).sort()',
+      `InstanceKeys(value).sort((a,b) => { ${counter}.hashSortComparisons++; return a < b ? -1 : a > b ? 1 : 0; })`,
+    );
     chmodSync(join(directory, 'typebox/build/system/hashing/hash.mjs'), 0o600);
     copy('hashing', hashingPath, hashing, join(directory, 'typebox/build/system/hashing/hash.mjs'));
     copy('definitions', definitionsPath, definitions, join(directory, 'definitions.ts'));
@@ -284,7 +334,11 @@ async function probe(): Promise<Evidence> {
         baseReads: 0,
         baseVisits: 0,
         qualifierVisits: 0,
-        snapshotVisits: 0, hashNodes: 0, hashBytes: 0, hashSortComparisons: 0, facetProbes: 0,
+        snapshotVisits: 0,
+        hashNodes: 0,
+        hashBytes: 0,
+        hashSortComparisons: 0,
+        facetProbes: 0,
         bases: new WeakSet(),
         types: new WeakSet(),
         qualifiers: new WeakSet(),
@@ -301,15 +355,20 @@ async function probe(): Promise<Evidence> {
         const owned = api.createFilterConstruction?.(release);
         return selected.map(([key, saved]) => {
           // Observe actual normalized admitted output as well as the complete typed refusal.
-          const errors = owned ? owned.validateFilter(saved.filter, { saved: false }) : api.validateFilter(saved.filter, release, { saved: false });
+          const errors = owned
+            ? owned.validateFilter(saved.filter, { saved: false })
+            : api.validateFilter(saved.filter, release, { saved: false });
           if (errors.length) return { key, errors };
-          return { key, errors, admitted: owned ? owned.admitFilter(api.parseFilter(saved.filter), { saved: false }) : api.admitFilter(api.parseFilter(saved.filter), release, { saved: false }) };
+          return {
+            key,
+            errors,
+            admitted: owned
+              ? owned.admitFilter(api.parseFilter(saved.filter), { saved: false })
+              : api.admitFilter(api.parseFilter(saved.filter), release, { saved: false }),
+          };
         });
       }
-      const original =
-        mode === 'release'
-          ? originalDefinitions.validateRelease(release)
-          : admissions(originalFilter);
+      const original = mode === 'release' ? originalDefinitions.validateRelease(release) : admissions(originalFilter);
       const instrumented = mode === 'release' ? measured.validateRelease(release) : admissions(measuredFilter);
       const { bases: _bases, types: _types, qualifiers: _qualifiers, ...counts } = state;
       rows.push({
