@@ -1,4 +1,5 @@
 import type { Fixtures, KernelRecording } from './fake.ts';
+import * as libraryContinue from './fake/library-continue.ts';
 
 type RouteContext = {
   request: Request;
@@ -59,7 +60,10 @@ function discover(): Discovered {
     fixtures = import.meta.glob<FixtureFile>('./fixtures/*.json', { eager: true, import: 'default' });
   }
   discovered = {
-    routes: ordered(modules).flatMap(([, module]) => module.routes),
+    routes: ordered({
+      ...Object.fromEntries(Object.entries(modules).filter(([file]) => !file.endsWith('/library-continue.ts'))),
+      './fake/library-continue.ts': libraryContinue,
+    }).flatMap(([, module]) => module.routes),
     recordings: Object.fromEntries(
       ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), recording]),
     ),

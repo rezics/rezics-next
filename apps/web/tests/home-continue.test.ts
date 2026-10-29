@@ -101,7 +101,8 @@ function crowded(): Entry[] {
 }
 
 let entries = showcase();
-let failLibrary = false;
+let failContinue = false;
+let continueOperationExposed = true;
 type Call = {
   method: string;
   path: string;
@@ -112,6 +113,7 @@ type Call = {
 };
 const calls: Call[] = [];
 const browserReads: { method: string; path: string }[] = [];
+const headerReads: { method: string; path: string }[] = [];
 const pageFake = createFakeKernelFetch(fixtures as never);
 
 function problem(status: number, code: string) {
@@ -129,7 +131,9 @@ function reset(next = showcase()) {
   calls.length = 0;
   browserReads.length = 0;
   entries = next;
-  failLibrary = false;
+  failContinue = false;
+  continueOperationExposed = true;
+  headerReads.length = 0;
 }
 
 // OpenID provider copied from library-entries.test.ts; the home page sends the website's access token.
@@ -138,7 +142,14 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['personal_library', 'reading_progress'] });
+    if (url.pathname === '/v1/platform/exposure')
+      return json({
+        admitted: [
+          'personal_library',
+          'reading_progress',
+          ...(continueOperationExposed ? ['library_continue.list'] : []),
+        ],
+      });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
@@ -252,6 +263,18 @@ const fake = Bun.serve({
     }
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+      const input = (await request.clone().json()) as { reads?: Record<string, { kind: string; id: string }> };
+      if (input.reads) {
+        browserReads.push({ method: request.method, path: url.pathname });
+        headerReads.push({ method: request.method, path: url.pathname });
+        const reads = Object.fromEntries(
+          Object.entries(input.reads).map(([key, descriptor]) => {
+            const item = entries.find((candidate) => candidate.subjectId === descriptor.id);
+            return [key, item ? { status: 200, body: { subject: item.subject } } : { status: 404 }];
+          }),
+        );
+        return json({ reads });
+      }
       browserReads.push({ method: request.method, path: url.pathname });
       return pageFake(request);
     }
@@ -259,30 +282,46 @@ const fake = Bun.serve({
       browserReads.push({ method: request.method, path: url.pathname });
       return json({ progressSessions: [], next: null });
     }
-    if (url.pathname !== '/v1/libraryEntries' || request.method !== 'GET')
+    if (request.method === 'GET' && url.pathname === '/v1/libraryEntries') {
+      browserReads.push({ method: request.method, path: url.pathname });
+      calls.push({
+        method: request.method,
+        path: url.pathname,
+        view: url.searchParams.get('view'),
+        limit: url.searchParams.get('limit'),
+        state: url.searchParams.get('state'),
+        authorization: request.headers.get('authorization'),
+      });
+      const listed = entries.filter((item) => item.state === 'in_progress').slice(0, 6);
+      return json({ libraryEntries: listed, next: null });
+    }
+    if (url.pathname !== '/v1/libraryContinue' || request.method !== 'GET')
       return json(problem(404, 'not_found'), 404, true);
     browserReads.push({ method: request.method, path: url.pathname });
     calls.push({
       method: request.method,
       path: url.pathname,
-      view: url.searchParams.get('view'),
+      view: null,
       limit: url.searchParams.get('limit'),
-      state: url.searchParams.get('state'),
+      state: null,
       authorization: request.headers.get('authorization'),
     });
     if (!request.headers.get('authorization')?.startsWith('Bearer '))
       return json(problem(401, 'authentication_required'), 401, true);
-    if (failLibrary) return json(problem(500, 'internal_error'), 500, true);
+    if (failContinue) return json(problem(503, 'service_unavailable'), 503, true);
     const rawLimit = Number(url.searchParams.get('limit') ?? 20);
     const limit = Number.isInteger(rawLimit) && rawLimit >= 1 && rawLimit <= 100 ? rawLimit : 20;
-    const state = url.searchParams.get('state');
     const listed = entries
-      .filter((item) => (state ? item.state === state : true))
+      .filter((item) => item.state === 'in_progress')
       .sort((left, right) => (left.updatedAt < right.updatedAt ? 1 : -1))
       .slice(0, limit);
-    const full = url.searchParams.get('view') === 'FULL';
     return json({
-      libraryEntries: listed.map((item) => (full ? item : { ...item, subject: undefined })),
+      subjects: listed.map((item) => ({
+        subjectId: item.subjectId,
+        state: item.state,
+        lastActivityAt: item.updatedAt,
+        activeProgressSession: null,
+      })),
       next: null,
     });
   },
@@ -488,7 +527,11 @@ async function messageOf(locale: string, key: string): Promise<string> {
   const file = new URL(`../messages/${locale}.json`, import.meta.url);
   return ((await Bun.file(file).json()) as Record<string, string>)[key]!;
 }
-function libraryReads() {
+function continueReads() {
+  return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryContinue');
+}
+
+function legacyLibraryReads() {
   return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryEntries');
 }
 function readsTo(path: string) {
@@ -529,12 +572,10 @@ test(
       expect(row).not.toContain('Only planned');
       expect(row).not.toContain('Already finished');
       // One read of the personal library, for entries in progress, up to six, with their subjects embedded.
-      const reads = libraryReads();
+      const reads = continueReads();
       expect(reads).toHaveLength(1);
       expect(reads[0]).toMatchObject({
-        view: 'FULL',
         limit: '6',
-        state: 'in_progress',
       });
       expect(reads[0]!.authorization).toStartWith('Bearer ');
     }
@@ -607,14 +648,14 @@ test(
       expect(personal(out.html)).toBeUndefined();
       expect(out.html).not.toContain(await messageOf(locale, 'home_continue_heading'));
       expect(out.html).toContain('name="q"');
-      expect(libraryReads()).toHaveLength(0);
+      expect(continueReads()).toHaveLength(0);
 
       reset(showcase().filter((item) => item.state !== 'in_progress'));
       const idle = await readPage(`/${locale}`, cookie);
       expect(idle.status).toBe(200);
       expect(personal(idle.html)).toBeUndefined();
       expect(idle.html).toContain('name="q"');
-      expect(libraryReads()).toHaveLength(1);
+      expect(continueReads()).toHaveLength(1);
     }
   },
   timeout,
@@ -625,13 +666,30 @@ test(
   async () => {
     const cookie = await alice();
     reset();
-    failLibrary = true;
+    failContinue = true;
     const page = await readPage('/en', cookie);
-    expect(libraryReads()).toHaveLength(1);
+    expect(continueReads()).toHaveLength(1);
     expect(page.status).toBe(200);
     expect(page.html).toContain('name="q"');
     expect(personal(page.html)).toBeUndefined();
     expect(page.html).not.toContain('Newest read');
+  },
+  timeout,
+);
+
+test(
+  'when exposure does not list library_continue.list, home keeps the legacy Continue reads',
+  async () => {
+    const cookie = await alice();
+    reset();
+    continueOperationExposed = false;
+    const page = await readPage('/en', cookie);
+    expect(page.status).toBe(200);
+    expect(personal(page.html)).toContain('Newest read');
+    expect(continueReads()).toHaveLength(0);
+    expect(legacyLibraryReads()).toHaveLength(1);
+    expect(legacyLibraryReads()[0]).toMatchObject({ view: 'FULL', state: 'in_progress', limit: '6' });
+    expect(readsTo('/v1/progressSessions')).toHaveLength(3);
   },
   timeout,
 );
@@ -649,11 +707,11 @@ test(
     reset(crowded());
     const signedIn = await readPage('/en', cookie);
     expect(signedIn.status).toBe(200);
-    expect(readsTo('/v1/pages:read')).toHaveLength(1);
-    expect(libraryReads()).toHaveLength(1);
-    expect(libraryReads()[0]).toMatchObject({ limit: '6', state: 'in_progress' });
-    expect(readsTo('/v1/progressSessions')).toHaveLength(6);
-    expect(browserReads).toHaveLength(8);
+    expect(readsTo('/v1/pages:read')).toHaveLength(2);
+    expect(continueReads()).toHaveLength(1);
+    expect(continueReads()[0]).toMatchObject({ limit: '6' });
+    expect(headerReads).toHaveLength(1);
+    expect(browserReads).toHaveLength(3);
   },
   timeout,
 );

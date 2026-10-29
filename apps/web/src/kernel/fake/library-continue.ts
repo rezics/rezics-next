@@ -1,0 +1,143 @@
+import entriesRecording from '../recorded/library-continue-entries.json';
+import sessionsRecording from '../recorded/library-continue-progress-sessions.json';
+import type { KernelRecording } from '../fake.ts';
+import type { FakeRoute } from '../fake-modules.ts';
+
+const entrylessId = '01a17ff1-0000-7000-8000-000000000001';
+const entrylessSession = {
+  ...sessionsRecording.progressSessions[0]!,
+  id: '01a17ff1-0000-7000-8000-000000000002',
+  subjectId: entrylessId,
+  versionSubjectId: entrylessId,
+};
+
+let storySize = 6;
+export function setContinueStorySize(size: number): void {
+  storySize = Math.max(0, Math.min(6, Math.floor(size)));
+}
+
+function subjects(): Record<string, unknown>[] {
+  const entries = entriesRecording.libraryEntries.filter((entry) => entry.state === 'in_progress');
+  const available: Record<string, unknown>[] = [
+    ...entries.slice(0, 3).map((entry, index) => ({
+      subjectId: entry.subjectId,
+      state: index === 0 ? 'in_progress' : index === 1 ? 'not-a-state-id' : null,
+      lastActivityAt: `2026-10-28T00:38:4${index}.000Z`,
+      activeProgressSession:
+        sessionsRecording.progressSessions.find((item) => item.subjectId === entry.subjectId) ?? null,
+    })),
+    {
+      subjectId: entrylessId,
+      state: null,
+      lastActivityAt: '2026-10-28T00:38:49.000Z',
+      activeProgressSession: entrylessSession,
+    },
+  ];
+  while (available.length < 6) {
+    const index = available.length;
+    const subjectId = `01a17ff1-0000-7000-8000-${String(index + 1).padStart(12, '0')}`;
+    available.push({
+      subjectId,
+      state: index % 2 === 0 ? 'in_progress' : null,
+      lastActivityAt: `2026-10-28T00:39:${String(index).padStart(2, '0')}.000Z`,
+      activeProgressSession: {
+        ...entrylessSession,
+        id: `${subjectId.slice(0, 8)}-session`,
+        subjectId,
+        versionSubjectId: subjectId,
+      },
+    });
+  }
+  return available.slice(0, storySize);
+}
+
+const headers = new Map<string, unknown>([
+  ...entriesRecording.libraryEntries.flatMap((entry) =>
+    entry.subject ? [[entry.subjectId, entry.subject] as const] : [],
+  ),
+  [
+    entrylessId,
+    {
+      id: entrylessId,
+      type: 'schema:Book',
+      types: ['schema:Book', 'schema:CreativeWork'],
+      label: { value: 'Entry-less session', language: 'en' },
+      cover: null,
+    },
+  ],
+]);
+
+async function body(request: Request): Promise<Record<string, unknown>> {
+  const value: unknown = await request
+    .clone()
+    .json()
+    .catch(() => undefined);
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function unavailable(request: Request): boolean {
+  return request.headers.get('authorization') === 'Bearer fake-continue-503';
+}
+
+export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: '/v1/libraryContinue',
+    story: ({ request }) =>
+      unavailable(request)
+        ? { status: 503, code: 'service_unavailable' }
+        : { status: 200, subjects: subjects(), next: null },
+    fixture: ({ request }) =>
+      unavailable(request)
+        ? { status: 503, code: 'service_unavailable' }
+        : { status: 200, subjects: subjects(), next: null },
+  },
+  {
+    method: 'POST',
+    path: '/v1/pages:read',
+    story: async ({ request }) => {
+      const input = await body(request);
+      if (typeof input.reads !== 'object' || input.reads === null) return;
+      const descriptors = input.reads as Record<string, { kind?: string; id?: string }>;
+      const reads: Record<string, unknown> = {};
+      for (const [key, descriptor] of Object.entries(descriptors)) {
+        const subject =
+          descriptor.kind === 'subject' && descriptor.id
+            ? (headers.get(descriptor.id) ?? syntheticHeader(descriptor.id))
+            : undefined;
+        reads[key] = subject
+          ? { status: 200, body: { subject } }
+          : { status: 404, body: { code: 'subject_not_found' } };
+      }
+      return { status: 200, reads } as KernelRecording;
+    },
+    fixture: async ({ request }) => {
+      const input = await body(request);
+      if (typeof input.reads !== 'object' || input.reads === null) return;
+      const descriptors = input.reads as Record<string, { kind?: string; id?: string }>;
+      const reads: Record<string, unknown> = {};
+      for (const [key, descriptor] of Object.entries(descriptors)) {
+        const subject =
+          descriptor.kind === 'subject' && descriptor.id
+            ? (headers.get(descriptor.id) ?? syntheticHeader(descriptor.id))
+            : undefined;
+        reads[key] = subject
+          ? { status: 200, body: { subject } }
+          : { status: 404, body: { code: 'subject_not_found' } };
+      }
+      return { status: 200, reads } as KernelRecording;
+    },
+  },
+];
+
+function syntheticHeader(id: string): unknown {
+  return id.startsWith('01a17ff1-0000-7000-8000-')
+    ? {
+        id,
+        type: 'schema:Book',
+        types: ['schema:Book', 'schema:CreativeWork'],
+        label: { value: `Continue title ${id.slice(-2)}`, language: 'en' },
+        cover: null,
+      }
+    : undefined;
+}

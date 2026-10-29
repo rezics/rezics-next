@@ -33,6 +33,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
   const ratio = sharedRatio(subjects.map(({ subject }) => subject));
   const cards = subjects.map(({ entry, subject }) => {
     const progress = progressView(entry.progress, locale);
+    const progressLabel = progress?.text ?? entry.stateLabel;
     const lang = entry.language && entry.language.toLowerCase() !== locale.toLowerCase() ? entry.language : undefined;
     const title = entry.label || m.subject_value_unlabelled();
     const href = entry.progress
@@ -46,10 +47,14 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
         title={title}
         {...(lang ? { titleLang: lang } : {})}
         linkLabel={m.home_continue_label({ title }, options)}
-        progress={{
-          value: progress?.percent == null ? null : progress.percent / 100,
-          label: progress?.text ?? m.home_continue_in_progress({}, options),
-        }}
+        {...(progressLabel
+          ? {
+              progress: {
+                value: progress?.percent == null ? null : progress.percent / 100,
+                label: progressLabel,
+              },
+            }
+          : {})}
         menuLabel={m.home_continue_actions({ title }, options)}
         menuEntries={[
           {

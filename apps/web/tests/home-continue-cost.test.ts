@@ -18,7 +18,7 @@ test('the public page query and browser Continue query keep their separate read 
   const counts = { D: 0, K: 0, R: 0, A: 0 };
   let size = 1;
   const reads: URL[] = [];
-  const progress: URL[] = [];
+  const headers: URL[] = [];
   const paths: string[] = [];
   const pages = createFakeKernelFetch(fixtures as never);
   const client = createKernelClient('https://kernel.example.test', {
@@ -31,30 +31,34 @@ test('the public page query and browser Continue query keep their separate read 
       }
       counts.K += 1;
       paths.push(`${request.method} ${url.pathname}`);
-      if (url.pathname === '/v1/libraryEntries' && request.method === 'GET') {
+      if (url.pathname === '/v1/libraryContinue' && request.method === 'GET') {
         reads.push(url);
         expect(request.headers.get('authorization')).toBe('Bearer fresh-token');
         const limit = Number(url.searchParams.get('limit') ?? 20);
         return Response.json({
-          libraryEntries: Array.from({ length: Math.min(size, limit) }, (_, index) => ({
+          subjects: Array.from({ length: Math.min(size, limit) }, (_, index) => ({
             subjectId: `subject-${index}`,
-            state: 'in_progress',
-            revision: 1,
-            createdAt: stamp,
-            updatedAt: stamp,
-            subject: {
-              id: `subject-${index}`,
-              type: 'book',
-              label: `Label ${index}`,
-            },
+            state: null,
+            lastActivityAt: stamp,
+            activeProgressSession: null,
           })),
           next: null,
         });
       }
-      if (url.pathname.startsWith('/v1/libraryEntries/')) throw new Error(`unexpected per-entry read ${url.pathname}`);
-      if (url.pathname === '/v1/progressSessions') {
-        progress.push(url);
-        return Response.json({ progressSessions: [], next: null });
+      if (url.pathname === '/v1/pages:read' && request.method === 'POST') {
+        const input = (await request.json()) as { reads?: Record<string, { kind: string; id: string }> };
+        if (input.reads) {
+          headers.push(url);
+          return Response.json({
+            reads: Object.fromEntries(
+              Object.entries(input.reads).map(([key, read]) => [
+                key,
+                { status: 200, body: { subject: { id: read.id, type: 'book', label: `Label ${read.id}` } } },
+              ]),
+            ),
+          });
+        }
+        return pages(request);
       }
       return pages(request);
     }) as typeof fetch,
@@ -110,7 +114,7 @@ test('the public page query and browser Continue query keep their separate read 
     counts.R = 0;
     counts.A = 0;
     reads.length = 0;
-    progress.length = 0;
+    headers.length = 0;
     paths.length = 0;
   };
 
@@ -130,12 +134,12 @@ test('the public page query and browser Continue query keep their separate read 
     const resume = await new QueryClient().fetchQuery(query);
     expect(resume).toHaveLength(Math.min(scale, 6));
     expect(reads).toHaveLength(1);
-    expect(progress).toHaveLength(Math.min(scale, 6));
+    expect(headers).toHaveLength(scale === 0 ? 0 : 1);
     expect(Number(reads[0]!.searchParams.get('limit'))).toBeGreaterThan(0);
     expect(Number(reads[0]!.searchParams.get('limit'))).toBeLessThanOrEqual(6);
-    expect(reads[0]!.searchParams.get('state')).toBe('in_progress');
-    expect(paths.filter((path) => path === 'POST /v1/pages:read')).toHaveLength(0);
-    expect(counts).toEqual({ D: 1, K: 1 + Math.min(scale, 6), R: 0, A: 0 });
+    expect(reads[0]!.searchParams.get('state')).toBeNull();
+    expect(paths.filter((path) => path === 'POST /v1/pages:read')).toHaveLength(scale === 0 ? 0 : 1);
+    expect(counts).toEqual({ D: 1, K: 1 + (scale === 0 ? 0 : 1), R: 0, A: 0 });
 
     reset();
     const signedOutPage = await loadRoutePage(client, '/');

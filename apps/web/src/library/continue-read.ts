@@ -4,9 +4,9 @@ import { personalRead } from '../kernel/query';
 import type { SubjectSummary } from '../media/summary';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { readEntryPage } from './entries-read';
 import type { ProgressLabelInput } from './progress-label';
 import { libraryLabel } from './reads';
+import { libraryEntryStateLabel, readEntryPage } from './entries-read';
 
 /** The Continue row shows at most this many subjects. */
 export const CONTINUE_LIMIT = 6;
@@ -24,7 +24,52 @@ export type ContinueEntry = {
   /** The embedded subject, which carries the cover and the types that choose its frame. */
   summary: SubjectSummary;
   progress: ContinueProgress | null;
+  stateLabel?: string;
 };
+
+type ContinueSubject = {
+  subjectId: string;
+  state: string | null;
+  activeProgressSession: (ProgressLabelInput & { id: string }) | null;
+};
+
+type ContinueKernelClient = KernelClient & {
+  libraryContinue: {
+    get(args: { query: { limit: number }; headers: { authorization: string } }): Promise<{
+      data?: { subjects: ContinueSubject[]; next: string | null } | null;
+    }>;
+  };
+  pages: {
+    $read: {
+      post(args: {
+        reads: Record<string, { kind: 'subject'; id: string }>;
+        headers: { authorization: string };
+      }): Promise<{
+        data?: { reads: Record<string, { status: number; body?: { subject?: RawSubject } }> } | null;
+      }>;
+    };
+  };
+};
+
+const knownStates = new Set(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
+
+function stateText(state: string | null): string | undefined {
+  return state !== null && knownStates.has(state) ? libraryEntryStateLabel(state) : undefined;
+}
+
+export function continueProgress(session: (ProgressLabelInput & { id: string }) | null): ContinueProgress | null {
+  return session
+    ? {
+        sessionId: session.id,
+        mode: session.mode,
+        unit: session.unit,
+        amount: session.amount,
+        total: session.total,
+        completedUnitCount: session.completedUnitCount,
+        locator: session.locator,
+      }
+    : null;
+}
 
 export function homeContinueQuery(locale: string, read: () => Promise<ContinueEntry[]>) {
   return queryOptions({
@@ -82,13 +127,53 @@ export async function readProgress(
   }
 }
 
-/**
- * The viewer's subjects in progress, most recently updated first: one library read for a signed-in visitor, none
- * otherwise, then one progress read per subject shown (at most six, whatever the size of the library). A failed
- * library read leaves the row out instead of failing the page; a failed progress read leaves that card without a
- * progress line.
- */
+/** Continue preview: one private list read and one batched subject-header read, with no reads when signed out. */
 export async function loadContinue(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<ContinueEntry[]> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    if (!authorization) return [];
+    const reader = client as ContinueKernelClient;
+    const result = await reader.libraryContinue.get({
+      query: { limit: CONTINUE_LIMIT },
+      headers: { authorization },
+    });
+    const subjects = (result.data?.subjects ?? []).slice(0, CONTINUE_LIMIT);
+    if (subjects.length === 0) return [];
+    const reads = Object.fromEntries(
+      subjects.map(({ subjectId }) => [`subject:${subjectId}`, { kind: 'subject' as const, id: subjectId }]),
+    );
+    const page = await reader.pages.$read.post({ reads, headers: { authorization } });
+    const results = page.data?.reads ?? {};
+    return subjects.flatMap((item) => {
+      const header = results[`subject:${item.subjectId}`];
+      const subject = header?.status === 200 ? header.body?.subject : undefined;
+      if (!subject) return [];
+      const language = typeof subject.label === 'object' && subject.label ? subject.label.language : undefined;
+      const progress = continueProgress(item.activeProgressSession);
+      const label = stateText(item.state);
+      return [
+        {
+          subjectId: item.subjectId,
+          label: libraryLabel(subject.label, item.subjectId),
+          ...(language ? { language } : {}),
+          summary: summaryOf(subject),
+          progress,
+          ...(label ? { stateLabel: label } : {}),
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** The compatibility path for kernels that have not exposed the Continue operation yet. */
+export async function loadLegacyContinue(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
@@ -110,6 +195,7 @@ export async function loadContinue(
             ...(language ? { language } : {}),
             summary: summaryOf(subject),
             progress,
+            ...(stateText(entry.state) ? { stateLabel: stateText(entry.state) } : {}),
           })),
         ];
       }),

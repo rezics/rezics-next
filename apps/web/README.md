@@ -526,13 +526,12 @@ Each server render and browser session has its own query cache. Public reads sta
 
 ### Home Continue row
 
-- **Touches:** for a signed-in visitor, one `GET /v1/libraryEntries?state=in_progress&view=FULL` with a limit of 6,
-  started in the browser after the session is known, then one `GET /v1/progressSessions?subjectId=` for each entry shown, all
-  started together; none for a signed-out visitor.
-- **Bound:** signed in, 1 more K per home view returning at most 6 entries with their embedded subjects, whatever the
-  size of the library, plus at most 6 progress reads (one per card shown), and 1 more D for the credential the reads
-  send; signed out, 0. Credential refresh can add R/A as for other personal reads; no other per-entry reads.
-- **Growth check:** `tests/home-continue-cost.test.ts`: the home page reads the library once per view whatever the size of the library
+- **Touches:** for a signed-in visitor, one `GET /v1/libraryContinue?limit=6` and one `POST /v1/pages:read` with at most 6
+  `subject` reads; none for a signed-out visitor.
+- **Bound:** two kernel requests per home view and at most 6 cards, whatever the size of the library or the number of
+  active sessions; no per-subject requests.
+- **Growth check:** `continue-runtime.test.ts`, "the row makes at most two kernel reads per view, none of them per
+  subject, with 0, 6 and 300 subjects in progress", counting fake kernel requests.
 - **Card:** each card is a `CoverCard`: the cover edge to edge, the title, the subject's type as the one secondary
   line, and one `ProgressRow`. The card is one link to the progress session, named "Continue <title>", and its ⋯ menu
   holds "Open subject page"; nothing else on it is interactive. The row shows the unit form the kernel's progress
