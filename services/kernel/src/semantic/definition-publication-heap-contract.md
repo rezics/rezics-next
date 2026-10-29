@@ -182,3 +182,17 @@ log, with its exact revision/runtime/host/load; no numbers are populated before 
 checks are the two-file kernel check and root typecheck once after the final implementation commit. A queued
 check stays queued until its managed terminal result. Diagnostic success and the deliberately red original HTTP
 case must be reported separately. No passing heap assertion closes publication admission or this Goal.
+
+The first required managed launch failed before creating a check or running any diagnostic:
+
+```text
+bun scripts/worker-check.ts --run -- bun run --cwd services/kernel check test/semantic/definition-publication-work.test.ts test/semantic/definition-publication-heap.test.ts
+Invalid check id: --
+```
+
+The installed launcher's `import.meta.main` branch treats `--run` followed by any argument as resuming an existing
+record; it passes the literal separator to `readRecord`, whose identifier validation rejects it. This contradicts
+the required immediate-id launch interface. There is no managed id to wait for, no Worker started by this attempt,
+and no raw H0/c/peak result. The original HTTP red has been preserved in source but was not re-observed here.
+Changing the launcher or bypassing the required interface is not claimed as diagnostic evidence. The same
+interface is required for root typecheck; its launch outcome is retained with the delivery logs.
