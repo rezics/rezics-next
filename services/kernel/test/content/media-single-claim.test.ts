@@ -3,7 +3,8 @@ import { fromPlainText } from '@rezics/document';
 import type { ContentMediaDriver } from '../../../../specs/content-media-driver.ts';
 import { newId } from '../../src/route/route.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
-import { eraseRevisionMedia } from '../../src/content/erasure-workflow.ts';
+import { createErasureJob } from '../../src/content/erasure-job.ts';
+import { createMediaStorage } from './support/storage.ts';
 import { createContentMediaDriver, currentMediaScenario } from './media-driver.ts';
 
 let driver: ContentMediaDriver;
@@ -146,14 +147,18 @@ test('erasing a post erases only the media that post claimed', async () => {
   await historicalReference(system.database.pool, first.revisionId, [firstImage, secondImage], '2025-01-01');
   const before = await row(secondImage);
   expect((await send('DELETE', `/v1/posts/${first.id}`)).status).toBe(204);
-  await clearErasedPostRevisions(system.database.pool, { postId: first.id }, Date.now() + 10_000);
-  // Drain the native media cleanup page for each retained revision, just as the erasure workflow does.
-  const revisions = await system.database.pool.query(
-    'SELECT revision_id FROM content.revision WHERE route=$1 AND post_id=$2',
-    [route, first.id],
-  );
-  for (const revision of revisions.rows)
-    await eraseRevisionMedia(system.database.pool, { route, post_id: first.id, revision_id: revision.revision_id });
+  const cleanupStorage = createMediaStorage();
+  try {
+    // Drain the same native cleanup called by the post-erased worker.
+    await clearErasedPostRevisions(
+      system.database.pool,
+      { postId: first.id },
+      Date.now() + 10_000,
+      createErasureJob(system.database.pool, cleanupStorage.storage),
+    );
+  } finally {
+    await cleanupStorage.close();
+  }
   expect((await row(firstImage)).erased).toBe(true);
   expect(await driver.download('author', firstImage, 'derivative')).toEqual({ outcome: 'denied' });
   expect(await row(secondImage)).toEqual(before);

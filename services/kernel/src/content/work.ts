@@ -373,7 +373,8 @@ async function registerWork(
   // authority, so a retry or a new event id reads it again and leaves erased rows unchanged.
   const erasedPostEvent = 'com.rezics.content.post.erased.v1' as const;
   const clearErasedPost = DBOS.registerStep(
-    async (postId: string) => clearErasedPostRevisions(context.pool, { postId }, Date.now() + 120_000),
+    async (postId: string) =>
+      clearErasedPostRevisions(context.pool, { postId }, Date.now() + 120_000, createErasureJob(context.pool, storage)),
     { name: 'content.erasePostRevisions.step', ...retry },
   );
   DBOS.registerWorkflow(async (postId: string) => clearErasedPost(postId), { name: 'content.erasePostRevisions' });
