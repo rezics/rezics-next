@@ -377,22 +377,7 @@ test('a signed-in person approves and executes organization creation rename and 
   expect(deleted.headers.get('cache-control')).toBe('no-store');
   expect(deleted.headers.get('x-content-type-options')).toBe('nosniff');
   expect(await stateOf(leaving.accountId)).not.toBe('active');
-  const later = await call('/account-operations/approve', { operationKey: 'after-delete', operation: removal }, '', {
-    headers: {
-      origin: issuer,
-      'content-type': 'application/json',
-      authorization: `Bearer ${leaving.bearer}`,
-    },
-  });
-  expect({
-    status: later.status,
-    body: await later.json(),
-    challenge: later.headers.get('www-authenticate'),
-  }).toMatchObject({
-    status: 401,
-    body: { code: 'invalid_credentials' },
-    challenge: 'Bearer error="invalid_token"',
-  });
+  await refused(await approve(leaving, 'after-delete', removal), 401);
 }, 120000);
 
 test('a transfer is approved by the source manager accepted by the destination manager and executed', async () => {
