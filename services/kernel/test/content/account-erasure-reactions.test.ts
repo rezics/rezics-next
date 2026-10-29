@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { Release } from '@rezics/definitions';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { eraseAccountReactionsPage, type ReactionErasureCursor } from '../../src/content/account-erasure-reactions.ts';
 import { createReactionCountEffect } from '../../src/content/reaction-projection.ts';
 import { createReportLocatorEffect } from '../../src/content/report-locator.ts';
@@ -63,7 +64,9 @@ beforeAll(async () => {
   people = await createPersonas(kernel, { version: 1, pool: db.pool, auth });
   // These accounts have no organization ownership or software-operator obligations.
   const clientId = `erasure_${crypto.randomUUID()}`;
-  const scopes = [...actionCatalogue(kernel).keys()].filter((action) => action !== 'media:complete').sort();
+  const scopes = [...new Set([...actionCatalogue(kernel).keys(), ...LIFECYCLE_ACTIONS.keys()])]
+    .filter((action) => action !== 'media:complete')
+    .sort();
   await registerTestClient(auth.host.service, { clientId, firstParty: true, scopes });
   async function ordinary(): Promise<Persona> {
     const account = await auth.person(`erasure_${crypto.randomUUID()}`);
