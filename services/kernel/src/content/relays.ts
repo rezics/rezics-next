@@ -1,5 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
+import { createAccess } from '../access/index.ts';
+import resourceRoles from '../access/resource-roles.json';
+import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent, Envelope } from '../events/log.ts';
@@ -13,6 +16,7 @@ import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
 import { createModerationDecisionEffect } from './moderation-decisions.ts';
 import { createReportOutcomeEffect } from './report-outcomes.ts';
 import { createReportEffect } from './report-effect.ts';
+import { createMentionNoticeEffect } from './mention-notices.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
   CONTENT_QUEUES,
@@ -186,11 +190,20 @@ function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effe
 
 /** Add once through WorkContext.addEffects before the sole worker is launched.
  * This static list owns no runner, workflow registration or checkpoint. */
-export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
+export function contentEffects(pool: Pool, client: WorkClient, clock: KernelClock = () => new Date()): Effect[] {
+  const access = createAccess({
+    actions: new Map(
+      Object.values(resourceRoles.roles)
+        .flat()
+        .map((action) => [action, { anonymous: action === 'subject:read' }]),
+    ),
+    clock,
+  });
   return [
     createBoardEffect(pool),
     createReportEffect(pool),
     createReportOutcomeEffect(pool),
+    createMentionNoticeEffect(pool, access),
     createModerationDecisionEffect(pool),
     enqueueEffect(pool, client, 'content_media_image', [MEDIA_WORK_EVENTS.image], 'image'),
     enqueueEffect(pool, client, 'content_media_purge', [...MEDIA_WORK_EVENTS.purge], 'purge'),

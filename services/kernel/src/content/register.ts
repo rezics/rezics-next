@@ -132,7 +132,7 @@ export const registerContent: WorkModule = {
       ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
     }).register(context);
     context.addEffects([
-      ...contentEffects(context.pool, context.client),
+      ...contentEffects(context.pool, context.client, context.clock),
       createReplyNoticeEffect(context.pool, access),
     ]);
   },

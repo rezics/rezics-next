@@ -565,6 +565,16 @@ A malformed media ID list is a 400 `invalid_request`. Any well-formed reference 
 Content setup writes one installation marker and one Global `reaction:set` grant once. The Global grant growth
 check uses scales [256, 1024, 4096] with the series rule.
 
+### Hot board page
+
+- **Touches:** One board point read, at most 200 candidates and bounded thread/board/Realm disclosure; at most 100 results.
+- **Growth check:** `test/content/board-hot-http.test.ts`: “the hot page stays within its bound as boards and threads grow”.
+
+### Mention notices
+
+- **Touches:** One first-revision body read (at most 2 MiB) and, for up to ten recipients, one preference check, one current Access read check and one notice row.
+- **Growth check:** `test/content/growth-mention-notices.test.ts`; mention nodes per post at scales [16, 64, 256], with at most ten notices and constant database rows beyond ten.
+
 Derivations use the implemented adapters and SQL in `db/content/migrations/` and `db/content/schema.sql`. At fixed admitted input, unique-key B-tree probes examine constant rows and use O(log N) shared blocks; changing k indexed rows uses O(k log N) blocks. Rows include filtered candidates; blocks include bounded body access but exclude dead tuples, vacuum debt and lock waits. `C` is the command envelope (receipt/partition/outbox and bounded write-basis inserts), adding constant rows/statements and logarithmic blocks. `A` is an authenticated Access check, derived in [Access Cost](../access/README.md#cost). Transactions, settings, catalogue checks and time reads add fixed statement constants. Body and metadata byte caps bound read/write bytes.
 
 Limits: board candidates <= 200, collection <= 100, public pages <= 100 results with at most 200 hydrated candidates. Post/revision candidate helpers cap s at 200 and fetch s + 1 identities. Reply validation checks at most 32 parent posts; edit at most 33. Rank refresh locks <= 500 candidates. Sitemap pages cap L at 1000. Media input is <= 20 MiB / 40 million decoded pixels, with at most twelve variants. Reaction slot growth scales are [64, 512, 4096]. The `subject-reactions-http` “subject reaction read” capture covers `reaction-projection.readReactionCounts`.
