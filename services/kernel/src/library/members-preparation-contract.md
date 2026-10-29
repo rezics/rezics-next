@@ -70,6 +70,10 @@ prose's 401 sentence does not replace the actual shared authentication contract.
 Initial scope is a same-owner curated Collection created through mounted production POST and admitted by current
 `collection:read`, on the owner's route. The native fixture proves its mounted members GET succeeds and releases
 its read snapshot before reservation. It proves no logical Everything/state or foreign-source admission.
+Reservation must recheck the exact current active curated header and owner binding inside the fenced transaction;
+the earlier successful read and an explicit grant alone cannot substitute for current Collection liveness.
+Use the existing private-read concealment: `accessCommandAuthorization` receives `not_found` as its denial,
+including when its native command-admission preparation refuses a terminal owner.
 A batch covers distinct definitions for that ONE Collection. This is sufficient to specify two reads and an intent
 with multiple locators without claiming all common-page reads are supported. Cross-Collection/source batches
 need the common-page owner's actual resource/page Access binding: Core accepts one authorization resource that

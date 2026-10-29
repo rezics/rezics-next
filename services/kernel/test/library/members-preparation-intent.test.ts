@@ -370,9 +370,9 @@ test('fresh Auth deletePersona commits T between intent and step; late work and 
     await native.db.admin.query('SELECT workflow_uuid,inputs FROM dbos.workflow_input ORDER BY workflow_uuid')
   ).rows;
   await expect(native.step(episode.locator)).rejects.toBeInstanceOf(LifecycleDeniedError);
-  await expect(f.store.reserve(f.actor, f.collectionId, [definition(1)])).rejects.toMatchObject({
-    message: 'Command admission denied',
-  });
+  await expect(f.store.reserve(f.actor, f.collectionId, [definition(1)])).rejects.toMatchObject(
+    new ProblemError('not_found'),
+  );
   expect(await native.rows(f.owner)).toEqual(before);
   expect((await native.workflow(episode.workflowId)).input.accounts).toEqual([f.owner.accountId]);
   expect(
