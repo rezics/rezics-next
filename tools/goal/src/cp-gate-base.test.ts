@@ -82,6 +82,48 @@ test.serial('the control-plane gate allows failures reproduced by the same test 
   expect(outcome?.passed).toBe(true);
 }, 30_000);
 
+test('run() passes the detached train mode to the code that needs it instead of setting process.env', async () => {
+  const before = process.env.GOAL_TRAIN_MODE;
+  const received: unknown[] = [];
+  const runtime = {
+    settings: { stateDirectory: '.temp/goal-cli-test' },
+    db: { close() {} },
+    store: { tasks: () => [] },
+    job: { drain: async () => {} },
+    inbox: {},
+    queue: {},
+    train: { runWaiting: async () => {} },
+  };
+  for (const command of ['status', 'train', 'status']) {
+    expect(await run([command], (options) => {
+      received.push(options);
+      return runtime as never;
+    })).toBe(0);
+    expect(process.env.GOAL_TRAIN_MODE).toBe(before);
+  }
+  expect(received).toEqual([
+    { trainMode: 'detached' },
+    { trainMode: 'inline' },
+    { trainMode: 'detached' },
+  ]);
+});
+
+test.serial("the control-plane landing check reruns each failing test file alone on the landing's base and refuses only failures that pass on the base or are new in the branch", async () => {
+  const shared = 'tools/goal/src/fixtures/shared.test.ts';
+  const regression = 'tools/goal/src/fixtures/regression.test.ts';
+  const added = 'tools/goal/src/fixtures/new.test.ts';
+  const { outcome, commands } = await controlPlaneOutcome([shared], [shared, regression, added], [shared, regression]);
+  const baseRuns = commands.filter(({ command, cwd }) => command[1] === 'test' && cwd.includes('control-plane-base-'));
+  expect(baseRuns.map(({ command }) => command)).toEqual([
+    ['bun', 'test', regression],
+    ['bun', 'test', shared],
+  ]);
+  expect(outcome?.passed).toBe(false);
+  expect(outcome?.firstFailure?.excerpt).toContain(regression);
+  expect(outcome?.firstFailure?.excerpt).toContain(added);
+  expect(outcome?.firstFailure?.excerpt).not.toContain(shared);
+}, 30_000);
+
 test.serial('the control-plane gate refuses a test file that fails on the branch and passes on its base', async () => {
   const { outcome } = await controlPlaneOutcome(false);
   expect(outcome?.passed).toBe(false);

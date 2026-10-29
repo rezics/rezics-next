@@ -24,7 +24,9 @@ export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox']);
 /** Runtime injection is confined to the programmatic test entry point. */
 export async function run(
   argv: string[],
-  factory: (options?: { trainMode: 'detached' | 'inline' }) => Runtime | IntegrationRuntime | Promise<Runtime | IntegrationRuntime> = createRuntime,
+  factory: (
+    options?: { trainMode: 'detached' | 'inline' },
+  ) => Runtime | IntegrationRuntime | Promise<Runtime | IntegrationRuntime> = createRuntime,
 ): Promise<number> {
   const [command, ...args] = argv;
   if (!command || !commands.includes(command)) {
