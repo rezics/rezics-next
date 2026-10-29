@@ -69,6 +69,7 @@ growth. Actual-cause investigation remains separate.
 The frozen, controller-formatted test is preserved at Git blob `51646d618c1482af9fc53e8f671f28f17b0ba062`.
 This documentation continuation uses only `test -s docs/research/imports-audit/client-counted-costs.md` for artifact
 acceptance; the completed focused check is not rerun, and no typecheck or broader gate is required.
+
 ## Recovered prerequisite and blocked cause capture
 
 Inspection on 2026-10-30 confirms the restored parent is an ancestor of the assigned branch.
@@ -208,10 +209,10 @@ marginal/rate assertions were not reached. No diagnostic rerun or final amended 
 The earlier parser-blocked sections describe prior attempts, not this reached result.
 
 | Records / driver-database ordinal | Converter calls | Counted prepares | SQLite executions | Transactions | Commits | All traced prepare events | Distinct literal texts |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 16 / 1 | 80 | 62 | 2686 | 51 | 51 | 63 | 62 |
-| 64 / 2 | 320 | 62 | 10654 | 195 | 195 | 63 | 62 |
-| 256 / 3 | 1280 | 64 | 42544 | 773 | 773 | 65 | 64 |
+| --------------------------------- | --------------: | ---------------: | ----------------: | -----------: | ------: | ------------------------: | ---------------------: |
+| 16 / 1                            |              80 |               62 |              2686 |           51 |      51 |                        63 |                     62 |
+| 64 / 2                            |             320 |               62 |             10654 |          195 |     195 |                        63 |                     62 |
+| 256 / 3                           |            1280 |               64 |             42544 |          773 |     773 |                        65 |                     64 |
 
 Each driver opens one instrumented handle. Trace event ordinals are contiguous 1–63, 1–63 and 1–65,
 respectively; no diagnostic limit was reached. They include setup's `PRAGMA table_info(run_generations)`
@@ -345,10 +346,10 @@ new-record count. The fixture retains record concurrency 16, zero-latency transp
 SQLite cleanup and the original 120,000 ms timeout.
 
 | Records | Converter calls | Counted SQLite prepares | SQLite executions | Transactions | SQLite commits | Prepare events | Distinct literal texts |
-| ------: | --------------: | ----------------------: | ----------------: | -----------: | -------------: | -------------: | --------------------: |
-|     256 |            1280 |                      64 |             41520 |          773 |            773 |             65 |                    64 |
-|    1024 |            5120 |                      64 |            166008 |         3085 |           3085 |             65 |                    64 |
-|    4096 |           20480 |                      64 |            663942 |        12331 |          12331 |             65 |                    64 |
+| ------: | --------------: | ----------------------: | ----------------: | -----------: | -------------: | -------------: | ---------------------: |
+|     256 |            1280 |                      64 |             41520 |          773 |            773 |             65 |                     64 |
+|    1024 |            5120 |                      64 |            166008 |         3085 |           3085 |             65 |                     64 |
+|    4096 |           20480 |                      64 |            663942 |        12331 |          12331 |             65 |                     64 |
 
 Each trace has event ordinals 1–65; all three cold literal sets are identical with 64 distinct texts. Against the
 original 16/64 set of 62 texts, the only additions are the already measured page branches:
