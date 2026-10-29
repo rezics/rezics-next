@@ -48,29 +48,19 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
       (node) => node['Relation Name'] === 'resource_grant' && Number(node['Actual Loops']) > 0,
     );
     expect(scans.length).toBeGreaterThan(0);
-    if (scans.some((node) => node['Index Name'] !== 'resource_grant_pkey_lookup')) {
-      await database.admin.query(`CREATE INDEX diagnostic_grant_lookup ON access.resource_grant
-        (subject_kind, subject_id, subject_role, action, valid, route, resource_id)
-        WHERE route=0 AND resource_id='00000000-0000-8000-8000-000000000000'::uuid`);
-      const alternative = await capture(database, () => probe('2030-01-01T12:00:00Z', true));
-      console.error(
-        'covering key alternative',
-        JSON.stringify(
-          nodes(alternative.capture.plans).filter(
-            (node) => node['Relation Name'] === 'resource_grant' && Number(node['Actual Loops']) > 0,
-          ),
-        ),
-      );
-      await database.admin.query('DROP INDEX access.diagnostic_grant_lookup');
-    }
     for (const node of scans) {
       expect(node['Node Type'], JSON.stringify({ scale, scans })).toBe('Index Only Scan');
       expect(node['Index Name'], JSON.stringify({ scale, scans })).toBe('resource_grant_pkey_lookup');
       const condition = String(node['Index Cond']);
-      // The partial index fixes route/resource; the remaining key is parameterized.
-      for (const key of ['subject_kind', 'subject_id', 'subject_role', 'action'])
-        expect(condition, JSON.stringify({ scale, scans })).toContain(`${key} =`);
-      expect(condition, JSON.stringify({ scale, scans })).toContain('valid <=');
+      // Both lexicographic bounds have the identical exact subject/action prefix.
+      // Empty is below every stored nonempty range; the upper bound ends at T.
+      const key = 'ROW(g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid)';
+      expect(condition, JSON.stringify({ scale, scans })).toContain(`${key} >= ROW(`);
+      expect(condition, JSON.stringify({ scale, scans })).toContain(`${key} <= ROW(`);
+      for (const key of ['k.subject_kind', 'k.subject_id', 'k.subject_role', "'organization:create'::text"])
+        expect(condition.split(key).length - 1, JSON.stringify({ scale, scans })).toBe(2);
+      expect(condition, JSON.stringify({ scale, scans })).toContain("'empty'::tstzrange");
+      expect(condition, JSON.stringify({ scale, scans })).toContain('tstzrange(');
       expect(node['Actual Rows'], JSON.stringify({ scale, scans })).toBeLessThanOrEqual(1);
       expect(node['Rows Removed by Filter'] ?? 0, JSON.stringify({ scale, scans })).toBe(0);
     }

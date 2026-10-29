@@ -26,9 +26,6 @@ WITH input AS NOT MATERIALIZED (
       THEN (SELECT count(*) FROM (
         SELECT g.valid FROM access.resource_grant g
         WHERE g.route = 0 AND g.resource_id = '00000000-0000-8000-8000-000000000000'::uuid
-          AND g.action = i.action AND g.subject_kind = k.subject_kind
-          AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
-          AND g.valid <= tstzrange((SELECT at FROM authority), NULL, '[)')
           AND ROW(g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid)
             >= ROW(k.subject_kind, k.subject_id, k.subject_role, i.action, 'empty'::tstzrange)
           AND ROW(g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid)
