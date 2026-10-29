@@ -1,4 +1,4 @@
-import { Exposure } from '../kernel/exposure';
+import { useOperation } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useState } from 'react';
@@ -21,6 +21,7 @@ function normalize(value: string): Settlement {
 export function OrderPage({ order: initial, checkout }: { order: OrderPageData; checkout?: 'canceled' | 'success' }) {
   const [order, setOrder] = useState(initial);
   const [gaveUp, setGaveUp] = useState(false);
+  const canReadOrder = useOperation('order.get');
   useEffect(() => {
     if (checkout === 'canceled' || !openSettlement.has(order.settlement)) return;
     let polls = 0;
@@ -81,18 +82,31 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
   return (
     <article className="max-w-3xl min-w-0 space-y-8 text-foreground">
       <PageHeading className="text-foreground">{heading}</PageHeading>
-      {order.settlement === 'paid' ? (
-        <section
-          aria-labelledby="receipt-heading"
-          className="space-y-5 rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6"
-        >
+      <div
+        className={
+          order.settlement === 'paid'
+            ? 'space-y-5 rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6'
+            : 'flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-4'
+        }
+      >
+        {order.settlement === 'paid' && (
           <h2 id="receipt-heading" className="text-xl font-semibold">
             {m.order_receipt()}
           </h2>
-          <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-            <SubjectCover data={order.subject} size="sm" priority />
-            <div className="min-w-0 space-y-4">
-              <p className="break-words text-lg font-medium">{order.subject.subject.title}</p>
+        )}
+        <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+          <SubjectCover data={order.subject} size="sm" priority />
+          <div className="min-w-0 space-y-4">
+            <p
+              className={
+                order.settlement === 'paid'
+                  ? 'break-words text-lg font-medium'
+                  : 'min-w-0 break-words pt-1 font-serif text-xl text-foreground'
+              }
+            >
+              {order.subject.subject.title}
+            </p>
+            {order.settlement === 'paid' && (
               <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm">
                 <dt className="text-muted-foreground">{m.order_reference()}</dt>
                 <dd className="break-all font-mono">{order.id}</dd>
@@ -105,15 +119,10 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
                   </time>
                 </dd>
               </dl>
-            </div>
+            )}
           </div>
-        </section>
-      ) : (
-        <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-4">
-          <SubjectCover data={order.subject} size="sm" priority />
-          <p className="min-w-0 break-words pt-1 font-serif text-xl text-foreground">{order.subject.subject.title}</p>
         </div>
-      )}
+      </div>
       {confirming && (
         <Alert role="status">
           <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>
@@ -166,11 +175,15 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
         </Alert>
       )}
       {gaveUp && pending && (
-        <Exposure operation="order.get">
-          <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>
-            {m.order_refresh()}
-          </Button>
-        </Exposure>
+        <Button
+          variant="outline"
+          size="lg"
+          className="w-full sm:w-auto"
+          disabled={!canReadOrder}
+          onClick={() => window.location.reload()}
+        >
+          {m.order_refresh()}
+        </Button>
       )}
     </article>
   );

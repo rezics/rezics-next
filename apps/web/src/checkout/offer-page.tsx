@@ -1,4 +1,4 @@
-import { Exposure } from '../kernel/exposure';
+import { useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -13,6 +13,7 @@ type Phase = 'ready' | 'submitting' | 'retry' | 'unavailable' | 'closed';
 
 export function OfferPage({ offer }: { offer: OfferPageData }) {
   const { state: session, csrfToken: csrf } = useSession();
+  const admitted = useOperation('order.create');
   const [phase, setPhase] = useState<Phase>(offer.state === 'delisted' ? 'unavailable' : 'ready');
 
   async function start() {
@@ -92,24 +93,28 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
           )}
         </div>
       </header>
-      <Exposure operation="order.create">
-        <div className="pt-2">
-          {phase === 'retry' ? (
-            <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
-              {m.offer_retry()}
-            </Button>
-          ) : phase === 'closed' ? null : (
-            <Button
-              size="lg"
-              className="w-full sm:w-auto"
-              disabled={phase !== 'ready' || session === 'unknown'}
-              onClick={() => void start()}
-            >
-              {m.offer_buy()}
-            </Button>
-          )}
-        </div>
-      </Exposure>
+      <div className="pt-2">
+        {phase === 'retry' ? (
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full sm:w-auto"
+            disabled={!admitted || session === 'unknown'}
+            onClick={() => void start()}
+          >
+            {m.offer_retry()}
+          </Button>
+        ) : phase === 'closed' ? null : (
+          <Button
+            size="lg"
+            className="w-full sm:w-auto"
+            disabled={!admitted || phase !== 'ready' || session === 'unknown'}
+            onClick={() => void start()}
+          >
+            {m.offer_buy()}
+          </Button>
+        )}
+      </div>
     </article>
   );
 }
