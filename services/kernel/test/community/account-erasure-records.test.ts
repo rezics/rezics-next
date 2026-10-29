@@ -234,7 +234,12 @@ test.serial(
     expect(await reasons()).toEqual(['', '']);
     for (const target of [fixture.member, fixture.outsider]) {
       await json(
-        await driver.request({ actor: target, method: 'POST', path: `/v1/realms/${place.realmId}/membership`, key: key() }),
+        await driver.request({
+          actor: target,
+          method: 'POST',
+          path: `/v1/realms/${place.realmId}/membership`,
+          key: key(),
+        }),
         403,
       );
     }
@@ -313,11 +318,32 @@ test.serial(
                       creator: fixture.owner.id,
                     },
                   ],
-                  'community.space_revision': [{ route, space_id: spaceId, revision_id: revisionId, predecessor: null,
-                    title: 'Unrelated', summary: '', created_at: at, author: fixture.owner.id }],
-                  'community.realm_revision': [{ route, realm_id: realmId, revision_id: revisionId, predecessor: null,
-                    title: 'Unrelated', summary: '', visibility: 'public', context_id: fixture.contextId,
-                    created_at: at, author: fixture.owner.id }],
+                  'community.space_revision': [
+                    {
+                      route,
+                      space_id: spaceId,
+                      revision_id: revisionId,
+                      predecessor: null,
+                      title: 'Unrelated',
+                      summary: '',
+                      created_at: at,
+                      author: fixture.owner.id,
+                    },
+                  ],
+                  'community.realm_revision': [
+                    {
+                      route,
+                      realm_id: realmId,
+                      revision_id: revisionId,
+                      predecessor: null,
+                      title: 'Unrelated',
+                      summary: '',
+                      visibility: 'public',
+                      context_id: fixture.contextId,
+                      created_at: at,
+                      author: fixture.owner.id,
+                    },
+                  ],
                   'community.realm_ban': [
                     {
                       route,
@@ -375,10 +401,6 @@ test.serial(
           });
           expect(result.found).toBe(1);
         },
-      });
-          await reset();
-        },
-        repetitions: 1,
       });
       expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     } finally {
