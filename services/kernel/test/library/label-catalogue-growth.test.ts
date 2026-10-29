@@ -532,9 +532,11 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       const prepared = states.get(repetition);
       if (!prepared) throw new Error(`Missing fresh operation states for repetition ${repetition}`);
       const ordered = [
-        ...operations.map((operation, index) => ({ operation, state: prepared[index]! }))
+        ...operations
+          .map((operation, index) => ({ operation, state: prepared[index]! }))
           .filter(({ operation }) => operation.name.startsWith('list')),
-        ...operations.map((operation, index) => ({ operation, state: prepared[index]! }))
+        ...operations
+          .map((operation, index) => ({ operation, state: prepared[index]! }))
           .filter(({ operation }) => !operation.name.startsWith('list')),
       ];
       for (const { operation, state } of ordered) operation.assert(await operation.run(state));
