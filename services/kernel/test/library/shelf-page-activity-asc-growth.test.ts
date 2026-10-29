@@ -242,15 +242,17 @@ test('activity ascending growth retains logarithmic indexed work and declares it
             rule: report.rule,
             indexProbes,
             shadow: report.shadow,
-            samples: report.samples.map(({ scale, cost: { rows, blocks, statements }, repetitions, relationSizes }) => ({
-              scale,
-              population: populations.get(scale),
-              relationSizes,
-              rows,
-              blocks,
-              statements,
-              repetitions: repetitions.map(({ rows, blocks, statements }) => ({ rows, blocks, statements })),
-            })),
+            samples: report.samples.map(
+              ({ scale, cost: { rows, blocks, statements }, repetitions, relationSizes }) => ({
+                scale,
+                population: populations.get(scale),
+                relationSizes,
+                rows,
+                blocks,
+                statements,
+                repetitions: repetitions.map(({ rows, blocks, statements }) => ({ rows, blocks, statements })),
+              }),
+            ),
           }),
         );
       }
