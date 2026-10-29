@@ -27,7 +27,8 @@ WITH input AS NOT MATERIALIZED (
           AND g.action = i.action AND g.subject_kind = k.subject_kind
           AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
           AND g.valid <= tstzrange((SELECT at FROM authority), NULL, '[)')
-        ORDER BY g.valid DESC LIMIT 1
+        ORDER BY g.route DESC, g.resource_id DESC, g.subject_kind DESC, g.subject_id DESC,
+                 g.subject_role DESC, g.action DESC, g.valid DESC LIMIT 1
       ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0
       ELSE (SELECT count(*) FROM access.resource_grant g
         WHERE g.route = i.route AND g.resource_id = target.resource_id AND g.action = i.action
