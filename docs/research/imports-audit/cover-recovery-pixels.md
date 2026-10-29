@@ -92,6 +92,14 @@ replacement. Exact native receipt, durable local ACK, command bytes, candidate/m
 survived same-SQLite recovery and identical-input repeat/reopen. Earlier-cover retractions remained required.
 The combined interruption/recovery/pixel witness passes on the retry's unchanged starting revision.
 
+Required root typecheck, `bun scripts/typecheck.ts` through worker-check, also exited **0**.
+Check `bc8a3291-4c57-4d59-888d-85d3ced22a20` completed all 13 workspace typechecks, including kernel,
+Auth and web. The command ran in 66.795 s after waiting for a shared slot; no infrastructure retry was needed.
+Log: `.temp/goal/checks/worker-check-2026-10-29T14-11-21.587Z-31191afc.log`.
+The earlier Lix/compiler connectivity failure did not recur in this retry.
+
+Delivery command, through worker-check: `test -s docs/research/imports-audit/cover-recovery-pixels.md`.
+
 ### Earlier attempt
 
 The earlier focused execution `45811b5f-4b8e-45e9-9192-66df37c4c652` exited 1 with **0 pass, 1 fail,
