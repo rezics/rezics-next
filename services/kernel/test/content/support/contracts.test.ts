@@ -44,6 +44,7 @@ function fixtureContracts(): void {
     >
   >();
   same<Equal<ContentAuthClient, { readonly id: string; readonly kind: 'first-party' | 'confidential' }>>();
+  same<Equal<ContentSystem['auth']['ordinaryScopes'], readonly string[]>>();
   same<
     Equal<
       ContentSystem,
@@ -60,6 +61,7 @@ function fixtureContracts(): void {
         readonly actors: ContentActors;
         readonly auth: {
           readonly ordinaryClient: ContentAuthClient;
+          readonly ordinaryScopes: readonly string[];
           readonly websiteClient: ContentAuthClient;
           issue(input: {
             readonly accountId: string;

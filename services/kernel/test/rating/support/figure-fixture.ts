@@ -51,14 +51,15 @@ export async function createFigureFixture(
     const database = (cleanupDatabase = await openGrowthDatabase(system.database.pool.options.connectionString));
     let closed = false;
     const voterIds = new Set<string>();
-    const scopes = (
-      system.auth.ordinaryClient as typeof system.auth.ordinaryClient & { readonly scopes: readonly string[] }
-    ).scopes;
     const freshen = async (account: Account | null) => {
       if (account && voterIds.has(account.id) && (decodeJwt(account.bearer).exp ?? 0) * 1000 <= Date.now() + 30_000) {
         // Large native publication fixtures outlive access tokens. Sign in again through real Auth.
         account.bearer = (
-          await system.auth.issue({ accountId: account.id, clientId: system.auth.ordinaryClient.id, scopes })
+          await system.auth.issue({
+            accountId: account.id,
+            clientId: system.auth.ordinaryClient.id,
+            scopes: system.auth.ordinaryScopes,
+          })
         ).bearer;
       }
     };
@@ -98,7 +99,7 @@ export async function createFigureFixture(
       const credential = await system.auth.issue({
         accountId: id,
         clientId: system.auth.ordinaryClient.id,
-        scopes,
+        scopes: system.auth.ordinaryScopes,
       });
       voterIds.add(id);
       voters.push({ id, bearer: credential.bearer });

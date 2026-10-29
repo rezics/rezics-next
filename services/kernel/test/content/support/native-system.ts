@@ -25,9 +25,7 @@ import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOpti
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
   readonly actors: Omit<ContentActors, 'worker' | 'otherWorker'>;
-  readonly auth: Omit<ContentSystem['auth'], 'websiteClient'> & {
-    readonly ordinaryScopes: readonly string[];
-  };
+  readonly auth: Omit<ContentSystem['auth'], 'websiteClient'>;
   /** The full fixture registers its website client on this same real Auth service. */
   readonly nativeAuth: AuthService;
 };
@@ -230,16 +228,15 @@ async function createNativeContentSystemWithOptions(
     const ordinaryClient = { id: `${namespace}_ordinary`, kind: 'first-party' as const };
     // Auth validates both the issued consent and the registered client ceiling
     // when a durable step restores its initiator.
-    const scopes = ordinaryScopes
-      ? [...ordinaryScopes]
-      : [...actions.keys()].filter((action) => action !== 'media:complete').sort();
-    const registeredOrdinaryScopes = Object.freeze([...scopes]);
-    // The content wrapper preserves this client object but rebuilds its auth object.
-    Object.defineProperty(ordinaryClient, 'scopes', { value: registeredOrdinaryScopes });
+    const registeredOrdinaryScopes = Object.freeze(
+      ordinaryScopes
+        ? [...ordinaryScopes]
+        : [...actions.keys()].filter((action) => action !== 'media:complete').sort(),
+    );
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
       firstParty: true,
-      scopes,
+      scopes: registeredOrdinaryScopes,
     });
     await host.start();
 
@@ -291,7 +288,7 @@ async function createNativeContentSystemWithOptions(
         email: `${name}@content.test`,
         password,
       });
-      return issue({ accountId, clientId: ordinaryClient.id, scopes });
+      return issue({ accountId, clientId: ordinaryClient.id, scopes: registeredOrdinaryScopes });
     };
     const governance = await person('governance');
     await bootstrapGovernance(pool, governance.actor.accountId);
@@ -337,7 +334,7 @@ async function createNativeContentSystemWithOptions(
       async person() {
         const name = `erase_${crypto.randomUUID().replaceAll('-', '')}`;
         const clientId = `${name}_client`;
-        const deletionScopes = [...new Set([...scopes, 'account:delete'])];
+        const deletionScopes = [...new Set([...registeredOrdinaryScopes, 'account:delete'])];
         await nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes: deletionScopes });
         const { accountId } = await host!.workflows.register({
           key: name,

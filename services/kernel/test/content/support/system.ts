@@ -55,6 +55,7 @@ export interface ContentSystem {
   readonly actors: ContentActors;
   readonly auth: {
     readonly ordinaryClient: ContentAuthClient;
+    readonly ordinaryScopes: readonly string[];
     readonly websiteClient: ContentAuthClient;
     /** Obtain a real Auth-issued token for a provisioned account and registered client. */
     issue(input: {
@@ -297,7 +298,13 @@ export async function createContentSystemWithOrdinaryScopes(
       routeKey: native.routeKey,
       tokenKeys: native.tokenKeys,
       actors: { ...native.actors, worker, otherWorker },
-      auth: { ordinaryClient: native.auth.ordinaryClient, websiteClient, issue, refresh },
+      auth: {
+        ordinaryClient: native.auth.ordinaryClient,
+        ordinaryScopes: native.auth.ordinaryScopes,
+        websiteClient,
+        issue,
+        refresh,
+      },
       access: native.access,
       actions: native.actions,
       clock: native.clock,
