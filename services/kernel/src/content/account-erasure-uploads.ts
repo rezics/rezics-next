@@ -58,14 +58,21 @@ export async function eraseAccountUploadsPage(
         return result;
       });
       if (!source || source.uploader_id !== accountId || source.erased) continue;
-      if (source.collection_pending) { pending++; pendingIds.add(key.id); continue; }
+      if (source.collection_pending) {
+        pending++;
+        pendingIds.add(key.id);
+        continue;
+      }
       if (source.claimed_item_id) {
         const post = await withConnection(deps.pool, async (client) => {
           const anchor = await readPartition(client, partitionOf(sourceRoute));
-        if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
-        return readPost.run(client, { route: sourceRoute, id: source.claimed_item_id! });
+          if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
+          return readPost.run(client, { route: sourceRoute, id: source.claimed_item_id! });
         });
-        if (post?.availability === 'available' && post.visibility === 'published') { retained.add(key.id); continue; }
+        if (post?.availability === 'available' && post.visibility === 'published') {
+          retained.add(key.id);
+          continue;
+        }
         // The post-erased projection owns this image.
         retained.add(key.id);
         continue;
@@ -76,12 +83,14 @@ export async function eraseAccountUploadsPage(
       });
       await purgeObject(deps.pool, deps.storage, key.id as MediaId);
     } else {
-      const visible = await readDocument(
-        { pool: deps.pool, access, routeKey: new Uint8Array() },
-        key.id,
-        { actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 },
-      );
-      if (visible) { retained.add(key.id); continue; }
+      const visible = await readDocument({ pool: deps.pool, access, routeKey: new Uint8Array() }, key.id, {
+        actor: { kind: 'anonymous' },
+        deadline: Date.now() + 30_000,
+      });
+      if (visible) {
+        retained.add(key.id);
+        continue;
+      }
       await runCommand(deps.pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
         await eraseField.run(tx, { route: sourceRoute, id: key.id, author_id: accountId });
         return noEffect(null);
@@ -94,8 +103,12 @@ export async function eraseAccountUploadsPage(
   else if (phase === 'media') next = { phase: 'fields', after: null };
   if (phase === 'media' || phase === 'fields') {
     await runCommand(deps.pool, { partition: partitionOf(home) }, async (tx) => {
-      await remove.run(tx, { route: home, account_id: accountId, phase,
-        ids: keys.filter((r) => !retained.has(r.id) && !pendingIds.has(r.id)).map((r) => r.id) });
+      await remove.run(tx, {
+        route: home,
+        account_id: accountId,
+        phase,
+        ids: keys.filter((r) => !retained.has(r.id) && !pendingIds.has(r.id)).map((r) => r.id),
+      });
       return noEffect(null);
     });
   }
@@ -112,10 +125,15 @@ export function createAccountUploadIndexEffect(pool: Pool): Effect {
       const data = event.data as Record<string, unknown>;
       const id = (data.mediaId ?? data.id) as string;
       const accountId = (data.actorId ?? data.authorId) as string;
-      const idRoute = route(id), accountRoute = route(accountId);
+      const idRoute = route(id),
+        accountRoute = route(accountId);
       await runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
-        await add.run(tx, { route: accountRoute, account_id: accountId,
-          phase: event.type === types[0] ? 'media' : 'fields', id });
+        await add.run(tx, {
+          route: accountRoute,
+          account_id: accountId,
+          phase: event.type === types[0] ? 'media' : 'fields',
+          id,
+        });
         return noEffect(null);
       });
     },
