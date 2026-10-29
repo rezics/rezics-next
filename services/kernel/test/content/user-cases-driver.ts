@@ -311,7 +311,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
           {
             resource: { route: route(realm.realmId), id: realm.realmId },
             subject: { kind: 'account', id: moderator.id },
-            role: 'community.realm.moderator',
+            role: 'community.realm.owner',
             valid: '(,)',
           },
           reader,
