@@ -1,6 +1,6 @@
 # Access and Auth erasure participants
 
-Research evidence, 29 October 2026. This is a recommendation for Accounts to adopt in its owner documents, not an amendment to [Account erasure](../deletion.md#account-erasure). Inspected repository revision: `da107d37f4b90b508bd705e8d2b0eaa1b38c444b`. No database, reference build or reference executable was run.
+Research evidence, 29 October 2026. This is a recommendation for Accounts to adopt in its owner documents, not an amendment to [Account erasure](../deletion.md#account-erasure). Inspected repository revision: `da107d37f4b90b508bd705e8d2b0eaa1b38c444b`. The findings come from source inspection; reference clones were not installed, built or executed.
 
 ## Recommendation and decisions
 
