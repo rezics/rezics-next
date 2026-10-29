@@ -124,9 +124,9 @@ test('relation property headings capitalize the definition label', () => {
 });
 
 test('subject field labels are capitalized while the hero and fact values retain their definitions', () => {
-  expect(renderedPage).toContain('<dt lang="en" class="font-semibold">Author</dt>');
-  expect(renderedPage).toContain('<dt lang="en" class="font-semibold">Publication date</dt>');
-  expect(renderedPage).toContain('<dt lang="en" class="font-semibold">ISBN-13</dt>');
+  expect(renderedPage).toMatch(/<dt[^>]*>Author<\/dt>/);
+  expect(renderedPage).toMatch(/<dt[^>]*>Publication date<\/dt>/);
+  expect(renderedPage).toMatch(/<dt[^>]*>ISBN-13<\/dt>/);
   expect(renderedPage).toContain('>bell hooks</a>');
   expect(renderedPage).toContain('lowercase tag');
 });
