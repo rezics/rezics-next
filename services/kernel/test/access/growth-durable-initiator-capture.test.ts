@@ -65,7 +65,14 @@ test('capture keeps constant statements and rows at 8, 64 and 512 consented scop
     name: 'durable initiator capture by consented scope count',
     scales: [8, 64, MAX_CONSENTED_SCOPES],
     bounds: { statements: 'constant', rows: 'constant', blocks: 'linear' },
-    async grow(_database, scale) {
+    async grow(database, scale) {
+      // Vary scopes alone; authorization also probes the grants seeded by this fixture.
+      for (const fixture of fixtures.values())
+        await database.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+          fixture.target.route,
+          fixture.target.id,
+        ]);
+      fixtures.clear();
       const scopes = ['subject:write', ...Array.from({ length: scale - 1 }, (_, i) => `scope:${i}`)];
       fixtures.set(scale, await captureFixture(db, false, scopes));
     },
