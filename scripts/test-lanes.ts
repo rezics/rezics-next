@@ -104,7 +104,7 @@ function outputGrowthFailures(output: string): GrowthFailure[] | null {
       if (message === undefined || block.some((candidate) => /^(error:|# Unhandled)/.test(candidate))) return null;
       failures.push({ title: failure[1]!, message: message.slice(message.indexOf(':') + 1).trim() });
       block = [];
-    } else if (/^\s*\d+ (?:tests? failed:|pass|fail|skip|todo)\b/.test(line) || line.startsWith('Ran ')) {
+    } else if (/^\s*\d+ (?:tests? failed:|(?:pass|fail|skip|todo)\b)/.test(line) || line.startsWith('Ran ')) {
       finished = true;
     } else if (!finished) {
       block.push(line);
