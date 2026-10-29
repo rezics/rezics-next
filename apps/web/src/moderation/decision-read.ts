@@ -112,7 +112,7 @@ export const readDecisionPage = createServerFn({ method: 'GET' })
     const reads = decisionReadAdapters(kernelClient() as unknown as DecisionKernel, authorization);
     const page = await loadDecisionPage(data.id, reads);
     if (!page) throw notFound();
-    return { ...page, viewerId: sessionSubject(request) };
+    return { ...page, viewerId: sessionSubject(request) ?? null };
   });
 
 export function decisionReadAdapters(client: DecisionKernel, authorization: string): DecisionReads {
