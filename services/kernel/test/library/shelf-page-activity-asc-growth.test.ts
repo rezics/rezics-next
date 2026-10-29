@@ -14,7 +14,7 @@ function nodes(value: unknown): Record<string, unknown>[] {
   return [value as Record<string, unknown>, ...Object.values(value).flatMap(nodes)];
 }
 
-test('fixed date reader stays bounded as private populations grow', async () => {
+test('activity ascending growth retains logarithmic indexed work and declares its actual fixed index-level probes under calibrated whole-series validation', async () => {
   const db = await openGrowthDatabase();
   try {
     for (const axis of ['matching', 'state', 'type', 'foreign'] as const) {
@@ -70,6 +70,13 @@ test('fixed date reader stays bounded as private populations grow', async () => 
           more: boolean;
           index: string;
         }[] = [];
+        // Each of four filter combinations runs first/deep-tie/tie-end/EOF reads.
+        // The SQL guards leave 1/2/2/2 range descents respectively, including empty EOF seeks.
+        // First/deep-tie/tie-end each hydrate limit+1 keys; EOF hydrates none.
+        // Thus one run makes exactly 4 * (7 + 3 * (limit+1)) descents: 52 or 616.
+        // Fixed descents can gain an index level together; this is separate from state uncertainty.
+        const indexProbes = 4 * (1 + 2 + 2 + 2 + 3 * (limit + 1));
+        const populations = new Map<number, Record<string, number>>();
         const operation = () =>
           withConnection(db.pool, async (client) => {
             await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -92,8 +99,11 @@ test('fixed date reader stays bounded as private populations grow', async () => 
           });
         const report = await checkGrowth(db, {
           name: `activity ascending ${axis} limit ${limit}`,
+          rule: 'series',
+          indexProbes,
           scales: [256, 1024, 4096],
           warmups: 1,
+          repetitions: 5,
           bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
           grow: async (_database, scale, previous) => {
             const start = Math.max(previous, 256) + 1;
@@ -127,13 +137,26 @@ test('fixed date reader stays bounded as private populations grow', async () => 
                   });
                 }
               }
+            expect(cases).toHaveLength(16);
+            const population = await db.admin.query<Record<string, number>>(
+              `SELECT count(*)::int AS "entryRows",
+                (count(*) FILTER (WHERE route = $1 AND account_id = $2))::int AS "ownerRows",
+                (count(*) FILTER (WHERE route = $1 AND account_id = $2 AND state = 'planned'))::int AS "plannedRows",
+                (count(*) FILTER (WHERE route = $1 AND account_id = $2 AND type_id = $3))::int AS "typeRows",
+                (count(*) FILTER (WHERE route = $1 AND account_id = $2 AND state = 'planned' AND type_id = $3))::int AS "plannedTypeRows"
+               FROM library.entry`,
+              [route, owner, types[0]],
+            );
+            populations.set(scale, population.rows[0]!);
           },
           operation,
-          warmup: async () => {
+          warmup: async (_database, scale) => {
             const measured = await capture(db, operation);
             const kept = withoutCatalogStatements('activity ascending plans', measured.capture);
             const plans = kept.plans.filter((p) => nodes(p).some((n) => n['Relation Name'] === 'entry'));
             expect(plans).toHaveLength(cases.length);
+            let rangeProbes = 0,
+              hydrationProbes = 0;
             for (let i = 0; i < cases.length; i++) {
               const c = cases[i]!,
                 plan = plans[i];
@@ -142,6 +165,13 @@ test('fixed date reader stays bounded as private populations grow', async () => 
               expect(cost.relations['library.entry']?.sequentialScans).toBe(0);
               const scans = nodes(plan).filter((n) => n['Relation Name'] === 'entry' && Number(n['Actual Loops']) > 0);
               expect(scans.some((scan) => scan['Index Name'] === c.index)).toBe(true);
+              const ranges = scans.filter((scan) => scan['Index Name'] === c.index);
+              expect(ranges).toHaveLength(c.after === null ? 1 : 2);
+              const hydrations = scans
+                .filter((scan) => scan['Index Name'] === 'entry_pkey')
+                .reduce((sum, scan) => sum + Number(scan['Actual Loops']), 0);
+              expect(hydrations).toBe(c.expected.length + Number(c.more));
+              hydrationProbes += hydrations;
               for (const scan of scans) {
                 if (scan['Index Name'] === 'entry_pkey') {
                   expect(scan['Index Cond']).toMatch(/route = .*account_id = .*subject_id =/);
@@ -150,6 +180,8 @@ test('fixed date reader stays bounded as private populations grow', async () => 
                   continue;
                 }
                 expect(scan['Index Name'], JSON.stringify(scan)).toBe(c.index);
+                expect(Number(scan['Actual Loops'])).toBe(1);
+                rangeProbes += Number(scan['Actual Loops']);
                 expect(scan['Scan Direction']).toBe('Backward');
                 expect(Number(scan['Actual Rows']) * Number(scan['Actual Loops'])).toBeLessThanOrEqual(limit + 1);
                 const bound = String(scan['Index Cond']);
@@ -169,20 +201,42 @@ test('fixed date reader stays bounded as private populations grow', async () => 
                     2 * (limit + 1),
                   );
             }
+            expect(rangeProbes).toBe(4 * (1 + 2 + 2 + 2));
+            expect(hydrationProbes).toBe(4 * 3 * (limit + 1));
+            expect(rangeProbes + hydrationProbes).toBe(indexProbes);
+            console.info(
+              JSON.stringify({
+                axis,
+                limit,
+                scale,
+                population: populations.get(scale),
+                indexProbes,
+                rangeProbes,
+                hydrationProbes,
+              }),
+            );
           },
         });
+        expect(report.rule).toBe('series');
+        for (const verdict of Object.values(report.shadow)) expect(verdict.outcome).toBe('compatible');
         for (const sample of report.samples) {
+          expect(sample.repetitions).toHaveLength(5);
           expect(sample.cost.statements).toBe(cases.length);
           expect(sample.cost.rows).toBeLessThanOrEqual(cases.length * 3 * (limit + 1));
         }
         console.info(
           JSON.stringify({
             name: report.name,
-            samples: report.samples.map(({ scale, cost: { rows, blocks, statements } }) => ({
+            rule: report.rule,
+            indexProbes,
+            shadow: report.shadow,
+            samples: report.samples.map(({ scale, cost: { rows, blocks, statements }, repetitions }) => ({
               scale,
+              population: populations.get(scale),
               rows,
               blocks,
               statements,
+              repetitions: repetitions.map(({ rows, blocks, statements }) => ({ rows, blocks, statements })),
             })),
           }),
         );
