@@ -3,7 +3,12 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import { sqliteEvidence, type Entry } from '../../../specs/imports-vndb-tables-driver.ts';
 import { VndbTablesStore } from '../src/vndb-tables.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
@@ -13,6 +18,15 @@ const TABLES = ['vn', 'vn_titles', 'entry_meta'] as const;
 const GROWING_TABLES = ['vndb_table_runs', 'vndb_table_rows', 'vndb_table_spool'];
 const SCALES = [1, 8, 64] as const;
 const BACKGROUND_ROWS_PER_SOURCE = 250;
+type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
+const check: CountedCheck<CountedValues> = {
+  read: (counts) => counts,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
 const encode = (text: string) => new TextEncoder().encode(text);
 const fixtureNames = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta'];
 const fixtureText = (name: string) =>
@@ -147,7 +161,7 @@ function seedBackground(database: Database, source: string, prefix: string, firs
   }
 }
 
-/** Grow each relation by 500 rows per unit across earlier archives and other sources. */
+/** Add 500 runs and 1500 rows in each of rows/spool per unit across two sources. */
 function seedScaleBackground(database: Database, source: string, firstUnit: number, lastUnit: number) {
   seedBackground(database, source, 'archive-', firstUnit, lastUnit);
   seedBackground(database, 'history', 'other-', firstUnit, lastUnit);
@@ -238,25 +252,25 @@ function seedSpoolRows(database: Database, source: string, run: string, count: n
 async function measureStage(
   evidence: ReturnType<typeof sqliteEvidence>,
   operation: () => Promise<void>,
-): Promise<{ rows: number; blocks: 0; statements: number }> {
+): Promise<CountedValues> {
   evidence.start();
   try {
-    const value = await operation();
-    const cost = evidence.finish();
-    return { ...cost, blocks: 0 };
+    await operation();
+    const raw = evidence.finish();
+    return { 'sqlite returned rows': raw.rows, 'sqlite statements': raw.statements };
   } catch (error) {
     evidence.cancel();
     throw error;
   }
 }
 
-function expectConstantGrowth(samples: GrowthSample[]) {
-  assertGrowth(samples, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+function expectConstantGrowth(samples: Sample[]) {
+  expect(countedViolations(check, samples)).toEqual([]);
 }
 
 test('VNDB staging stays within its bound as R grows', async () => {
   const h = harness();
-  const samples: GrowthSample[] = [];
+  const samples: Sample[] = [];
   try {
     let seededUnits = 0;
     for (const scale of SCALES) {
@@ -267,11 +281,11 @@ test('VNDB staging stays within its bound as R grows', async () => {
       const run = `stage-${scale}`;
       h.store.begin(SOURCE, run);
       h.database.exec('ANALYZE');
-      const cost = await measureStage(h.asynchronousEvidence, () =>
+      const counts = await measureStage(h.asynchronousEvidence, () =>
         h.store.stage(SOURCE, run, stream(spooledArchive())),
       );
       expect(h.store.inspect(SOURCE, run).state).toBe('ready');
-      samples.push({ scale, cost });
+      samples.push({ scale, counted: countedSample([check.read(counts, scale)]) });
     }
     expectConstantGrowth(samples);
   } finally {
@@ -281,7 +295,7 @@ test('VNDB staging stays within its bound as R grows', async () => {
 
 test('VNDB projection stays within its bound as R grows', () => {
   const h = harness();
-  const samples: GrowthSample[] = [];
+  const samples: Sample[] = [];
   try {
     const source = 'projection';
     seedCompleteRows(h.database, source, 'projection-run', 17);
@@ -295,7 +309,7 @@ test('VNDB projection stays within its bound as R grows', () => {
       h.probe.verifyPlans();
       expect(measured.value.records).toHaveLength(16);
       expect(measured.value.next).toBe('v16');
-      samples.push({ scale, cost: measured.cost });
+      samples.push({ scale, counted: countedSample([check.read(measured.counts, scale)]) });
     }
     expectConstantGrowth(samples);
   } finally {
@@ -305,7 +319,7 @@ test('VNDB projection stays within its bound as R grows', () => {
 
 test('VNDB validation stays within its bound as R grows', () => {
   const h = harness();
-  const samples: GrowthSample[] = [];
+  const samples: Sample[] = [];
   const source = 'validation';
   const validate = (h.store as unknown as InternalOperations).validate.bind(h.store);
   try {
@@ -318,7 +332,7 @@ test('VNDB validation stays within its bound as R grows', () => {
 
       const measured = h.probe.measure(() => validate(source, 'validation-run'));
       h.probe.verifyPlans();
-      samples.push({ scale, cost: measured.cost });
+      samples.push({ scale, counted: countedSample([check.read(measured.counts, scale)]) });
     }
     expectConstantGrowth(samples);
   } finally {
@@ -328,7 +342,7 @@ test('VNDB validation stays within its bound as R grows', () => {
 
 test('VNDB cleanup stays within its bound as R grows', () => {
   const h = harness();
-  const samples: GrowthSample[] = [];
+  const samples: Sample[] = [];
   const cleanup = (h.store as unknown as InternalOperations).cleanup.bind(h.store);
   try {
     const source = 'cleanup';
@@ -344,7 +358,7 @@ test('VNDB cleanup stays within its bound as R grows', () => {
       const measured = h.probe.measure(() => cleanup(source, run));
       h.probe.verifyPlans();
       expect(measured.value).toBeUndefined();
-      samples.push({ scale, cost: measured.cost });
+      samples.push({ scale, counted: countedSample([check.read(measured.counts, scale)]) });
     }
     expectConstantGrowth(samples);
   } finally {
