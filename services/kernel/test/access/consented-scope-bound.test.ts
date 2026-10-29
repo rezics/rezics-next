@@ -137,27 +137,27 @@ test('the full default website catalogue commits membership and content actor sn
     space = newId(route),
     thread = newId(route);
   const spaceRevision = newId(route);
-  const connection = await pool.connect();
+  const spaceConnection = await pool.connect();
   try {
-    await connection.query('BEGIN');
-    await connection.query(
+    await spaceConnection.query('BEGIN');
+    await spaceConnection.query(
       `INSERT INTO community.space
        (route,space_id,state,head_revision_id,created_at,creator)
        VALUES ($1,$2,'active',$3,statement_timestamp(),$4)`,
       [route, space, spaceRevision, actor.accountId],
     );
-    await connection.query(
+    await spaceConnection.query(
       `INSERT INTO community.space_revision
        (route,space_id,revision_id,predecessor,title,summary,created_at,author)
        VALUES ($1,$2,$3,NULL,'Scope bound','',statement_timestamp(),$4)`,
       [route, space, spaceRevision, actor.accountId],
     );
-    await connection.query('COMMIT');
+    await spaceConnection.query('COMMIT');
   } catch (error) {
-    await connection.query('ROLLBACK');
+    await spaceConnection.query('ROLLBACK');
     throw error;
   } finally {
-    connection.release();
+    spaceConnection.release();
   }
   await pool.query(
     `INSERT INTO community.realm
