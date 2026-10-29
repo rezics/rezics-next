@@ -645,6 +645,7 @@ CREATE TABLE semantic.identity_epoch_group (
     terminal uuid NOT NULL,
     observed_count bigint NOT NULL,
     generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner_epoch integer,
     version bigint DEFAULT 1 NOT NULL,
     ready boolean DEFAULT false NOT NULL,
     published_epoch bigint DEFAULT 1 NOT NULL,
