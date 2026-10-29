@@ -320,3 +320,159 @@ export async function withInFlightControlMove<T>(f: EpochFixture, operation: () 
     for (const [client, query] of wrapped) client.query = query;
   }
 }
+
+/** Real Library source commands. No canonical rows, directory readiness or ACKs are fixture-written. */
+export async function libraryCutoverInput(f: EpochFixture, originals: readonly string[]) {
+  const { createCollectionCommands } = await import('../../../src/library/collections.ts');
+  const { createFollowCommands } = await import('../../../src/library/follows.ts');
+  const { linkProjection } = await import('../../../src/semantic/links.ts');
+  const { partitionOf } = await import('../../../src/route/route.ts');
+  const accounts = { owner: newId(0xac10) };
+  const actions = [
+    'collection:create',
+    'collection:read',
+    'collection:update',
+    'subject:read',
+    'follow:create',
+    'follow:delete',
+  ];
+  const real = await createRealAccess(f.admin, accounts, actions);
+  const access = real.access({
+    actions: new Map(
+      actions.map((action) => [
+        action,
+        {
+          anonymous: action === 'subject:read',
+          ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
+        },
+      ]),
+    ),
+  });
+  const actor = () => access.authenticate(real.bearer('owner'), { pool: f.pool, deadline: Date.now() + 5000 });
+  const commands = createCollectionCommands({ pool: f.pool, access });
+  const follows = createFollowCommands({ pool: f.pool, access });
+  const collection = (
+    await commands.createCollection(
+      await actor(),
+      { title: 'Identity directory source', visibility: 'private' },
+      randomUUID(),
+    )
+  ).value;
+  const members = [];
+  for (const original of originals) {
+    const projection = linkProjection(f.pool);
+    for (;;) {
+      const progress = await projection.run(partitionOf(routeOf(original)!));
+      expect(progress.status).toBe('read');
+      if (progress.status !== 'read') throw new Error('Native Library source link projection unavailable');
+      if (progress.envelopes === 0) break;
+    }
+    members.push(
+      (
+        await commands.addMember(
+          await actor(),
+          collection.id,
+          { subjectId: original, note: 'Preserved original occurrence' },
+          randomUUID(),
+        )
+      ).value,
+    );
+    await follows.follow(await actor(), { targetType: 'subject', targetId: original }, randomUUID());
+  }
+  return { collection, members, account: accounts.owner };
+}
+
+/** The already specified coordinator export, not a new participant callback or test scheduler. */
+export async function nativeCutoverCoordinator() {
+  const path = new URL('../../../src/semantic/identity-epoch-coordinator.ts', import.meta.url);
+  const module = await import(path.href);
+  return module.resumeIdentityEpochJob as import('../../../src/semantic/identity-epoch-contract.ts').ResumeIdentityEpochJob;
+}
+
+/** Pause the actual owner's SQL before dispatch. Only scheduling changes: no rows/receipts/results replaced.
+ * If work ends before the requested native statement, fail at that actual boundary and never await a fake gate.
+ */
+export async function duringNativeSQL<T>(
+  f: EpochFixture,
+  pattern: RegExp,
+  operation: () => Promise<T>,
+  between: () => Promise<void>,
+): Promise<T> {
+  const { AsyncLocalStorage } = await import('node:async_hooks');
+  const context = new AsyncLocalStorage<boolean>();
+  const reached = Promise.withResolvers<void>();
+  const proceed = Promise.withResolvers<void>();
+  const wrapped = new Map<pg.PoolClient, pg.PoolClient['query']>();
+  let paused = false;
+  const acquire = (client: pg.PoolClient) => {
+    if (!context.getStore() || wrapped.has(client)) return;
+    const query = client.query;
+    wrapped.set(client, query);
+    client.query = new Proxy(query, {
+      apply(target, self, args: unknown[]) {
+        const input = args[0];
+        const sql = typeof input === 'string' ? input : ((input as { text?: string })?.text ?? '');
+        if (context.getStore() && !paused && pattern.test(sql)) {
+          paused = true;
+          console.info('native cutover interruption', sql);
+          reached.resolve();
+          return proceed.promise.then(() => Reflect.apply(target, self, args));
+        }
+        return Reflect.apply(target, self, args);
+      },
+    });
+  };
+  f.pool.on('acquire', acquire);
+  const result = context.run(true, operation);
+  const ended = result.then(
+    () => 'ended' as const,
+    () => 'ended' as const,
+  );
+  try {
+    const boundary = await Promise.race([reached.promise.then(() => 'native-sql' as const), ended]);
+    if (boundary === 'ended') await result; // Preserve the actual native failure in the raw output.
+    expect(boundary, `native operation must reach ${pattern}`).toBe('native-sql');
+    await between();
+    proceed.resolve();
+    return await result;
+  } finally {
+    proceed.resolve();
+    await result.catch(() => {});
+    f.pool.off('acquire', acquire);
+    for (const [client, query] of wrapped) client.query = query;
+  }
+}
+
+/** Native statement/returned-or-affected row observations, not a physical EXPLAIN budget certificate. */
+export async function observeCutoverSQL<T>(f: EpochFixture, operation: () => Promise<T>) {
+  const { AsyncLocalStorage } = await import('node:async_hooks');
+  const context = new AsyncLocalStorage<boolean>();
+  const queries: { sql: string; rows: number }[] = [];
+  const wrapped = new Map<pg.PoolClient, pg.PoolClient['query']>();
+  const acquire = (client: pg.PoolClient) => {
+    if (!context.getStore() || wrapped.has(client)) return;
+    const query = client.query;
+    wrapped.set(client, query);
+    client.query = new Proxy(query, {
+      apply(target, self, args: unknown[]) {
+        const measured = context.getStore();
+        const input = args[0];
+        const sql = typeof input === 'string' ? input : ((input as { text?: string })?.text ?? '');
+        const result = Reflect.apply(target, self, args);
+        if (!measured) return result;
+        return Promise.resolve(result).then((value: pg.QueryResult) => {
+          queries.push({ sql, rows: Math.max(value.rows?.length ?? 0, value.rowCount ?? 0) });
+          return value;
+        });
+      },
+    });
+  };
+  f.pool.on('acquire', acquire);
+  try {
+    return { value: await context.run(true, operation), queries };
+  } finally {
+    console.info('native cutover SQL observations', JSON.stringify(queries));
+    f.pool.off('acquire', acquire);
+    for (const [client, query] of wrapped) client.query = query;
+  }
+}

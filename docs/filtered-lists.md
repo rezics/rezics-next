@@ -131,6 +131,12 @@ IDs, original subject IDs, notes, order and multiplicity. Do not canonicalize af
 `[a,c,z]` with `a → z` would produce `[z,c,z]`, not canonical `[c,z]`.
 
 The shared catalogue identity epoch is pending during serialized durable merge/unmerge/repoint maintenance.
+The fixed `library-private-follow-counts` publication participant covers all Library canonical source drivers,
+owner candidates and structural-support directory rekeys, including concurrent first apply, as well as follows,
+support, totals and pending/published fences. A follow-only ACK cannot publish; every prior removal/addition and
+directory effect needs exact native custody under the [identity contract](../services/kernel/src/semantic/identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant).
+Accounts owns the missing fenced owner operational transaction/atomic-intent Core primitive; Commerce consumes
+its actual exports for Members GET preparation. Missing delivery supplies neither a ready empty list nor an ACK.
 Canonical list reads prepare while pending. Cursors bind the published epoch and restart after changes. At most
 **4,096 originals** belong to a group, admitted before effects. Published redirects point directly to active
 terminals. There is no request-time 4,096-home sweep, exhaustive alias walk or per-page identity-basis protocol.

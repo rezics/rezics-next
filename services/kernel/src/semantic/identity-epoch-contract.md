@@ -230,14 +230,16 @@ rows per generation+canonical ID, and preserve original support and last-eligibl
 DISTINCT from ordinary projection checkpoint and privacy-reduction ACK. Source/public projection and current privacy
 narrowing remain separately owned work; do not fork their public-filter contract or require a new engine/certificate.
 
-Library must export a real `IdentityEpochStep` adapter for private follow counts; its concrete module path/export is
-MISSING. It receives the same affected-original/new-terminal stream, re-keys in <=100-row steps, and ACKs before
+Library must export a real `IdentityEpochStep` adapter under the existing fixed `library-private-follow-counts`
+name for ALL Library canonical records; its concrete module path/export is MISSING. It receives the same
+affected-original/new-terminal stream, re-keys in <=100-row steps, and ACKs before
 publication. Support is per (canonical target, follower); totals change only at 0->1 / 1->0. Derived pair/support/total
 rows live in the canonical-target home; stored follows stay in the source owner home. Admission uses
 `admitHomeEffect` in the destination effect transaction. A global epoch pre-read is not an atomic fence. Old-destination
 applies reject, then reread current source+mapping. Crossing-epoch cleanup, delayed first positive and terminal account
 purge must never resurrect a pair or total. Existing follow/listing helpers do not provide that proof; neither an
-assumed noData ACK nor a new account generation, holder directory or private-fact mirror substitutes for it.
+assumed noData ACK nor a new account generation or private-fact mirror substitutes for it. The required bounded
+owner-candidate and structural-support directory is covered by this SAME participant, as specified below.
 
 Required `semantic/identity-epoch-coordinator.ts` exports `resumeIdentityEpochJob: ResumeIdentityEpochJob` and
 `waitIdentityEpochPublished: WaitIdentityEpochPublished`. The final binding serially drains mapping, invokes the fixed
@@ -249,6 +251,75 @@ STORE and mapping import only native dependencies and these types; participant p
 only final coordinator composition imports concrete participants. Neither participant waits for or imports coordinator.
 Accounts and ordinary callers bind last, after their actual response contracts and native prerequisites exist.
 
+### Complete Library canonical coverage under the fixed participant
+
+The fixed version-1 `library-private-follow-counts` step covers EVERY Library canonical record. Its historical
+name does not restrict its ACK to follows. There is no third participant, identity job, queue, component shape,
+transaction-ID shape or callback ABI. The same job/epoch/input descriptor and native receipt protocol applies.
+Coverage includes:
+
+- Canonical source facts for all six existing drivers: member, entry, label, session, copy and output; their
+  working/ready generations, source/identity bases, checkpoints, candidate seeks and pending/exhaustion state.
+  Existing physical `library.canonical_source_fact` keys are `(route,collection_id,generation,basis_digest,
+  canonical_subject_id,stored_subject_id,driver,fact_id)`; `canonical_source_state` is keyed by
+  `(route,collection_id)`. Their presence is storage evidence, not a working producer or readiness certificate.
+- Owner candidate records keyed by owner/source incarnation and canonical subject, and their structural-support
+  directory keyed by original and exact owner/source/driver/fact locator. Cover every supporting original, including
+  a hidden original, negative/tombstone support and a never-positive first apply. The directory is an internal
+  maintenance locator, not Access, membership authority or a new private-fact mirror. It must discover affected
+  owners through indexed bounded work, never an identity-job scan of all Libraries or a per-request home sweep.
+- Canonical entry state/conflict winners under the existing native owner write sequence, union-label support,
+  independent session/copy support and curated occurrence/output candidate support. Preserve every stored original,
+  occurrence, note, date, order, multiplicity, accepting pin and unrelated later write. A source's ready pointer
+  alone cannot authorize a canonical candidate or prove all support was rekeyed.
+- Follow source-replacement delivery, old/new canonical target pairs, per-target/follower support and totals,
+  pending/published identity fences and independent current source-account terminal fences. Canonical totals count
+  a follower once at positive support; only 0->1 and 1->0 transitions change the total. Negative first applies and
+  delayed deliveries retain revision/fence protection. No ready zero is inferred from missing producer data.
+
+Before dispatching a page, persist its COMPLETE expected effect manifest: each old canonical removal, each new
+addition, owner-candidate replacement, directory OLD-key removal and NEW-key insertion, source-basis invalidation,
+pending fence and eventual published fence. Include all preceding pages and retained half-effects. Identity work
+uses exact old/new terminal and source locator, not just its endpoint vector or the observed count of follow rows.
+Each home commits effects, manifest progress and exact native receipt together under the actual same-effect
+gate/account fences. Release ALL source/Library clients before another home/control/engine checkout. The receiving
+control command takes durable custody of every expected receipt; an empty manifest created without authoritative
+directory coverage is incomplete. No blanket `noData`, callback return or missing-row-as-empty inference is legal.
+
+FIRST APPLY is part of this invariant. Directory registration/support application and identity gate installation
+serialize in the actual destination home, including first-absent gate insertion. If first apply commits first,
+its directory and support are included in the retained input/dirty head and rekey manifest. If installation wins,
+the stale apply atomically rejects and retries from current source/mapping/account truth, or commits durable
+retry responsibility under the new epoch. A source command already committed but not yet registered must have
+durable delivery custody visible to closure; it cannot fall between enumeration and directory publication. Directory
+rekey is not complete until both OLD removal and NEW insertion, concurrent registrations, pending/published fences
+and all first-apply obligations have receiving-owner/control custody. Saved empty pages do not close newer work.
+
+The final Library ACK binds the SAME native transaction ID AND component, job, epoch, step/version and complete
+scope. `publish` rejects `identity_participants_incomplete` when even ONE canonical-directory, candidate, support,
+first-apply or prior-page effect lacks custody, EVEN IF every follow pair/support/total effect is complete. A
+follow-only ACK is invalid for this scope and cannot be upgraded by relabelling its receipt or by the coordinator.
+The minimized completion manifest retains proof of directory coverage and all prior effects through reclamation,
+replay and terminal erasure. Local published fences may be installed while the global job is pending; no reader
+treats that local installation as permission to bypass the global publication predicate.
+
+Native negative schedule: retain a real owner with canonical candidates and a follow, admit the real job, complete
+actual follow effects, then interrupt directory OLD removal/NEW addition or concurrent first-apply custody. Attempt
+reconciliation/publication with the real saved producer receipt: it must reject and remain pending. Also race first
+apply on BOTH sides of gate installation and crash between directory halves/source commit/control custody/ACK.
+Full completion requires actual directory, canonical driver, follow, support, total and fence receipts and all prior
+effects; resume the SAME job, idempotently redeliver lost receipts, publish once, then assert canonical reads and
+unchanged stored originals. Actual missing directory/Core producers keep these cases RED, not skipped or satisfied
+by follow-only completion. The cutover suite's native interruption uses actual owner input and coordinator SQL;
+the full follow-complete/directory-incomplete schedule additionally needs the owner's delivered receipt layout.
+
+Accounts owns the additive event-free fenced owner operational transaction plus atomic durable intent Core
+primitive and its native specification. Existing `noEffect` forbids domain writes and CANNOT implement this
+primitive. Semantic declares neither a guessed callable export nor an operational callback/permission receipt.
+That owner producer is **MISSING**; source intent/operational rows remain Access-owned. Commerce alone consumes its
+ACTUAL delivered exports for Members GET derived preparation. This specification adds no Core, Accounts, Library,
+Search, schema or SQL implementation. Directory/first-apply production cannot be counted as `noData` while missing.
+
 ## Independently landable producer boundaries
 
 | Producer                  | Required surface / evidence                                                                                                  | Present |
@@ -256,7 +327,7 @@ Accounts and ordinary callers bind last, after their actual response contracts a
 | Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bootstrap completeness, per-home fences, ACK custody   | MISSING |
 | Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING |
 | Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | MISSING |
-| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; <=100-row support re-key and stale-destination rejection          | MISSING |
+| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | MISSING |
 | Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | MISSING |
 | Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | MISSING |
 
@@ -389,6 +460,37 @@ frozen. Do not revive identity-basis, home vectors or per-page replay as a subst
   scans, cached allow or stored-personal-reference moves. Incomplete ACK/readiness cannot manufacture a ready zero.
 - Growth check: affected/unaffected points, publication/replay and cursor restart while unrelated groups, histories,
   private support and completed workflow state grow independently. Full native growth evidence remains required.
+
+### Library canonical directory and first-apply custody
+
+- Touches: the SAME affected-input pages, indexed original-to-owner/source/driver/fact directory, owner candidates,
+  all canonical driver records and source working/ready bases, follow pair/support/totals, old/new home gates,
+  current source-account fences, expected effect manifest, native receipts and released control custody.
+- Bound: charge raw directory fanout BEFORE filtering/deduplication, including empty seeks and concurrent first
+  registrations; fanout follows finite relevant support, never all owners. One rekey locator has two input reads
+  (affected original and directory locator), two directory changes (OLD removal/NEW insertion), two candidate
+  changes, two canonical support changes, two fence effects, and at least four native receipt/custody writes for
+  the old/new effects: at least 14 raw row touches before metadata and retries. Consequently a page containing
+  c metadata/frontier/owner/account/receipt/outbox rows admits AT MOST floor((100-c)/14) such locators; extra
+  driver/follow/total or native receipt rows reduce it further. This is a ceiling, not a claim that 14 suffices
+  for every driver. Each native one-home effect command includes BEGIN/SERIALIZABLE setup, native time, owner
+  checks, gate/claim, effect SQL, callbacks, native fence, receipt/outbox and COMMIT. Every statement is charged;
+  batching OLD/NEW keys cannot erase their raw row cost. At most one indexed HOME handoff-state lookup per guarded
+  write remains mandatory; first-absent gate uniqueness/locking and source-account terminal locks are additional
+  work under existing bounds. Directory EOF needs a bounded indexed empty seek plus all pending registrations
+  and deliveries in custody, not a returned empty page alone. Retained space includes one directory row per live
+  source-support locator, negative work until safe minimization, both halves of each unfinished rekey, and the
+  minimized per-effect completion/custody skeleton. Native B-tree/MVCC/catalogue/physical bytes are measured.
+  Keep 100 raw rows/page, 100 pages/segment, 5000ms command deadline, eight scalars/2048 cursor JSON bytes and
+  4096 workflow bytes. Owner operational transaction costs require the actual Accounts Core producer; existing
+  `noEffect` is not an allowance to omit that transaction, its durable intent or source/control delivery.
+- Growth check: fixed selected support while unrelated owners, directory rows, original groups, completed jobs and
+  receipt history grow 1/8/64; separately 64/512/4096 originals and 100/101 raw support boundaries. Native first,
+  deep, empty, replay, OLD/NEW key deletion, concurrent first apply on either side of gate insertion, terminal
+  purge, source->custody->ACK crash and follow-complete/directory-incomplete publication refusal are mandatory.
+  Capture all source/Library/control pools, statements, rows, index/heap/catalogue blocks, payload bytes and live
+  retained evidence. No new participant, sweep, global creation lock, deadline allowance or passed budget follows
+  from these proposed bounds; Performance reviews actual formatted rows before runtime release.
 
 ### Released mapping control observation
 
@@ -781,6 +883,9 @@ incorporated by the account-erasure owner into its inventory; no second erasure 
 > descriptor, flat generation membership and pending membership; topology/work/frontier and unfinished legacy
 > manifest; mapping/home gate/effect record; native receipt and editorial write-basis reference; control page,
 > effect and participant ACK custody; undo/reversal provenance and minimizer/reference/reclamation records.
+> This explicitly includes Library canonical owner-candidate and structural-support directory locators, every
+> driver support row, pending/published fence, concurrent FIRST-APPLY delivery/registration work, directory OLD/NEW
+> rekey manifest, prior-half receipt, Library ACK coverage manifest and all minimized/shared custody copies.
 > Each producer atomically records an indexed account-role-to-exact-locator relation, including requester,
 > operator, reviewed account, source author and acting human, not just the primary account key. Owners/keys are:
 > source home `(route,original[,terminal],head/page/native transaction)`; control home `(job,epoch,version,scope,
@@ -788,6 +893,14 @@ incorporated by the account-erasure owner into its inventory; no second erasure 
 > core/editorial/work stores by exact native receipt/outbox/write-basis/workflow key. Access owns Accounts source
 > intent by `(direction,account,receipt)` plus Global `(route=0,request_id,decision_receipt_id)` and account-home
 > reversal/pending native locator. All copies and shared custody retain exact producer/consumer owner locators.
+> Library remains the payload owner of canonical data: `(route,collection_id,generation,basis_digest,canonical,
+> stored_original,driver,fact)` and owner-candidate `(owner,source_incarnation,canonical)`; its directory is indexed
+> by `(original,owner,source_incarnation,driver,fact)`. The Semantic participant inventories its identity work and
+> exact Library payload/minimizer locators; it does not claim that clearing Semantic rows erased Library copies.
+> First-apply/work/receipt locators include source revision, job/epoch/version and exact native transaction plus
+> component; both OLD and NEW directory keys remain cleanup obligations until receiving custody is acknowledged.
+> Access additionally owns the Accounts Core operational transaction/atomic-intent source records and their
+> account-role/native receipt/delivery indexes. A missing callable or locator is unfinished, never noData.
 >
 > Clear personal labels, request/reason bodies, private provenance and account attribution payload according to
 > existing account terminal policy; preserve communal originals/terminals and only the necessary de-identified

@@ -29,6 +29,7 @@ export type IdentityIntent =
     }>
   | Readonly<{ kind: 'repoint'; original: string; terminal: string; release: string }>;
 
+/** The Library name is fixed: its scope includes ALL Library canonical records and directories. */
 export type IdentityStepName = 'mapping' | 'search-canonical-index' | 'library-private-follow-counts';
 /** Native command component plus transaction identity; a receipt locator, never an allow. */
 export type IdentityNativeReceipt = Readonly<{
@@ -145,7 +146,10 @@ export type IdentityEpochStore = Readonly<{
    * Missing/uncommitted/conflicting receipts reject; the caller cannot assert completion.
    */
   reconcileStepReceipt(pool: Pool, receipt: IdentityStepReceipt): Promise<IdentityStepProgress>;
-  /** Reconciles persisted fixed participant ACK receipts; never accepts a caller completion flag. */
+  /** Reconciles persisted fixed participant ACK receipts; never accepts a caller completion flag.
+   * Library coverage includes canonical owner candidates, structural-support directories and concurrent
+   * first-apply custody, as well as follow/support/totals. A follow-only ACK is incomplete.
+   */
   publish(tx: CommandTransaction, job: IdentityJobRef): Promise<CommandResult<IdentityJobRef>>;
 }>;
 
@@ -161,6 +165,7 @@ export type IdentityEpochStep = (pool: Pool, job: IdentityJobRef) => Promise<Ide
 export type IdentityEpochParticipants = Readonly<{
   version: 1;
   'search-canonical-index': IdentityEpochStep;
+  /** Same participant/receipt ABI; all canonical removals/additions/fences/directory rekeys must be custodied. */
   'library-private-follow-counts': IdentityEpochStep;
 }>;
 

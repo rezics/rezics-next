@@ -328,15 +328,23 @@ Delivery order is Store, mapping and fixed Search/Library producers, coordinator
 pending/cap proof cannot activate full publication. Native cutover cases remain red where producers are absent;
 co-owner review, Performance review of every Cost row and approved formatted-byte freeze precede runtime work.
 
-### Library follow-count publication participant
+### Library canonical publication participant
 
-The durable epoch job includes the co-owned Library follow-count participant for affected originals and the new
-terminal. Durable re-key steps of at most 100 rows ACK before epoch publication; stored follows remain unchanged.
+The SAME fixed `library-private-follow-counts` participant covers EVERY Library canonical record for affected
+originals and new terminals: all six canonical source drivers, owner candidates, structural-support directory,
+concurrent first-apply custody, follows, support, totals and pending/published fences. Its name, version and receipt
+ABI do not change; there is no third participant or queue. Durable re-key steps of at most 100 raw rows ACK before
+epoch publication; stored personal originals remain unchanged. Publication rejects a missing directory rekey or
+first-apply effect even when follow work is complete. The complete prior removal/addition/fence custody manifest,
+negative native schedule and terminal-erasure inventory are in the [owning contract](identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant).
 Support is per (canonical target, follower); totals change only on support transitions 0-to-1 or 1-to-0. Derived
 pairs, support and totals live in the canonical-target partition and counts remain private. Stale-destination
 applies must fail epoch admission, then reread actual source and mapping on retry. The store authority is
 [Private follow counts](../../../../docs/private-follow-counts.md); this section copies neither SQL nor a step ABI.
 Native crash/replay and crossing-epoch/terminal-cleanup no-resurrection proof are required before completion.
+Accounts owns the missing event-free fenced owner operational transaction/atomic durable intent Core primitive
+and its native specification. Semantic invents no export for it; Commerce consumes actual delivered exports for
+Members GET preparation. Missing owner producers cannot supply a no-data ACK or advertise publication readiness.
 
 ### Superseded implementation and remaining acceptance
 
