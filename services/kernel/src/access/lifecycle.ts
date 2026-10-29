@@ -31,6 +31,7 @@ import holdsRead from './lifecycle-holds.sql';
 import membershipChange from './lifecycle-membership.sql';
 import memberInsert from './lifecycle-member-insert.sql';
 import ownersRead from './lifecycle-owners.sql';
+import membershipTime from './lifecycle-membership-time.sql';
 import fenceStatement from './lifecycle-fence.sql';
 import authBarrier from './auth-barriers-advance.sql';
 import fenceRead from './lifecycle-fence-read.sql';
@@ -1334,11 +1335,19 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
               reservation_id: input.reservationId,
             }),
           );
+          // Keep the single command time for history, but never check owners
+          // before a membership change already committed under this org lock.
+          const guard = await membershipTime.run(tx, {
+            route,
+            organization_id: input.organizationId,
+            at: authoritativeTimeValue(currentCommand(tx).time),
+          });
+          requireAllowed(guard?.at);
           const owners = await ownersRead.run(tx, {
             route,
             organization_id: input.organizationId,
             member_id: input.memberAccountId,
-            at: authoritativeTimeValue(currentCommand(tx).time),
+            at: guard.at,
           });
           requireAllowed(
             owners && owners.owners > 0 && (input.role === 'owner' || owners.target === 0 || owners.owners > 1),
