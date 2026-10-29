@@ -28,7 +28,11 @@ function targetContent(target: Target | undefined): ReactNode {
   if (target.kind === 'post') {
     const body = revision.body ?? resource.body;
     try {
-      return body && typeof body === 'object' ? documentText(body as never) : m.moderation_target_unavailable();
+      return typeof body === 'string'
+        ? body
+        : body && typeof body === 'object'
+          ? documentText(body as never)
+          : m.moderation_target_unavailable();
     } catch {
       return m.moderation_target_unavailable();
     }
