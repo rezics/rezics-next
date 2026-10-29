@@ -441,8 +441,13 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
       // canonical comparison below still requires the entire supported shape.
       if (!own(fields, 'lowerBound') && !own(fields, 'upperBound')) options.exact = true;
     }
-    if (canonicalize(value) !== canonicalize(valueSchema(property.datatype, options))) add(at(pointer, 'value'));
-    patterns(value, at(pointer, 'value'));
+    const fixedSchema = canonicalize(value) === canonicalize(valueSchema(property.datatype, options));
+    if (!fixedSchema) add(at(pointer, 'value'));
+    // Fixed schemas contain only package-authored patterns. In particular the
+    // wildcard unit's anchored IRI alternative is outside recheck's automaton
+    // profile. Analyze caller-supplied patterns and all noncanonical schemas;
+    // never change an existing release's schema bytes to satisfy the analyzer.
+    if (!fixedSchema || options.pattern !== undefined) patterns(value, at(pointer, 'value'));
   }
   for (const [id, settings] of Object.entries(release.contexts ?? {}))
     for (const property of Object.keys(settings.defaults))
