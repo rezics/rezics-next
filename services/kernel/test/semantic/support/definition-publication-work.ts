@@ -97,7 +97,7 @@ export function workDiagnostic(release: Release) {
   });
   // Existing successful path: size walk; validation JCS; digest JCS+SHA;
   // receipt-envelope JCS+SHA. This excludes parse and other traversals on purpose.
-  const knownByteFloor = 3 * releaseBytes + 2 * envelopeBytes + 2 * valueCanonicalBytes;
+  const knownByteFloor = 4 * releaseBytes + 2 * envelopeBytes + 2 * valueCanonicalBytes;
   return {
     releaseBytes, wireBytes, envelopeBytes, valueCanonicalBytes, valueNodes,
     distinct: distinct.size, steps, newSteps,
@@ -116,7 +116,7 @@ export function workDiagnostic(release: Release) {
 export const EFFECT_TABLES = [
   'semantic.definition_release', 'semantic.definition_activation', 'semantic.revision',
   'semantic.subject', 'semantic.fact', 'semantic.candidate', 'semantic.source_candidate',
-  'semantic.external_claim', 'core.receipt', 'core.outbox', 'editorial.write_basis',
+  'semantic.external_claim', 'core.partition', 'core.receipt', 'core.outbox', 'editorial.write_basis',
 ] as const;
 
 export async function effectsSnapshot(pool: Pool) {
