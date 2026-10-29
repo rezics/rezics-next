@@ -967,7 +967,7 @@ test('compile cache: each remote run keeps Node compile cache inside its own run
   for (const [index, script] of scripts.entries()) {
     const cachePath = script.match(/(?:^|\s)BUN_RUNTIME_TRANSPILER_CACHE_PATH=([^\s]+)/)?.[1];
     expect(cachePath).toBe(`${runDirectories[index]}/bun-runtime-transpiler-cache`);
-    expect(script).toContain(`export NODE_COMPILE_CACHE='${runDirectories[index]}/.temp/node-compile-cache'`);
+    expect(script).toContain(`export NODE_COMPILE_CACHE=${runDirectories[index]}/.temp/node-compile-cache`);
     expect(script).not.toContain('/tmp/node-compile-cache');
     expect(script.indexOf('export NODE_COMPILE_CACHE')).toBeLessThan(script.indexOf('"$bun" install --frozen-lockfile'));
   }
