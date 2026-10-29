@@ -80,7 +80,7 @@ if (script.includes('MemAvailable')) {
 } else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
   log({ kind: 'base' });
   console.log('BASE -\\nAGE -\\nZSTD 0');
-} else if (script.includes('REMOTE_CHECK_BASE_REFRESH')) {
+} else if (script.includes('REMOTE_CHECK_BASE_REFRESH') && !script.includes('systemd-run')) {
   log({ kind: 'base-refresh' });
 } else if (script.includes('REMOTE_CHECK_SLOT_')) {
   const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
@@ -353,7 +353,7 @@ test('a stack run runs locally when no check host answers, and when no host has 
   expect(seen.filter((event) => event.kind === 'slot' || event.kind === 'rsync' || event.kind === 'run')).toEqual([]);
 
   // No host has two slots, so the run never asks one.
-  const small = scenario({ a: { available: 4e9, slots: 1 } });
+  const small = scenario({ a: { available: 5 * 2 ** 30, slots: 1 } });
   const third = await stack(small.env, local, ['--slots', '2']);
   expect(third.code).toBe(1);
   expect(third.stderr).toContain('requested 2 slots exceeds the cap of 1');
