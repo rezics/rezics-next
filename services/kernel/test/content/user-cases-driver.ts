@@ -219,12 +219,22 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
       await setup('POST', '/v1/grants', input);
       return input;
     }
-    async function subject(label: string, type = 'schema:Book', statements?: unknown): Promise<string> {
-      const { subject: created } = await setup<{ subject: { id: string } }>('POST', '/v1/subjects', {
-        type,
-        labels: { en: label },
-        ...(statements ? { statements } : {}),
-      });
+    async function subject(
+      label: string,
+      type = 'schema:Book',
+      statements?: unknown,
+      actor = moderator,
+    ): Promise<string> {
+      const { subject: created } = await setup<{ subject: { id: string } }>(
+        'POST',
+        '/v1/subjects',
+        {
+          type,
+          labels: { en: label },
+          ...(statements ? { statements } : {}),
+        },
+        actor,
+      );
       labels.set(created.id, label);
       return created.id;
     }
@@ -241,17 +251,14 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
     async function effects(mode: 'drain' | 'replay') {
       if (mode === 'replay') {
         // Reset only delivery checkpoints; durable effect identities and native receipts deduplicate replay.
+        await worker?.stop();
+        worker = undefined;
         await pool.query("DELETE FROM core.consumer_checkpoint WHERE consumer = 'effects'");
       }
-      worker = await startUserCasesWorker(system, prefix);
-      try {
-        await settleUserCasesWorker(system, worker, prefix);
-        fixtureTime = Math.max(fixtureTime, Date.now());
-        if (search) await search.request('POST', `/${prefix}subjects-g1/_refresh`);
-      } finally {
-        await worker.stop();
-        worker = undefined;
-      }
+      worker ??= await startUserCasesWorker(system, prefix);
+      await settleUserCasesWorker(system, worker, prefix);
+      fixtureTime = Math.max(fixtureTime, Date.now());
+      if (search) await search.request('POST', `/${prefix}subjects-g1/_refresh`);
     }
     async function contentResult<T>(response: Response, field: 'thread' | 'post'): Promise<ApiResult<T>> {
       return result(response, (json) => json[field] as T);
@@ -277,20 +284,39 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
         const belowThresholdSubjectId = await subject(data.subjects.belowThresholdSubject);
         const priorSubjectIds: string[] = [];
         for (const label of data.subjects.priorSubjects) priorSubjectIds.push(await subject(label));
-        const { space } = await setup<{ space: { spaceId: string } }>('POST', '/v1/spaces', {
-          title: 'Controlled private Realm host',
-        });
-        const { realm } = await setup<{ realm: { realmId: string; headRevisionId: string } }>('POST', '/v1/realms', {
-          spaceId: space.spaceId,
-          title: data.rating.privateRealm,
-          visibility: 'protected',
-          contextId: GLOBAL_CONTEXT,
-        });
-        await setup('POST', `/v1/realms/${realm.realmId}/members`, { accountId: reader.id });
-        schemeId = await subject('Controlled board scheme', 'skos:ConceptScheme');
-        await setup('PUT', `/v1/realms/${realm.realmId}/boardScheme`, { schemeId }, moderator, {
+        const { space } = await setup<{ space: { spaceId: string } }>(
+          'POST',
+          '/v1/spaces',
+          { title: 'Controlled private Realm host' },
+          reader,
+        );
+        const { realm } = await setup<{ realm: { realmId: string; headRevisionId: string } }>(
+          'POST',
+          '/v1/realms',
+          {
+            spaceId: space.spaceId,
+            title: data.rating.privateRealm,
+            visibility: 'protected',
+            contextId: GLOBAL_CONTEXT,
+          },
+          reader,
+        );
+        schemeId = await subject('Controlled board scheme', 'skos:ConceptScheme', undefined, reader);
+        await setup('PUT', `/v1/realms/${realm.realmId}/boardScheme`, { schemeId }, reader, {
           'if-match': JSON.stringify(realm.headRevisionId),
         });
+        await setup(
+          'POST',
+          '/v1/roleGrants',
+          {
+            resource: { route: route(realm.realmId), id: realm.realmId },
+            subject: { kind: 'account', id: moderator.id },
+            role: 'community.realm.moderator',
+            valid: '(,)',
+          },
+          reader,
+        );
+        await setup('POST', `/v1/realms/${realm.realmId}/members`, { accountId: reader.id });
         const reviewBoards: string[] = [];
         for (const visibility of ['published', 'protected'] as const) {
           // The Global board is independently routed from every review author.
@@ -447,6 +473,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
           {
             'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
           },
+          options.actor,
         );
         const response = await send(
           'POST',
