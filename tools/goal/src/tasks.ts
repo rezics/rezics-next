@@ -430,7 +430,14 @@ export class WorkerTasks {
         currentAttempt?.logPath ?? join(this.settings.stateDirectory, 'runs', taskId, 'release-rebase.log');
       mkdirSync(dirname(logPath), { recursive: true });
       try {
-        rebaseOnto(task.worktree, integration, task.base, `${logPath}.rebase`, this.settings.derivedFiles, task.brief.paths);
+        rebaseOnto(
+          task.worktree,
+          integration,
+          task.base,
+          `${logPath}.rebase`,
+          this.settings.derivedFiles,
+          task.brief.paths,
+        );
       } catch (error) {
         const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'])
           .split('\0')
@@ -728,7 +735,14 @@ export class WorkerTasks {
           const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`]));
           if (commits > 0) {
             try {
-              rebaseOnto(task.worktree, integration, task.base, rebaseLog, this.settings.derivedFiles, task.brief.paths);
+              rebaseOnto(
+                task.worktree,
+                integration,
+                task.base,
+                rebaseLog,
+                this.settings.derivedFiles,
+                task.brief.paths,
+              );
             } catch (error) {
               files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
               if (!files.length) throw error;

@@ -35,8 +35,9 @@ test('a retry rebase unions appended Markdown lines from both sides', async () =
       rebasedContent = readFileSync(join(task.worktree, guide), 'utf8');
       return undefined;
     }) as (...args: unknown[]) => unknown;
-    const retry = (h.tasks as unknown as { retryTask: (id: string, options: object, leased: boolean) => Promise<unknown> })
-      .retryTask;
+    const retry = (
+      h.tasks as unknown as { retryTask: (id: string, options: object, leased: boolean) => Promise<unknown> }
+    ).retryTask;
 
     await retry.call(h.tasks, task.id, { escalation: 'rebase-conflict' }, true);
 
@@ -74,7 +75,9 @@ test('the train lands a Markdown union and names it in the landing log and owner
     const log = readFileSync(h.outcomes[0]!.logPath, 'utf8');
     expect(log).toContain(`Markdown union: ${guide}`);
     const notices = h.store.db.query('SELECT event FROM manager_inbox').all() as { event: string }[];
-    expect(notices.map((row) => JSON.parse(row.event).summary as string).some((summary) => summary.includes(guide))).toBe(true);
+    expect(
+      notices.map((row) => JSON.parse(row.event).summary as string).some((summary) => summary.includes(guide)),
+    ).toBe(true);
   } finally {
     h.dispose();
   }
@@ -90,7 +93,9 @@ test('a promotion-stage generated conflict regenerates during a dev landing', as
       script,
       `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(generated)}, 'regenerated from dev\\n');`,
     );
-    h.settings.derivedFiles = [{ path: 'packages/client/src/kernel/**', stage: 'promotion', command: [process.execPath, script] }];
+    h.settings.derivedFiles = [
+      { path: 'packages/client/src/kernel/**', stage: 'promotion', command: [process.execPath, script] },
+    ];
     const task = await dispatchFile(h, generated, 'worker generated output\n');
     h.advanceDev(generated, 'integration generated output\n');
 
