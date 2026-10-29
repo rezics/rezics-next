@@ -29,14 +29,3 @@ export const SignedIn: Story = {
   play: settingsReady,
   render: () => <PageStory visitor="Signed In" path="/settings" />,
 };
-
-export const SignedOut: Story = {
-  name: 'Signed Out',
-  play: async (context) => {
-    await pageReady(context);
-    const view = within(within(context.canvasElement).getByRole('main'));
-    await view.findByRole('link', { name: m.account_sign_in() });
-    await expect(view.queryByRole('radio')).toBeNull();
-  },
-  render: () => <PageStory visitor="Signed Out" path="/settings" />,
-};

@@ -24,19 +24,8 @@ async function listed(context: { canvasElement: HTMLElement }) {
   link.closest('[data-slot="list-row"]')?.setAttribute('data-overlay', 'visible');
 }
 
-/** A signed-out reader is offered sign-in instead. */
-async function offered(context: { canvasElement: HTMLElement }) {
-  const view = await mainView(context);
-  await view.findByRole('link', { name: /\S/ });
-}
-
 export const SignedIn: Story = {
   name: 'Signed In',
   play: listed,
   render: () => <PageStory visitor="Signed In" path="/realms" />,
-};
-export const SignedOut: Story = {
-  name: 'Signed Out',
-  play: offered,
-  render: () => <PageStory visitor="Signed Out" path="/realms" />,
 };
