@@ -109,12 +109,13 @@ test('concurrent identical first requests force native contention retry and shar
   const second = native.db.openPool({ max: 1 });
   const barrier = uniquenessRace([native.db.pool, second]);
   await barrier.arm();
+  const secondActor = await native.actor(f.owner, second);
   const raced = await capture(
     native.db,
     () =>
       Promise.all([
         f.store.reserve(f.actor, f.collectionId, [definition()]),
-        native.store(second).reserve(f.actor, f.collectionId, [definition()]),
+        native.store(second).reserve(secondActor, f.collectionId, [definition()]),
       ]),
     { includeBackends: true },
   );
@@ -228,10 +229,11 @@ test('quota boundary serializes concurrent 33rd and 34th definitions, preserves 
     .sort((a, b) => String(a.episode_id).localeCompare(String(b.episode_id)))
     .slice(0, 2);
   const second = native.db.openPool({ max: 1 });
+  const secondActor = await native.actor(f.owner, second);
   const result = await capture(native.db, () =>
     Promise.all([
       f.store.reserve(f.actor, f.collectionId, [definition(32)]),
-      native.store(second).reserve(f.actor, f.collectionId, [definition(33)]),
+      native.store(second).reserve(secondActor, f.collectionId, [definition(33)]),
     ]),
   );
   const rows = await native.rows(f.owner);
@@ -295,6 +297,23 @@ test('a registered-step admission boundary refuses an absent episode without cre
   expect(observed.capture.statements.some((sql) => /\b(?:INSERT INTO|UPDATE|DELETE FROM)\b/i.test(sql))).toBe(false);
 });
 
+test('a digest hit with unequal retained canonical bytes fails closed instead of sharing a different definition', async () => {
+  const f = await native.fixture();
+  const episode = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
+  await native.db.admin.query(
+    'UPDATE library.members_preparation SET canonical_basis=$4 WHERE route=$1 AND owner_account_id=$2 AND episode_id=$3',
+    [
+      episode.locator.route,
+      f.owner.accountId,
+      episode.locator.episodeId,
+      canonicalize([1, f.owner.accountId, f.collectionId, definition(1).filter, 'id', definition(1).release.digest]),
+    ],
+  );
+  await expect(f.store.reserve(f.actor, f.collectionId, [definition()])).rejects.toMatchObject(
+    new ProblemError('unsupported_query'),
+  );
+});
+
 test('touch refuses an absent locator rather than recreating it or charging owner quota', async () => {
   const f = await native.fixture();
   expect(await f.store.touch(f.actor, native.locator(f.owner, f.collectionId))).toBe(false);
@@ -333,7 +352,9 @@ test('fresh Auth deletePersona commits T between intent and step; late work and 
   ).toEqual([{ state: 'deleted' }]);
   const before = await native.rows(f.owner);
   await expect(native.step(episode.locator)).rejects.toBeInstanceOf(LifecycleDeniedError);
-  await expect(f.store.reserve(f.actor, f.collectionId, [definition(1)])).rejects.toBeInstanceOf(Error);
+  await expect(f.store.reserve(f.actor, f.collectionId, [definition(1)])).rejects.toMatchObject({
+    message: 'Command admission denied',
+  });
   expect(await native.rows(f.owner)).toEqual(before);
   expect((await native.workflow(episode.workflowId)).input.accounts).toEqual([f.owner.accountId]);
 });
@@ -391,7 +412,12 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
       if (operation === 'quota-full retirement')
         for (let ordinal = 1; ordinal < 32; ordinal++)
           await f.store.reserve(f.actor, f.collectionId, [definition(ordinal)]);
+      let measuredActor = f.actor;
+      const second = operation === 'forced-one-contention-retry' ? native.db.openPool({ max: 1 }) : null;
+      let competingActor = f.actor;
       const prepare = async () => {
+        measuredActor = await native.actor(f.owner);
+        if (second) competingActor = await native.actor(f.owner, second);
         if (operation === 'duplicate') return;
         // Test-only negative scheduling, outside captures, preserving the live-count invariant.
         await native.db.admin.query(
@@ -462,15 +488,14 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
             return;
           }
           if (operation === 'forced-one-contention-retry') {
-            const second = native.db.openPool({ max: 1 });
-            const barrier = uniquenessRace([native.db.pool, second]);
+            const barrier = uniquenessRace([native.db.pool, second!]);
             await barrier.arm();
             await Promise.all([
-              f.store.reserve(f.actor, f.collectionId, [definition(40)]),
-              native.store(second).reserve(f.actor, f.collectionId, [definition(40)]),
+              f.store.reserve(measuredActor, f.collectionId, [definition(40)]),
+              native.store(second!).reserve(competingActor, f.collectionId, [definition(40)]),
             ]);
             expect(barrier.arrivals()).toBe(2);
-          } else await f.store.reserve(f.actor, f.collectionId, [definition(40)]);
+          } else await f.store.reserve(measuredActor, f.collectionId, [definition(40)]);
         },
       });
       expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);

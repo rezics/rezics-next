@@ -53,8 +53,9 @@ and optionally the trusted KernelClock. It returns:
 Definitions carry the actual FilterDocument, fixed `id` order and an immutable accepted release digest/value.
 Validate and expand with shared parse/admit rules; no private interpreter or alternative DTO is selected.
 The exact canonical basis is `canonicalize([1, principal.id, collectionId, expandedFilter, sort, releaseDigest])`.
-Preserve its bytes alongside SHA-256. Digest equality alone never establishes definition equality; use a bounded
-exact key (e.g. exact canonical basis uniqueness), not an unbounded hash-collision bucket scan. No semantic
+Preserve its bytes alongside SHA-256. Digest equality alone never establishes definition equality. The indexed digest hit must compare
+the retained exact bytes; unequal bytes fail closed with existing unsupported_query, never share an episode or
+scan a collision bucket. This avoids putting potentially large canonical JSON in a PostgreSQL B-tree key. No semantic
 commutativity rewrite is implied: shared expanded array order remains significant. Limits and cursors are absent
 from this key; continuation and different page sizes share an episode. Release meaning changes do not share it.
 
@@ -90,11 +91,12 @@ source/subject/foreign/tuple/identity safety checks, including exclusions and or
 The proposed native header relation is `library.members_preparation`. Its route-leading primary key is
 `(route, owner_account_id, collection_id, episode_id)`. episode_id is a newly allocated routed native UUID on
 insertion, an opaque generation identity, never a semantic epoch or time-derived reuse key. Header fields include
-exact canonical_basis, basis_digest, state (`live` or `retired`), last_read_at and workflow_id. The live exact-basis
-unique key is `(route, owner_account_id, canonical_basis) WHERE state='live'`. Expired headers are retired before
+exact canonical_basis, basis_digest, state (`live` or `retired`), last_read_at and workflow_id. The live digest
+unique key is `(route, owner_account_id, basis_digest) WHERE state='live'`, with exact-byte equality required
+after the hit. A collision refuses admission rather than aliasing definitions. Expired headers are retired before
 replacement. Retired payload remains retained cleanup work; it is not implicitly erased by changing state.
 
-One indexed `library.members_preparation_owner` control row keyed by `(route,owner_account_id)` serializes live
+One indexed `library.members_preparation_owner` control row keyed by `(route,owner_account_id)`, with `live_count`, serializes live
 quota and the LRU order. Its live count is maintained atomically, never reconstructed from all result/history rows.
 Lock control before deciding admission. A bounded indexed LRU frontier orders live headers by
 `(last_read_at ASC, episode_id ASC)`; UUID order breaks equal trusted timestamps. Insert increments count, retirement
@@ -171,7 +173,7 @@ own drained inventory/ACK is not whole-role NoData, overall erasure completion o
 ### Retired header and late work
 
 - Touches: exact owner/episode indexed point plus bounded cleanup frontier and active account fence.
-- Bound: the single kernel bounded-job authority plus any stricter filtered-list ceilings; retained cleanup must
+- Bound: the [single kernel bounded-job authority](../../README.md#bounded-job-steps) plus any stricter filtered-list ceilings; retained cleanup must
   settle finite work. No request-time per-definition result/history scan, synchronous cascade or missing=ready.
 - Growth check: independently grow expired/retired episodes, successors, queued stale intents and unrelated histories
   at the same three scales. Selected-episode work stays constant and every cleanup continuation is charged. Native

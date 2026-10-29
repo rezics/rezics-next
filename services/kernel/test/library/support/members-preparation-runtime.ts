@@ -54,13 +54,13 @@ export async function membersPreparationRuntime() {
   const scopes = [...actionCatalogue(kernel).keys()].sort();
   await registerTestClient(service, { clientId, firstParty: true, scopes });
   const context = () => ({ pool: db.pool, deadline: Date.now() + 5000 });
-  const actor = (persona: Persona | null) =>
+  const actor = (persona: Persona | null, pool: Pool = db.pool) =>
     actorOf(
       kernel.testAccess,
       new Request('http://kernel.test', {
         headers: persona ? { authorization: `Bearer ${persona.bearer}` } : {},
       }),
-      context(),
+      { ...context(), pool },
     );
   const store = (pool: Pool = db.pool) =>
     createMembersPreparation({ pool, workClient, access: kernel.testAccess, clock });
