@@ -12,7 +12,7 @@ function createStabilize(h: ReturnType<typeof integrationHarness>, commit = h.he
   git(h.root, 'branch', 'stabilize', commit);
 }
 
-test('stabilize gates its head instead of the integration head and advances to dev after publishing', async () => {
+test('stabilize finishes its current gate, then gates the next green dev candidate', async () => {
   const h = integrationHarness();
   try {
     const stable = await h.seed('stable');
@@ -28,11 +28,11 @@ test('stabilize gates its head instead of the integration head and advances to d
     });
 
     expect(gated).toContain(candidate);
-    expect(gated).not.toContain(dev);
-    expect(h.head('main')).toBe(candidate);
+    expect(gated).toContain(dev);
+    expect(h.head('main')).toBe(dev);
     expect(h.head('stabilize')).toBe(dev);
     expect(h.store.task(stable.id).state).toBe('merged');
-    expect(h.store.task(later.id).state).toBe('integrated');
+    expect(h.store.task(later.id).state).toBe('merged');
   } finally {
     h.dispose();
   }

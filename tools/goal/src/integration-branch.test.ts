@@ -216,7 +216,7 @@ test('a failing stabilize candidate stays on dev for a fix without reverting tas
       expect(h.store.task(task.id).state).toBe('integrated');
       expect(h.store.task(task.id).currentAttempt).toBe(1);
     }
-    expect(h.inbox).toEqual([]);
+    expect(h.inbox.map((event) => event.kind)).toEqual(['environment']);
   } finally {
     h.dispose();
   }

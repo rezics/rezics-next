@@ -130,6 +130,7 @@ test('an enqueue while the train is finishing waits for the lease and lands with
     release();
     await Promise.all([started, other]);
     await runtime.job.drain();
+    await runtime.pump();
     expect(h.store.tasks().map((task) => task.state)).toEqual(['merged', 'merged']);
     expect(runtime.queue.next()).toBeUndefined();
   } finally {
@@ -262,6 +263,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
     const task = tasks.dispatch(h.briefFile);
     await runtime.job.start(task.id);
     await runtime.job.drain();
+    await runtime.pump();
     const attempts = h.store.attempts(task.id);
     expect(attempts[0]!.failureKind).toBe('pool-exhausted');
     expect(attempts[0]!.pool).not.toBe(attempts[1]!.pool);
@@ -310,9 +312,9 @@ test('the production CLI dispatch, train and inbox commands compose the real run
       return stdout;
     };
     const id = (await command('dispatch', h.briefFile)).trim();
+    expect(await command('train')).toBe('');
     expect(h.store.task(id).state).toBe('merged');
     expect(h.store.records()[0]!.outcome).toBe('passed');
-    expect(await command('train')).toBe('');
     expect(JSON.parse(await command('inbox', 'read', 'fixture'))).toEqual([]);
   } finally {
     h.dispose();
