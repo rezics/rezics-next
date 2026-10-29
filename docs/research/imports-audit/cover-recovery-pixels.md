@@ -253,3 +253,55 @@ Submitted at revision `e489580f74` through `bun scripts/worker-check.ts --`:
 
 Submission succeeded; execution results are pending manager delivery. No polling or old-case rerun
 was performed. The native command/receipt and counts above remain historical until fresh results arrive.
+
+
+### Fresh validation results
+
+All three submitted checks exited **0**, as delivered by the manager and confirmed in their logs.
+Execution revision: `e489580f74` (subsequent edits only record evidence in this report).
+The focused native file ran exactly once: **1 pass, 0 fail, 595 expect() calls**, one test in one
+file, 46.56 s, zero load reruns. Its title remains
+`actual interrupted cover replacement recovers exact acknowledged media and serves distinct recovered and subsequent replacement pixels`.
+The frozen test SHA-256 remains
+`751500e9c56f1b840f5f149d56b511537638867388976bcb245f55bedd72d171`.
+No assertion changes or product fixes were needed: the composed case already passes in the supplied base.
+
+The native-file compiler/format gates passed, with 675 Reylo analyses. The affected kernel typecheck
+also passed, including `tsc --noEmit --runExternalCode -p tsconfig.json` and native construction.
+The delivery command `test -s docs/research/imports-audit/cover-recovery-pixels.md` passed.
+
+Logs, corresponding to the submitted IDs immediately above:
+
+- Native file: `.temp/goal/checks/worker-check-2026-10-29T18-35-46.127Z-bf86ffc5.log`.
+- Kernel typecheck: `.temp/goal/checks/worker-check-2026-10-29T18-35-46.309Z-ee2b99a7.log`.
+- Delivery: `.temp/goal/checks/worker-check-2026-10-29T18-35-46.521Z-04f042bc.log`.
+
+Fresh actual interrupted command/result:
+
+```json
+{"command":{"op":"propose","key":"bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e","source":{"source":"bangumi","external_id":"424242","record_revision":"unversioned","converter_revision":"bangumi@3","digest":"cff54636a2b8bca8cff5d1457b80ea57364fbba190a670aa1d0971fe91b67f9b","field_group":"cover"},"subject":"01a18901-3b35-740f-a721-7b4081e40d74","statement":{"property":{"id":"schema:image"},"value":{"type":"value","content":"01a18901-4088-7091-86ca-7b401d0a42ed"},"references":[{"parts":[{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://bgm.tv/subject/424242"}},{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://lain.bgm.tv/pic/cover/l/ab/cd/replacement.jpg"}}]}]}},"result":{"key":"bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e","status":201,"value":{"candidate":"04b8b8da-cb20-8617-88a6-7b40e2730042","revision":22}}}
+```
+
+Exact actual native receipt retained across recovery/replay:
+
+```json
+{"partition_no":1972,"principal_kind":"account","principal_id":"764ada75-62ac-8c41-a37c-4d9a8c0cfe2a","command_kind":"subject.batch_propose","idempotency_key":"bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e"}
+```
+
+Recovered binding signature: `03ff5ce07537542147b8b43a9d4dda4d9e74a8fa9444c5b678a367b1076da419`.
+
+| Input | Actual native media | Original SHA-256 |
+| --- | --- | --- |
+| Red | `01a18901-3b7f-733b-9a2d-7b408096f006` | `73b890ef39bd02ae80be6353cddd8b286d754874289b20050d2491c4f271ab99` |
+| Recovered green | `01a18901-4088-7091-86ca-7b401d0a42ed` | `68fa4b251cdcb8b79083c873db5090a2351d508c3f35bc6d83417d24963b5dcc` |
+| Subsequent blue | `01a18901-4481-70e5-b07f-7b40afa28893` | `384ac8c8ffc149c4bbbb7d4ac2f60d627c75576810ab81310f314cfb56c30a12` |
+
+The fresh derivative hash sets match the three distinct sets recorded above; all derivatives were
+authorized, read from actual storage and Sharp-decoded on both anonymous subject and native-page reads.
+The recovered ACK/candidate/key/bytes/receipt survived same-SQLite reopen, with the required earlier
+cover retraction. Explicit editor selection preceded green and blue disclosure. Identical-input
+repeat/reopen preserved receipts, effects and job capture. This establishes the composed witness only;
+it does not establish the separate consumer/scalability obligations listed above.
+
+No files outside the declared paths changed. The frozen test, helper, source policy, metadata ABI,
+schema and production code remain unchanged. No old recovery suite or whole-workspace gate ran.
