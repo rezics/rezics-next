@@ -53,7 +53,7 @@ export const AddFormOpen: Story = {
   },
 };
 export const EditFormOpen: Story = {
-render: () => <CopiesStory mode="one" />,
+  render: () => <CopiesStory mode="one" />,
   async play(args) {
     await ready(args);
     const canvas = within(args.canvasElement);

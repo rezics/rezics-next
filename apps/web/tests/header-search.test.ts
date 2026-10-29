@@ -48,7 +48,8 @@ test('the header filter control opens the current search filters and reports act
   const search = await source('../src/search/search.tsx');
   expect(search).toContain('rezics:open-search-filters');
   expect(search).toContain('activeFilterCount');
-  expect(search).toContain('<DrawerContent className="lg:hidden">');
+  expect(search).toContain('BottomSheet');
+  expect(search).toContain('SlidersHorizontalIcon');
   expect(search).toContain('Collapsible open={filtersOpen}');
   expect(search).not.toContain('DrawerTrigger');
 });

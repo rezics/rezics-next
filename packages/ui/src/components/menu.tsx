@@ -265,7 +265,7 @@ export function Menu({
         </D.DropdownMenu>
       )}
       {form === 'sheet' && (
-<BottomSheet
+        <BottomSheet
           open={open}
           onOpenChange={(value) => (value ? openMenu() : close())}
           title={page?.label ?? title}
@@ -306,62 +306,6 @@ export function Menu({
                           </Field>
                         ))}
                       </RadioGroup>
-                    );
-                  if (entry.type === 'submenu')
-                    return (
-                      <Button
-                        key={index}
-                        variant="ghost"
-                        className="min-h-11 justify-between"
-                        onClick={() => {
-                          setStack((value) => [...value, entry]);
-                          window.history.pushState({ rezicsMenuPage: true }, '', window.location.href);
-                          historyDepth.current += 1;
-                        }}
-                      >
-                        {entry.label}
-                        <span aria-hidden>›</span>
-                      </Button>
-                    );
-                  if (entry.type === 'link')
-                    return (
-                      <a
-                        key={index}
-                        href={entry.href}
-                        className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
-                        onClick={() => close()}
-                      >
-                        {entry.label}
-                      </a>
-                    );
-                  return (
-                    <Button
-                      key={index}
-                      variant="ghost"
-                      className={`min-h-11 justify-start ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
-                      disabled={entry.disabled}
-                      onClick={() => select(entry)}
-                    >
-                      {entry.label}
-                    </Button>
-                  );
-                })}
-          </div>
-        </BottomSheet>
-                          >
-                            <input
-                              type="radio"
-                              name={`${radioName}-${index}`}
-                              checked={entry.value === option.value}
-                              onChange={() => {
-                                entry.onValueChange(option.value);
-                                close();
-                              }}
-                            />
-                            {option.label}
-                          </label>
-                        ))}
-                      </div>
                     );
                   if (entry.type === 'submenu')
                     return (

@@ -460,7 +460,7 @@ function SessionEditor({
       ) : null}
       {editing ? (
         phone ? (
-<BottomSheet open={editing} onOpenChange={setEditing} title={m.library_progress_update()}>
+          <BottomSheet open={editing} onOpenChange={setEditing} title={m.library_progress_update()}>
             <input type="hidden" name="idempotencyKey" value={key} />
             {alert ? (
               <p role="alert" className="rounded-lg border border-border bg-card p-3">

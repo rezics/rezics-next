@@ -544,7 +544,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
               <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
             </Collapsible>
           </form>
-<button
+          <button
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} w-fit gap-2 border-border lg:hidden`}
             style={{ borderColor: 'color-mix(in oklch, var(--border), var(--foreground) 35%)' }}
