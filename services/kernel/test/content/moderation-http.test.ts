@@ -629,6 +629,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
         expect(result.body.securityRevision).toBe('2');
       },
     });
+    expect(report.rule).toBe('series');
     expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
     for (const { cost } of report.samples) {
       expect(cost.statements).toBeGreaterThan(0);

@@ -462,6 +462,7 @@ test('checkGrowth rejects a hot-partition scan and passes exact bounded keyset p
       warmup: () => probe(true),
       operation: () => probe(),
     });
+    expect(report.rule).toBe('series');
     expect(report.samples.map((sample) => sample.scale)).toEqual([32, 256, 2048]);
     expect(report.samples.every((sample) => sample.cost.statements === 10)).toBe(true);
     // Reuse the identical seed method at all three scales for the deliberately unbounded baseline.

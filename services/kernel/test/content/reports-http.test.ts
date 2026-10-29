@@ -585,6 +585,7 @@ describe('real migrated report HTTP and shared admission', () => {
         expect(JSON.stringify(await effects())).not.toContain(proof);
       },
     });
+    expect(report.rule).toBe('series');
     expect(report.samples).toHaveLength(3);
     for (const sample of report.samples) {
       expect(sample.cost.rows).toBeGreaterThan(0);
