@@ -15,12 +15,14 @@ test('board and thread titles use the shared page heading size, not the display 
 });
 
 test('a post shows edited only when it was revised after it was published', () => {
-  expect(thread).toMatch(/post\.revisedAt\s*&&\s*new Date\(post\.revisedAt\)\.getTime\(\)\s*>\s*new Date\(post\.createdAt\)\.getTime\(\)/);
+  expect(thread).toMatch(
+    /post\.revisedAt\s*&&\s*new Date\(post\.revisedAt\)\.getTime\(\)\s*>\s*new Date\(post\.createdAt\)\.getTime\(\)/,
+  );
 });
 
 test('thread titles on the board render in the page heading style for rows and an untitled thread shows its first words instead of an untitled label', () => {
   expect(board).toContain('ListRow');
-  expect(board).toContain('text-xl font-semibold');
+  expect(board).toContain('text-lg font-semibold tracking-tight');
   expect(board).toMatch(/firstPost\.body|firstPost\.text/);
   expect(board).not.toMatch(/thread\.title \?\? m\.threads_untitled\(\)/);
 });

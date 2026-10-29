@@ -1,6 +1,6 @@
 import { useSession } from '../../session/query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { Item, ItemActions, ItemContent, ItemTitle } from '@rezics/ui/shadcn/item';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { createFileRoute, Link, useLocation } from '@tanstack/react-router';
 import { MessageSquareIcon } from 'lucide-react';
 import * as v from 'valibot';
@@ -24,6 +24,25 @@ function boardSearch(search: Record<string, unknown>): { cursor?: string; sort?:
     ...(typeof cursor === 'string' ? { cursor } : {}),
     ...(sort ? { sort } : {}),
   };
+}
+
+function threadOpeningWords(body: unknown): string | undefined {
+  const pending: unknown[] = [body];
+  let visited = 0;
+  while (pending.length > 0 && visited < 64) {
+    const value = pending.pop();
+    visited += 1;
+    if (!value || typeof value !== 'object') continue;
+    const record = value as Record<string, unknown>;
+    if (typeof record.text === 'string' && record.text.trim()) {
+      const words = record.text.trim().split(/\s+/u).slice(0, 8).join(' ');
+      return Array.from(words).slice(0, 64).join('');
+    }
+    for (const child of Object.values(record).reverse()) {
+      if (child && typeof child === 'object') pending.push(child);
+    }
+  }
+  return undefined;
 }
 
 export const Route = createFileRoute('/boards/$id')({
@@ -74,22 +93,20 @@ function BoardPage() {
           ) : null}
         </div>
         {threads.threads.length ? (
-          <ul className="divide-y divide-border/60 border-y border-border/60">
+          <ul className="space-y-1">
             {threads.threads.map((thread) => {
               const { replyCount, lastActivityAt } = threadActivity(thread);
+              const title = thread.title ?? threadOpeningWords(thread.firstPost.body) ?? m.threads_untitled();
               return (
-                <li key={thread.id}>
-                  <Item className="gap-x-4 gap-y-1 rounded-none px-1 py-3" size="sm">
-                    <ItemContent className="min-w-0 basis-72 gap-1.5">
-                      <ItemTitle className="max-w-full text-base">
-                        <Link
-                          to="/threads/$id/$slug"
-                          params={{ id: thread.id, slug: threadSlug(threadTitle(thread)) }}
-                          className="truncate text-primary hover:underline"
-                        >
-                          {thread.title ?? m.threads_untitled()}
-                        </Link>
-                      </ItemTitle>
+                <ListRow key={thread.id} className="flex flex-col items-start gap-2 py-4 sm:flex-row sm:items-center">
+                  <ListRowLink href={threadLocation(locale, { id: thread.id, title: threadTitle(thread) })}>
+                    {title}
+                  </ListRowLink>
+                  <div className="min-w-0 flex-1">
+                    <h3 aria-hidden="true" className="text-lg font-semibold tracking-tight text-balance">
+                      {title}
+                    </h3>
+                    <ListRowControl className="w-fit">
                       <Byline
                         author={authors?.[thread.authorId]}
                         createdAt={thread.createdAt}
@@ -97,24 +114,24 @@ function BoardPage() {
                         showAuthor={authors !== null}
                         size="sm"
                       />
-                    </ItemContent>
-                    {replyCount !== null || lastActivityAt ? (
-                      <ItemActions className="flex-wrap gap-x-4 text-sm text-muted-foreground">
-                        {replyCount !== null ? (
-                          <span className="inline-flex items-center gap-1.5 tabular-nums">
-                            <MessageSquareIcon aria-hidden="true" className="size-4" />
-                            {m.board_thread_replies({ count: replyCount })}
-                          </span>
-                        ) : null}
-                        {lastActivityAt ? (
-                          <time dateTime={lastActivityAt} title={fullDateTime(lastActivityAt, locale)}>
-                            {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
-                          </time>
-                        ) : null}
-                      </ItemActions>
-                    ) : null}
-                  </Item>
-                </li>
+                    </ListRowControl>
+                  </div>
+                  {replyCount !== null || lastActivityAt ? (
+                    <ListRowControl className="flex flex-wrap gap-x-4 text-sm text-muted-foreground sm:justify-end">
+                      {replyCount !== null ? (
+                        <span className="inline-flex items-center gap-1.5 tabular-nums">
+                          <MessageSquareIcon aria-hidden="true" className="size-4" />
+                          {m.board_thread_replies({ count: replyCount })}
+                        </span>
+                      ) : null}
+                      {lastActivityAt ? (
+                        <time dateTime={lastActivityAt} title={fullDateTime(lastActivityAt, locale)}>
+                          {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
+                        </time>
+                      ) : null}
+                    </ListRowControl>
+                  ) : null}
+                </ListRow>
               );
             })}
           </ul>

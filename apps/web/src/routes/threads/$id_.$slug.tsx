@@ -309,7 +309,7 @@ function PostSlot({
           showAuthor={authors !== null}
           className="min-h-8 flex-1"
         >
-          {post.revisedAt ? (
+          {post.revisedAt && new Date(post.revisedAt).getTime() > new Date(post.createdAt).getTime() ? (
             <>
               <span aria-hidden="true">·</span>
               <time dateTime={post.revisedAt} title={fullDateTime(post.revisedAt)}>

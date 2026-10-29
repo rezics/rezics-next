@@ -14,6 +14,12 @@ export const SignedOut: Story = {
   play: threadReady,
   render: () => <PageStory visitor="Signed Out" path={pagePaths.thread} />,
 };
+
+export const EditedAndUneditedPosts: Story = {
+  name: 'Edited and unedited posts',
+  play: threadReady,
+  render: () => <PageStory visitor="Signed Out" path={pagePaths.thread} />,
+};
 /** A thread whose author is a deleted organization: the byline names no one and keeps the neutral avatar. */
 export const DeletedOrganization: Story = {
   name: 'Deleted Organization',

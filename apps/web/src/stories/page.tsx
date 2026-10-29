@@ -150,6 +150,12 @@ export async function boardReady(context: { canvasElement: HTMLElement }) {
   await view.findByRole('heading', { level: 1, name: boardRecording.board.title });
   await view.findByRole('heading', { level: 2, name: m.board_threads_heading() });
   await listItemWithLink(view, title);
+  const hovered = await view.findByRole('link', { name: title });
+  await view.findByRole('link', {
+    name: 'A long title about the quiet planet, the little fox, and the stars that guide every traveler home',
+  });
+  await view.findByRole('link', { name: 'When the stars are quiet, where does the fox sleep?' });
+  await userEvent.hover(hovered);
 }
 
 export async function threadReady(context: { canvasElement: HTMLElement }) {
@@ -159,6 +165,8 @@ export async function threadReady(context: { canvasElement: HTMLElement }) {
   if (!title) throw new Error('The recorded thread has no title.');
   await view.findByRole('heading', { level: 1, name: title });
   await view.findByRole('heading', { level: 2, name: m.thread_posts_heading() });
+  await view.findAllByText(m.thread_post_edited());
+  await expect(view.getAllByText(m.thread_post_edited())).toHaveLength(1);
   const attached = subjectRecording.subject.labels as Record<string, string>;
   await view.findByRole('link', { name: attached[getLocale()] ?? attached.en! });
   await view.findByRole('heading', { level: 2, name: 'Flight notes' });

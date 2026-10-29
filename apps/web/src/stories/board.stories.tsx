@@ -14,3 +14,9 @@ export const SignedOut: Story = {
   play: boardReady,
   render: () => <PageStory visitor="Signed Out" path={pagePaths.board} />,
 };
+
+export const PresentationStates: Story = {
+  name: 'Long and untitled thread rows',
+  play: boardReady,
+  render: () => <PageStory visitor="Signed Out" path={pagePaths.board} />,
+};
