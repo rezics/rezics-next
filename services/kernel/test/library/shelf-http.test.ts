@@ -272,7 +272,10 @@ test('shelf port transport keeps old entries and rejects closed queries and unau
     );
   await progress(false);
   const old = {
-    libraryEntries: [{ ...baseEntry, subjectId: secondId, updatedAt: '2026-01-03T00:00:00.000Z' }, baseEntry],
+    libraryEntries: [
+      { ...baseEntry, subjectId: secondId, updatedAt: '2026-01-03T00:00:00.000Z', incarnationId: null },
+      { ...baseEntry, incarnationId: null },
+    ],
     next: null,
   };
   expect(await json(await get('/v1/libraryEntries', 'libraryOnly'))).toEqual(old);
