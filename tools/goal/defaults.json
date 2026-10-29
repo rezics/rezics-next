@@ -71,7 +71,7 @@
     {
       "path": "services/kernel/db/*/schema.sql",
       "stage": "integration",
-      "command": ["bun", "run", "--cwd", "services/kernel", "derived"]
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived", "schema"]
     },
     {
       "path": "packages/client/src/kernel/**",
