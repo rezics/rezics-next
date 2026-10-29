@@ -423,10 +423,10 @@ function rebaseWithDerivedFiles(
   originalBase: string,
   logPath: string,
   files: readonly DerivedFile[],
-): unknown | undefined {
+): unknown | boolean {
   try {
     git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
-    return undefined;
+    return false;
   } catch (initialError) {
     let rebaseError: unknown = initialError;
     for (;;) {
@@ -458,12 +458,13 @@ function rebaseWithDerivedFiles(
         if (result.status !== 0)
           throw new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`);
       }
+      const regeneratedLockfile = derivedConflicts.includes('bun.lock');
       const stageFiles = new Set(derivedConflicts);
       for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files).length) stageFiles.add(path);
       stagePaths(cwd, stageFiles);
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
-        return undefined;
+        return regeneratedLockfile;
       } catch (continueError) {
         if (!unmergedFiles(cwd).length) throw continueError;
         rebaseError = continueError;
@@ -490,7 +491,7 @@ export function rebaseOnto(
   logPath: string,
   files: readonly DerivedFile[] = defaultDerivedFiles,
   allowedPaths?: readonly string[],
-): void {
+): boolean {
   const upstream = rebaseUpstream(cwd, base, originalBase);
   const head = git(cwd, 'rev-parse', 'HEAD');
   // Files the worker's own commits touched: a squash may change these outside the allowed paths, never a file only
@@ -498,7 +499,7 @@ export function rebaseOnto(
   const own = new Set(git(cwd, 'log', '--name-only', '--format=', `${base}..${head}`).split('\n').filter(Boolean));
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
   const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
-  if (initialConflict === undefined) return;
+  if (typeof initialConflict === 'boolean') return initialConflict;
 
   git(cwd, 'rebase', '--abort');
   git(cwd, 'reset', '--soft', upstream);
@@ -522,7 +523,8 @@ export function rebaseOnto(
   }
 
   const squashedConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
-  if (squashedConflict !== undefined) throw squashedConflict;
+  if (squashedConflict !== undefined && typeof squashedConflict !== 'boolean') throw squashedConflict;
+  return squashedConflict === true;
 }
 
 export type TrainOptions = {
