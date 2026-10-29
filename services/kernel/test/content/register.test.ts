@@ -195,7 +195,6 @@ if (process.argv.includes('--content-registration')) {
       'content_board_thread',
       'content_report_target',
       'content_report_outcome',
-      'content_mention_notice',
       'content_moderation_decision',
       'content_media_image',
       'content_media_purge',
