@@ -1152,16 +1152,18 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   and hot partition stay fixed while unrelated source owners/targets and own negative history grow. Every run
   has a fresh released subject and idempotency keys, with its negative follow prepared through ordinary commands
   outside captures. All eighteen spare subjects are provisioned before the first scale's capture, keeping the
-  native subject neighbourhood fixed across scales. Both measured follow/unfollow replacements include ordinary command, Access, receipt, outbox,
-  write-basis and nested hook work. Constant rows/statements and logarithmic blocks use the shared kernel bounds;
+  native subject neighbourhood fixed across scales. Both measured follow/unfollow replacements include ordinary
+  command, Access, receipt, outbox, write-basis and nested hook work. Constant rows/statements and logarithmic blocks use the shared kernel bounds;
   each repetition additionally requires positive source/counter work and zero sequential scans on those relations.
   The local `growth.json` evidence retains populations, every repetition and the actual series verdict;
   `plans.json` retains the actual auto_explain documents, including nested plans, rows/removals, loops and buffers.
   Synthetic negative growth cardinality and isolated rollback/overflow/DDL invariants remain primitive-only,
-  separate from native positive fixture/HTTP/owner-command evidence. Calibrated acceptance awaits verification
-  after fixing fixture population: provisioning spare subjects per scale had grown native subject scans alongside
-  the declared source axes, and the series rule correctly rejected that capture. Failed bounds retain repetition
-  costs and relation populations as well as the native plans; no allowance or cost accounting changes.
+  separate from native positive fixture/HTTP/owner-command evidence. The native writer and cutover cases pass.
+  Calibrated growth remains unproven: the fixed subject population capture returned `GrowthEvidenceError` for rows.
+  Added per-run plan diagnostics have not executed because check preparation stalled on both the initial runner
+  and its automatic retry. Failed bounds retain repetition costs and relation populations as well as native plans;
+  insufficient-evidence failures also report per-run plan costs through the shared harness. There is no passing
+  calibrated verdict or change to allowances or cost accounting.
 
 ### Follow read
 
