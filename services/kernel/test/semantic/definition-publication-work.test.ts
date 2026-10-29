@@ -148,9 +148,9 @@ test('checkpoint-only proposal retains the full catalogue at three changed-input
   const context = digestContextDiagnostic();
   expect(context.clientUnits).toBe(1024);
   expect(context.requestedByBytes).toBe(92);
-  expect(context.framingAndOperationBytes).toBe(68);
-  expect(context.contextMaxBytes).toBe(68 + 6 * 1024 + 92);
-  expect(context.contextMaxBytes).toBe(6304);
+  expect(context.framingAndOperationBytes).toBe(76);
+  expect(context.contextMaxBytes).toBe(76 + 6 * 1024 + 92);
+  expect(context.contextMaxBytes).toBe(6312);
   console.log('definition-publication-work context bound', JSON.stringify(context));
   for (const added of [64, 512, RELEASE_LIMITS.properties - Object.keys(bundledRelease.properties).length]) {
     const release = publicationFixture(added);
