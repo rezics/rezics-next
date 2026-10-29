@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
+import type { ProgressLabelInput } from './progress-label';
 import { prepareSession, viewerCredential } from '../session/request';
 import {
   libraryFullQuery,
@@ -41,6 +42,7 @@ export type PersonalLibraryEntry = {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  activeProgressSession?: ProgressLabelInput | null;
   subject: LibrarySubject | null;
   changeKey: string;
   removeKey: string;
@@ -99,6 +101,7 @@ type RawEntry = {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  activeProgressSession?: ProgressLabelInput | null;
   subject?: Parameters<typeof subjectOf>[0];
 };
 
@@ -109,6 +112,7 @@ function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
     revision: entry.revision,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    activeProgressSession: entry.activeProgressSession ?? null,
     subject: subjectOf(entry.subject),
   };
 }

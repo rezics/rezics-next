@@ -1,5 +1,6 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
+import { ProgressRow } from '@rezics/ui/progress-row';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { ShelfList, ShelfListRow } from '@rezics/ui/shelf-list';
@@ -37,7 +38,8 @@ import {
   type LibraryEntryStateWrite,
   type PersonalLibraryEntry,
 } from './entries-read';
-import { coverSubject, rowRatio } from './subject-row';
+import { coverSubject } from './subject-row';
+import { progressView } from './progress-label';
 import type { ShelfLayout, ShelfSize } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
 
@@ -56,6 +58,11 @@ function failureText(reason: ShelfFailure): string {
 }
 
 const densities: Record<ShelfSize, CoverDensity> = { s: 'small', m: 'medium', l: 'large' };
+
+function entryProgress(entry: PersonalLibraryEntry, locale: string) {
+  const view = progressView(entry.activeProgressSession ?? null, locale);
+  return view ? { value: view.percent == null ? null : view.percent / 100, label: view.text } : undefined;
+}
 
 function titleOf(entry: PersonalLibraryEntry): string {
   return entry.subject?.label ?? m.library_subject_unavailable();
@@ -200,9 +207,10 @@ function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: strin
 function GridView({ controls, shelf, size }: { controls: Controls; shelf: LibraryEntryStateWrite; size: ShelfSize }) {
   const { rows, locale } = controls;
   return (
-    <CoverGrid ratio={rowRatio(rows.map((row) => row.entry.subject))} density={densities[size]}>
+    <CoverGrid ratio="5:7" density={densities[size]} fixedDensity>
       {rows.map((row) => {
         const { entry } = row;
+        const progress = entryProgress(entry, locale);
         const notes =
           row.conflict || row.failure || entry.state !== shelf ? (
             <div className="space-y-1">
@@ -217,6 +225,7 @@ function GridView({ controls, shelf, size }: { controls: Controls; shelf: Librar
               href={hrefOf(entry, locale)}
               title={titleOf(entry)}
               cover={coverOf(entry)}
+              {...(progress ? { progress } : {})}
               secondary={
                 <>
                   {m.library_updated()} <Updated entry={entry} locale={locale} />
@@ -239,6 +248,7 @@ function ListView({ controls }: { controls: Controls }) {
     <ShelfList>
       {rows.map((row) => {
         const { entry } = row;
+        const progress = entryProgress(entry, locale);
         const title = titleOf(entry);
         return (
           <ShelfListRow
@@ -247,6 +257,7 @@ function ListView({ controls }: { controls: Controls }) {
             cover={coverOf(entry)}
             title={title}
             meta={entry.subject?.typeLabel}
+            {...(progress ? { progress } : {})}
             status={stateLabel(entry.state)}
             {...(admitted && hydrated && !pending
               ? { statusMenu: <StatusRadios row={row} controls={controls} /> }
@@ -278,11 +289,13 @@ function TableView({ controls }: { controls: Controls }) {
   ];
   const tableRows: ShelfTableRow[] = rows.map((row) => {
     const { entry } = row;
+    const progress = entryProgress(entry, locale);
     return {
       id: entry.subjectId,
       href: hrefOf(entry, locale),
       title: titleOf(entry),
       cover: coverOf(entry),
+      ...(progress ? { progress: <ProgressRow {...progress} /> } : {}),
       type: entry.subject?.typeLabel,
       status: admitted ? (
         <DropdownMenu>

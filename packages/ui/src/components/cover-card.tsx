@@ -253,21 +253,31 @@ const densityClasses: Record<CoverDensity, string> = {
   medium: 'grid-cols-[repeat(auto-fill,minmax(8.75rem,1fr))]',
   large: 'grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]',
 };
+const fixedDensityClasses: Record<CoverDensity, string> = {
+  small: 'grid-cols-4 sm:grid-cols-[repeat(auto-fill,6rem)]',
+  medium: 'grid-cols-3 sm:grid-cols-[repeat(auto-fill,7.5rem)]',
+  large: 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,9rem)]',
+};
 
 export function CoverGrid({
   ratio,
   density,
+  fixedDensity = false,
   children,
 }: {
   ratio: CoverRatio;
   density?: CoverDensity;
+  fixedDensity?: boolean;
   children: ReactNode;
 }) {
   return (
     <RatioContext.Provider value={ratio}>
       <DensityContext.Provider value={density}>
         <div className="@container">
-          <div data-slot="cover-grid" className={`grid gap-2 ${densityClasses[density ?? 'medium']}`}>
+          <div
+            data-slot="cover-grid"
+            className={`grid gap-2 ${(fixedDensity ? fixedDensityClasses : densityClasses)[density ?? 'medium']}`}
+          >
             {children}
           </div>
         </div>

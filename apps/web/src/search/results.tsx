@@ -113,13 +113,7 @@ export function ResultList({
         return (
           <Item key={hit.id} role="listitem" variant="outline" className="items-start gap-4 flex-nowrap">
             <ItemMedia>
-              <Link
-                to={subjectLink.to}
-                params={subjectLink.params}
-                tabIndex={-1}
-                aria-hidden
-                className="block rounded-lg"
-              >
+              <Link to={subjectLink.to} params={subjectLink.params} tabIndex={-1} aria-hidden className="block">
                 <Cover
                   subject={coverSubject(hit.id, label.text, hit.summary, hit.type)}
                   cover={coverOf(hit.summary)}

@@ -8,6 +8,7 @@ import {
 } from '@rezics/composition';
 import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
+import { SectionHeading } from '../../library/section-heading';
 import { createContext, useContext, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
@@ -97,6 +98,7 @@ type SubjectRead = {
 };
 type SearchHit = Pick<Subject, 'id' | 'labels'> & {
   type?: string;
+  typeLabel?: string;
   summary?: SubjectSummary;
 };
 type SearchRead = {
@@ -800,13 +802,9 @@ function TypeList(props: Record<string, unknown>) {
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2
-            id={`${id}-title`}
-            lang={title.lang}
-            className="text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl"
-          >
+          <SectionHeading id={`${id}-title`} lang={title.lang}>
             {title.text}
-          </h2>
+          </SectionHeading>
           {read.total && (
             <span data-slot="type-count" className="text-sm text-muted-foreground tabular-nums">
               {m.home_section_count({ count: countText(read.total, locale) }, { locale: locale as never })}
@@ -832,6 +830,7 @@ function TypeList(props: Record<string, unknown>) {
             cover={{ subject, cover: coverOf(hit.summary), src: coverSrc }}
             title={text.text || messages.unlabelled}
             {...(text.lang ? { titleLang: text.lang } : {})}
+            {...(hit.typeLabel ? { secondary: hit.typeLabel } : {})}
           />
         ))}
       </CoverRow>

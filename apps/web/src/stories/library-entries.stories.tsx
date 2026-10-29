@@ -29,3 +29,13 @@ export const SmallGrid: Story = {
   play: libraryEntriesReady,
   render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?size=s`} />,
 };
+export const MediumGrid: Story = {
+  name: 'Medium Grid',
+  play: libraryEntriesReady,
+  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?size=m`} />,
+};
+export const LargeGrid: Story = {
+  name: 'Large Grid',
+  play: libraryEntriesReady,
+  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?size=l`} />,
+};

@@ -8,6 +8,7 @@ import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { progressView } from './progress-label';
+import { SectionHeading } from './section-heading';
 import type { ContinueEntry } from './continue-read';
 
 /**
@@ -55,7 +56,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
   });
   return (
     <>
-      <h2 className="font-serif text-xl font-semibold tracking-tight">{m.home_continue_heading()}</h2>
+      <SectionHeading>{m.home_continue_heading()}</SectionHeading>
       <div className="sm:hidden">
         <CoverRow ratio={ratio} label={m.home_continue_heading()}>
           {cards}
