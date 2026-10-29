@@ -75,6 +75,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   const stack = await startNativeWebStack();
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
+  let provisioned: { data: typeof import('../../../../specs/fixtures/web-publication.json'); fixture: PublicationFixture } | undefined;
   const feedMeasurements = new Map<string, { times: number[]; retries: number }>();
   // Only native setup/control requests retry. Served documents must retain their
   // original HTTP response, including retryable failures and manual redirects.
@@ -264,6 +265,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', publicOrigin).href,
       sitemap,
     };
+    provisioned = { data: structuredClone(data), fixture };
     console.info(
       `web-publication-driver-growth: setup=${Math.round(performance.now() - factoryStarted)}ms provision=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created.size}`,
     );
@@ -271,50 +273,105 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   };
 
   const settle = async () => {
-    // Feed reads are native API requests. An empty page is not exhaustion when it
-    // carries a continuation; always follow the opaque cursor until next is null.
+    if (!provisioned) throw new Error('settle requires a provisioned publication fixture');
+    const { data, fixture } = provisioned;
     const routes = [
-      '/v1/sitemap/collections',
-      '/v1/sitemap/realms',
-      '/v1/sitemap/spaces',
-      '/v1/sitemap/boards',
-      '/v1/sitemap/threads',
-      '/v1/subject-pages',
-    ];
-    for (const route of routes) {
-      let cursor: string | null = null;
-      let pages = 0;
-      const measurements = { times: [] as number[], retries: 0 };
-      feedMeasurements.set(route, measurements);
-      try {
-        do {
-          const query = new URLSearchParams({ limit: '100' });
-          if (cursor !== null) query.set('cursor', cursor);
-          const response = await kernel(`${route}?${query}`);
-          if (!response.ok)
-            throw new Error(`Native sitemap feed ${route} returned ${response.status}: ${await response.text()}`);
-          const page = (await response.json()) as { next: unknown };
-          if (page.next !== null && typeof page.next !== 'string')
-            throw new Error(`Native sitemap feed ${route} omitted its continuation`);
-          cursor = page.next;
-          if (++pages > 10_000) throw new Error(`Native sitemap feed ${route} did not terminate`);
-        } while (cursor !== null);
-      } finally {
-        feedMeasurements.delete(route);
-        const times = measurements.times.sort((a, b) => a - b);
-        const middle = Math.floor(times.length / 2);
-        const median =
-          times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
-        console.info(
-          `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
-        );
-      }
-    }
-    // Exhausted discovery feeds do not establish asynchronous consumer progress.
-    // Do not replace the missing native completion read with a timed sleep.
-    throw new Error(
-      'settle requires a native HTTP read reporting durable projections and the search index drained; the kernel exposes none',
+      ['collection', '/v1/sitemap/collections'],
+      ['realm', '/v1/sitemap/realms'],
+      ['space', '/v1/sitemap/spaces'],
+      ['board', '/v1/sitemap/boards'],
+      ['thread', '/v1/sitemap/threads'],
+      ['subject', '/v1/subject-pages'],
+    ] as const;
+    const pending = new Map<string, Set<string>>(
+      routes.map(([kind, route]) => [
+        route,
+        new Set(fixture.sitemap[kind].eligible.map(({ url }) => {
+          const id = new URL(url).pathname.split('/')[3];
+          if (!id) throw new Error(`Fixture sitemap URL lacks its created identity: ${url}`);
+          return decodeURIComponent(id);
+        })),
+      ]),
     );
+    let missingTitles = [...data.search.matchingBooks];
+    let searchPending = true;
+    const deadline = performance.now() + 180_000;
+    let round = 0;
+    const unmet = () => [
+      ...[...pending].map(([route, ids]) => `${route} missing IDs=${JSON.stringify([...ids])}`),
+      ...(searchPending ? [`/v1/subjects:search missing titles=${JSON.stringify(missingTitles)}`] : []),
+    ];
+    while (true) {
+      for (const [kind, route] of routes) {
+        if (!pending.has(route)) continue;
+        const missing = pending.get(route)!;
+        let cursor: string | null = null;
+        let pages = 0;
+        let emptyPages = 0;
+        let unavailable = false;
+        const measurements = { times: [] as number[], retries: 0 };
+        feedMeasurements.set(route, measurements);
+        try {
+          do {
+            if (performance.now() >= deadline) break;
+            const query = new URLSearchParams({ limit: '100' });
+            if (cursor !== null) query.set('cursor', cursor);
+            const response = await kernel(`${route}?${query}`);
+            if (!response.ok) {
+              const body = await response.text();
+              const problem = JSON.parse(body) as { code?: string };
+              if (response.status === 503 && problem.code === 'semantic_not_ready') {
+                console.info(`web-publication-driver-feed: route=${route} unavailable=semantic_not_ready`);
+                unavailable = true;
+                break;
+              }
+              throw new Error(`Native sitemap feed ${route} returned ${response.status}: ${body}`);
+            }
+            const page = (await response.json()) as {
+              items?: { id: string }[];
+              subjectPages?: { id: string }[];
+              next: unknown;
+            };
+            const items = kind === 'subject' ? page.subjectPages : page.items;
+            if (!Array.isArray(items) || (page.next !== null && typeof page.next !== 'string'))
+              throw new Error(`Native sitemap feed ${route} omitted its items or continuation`);
+            for (const { id } of items) missing.delete(id);
+            pages++;
+            if (items.length === 0) emptyPages++;
+            cursor = page.next;
+            // Empty candidate pages carry progress too. Exhaust the native cursor
+            // even when all fixture IDs appeared before the end of the feed.
+          } while (cursor !== null);
+        } finally {
+          feedMeasurements.delete(route);
+          const times = measurements.times.sort((a, b) => a - b);
+          const middle = Math.floor(times.length / 2);
+          const median = times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
+          console.info(
+            `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} empty-pages=${emptyPages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
+          );
+        }
+        if (unavailable || (cursor === null && missing.size === 0)) pending.delete(route);
+      }
+      if (searchPending && performance.now() < deadline) {
+        const response = await kernel('/v1/subjects:search', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: data.search.query, languages: [data.search.locale], limit: 100 }),
+        });
+        if (!response.ok)
+          throw new Error(`Native search returned ${response.status}: ${await response.text()}`);
+        const result = (await response.json()) as { subjects: { type: string; labels: Record<string, string> }[] };
+        const titles = new Set(result.subjects.filter(({ type }) => type === 'schema:Book').map(({ labels }) => labels[data.search.locale]));
+        missingTitles = data.search.matchingBooks.filter((title) => !titles.has(title));
+        searchPending = missingTitles.length !== 0;
+      }
+      console.info(`web-publication-driver-settle: round=${++round} unmet=${JSON.stringify(unmet())}`);
+      if (pending.size === 0 && !searchPending) return;
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new Error(`Publication fixture did not settle within 180 seconds: ${unmet().join('; ')}`);
+      await Bun.sleep(Math.min(1000 * 2 ** Math.min(round - 1, 3), remaining));
+    }
   };
 
   return {
