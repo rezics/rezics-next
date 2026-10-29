@@ -322,7 +322,7 @@ describe('deployment sequencing', () => {
     expect(outputLines.join('\n')).toContain('https://ver-123.storybook.rezics.workers.dev');
   });
 
-  test('a publishing deployment reads the live build once', async () => {
+  test('a publishing deployment reads the live build before building and after routing', async () => {
     let liveReads = 0;
     const calls: string[] = [];
     await runDeployment({
@@ -341,7 +341,7 @@ describe('deployment sequencing', () => {
       print: () => {},
     });
     expect(calls).toContain('upload');
-    expect(liveReads).toBe(1);
+    expect(liveReads).toBe(2);
   });
 
   test('a real deployment without a resolved commit fails before checking the tree or building', async () => {
