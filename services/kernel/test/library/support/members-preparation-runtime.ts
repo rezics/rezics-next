@@ -15,7 +15,7 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { cookies, nativeFixture, password } from '../../access/native-account-bindings-fixture.ts';
-import { capture, openGrowthDatabase } from '../../support/growth.ts';
+import { capture, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
 import { registerTestClient, testKernel } from '../../support/test-kernel.ts';
 
@@ -247,4 +247,47 @@ export function uniquenessRace(pools: readonly Pool[]) {
       }
     },
   };
+}
+
+/** Negative native scheduling only, after a real positive episode; never seeds a principal, grant or source. */
+export async function retainEpisodes(
+  db: GrowthDatabase,
+  anchor: PreparationLocator,
+  count: number,
+  options: { headers: boolean; queued: boolean },
+) {
+  const ids = Array.from({ length: count }, () => newId(anchor.route));
+  const workflowIds = ids.map((id) => `library:members-preparation:${anchor.route}:${anchor.ownerAccountId}:${id}`);
+  if (options.headers)
+    await db.admin.query(
+      `INSERT INTO library.members_preparation(route,owner_account_id,collection_id,episode_id,canonical_basis,basis_digest,state,last_read_at,workflow_id)
+    SELECT h.route,h.owner_account_id,h.collection_id,retained.id,h.canonical_basis,h.basis_digest,'retired',h.last_read_at,retained.workflow
+    FROM library.members_preparation h CROSS JOIN unnest($4::uuid[],$5::text[]) AS retained(id,workflow)
+    WHERE h.route=$1 AND h.owner_account_id=$2 AND h.collection_id=$3 AND h.episode_id=$6`,
+      [anchor.route, anchor.ownerAccountId, anchor.collectionId, ids, workflowIds, anchor.episodeId],
+    );
+  await db.admin.query(
+    `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,class_name,config_name,completed_at)
+    SELECT id,'library.membersPreparation',$2,'workflows',NULL,NULL,$3 FROM unnest($1::text[]) id`,
+    [workflowIds, options.queued ? 'ENQUEUED' : 'SUCCESS', options.queued ? null : 1],
+  );
+  await db.admin.query(
+    `INSERT INTO dbos.workflow_input(workflow_uuid,inputs)
+    SELECT * FROM unnest($1::text[],$2::text[])`,
+    [
+      workflowIds,
+      ids.map((episodeId) =>
+        JSON.stringify({
+          json: [
+            {
+              accounts: [anchor.ownerAccountId],
+              route: anchor.route,
+              episodes: [{ collectionId: anchor.collectionId, episodeId }],
+              cleanup: [],
+            },
+          ],
+        }),
+      ),
+    ],
+  );
 }

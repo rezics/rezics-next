@@ -7,7 +7,12 @@ import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth } from '../support/growth.ts';
-import { definition, membersPreparationRuntime, uniquenessRace } from './support/members-preparation-runtime.ts';
+import {
+  definition,
+  membersPreparationRuntime,
+  retainEpisodes,
+  uniquenessRace,
+} from './support/members-preparation-runtime.ts';
 
 let native: Awaited<ReturnType<typeof membersPreparationRuntime>>;
 beforeAll(async () => {
@@ -249,6 +254,7 @@ test('quota boundary serializes concurrent 33rd and 34th definitions, preserves 
   expect(result.capture.statements.some((sql) => /DELETE FROM library\.|CASCADE/i.test(sql))).toBe(false);
   const duplicate = await capture(native.db, () => f.store.reserve(f.actor, f.collectionId, [definition(33)]));
   expect(duplicate.value.intent).toBeNull();
+  expect(duplicate.capture.statements.filter((sql) => /FROM library.members_preparation\b/i.test(sql))).toHaveLength(1);
   expect(await native.rows(f.owner)).toEqual(rows);
   expect(duplicate.capture.statements.some((sql) => /\b(?:INSERT INTO|UPDATE|DELETE FROM)\b/i.test(sql))).toBe(false);
 });
@@ -289,7 +295,7 @@ test('trusted idle expiry creates a distinct native episode and workflow; old co
   expect(await f.store.touch(f.actor, old.locator)).toBe(false);
 });
 
-test('a registered-step admission boundary refuses an absent episode without creating it', async () => {
+test('a native work-step admission boundary refuses an absent episode without creating it', async () => {
   const f = await native.fixture();
   const locator = native.locator(f.owner, f.collectionId);
   const observed = await capture(native.db, () => native.step(locator));
@@ -351,12 +357,18 @@ test('fresh Auth deletePersona commits T between intent and step; late work and 
     ).rows,
   ).toEqual([{ state: 'deleted' }]);
   const before = await native.rows(f.owner);
+  const workflows = (
+    await native.db.admin.query('SELECT workflow_uuid,inputs FROM dbos.workflow_input ORDER BY workflow_uuid')
+  ).rows;
   await expect(native.step(episode.locator)).rejects.toBeInstanceOf(LifecycleDeniedError);
   await expect(f.store.reserve(f.actor, f.collectionId, [definition(1)])).rejects.toMatchObject({
     message: 'Command admission denied',
   });
   expect(await native.rows(f.owner)).toEqual(before);
   expect((await native.workflow(episode.workflowId)).input.accounts).toEqual([f.owner.accountId]);
+  expect(
+    (await native.db.admin.query('SELECT workflow_uuid,inputs FROM dbos.workflow_input ORDER BY workflow_uuid')).rows,
+  ).toEqual(workflows);
 });
 
 test('preT native operational account share completes before T and Auth deletion waits on its actual row lock', async () => {
@@ -448,34 +460,10 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
         includeBackends: true,
         bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
         async grow(db, scale, previous) {
-          if (axis === 'retired owner results') {
-            // Native retained negative scheduling rows, copied only after the real positive reservation.
-            await db.admin.query(
-              `INSERT INTO library.members_preparation(route,owner_account_id,collection_id,episode_id,canonical_basis,basis_digest,state,last_read_at,workflow_id)
-              SELECT route,owner_account_id,collection_id,gen_random_uuid(),canonical_basis,basis_digest,'retired',last_read_at,workflow_id
-              FROM library.members_preparation CROSS JOIN generate_series($4::int,$5::int)
-              WHERE route=$1 AND owner_account_id=$2 AND episode_id=$3`,
-              [anchor.locator.route, f.owner.accountId, anchor.locator.episodeId, previous + 1, scale],
-            );
-          } else {
-            await db.admin.query(
-              `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,class_name,config_name,completed_at)
-              SELECT $1 || ':' || n, 'library.membersPreparation','SUCCESS','workflows',NULL,NULL,1 FROM generate_series($2::int,$3::int) n`,
-              [anchor.workflowId, previous + 1, scale],
-            );
-            await db.admin.query(
-              `INSERT INTO dbos.workflow_input(workflow_uuid,inputs)
-              SELECT $1 || ':' || n, $4 FROM generate_series($2::int,$3::int) n`,
-              [
-                anchor.workflowId,
-                previous + 1,
-                scale,
-                JSON.stringify({
-                  json: [{ accounts: [f.owner.accountId], route: anchor.locator.route, episodes: [], cleanup: [] }],
-                }),
-              ],
-            );
-          }
+          await retainEpisodes(db, anchor.locator, scale - previous, {
+            headers: axis === 'retired owner results',
+            queued: false,
+          });
         },
         prepare,
         async warmup(db, scale, repetition) {
@@ -504,54 +492,34 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
   }
 }
 
-test('native retired-header growth: expired episodes, successor generations and queued stale intents retain constant exact-step work', async () => {
-  const f = await native.fixture();
-  const episode = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
-  native.advance(24 * 60 * 60 * 1000);
-  const successor = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
-  expect(successor.locator.episodeId).not.toBe(episode.locator.episodeId);
-  const report = await checkGrowth(native.db, {
-    name: 'obsolete exact episode versus expired/retired successors and queued stale intents',
-    scales: [64, 512, 4096],
-    includeBackends: true,
-    bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
-    async grow(db, scale, previous) {
-      await db.admin.query(
-        `INSERT INTO library.members_preparation(route,owner_account_id,collection_id,episode_id,canonical_basis,basis_digest,state,last_read_at,workflow_id)
-        SELECT route,owner_account_id,collection_id,gen_random_uuid(),canonical_basis,basis_digest,'retired',last_read_at,workflow_id
-        FROM library.members_preparation CROSS JOIN generate_series($4::int,$5::int)
-        WHERE route=$1 AND owner_account_id=$2 AND episode_id=$3`,
-        [episode.locator.route, f.owner.accountId, episode.locator.episodeId, previous + 1, scale],
-      );
-      await db.admin.query(
-        `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,class_name,config_name)
-        SELECT $1 || ':' || n,'library.membersPreparation','ENQUEUED','workflows',NULL,NULL FROM generate_series($2::int,$3::int) n`,
-        [episode.workflowId, previous + 1, scale],
-      );
-      await db.admin.query(
-        `INSERT INTO dbos.workflow_input(workflow_uuid,inputs)
-        SELECT $1 || ':' || n,$4 FROM generate_series($2::int,$3::int) n`,
-        [
-          episode.workflowId,
-          previous + 1,
-          scale,
-          JSON.stringify({
-            json: [
-              {
-                accounts: [f.owner.accountId],
-                route: episode.locator.route,
-                episodes: [{ collectionId: f.collectionId, episodeId: episode.locator.episodeId }],
-                cleanup: [],
-              },
-            ],
-          }),
-        ],
-      );
-    },
-    async operation() {
-      expect(await native.step(episode.locator)).toBe(false);
-    },
+for (const axis of [
+  'expired/retired episodes',
+  'successor generations',
+  'queued stale intents',
+  'unrelated histories',
+] as const) {
+  test(`native retired-header growth: exact obsolete step versus ${axis} at 64/512/4096`, async () => {
+    const f = await native.fixture();
+    const episode = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
+    native.advance(24 * 60 * 60 * 1000);
+    const successor = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
+    expect(successor.locator.episodeId).not.toBe(episode.locator.episodeId);
+    const report = await checkGrowth(native.db, {
+      name: `obsolete exact episode / ${axis}`,
+      scales: [64, 512, 4096],
+      includeBackends: true,
+      bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
+      async grow(db, scale, previous) {
+        await retainEpisodes(db, episode.locator, scale - previous, {
+          headers: axis !== 'unrelated histories',
+          queued: axis === 'queued stale intents',
+        });
+      },
+      async operation() {
+        expect(await native.step(episode.locator)).toBe(false);
+      },
+    });
+    expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+    console.log(JSON.stringify(report));
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
-  console.log(JSON.stringify(report));
-});
+}
