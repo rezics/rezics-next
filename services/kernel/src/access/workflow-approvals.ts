@@ -135,7 +135,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
   requireAllowed(value && typeof value === 'object' && !Array.isArray(value));
   const encoded = canonicalize(value);
   const encodedLimit =
-    value.kind === 'client-reduction' ? MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 2048 : 12000;
+    value.kind === 'client-reduction' ? MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4096 : 12000;
   requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= encodedLimit);
   const operation = JSON.parse(encoded) as NativeOperation;
   // The requested workflow key is resolution metadata. Automated creation also

@@ -7,7 +7,7 @@ ALTER TABLE access.workflow_approval
   DROP CONSTRAINT workflow_approval_operation_check,
   ADD CONSTRAINT workflow_approval_operation_check CHECK (
     jsonb_typeof(operation) = 'object' AND octet_length(operation::text) <=
-      CASE WHEN operation->>'kind' = 'client-reduction' THEN 69119 ELSE 16384 END);
+      CASE WHEN operation->>'kind' = 'client-reduction' THEN 71167 ELSE 16384 END);
 
 -- migrate:down
 -- Forward only: retained approvals may exceed the previous scope bounds.

@@ -70,7 +70,7 @@ function scopes(value: unknown): value is string[] {
   );
 }
 // JSON adds two quotes per scope, punctuation, two bounded IDs and field names.
-const consentResponseOctets = MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 2 * 1024 + 128;
+const consentResponseOctets = MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4 * 1024 + 128;
 async function boundedJson(response: Response, signal: AbortSignal): Promise<unknown> {
   if (
     !response.body ||

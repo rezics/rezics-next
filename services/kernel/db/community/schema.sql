@@ -414,7 +414,7 @@ CREATE TABLE community.realm_membership_operation (
     CONSTRAINT realm_membership_operation_actor_authn_epoch_check CHECK (((actor_authn_epoch >= 1) AND (actor_authn_epoch <= '9007199254740991'::bigint))),
     CONSTRAINT realm_membership_operation_actor_client_id_check CHECK (((char_length(actor_client_id) >= 1) AND (char_length(actor_client_id) <= 1024))),
     CONSTRAINT realm_membership_operation_actor_requested_by_check CHECK ((actor_requested_by ~ '^urn:rezics:request:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text)),
-    CONSTRAINT realm_membership_operation_actor_scopes_check CHECK (((cardinality(actor_scopes) <= 100) AND ((cardinality(actor_scopes) = 0) OR (array_ndims(actor_scopes) = 1)))),
+    CONSTRAINT realm_membership_operation_actor_scopes_check CHECK (((cardinality(actor_scopes) <= 512) AND ((cardinality(actor_scopes) = 0) OR (array_ndims(actor_scopes) = 1)))),
     CONSTRAINT realm_membership_operation_check CHECK ((route = ((get_byte(uuid_send(operation_id), 10) * 256) + get_byte(uuid_send(operation_id), 11)))),
     CONSTRAINT realm_membership_operation_check1 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
     CONSTRAINT realm_membership_operation_check2 CHECK ((((kind = 'join'::text) AND (reservation_id IS NULL) AND (ban_id IS NULL)) OR ((kind = 'leave'::text) AND (reservation_id IS NOT NULL) AND (ban_id IS NULL) AND (member_account_id = initiator_account_id)) OR ((kind = 'removal'::text) AND (reservation_id IS NOT NULL) AND (ban_id IS NOT NULL)))),

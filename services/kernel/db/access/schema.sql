@@ -1210,11 +1210,15 @@ CREATE TABLE access.workflow_approval (
     CONSTRAINT workflow_approval_check2 CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:05:00'::interval)) AND (expires_at <= jwt_expires_at))),
     CONSTRAINT workflow_approval_client_id_check CHECK (((length(client_id) >= 1) AND (length(client_id) <= 1024))),
     CONSTRAINT workflow_approval_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT workflow_approval_operation_check CHECK (((jsonb_typeof(operation) = 'object'::text) AND (octet_length((operation)::text) <= 16384))),
+    CONSTRAINT workflow_approval_operation_check CHECK (((jsonb_typeof(operation) = 'object'::text) AND (octet_length((operation)::text) <=
+CASE
+    WHEN ((operation ->> 'kind'::text) = 'client-reduction'::text) THEN 69119
+    ELSE 16384
+END))),
     CONSTRAINT workflow_approval_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 255))),
     CONSTRAINT workflow_approval_requested_by_check CHECK ((length(requested_by) <= 100)),
     CONSTRAINT workflow_approval_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT workflow_approval_scopes_check CHECK (((cardinality(scopes) <= 6450) AND (octet_length(array_to_string(scopes, ' '::text)) <= 12900)))
+    CONSTRAINT workflow_approval_scopes_check CHECK (((cardinality(scopes) <= 512) AND (octet_length(array_to_string(scopes, ' '::text)) <= 66047)))
 );
 
 

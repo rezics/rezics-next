@@ -508,8 +508,8 @@ CREATE FUNCTION content.operation_scopes_valid(scopes text[]) RETURNS boolean
     LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
     AS $_$
   SELECT (cardinality(scopes) = 0 OR array_ndims(scopes) = 1)
-    AND cardinality(scopes) <= 6450
-    AND octet_length(array_to_string(scopes, ' ')) <= 12900
+    AND cardinality(scopes) <= 512
+    AND octet_length(array_to_string(scopes, ' ')) <= 66047
     AND COALESCE(bool_and(scope IS NOT NULL AND scope ~ '^[!-~]{1,128}$'
       AND position('"' in scope) = 0 AND position(chr(92) in scope) = 0), true)
   FROM unnest(scopes) AS scope
@@ -942,7 +942,7 @@ CREATE TABLE content.operation (
     CONSTRAINT operation_creation_target_id_check CHECK (content.operation_routable_uuid(creation_target_id)),
     CONSTRAINT operation_creation_target_route CHECK ((creation_target_route = ((get_byte(uuid_send(creation_target_id), 10) * 256) + get_byte(uuid_send(creation_target_id), 11)))),
     CONSTRAINT operation_creation_target_route_check CHECK (((creation_target_route >= 0) AND (creation_target_route <= 65535))),
-    CONSTRAINT operation_initiator_wire CHECK (((source_digest IS NULL) OR (content.operation_routable_uuid(operation_id) AND content.operation_routable_uuid(initiator_account_id) AND content.operation_routable_uuid(recorded_transaction_id) AND content.operation_routable_uuid(thread_id) AND content.operation_routable_uuid(author_account_id) AND content.operation_routable_uuid(upper_post_id) AND (actor_client_id ~ '^[!-~]+$'::text) AND (cardinality(actor_scopes) <= 100) AND ((actor_requested_by IS NULL) OR ((char_length(actor_requested_by) <= 128) AND (actor_requested_by ~ '^urn:rezics:request:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)))))),
+    CONSTRAINT operation_initiator_wire CHECK (((source_digest IS NULL) OR (content.operation_routable_uuid(operation_id) AND content.operation_routable_uuid(initiator_account_id) AND content.operation_routable_uuid(recorded_transaction_id) AND content.operation_routable_uuid(thread_id) AND content.operation_routable_uuid(author_account_id) AND content.operation_routable_uuid(upper_post_id) AND (actor_client_id ~ '^[!-~]+$'::text) AND (cardinality(actor_scopes) <= 512) AND ((actor_requested_by IS NULL) OR ((char_length(actor_requested_by) <= 128) AND (actor_requested_by ~ '^urn:rezics:request:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)))))),
     CONSTRAINT operation_original_delegation_issued_valid_check CHECK (((char_length(original_delegation_issued_valid) >= 1) AND (char_length(original_delegation_issued_valid) <= 256))),
     CONSTRAINT operation_original_delegation_transaction_id_check CHECK (content.operation_routable_uuid(original_delegation_transaction_id)),
     CONSTRAINT operation_original_minimum_authn_epoch_check CHECK ((original_minimum_authn_epoch ~ '^[1-9][0-9]{0,18}$'::text)),

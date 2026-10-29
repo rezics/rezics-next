@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
@@ -382,3 +383,37 @@ test('durable consent point reader honors native pending reduction ceiling befor
     fixture.close();
   }
 }, 120000);
+
+test('current consent keeps one point statement and fixed rows at 16, 103 and 512 scopes', async () => {
+  const fixture = testDatabase();
+  const db = await openGrowthDatabase(fixture.url);
+  try {
+    await db.admin.query(`INSERT INTO auth_client VALUES ('scope-bound',false,ARRAY['read']);
+      INSERT INTO auth_client_coverage (client_id,ready) VALUES ('scope-bound',true);
+      INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ('person','scope-bound',ARRAY['read'])`);
+    const read = createCurrentConsentReader({ database: db.pool }).readCurrentConsent;
+    const costs = [];
+    for (const count of [16, 103, MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPES + 1]) {
+      const scopes = Array.from({ length: count }, (_, i) => `scope:${i}:`.padEnd(128, 'a'));
+      await db.admin.query("UPDATE auth_client SET scopes=$1 WHERE client_id='scope-bound'", [scopes]);
+      await db.admin.query("UPDATE auth_consent SET scopes=$1 WHERE client_id='scope-bound'", [scopes]);
+      const sample = await capture(db, () => read({ actorAccountId: 'person', clientId: 'scope-bound' }));
+      expect(sample.value).toEqual(
+        count > MAX_CONSENTED_SCOPES
+          ? null
+          : {
+              actorAccountId: 'person',
+              clientId: 'scope-bound',
+              scopes: [...scopes].sort(),
+            },
+      );
+      const cost = costOf(sample.capture);
+      costs.push([cost.statements, cost.rows]);
+    }
+    expect(costs[0]![0]).toBe(1);
+    expect(costs).toEqual([costs[0], costs[0], costs[0], costs[0]]);
+  } finally {
+    await db.close();
+    fixture.close();
+  }
+});
