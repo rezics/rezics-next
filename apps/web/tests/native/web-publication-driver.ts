@@ -336,74 +336,79 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       ...(searchPending ? [`/v1/subjects:search missing titles=${JSON.stringify(missingTitles)}`] : []),
     ];
     while (true) {
-      for (const [kind, route] of routes) {
-        if (!pending.has(route)) continue;
-        const missing = new Set(expected.get(route)!);
-        pending.set(route, missing);
-        let cursor: string | null = null;
-        let pages = 0;
-        let emptyPages = 0;
-        let unavailable = false;
-        const measurements = { times: [] as number[], retries: 0 };
-        feedMeasurements.set(route, measurements);
-        try {
-          do {
-            if (performance.now() >= deadline) break;
-            const query = new URLSearchParams({ limit: '100' });
-            if (cursor !== null) query.set('cursor', cursor);
-            const response = await kernel(`${route}?${query}`);
-            if (!response.ok) {
-              const body = await response.text();
-              const problem = responseProblem(body);
-              if (response.status === 503 && problem?.code === 'semantic_not_ready') {
-                console.info(`web-publication-driver-feed: route=${route} unavailable=semantic_not_ready`);
-                unavailable = true;
-                break;
+      try {
+        for (const [kind, route] of routes) {
+          if (!pending.has(route)) continue;
+          const missing = new Set(expected.get(route)!);
+          pending.set(route, missing);
+          let cursor: string | null = null;
+          let pages = 0;
+          let emptyPages = 0;
+          let unavailable = false;
+          const measurements = { times: [] as number[], retries: 0 };
+          feedMeasurements.set(route, measurements);
+          try {
+            do {
+              if (performance.now() >= deadline) break;
+              const query = new URLSearchParams({ limit: '100' });
+              if (cursor !== null) query.set('cursor', cursor);
+              const response = await kernel(`${route}?${query}`);
+              if (!response.ok) {
+                const body = await response.text();
+                const problem = responseProblem(body);
+                if (response.status === 503 && problem?.code === 'semantic_not_ready') {
+                  console.info(`web-publication-driver-feed: route=${route} unavailable=semantic_not_ready`);
+                  unavailable = true;
+                  break;
+                }
+                throw new Error(`Native sitemap feed ${route} returned ${response.status}: ${body}`);
               }
-              throw new Error(`Native sitemap feed ${route} returned ${response.status}: ${body}`);
-            }
-            const page = (await response.json()) as {
-              items?: { id: string }[];
-              subjectPages?: { id: string }[];
-              next: unknown;
-            };
-            const items = kind === 'subject' ? page.subjectPages : page.items;
-            if (!Array.isArray(items) || (page.next !== null && typeof page.next !== 'string'))
-              throw new Error(`Native sitemap feed ${route} omitted its items or continuation`);
-            for (const { id } of items) missing.delete(id);
-            pages++;
-            if (items.length === 0) emptyPages++;
-            cursor = page.next;
-            // Empty candidate pages carry progress too. Exhaust the native cursor
-            // even when all fixture IDs appeared before the end of the feed.
-          } while (cursor !== null);
-        } finally {
-          feedMeasurements.delete(route);
-          const times = measurements.times.sort((a, b) => a - b);
-          const middle = Math.floor(times.length / 2);
-          const median =
-            times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
-          console.info(
-            `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} empty-pages=${emptyPages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
-          );
+              const page = (await response.json()) as {
+                items?: { id: string }[];
+                subjectPages?: { id: string }[];
+                next: unknown;
+              };
+              const items = kind === 'subject' ? page.subjectPages : page.items;
+              if (!Array.isArray(items) || (page.next !== null && typeof page.next !== 'string'))
+                throw new Error(`Native sitemap feed ${route} omitted its items or continuation`);
+              for (const { id } of items) missing.delete(id);
+              pages++;
+              if (items.length === 0) emptyPages++;
+              cursor = page.next;
+              // Empty candidate pages carry progress too. Exhaust the native cursor
+              // even when all fixture IDs appeared before the end of the feed.
+            } while (cursor !== null);
+          } finally {
+            feedMeasurements.delete(route);
+            const times = measurements.times.sort((a, b) => a - b);
+            const middle = Math.floor(times.length / 2);
+            const median =
+              times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
+            console.info(
+              `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} empty-pages=${emptyPages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
+            );
+          }
+          if (unavailable || (pages > 0 && cursor === null && missing.size === 0)) pending.delete(route);
         }
-        if (unavailable || (pages > 0 && cursor === null && missing.size === 0)) pending.delete(route);
+        if (searchPending && performance.now() < deadline) {
+          const response = await kernel('/v1/subjects:search', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text: data.search.query, languages: [data.search.locale], limit: 100 }),
+          });
+          if (!response.ok) throw new Error(`Native search returned ${response.status}: ${await response.text()}`);
+          const result = (await response.json()) as { subjects: { type: string; labels: Record<string, string> }[] };
+          const titles = new Set(
+            result.subjects
+              .filter(({ type }) => type === 'schema:Book')
+              .map(({ labels }) => labels[data.search.locale]),
+          );
+          missingTitles = data.search.matchingBooks.filter((title) => !titles.has(title));
+          searchPending = missingTitles.length !== 0;
+        }
+      } finally {
+        console.info(`web-publication-driver-settle: round=${++round} unmet=${JSON.stringify(unmet())}`);
       }
-      if (searchPending && performance.now() < deadline) {
-        const response = await kernel('/v1/subjects:search', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text: data.search.query, languages: [data.search.locale], limit: 100 }),
-        });
-        if (!response.ok) throw new Error(`Native search returned ${response.status}: ${await response.text()}`);
-        const result = (await response.json()) as { subjects: { type: string; labels: Record<string, string> }[] };
-        const titles = new Set(
-          result.subjects.filter(({ type }) => type === 'schema:Book').map(({ labels }) => labels[data.search.locale]),
-        );
-        missingTitles = data.search.matchingBooks.filter((title) => !titles.has(title));
-        searchPending = missingTitles.length !== 0;
-      }
-      console.info(`web-publication-driver-settle: round=${++round} unmet=${JSON.stringify(unmet())}`);
       if (pending.size === 0 && !searchPending) return;
       const remaining = deadline - performance.now();
       if (remaining <= 0)
