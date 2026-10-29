@@ -88,7 +88,7 @@ async function observe<T>(run: () => Promise<T>) {
   const statements: Statement[] = [];
   const active = new AsyncLocalStorage<boolean>();
   const original = pg.Client.prototype.query;
-  pg.Client.prototype.query = function (this: pg.Client, ...args: Parameters<typeof original>) {
+  pg.Client.prototype.query = function (this: pg.Client, ...args: unknown[]) {
     const q = args[0];
     if (active.getStore()) {
       statements.push({
@@ -469,7 +469,7 @@ test(
         ])) as HttpResponse,
         200,
       ).body.collection;
-      const current = status(await f.request('alice', 'GET', `/v1/collections/${a.id}`), 200).body.collection;
+      const current = status(await f.request('alice', 'GET', `/v1/collections/${a.id}`), 200).body.collection as Header;
       expect(current).toEqual(renamed);
       const concealed = status(
         (await Reflect.apply(f.request, f, [
@@ -548,7 +548,7 @@ test(
       const facts = await personal();
       for (const [i, c] of targets.entries()) revision(await put(f, c.id, i), i + 1);
       const captured = await observe(() => list(f, '?limit=1'));
-      expect(captured.value.pins).toEqual([{ collectionId: targets[0]!.id, target: targets[0] }]);
+      expect(captured.value.pins).toEqual([{ collectionId: targets[0]!.id, target: targets[0]! }]);
       noWrites(captured.statements);
       for (const c of targets.slice(1))
         expect(JSON.stringify(captured.statements.map((s) => s.values))).not.toContain(c.id);
@@ -588,7 +588,7 @@ test(
           'transaction_retry_exhausted',
           'overloaded',
           'partition_unavailable',
-        ]).toContain(r.body.code);
+        ]).toContain(r.body.code as string);
       } finally {
         if (release) clearTimeout(release);
         await blocker.query('ROLLBACK');
