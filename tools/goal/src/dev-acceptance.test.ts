@@ -59,14 +59,17 @@ test("a passing dev landing advances dev and a batch runs every entry's acceptan
     await h.start(second);
     const checked: { command: string; files: string[] }[] = [];
     await h.train(async (command, cwd) => {
-      checked.push({ command: command.join(' '), files: ['first', 'second'].filter((file) => {
-        try {
-          readFileSync(join(cwd, file));
-          return true;
-        } catch {
-          return false;
-        }
-      }) });
+      checked.push({
+        command: command.join(' '),
+        files: ['first', 'second'].filter((file) => {
+          try {
+            readFileSync(join(cwd, file));
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      });
       return { passed: true, output: '', timedOut: false };
     });
 

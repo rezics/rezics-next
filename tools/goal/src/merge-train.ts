@@ -1091,8 +1091,11 @@ export class MergeTrain {
             retry = true;
             break;
           }
-          if (!accepted.passed || git(trainTree, 'rev-parse', 'HEAD') !== member.candidate ||
-              spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0) {
+          if (
+            !accepted.passed ||
+            git(trainTree, 'rev-parse', 'HEAD') !== member.candidate ||
+            spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0
+          ) {
             failedBatch = {
               kind: 'acceptance',
               output: accepted.output || 'Acceptance command changed the candidate commit',
@@ -1911,12 +1914,16 @@ export class MergeTrain {
             result.failsOnMain =
               !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
             if (result.failsOnMain)
-              appendFileSync(logPath, `${integratesIntoDev ? 'Acceptance failure is pre-existing on dev' : 'Acceptance failure is pre-existing on main'}\n`);
+              appendFileSync(
+                logPath,
+                `${integratesIntoDev ? 'Acceptance failure is pre-existing on dev' : 'Acceptance failure is pre-existing on main'}\n`,
+              );
             result.stage = stage;
             return finish();
           }
           // Acceptance commands may inspect but not replace or modify the candidate that was validated.
-          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Acceptance command changed the candidate commit');
+          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
+            throw new Error('Acceptance command changed the candidate commit');
           git(trainTree, 'diff', '--quiet', 'HEAD', '--');
         }
         stage = 'merge';
