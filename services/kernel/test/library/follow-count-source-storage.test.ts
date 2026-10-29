@@ -315,8 +315,8 @@ test('native source hook rows and statements stay constant with logarithmic bloc
         rows: cost.rows,
         statements: cost.statements,
         blocks: cost.blocks,
-        source: cost.relations['library.follow_count_source'],
-        owner: cost.relations['library.follow_count_owner'],
+        source: cost.relations?.['library.follow_count_source'],
+        owner: cost.relations?.['library.follow_count_owner'],
       })),
     ),
   );
