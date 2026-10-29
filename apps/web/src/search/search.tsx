@@ -277,21 +277,24 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
           (definition) => isRecord(definition) && Array.isArray(definition.facets) && definition.facets.length > 0,
         )
       : false;
+    const typeChoicesRequested = Boolean(release && !type && data.query && typeChoicesAvailable);
     const typeBody: FacetBody = { text: data.query, languages, facets: [{ property: 'type', size: 20 }] };
-    const typeChoicesPromise: Promise<{ id: string; labels: Record<string, string> }[] | null> =
-      release && !type && data.query && typeChoicesAvailable
-        ? kernelClient(data.locale)
-            .subjects.$facets.post(typeBody)
-            .then((response) => {
-              if (response.error) return null;
-              const values = (response.data as FacetResult).facets.find((facet) => facet.property === 'type')?.values;
-              return (values ?? []).map(({ value, labels }) => ({
-                id: value,
-                labels: Object.keys(labels).length > 0 ? labels : (release!.types[value]?.labels ?? {}),
-              }));
-            })
-            .catch(() => null)
-        : Promise.resolve(null);
+    const typeChoicesPromise: Promise<{ id: string; labels: Record<string, string> }[] | null> = typeChoicesRequested
+      ? kernelClient(data.locale)
+          .subjects.$facets.post(typeBody)
+          .then((response) => {
+            if (response.error) {
+              facetIndexNotReady ||= problemCode(response.error) === 'index_not_ready';
+              return null;
+            }
+            const values = (response.data as FacetResult).facets.find((facet) => facet.property === 'type')?.values;
+            return (values ?? []).map(({ value, labels }) => ({
+              id: value,
+              labels: Object.keys(labels).length > 0 ? labels : (release!.types[value]?.labels ?? {}),
+            }));
+          })
+          .catch(() => null)
+      : Promise.resolve(null);
     const [result, facetResult, typeChoicesResult] = await Promise.all([
       searchPromise,
       facetsPromise,
@@ -335,7 +338,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ]),
       ),
       facetsAvailable: release !== undefined && facetsAvailable,
-      facetRetry: facetResult === null || (typeFacetRequested && typeFacets === null),
+      facetRetry: facetResult === null || (typeChoicesRequested && typeChoicesResult === null),
       facetIndexNotReady,
       staleCursorRestarted,
       sort: data.sort ?? 'relevance',
