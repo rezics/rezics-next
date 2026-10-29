@@ -30,6 +30,7 @@ import { refreshBoardRankBatch } from './board-rank.ts';
 import { createErasureJob } from './erasure-job.ts';
 import { createReactionCountEffect } from './reaction-projection.ts';
 import { createAuthorItemEffect } from './author-item-index.ts';
+import { createReportLocatorEffect } from './report-locator.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
 import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
@@ -401,6 +402,7 @@ async function registerWork(
     createReactionCountEffect(context.pool),
     createSubjectThreadEffect(context.pool),
     createAuthorItemEffect(context.pool),
+    createReportLocatorEffect(context.pool),
   ]);
 }
 

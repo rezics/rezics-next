@@ -306,6 +306,12 @@ BEGIN
        = (to_jsonb(OLD) - ARRAY['outcome', 'resolved_at', 'resolved_by', 'decision_id']) THEN
     RETURN NEW;
   END IF;
+  IF TG_OP = 'UPDATE' AND NOT OLD.reporter_erased AND OLD.reporter_account_id IS NOT NULL
+     AND NEW.reporter_erased AND NEW.reporter_account_id IS NULL AND NEW.evidence IS NULL
+     AND (to_jsonb(NEW) - ARRAY['evidence', 'reporter_account_id', 'reporter_erased'])
+       = (to_jsonb(OLD) - ARRAY['evidence', 'reporter_account_id', 'reporter_erased']) THEN
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'Report records and their resolved outcomes are immutable' USING ERRCODE = '23514';
 END;
 $$;
@@ -1023,6 +1029,7 @@ CREATE TABLE content.report (
     resolved_at timestamp with time zone,
     resolved_by uuid,
     decision_id uuid,
+    reporter_erased boolean DEFAULT false NOT NULL,
     CONSTRAINT report_check CHECK ((route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT report_check1 CHECK (((octet_length(reason) + COALESCE(octet_length(evidence), 0)) <= 2097152)),
     CONSTRAINT report_check2 CHECK (((revision_id IS NULL) OR (target_kind <> 'board'::text))),
@@ -1030,7 +1037,8 @@ CREATE TABLE content.report (
     CONSTRAINT report_outcome_shape CHECK ((((outcome IS NULL) AND (resolved_at IS NULL) AND (resolved_by IS NULL) AND (decision_id IS NULL)) OR ((outcome IS NOT NULL) AND (outcome = ANY (ARRAY['actioned'::text, 'dismissed'::text])) AND (resolved_at IS NOT NULL) AND (resolved_by IS NOT NULL) AND (((outcome = 'actioned'::text) AND (decision_id IS NOT NULL)) OR ((outcome = 'dismissed'::text) AND (decision_id IS NULL)))))),
     CONSTRAINT report_reason_check CHECK ((reason = ANY (ARRAY['off_topic'::text, 'inappropriate'::text, 'spam'::text, 'illegal'::text, 'other'::text]))),
     CONSTRAINT report_reporter_account_id_check CHECK (((reporter_account_id IS NULL) OR (reporter_account_id <> '00000000-0000-0000-0000-000000000000'::uuid))),
-    CONSTRAINT report_required_evidence CHECK (((reason <> ALL (ARRAY['illegal'::text, 'other'::text])) OR ((evidence IS NOT NULL) AND (char_length(evidence) > 0)))),
+    CONSTRAINT report_reporter_erased_shape CHECK (((NOT reporter_erased) OR ((reporter_account_id IS NULL) AND (evidence IS NULL)))),
+    CONSTRAINT report_required_evidence CHECK ((reporter_erased OR (reason <> ALL (ARRAY['illegal'::text, 'other'::text])) OR ((evidence IS NOT NULL) AND (char_length(evidence) > 0)))),
     CONSTRAINT report_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT report_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
 );
@@ -1061,6 +1069,22 @@ CREATE TABLE content.report_outcome_work (
     done boolean NOT NULL,
     CONSTRAINT report_outcome_work_check CHECK ((route = ((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)))),
     CONSTRAINT report_outcome_work_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: report_reporter; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_reporter (
+    route integer NOT NULL,
+    reporter_account_id uuid NOT NULL,
+    report_route integer NOT NULL,
+    report_id uuid NOT NULL,
+    CONSTRAINT report_reporter_check CHECK ((route = ((get_byte(uuid_send(reporter_account_id), 10) * 256) + get_byte(uuid_send(reporter_account_id), 11)))),
+    CONSTRAINT report_reporter_check1 CHECK ((report_route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
+    CONSTRAINT report_reporter_report_route_check CHECK (((report_route >= 0) AND (report_route <= 65535))),
+    CONSTRAINT report_reporter_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -1436,6 +1460,14 @@ ALTER TABLE ONLY content.report_outcome_work
 
 ALTER TABLE ONLY content.report
     ADD CONSTRAINT report_pkey PRIMARY KEY (route, report_id);
+
+
+--
+-- Name: report_reporter report_reporter_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_reporter
+    ADD CONSTRAINT report_reporter_pkey PRIMARY KEY (route, reporter_account_id, report_id);
 
 
 --
