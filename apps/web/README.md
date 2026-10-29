@@ -278,13 +278,6 @@ The search route keeps its schema in `search/search-params.ts`; its query key in
 
 **Head**: Every route's `head()` builds tags with `pageHead()` from `apps/web/src/shell/head.ts`: title, description, card, robots and JSON-LD. Canonical and `hreflang` alternates are emitted once for the page by the root, from the leaf route's locale paths.
 
-### Top rated search
-
-- **Touches:** One `POST /v1/subjects:search` with `sort: rating` for each page. An outdated cursor causes one additional first-page search request; the result envelope and facet reads stay the same.
-- **Bound:** One search read per page view, two at most after a stale cursor. The public Global score is displayed only when the result contains a score; a missing figure stays blank.
-- **Presentation:** Relevance remains the default and is omitted from the URL; Top rated preserves the query and filters. The page follows returned facet order and displays no search total, facet value count or count-relation metadata under either sort.
-- **Growth check:** `apps/web/tests/search-rating-sort.test.ts` covers the rating request, the single stale-cursor restart, retained facet retry control, absent count display and result-row targets.
-
 **Statuses**: Loaders end with real statuses: `notFound()` for 404, with unknown, unreadable and removed ids answering alike; `redirect({ statusCode: 301 })` for moved pages and outdated slugs; and the closed page for 403. A page never answers 200 with an error inside.
 
 **Subject URLs**: A subject's canonical path is `/{locale}/subjects/{id}/{slug}`, where `slug` comes from the display label in that locale. Views append their view name; an id without a slug and an outdated slug redirect 301 while retaining the view and search params. Use `apps/web/src/subject/subject-href.ts` for every subject link. The id selects the page, and the loader supplies every locale's slug for canonical and alternate tags.
@@ -503,6 +496,13 @@ Each server render and browser session has its own query cache. Public reads sta
   `searches read the definitions release once per digest and make two kernel reads each`
 - **Growth check:** `tests/request-languages.test.ts` keeps search and home request counts fixed at 1, 10 and 100
   matching subjects
+
+### Top rated search
+
+- **Touches:** One `POST /v1/subjects:search` with `sort: rating` for each page. An outdated cursor causes one additional first-page search request; the result envelope and facet reads stay the same.
+- **Bound:** One search read per page view, two at most after a stale cursor. The public Global score is displayed only when the result contains a score; a missing figure stays blank.
+- **Presentation:** Relevance remains the default and is omitted from the URL; Top rated preserves the query and filters. The page follows returned facet order and displays no search total, facet value count or count-relation metadata under either sort.
+- **Growth check:** `apps/web/tests/search-rating-sort.test.ts` covers the rating request, the single stale-cursor restart, retained facet retry control, absent count display and result-row targets.
 
 ### Suggestions (shell typeahead)
 
