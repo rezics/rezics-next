@@ -440,83 +440,86 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   writeFileSync(profilePath, '');
   process.env.GROWTH_PROFILE = profilePath;
   const evidence: { scale: number; operation: string; capture: unknown }[] = [];
-  for (const operation of operations) {
-    const states = new Map<number, State>();
-    const report = await checkGrowth(db, {
-      name: `Personal label catalogue (${operation.name})`,
-      scales,
-      rule: 'series',
-      warmups: 1,
-      repetitions: 5,
-      includeBackends: true,
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      async grow(database, scale) {
-        await grow(database, scale);
-      },
-      async warmup(_database, _scale, _repetition) {
-        const result = await operation.run(await operation.prepare());
-        operation.assert(result);
-      },
-      async prepare(_database, _scale, repetition) {
-        states.set(repetition, await operation.prepare());
-      },
-      async operation(_database, _scale, repetition) {
-        const state = states.get(repetition);
-        if (!state) throw new Error(`Missing fresh state for ${operation.name} repetition ${repetition}`);
-        const result = await operation.run(state);
-        operation.assert(result);
-        return result;
-      },
-    });
-    for (const sample of report.samples) {
-      const relation = sample.cost.relations['library.personal_label'];
-      expect(relation).toBeDefined();
-      expect(relation!.sequentialScans).toBe(0);
-      expect(relation!.rows).toBeLessThanOrEqual(operation.name.startsWith('list') ? 16 : 2);
-      expect(sample.cost.backgroundStatements ?? 0).toBe(0);
+  async function assertCapturedOperation(scale: number, operation: Operation) {
+    const result = await capture(db, async () => operation.run(await operation.prepare()), { includeBackends: true });
+    operation.assert(result.value);
+    const catalogue = catalogStatementBound(result.capture);
+    expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
+    const plans = result.capture.plans.flatMap((plan) => nodes(plan));
+    const labelNodes = plans.filter(
+      (node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label',
+    );
+    expect(labelNodes.length).toBeGreaterThan(0);
+    for (const node of labelNodes) {
+      expect(node['Node Type']).not.toBe('Seq Scan');
+      if (operation.name !== 'create' && node['Index Name'] !== undefined)
+        expect(node['Index Name']).toBe(primaryKeyIndex);
+      expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(
+        operation.name.startsWith('list') ? 8 : 1,
+      );
+      expect(Number(node['Rows Removed by Filter'] ?? 0) * Number(node['Actual Loops'])).toBe(0);
     }
+    if (operation.name !== 'create')
+      expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
+    if (operation.name.startsWith('list')) {
+      const sql = result.capture.statements.find((statement) => /WITH source AS MATERIALIZED/i.test(statement));
+      expect(sql).toBeDefined();
+      expect(sql).not.toMatch(/deleted_at\s+IS\s+NULL|\bOFFSET\b|\bcount\s*\(/i);
+      expect(sql).toMatch(/label_id\s*>/);
+      expect(plans.some((node) => node['Node Type'] === 'Limit' && Number(node['Actual Rows']) === 8)).toBe(true);
+      expect(labelNodes.some((node) => Number(node['Actual Rows']) === 8)).toBe(true);
+    }
+    if (operation.name === 'noop') {
+      expect(result.capture.statements.some((statement) => /UPDATE library\.personal_label/i.test(statement))).toBe(
+        false,
+      );
+      expect(result.capture.statements.some((statement) => /INSERT INTO core\.outbox/i.test(statement))).toBe(false);
+    }
+    evidence.push({ scale, operation: operation.name, capture: result.capture });
   }
 
-  // Plans are taken from real captured operations, with the same representative table at every scale.
-  for (const scale of scales) {
-    await grow(db, scale);
-    for (const operation of operations) {
-      const result = await capture(db, async () => operation.run(await operation.prepare()), { includeBackends: true });
-      operation.assert(result.value);
-      const catalogue = catalogStatementBound(result.capture);
-      expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
-      const plans = result.capture.plans.flatMap((plan) => nodes(plan));
-      const labelNodes = plans.filter(
-        (node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label',
+  const states = new Map<number, State[]>();
+  const report = await checkGrowth(db, {
+    name: 'Personal label catalogue operations',
+    scales,
+    rule: 'series',
+    warmups: 1,
+    repetitions: 5,
+    includeBackends: true,
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(database, scale) {
+      await grow(database, scale);
+      const before = Number(
+        (await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label'))
+          .rows[0]!.count,
       );
-      expect(labelNodes.length).toBeGreaterThan(0);
-      for (const node of labelNodes) {
-        expect(node['Node Type']).not.toBe('Seq Scan');
-        if (operation.name !== 'create' && node['Index Name'] !== undefined)
-          expect(node['Index Name']).toBe(primaryKeyIndex);
-        expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(
-          operation.name.startsWith('list') ? 8 : 1,
-        );
-        expect(Number(node['Rows Removed by Filter'] ?? 0) * Number(node['Actual Loops'])).toBe(0);
-      }
-      if (operation.name !== 'create')
-        expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
-      if (operation.name.startsWith('list')) {
-        const sql = result.capture.statements.find((statement) => /WITH source AS MATERIALIZED/i.test(statement));
-        expect(sql).toBeDefined();
-        expect(sql).not.toMatch(/deleted_at\s+IS\s+NULL|\bOFFSET\b|\bcount\s*\(/i);
-        expect(sql).toMatch(/label_id\s*>/);
-        expect(plans.some((node) => node['Node Type'] === 'Limit' && Number(node['Actual Rows']) === 8)).toBe(true);
-        expect(labelNodes.some((node) => Number(node['Actual Rows']) === 8)).toBe(true);
-      }
-      if (operation.name === 'noop') {
-        expect(result.capture.statements.some((statement) => /UPDATE library\.personal_label/i.test(statement))).toBe(
-          false,
-        );
-        expect(result.capture.statements.some((statement) => /INSERT INTO core\.outbox/i.test(statement))).toBe(false);
-      }
-      evidence.push({ scale, operation: operation.name, capture: result.capture });
-    }
+      for (const operation of operations) await assertCapturedOperation(scale, operation);
+      const after = Number(
+        (await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label'))
+          .rows[0]!.count,
+      );
+      if (counts[String(scale)] && typeof counts[String(scale)] === 'object')
+        Object.assign(counts[String(scale)] as Record<string, unknown>, { fixedMeasurementRows: after - before });
+    },
+    async warmup() {
+      for (const operation of operations) operation.assert(await operation.run(await operation.prepare()));
+    },
+    async prepare(_database, _scale, repetition) {
+      states.set(repetition, await Promise.all(operations.map((operation) => operation.prepare())));
+    },
+    async operation(_database, _scale, repetition) {
+      const prepared = states.get(repetition);
+      if (!prepared) throw new Error(`Missing fresh operation states for repetition ${repetition}`);
+      for (const [index, operation] of operations.entries()) operation.assert(await operation.run(prepared[index]!));
+    },
+  });
+  for (const sample of report.samples) {
+    const relation = sample.cost.relations['library.personal_label'];
+    expect(relation).toBeDefined();
+    expect(relation!.sequentialScans).toBe(0);
+    const boundedRows = operations.reduce((total, operation) => total + (operation.name.startsWith('list') ? 16 : 2), 0);
+    expect(relation!.rows).toBeLessThanOrEqual(boundedRows);
+    expect(sample.cost.backgroundStatements ?? 0).toBe(0);
   }
   mkdirSync('.temp/label-catalogue', { recursive: true });
   writeFileSync('.temp/label-catalogue/native-growth.json', JSON.stringify(evidence));
