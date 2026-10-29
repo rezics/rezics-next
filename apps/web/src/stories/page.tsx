@@ -178,6 +178,17 @@ export async function threadReady(context: { canvasElement: HTMLElement }) {
   await expect(view.getByText('The rose was unique')).toBeVisible();
 }
 
+export async function threadPolishReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  const title = threadRecording.thread.title;
+  if (!title) throw new Error('The recorded thread has no title.');
+  await view.findByRole('heading', { level: 1, name: title });
+  await view.findByRole('heading', { level: 2, name: m.thread_posts_heading() });
+  await view.findAllByText(m.thread_post_edited());
+  await expect(view.getAllByText(m.thread_post_edited())).toHaveLength(1);
+}
+
 /** The offer page shows its locale's subject label, the read's price and one checkout control. */
 function offerReady(recording: typeof offerRecording, available: boolean) {
   return async (context: { canvasElement: HTMLElement }) => {

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PageStory, pagePaths, pageReady, threadReady } from './page';
+import { PageStory, pagePaths, pageReady, threadPolishReady, threadReady } from './page';
 
 const meta = { title: 'Pages/Thread', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -17,7 +17,7 @@ export const SignedOut: Story = {
 
 export const EditedAndUneditedPosts: Story = {
   name: 'Edited and unedited posts',
-  play: threadReady,
+  play: threadPolishReady,
   render: () => <PageStory visitor="Signed Out" path={pagePaths.thread} />,
 };
 /** A thread whose author is a deleted organization: the byline names no one and keeps the neutral avatar. */
