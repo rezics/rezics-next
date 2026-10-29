@@ -124,7 +124,7 @@ test('native Reylo analysis stays warm without losing diagnostics or runtime res
     const { default: query } = (await import(pathToFileURL(resolve(directory, 'consumer.ts')).href)) as {
       default: { run: (client: pg.Pool, parameters: Record<string, never>) => Promise<unknown> };
     };
-    expect(await query.run(pool, {})).toEqual([{ answer: 7 }]);
+    expect(await query.run(pool, {})).toEqual({ answer: 7 });
 
     const warm = compile();
     expect(warm.status, warm.output).toBe(0);
