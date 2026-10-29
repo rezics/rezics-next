@@ -609,8 +609,16 @@ The continuation names the last processed candidate. The key-only extra row rema
 
 ### Definition publish
 
+New release digests admit at most 4096 bases per type, 256 mappings per type/property and 4096 qualifiers per
+property, with existing input-limit diagnostics. [Construction](../../../../packages/definitions/src/publication-construction-contract.md)
+owns the shared linear validation/index loops and historical compatibility boundary. Cold stored reads retain
+historical validity and exact digest verification; capped replay/new-key admission requires one same-pool indexed
+published-digest point, followed by ordinary fresh command authorization before receipt disclosure. Fresh bootstrap
+uses new-publication caps. Pattern aggregate HTTP refusal and its reached-defect/same-pattern-excess tie remain
+pending in the parent CPU contract; these shape limits do not supply that producer.
+
 - Touches: `publishRelease`: validate/hash one body, insert 0/1 `semantic.definition_release` through `definition_release_pkey(route, digest)`, conflict does nothing; receipted command emits 1 event even on existing digest. Grow D and H; fix body size and authorization evidence.
-- Bound: Rows O(1), blocks O(log D + C), one body statement, nine including command; no scan of prior releases.
+- Bound: Rows O(1), blocks O(log D + C), one body statement, nine including command; capped historical submissions add one same-pool indexed existence statement; no scan of prior releases.
 - Growth check: `test/semantic/growth-definitions.test.ts`: `Definition publish stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition activate

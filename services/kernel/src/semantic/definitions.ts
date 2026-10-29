@@ -118,14 +118,17 @@ export async function publishRelease(pool: Pool, options: WriteOptions & { relea
   // and receipt/key conflict ordering remain inside runCommand at fresh T.
   const caps = publicationLimits(options.release);
   let publishedDigest: string | undefined;
+  let submitted = options.release;
   if (caps.length) {
     const admission = releaseAdmission(options.release);
     if (admission.length) throw new DefinitionInputError(admission);
-    publishedDigest = releaseDigest(options.release as Release);
+    // The database await must retain owned data, not a mutable caller graph.
+    submitted = structuredClone(options.release);
+    publishedDigest = releaseDigest(submitted as Release);
     if (!(await exists.run(pool, { route: resource.route, digest: publishedDigest })))
       throw new DefinitionInputError(caps);
   }
-  const release = validated(options.release);
+  const release = validated(submitted);
   const digest = publishedDigest ?? releaseDigest(release);
   const command = await runCommand(
     pool,
