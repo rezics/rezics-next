@@ -4124,7 +4124,7 @@ test('critical priority: critical direct runs carry their class through admissio
   expect(valid.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain(
     '# REMOTE_CHECK_PRIORITY critical',
   );
-  expect(result.stderr).toContain('run priority critical on a');
+  expect(String(valid.events().find((event) => event.kind === 'run')?.script)).toContain('critical a');
   const invalid = scenario({ a: { available: 8e9 } });
   const refused = await remote({ ...invalid.env, REMOTE_CHECK_PRIORITY: 'urgent' }, workspace());
   expect(refused.code).toBe(1);
