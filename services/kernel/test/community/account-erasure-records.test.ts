@@ -1,5 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver, Fixture, Realm } from '../../../../specs/community-driver.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { enqueueMembership } from '../../src/access/membership-work.ts';
+import { restartWorker } from './community-driver.ts';
 import { banAccount } from '../../src/community/ban.ts';
 import { createSpace } from '../../src/community/space.ts';
 import { createRealm } from '../../src/community/realm.ts';
@@ -269,6 +272,150 @@ test.serial(
         }),
         403,
       );
+    }
+  },
+  120000,
+);
+
+test.serial(
+  'a membership operation naming the account is erased once its workflow is terminal, or once it is older than the enqueue grace with no workflow history, and is pending otherwise',
+  async () => {
+    const state = await setup();
+    const { driver, fixture, system, account } = state;
+    const pool = system.database.pool;
+    const places: string[] = [];
+    // Each ban creates a real removal operation with the moderator as its durable initiator.
+    for (let index = 0; index < 4; index++) {
+      const place = await realm(driver, fixture);
+      places.push(place.realmId);
+      expect((await driver.grantModerator(place.realmId, account)).status).toBe(201);
+      await json(
+        await driver.request({
+          actor: fixture.owner,
+          method: 'POST',
+          path: `/v1/realms/${place.realmId}/members`,
+          key: key(),
+          body: { accountId: fixture.member.id },
+        }),
+        202,
+      );
+      await driver.settle();
+      await ban(driver, account, place.realmId, fixture.member, `Removal ${index}`);
+      await driver.settle();
+    }
+    const readOperations = async () =>
+      (
+        await pool.query(
+          `SELECT * FROM community.realm_membership_operation
+         WHERE realm_id=ANY($1::uuid[]) AND kind='removal' ORDER BY requested_at, operation_id`,
+          [places],
+        )
+      ).rows;
+    const operations = await readOperations();
+    expect(operations).toHaveLength(4);
+    const [finished, retainedOut, recent, running] = operations;
+    const client = await createWorkClient(pool.options.connectionString!);
+    const replay = await client.getWorkflow(retainedOut.creation_idempotency_key);
+    expect(replay?.status).toBe('SUCCESS');
+    const runningHistory = await client.getWorkflow(running.creation_idempotency_key);
+    expect(runningHistory?.status).toBe('SUCCESS');
+    const erased = await deletePersona({ pool, auth: state.deletion.auth }, state.persona);
+    await drain(driver, [...places, account.id]);
+    await worker.stop();
+    const grace = 60 * 60 * 1000;
+    let now = new Date(retainedOut.requested_at).getTime() + grace + 1;
+    expect(new Date(recent.requested_at).getTime()).toBeGreaterThan(now - grace);
+    const deps = { pool, clock: () => new Date(now) };
+    const phase = await import('../../src/community/account-erasure-records.ts');
+    try {
+      // Model retention removing terminal history, without changing either source operation.
+      await pool.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid=ANY($1::text[])', [
+        [retainedOut.creation_idempotency_key, recent.creation_idempotency_key],
+      ]);
+      await pool.query("UPDATE dbos.workflow_status SET status='PENDING' WHERE workflow_uuid=$1", [
+        running.creation_idempotency_key,
+      ]);
+      expect(await phase.eraseAccountCommunityRecordsPage(deps, account.id, { erasedAt: erased.at })).toMatchObject({
+        pending: 2,
+        next: null,
+      });
+      const rows = await readOperations();
+      for (const original of [finished, retainedOut]) {
+        const row = rows.find((row) => row.operation_id === original.operation_id);
+        expect(row).toMatchObject({
+          initiator_account_id: null,
+          actor_client_id: null,
+          actor_scopes: null,
+          actor_requested_by: null,
+          actor_authn_epoch: null,
+          original_minimum_authn_epoch: null,
+          original_operator_account_id: null,
+          original_delegation_transaction_id: null,
+          original_delegation_issued_valid: null,
+        });
+        expect(JSON.stringify(row)).not.toContain(account.id);
+      }
+      for (const original of [recent, running])
+        expect(rows.find((row) => row.operation_id === original.operation_id)).toEqual(original);
+      const locators = async () =>
+        (
+          await pool.query(
+            `SELECT owner_id::text FROM community.party_locator
+           WHERE route=$1 AND account_id=$2 AND kind='membership_operation' ORDER BY owner_id`,
+            [routeOf(account.id), account.id],
+          )
+        ).rows.map((row) => row.owner_id);
+      expect(await locators()).toEqual([recent.operation_id, running.operation_id].sort());
+      // The exact boundary remains pending: "older than" the grace is strict.
+      now = new Date(recent.requested_at).getTime() + grace;
+      expect((await phase.eraseAccountCommunityRecordsPage(deps, account.id, { erasedAt: erased.at })).pending).toBe(2);
+      now++;
+      expect((await phase.eraseAccountCommunityRecordsPage(deps, account.id, { erasedAt: erased.at })).pending).toBe(1);
+      expect((await readOperations()).find((row) => row.operation_id === recent.operation_id)).toMatchObject({
+        initiator_account_id: null,
+        actor_client_id: null,
+      });
+      expect((await readOperations()).find((row) => row.operation_id === running.operation_id)).toEqual(running);
+      expect(await locators()).toEqual([running.operation_id]);
+    } finally {
+      await pool.query('UPDATE dbos.workflow_status SET status=$2 WHERE workflow_uuid=$1', [
+        running.creation_idempotency_key,
+        runningHistory!.status,
+      ]);
+      await restartWorker();
+      await client.close();
+    }
+    const work = await createWorkClient(pool.options.connectionString!);
+    try {
+      const membership = async () => ({
+        members: (
+          await pool.query('SELECT * FROM community.realm_member WHERE realm_id=$1 ORDER BY account_id, valid', [
+            retainedOut.realm_id,
+          ])
+        ).rows,
+        inverse: (
+          await pool.query('SELECT * FROM access.membership_inverse WHERE account_id=$1 ORDER BY kind, group_id', [
+            fixture.member.id,
+          ])
+        ).rows,
+        terminal: (
+          await pool.query(
+            'SELECT * FROM community.realm_member_terminal WHERE realm_id=$1 ORDER BY account_id, reservation_id',
+            [retainedOut.realm_id],
+          )
+        ).rows,
+      });
+      const before = await membership();
+      // Retention removed the workflow, so this is a fresh execution with its original durable id and seal.
+      await enqueueMembership(work, retainedOut.creation_idempotency_key, replay!.input![0]);
+      await expect(
+        work.retrieveWorkflow(retainedOut.creation_idempotency_key).getResult({ pollingIntervalMs: 10 }),
+      ).rejects.toThrow('Membership workflow step failed: reserve');
+      const steps = await work.listWorkflowSteps(retainedOut.creation_idempotency_key);
+      expect(steps.map((step) => step.functionName)).toEqual(['accounts.membership.reserve']);
+      expect(await membership()).toEqual(before);
+    } finally {
+      await work.close();
     }
   },
   120000,
