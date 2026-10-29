@@ -141,3 +141,10 @@ evidence; no runtime assertion has been reached.
 | `specs/terminal-erasure-outcomes.test.ts` | `1d398bd9119e0e31c632daaffb427d44c3ae8f77f8454ee4d6c0a0025b35d0e7` | `1d398bd9119e0e31c632daaffb427d44c3ae8f77f8454ee4d6c0a0025b35d0e7` |
 | `specs/imports-vndb-tables-driver.ts` | `8bbb39e5f2482bd703f1fa1abb97a6426218902b46b4e3ba9e93a42cf852e11f` | `8bbb39e5f2482bd703f1fa1abb97a6426218902b46b4e3ba9e93a42cf852e11f` |
 | `specs/imports-vndb-tables.test.ts` | `97d91eecee9860906c474eb9955253cffe6a04523cb72e5d6c07c48dfd3e98a6` | `97d91eecee9860906c474eb9955253cffe6a04523cb72e5d6c07c48dfd3e98a6` |
+
+A subsequent admission rechecked the current runner and all sixteen final hashes above. The exact prescribed
+focused acceptance submission was attempted twice and the typecheck submission once; all exited 1 with
+`Invalid check id: --` before allocating a check ID. The runner still treats `--run` as execution of an
+existing UUID. The final typecheck retry is recorded in the attempt result. No native assertion, SDK workflow
+or typecheck was reached, and no check is live. The acceptance, fixture child and preserved files were not
+changed in this admission. The submission interface remains the concrete blocker.
