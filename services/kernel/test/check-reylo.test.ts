@@ -129,7 +129,7 @@ test('native Reylo analysis stays warm without losing diagnostics or runtime res
     const warm = compile();
     expect(warm.status, warm.output).toBe(0);
     expect(entryCount()).toBe(coldEntries);
-    expect(await query.run(pool, {})).toEqual([{ answer: 7 }]);
+    expect(await query.run(pool, {})).toEqual({ answer: 7 });
 
     writeFileSync(queryPath, 'SELECT missing_native_reylo_column;\n');
     const invalidCold = compile();
