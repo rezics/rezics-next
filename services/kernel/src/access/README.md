@@ -636,6 +636,29 @@ Its `state` is `pending` until all participants acknowledge, then `retention-out
 unresolved, then `complete`. It returns null for a missing erasure and has no HTTP route. Backup expiry is not
 modelled because no backup policy exists; it remains an open external condition.
 
+The late-locator completion extension requires a bounded DBOS frontier probe before it can replace the
+acknowledgement-only completion above. Its probe must select unfinished workflows of registered locator effects,
+bounded by the moment their source envelopes have passed the effects checkpoint. The shared relay identifies an
+effect through `queue_name = 'effects'` and `queue_partition_key = '<effect>:<partition>'`; every effect workflow
+has the same workflow name, `effect`.
+
+DBOS 5.4.6-preview supplies `idx_workflow_status_in_flight_v2` on
+`(queue_name, status, priority, created_at)` and `idx_workflow_status_partition_dequeue_v3` on
+`(queue_name, status, queue_partition_key, priority, created_at, workflow_uuid)`, both restricted to unfinished
+workflows. Neither provides the required creation-time range directly after the effect key without constraining
+priority. A frontier must not silently exclude reprioritized locator workflows or examine an increasing number of
+newer workflows while searching for an older one. The priority-independent bound is therefore not established.
+
+The implementation prerequisite is a kernel-owned index on
+`dbos.workflow_status (queue_name, queue_partition_key, created_at) WHERE status IN ('ENQUEUED', 'PENDING')`.
+Install it after the SDK's schema migration, which currently runs after the application migrations in
+[`migrate`](../../scripts/database.ts), and preserve it across SDK upgrades. Verify the probe with registered effect
+keys held fixed while newer unfinished workflows and unrelated history grow, including varied priorities.
+Once this prerequisite is available, snapshot partition heads once after the tombstone, store only checkpoint
+backlogs, wait for their delivery, freeze the workflow frontier, and retry the indexed completion probe in durable
+work. Open late items must also block completion; acknowledgements and retention resolution retain their current
+meaning. These frontier and late-item interfaces are not implemented yet.
+
 - Each purge is idempotent and bounded per step, so durable retries and replay are safe.
 - Deletion never waits for consumers. Authority ends at T; consumer data goes asynchronously and durably.
 - Each consumer lists its purge, trigger and retained data in its owner's retention inventory.
