@@ -234,7 +234,7 @@ test.serial(
     expect(await reasons()).toEqual(['', '']);
     for (const target of [fixture.member, fixture.outsider]) {
       await json(
-        await driver.request({ actor: target, method: 'POST', path: `/v1/realms/${place.realmId}/join`, key: key() }),
+        await driver.request({ actor: target, method: 'POST', path: `/v1/realms/${place.realmId}/membership`, key: key() }),
         403,
       );
     }
@@ -259,7 +259,8 @@ test.serial(
       202,
     );
     await driver.settle();
-    await ban(driver, fixture.owner, place.realmId, account, 'Growth probe');
+    expect((await driver.grantModerator(place.realmId, account)).status).toBe(201);
+    await ban(driver, account, place.realmId, fixture.outsider, 'Growth probe');
     const erased = await deletePersona({ pool: system.database.pool, auth: system.deletion.auth }, state.persona);
     await drain(driver, [place.realmId, account.id]);
     await worker.stop();
@@ -268,33 +269,9 @@ test.serial(
     const route = routeOf(place.realmId)!;
     const at = new Date().toISOString();
     // Keep the measured page's input identical; unrelated rows use fresh Realms on the same route.
-    const probe = (await db.admin.query('SELECT * FROM community.party_locator WHERE account_id=$1', [account.id]))
-      .rows;
-    const banRows = (
-      await db.admin.query('SELECT *, valid::text AS valid FROM community.realm_ban WHERE realm_id=$1', [place.realmId])
-    ).rows;
     const operation = (await db.admin.query('SELECT * FROM community.realm_membership_operation LIMIT 1')).rows[0];
     expect(operation).toBeDefined();
     try {
-      const reset = async () => {
-        await db.admin.query(
-          'INSERT INTO community.realm_ban (route,realm_id,account_id,valid,reason,actor,transaction_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',
-          [
-            route,
-            place.realmId,
-            account.id,
-            banRows[0]!.valid,
-            'Growth probe',
-            fixture.owner.id,
-            banRows[0]!.transaction_id,
-          ],
-        );
-        for (const row of probe)
-          await db.admin.query(
-            'INSERT INTO community.party_locator (route,account_id,kind,due_at,owner_route,owner_id,key) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',
-            [row.route, row.account_id, row.kind, row.due_at, row.owner_route, row.owner_id, row.key],
-          );
-      };
       const report = await checkGrowth(db, {
         name: "an account community record erasure page stays within its bound as other Realms' bans, operations and verdicts grow",
         rule: 'series',
@@ -336,6 +313,11 @@ test.serial(
                       creator: fixture.owner.id,
                     },
                   ],
+                  'community.space_revision': [{ route, space_id: spaceId, revision_id: revisionId, predecessor: null,
+                    title: 'Unrelated', summary: '', created_at: at, author: fixture.owner.id }],
+                  'community.realm_revision': [{ route, realm_id: realmId, revision_id: revisionId, predecessor: null,
+                    title: 'Unrelated', summary: '', visibility: 'public', context_id: fixture.contextId,
+                    created_at: at, author: fixture.owner.id }],
                   'community.realm_ban': [
                     {
                       route,
@@ -393,12 +375,7 @@ test.serial(
           });
           expect(result.found).toBe(1);
         },
-        async warmup() {
-          await reset();
-          await phase.eraseAccountCommunityRecordsPage({ pool: db.pool }, account.id, {
-            erasedAt: erased.at,
-            after: null,
-          });
+      });
           await reset();
         },
         repetitions: 1,

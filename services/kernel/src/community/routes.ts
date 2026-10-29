@@ -211,7 +211,10 @@ function strict<S extends TSchema>(schema: S) {
 }
 
 const banParams = t.Object({ realmId: t.String(), accountId: id }, closed);
-const banRecord = t.Object({ accountId: id, reason: t.String({ maxLength: 1024 }), actor: id, at: t.String() }, closed);
+const banRecord = t.Object(
+  { accountId: id, reason: t.String({ maxLength: 1024 }), actor: t.Union([id, t.Null()]), at: t.String() },
+  closed,
+);
 const banResponse = t.Object(
   { ban: t.Object({ ...banRecord.properties, realmId: id, workflowId: t.Union([t.String(), t.Null()]) }, closed) },
   closed,

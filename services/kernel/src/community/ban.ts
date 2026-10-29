@@ -26,7 +26,7 @@ export type Ban = {
   realmId: string;
   accountId: string;
   reason: string;
-  actor: string;
+  actor: string | null;
   at: string;
   workflowId: string | null;
 };

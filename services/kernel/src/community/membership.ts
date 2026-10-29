@@ -187,6 +187,12 @@ async function loadOperation(client: AccessClient, operation: DurableOperationAn
   const row = await readOperationRow.run(client, { route: operation.route, operation_id: operation.id });
   if (
     !row ||
+    row.member_account_id === null ||
+    row.initiator_account_id === null ||
+    row.actor_client_id === null ||
+    row.actor_scopes === null ||
+    row.actor_authn_epoch === null ||
+    row.original_minimum_authn_epoch === null ||
     row.kind !== kind ||
     row.creation_command_kind !== operation.kind ||
     routeOf(row.realm_id) !== operation.route

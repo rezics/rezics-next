@@ -4,6 +4,7 @@ import {
   createNativeWorkflowProofPorts,
   createProvisioningEvidenceVerifier,
   type AuthService,
+  type AccountOperationAccess,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -196,17 +197,18 @@ async function createNativeContentSystemWithOptions(
         const approvals = createWorkflowApprovals({
           pool,
           access,
-          actions,
+          actions: new Map([...LIFECYCLE_ACTIONS, ...actions]),
           referenceKeys,
           creationBinding: (input) => proofs.creationBinding(input),
         });
-        return {
+        const ports: AccountOperationAccess = {
           context: () => ({ pool, deadline: Date.now() + 10000 }),
           approve: (token, input, context) => approvals.approve(token, input as never, context as never),
           resolveForCaller: (token, reference, operation, context) =>
             approvals.resolveForCaller(token, reference, operation as never, context as never),
           admitGroup: async () => false,
         };
+        return ports;
       })(),
       stagingKey: crypto.getRandomValues(new Uint8Array(32)),
       maintenanceSchedule: '0 0 1 1 *',
@@ -326,6 +328,9 @@ async function createNativeContentSystemWithOptions(
         },
         async person() {
           const name = `erase_${crypto.randomUUID().replaceAll('-', '')}`;
+          const clientId = `${name}_client`;
+          const deletionScopes = [...new Set([...scopes, 'account:delete'])];
+          await nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes: deletionScopes });
           const { accountId } = await host!.workflows.register({
             key: name,
             handle: name,
@@ -335,8 +340,8 @@ async function createNativeContentSystemWithOptions(
           const signed = await requestAuth('/signin', {
             account_id: accountId,
             password: 'ordinary native registration password',
-            client_id: ordinaryClient.id,
-            scope: scopes,
+            client_id: clientId,
+            scope: deletionScopes,
           });
           const cookie = signed.headers
             .getSetCookie()

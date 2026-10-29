@@ -1,3 +1,4 @@
+import { createPartyLocatorEffect } from './party-locator.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { MembershipWorkInput, MembershipWorkResult } from '@rezics/auth-contract';
@@ -83,5 +84,6 @@ export const communityWorkModule: WorkModule = {
   name: 'community',
   register(context) {
     registerCommunityWork(context);
+    context.addEffects([createPartyLocatorEffect(context.pool)]);
   },
 };

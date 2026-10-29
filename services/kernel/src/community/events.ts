@@ -30,6 +30,8 @@ function publication(verdict: 'adopt' | 'withdraw' | 'reject') {
 
 /** Closed community event catalogue. Envelope identity and ordering belong to the kernel. */
 export const COMMUNITY_EVENTS = {
+  'com.rezics.community.party-locator.projected.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
+  'com.rezics.community.account-records.erased.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
   'com.rezics.community.space.created.v1': spaceRevision,
   'com.rezics.community.space.updated.v1': spaceRevision,
   'com.rezics.community.space.address-claim-pending.v1': addressOnly,
@@ -41,7 +43,14 @@ export const COMMUNITY_EVENTS = {
   'com.rezics.community.realm.created.v1': realmRevision,
   'com.rezics.community.realm.updated.v1': realmRevision,
   'com.rezics.community.realm.ban.v1': Type.Object(
-    { realmId: id, accountId: id, reason: Type.String({ maxLength: 1024 }), actor: id, at: instant, transactionId: id },
+    {
+      realmId: id,
+      accountId: id,
+      reason: Type.String({ maxLength: 1024 }),
+      actor: Type.Union([id, Type.Null()]),
+      at: instant,
+      transactionId: id,
+    },
     { additionalProperties: false },
   ),
   'com.rezics.community.realm.unban.v1': Type.Object(
