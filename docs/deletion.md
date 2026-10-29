@@ -73,8 +73,9 @@ promises still hold.
    counts. Registered locator effects have a permanent, input-free open-work row committed by the relay before
    enqueueing. Only success under that workflow id or an explicit platform resolution naming the row clears it.
    ERROR, cancellation, exhausted recovery and deletion of DBOS history leave it open. A fork never clears the
-   original row. Any open row whose source envelope's authoritative time is at or before T holds every later
-   erasure, regardless of account; later envelopes do not hold it. Done and resolved rows remain.
+   original row. An open row whose database `opened_at` is at or before the erasure's `workflow_until` holds it,
+   regardless of account. The relay commits rows before advancing the checkpoint; `workflow_until` is recorded after
+   that frontier passes. Rows opened later do not hold the erasure. Done and resolved rows remain.
 8. **First scope.** A coordinator plus each owner's cleanup uses the existing PostgreSQL, DBOS, OpenSearch and R2
    APIs. Account restore, a legal-hold engine, self-service export, a separate deletion service and per-account
    encryption are not built.

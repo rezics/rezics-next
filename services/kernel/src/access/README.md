@@ -690,10 +690,11 @@ history or polls from a request.
 
 The relay commits one `access.erasure_locator_work` row per registered locator effect run before enqueueing any
 workflow in its batch. Deterministic workflow ids and `ON CONFLICT DO NOTHING` preserve done/resolved rows on replay.
-The source key is the outbox envelope's authoritative `recorded_at` (CloudEvent `time`), compared at full PostgreSQL
-precision to the tombstone's `at`, inclusively. The delivered checkpoint frontier remains a delivery barrier;
-`workflow_until` records that barrier passing, not a cutoff for source work. Completion and status probe only the
-partial index of open source times at or before T, never DBOS history. Later traffic cannot hold the erasure.
+Each row's `opened_at` is the database millisecond clock when the relay commits it, using the same expression as
+`workflow_until`. The delivered checkpoint frontier remains a delivery barrier: its timestamp fences every row
+opened for an envelope delivered before the snapshot, including old failed work on a partition absent from the
+frontier. Completion and status probe only the partial index of open rows with `opened_at <= workflow_until`, never
+DBOS history. Later traffic cannot hold the erasure.
 
 After `effect.run` succeeds, the durable `effect.locator.done` step marks only its own workflow id done. Failures,
 cancellation, exhausted recovery and retention leave the row open, holding every subsequent erasure because custody

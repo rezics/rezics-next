@@ -302,8 +302,8 @@ test('the frontier finds non-zero priority pending work and ignores unrelated fa
     {},
   );
   await db.admin.query(
-    `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at)
-     VALUES($1,$2,'1970-01-01')`,
+    `INSERT INTO access.erasure_locator_work(workflow_id,effect,opened_at)
+     VALUES($1,$2,0)`,
     [pendingId, locatorEffect],
   );
   await relayAll();

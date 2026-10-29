@@ -200,8 +200,8 @@ test(`locator success adds one batch insert and stays bounded as kept rows and D
     async grow(db, scale, previous) {
       await seedHistory(db, namespace, partitionBase, previous, scale);
       await db.admin.query(
-        `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at,state)
-           SELECT $1||':'||n,'growth_locator','1970-01-01','done'
+        `INSERT INTO access.erasure_locator_work(workflow_id,effect,opened_at,state)
+           SELECT $1||':'||n,'growth_locator',0,'done'
            FROM generate_series($2::integer+1,$3::integer) n`,
         [namespace, previous, scale],
       );

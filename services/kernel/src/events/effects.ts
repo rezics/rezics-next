@@ -94,15 +94,14 @@ export function registerEffects(
           .map(({ envelope, eventSeq, event, effect }) => ({
             workflow_id: effectWorkflowId(envelope, eventSeq, effect.name),
             effect: effect.name,
-            source_at: event.time,
           })),
       );
       if (locatorRows.length > 0) {
         // A separate autocommit transaction precedes every enqueue, including partial batch failure.
         await locatorPool().query(
-          `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at)
-           SELECT workflow_id,effect,source_at FROM jsonb_to_recordset($1::jsonb)
-             AS x(workflow_id text,effect text,source_at timestamptz)
+          `INSERT INTO access.erasure_locator_work(workflow_id,effect,opened_at)
+           SELECT workflow_id,effect,ceil(extract(epoch FROM clock_timestamp()) * 1000)::bigint
+           FROM jsonb_to_recordset($1::jsonb) AS x(workflow_id text,effect text)
            ON CONFLICT (workflow_id) DO NOTHING`,
           [JSON.stringify(locatorRows)],
         );

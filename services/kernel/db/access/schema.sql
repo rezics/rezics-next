@@ -732,7 +732,7 @@ CREATE TABLE access.erasure_late_item (
 CREATE TABLE access.erasure_locator_work (
     workflow_id text NOT NULL,
     effect text NOT NULL,
-    source_at timestamp with time zone NOT NULL,
+    opened_at bigint NOT NULL,
     state text DEFAULT 'open'::text NOT NULL,
     resolution_transaction_id uuid,
     CONSTRAINT erasure_locator_work_check CHECK (((state = 'resolved'::text) = (resolution_transaction_id IS NOT NULL))),
@@ -1652,7 +1652,7 @@ CREATE INDEX erasure_late_item_open ON access.erasure_late_item USING btree (rou
 -- Name: erasure_locator_work_open; Type: INDEX; Schema: access; Owner: -
 --
 
-CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work USING btree (source_at) WHERE (state = 'open'::text);
+CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work USING btree (opened_at) WHERE (state = 'open'::text);
 
 
 --

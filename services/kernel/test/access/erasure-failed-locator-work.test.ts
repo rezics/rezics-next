@@ -40,6 +40,19 @@ type Control = {
   attempts: number;
 };
 const controls = new Map<string, Control>();
+async function within<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), 10_000);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let work: Awaited<ReturnType<typeof composeWork>>;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
@@ -79,7 +92,7 @@ beforeAll(async () => {
                   const control = controls.get((event.data as { id: string }).id)!;
                   control.attempts++;
                   control.entered.release();
-                  await control.gate.reached;
+                  await within(control.gate.reached, 'effect barrier');
                   if (control.fail) throw new Error('deterministic locator failure');
                 },
               })),
@@ -169,17 +182,17 @@ async function expectHeld(accountId: string) {
 test('ERROR holds every subsequent erasure, survives resume and a successful fork, and clears only by named platform resolution', async () => {
   const failed = await source({ fail: true });
   await relayAll();
-  await expect(DBOS.retrieveWorkflow(failed.workflowId).getResult()).rejects.toThrow();
+  await expect(within(DBOS.retrieveWorkflow(failed.workflowId).getResult(), 'failed workflow')).rejects.toThrow();
   expect(failed.control.attempts).toBe(10);
   expect(await DBOS.getWorkflowStatus(failed.workflowId)).toMatchObject({ status: 'ERROR' });
   expect(await row(failed.workflowId)).toMatchObject({ state: 'open', effect: locator });
   const accounts = [await tombstone(), await tombstone()];
   for (const accountId of accounts) await expectHeld(accountId);
   failed.control.fail = false;
-  await DBOS.resumeWorkflow(failed.workflowId);
+  await within(DBOS.resumeWorkflow(failed.workflowId), 'ERROR resume');
   expect(await DBOS.getWorkflowStatus(failed.workflowId)).toMatchObject({ status: 'ERROR' });
   const forkId = `fork:${failed.workflowId}`;
-  await (await DBOS.forkWorkflow(failed.workflowId, 0, { newWorkflowID: forkId })).getResult();
+  await within((await DBOS.forkWorkflow(failed.workflowId, 0, { newWorkflowID: forkId })).getResult(), 'fork result');
   expect(await DBOS.getWorkflowStatus(forkId)).toMatchObject({ status: 'SUCCESS' });
   expect(await row(failed.workflowId)).toMatchObject({ state: 'open' });
   for (const accountId of accounts) await expectHeld(accountId);
@@ -201,7 +214,7 @@ test('ERROR holds every subsequent erasure, survives resume and a successful for
 test('retention deletes failed DBOS history before the first tombstone without losing custody evidence', async () => {
   const failed = await source({ fail: true });
   await relayAll();
-  await expect(DBOS.retrieveWorkflow(failed.workflowId).getResult()).rejects.toThrow();
+  await expect(within(DBOS.retrieveWorkflow(failed.workflowId).getResult(), 'retained failed workflow')).rejects.toThrow();
   const old = Date.now() - 40 * 86400000;
   await db.admin.query('UPDATE dbos.workflow_status SET created_at=$2,completed_at=$2 WHERE workflow_uuid=$1', [
     failed.workflowId,
@@ -224,11 +237,11 @@ for (const ending of ['CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'] as const) {
     const partition = nextPartition++;
     const head = await source({ held: true, partition });
     await relayAll();
-    await head.control.entered.reached;
+    await within(head.control.entered.reached, 'head effect barrier');
     const queued = await source({ partition });
     await relayAll();
     expect(await DBOS.getWorkflowStatus(queued.workflowId)).toMatchObject({ status: 'ENQUEUED' });
-    await DBOS.cancelWorkflow(queued.workflowId);
+    await within(DBOS.cancelWorkflow(queued.workflowId), 'workflow cancellation');
     expect(queued.control.attempts).toBe(0);
     if (ending === 'MAX_RECOVERY_ATTEMPTS_EXCEEDED') {
       // Install the SDK's exhausted-recovery terminal state; resume itself uses the real installed SDK.
@@ -238,15 +251,15 @@ for (const ending of ['CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'] as const) {
       ]);
     }
     head.control.gate.release();
-    await DBOS.retrieveWorkflow(head.workflowId).getResult();
+    await within(DBOS.retrieveWorkflow(head.workflowId).getResult(), 'head workflow');
     const accountId = await tombstone();
     await expectHeld(accountId);
-    await (await DBOS.resumeWorkflow(queued.workflowId)).getResult();
+    await within((await DBOS.resumeWorkflow(queued.workflowId)).getResult(), 'resumed workflow');
     expect(queued.control.attempts).toBe(1);
     expect(await row(queued.workflowId)).toMatchObject({ state: 'done', resolution_transaction_id: null });
     const steps = await DBOS.listWorkflowSteps(queued.workflowId);
     expect(steps?.map((step) => step.name)).toContain('effect.locator.done');
-    await DBOS.resumeWorkflow(queued.workflowId);
+    await within(DBOS.resumeWorkflow(queued.workflowId), 'successful workflow resume');
     expect(await DBOS.getWorkflowStatus(queued.workflowId)).toMatchObject({ status: 'SUCCESS' });
     expect(queued.control.attempts).toBe(1);
     expect((await advance(accountId)).value).toBe(true);
@@ -262,12 +275,12 @@ for (const ending of ['CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'] as const) {
 test('later open locator work and an unregistered failed effect do not hold an earlier tombstone', async () => {
   const unregistered = await source({ fail: true, other: true });
   await relayAll();
-  await expect(DBOS.retrieveWorkflow(unregistered.workflowId).getResult()).rejects.toThrow();
+  await expect(within(DBOS.retrieveWorkflow(unregistered.workflowId).getResult(), 'unregistered failed workflow')).rejects.toThrow();
   expect(await row(unregistered.workflowId)).toBeUndefined();
   const accountId = await tombstone();
   const later = await source({ held: true });
   await relayAll();
-  await later.control.entered.reached;
+  await within(later.control.entered.reached, 'later effect barrier');
   expect((await row(later.workflowId)).state).toBe('open');
   expect((await status(accountId))?.state).toBe('complete');
   // Re-evaluate an uncompleted erasure at the same T to exercise the probe rather than the completed shortcut.
@@ -286,7 +299,7 @@ test('later open locator work and an unregistered failed effect do not hold an e
     await acknowledgeErasure({ pool: db.pool }, { accountId: twin, participant, outcome: 'none' });
   expect((await status(twin))?.state).toBe('complete');
   later.control.gate.release();
-  await DBOS.retrieveWorkflow(later.workflowId).getResult();
+  await within(DBOS.retrieveWorkflow(later.workflowId).getResult(), 'later workflow');
 }, 60000);
 
 test('all batch rows commit before enqueue; an enqueue failure leaves the checkpoint behind and replay preserves success', async () => {
@@ -321,9 +334,9 @@ test('all batch rows commit before enqueue; an enqueue failure leaves the checkp
     ).rows[0]?.position,
   ).toBe('0');
   first.control.gate.release();
-  await DBOS.retrieveWorkflow(first.workflowId).getResult();
+  await within(DBOS.retrieveWorkflow(first.workflowId).getResult(), 'first batch workflow');
   await relayAll();
-  await DBOS.retrieveWorkflow(second.workflowId).getResult();
+  await within(DBOS.retrieveWorkflow(second.workflowId).getResult(), 'second batch workflow');
   expect((await row(first.workflowId)).state).toBe('done');
   expect((await row(second.workflowId)).state).toBe('done');
   expect(first.control.attempts).toBe(1);
