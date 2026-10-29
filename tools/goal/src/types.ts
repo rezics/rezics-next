@@ -56,6 +56,7 @@ export type Settings = {
   /** Opt in locally. Each module has its own ws/<module> branch and persistent shared checkout. */
   sharedWebModules?: Record<string, string[]>;
   notes?: readonly import('./notes.ts').Note[];
+  flowThresholds?: import('./flow.ts').FlowThresholds;
   mainBranch: string;
   integrationBranch: string;
   stabilizeBranch: string;
