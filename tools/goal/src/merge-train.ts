@@ -1301,7 +1301,7 @@ export class MergeTrain {
     let sharedSource = '';
 
     let integrationTarget: IntegrationTarget =
-      recorded.target === 'stabilize'
+      recorded.target === 'stabilize' && recorded.goal !== 'control-plane'
         ? 'stabilize'
         : recorded.target === 'main' || o.integrationBranch === undefined
           ? 'main'
@@ -1384,43 +1384,12 @@ export class MergeTrain {
         throw new Error('The main checkout must already have main checked out');
       if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
-      if (workspace && sharedStore) {
-        sharedSource = tip;
-        const task = sharedStore.task(request.taskId);
-        const own = taskCommits(task, tip);
-        if (!own.length)
-          throw new Error('No Goal-Task trailer commits for this task: commit your own work before finishing');
-        if (own.every((commit) => workspaceAncestor(o.mainCheckout, commit, target()))) {
-          workspace.integrated(recorded.workspace!.module, target());
-          result.passed = true;
-          result.stage = 'merge';
-          result.mergedCommit = target();
-          await workspace.withLaunch(recorded.workspace!.module, () => workspace.syncIdle(recorded.workspace!.module));
-          return finish();
-        }
-        const attribution = workspaceCommits(task.worktree, workspace.workspace(recorded.workspace!.module).base, tip);
-        sharedTasks = sharedStore
-          .tasks()
-          .filter(
-            (candidate) =>
-              candidate.workspace?.module === recorded.workspace!.module &&
-              !['cancelled', 'merged'].includes(candidate.state) &&
-              attribution.has(candidate.id) &&
-              attribution.get(candidate.id)!.some((commit) => !workspaceAncestor(o.mainCheckout, commit, target())),
-          );
-      }
-
-      // A worker branch starts on dev and a retry moves it onto a newer dev, so its own changes are those after its
-      // fork from dev. The recorded base counted every landing in between: thousands of paths overflowed the diff and
-      // other goals' files kept every retried control-plane task off main. Only the commits after the fork replay.
+      // Control-plane branches start on main, so measure their work from their fork from main. The recorded base can
+      // lag after retries, and measuring against dev would include unrelated dev-only commits in the control-plane
+      // diff. Only the commits after the main fork are considered for the main landing.
       let controlPlaneFork: string | undefined;
-      if (
-        !workspace &&
-        recorded.goal === 'control-plane' &&
-        recorded.target !== 'stabilize' &&
-        o.integrationBranch !== undefined
-      ) {
-        const fork = git(o.mainCheckout, 'merge-base', tip, `refs/heads/${o.integrationBranch}`);
+      if (!workspace && recorded.goal === 'control-plane' && o.integrationBranch !== undefined) {
+        const fork = git(o.mainCheckout, 'merge-base', tip, `refs/heads/${mainBranch}`);
         const taskChanges = changedPathsBetween(o.mainCheckout, fork, tip);
         controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
         if (controlPlane) controlPlaneFork = fork;
