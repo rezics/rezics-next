@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser } from 'playwright';
+import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -58,7 +59,7 @@ test('a linked notification stretches its link across the row and a plain notifi
 
 test('unavailable notices stay plain and every row retains its time', () => {
   const html = markup([linked, unavailable]);
-  expect(html).toContain('A private item is unavailable');
+  expect(html).toContain(m.inbox_unavailable_item());
   const rows = [...html.matchAll(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/g)].map((match) => match[0]!);
   expect(rows).toHaveLength(2);
   expect(rows[1]).not.toContain('<a');
@@ -70,7 +71,8 @@ afterAll(async () => browser?.close());
 
 test('the inbox list has no accessibility violations', async () => {
   browser = await chromium.launch();
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   await page.setContent(`<main><h1>Inbox</h1>${markup([linked, plain, unavailable])}</main>`);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
