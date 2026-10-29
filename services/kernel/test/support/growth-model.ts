@@ -293,16 +293,17 @@ function staircaseFit(
       coefficients: coefficients.filter((_, index) => index !== variable),
       limit,
     }));
-    for (const upper of positive) for (const lower of negative) {
-      const up = upper.coefficients[variable]!;
-      const down = -lower.coefficients[variable]!;
-      reduced.push({
-        coefficients: upper.coefficients.flatMap((value, index) =>
-          index === variable ? [] : [value / up + lower.coefficients[index]! / down],
-        ),
-        limit: upper.limit / up + lower.limit / down,
-      });
-    }
+    for (const upper of positive)
+      for (const lower of negative) {
+        const up = upper.coefficients[variable]!;
+        const down = -lower.coefficients[variable]!;
+        reduced.push({
+          coefficients: upper.coefficients.flatMap((value, index) =>
+            index === variable ? [] : [value / up + lower.coefficients[index]! / down],
+          ),
+          limit: upper.limit / up + lower.limit / down,
+        });
+      }
     inequalities = reduced;
     stages.push(inequalities);
     if (inequalities.some(({ coefficients, limit }) => coefficients.every((value) => value === 0) && limit < -1e-9))
@@ -324,9 +325,14 @@ function staircaseFit(
       else if (rest > inequality.limit + 1e-8) return undefined;
     }
     if (lower > upper + 1e-8) return undefined;
-    solution[variable] = Number.isFinite(lower) && Number.isFinite(upper)
-      ? lower + (upper - lower) / 2
-      : Number.isFinite(lower) ? lower : Number.isFinite(upper) ? upper : 0;
+    solution[variable] =
+      Number.isFinite(lower) && Number.isFinite(upper)
+        ? lower + (upper - lower) / 2
+        : Number.isFinite(lower)
+          ? lower
+          : Number.isFinite(upper)
+            ? upper
+            : 0;
   }
   return [0, ...solution.slice(2)];
 }

@@ -124,7 +124,7 @@ function shadowVerdict(samples: readonly ReportSample[], check: GrowthCheck, met
       return { scale, repetitions: repetitions.map((value) => value[metric]), uncertainty };
     });
     return {
-      ...classifySeries(points, check.bounds[metric], metric === 'blocks' ? check.indexProbes ?? 0 : 0),
+      ...classifySeries(points, check.bounds[metric], metric === 'blocks' ? (check.indexProbes ?? 0) : 0),
       uncertainties,
     };
   } catch (error) {
@@ -463,7 +463,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
             uncertainty: uncertainties[index]!,
           })),
           check.bounds[metric],
-          metric === 'blocks' ? check.indexProbes ?? 0 : 0,
+          metric === 'blocks' ? (check.indexProbes ?? 0) : 0,
         );
         if (verdict.outcome === 'insufficient-evidence') {
           throw new GrowthEvidenceError(
