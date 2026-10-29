@@ -7,15 +7,25 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
+import {
+  createLibraryCommandRunner,
+  LibraryNotFoundError,
+  requireRoute,
+  WORK_STEP_DEADLINE_MS,
+} from './command-support.ts';
 import type { Entry, EntryState } from './entry-model.ts';
 import * as store from './entry-store.ts';
 import entryPage from './entry-store-entry-page.sql';
 import { createFollowCommands } from './follows.ts';
 import { resolveSubject } from './subject-anchor.ts';
+import { readLibraryProfileSource } from './profile-source.ts';
+import { hasEntryState } from './profile.ts';
+import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
+import stampOwnerSequence from './entry-owner-write-sequence.sql';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type PutEntryInput = { state: EntryState; revision?: number };
@@ -23,7 +33,7 @@ type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
 type QueryClient = Pick<PoolClient, 'query'>;
 type EntryPageRow = Awaited<ReturnType<typeof entryPage.run>>[number];
 
-const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
+const STATE_ID = /^[a-z][a-z0-9_.-]{0,63}$/;
 const UPDATED_EVENT = 'com.rezics.library.entry.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.entry.deleted.v1';
 const DEFAULT_PAGE_SIZE = 20;
@@ -50,7 +60,7 @@ function account(actor: Actor, action: string): AccountActor {
 }
 
 function state(value: unknown): EntryState {
-  if (typeof value !== 'string' || !ENTRY_STATES.has(value)) throw new LibraryEntryInvalidError();
+  if (typeof value !== 'string' || STATE_ID.exec(value)?.[0] !== value) throw new LibraryEntryInvalidError();
   return value;
 }
 
@@ -165,15 +175,20 @@ export function createEntryCommands(config: Dependencies) {
   async function putEntry(actor: Actor, subjectId: string, input: unknown, requestKey: string) {
     const owner = account(actor, 'library_entry:update');
     const parsed = putInput(input);
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     requireRoute(owner.accountId);
     requireRoute(subjectId);
     const existing = await snapshot(actor, 'library_entry:update', (client, accountOwner, route) =>
       store.readEntry(client, route, accountOwner.accountId, subjectId),
     );
+    // Preserve the existing normalized receipt input. A missing current source must
+    // reach owner authorization and receipt lookup before fresh admission fails.
     const resolved = existing
       ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
-      : await resolveSubject({ pool, access }, owner, subjectId);
-    if (!resolved) throw new LibraryNotFoundError();
+      : ((await resolveSubject({ pool, access }, owner, subjectId).catch(() => null)) ?? {
+          subjectId,
+          requestedSubjectId: null,
+        });
 
     const requestInput = {
       subjectId: resolved.subjectId,
@@ -183,10 +198,39 @@ export function createEntryCommands(config: Dependencies) {
     };
     const expectedRevision = parsed.revision;
     try {
-      return await runner.ownAccount(
+      return await runner.ownAccountPrepared(
         actor,
-        { action: 'library_entry:update', kind: 'library.entry.put', requestKey, input: requestInput },
-        async (tx, command) => {
+        {
+          action: 'library_entry:update',
+          kind: 'library.entry.put',
+          requestKey,
+          input: requestInput,
+          async prepare(attempt) {
+            try {
+              return {
+                source: await readLibraryProfileSource(
+                  {
+                    pool,
+                    access,
+                    actor: owner,
+                    at: attempt.time,
+                    deadline,
+                  },
+                  subjectId,
+                ),
+              };
+            } catch (error) {
+              return { error };
+            }
+          },
+        },
+        async (tx, command, prepared) => {
+          if ('error' in prepared) throw prepared.error;
+          const source = prepared.source;
+          if (!source || source.subjectId !== resolved.subjectId) throw new LibraryNotFoundError();
+          if (source.kind !== 'supported' || !hasEntryState(source.profile, parsed.state))
+            throw new ProblemError('unsupported_library_profile');
+          const seq = await allocateOwnerWriteSeq(tx, owner.accountId);
           const route = requireRoute(owner.accountId);
           const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
           let entry: Entry;
@@ -201,6 +245,7 @@ export function createEntryCommands(config: Dependencies) {
                 state: parsed.state,
               },
               context,
+              source.pin,
             );
           } else {
             const changed = await store.updateEntryState(
@@ -211,11 +256,21 @@ export function createEntryCommands(config: Dependencies) {
               expectedRevision,
               parsed.state,
               context,
+              source.pin,
             );
             if (!changed) throw new LibraryConflictError();
             entry = changed;
           }
 
+          const stamped = await stampOwnerSequence.run(tx, {
+            route,
+            account_id: owner.accountId,
+            subject_id: entry.subjectId,
+            revision: entry.revision,
+            transaction_id: command.transactionId,
+            seq,
+          });
+          if (stamped.length !== 1) throw new Error('Library entry owner sequence stamp failed');
           const events = [entryEvent(UPDATED_EVENT, owner.accountId, entry.subjectId)];
           if (entry.state === 'in_progress') {
             const followed = await follows.followFromLibrary(tx, route, {
@@ -255,6 +310,7 @@ export function createEntryCommands(config: Dependencies) {
       },
       async (tx, command) => {
         const route = requireRoute(owner.accountId);
+        await allocateOwnerWriteSeq(tx, owner.accountId);
         const removed = await store.deleteEntry(tx, route, owner.accountId, resolved.subjectId, expected);
         if (!removed) throw new LibraryConflictError();
         return { value: removed, events: [entryEvent(DELETED_EVENT, owner.accountId, removed.subjectId)] };

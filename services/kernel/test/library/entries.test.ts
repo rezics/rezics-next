@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
 import type pg from 'pg';
 import { readAccount, type Account } from '../../src/access/account-data.ts';
@@ -13,9 +12,13 @@ import { createFollowCommands } from '../../src/library/follows.ts';
 import type { EntryState } from '../../src/library/entry-model.ts';
 import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { createAccess } from '../../src/access/permission.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { admittedAccess, accountToken, authenticateAccount } from '../support/admitted-access.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
+import { compileEntryRelease, entryTypes } from './support/profile-entry-fixture.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   measure,
   openGrowthDatabase,
@@ -35,7 +38,15 @@ const entryScopes = [
   'library_entry:read',
   'library_entry:list',
 ];
-const scopes = [...entryScopes, 'follow:create', 'follow:delete'];
+const scopes = [
+  ...entryScopes,
+  'follow:create',
+  'follow:delete',
+  'subject:create',
+  'access:grant',
+  'exposure:open',
+  'gate:any',
+];
 const actor = (accountId: string, permissions: readonly string[] = scopes): AccountActor => ({
   kind: 'account',
   accountId,
@@ -44,15 +55,16 @@ const actor = (accountId: string, permissions: readonly string[] = scopes): Acco
   requestedBy: null,
   authnEpoch: 1,
 });
-const owner = actor(newId(route));
-const other = actor(newId(route));
+let owner = actor(newId(route));
+let other = actor(newId(route));
 const suspended = actor(newId(route));
-const noScope = actor(newId(route), ['subject:read']);
+let noScope = actor(newId(route), ['subject:read']);
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(61)]]) };
 
 let database: GrowthDatabase;
 let access: Access;
+let kernel: ReturnType<typeof createKernel>;
 let accounts: Map<string, Account>;
 let commands: ReturnType<typeof createEntryCommands>;
 let followCommands: ReturnType<typeof createFollowCommands>;
@@ -76,17 +88,19 @@ async function installAccount(accountId: string, state: 'active' | 'suspended'):
 }
 
 async function createReadableSubject(forActor: AccountActor = owner, label: string = randomUUID()): Promise<string> {
-  const request = key();
-  const result = await createSubject(database.pool, {
-    actor: forActor,
-    target: subjectTarget(new Uint8Array(32).fill(73), forActor.accountId, request),
-    idempotencyKey: request,
-    digest: createHash('sha256').update(request).digest(),
-    item: { type: 'schema:Book', labels: { en: label } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  return result.subject.id;
+  const response = await kernel.handle(
+    new Request('http://kernel.test/v1/subjects', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await accountToken(forActor)}`,
+        'content-type': 'application/json',
+        'idempotency-key': `"${key()}"`,
+      },
+      body: JSON.stringify({ type: entryTypes.game, labels: { en: label } }),
+    }),
+  );
+  expect(response.status).toBe(201);
+  return ((await response.json()) as { subject: { id: string } }).subject.id;
 }
 
 async function denyOwnerRead(subjectId: string): Promise<void> {
@@ -162,16 +176,44 @@ function unrelatedPopulation(name: string): Population {
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
-  await bootstrapRelease(database.pool, bundledRelease);
+  await bootstrapRelease(database.pool, await compileEntryRelease('original'));
   accounts = new Map<string, Account>();
   accounts.set(owner.accountId, await installAccount(owner.accountId, 'active'));
   accounts.set(other.accountId, await installAccount(other.accountId, 'active'));
   accounts.set(suspended.accountId, await installAccount(suspended.accountId, 'suspended'));
   accounts.set(noScope.accountId, await installAccount(noScope.accountId, 'active'));
-  access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
-    accountEvidence: (candidate) => accounts.get(candidate.accountId) ?? null,
+  kernel = createKernel({
+    pool: database.pool,
+    tokens,
+    routeKey: new Uint8Array(32).fill(73),
+    access(config) {
+      return (access = admittedAccess(config));
+    },
   });
+  await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
+  const admit = (candidate: AccountActor) =>
+    authenticateAccount(access, { pool: database.pool, deadline: deadlineFor(120_000) }, candidate);
+  owner = await admit(owner);
+  other = await admit(other);
+  noScope = await admit(noScope);
+  await bootstrapGovernance(database.pool, owner.accountId);
+  await createGrantCommands({ pool: database.pool, access, managementAction: 'access:grant' }).create(
+    { pool: database.pool, actor: owner, deadline: deadlineFor(30_000) },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'active_accounts' },
+      actions: ['subject:create'],
+      valid: '(,)',
+      key: key(),
+    },
+  );
+  const opened = await kernel.handle(
+    new Request('http://kernel.test/v1/platform/exposure/personal_library:open', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${await accountToken(owner)}`, 'idempotency-key': `"${key()}"` },
+    }),
+  );
+  expect(opened.status).toBe(200);
   commands = createEntryCommands({ pool: database.pool, access, tokens, clock });
   followCommands = createFollowCommands({ pool: database.pool, access, clock });
 });
@@ -310,8 +352,13 @@ test('setting in progress follows the subject in the same command unless it was 
 });
 
 test('every entry state can be listed by a signed account and state bound keyset cursor', async () => {
-  const pageOwner = actor(newId(route));
-  accounts.set(pageOwner.accountId, await installAccount(pageOwner.accountId, 'active'));
+  const pageIdentity = actor(newId(route));
+  accounts.set(pageIdentity.accountId, await installAccount(pageIdentity.accountId, 'active'));
+  const pageOwner = await authenticateAccount(
+    access,
+    { pool: database.pool, deadline: deadlineFor(120_000) },
+    pageIdentity,
+  );
   const states: EntryState[] = ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
   for (const state of states) {
     const subjectId = await createReadableSubject(pageOwner, `Page ${state}`);

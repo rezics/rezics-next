@@ -283,7 +283,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         params: t.Object({ subjectId: id }),
         headers,
         body: t.Object({ state: stateInput, revision: t.Optional(revision) }, closed),
-        response: { 200: entryResponse, 201: entryResponse, ...failures },
+        response: {
+          200: entryResponse,
+          201: entryResponse,
+          ...failures,
+          422: problemSchema('idempotency_conflict', 'unsupported_library_profile'),
+        },
         detail: detail('library_entry.put', 'library_entry:update', true),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
