@@ -444,6 +444,10 @@ export function watch(
   probe: CheckHostProbe = sshProbe,
   limitFor: (task: Task) => number = () => DEFAULT_ATTEMPT_LIMIT_MS,
 ): number {
+  // A manager event summary must be one line. A worker command holding a newline once made delivery throw before the
+  // alert state was saved, so every alert went out again on each sweep.
+  const send = deliver;
+  deliver = (summary, managerId, kind) => send(summary.replace(/\s*[\r\n]+\s*/g, ' '), managerId, kind);
   const path = join(stateDirectory, 'watchdog.json');
   let state: State = { alerts: {} };
   try {

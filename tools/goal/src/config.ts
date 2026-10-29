@@ -283,6 +283,7 @@ export type RuntimeOptions = {
 };
 
 /** The only production composition: every module shares this database connection and worker fence. */
+export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
@@ -300,7 +301,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
   const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
-  const execute = gateRunner(settings.integration.gateTimeoutMs);
+  // Landing checks unblock every other task, so remote checks admit them before workers' checks (promotion uses --gate).
+  const execute = gateRunner(settings.integration.gateTimeoutMs, undefined, LANDING_CHECK_ENVIRONMENT);
   const runGate: GateRunner = options.runGate ?? execute;
   // Promotion runs the full root gate, which outlasts the integration gate's limit.
   const promotionGate: GateRunner =
