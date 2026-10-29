@@ -21,6 +21,14 @@ Their adjacent tests exercise placement, admission, accounting and cleanup.
 | Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate.                                                                                                                                                                                                      |
 | Landing gate | Root `bun run check` splits all workspace checks into two duration-balanced remote groups when `KERNEL_CHECK_REMOTE` names a readable file. The lighter group also runs the control-plane gate.                                                                                                                                                                                                                   |
 
+`bun scripts/worker-check.ts -- <command...>` prints `check: id <id>` as soon as its detached check starts.
+Use `bun scripts/worker-check.ts --wait <id>` to wait for up to 10 minutes. Exit status 75 with
+`check: still running` means resume with the same `--wait <id>`; never start the check again. The log path and its
+latest non-empty line are printed when the wait yields, including while admission is queued. A runner is considered
+live only on its recorded host and when `/proc/<pid>/cmdline` identifies this script's `--run <id>` invocation;
+otherwise the log modification time determines whether it is silent. One dead or silent runner is rerun detached
+under the same id. A second dead or silent runner ends as an infrastructure failure with exit status 1.
+
 The gate requests four slots per group by default (`GATE_REMOTE_SLOTS` overrides this).
 It partitions eligible hosts between groups when at least two qualify by configured slot count.
 Otherwise both groups use the original hosts file. Admission still checks actual slice capacity.

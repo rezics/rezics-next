@@ -54,6 +54,8 @@ export type RemoteCheck = {
   pollMs?: number;
   /** Test seam for retry backoff; defaults to 100 ms. */
   retryBackoffMs?: number;
+  /** Test seam for the queued slot status heartbeat. */
+  waitRepeatMs?: number;
   /** Called for each probe round that finds at least one responding host. */
   answered?: () => void;
   /** Called with the host's name once its slot is held and the command is about to start. */
@@ -1268,6 +1270,7 @@ async function acquire(
   giveUpIfUnanswered = false,
   onAnswered?: () => void,
   gate = false,
+  waitRepeatMs = 60_000,
 ): Promise<Lease | null> {
   let announced = false;
   let answered = false;
@@ -1277,11 +1280,16 @@ async function acquire(
   let markerHost: string | undefined;
   const multiWaiterId = !gate && slots > 1 ? randomUUID() : undefined;
   const wait = checkWaitRecorder();
-  const announceWait = (): void => {
+  let lastAnnouncement = -Infinity;
+  const announceWait = (ranked: RankedHost[]): void => {
     wait.begin();
-    if (announced) return;
-    console.error('remote-check: every check slot is busy; waiting for a free one');
+    if (announced && performance.now() - lastAnnouncement < waitRepeatMs) return;
+    const state = ranked.length
+      ? ranked.map(({ host, freeSlots, slotLimit }) => `${host.name} ${freeSlots}/${slotLimit} free`).join(', ')
+      : 'no responding hosts';
+    console.error(`remote-check: every check slot is busy; waiting for a free one (${state})`);
     announced = true;
+    lastAnnouncement = performance.now();
   };
   try {
     while (true) {
@@ -1383,7 +1391,7 @@ async function acquire(
           marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal)) ?? undefined;
         }
       }
-      announceWait();
+      announceWait(ranked);
       wait.record();
       await sleep(pollMs, signal);
     }
@@ -1722,6 +1730,7 @@ async function runWithTransportRetries(
         giveUpIfUnanswered,
         onAnswered,
         options.gate ?? false,
+        options.waitRepeatMs,
       );
     } else {
       lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false);
@@ -1735,6 +1744,7 @@ async function runWithTransportRetries(
           false,
           onAnswered,
           options.gate ?? false,
+          options.waitRepeatMs,
         );
       }
     }
@@ -1863,6 +1873,11 @@ function parse(argv: string[]): RemoteCheck {
     process.env.REMOTE_CHECK_RETRY_BACKOFF_MS === undefined
       ? undefined
       : Number(process.env.REMOTE_CHECK_RETRY_BACKOFF_MS);
+  const waitRepeatMs = process.env.REMOTE_CHECK_WAIT_REPEAT_MS === undefined
+    ? undefined
+    : Number(process.env.REMOTE_CHECK_WAIT_REPEAT_MS);
+  if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
+    throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
   return {
     hosts: readHosts(hostsFile),
     workspace,
@@ -1875,6 +1890,7 @@ function parse(argv: string[]): RemoteCheck {
     ...(returns === undefined ? {} : { returns }),
     ...(pollMs === undefined ? {} : { pollMs }),
     ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),
+    ...(waitRepeatMs === undefined ? {} : { waitRepeatMs }),
   };
 }
 

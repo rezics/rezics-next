@@ -147,6 +147,8 @@ export async function acquireStackSlot(
   label: string,
   env: Record<string, string | undefined> = process.env,
   weight = 1,
+  onWaiting?: (line: string) => void,
+  repeatMs = 60_000,
 ): Promise<StackSlot> {
   const capacity = stackCapacity(env);
   if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity)
@@ -174,7 +176,7 @@ export async function acquireStackSlot(
   const changed = (observed: number) =>
     new Promise<void>((done) => {
       if (generation !== observed) return done();
-      const timer = setTimeout(finish, 2000);
+      const timer = setTimeout(finish, Math.min(2000, repeatMs));
       function finish() {
         clearTimeout(timer);
         wake = undefined;
@@ -260,8 +262,10 @@ export async function acquireStackSlot(
           await Promise.all(acquired.map((entry) => entry.lock.release()));
         }
         const held = heldSlots.length;
-        if (performance.now() - lastLog >= 60_000) {
-          console.error(`stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`);
+        if (performance.now() - lastLog >= repeatMs) {
+          const line = `stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`;
+          if (onWaiting) onWaiting(line);
+          else console.error(line);
           lastLog = performance.now();
         }
         wait.begin();

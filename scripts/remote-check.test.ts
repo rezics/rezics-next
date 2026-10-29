@@ -1006,6 +1006,7 @@ test('a remote slot wait is appended to GOAL_CHECK_WAIT_FILE while it is still w
   const waitFile = join(env.FAKE_DIR!, 'goal-check-wait-ms');
   env.GOAL_CHECK_WAIT_FILE = waitFile;
   env.REMOTE_CHECK_POLL_MS = '20';
+  env.REMOTE_CHECK_WAIT_REPEAT_MS = '10';
   const run = startRemote(env, workspace(), ['true']);
 
   await waitFor(
@@ -1017,8 +1018,11 @@ test('a remote slot wait is appended to GOAL_CHECK_WAIT_FILE while it is still w
   const whileStillWaiting = readFileSync(waitFile, 'utf8');
   expect(whileStillWaiting.length).toBeGreaterThanOrEqual(whileWaiting.length);
 
-  const [code, ,] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
+  const [code, , stderr] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
   expect(code).toBe(0);
+  const slotWaitLines = stderr.split('\n').filter((line) => line.includes('every check slot is busy'));
+  expect(slotWaitLines.length).toBeGreaterThanOrEqual(2);
+  expect(slotWaitLines.every((line) => /a \d+\/\d+ free/.test(line))).toBe(true);
   const lines = readFileSync(waitFile, 'utf8').trim().split('\n');
   expect(lines.length).toBeGreaterThan(0);
   expect(lines.every((line) => /^\d+$/.test(line) && Number(line) > 0 && Number(line) <= 60_000)).toBe(true);

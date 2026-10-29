@@ -47,9 +47,12 @@ type CheckRecord = {
   runnerHost?: string;
   exitCode?: number;
   infrastructureFailure?: string;
+  reruns?: number;
+  infrastructureFailureFinal?: boolean;
 };
 
 const LOG_STALL_MS = 10 * 60 * 1000;
+const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const WAIT_POLL_MS = 25;
 
 function recordPath(cwd: string, id: string): string {
@@ -112,6 +115,7 @@ export async function runWorkerCheck(
   cwd = process.cwd(),
   reportOutput = true,
   recordedLog?: string,
+  leaseWaitRepeatMs = 60_000,
 ): Promise<number> {
   if (argv.length === 0) throw new Error('A check command is required');
   const localOnly = argv[0] === '--local';
@@ -121,7 +125,7 @@ export async function runWorkerCheck(
   const root = resolve(cwd);
   const command = resolveRepositoryBun(argv, root);
   const file = recordedLog ?? logPath(root);
-  const descriptor = openSync(file, 'wx', 0o600);
+  const descriptor = openSync(file, recordedLog ? 'w' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   const env = { ...process.env };
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
@@ -222,6 +226,8 @@ export async function runWorkerCheck(
       REZICS_STACK_LEASE_DIR: directory,
     },
     weight,
+    (line) => writeSync(descriptor, `${line}\n`),
+    leaseWaitRepeatMs,
   );
   env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
   let child: ReturnType<typeof spawn>;
@@ -346,6 +352,9 @@ export function resolveRepositoryBun(
   executable = process.execPath,
 ): string[] {
   if (command[0] !== 'bun') return [...command];
+  // Test fixtures and standalone check roots may not have a package manifest. In that case the
+  // current Bun is the only available runtime; repository checks still enforce the pinned binary.
+  if (!existsSync(join(root, 'package.json'))) return [executable, ...command.slice(1)];
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     packageManager?: string;
   };
@@ -367,12 +376,14 @@ export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): 
   const file = logPath(root);
   const record: CheckRecord = { id, cwd: root, argv: [...argv], status: 'running', log: relative(root, file) };
   writeRecord(record);
+  const descriptor = openSync(file, 'a', 0o600);
   const child = spawn(process.execPath, [resolve(import.meta.path), '--run', id], {
     cwd: root,
     detached: true,
     env: process.env,
-    stdio: 'ignore',
+    stdio: ['ignore', descriptor, descriptor],
   });
+  closeSync(descriptor);
   record.runnerPid = child.pid;
   record.runnerHost = hostname();
   writeRecord(record);
@@ -390,70 +401,86 @@ export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): 
 export async function waitWorkerCheck(
   id: string,
   cwd = process.cwd(),
-  timeoutMs = Number.POSITIVE_INFINITY,
-  monitor: { stallMs?: number; pollMs?: number } = {},
+  timeoutMs = WAIT_TIMEOUT_MS,
+  monitor: { stallMs?: number; pollMs?: number; rerunWaitMs?: number; rerunStallMs?: number; leaseRepeatMs?: number; write?: (text: string) => void } = {},
 ): Promise<number> {
   const root = resolve(cwd);
   const started = Date.now();
   const stallMs = monitor.stallMs ?? LOG_STALL_MS;
   const pollMs = monitor.pollMs ?? WAIT_POLL_MS;
+  const write = monitor.write ?? ((text: string) => process.stdout.write(text));
   let record = readRecord(root, id);
-  let observedSize = -1;
-  let lastGrowth = Date.now();
+  let lastGrowth = 0;
   while (record.status === 'running') {
-    if (Date.now() - started >= timeoutMs) throw new Error(`Wait timed out for check ${id}`);
+    if (Date.now() - started >= timeoutMs) {
+      if (record.infrastructureFailure) write(`${record.infrastructureFailure}\n`);
+      write('check: still running\n');
+      const latest = latestLogLine(join(root, record.log));
+      if (latest) write(`${latest}\n`);
+      write(`check: log ${record.log}\n`);
+      return 75;
+    }
     const file = join(root, record.log);
-    let size = 0;
     let modifiedAt = Date.now();
     try {
       const stats = statSync(file);
-      size = stats.size;
       modifiedAt = stats.mtimeMs;
     } catch {
       // A runner can create its log just after publishing its result record.
     }
-    if (observedSize === -1) {
-      observedSize = size;
+    if (lastGrowth === 0) {
       lastGrowth = modifiedAt;
-    } else if (size > observedSize || modifiedAt > lastGrowth) {
-      observedSize = size;
+    } else if (modifiedAt > lastGrowth) {
       lastGrowth = modifiedAt;
     }
-    if (record.runnerPid !== undefined && !isProcessAlive(record.runnerPid)) {
-      return await rerunInterruptedCheck(record, root, id, 'runner process exited');
+    const alive = recordedRunnerAlive(record, root, id);
+    if (alive === false) {
+      return await rerunInterruptedCheck(record, root, id, 'runner process exited', Math.max(0, timeoutMs - (Date.now() - started)), monitor);
     }
     if (Date.now() - lastGrowth >= stallMs) {
-      if (record.runnerPid !== undefined) stopRunner(record.runnerPid);
+      if (alive === true && record.runnerPid !== undefined) stopRunner(record.runnerPid);
       return await rerunInterruptedCheck(
         record,
         root,
         id,
-        `log did not grow for ${Math.round(stallMs / 60_000)} minutes`,
+        `log did not grow for ${stallMs < 60_000 ? `${stallMs} ms` : `${Math.round(stallMs / 60_000)} minutes`}`,
+        Math.max(0, timeoutMs - (Date.now() - started)),
+        monitor,
       );
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
     record = readRecord(root, id);
   }
   if (record.infrastructureFailure) {
-    process.stdout.write(`${record.infrastructureFailure}\n`);
-    process.stdout.write(`check: log ${record.log}\n`);
-    return 1;
+    write(`${record.infrastructureFailure}\n`);
+    if (record.infrastructureFailureFinal) {
+      write(`check: exit status 1\ncheck: log ${record.log}\n`);
+      return 1;
+    }
   }
   const code = record.exitCode ?? 1;
   const absoluteLog = join(root, record.log);
-  process.stdout.write(`check: exit status ${code}\n`);
+  write(`check: exit status ${code}\n`);
   if (code !== 0 && existsSync(absoluteLog))
-    process.stdout.write(`check: failure summary\n${failureSummary(absoluteLog)}\n`);
-  process.stdout.write(`check: log ${record.log}\n`);
+    write(`check: failure summary\n${failureSummary(absoluteLog)}\n`);
+  write(`check: log ${record.log}\n`);
   return code;
 }
 
-function isProcessAlive(pid: number): boolean {
+function recordedRunnerAlive(record: CheckRecord, root: string, id: string): boolean | undefined {
+  if (record.runnerHost !== hostname() || record.runnerPid === undefined) return undefined;
   try {
-    process.kill(pid, 0);
-    return true;
+    process.kill(record.runnerPid, 0);
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+    return (error as NodeJS.ErrnoException).code === 'EPERM' ? undefined : false;
+  }
+  try {
+    const command = readFileSync(`/proc/${record.runnerPid}/cmdline`, 'utf8').split('\0');
+    const script = resolve(import.meta.path);
+    const isThisRunner = command.some((part) => resolve(part) === script) && command.some((part, index) => part === '--run' && command[index + 1] === id);
+    return isThisRunner ? true : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -470,16 +497,61 @@ function stopRunner(pid: number): void {
   }
 }
 
-async function rerunInterruptedCheck(record: CheckRecord, root: string, id: string, reason: string): Promise<number> {
+function latestLogLine(file: string): string {
+  try {
+    return readFileSync(file, 'utf8').trimEnd().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+async function rerunInterruptedCheck(
+  record: CheckRecord,
+  root: string,
+  id: string,
+  reason: string,
+  remainingMs: number,
+  monitor: { stallMs?: number; pollMs?: number; rerunWaitMs?: number; rerunStallMs?: number; leaseRepeatMs?: number; write?: (text: string) => void },
+): Promise<number> {
   const host = record.runnerHost ?? hostname();
+  const oldLog = record.log;
+  if ((record.reruns ?? 0) >= 1) {
+    record.status = 'finished';
+    record.exitCode = 1;
+    record.infrastructureFailureFinal = true;
+    record.infrastructureFailure = `worker-check: infrastructure failure (${reason}) on ${host}; second runner failed; log ${oldLog}`;
+    writeRecord(record);
+    (monitor.write ?? ((text: string) => process.stdout.write(text)))(`${record.infrastructureFailure}\ncheck: exit status 1\ncheck: log ${oldLog}\n`);
+    return 1;
+  }
   const rerunLog = logPath(root);
-  const rerunCode = await runWorkerCheck(record.argv, root, false, rerunLog);
-  record.status = 'finished';
-  record.exitCode = 1;
+  record.reruns = 1;
   record.log = relative(root, rerunLog);
-  record.infrastructureFailure = `worker-check: infrastructure failure (${reason}) on ${host}; reran check once (rerun exit status ${rerunCode}); log ${record.log}`;
+  record.runnerPid = undefined;
+  record.runnerHost = hostname();
+  record.infrastructureFailure = `worker-check: infrastructure failure (${reason}) on ${host}; rerunning once; old log ${oldLog}`;
   writeRecord(record);
-  return waitWorkerCheck(id, root, 0);
+  const descriptor = openSync(rerunLog, 'a', 0o600);
+  const child = spawn(process.execPath, [resolve(import.meta.path), '--run', id], {
+    cwd: root,
+    detached: true,
+    env: process.env,
+    stdio: ['ignore', descriptor, descriptor],
+  });
+  closeSync(descriptor);
+  record.runnerPid = child.pid;
+  writeRecord(record);
+  child.once('error', (error) => {
+    record.status = 'finished';
+    record.exitCode = 1;
+    record.infrastructureFailure = `worker-check: infrastructure failure (could not start rerun: ${error.message}) on ${hostname()}; old log ${oldLog}`;
+    writeRecord(record);
+  });
+  child.unref();
+  return waitWorkerCheck(id, root, monitor.rerunWaitMs ?? remainingMs, {
+    ...monitor,
+    ...(monitor.rerunStallMs === undefined ? {} : { stallMs: monitor.rerunStallMs }),
+  });
 }
 
 async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number> {
