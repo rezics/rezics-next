@@ -46,12 +46,19 @@ afterAll(async () => {
   await driver?.close();
 });
 
-async function command<T>(actor: Account | null, method: 'POST' | 'PUT', path: string, body?: unknown) {
+async function command<T>(
+  actor: Account | null,
+  method: 'POST' | 'PUT',
+  path: string,
+  body?: unknown,
+  ifMatch?: string,
+) {
   const response = await driver.request({
     actor,
     method,
     path,
     key: JSON.stringify(randomUUID()),
+    ...(ifMatch === undefined ? {} : { ifMatch }),
     ...(body === undefined ? {} : { body }),
   });
   const text = await response.clone().text();
@@ -81,6 +88,7 @@ async function makeProtectedRealm(): Promise<{ realm: Realm; boardId: string }> 
     {
       schemeId: schemeValue.subject.id,
     },
+    JSON.stringify(realmValue.realm.headRevisionId),
   );
   const concept = await command<{ subject: { id: string } }>(fixture.owner, 'POST', '/v1/subjects', {
     type: 'skos:Concept',
