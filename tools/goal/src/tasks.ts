@@ -13,7 +13,7 @@ import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { awaitHostCapacity, launch, startsFirst, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { terminateProcessGroup } from './process.ts';
-import { readMeasurement, makeRecord } from './records.ts';
+import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Profile, Settings, Task } from './types.ts';
@@ -733,13 +733,14 @@ export class WorkerTasks {
               return reading ? pace(reading, candidate, now, schedule)?.urgency : undefined;
             },
       );
+      const oldSession = old ? attemptSession(old) : null;
       const resumeSession =
-        old?.session &&
+        oldSession &&
         agentAdapter(profile.cli).canResume &&
-        old.pool === pool.name &&
-        old.profile.cli === profile.cli &&
-        old.profile.model === profile.model
-          ? old.session
+        old!.pool === pool.name &&
+        old!.profile.cli === profile.cli &&
+        old!.profile.model === profile.model
+          ? oldSession
           : undefined;
       const make = (n: number): Attempt => ({
         taskId,
