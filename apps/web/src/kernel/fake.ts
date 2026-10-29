@@ -196,7 +196,8 @@ const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle
 
 function recordedResponse(recording: KernelRecording): Response {
   const recordedHeaders = new Headers({
-    'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json',
+    'content-type':
+      recording.status === 404 || recording.status === 422 ? 'application/problem+json' : 'application/json',
   });
   if (isRecord(recording.headers))
     for (const [name, value] of Object.entries(recording.headers))
@@ -215,11 +216,9 @@ function recordedResponse(recording: KernelRecording): Response {
     if (requestKeys.has(key)) continue;
     body[key] = value;
   }
-  delete body.headers;
-  if (isRecord(recording.headers)) return Response.json(body, { status: recording.status, headers: recordedHeaders });
   return Response.json(body, {
     status: recording.status,
-    headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
+    headers: recordedHeaders,
   });
 }
 

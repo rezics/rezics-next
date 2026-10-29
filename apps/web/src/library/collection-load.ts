@@ -1,6 +1,10 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
+import type { FilterDocument } from '@rezics/filter';
+import type { CollectionFilterProperty } from './collection-filters';
+import type { CollectionFilterParams } from './collection-filter-params';
+import { collectionFilterQuery } from './collection-filter-params';
 import { getLocale } from '../paraglide/runtime.js';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { readCollectionFollow } from './collection-records';
@@ -126,6 +130,12 @@ export type EditableCollectionPage = CollectionPageData & {
   firstPage: boolean;
   /** The viewer's follow state, or null when the viewer cannot follow this collection. */
   following: boolean | null;
+  filter?: FilterDocument;
+  filterIgnored?: string[];
+  filterType?: string;
+  filterStatus?: 'unsupported' | 'preparing' | 'failed';
+  filterProperties?: CollectionFilterProperty[];
+  filterParams?: CollectionFilterParams;
 };
 
 function accountOf(account: { handle: string | null; displayName: string | null } | null | undefined) {
@@ -141,7 +151,15 @@ export async function loadEditableCollectionPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { id: string; cursor?: string },
+  input: {
+    id: string;
+    cursor?: string;
+    filter?: FilterDocument;
+    filterIgnored?: string[];
+    filterType?: string;
+    filterProperties?: CollectionFilterProperty[];
+    filterParams?: CollectionFilterParams;
+  },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<CollectionPageResult> {
   let authorization: string | null = null;
@@ -155,8 +173,39 @@ export async function loadEditableCollectionPage(
   }
   const viewer = authorization ? sessionSubject(request) : undefined;
   const headers = authorization ? { headers: { authorization } } : {};
-  const readMembers = (cursor?: string) =>
-    client.collections({ collectionId: input.id }).members.get({ query: libraryListQuery(cursor), ...headers });
+  let filterStatus: EditableCollectionPage['filterStatus'];
+  const readMembers = async (cursor?: string, filter = input.filter) => {
+    const query = { ...libraryListQuery(cursor), ...collectionFilterQuery(filter) };
+    for (let retry = 0; ; retry++) {
+      let result: unknown;
+      try {
+        result = await client
+          .collections({ collectionId: input.id })
+          .members.get({ query: query as never, ...headers });
+      } catch (error) {
+        result = error;
+      }
+      const status = resultStatus(result);
+      if (filter && (status === 400 || status === 422)) {
+        filterStatus = 'unsupported';
+        return readLibraryResult(
+          await client
+            .collections({ collectionId: input.id })
+            .members.get({ query: libraryListQuery(cursor), ...headers }),
+        );
+      }
+      if (filter && status === 202) {
+        if (retry >= 3) {
+          filterStatus = 'preparing';
+          return { members: [], next: null };
+        }
+        const delay = retryAfterMs(result) || 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      return readLibraryResult(result as Parameters<typeof readLibraryResult>[0]);
+    }
+  };
   const [collectionResult, first] = await Promise.all([
     client.collections({ collectionId: input.id }).get({ query: libraryFullQuery(), ...headers }),
     readMembers(input.cursor).then(
@@ -253,5 +302,11 @@ export async function loadEditableCollectionPage(
     revision: collection.revision,
     firstPage: first.stale || input.cursor === undefined,
     following,
+    ...(input.filter ? { filter: input.filter } : {}),
+    ...(input.filterIgnored ? { filterIgnored: input.filterIgnored } : {}),
+    ...(input.filterType ? { filterType: input.filterType } : {}),
+    ...(filterStatus ? { filterStatus } : {}),
+    ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
+    ...(input.filterParams ? { filterParams: input.filterParams } : {}),
   };
 }

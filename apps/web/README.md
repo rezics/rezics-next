@@ -681,6 +681,12 @@ language through the client's `accept-language`.
   none when warm; local work is one lookup per distinct type among at most 100 rows. A type with no name is left out
 - **Growth check:** `tests/library-collection-cost.test.ts`: `collection page stays within its bound as its member page grows`
 
+### Collection members filter
+
+- **Touches:** One `GET /v1/collections/{collectionId}/members` per page view and per filter change, with the admitted filter added; tag suggestions use the existing suggestion read, one per typed query after the debounce.
+- **Bound:** One members read per page of at most the page size, whatever the number of members or filters; at most 3 rereads while preparing.
+- **Growth check:** `tests/collection-filters.test.ts`: `one members read per filter change and per page, with 0, 20 and 100 members on the page and 0, 1 and 2 filters`
+
 ### Realm page
 
 - **Touches:** The anonymous page render reads `GET /v1/spaceAddresses/<address>`, then `GET /v1/spaces/<id>`. Only

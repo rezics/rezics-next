@@ -5,6 +5,7 @@
   "compatibility_date": "2026-10-29",
   "workers_dev": true,
   "preview_urls": true,
+  "vars": { "COLLECTION_FILTERS": "true" },
   "routes": [{ "pattern": "storybook.rezics.com", "custom_domain": true }],
   "assets": {
     "directory": "./storybook-static",

@@ -31,6 +31,7 @@ export const env = {
   WEBSITE_SCOPES: 'openid',
   WEBSITE_CLIENT_ID: 'storybook',
   WEBSITE_CLIENT_KEY: '{}',
+  COLLECTION_FILTERS: 'true',
   SESSIONS: {
     idFromName: (name: string) => name,
     get: () => session,

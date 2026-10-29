@@ -31,6 +31,8 @@ import {
 } from './collection-edit';
 import type { EditableCollectionPage } from './collection-load';
 import type { CollectionMember, CollectionVisibility } from './reads';
+import { CollectionFilters } from './collection-filters';
+import { collectionFilterAddress } from './collection-filter-params';
 import { rowRatio, SubjectIdentity } from './subject-row';
 
 /** The kernel holds at most this many members in one collection. */
@@ -343,7 +345,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
             <AccountRef account={null} />
           )}
         </p>
-        <p>{m.library_member_count({ count: page.memberCount })}</p>
+        {!page.filter ? <p>{m.library_member_count({ count: page.memberCount })}</p> : null}
         {atLimit ? <p>{m.library_collection_full()}</p> : null}
         <p>
           {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
@@ -408,6 +410,23 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
         {failure ? <p role="alert">{failure}</p> : null}
       </header>
       <section className="space-y-4" aria-labelledby="collection-members-heading">
+        {page.filterProperties && page.filterParams ? (
+          <CollectionFilters
+            id={page.id}
+            type={page.filterType ?? 'schema:Book'}
+            properties={page.filterProperties}
+            params={page.filterParams}
+          />
+        ) : null}
+        {page.filterIgnored?.length ? (
+          <p role="status">{m.collection_filter_ignored({ filter: page.filterIgnored.join(', ') })}</p>
+        ) : null}
+        {page.filterStatus === 'unsupported' ? <p role="status">{m.collection_filter_unsupported()}</p> : null}
+        {page.filterStatus === 'preparing' ? (
+          <p role="status">
+            {m.collection_filter_preparing()} {m.collection_filter_retry_later()}
+          </p>
+        ) : null}
         <h2 id="collection-members-heading" className="text-xl font-semibold">
           {m.library_collection_members()}
         </h2>
@@ -467,9 +486,16 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
               })}
             </CoverGrid>
           </div>
-        ) : (
-          <p className="text-muted-foreground">{m.library_collection_empty()}</p>
+        ) : page.filterStatus === 'preparing' ? null : (
+          <p className="text-muted-foreground">
+            {page.filter ? m.collection_filter_no_match() : m.library_collection_empty()}
+          </p>
         )}
+        {page.filter && page.filterStatus !== 'preparing' && members.length === 0 ? (
+          <a className={buttonClass} href={collectionFilterAddress(getLocale(), page.id, {}, {})}>
+            {m.collection_filter_clear()}
+          </a>
+        ) : null}
         {page.next ? (
           <Exposure operation="collection_member.list">
             <nav aria-label={m.library_collection_members()}>
