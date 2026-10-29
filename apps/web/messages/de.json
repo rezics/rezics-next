@@ -614,4 +614,9 @@
   "decision_appeal_too_long": "Verwende höchstens 2.000 Zeichen.",
   "decision_appeal_unavailable": "Deine Beschwerde konnte nicht gesendet werden. Versuche es erneut.",
   "decision_target_fallback": "{kind}, von dieser Entscheidung betroffen"
+  "thread_media_unavailable": "Ein Bild in diesem Entwurf kann noch nicht verwendet werden.",
+  "thread_media_status": "Bildstatus",
+  "thread_media_processing": "Dieses Bild wird noch verarbeitet.",
+  "thread_media_unusable": "Dieses Bild kann nicht mehr verwendet werden.",
+  "thread_media_remove": "Bild entfernen"
 }

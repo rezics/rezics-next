@@ -614,4 +614,9 @@
   "decision_appeal_too_long": "2,000文字以内で入力してください。",
   "decision_appeal_unavailable": "異議申し立てを送信できませんでした。もう一度お試しください。",
   "decision_target_fallback": "この決定の対象となった{kind}"
+  "thread_media_unavailable": "下書きの画像をまだ使用できません。",
+  "thread_media_status": "画像の状態",
+  "thread_media_processing": "この画像は処理中です。",
+  "thread_media_unusable": "この画像はもう使用できません。",
+  "thread_media_remove": "画像を削除"
 }

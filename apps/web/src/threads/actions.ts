@@ -7,6 +7,7 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
+import { readDraftMediaStates, type DraftMediaState } from './media-state';
 import {
   erasePostRequest,
   revisePostRequest,
@@ -19,8 +20,22 @@ import { forgetThreadSlug, rememberThreadSlug } from './thread-href';
 const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type FailureReason = 'closed' | 'forbidden' | 'not-found' | 'conflict' | 'invalid' | 'rate-limited' | 'unavailable';
-export type WriteFailure = { ok: false; reason: FailureReason; retryAfter?: number; existingReviewId?: string };
+type FailureReason =
+  | 'closed'
+  | 'forbidden'
+  | 'not-found'
+  | 'conflict'
+  | 'media-unavailable'
+  | 'invalid'
+  | 'rate-limited'
+  | 'unavailable';
+export type WriteFailure = {
+  ok: false;
+  reason: FailureReason;
+  retryAfter?: number;
+  existingReviewId?: string;
+  media?: DraftMediaState[];
+};
 export type ThreadResource = ReturnType<KernelClient['threads']>;
 export type PostResource = ReturnType<KernelClient['posts']>;
 export type ThreadCreated = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>;
@@ -139,7 +154,10 @@ function refusal(status: number, headers: HeadersInit | undefined, body?: unknow
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
   if (status === 403 || status === 401) return { ok: false, reason: 'forbidden' };
   if (status === 404) return { ok: false, reason: 'not-found' };
-  if (status === 409) return { ok: false, reason: 'conflict' };
+  if (status === 409) {
+    const code = body && typeof body === 'object' && 'code' in body ? body.code : undefined;
+    return { ok: false, reason: code === 'media_unavailable' ? 'media-unavailable' : 'conflict' };
+  }
   if (status === 400 || status === 413 || status === 422) return { ok: false, reason: 'invalid' };
   if (status === 429) {
     const retryAfter = parseRetryAfter(new Headers(headers).get('retry-after'));
@@ -195,7 +213,13 @@ export const replyToThread = createServerFn({ method: 'POST' })
             headers: { authorization, 'idempotency-key': data.idempotencyKey } as { 'idempotency-key': string },
           },
         );
-      if (result.error) return refusal(result.status, result.headers, result.error.value);
+      if (result.error) {
+        const failure = refusal(result.status, result.headers, result.error.value);
+        if (failure.reason === 'media-unavailable') {
+          failure.media = await readDraftMediaStates(kernelClient(), authorization, data.mediaIds ?? []);
+        }
+        return failure;
+      }
       return { ok: true, post: result.data.post };
     } catch (error) {
       if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };

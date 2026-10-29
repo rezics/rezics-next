@@ -1,5 +1,5 @@
 import { sessionCsrfToken } from '../session/query';
-import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
+import { fromPlainText, hasDocumentContent, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import { RichTextEditor, type RichTextEditorLabels, type UploadState } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -10,6 +10,7 @@ import { lookupPostMention } from './mentions';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from './actions';
+import type { DraftMediaState } from './media-state';
 import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from './upload';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -41,13 +42,81 @@ export function refusalText(failure: WriteFailure): string {
       return m.thread_write_closed();
     case 'forbidden':
       return m.thread_write_forbidden();
+    case 'conflict':
+      return m.thread_edit_conflict();
     case 'invalid':
       return m.thread_write_invalid();
+    case 'media-unavailable':
+      return m.thread_media_unavailable();
     case 'rate-limited':
       return m.thread_write_rate_limited({ seconds: failure.retryAfter ?? 1 });
     default:
       return m.thread_write_unavailable();
   }
+}
+
+function imageAlt(snapshot: DocumentSnapshot, id: string): string {
+  let alt = '';
+  const visit = (node: DocumentNode) => {
+    if (node.type === 'image' && node.attrs?.src === id && typeof node.attrs.alt === 'string') alt = node.attrs.alt;
+    for (const child of node.content ?? []) visit(child);
+  };
+  visit(snapshot.doc);
+  return alt;
+}
+
+function withoutImage(snapshot: DocumentSnapshot, id: string): DocumentSnapshot {
+  const visit = (node: DocumentNode): DocumentNode | null => {
+    if (node.type === 'image' && node.attrs?.src === id) return null;
+    return {
+      ...node,
+      ...(node.content
+        ? { content: node.content.map(visit).filter((child): child is DocumentNode => child !== null) }
+        : {}),
+    };
+  };
+  return { ...snapshot, doc: visit(snapshot.doc)! };
+}
+
+function mediaIssueList(
+  media: DraftMediaState[] | undefined,
+  snapshot: DocumentSnapshot,
+  retry: () => void,
+  remove: (id: string) => void,
+) {
+  if (!media?.length) return null;
+  const issues = media.filter(
+    (item) =>
+      item.state === 'reserved' ||
+      item.state === 'uploaded' ||
+      item.state === 'rejected' ||
+      item.state === 'erased' ||
+      item.state === 'missing',
+  );
+  if (issues.length === 0) return null;
+  return (
+    <ul className="space-y-2" aria-label={m.thread_media_status()}>
+      {issues.map((item) => {
+        const processing = item.state === 'reserved' || item.state === 'uploaded';
+        const alt = imageAlt(snapshot, item.id);
+        return (
+          <li key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 p-3">
+            <span className="font-medium">{alt || m.editor_image()}</span>
+            <span>{processing ? m.thread_media_processing() : m.thread_media_unusable()}</span>
+            {processing ? (
+              <Button type="button" variant="outline" onClick={retry}>
+                {m.thread_write_retry()}
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => remove(item.id)}>
+                {m.thread_media_remove()}
+              </Button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function uploadRefusalText(refusal: UploadRefusal): string {
@@ -229,6 +298,16 @@ export function PostComposer<T>({
     setBodyCanSend(hasDocumentContent(next));
   }
 
+  function removeIssueImage(id: string) {
+    const next = withoutImage(bodyRef.current, id);
+    bodyRef.current = next;
+    setBody(next);
+    setBodyCanSend(hasDocumentContent(next) || imageSources(next).length > 0);
+    setFailure((current) =>
+      current && 'media' in current ? { ...current, media: current.media?.filter((item) => item.id !== id) } : current,
+    );
+  }
+
   function captureEditorInput(event: FormEvent<HTMLDivElement>) {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
@@ -360,6 +439,7 @@ export function PostComposer<T>({
               <Button type="button" variant="outline" disabled={submitting} onClick={() => void submit()}>
                 {m.thread_write_retry()}
               </Button>
+              {mediaIssueList(failure.media, bodyRef.current, () => void submit(), removeIssueImage)}
             </>
           )}
         </div>
@@ -383,6 +463,8 @@ export function postEditFailureText(failure: EditFailure): string {
       return m.thread_edit_not_found();
     case 'conflict':
       return m.thread_edit_conflict();
+    case 'media-unavailable':
+      return m.thread_media_unavailable();
     case 'invalid':
       return m.thread_edit_invalid();
     case 'rate-limited':
@@ -434,6 +516,15 @@ export function InlinePostEditor({
     setBody(next);
   }
 
+  function removeIssueImage(id: string) {
+    const next = withoutImage(bodyRef.current, id);
+    bodyRef.current = next;
+    setBody(next);
+    setFailure((current) =>
+      current && 'media' in current ? { ...current, media: current.media?.filter((item) => item.id !== id) } : current,
+    );
+  }
+
   function captureEditorInput(event: FormEvent<HTMLDivElement>) {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
@@ -444,8 +535,8 @@ export function InlinePostEditor({
     setBody(next);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     if (pendingRef.current > 0 || !hasDocumentContent(bodyRef.current) || submitting) return;
     const mediaIds = imageSources(bodyRef.current);
     if (mediaIds.length > replyImageLimit) {
@@ -539,6 +630,12 @@ export function InlinePostEditor({
         {failure ? (
           <div className="space-y-3" role="alert">
             <p>{postEditFailureText(failure)}</p>
+            {mediaIssueList(
+              'media' in failure ? failure.media : undefined,
+              bodyRef.current,
+              () => void submit(),
+              removeIssueImage,
+            )}
             {failure.reason === 'stale' && failure.currentPost ? (
               <Button type="button" variant="outline" onClick={() => void loadCurrentVersion()}>
                 {m.thread_edit_load_current()}

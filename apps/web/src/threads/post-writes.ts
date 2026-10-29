@@ -3,6 +3,7 @@ import type { DocumentSnapshot } from '@rezics/document';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request.ts';
+import { readDraftMediaStates } from './media-state';
 import type { EditFailure, RevisedPost, WriteFailure } from './actions';
 
 type Refusal = (status: number, headers: HeadersInit | undefined, body?: unknown) => WriteFailure;
@@ -91,7 +92,10 @@ export async function startThreadRequest(
     );
     if (result.error) {
       const failure = refusal(result.status, result.headers, result.error.value);
-      if (result.status === 409 && input.kind === 'review') {
+      if (failure.reason === 'media-unavailable') {
+        failure.media = await readDraftMediaStates(client, authorization, input.mediaIds ?? []);
+      }
+      if (failure.reason === 'conflict' && input.kind === 'review') {
         const authorId = sessionSubject(request);
         if (authorId) {
           const existingReviewId = await findExistingReview(client, {
@@ -165,7 +169,11 @@ export async function revisePostRequest(
         }
         return { ok: false, reason: 'stale' };
       }
-      return refusal(result.status, result.headers, result.error.value);
+      const failure = refusal(result.status, result.headers, result.error.value);
+      if (failure.reason === 'media-unavailable') {
+        failure.media = await readDraftMediaStates(client, authorization, input.mediaIds ?? []);
+      }
+      return failure;
     }
     return { ok: true, post: result.data.post };
   } catch (error) {

@@ -614,4 +614,9 @@
   "decision_appeal_too_long": "2,000자 이내로 작성하세요.",
   "decision_appeal_unavailable": "이의 제기를 제출하지 못했습니다. 다시 시도하세요.",
   "decision_target_fallback": "이 결정의 대상 {kind}"
+  "thread_media_unavailable": "초안의 이미지 하나를 아직 사용할 수 없습니다.",
+  "thread_media_status": "이미지 상태",
+  "thread_media_processing": "이 이미지는 아직 처리 중입니다.",
+  "thread_media_unusable": "이 이미지는 더 이상 사용할 수 없습니다.",
+  "thread_media_remove": "이미지 삭제"
 }

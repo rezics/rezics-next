@@ -614,4 +614,9 @@
   "decision_appeal_too_long": "Use no more than 2,000 characters.",
   "decision_appeal_unavailable": "Your appeal could not be submitted. Try again.",
   "decision_target_fallback": "{kind} affected by this decision"
+  "thread_media_unavailable": "An image in this draft cannot be used yet.",
+  "thread_media_status": "Image status",
+  "thread_media_processing": "This image is still processing.",
+  "thread_media_unusable": "This image can no longer be used.",
+  "thread_media_remove": "Remove image"
 }

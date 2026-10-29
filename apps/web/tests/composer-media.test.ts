@@ -128,8 +128,11 @@ let current = thread(2, 'A shared reading');
 let posts: Posts = { posts: [post(12)], next: null };
 type Call = { method: string; path: string; body: unknown; key: string | null; authorization: string | null };
 const calls: Call[] = [];
+const stateReads: Call[] = [];
 type MediaRefusal = 'type' | 'size' | 'rate' | 'reject';
 let refusal: MediaRefusal | undefined;
+let writeRefusal: { status: number; code: string } | undefined;
+const mediaStates = new Map<string, string>();
 type Reservation = {
   id: string;
   state: 'reserved' | 'uploaded' | 'available' | 'rejected';
@@ -188,7 +191,10 @@ function mediaProblem(status: number, code: string, headers: Record<string, stri
 }
 function reset() {
   calls.length = 0;
+  stateReads.length = 0;
   refusal = undefined;
+  writeRefusal = undefined;
+  mediaStates.clear();
   reservations.clear();
   current = thread(2, 'A shared reading');
   posts = { posts: [post(12)], next: null };
@@ -361,6 +367,11 @@ const fake = Bun.serve({
         return Response.json({ media: { id: entry.id, state: 'uploaded' } });
       }
       if (request.method === 'GET') {
+        if (writeRefusal) stateReads.push(calls.at(-1)!);
+        const state = mediaStates.get(entry.id);
+        if (state === 'missing') return mediaProblem(404, 'not_found');
+        if (state === 'erased') return Response.json({ media: { id: entry.id, state: 'erased' } });
+        if (state) return Response.json({ media: { id: entry.id, state } });
         if (entry.state === 'uploaded') {
           entry.polls += 1;
           if (refusal === 'reject') entry.state = 'rejected';
@@ -383,6 +394,7 @@ const fake = Bun.serve({
       request.method === 'POST' &&
       (url.pathname === '/v1/threads' || url.pathname === `/v1/threads/${id(2)}/posts`)
     ) {
+      if (writeRefusal) return mediaProblem(writeRefusal.status, writeRefusal.code);
       if (url.pathname === '/v1/threads') {
         const draft = body as Parameters<KernelClient['threads']['post']>[0];
         current = thread(3, draft.title, draft.body);
@@ -409,6 +421,127 @@ function freePort(): Promise<number> {
     });
   });
 }
+
+test(
+  'a media refusal keeps the reply draft and identifies unusable and processing images from one server round trip',
+  async () => {
+    reset();
+    const { page } = await open(threadPath());
+    try {
+      await readyEditor(page);
+      await editor(page).fill('Keep this reply draft');
+      await chooseImage(page, 'Processing chart');
+      await page.getByRole('img', { name: 'Processing chart' }).waitFor();
+      await chooseImage(page, 'Unusable chart');
+      await page.getByRole('img', { name: 'Unusable chart' }).waitFor();
+      await chooseImage(page, 'Erased chart');
+      await page.getByRole('img', { name: 'Erased chart' }).waitFor();
+      await chooseImage(page, 'Missing chart');
+      await page.getByRole('img', { name: 'Missing chart' }).waitFor();
+      const imageIds = [...reservations.keys()];
+      expect(imageIds).toHaveLength(4);
+      mediaStates.set(imageIds[0]!, 'uploaded');
+      mediaStates.set(imageIds[1]!, 'rejected');
+      mediaStates.set(imageIds[2]!, 'erased');
+      mediaStates.set(imageIds[3]!, 'missing');
+      writeRefusal = { status: 409, code: 'media_unavailable' };
+
+      await send(page).click();
+      await page
+        .getByRole('alert')
+        .getByText(/still processing/i)
+        .waitFor();
+      await page
+        .getByRole('alert')
+        .getByText(/unusable/i)
+        .waitFor();
+      expect(await editor(page).innerText()).toContain('Keep this reply draft');
+      expect(await editor(page).getByRole('img', { name: 'Processing chart' }).count()).toBe(1);
+      expect(await editor(page).getByRole('img', { name: 'Unusable chart' }).count()).toBe(1);
+      expect(await editor(page).getByRole('img', { name: 'Erased chart' }).count()).toBe(1);
+      expect(await editor(page).getByRole('img', { name: 'Missing chart' }).count()).toBe(1);
+      expect(await page.getByRole('alert').getByRole('button', { name: 'Remove image' }).count()).toBe(3);
+      const issueList = page.getByRole('list', { name: 'Image status' });
+      await issueList
+        .getByRole('listitem')
+        .filter({ hasText: 'Processing chart' })
+        .getByRole('button', { name: 'Try again' })
+        .waitFor();
+      for (const alt of ['Unusable chart', 'Erased chart', 'Missing chart']) {
+        await issueList
+          .getByRole('listitem')
+          .filter({ hasText: alt })
+          .getByRole('button', { name: 'Remove image' })
+          .waitFor();
+      }
+      expect(stateReads.map((call) => call.path).sort()).toEqual(
+        imageIds.map((mediaId) => `/v1/media/${mediaId}`).sort(),
+      );
+      expect(stateReads.every((call) => call.authorization?.startsWith('Bearer '))).toBe(true);
+      expect(page.url()).toContain('/en/threads/');
+
+      for (const alt of ['Unusable chart', 'Erased chart', 'Missing chart']) {
+        await issueList
+          .getByRole('listitem')
+          .filter({ hasText: alt })
+          .getByRole('button', { name: 'Remove image' })
+          .click();
+        expect(await editor(page).getByRole('img', { name: alt }).count()).toBe(0);
+      }
+
+      stateReads.length = 0;
+      mediaStates.set(imageIds[0]!, 'reserved');
+      writeRefusal = { status: 409, code: 'media_unavailable' };
+      await send(page).click();
+      await page.getByRole('alert').getByText('An image in this draft cannot be used yet.').waitFor();
+      expect(stateReads.map((call) => call.path)).toEqual([`/v1/media/${imageIds[0]}`]);
+      expect(
+        await page
+          .getByRole('list', { name: 'Image status' })
+          .getByText(/still processing/i)
+          .count(),
+      ).toBe(1);
+
+      stateReads.length = 0;
+      mediaStates.set(imageIds[0]!, 'available');
+      await send(page).click();
+      await page.getByRole('alert').getByText('An image in this draft cannot be used yet.').waitFor();
+      expect(stateReads.map((call) => call.path)).toEqual([`/v1/media/${imageIds[0]}`]);
+      expect(await page.getByRole('list', { name: 'Image status' }).count()).toBe(0);
+
+      stateReads.length = 0;
+      writeRefusal = { status: 409, code: 'idempotency_conflict' };
+      await send(page).click();
+      await page.getByRole('alert').getByText('This post cannot be changed right now.').waitFor();
+      expect(stateReads).toHaveLength(0);
+      const conflictedWrite = calls
+        .filter((call) => call.method === 'POST' && call.path === `/v1/threads/${id(2)}/posts`)
+        .at(-1)!;
+      expect((conflictedWrite.body as { mediaIds: string[] }).mediaIds).toEqual([imageIds[0]]);
+
+      writeRefusal = { status: 400, code: 'invalid_request' };
+      await send(page).click();
+      await page.getByRole('alert').getByText('This draft is invalid. Review it and try again.').waitFor();
+      expect(stateReads).toHaveLength(0);
+      expect(await editor(page).innerText()).toContain('Keep this reply draft');
+
+      writeRefusal = undefined;
+      const previousWrites = calls.filter(
+        (call) => call.method === 'POST' && call.path === `/v1/threads/${id(2)}/posts`,
+      ).length;
+      await send(page).click();
+      await eventually(
+        () =>
+          calls.filter((call) => call.method === 'POST' && call.path === `/v1/threads/${id(2)}/posts`).length >
+          previousWrites,
+      );
+      expect(stateReads).toHaveLength(0);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
 
 let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;

@@ -614,4 +614,9 @@
   "decision_appeal_too_long": "Usa un máximo de 2.000 caracteres.",
   "decision_appeal_unavailable": "No se pudo enviar la apelación. Inténtalo de nuevo.",
   "decision_target_fallback": "{kind} afectado por esta decisión"
+  "thread_media_unavailable": "Aún no se puede usar una imagen de este borrador.",
+  "thread_media_status": "Estado de la imagen",
+  "thread_media_processing": "La imagen todavía se está procesando.",
+  "thread_media_unusable": "Ya no se puede usar esta imagen.",
+  "thread_media_remove": "Quitar imagen"
 }
