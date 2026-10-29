@@ -179,6 +179,7 @@ async function createReportEvents(
 
 test('Report effect projection stays within its bound as source reports and target reverse-index history grow', async () => {
   const eventsByRun = new Map<number, CloudEvent>();
+  const appliedReportIds: string[] = [];
   let runOffset = 0;
   let sourcePartition: number | undefined;
   const sourcePopulation = (partition: number): Population => ({
@@ -218,26 +219,7 @@ test('Report effect projection stays within its bound as source reports and targ
       const event = eventsByRun.get(repetition);
       if (!event) throw new Error(`Missing fresh report event ${repetition}`);
       await applyReportEffect(observed.pool, event);
-      const reportId = event.subject!;
-      const reportTime = await observed.admin.query<{ created_at: string }>(
-        'SELECT created_at::text FROM content.report WHERE route=$1 AND report_id=$2',
-        [routeOf(reportId), reportId],
-      );
-      const result = await observed.admin.query<{ rows: number; events: number; created_at: string }>(
-        `SELECT (SELECT count(*)::int FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS rows,
-                (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5) AS events,
-                (SELECT created_at::text FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS created_at`,
-        [
-          routeOf(target.id),
-          target.kind,
-          target.id,
-          routeOf(reportId),
-          reportId,
-          partitionOf(routeOf(target.id)!),
-          projectedType,
-        ],
-      );
-      expect(result.rows[0]).toEqual({ rows: 1, events: 1, created_at: reportTime.rows[0]!.created_at });
+      appliedReportIds.push(event.subject!);
     },
     async warmup(observed, _scale, repetition) {
       const event = eventsByRun.get(repetition);
@@ -246,6 +228,26 @@ test('Report effect projection stays within its bound as source reports and targ
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  const appliedReportId = appliedReportIds[0]!;
+  const reportTime = await db.admin.query<{ created_at: string }>(
+    'SELECT created_at::text FROM content.report WHERE route=$1 AND report_id=$2',
+    [routeOf(appliedReportId), appliedReportId],
+  );
+  const projection = await db.admin.query<{ rows: number; events: number; created_at: string }>(
+    `SELECT (SELECT count(*)::int FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS rows,
+            (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5) AS events,
+            (SELECT created_at::text FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS created_at`,
+    [
+      routeOf(target.id),
+      target.kind,
+      target.id,
+      routeOf(appliedReportId),
+      appliedReportId,
+      partitionOf(routeOf(target.id)!),
+      projectedType,
+    ],
+  );
+  expect(projection.rows[0]).toEqual({ rows: 1, events: 1, created_at: reportTime.rows[0]!.created_at });
   for (const sample of report.samples)
     for (const relation of ['content.report', 'content.report_target'])
       expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
@@ -253,6 +255,10 @@ test('Report effect projection stays within its bound as source reports and targ
 
 test('Report effect replay stays within its bound and changes nothing as history grows', async () => {
   const eventsByRun = new Map<number, CloudEvent>();
+  const replayResults: {
+    before: { rows: number; events: number; position: string };
+    after: { rows: number; events: number; position: string };
+  }[] = [];
   let runOffset = 0;
   let sourcePartition: number | undefined;
   let ordinal = 0;
@@ -297,7 +303,7 @@ test('Report effect replay stays within its bound and changes nothing as history
                 (SELECT position::text FROM core.partition WHERE partition_no=$6) AS position`,
         [routeOf(target.id), target.kind, target.id, routeOf(reportId), reportId, targetPartition, projectedType],
       );
-      expect(after.rows[0]).toEqual(before.rows[0]);
+      replayResults.push({ before: before.rows[0]!, after: after.rows[0]! });
     },
     async warmup(observed, _scale, repetition) {
       const event = eventsByRun.get(repetition);
@@ -306,6 +312,7 @@ test('Report effect replay stays within its bound and changes nothing as history
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  for (const result of replayResults) expect(result.after).toEqual(result.before);
   for (const sample of report.samples)
     for (const relation of ['content.report', 'content.report_target'])
       expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
