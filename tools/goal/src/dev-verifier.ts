@@ -133,8 +133,8 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
       }
       const culprit = boundaries[high]!.task;
       const culpritLog = readFileSync(failed.log, 'utf8');
-      const revertBase = culprit.integratedBase ?? culprit.base;
-      const revert = spawnSync('git', ['revert', '--no-commit', `${revertBase}..${culprit.integratedCommit}`], { cwd: checkout, encoding: 'utf8' });
+      const culpritChanges = taskCommits(culprit, checkout);
+      const revert = spawnSync('git', ['revert', '--no-commit', ...culpritChanges], { cwd: checkout, encoding: 'utf8' });
       if (revert.status !== 0) throw new Error(`Could not revert verifier culprit ${culprit.id}: ${revert.stderr}`);
       const message = `revert: ${culprit.id} after ${failed.check.command.join(' ')}`;
       const committed = spawnSync('git', ['commit', '-m', message], { cwd: checkout, encoding: 'utf8' });

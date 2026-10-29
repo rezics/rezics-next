@@ -104,7 +104,8 @@ test('worker bases and promotion candidates use dev-verified', async () => {
   git(root, 'branch', '-f', 'dev', unverified);
   const taskSource = await Bun.file(new URL('./tasks.ts', import.meta.url)).text();
   const promotionSource = await Bun.file(new URL('./promotion.ts', import.meta.url)).text();
-  expect(taskSource).toContain("this.branchHead(verified, false)");
+  expect(taskSource).toContain('private existingVerifiedBranch(): string');
+  expect(taskSource).toContain('this.existingVerifiedBranch()');
   expect(promotionSource).toContain("'dev-verified'");
 });
 
@@ -121,8 +122,9 @@ test('infrastructure failure reruns only that command and never reverts a landin
       ? { passed: false, output: 'ETIMEDOUT', timedOut: false }
       : { passed: true, output: '', timedOut: false };
   } });
-  expect(calls).toHaveLength(2);
-  expect(calls[1]).toBe(calls[0]);
+  expect(calls.filter((command) => command.includes('bun scripts/typecheck.ts'))).toHaveLength(2);
+  expect(calls.filter((command) => command === 'affected-check')).toHaveLength(1);
+  expect(calls.filter((command) => command === 'acceptance kernel-task')).toHaveLength(1);
   expect(git(root, 'rev-parse', 'dev')).toBe(landing);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(landing);
 });
