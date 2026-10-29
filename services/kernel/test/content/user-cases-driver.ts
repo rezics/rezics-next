@@ -14,7 +14,6 @@ import type {
   Post,
   RealmFigure,
   Thread,
-  WriteOptions,
 } from '../../../../specs/content-user-cases-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
