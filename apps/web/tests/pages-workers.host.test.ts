@@ -26,7 +26,11 @@ function aggregateSince(start: number, id: string) {
     { method: 'POST', body: { target: { subject: id }, languages: ['en'] } },
   ]);
   expect(aggregate[0]!.language).toBe('en');
-  // Reaction counts and public collections are normal separate reads; standalone subjects/facts must never fill in the page.
+  // This non-agent fixture permits one routing lookup, separate from the descriptor aggregate.
+  const routing = calls.filter(({ path }) => path === `/v1/subjects/${id}`);
+  expect(routing.length).toBeLessThanOrEqual(1);
+  expect(routing.every(({ method }) => method === 'GET')).toBe(true);
+  // Reaction counts and public collections are normal separate reads; standalone facts must never fill in the page.
   expect(
     calls.filter(
       ({ path }) =>
@@ -73,6 +77,7 @@ test('the real Workers SSR path renders the Puck composition before client JavaS
       'data-slot="subject-creators"',
       'aria-label="More actions"',
       '</header>',
+      'data-slot="subject-summary"',
       'A pilot stranded in the Sahara meets a small prince',
       '<dl data-slot="subject-facts"',
       '>Editions</h2>',
@@ -83,6 +88,12 @@ test('the real Workers SSR path renders the Puck composition before client JavaS
       expect(index, landmark).toBeGreaterThan(previous);
       previous = index;
     }
+    const about = /<section\b[^>]*data-slot="subject-summary"[^>]*>[\s\S]*?<\/section>/.exec(main);
+    expect(about).not.toBeNull();
+    const prose = about![0].indexOf('A pilot stranded in the Sahara meets a small prince');
+    expect(prose).toBeGreaterThanOrEqual(0);
+    expect(about![0].indexOf('<dl')).toBeGreaterThan(prose);
+    expect(main.indexOf('>Editions</h2>')).toBeGreaterThan(about!.index + about![0].length);
     expect(main).not.toContain('data-rfd-droppable-id');
     expect(html).not.toContain(worker!.privateSentinel);
     aggregateSince(start, page.subject);
