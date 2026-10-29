@@ -11,6 +11,7 @@ const databases: GrowthDatabase[] = [];
 const preparers = new Map<ActorFixture, pg.Pool>();
 const rosters = new Map<ActorFixture, string[]>();
 const unrelatedCounts = new Map<ActorFixture, number>();
+const fixedKReferencePopulation = { grants: 4096, unrelated: 9000 } as const;
 afterAll(async () => {
   for (const preparer of preparers.values()) await preparer.end();
   for (const db of databases) await db.close();
@@ -217,7 +218,15 @@ test('evaluator rows/statements/blocks are at most linear in admitted K through 
     scales: [10, 100, 1000],
     bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
     rule: 'series',
-    grow: (db, scale, previous) => population(db, f, 4096, scale, previous ? 4096 : 0, 9000),
+    grow: (db, scale, previous) =>
+      population(
+        db,
+        f,
+        fixedKReferencePopulation.grants,
+        scale,
+        previous ? fixedKReferencePopulation.grants : 0,
+        fixedKReferencePopulation.unrelated,
+      ),
     operation: () => operation(f, outage, staleTarget),
   });
 }, 60000);
