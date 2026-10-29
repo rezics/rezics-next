@@ -143,7 +143,13 @@ test('a queued memory lease writes its waiting line repeatedly into the check lo
   const holder = await acquireStackSlot('holder', { REZICS_STACK_SLOTS: '1', REZICS_STACK_LEASE_DIR: leaseDirectory });
   const old = { ...process.env };
   try {
-    for (const [key, value] of Object.entries({ REZICS_CHECK_MEMORY: 'on', REZICS_CHECK_MEMORY_DIR: leaseDirectory, REZICS_CHECK_MEMORY_GIB: '1', REZICS_CHECK_SCOPE: 'off' })) process.env[key] = value;
+    for (const [key, value] of Object.entries({
+      REZICS_CHECK_MEMORY: 'on',
+      REZICS_CHECK_MEMORY_DIR: leaseDirectory,
+      REZICS_CHECK_MEMORY_GIB: '1',
+      REZICS_CHECK_SCOPE: 'off',
+    }))
+      process.env[key] = value;
     delete process.env.KERNEL_CHECK_REMOTE;
     const waiting = runWorkerCheck(['bun', '-e', 'console.error("lease completed")'], directory, false, undefined, 15);
     await new Promise((resolveWait) => setTimeout(resolveWait, 55));
@@ -151,8 +157,14 @@ test('a queued memory lease writes its waiting line repeatedly into the check lo
     expect(await waiting).toBe(0);
   } finally {
     await holder.release();
-    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE']) {
-      if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key]!;
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
     }
   }
   const logDirectory = join(directory, '.temp/goal/checks');
@@ -223,7 +235,14 @@ test('a finished check result remains readable by id after its worker session en
   });
 });
 
-function writeRunningRecord(root: string, id: string, log: string, runnerPid: number, runnerHost = 'check-host-a', reruns = 0) {
+function writeRunningRecord(
+  root: string,
+  id: string,
+  log: string,
+  runnerPid: number,
+  runnerHost = 'check-host-a',
+  reruns = 0,
+) {
   const resultDirectory = join(root, '.temp/goal/checks/results');
   mkdirSync(resultDirectory, { recursive: true });
   writeFileSync(
@@ -254,7 +273,9 @@ test('worker-check --wait reruns once when the runner is gone but its result sti
   const id = '00000000-0000-4000-8000-000000000001';
   writeRunningRecord(root, id, log, 2_000_000_000, hostname());
   const out: string[] = [];
-  await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 5_000, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(0));
+  await withQuietAdmission(async () =>
+    expect(await waitWorkerCheck(id, root, 5_000, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(0),
+  );
   expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
   expect(out.join('')).toContain(`infrastructure failure (runner process exited) on ${hostname()}`);
   expect(out.join('')).toContain('check: exit status 0');
@@ -277,7 +298,16 @@ test('a check whose log has been silent for 10 minutes is stopped and rerun once
   writeRunningRecord(root, id, log, runner.pid!, 'stall-host-b');
   const out: string[] = [];
   try {
-    await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 5_000, { pollMs: 5, stallMs: 10, rerunStallMs: 1_000, write: (chunk) => out.push(chunk) })).toBe(0));
+    await withQuietAdmission(async () =>
+      expect(
+        await waitWorkerCheck(id, root, 5_000, {
+          pollMs: 5,
+          stallMs: 10,
+          rerunStallMs: 1_000,
+          write: (chunk) => out.push(chunk),
+        }),
+      ).toBe(0),
+    );
   } finally {
     runner.kill('SIGKILL');
   }
@@ -296,11 +326,15 @@ test('a second interrupted runner finishes as infrastructure failure without a t
   const id = '00000000-0000-4000-8000-000000000003';
   writeRunningRecord(root, id, log, 2_000_000_000, hostname(), 1);
   const out: string[] = [];
-  await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(1));
+  await withQuietAdmission(async () =>
+    expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(1),
+  );
   expect(() => readFileSync(join(root, 'rerun-marker'), 'utf8')).toThrow();
   expect(out.join('')).toContain('second runner failed');
   expect(out.join('')).toContain('check: exit status 1');
-  expect(JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).infrastructureFailureFinal).toBe(true);
+  expect(
+    JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).infrastructureFailureFinal,
+  ).toBe(true);
 });
 
 test('an unrelated local pid and a runner recorded on another host are not treated as live runners', async () => {
@@ -315,9 +349,15 @@ test('an unrelated local pid and a runner recorded on another host are not treat
     writeFileSync(join(root, log), 'queued line\n');
     writeRunningRecord(root, id, log, pid, host);
     const out: string[] = [];
-    await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 20, { pollMs: 5, stallMs: 1000, write: (chunk) => out.push(chunk) })).toBe(75));
+    await withQuietAdmission(async () =>
+      expect(await waitWorkerCheck(id, root, 20, { pollMs: 5, stallMs: 1000, write: (chunk) => out.push(chunk) })).toBe(
+        75,
+      ),
+    );
     expect(out.join('')).toContain('queued line');
-    expect(JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).reruns).toBeUndefined();
+    expect(
+      JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).reruns,
+    ).toBeUndefined();
   }
 });
 
@@ -427,10 +467,21 @@ test('remote slot wait heartbeats emitted by the runner reach the local check lo
     expect(await runWorkerCheck(command, fixture.root)).toBe(0);
     const logDirectory = join(fixture.root, '.temp/goal/checks');
     const log = readFileSync(join(logDirectory, readdirSync(logDirectory)[0]!), 'utf8');
-    expect(log.match(/remote-check: every check slot is busy; waiting.*check-a 0\/1 free/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(
+      log.match(/remote-check: every check slot is busy; waiting.*check-a 0\/1 free/g)?.length,
+    ).toBeGreaterThanOrEqual(2);
   } finally {
-    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE']) {
-      if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key]!;
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
     }
   }
 });
@@ -698,8 +749,18 @@ test('a worker already on a check host runs its command locally without relaying
     expect(existsSync(fixture.localMarker)).toBe(true);
     expect(existsSync(fixture.remoteEvents)).toBe(false);
   } finally {
-    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE', 'KERNEL_CHECK_ON_REMOTE']) {
-      if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key]!;
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+      'KERNEL_CHECK_ON_REMOTE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
     }
   }
 });
