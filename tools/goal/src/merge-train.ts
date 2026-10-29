@@ -1093,10 +1093,11 @@ export class MergeTrain {
       });
     const passedAcceptance = new Map<string, { output: string; command: readonly string[] }>();
     const discardIntegratedMembers = (): boolean => {
-      if (!(o.fence instanceof WorkerStore)) return false;
+      const store = o.fence;
+      if (!(store instanceof WorkerStore)) return false;
       const integrated = new Set(
         pending
-          .filter((entry) => ['integrated', 'merged'].includes(o.fence.task(entry.request.taskId).state))
+          .filter((entry) => ['integrated', 'merged'].includes(store.task(entry.request.taskId).state))
           .map((entry) => entry.id),
       );
       if (!integrated.size) return false;
