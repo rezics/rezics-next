@@ -36,7 +36,15 @@ function kernel({ conflict = false }: { conflict?: boolean } = {}) {
         });
       if (conflict)
         return Response.json(
-          { status: 409, code: 'conflict' },
+          {
+            type: 'https://rezics.com/problems/conflict',
+            title: 'conflict',
+            status: 409,
+            code: 'conflict',
+            retryable: false,
+            effect_status: 'not_applied',
+            request_id: '0192f3a0-6c1e-7b2a-9d4e-000000000023',
+          },
           {
             status: 409,
             headers: { 'content-type': 'application/problem+json' },
@@ -178,7 +186,7 @@ test('no-JavaScript entry forms preserve the incarnation through their server ac
 
 test('entry writes stay centralized in entries-read.ts', async () => {
   const sources = [...new Bun.Glob('**/*.{ts,tsx}').scanSync({ cwd: join(root, 'src') })].filter(
-    (file) => !file.endsWith('/library/entries-read.ts'),
+    (file) => file !== 'library/entries-read.ts',
   );
   const violations = await Promise.all(
     sources.map(async (file) => {
