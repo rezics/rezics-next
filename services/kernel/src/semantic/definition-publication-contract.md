@@ -404,3 +404,30 @@ A=A_max/max-body margin; H0/c/transient allocation evidence; CPU barrier, cancel
 shutdown observations. No missing port is replaced by a success-shaped helper, guessed resource DTO or authority
 receipt. This SPEC and its red HTTP acceptance do not claim physical reclamation, runtime readiness, main/root
 gate or Goal completion. No new external research pair is requested.
+
+## Recorded native candidate boundary
+
+The named managed acceptance completed with exit 1: one diagnostic case passed, the existing HTTP case
+failed at its intended missing own-work boundary (83 assertions across two cases). Before that assertion,
+actual cold publication/GET/ETag, exact authorized 201 replay, new-key 200, changed-body idempotency 422,
+malformed 400 and current revoked replay 403/no receipt disclosure/no effect all passed through the real
+shared Auth/Semantic driver. All three preflight releases passed the unchanged validator and checker.
+The added A-only/context diagnostic also passed at all three changed-input sizes.
+
+The valid excess body actually returned 201 with digest
+`sha256:e6c0f126b003a7cb15829cd8332d167e7da5961c05963a57b2e796d9a7172a56`, instead of required nonretryable
+422 `definition_work_exceeded`. Actual effect deltas were one release, receipt, outbox and write-basis row;
+all other counted table row deltas were zero. Partition row count zero does not mean no partition update:
+the all-effects content fingerprints changed from
+`14bc993e24c69a03000b3f1346f215e8307ca7de667f6795e851105bf7cfb07a` to
+`c59fa988277a7b45b0920b0349303e30372f333ac41d99f572daf18306bf8281`.
+This is an actual HTTP/effects red, not a missing-export, invalid-release or injected-verdict failure.
+
+The acceptance log is `.temp/goal/checks/worker-check-2026-10-29T10-58-03.206Z-d3a1fe54.log`, SHA-256
+`fd78069bdffe520e599efcd89c30d203f1808848dfc59d85e0af57c85693bb4d`. Its original remote transport failed;
+the wrapper's automatic retry completed the actual native test. Root typecheck initially encountered SQL
+content-mapper failure and `LixError: Lix open did not settle within 30000ms`; the single managed retry
+passed, exit 0. Successful root log `.temp/goal/checks/worker-check-2026-10-29T11-07-19.185Z-1b464928.log`,
+SHA-256 `79fd1612159d23e714cac5a7d0a24de0d219899df63316774cffdd73611153fd`.
+No live check remains. The HTTP red remains required future producer work; these results claim no runtime
+admission, idle-host margin, physical cleanup or main/root-gate completion.
