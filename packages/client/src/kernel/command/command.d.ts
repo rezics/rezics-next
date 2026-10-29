@@ -157,6 +157,12 @@ export declare function authoritativeTimeValue(time: AuthoritativeTime): string;
 export declare function currentCommand(tx: CommandTransaction): CurrentCommand;
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export declare function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined;
+/** Executor internals: lend Access an attempt time without granting command authority.
+ * Operational attempts never enter commands, receiptOwners or the callback registry.
+ */
+export declare function withOperationalAttempt<T>(tx: CommandTransaction, attempt: CommandAttempt, run: () => Promise<T>): Promise<T>;
+/** Release an executor time when preparation fails before resource checkout. */
+export declare function releaseOperationalTime(time: AuthoritativeTime): void;
 /** Register work for the current command after its body and finalizer succeed.
  * The callback receives the executor-minted transaction id and runs before the
  * receipt and outbox are written. Registration is scoped to one live attempt.
