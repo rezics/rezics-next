@@ -184,3 +184,37 @@ test('rollout and Claude commands expose shell commands and worker-check waits s
     repo.close();
   }
 });
+
+test('native Codex shell launchers report repeated process inspection without treating quoted command text as polling', () => {
+  const repo = repository();
+  try {
+    const worker = repo.branch('shell-worker', 'change.txt');
+    const state = join(repo.path, 'state');
+    mkdirSync(state);
+    const logPath = join(worker.worktree, 'run.jsonl');
+    const store = runningStore(
+      { worktree: worker.worktree, base: git(repo.main, ['rev-parse', 'main']) },
+      { logPath, startedAt: new Date(now - 5 * 60_000).toISOString() },
+    );
+    const delivered: { summary: string; managerId?: string; kind?: string }[] = [];
+    const record = (id: string, command: string) =>
+      appendFileSync(logPath, JSON.stringify({ type: 'item.completed', item: { id, type: 'command_execution', command } }) + '\n');
+    record('echo', `/usr/bin/zsh -lc 'echo "ps -ef"'`);
+    record('printf', `/bin/bash -c "echo 'pgrep -af worker'"`);
+    expect(runWatch(store, state, delivered)).toBe(0);
+    const ps = `/usr/bin/zsh -lc 'ps -ef'`;
+    record('ps', ps);
+    expect(runWatch(store, state, delivered)).toBe(0);
+    const pgrep = `/bin/bash -c "git status --short\n/usr/bin/pgrep -af worker"`;
+    record('pgrep', pgrep);
+    expect(runWatch(store, state, delivered)).toBe(1);
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({ managerId: 'manager-a', kind: 'stalled' });
+    expect(delivered[0]!.summary).toContain('Polling:');
+    expect(delivered[0]!.summary).toContain(ps);
+    expect(delivered[0]!.summary).toContain(pgrep);
+    expect(runWatch(store, state, delivered, now + 5 * 60_000)).toBe(0);
+  } finally {
+    repo.close();
+  }
+});

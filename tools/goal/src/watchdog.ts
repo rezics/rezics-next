@@ -237,6 +237,13 @@ function elapsedText(ms: number): string {
   return hours ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 
+function inspectsProcesses(command: string): boolean {
+  // Codex command_execution records include the shell launcher around the requested script.
+  const shell = /^(?:\S*\/)?(?:ba|z)?sh\s+-[a-z]*c\s+(['"])([\s\S]*)\1$/.exec(command);
+  const script = shell?.[2] ?? command;
+  return /(?:^|[;&|\n])\s*(?:\S*\/)?(?:ps|pgrep)(?:\s|$)/.test(script);
+}
+
 function commitCount(task: Task): number {
   const result = spawnSync('git', ['-C', task.worktree, 'rev-list', '--count', `${task.base}..HEAD`], {
     encoding: 'utf8',
@@ -274,7 +281,7 @@ function longAttemptIncidents(
         kind: 'stalled',
         summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
       });
-    const processCommands = commands.filter((command) => /(?:^|[;&|]\s*)(?:\S*\/)?(?:ps|pgrep)(?:\s|$)/.test(command));
+    const processCommands = commands.filter(inspectsProcesses);
     if (!waitsForCheck && processCommands.length >= 2)
       found.push({
         key: `attempt-polling:${task.id}:${attempt.attempt}`,
