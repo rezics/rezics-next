@@ -204,6 +204,15 @@ const fake = Bun.serve({
     const subjectRead = createFakeKernelFetch(fixtures as never);
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}`) return subjectRead(request);
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') return subjectRead(request);
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}/ratings`)
+      return json({
+        question: url.searchParams.get('question'),
+        subject: subjectId,
+        figures: url.searchParams.getAll('population').map((population) => ({ population, count: 0 })),
+      });
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}/source-statistics`) return json([]);
+    if (request.method === 'GET' && /^\/v1\/subjects\/[^/]+\/ratings\/[^/]+\/vote$/.test(url.pathname))
+      return json(problem(404, 'not_found'), 404);
     if (url.pathname === `/v1/libraryEntries/${subjectId}`) {
       if (request.method === 'GET')
         return libraryEntry

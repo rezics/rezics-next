@@ -14,6 +14,8 @@ import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/
 import { subjectTabs } from '../../features/pages/views';
 import { loadSubjectReactions } from '../../features/pages/subject-reactions';
 import { SubjectHeaderActions } from '../../features/pages/subject-reactions-view';
+import { loadSubjectRatings } from '../../features/pages/subject-ratings';
+import { RatingsContext } from '../../features/pages/subject-ratings-view';
 import { kernelClient } from '../../kernel/client';
 import { loadSubjectLibrarySlot } from '../../library/subject-slot';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
@@ -70,7 +72,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
       throw redirect({ href: keepSearch(subjectUrlForView(canonical.value, data.view), data.search), statusCode: 301 });
 
     const request = getRequest();
-    const [result, library, reader, reactions] = await Promise.all([
+    const [result, library, reader, reactions, ratings] = await Promise.all([
       loadSubjectPage(client, data.id, data.view as View | undefined, data.locale),
       loadSubjectLibrarySlot(
         client,
@@ -82,6 +84,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
       ),
       loadReader(client, request, env as Partial<SessionEnv>),
       loadSubjectReactions(client, request, env as Partial<SessionEnv>, data.id),
+      loadSubjectRatings(client, request, env as Partial<SessionEnv>, data.id),
     ]);
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'redirect') {
@@ -109,6 +112,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
       relations,
       tabs: subjectTabs(result.page),
       reactions,
+      ratings,
       verification,
       paths: canonical.value.paths,
     };
@@ -144,40 +148,42 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
 });
 
 function SubjectRoute() {
-  const { page, library, reader, frame, relations, tabs, reactions, verification } = Route.useLoaderData();
+  const { page, library, reader, frame, relations, tabs, reactions, ratings, verification } = Route.useLoaderData();
   const { state: session } = useSession();
   const returnTo = useLocation().publicHref.split(/[?#]/, 1)[0]!;
   const nonce = useRouter().options.ssr?.nonce;
   return (
-    <SubjectPage
-      page={page}
-      locale={getLocale()}
-      messages={subjectPageMessages()}
-      reader={reader}
-      {...(frame.label ? { typeLabel: frame.label } : {})}
-      {...(frame.ratio ? { ratio: frame.ratio } : {})}
-      relations={relations}
-      link={SubjectLink}
-      tabs={tabs}
-      tabLabels={viewTabLabels()}
-      invitation={m.subject_empty()}
-      {...(nonce !== undefined ? { nonce } : {})}
-      renderJsonLd={false}
-      actions={(subject) => (
-        <SubjectHeaderActions
-          id={subject.id}
-          reactions={reactions}
-          signedIn={session === 'signed-in'}
-          returnTo={returnTo}
-          verification={verification}
-        >
-          <SubjectLibrarySlot
-            subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
-            locale={subject.locale}
-            data={library}
-          />
-        </SubjectHeaderActions>
-      )}
-    />
+    <RatingsContext.Provider value={ratings}>
+      <SubjectPage
+        page={page}
+        locale={getLocale()}
+        messages={subjectPageMessages()}
+        reader={reader}
+        {...(frame.label ? { typeLabel: frame.label } : {})}
+        {...(frame.ratio ? { ratio: frame.ratio } : {})}
+        relations={relations}
+        link={SubjectLink}
+        tabs={tabs}
+        tabLabels={viewTabLabels()}
+        invitation={m.subject_empty()}
+        {...(nonce !== undefined ? { nonce } : {})}
+        renderJsonLd={false}
+        actions={(subject) => (
+          <SubjectHeaderActions
+            id={subject.id}
+            reactions={reactions}
+            signedIn={session === 'signed-in'}
+            returnTo={returnTo}
+            verification={verification}
+          >
+            <SubjectLibrarySlot
+              subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
+              locale={subject.locale}
+              data={library}
+            />
+          </SubjectHeaderActions>
+        )}
+      />
+    </RatingsContext.Provider>
   );
 }

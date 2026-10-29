@@ -6,6 +6,8 @@ import { fromMarkdown } from '@rezics/document';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import type { PageMessages } from '../src/features/pages/data.tsx';
+import { RatingsContext } from '../src/features/pages/subject-ratings-view.tsx';
+import { GLOBAL } from '../src/features/pages/subject-ratings.ts';
 
 const subjectId = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const characterId = '01a1740d-7480-71e4-841f-66c04022d7c0';
@@ -155,7 +157,13 @@ function pageOf(
   };
 }
 const render = (page: SubjectPageData, locale = 'en') =>
-  renderToString(createElement(SubjectPage, { page, locale, messages, renderJsonLd: false } as never));
+  renderToString(
+    createElement(
+      RatingsContext.Provider,
+      { value: { figures: [{ population: GLOBAL, count: 0 }], statistics: [], realms: [], own: null } },
+      createElement(SubjectPage, { page, locale, messages, renderJsonLd: false } as never),
+    ),
+  );
 const text = (html: string) =>
   html
     .replace(/<[^>]+>/g, ' ')
@@ -198,12 +206,14 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
   expect(html.match(/data-slot="subject-sources"/g)).toHaveLength(1);
 });
 
-test('RatingSummary, ThreadList and ReviewList render an honest empty or unavailable state with an invitation until their reads exist', () => {
+test('RatingSummary renders its empty rating state while ThreadList and ReviewList invite the first contribution', () => {
   const plan = planReads(platformRegistry, document, { subject: subjectId });
   expect(Object.values(plan.nodes)).toHaveLength(7);
   const html = render(pageOf());
+  const ratings = section(html, 'rating-summary');
+  expect(text(ratings)).toContain('No ratings yet');
+  expect(ratings).toContain(`href="/en/subjects/${subjectId}/reviews"`);
   for (const [slot, view] of [
-    ['rating-summary', 'reviews'],
     ['review-list', 'reviews'],
     ['thread-list', 'discussion'],
   ] as const) {

@@ -1,0 +1,12 @@
+{
+  "question": "00000000-0000-7000-8000-000000000001",
+  "subject": "01a180f0-8201-7169-b529-c8cc354676f1",
+  "figures": [
+    {
+      "population": "00000000-0000-8000-8000-000000000000",
+      "count": 0,
+      "freshness": { "asOf": null, "updating": false }
+    }
+  ],
+  "status": 200
+}

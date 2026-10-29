@@ -184,6 +184,10 @@ media routes return 503 while the rest of the site continues to work. Subject pa
 development, when `KERNEL_ORIGIN` is unset, subject reads use the local route fixtures. Production requires it for
 subject reads.
 
+The subject overview reads the public Global rating aggregate and imported source statistics in parallel with the
+page. Signed-in readers also request their own vote. The overview does not read Realm memberships, so it shows Global
+alone; imported figures retain their source's scale.
+
 ### Storybook and page recordings
 
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and

@@ -37,6 +37,8 @@ function aggregateSince(start: number, id: string) {
           `/v1/subjects/${id}`,
           `/v1/subjects/${id}/reactions`,
           `/v1/subjects/${id}/collections`,
+          `/v1/subjects/${id}/ratings`,
+          `/v1/subjects/${id}/source-statistics`,
         ].includes(path),
     ),
   ).toEqual([]);

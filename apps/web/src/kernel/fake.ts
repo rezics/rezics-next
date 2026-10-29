@@ -184,6 +184,12 @@ const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle
 
 function recordedResponse(recording: KernelRecording): Response {
   if (recording.status === 204) return new Response(null, { status: 204 });
+  // Fake modules use this envelope when a kernel response body is not an object, such as a list response.
+  if (Object.hasOwn(recording, '__responseBody'))
+    return Response.json(recording.__responseBody, {
+      status: recording.status,
+      headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
+    });
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(recording)) {
     if (requestKeys.has(key)) continue;
@@ -559,6 +565,8 @@ export function createRecordedKernelFetch(recordings: Record<string, KernelRecor
     const request = new Request(input, init);
     const exposure = exposureResponse(request);
     if (exposure) return exposure;
+    const moduleRecording = await answerFakeRoute('story', request, recordings);
+    if (moduleRecording) return recordedResponse(moduleRecording);
     const recording = await selectRecording(request, new URL(request.url).pathname, recordings);
     if (!recording) return new Response(null, { status: 404 });
     return recordedResponse(recording);

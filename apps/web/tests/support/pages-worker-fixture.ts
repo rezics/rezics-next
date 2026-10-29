@@ -74,6 +74,19 @@ export async function startPagesWorker() {
           if (path === definitionPath) return json(release);
           if (path === `/v1/subjects/${page.subject}`) return Response.json(page.reads.r0.body);
           if (path === `/v1/subjects/${page.subject}/reactions`) return json(reactions);
+          if (path === `/v1/subjects/${page.subject}/ratings`) {
+            const populations = new URL(request.url).searchParams.getAll('population');
+            return Response.json({
+              question: new URL(request.url).searchParams.get('question'),
+              subject: page.subject,
+              figures: populations.map((population) => ({
+                population,
+                count: 0,
+                freshness: { asOf: null, updating: false },
+              })),
+            });
+          }
+          if (path === `/v1/subjects/${page.subject}/source-statistics`) return Response.json([]);
         }
         return json(missing);
       },

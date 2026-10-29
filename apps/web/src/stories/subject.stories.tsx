@@ -2,10 +2,12 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
+import { ratingsFixtures } from '../kernel/fake/ratings';
 
 const meta = { title: 'Pages/Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
 export const SignedIn: Story = {
   name: 'Signed In',
   play: pageReady,
@@ -17,6 +19,7 @@ export const SignedOut: Story = {
   render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
 };
 
+<<<<<<< HEAD
 async function heroReady(context: { canvasElement: HTMLElement }, reveal: boolean) {
   await pageReady(context);
   const view = within(within(context.canvasElement).getByRole('main'));
@@ -52,4 +55,69 @@ export const HeroSignedOutSpoilersShown: Story = {
   name: 'Hero / Signed Out / Spoilers Shown',
   play: (context) => heroReady(context, true),
   render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
+};
+
+export const GlobalScore: Story = {
+  name: 'Global score',
+  play: pageReady,
+  render: () => (
+    <PageStory
+      visitor="Signed Out"
+      path={pagePaths.subject}
+      ratings={ratingsFixtures['subject-ratings-global'].preview}
+      ratingsFixture="subject-ratings-global"
+    />
+  ),
+};
+
+export const RealmsAndOwnVote: Story = {
+  name: 'Realms and own vote',
+  play: pageReady,
+  render: () => (
+    <PageStory
+      visitor="Signed In"
+      path={pagePaths.subject}
+      ratings={ratingsFixtures['subject-ratings-realms'].preview}
+      ratingsFixture="subject-ratings-realms"
+    />
+  ),
+};
+
+export const BelowThreshold: Story = {
+  name: 'Below threshold',
+  play: pageReady,
+  render: () => (
+    <PageStory
+      visitor="Signed Out"
+      path={pagePaths.subject}
+      ratings={ratingsFixtures['subject-ratings-below-threshold'].preview}
+      ratingsFixture="subject-ratings-below-threshold"
+    />
+  ),
+};
+
+export const ImportedScores: Story = {
+  name: 'Imported scores',
+  play: pageReady,
+  render: () => (
+    <PageStory
+      visitor="Signed Out"
+      path={pagePaths.subject}
+      ratings={ratingsFixtures['subject-ratings-imported'].preview}
+      ratingsFixture="subject-ratings-imported"
+    />
+  ),
+};
+
+export const OwnVoteForbidden: Story = {
+  name: 'Own vote forbidden',
+  play: pageReady,
+  render: () => (
+    <PageStory
+      visitor="Signed In"
+      path={pagePaths.subject}
+      ratings={ratingsFixtures['subject-ratings-own-forbidden'].preview}
+      ratingsFixture="subject-ratings-own-forbidden"
+    />
+  ),
 };

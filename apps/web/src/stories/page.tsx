@@ -9,7 +9,10 @@ import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { deletedOrganizationThreadId } from '../kernel/fake';
 import { searchFacetStoryPaths } from '../kernel/fake/search-facets';
+import { selectRatingsFixture, type RatingsFixtureName } from '../kernel/fake/ratings';
 import { threadHref } from '../threads/thread-href';
+import { RatingsPreviewContext } from '../features/pages/subject-ratings-view';
+import type { Ratings } from '../features/pages/subject-ratings';
 import boardRecording from '../kernel/recorded/board.json';
 import boardThreadsRecording from '../kernel/recorded/board-threads.json';
 import searchEmptyRecording from '../kernel/recorded/search-empty.json';
@@ -109,8 +112,19 @@ function localizedEntry(path: string): string {
 }
 
 /** Each story enters the generated application route tree at its localized public URL. */
-export function PageStory({ visitor, path }: { visitor: 'Signed In' | 'Signed Out'; path: string }) {
+export function PageStory({
+  visitor,
+  path,
+  ratings,
+  ratingsFixture,
+}: {
+  visitor: 'Signed In' | 'Signed Out';
+  path: string;
+  ratings?: Ratings;
+  ratingsFixture?: RatingsFixtureName;
+}) {
   const entry = localizedEntry(path);
+  selectRatingsFixture(ratingsFixture);
   setStoryRequestContext({ visitor, url: entry });
   const { router, queryClient } = useMemo(() => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
@@ -126,9 +140,11 @@ export function PageStory({ visitor, path }: { visitor: 'Signed In' | 'Signed Ou
     return { router, queryClient };
   }, [entry]);
   return (
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <RatingsPreviewContext.Provider value={ratings}>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </RatingsPreviewContext.Provider>
   );
 }
 

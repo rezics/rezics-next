@@ -1369,6 +1369,34 @@ async function main(): Promise<void> {
     if (actual !== status) throw new Error(`${name} returned ${actual}: ${JSON.stringify(recorded.get(name))}`);
   };
   await expectStatus('subject', `/v1/subjects/${subjectId}`, 200);
+  if (writes('subject-ratings', 'subject-source-statistics')) {
+    const aggregatePath = `/v1/subjects/${subjectId}/ratings?question=00000000-0000-7000-8000-000000000001&population=00000000-0000-8000-8000-000000000000`;
+    let aggregateRecording: JsonObject | undefined;
+    let sourceRecording: unknown;
+    try {
+      const response = await retryOverloaded(() => fetch(new URL(aggregatePath, origin)));
+      if (response.status === 200) {
+        const body = objectBody(await response.json(), `subject-ratings ${aggregatePath}`);
+        aggregateRecording = { ...body, status: response.status };
+      }
+    } catch {
+      // Ratings may not be mounted in this recording stack. Only a successful kernel response becomes a fixture.
+    }
+    const sourcePath = `/v1/subjects/${subjectId}/source-statistics`;
+    try {
+      const response = await retryOverloaded(() => fetch(new URL(sourcePath, origin)));
+      if (response.status === 200) {
+        const body: unknown = await response.json();
+        if (Array.isArray(body)) sourceRecording = body;
+      }
+    } catch {
+      // Source statistics are optional for the same reason as the aggregate above.
+    }
+    if (aggregateRecording !== undefined && sourceRecording !== undefined) {
+      recorded.set('subject-ratings', aggregateRecording);
+      recorded.set('subject-source-statistics', sourceRecording as JsonObject);
+    }
+  }
   // The Realm's published subjects and the uncovered story predate this recorder. Seed their
   // existing labels, read them through the kernel, and retain their stable fixture identities.
   const readFixtureSubject = async (fixture: JsonObject): Promise<JsonObject> => {
@@ -1728,7 +1756,8 @@ async function main(): Promise<void> {
 
   const output = process.env.WEB_RECORD_OUTPUT ?? join(app, 'src/kernel/recorded');
   await mkdir(output, { recursive: true });
-  const unknown = only.filter((name) => !recorded.has(name));
+  const optionalRecordings = new Set(['subject-ratings', 'subject-source-statistics']);
+  const unknown = only.filter((name) => !recorded.has(name) && !optionalRecordings.has(name));
   if (unknown.length)
     throw new Error(`Unknown recordings: ${unknown.join(', ')}. Recorded: ${[...recorded.keys()].join(', ')}`);
   const written: string[] = [];
@@ -1742,13 +1771,17 @@ async function main(): Promise<void> {
     await writeFile(file, JSON.stringify(stableRecording(body, previous)));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
-  const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', ...written], {
-    cwd: root,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  if (formatted.exitCode !== 0)
-    throw new Error(`Formatting the recordings failed: ${formatted.stderr.toString() || formatted.stdout.toString()}`);
+  if (written.length) {
+    const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', ...written], {
+      cwd: root,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    if (formatted.exitCode !== 0)
+      throw new Error(
+        `Formatting the recordings failed: ${formatted.stderr.toString() || formatted.stdout.toString()}`,
+      );
+  }
 }
 
 async function executeRecord(): Promise<number> {

@@ -1,4 +1,5 @@
 import { useOperation } from '../../kernel/exposure';
+import { RatingsSection } from './subject-ratings-view';
 import { pickLanguage, type PageRead } from '@rezics/composition';
 import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -737,14 +738,13 @@ function Unavailable({
 }
 
 export function RatingSummary(props: Record<string, unknown>) {
-  const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
+  const value = useContext(OverviewContext);
+  if (!value?.subject) return null;
   return (
-    <Unavailable
-      slot="rating-summary"
-      id={props.id}
-      title={m.subject_ratings({}, { locale })}
-      text={m.subject_ratings_unavailable({}, { locale })}
-      view="reviews"
+    <RatingsSection
+      id={typeof props.id === 'string' ? props.id : 'ratings'}
+      subject={value.subject}
+      locale={value.locale}
     />
   );
 }
