@@ -2,11 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { effectsRelay } from '../../src/events/effects.ts';
 import { importsWorkModule } from '../../src/imports/erasure.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { composeWork } from '../../src/work/registry.ts';
-import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
@@ -17,8 +14,10 @@ const databaseUrl = process.env.DATABASE_URL!;
 const pool = createPool(databaseUrl);
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let person: Persona;
-let runtime: Awaited<ReturnType<typeof composeWork>>;
-let relay: ReturnType<typeof effectsRelay>;
+let runtime: ReturnType<typeof Bun.spawn>;
+let workerOutput = '';
+let workerRead: Promise<void>;
+let workerErrors: Promise<string>;
 
 beforeAll(async () => {
   auth = await nativeFixture(pool);
@@ -33,16 +32,37 @@ beforeAll(async () => {
   });
   const personas = await createPersonas(kernel, { version: 1, pool, auth });
   person = personas.alice;
-
-  const client = await createWorkClient(databaseUrl, pool);
-  runtime = await composeWork([importsWorkModule], { databaseUrl, pool, client });
-  await runtime.launch();
-  relay = effectsRelay(pool, runtime.effects);
 }, 360_000);
+
+async function startImportsWorker() {
+  runtime = Bun.spawn([process.execPath, `${import.meta.dir}/erasure-participant-worker.ts`], {
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      KERNEL_WORKER_POOL_SIZE: '4',
+      KERNEL_EXECUTOR_ID: `imports-erasure-${crypto.randomUUID()}`,
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  workerRead = (async () => {
+    for await (const chunk of runtime.stdout) workerOutput += new TextDecoder().decode(chunk);
+  })();
+  workerErrors = new Response(runtime.stderr).text();
+  const deadline = Date.now() + 30_000;
+  while (!workerOutput.includes('imports-worker-ready') && Date.now() < deadline && runtime.exitCode === null)
+    await Bun.sleep(10);
+  expect(workerOutput).toContain('imports-worker-ready');
+}
 
 afterAll(async () => {
   try {
-    await runtime?.shutdown();
+    if (runtime) {
+      runtime.kill('SIGTERM');
+      await runtime.exited;
+      await workerRead;
+      expect(await workerErrors).toBe('');
+    }
   } finally {
     try {
       await auth?.close();
@@ -88,7 +108,7 @@ test('real account deletion delivers the registered imports effect and persists 
     data: { accountId: person.accountId },
   });
 
-  await relay.run(partition);
+  await startImportsWorker();
   await drainEffects(pool, partition);
   let delivered = await readErasureStatus(pool, person.accountId);
   for (let attempt = 0; attempt < 100 && delivered?.participants.imports?.outcome === 'pending'; attempt++) {
@@ -113,7 +133,6 @@ test('real account deletion delivers the registered imports effect and persists 
   expect(acknowledgement.rows).toHaveLength(1);
   expect(acknowledgement.rows[0]).toMatchObject({ outcome: 'none', retained: [] });
   const immutableRow = acknowledgement.rows[0];
-  await relay.run(partition);
   const replay = await pool.query(
     `SELECT a.outcome,a.retained,a.xmin::text
      FROM access.erasure_acknowledgement a
