@@ -288,16 +288,11 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   let codeTimer: ReturnType<typeof setInterval> | undefined;
   let stateTimer: ReturnType<typeof setInterval> | undefined;
   let recoveryTimer: ReturnType<typeof setInterval> | undefined;
-  let recovery: Promise<void> | undefined;
   const recoverOrphans = () => {
     if (!runtime.recoverOrphans) return Promise.resolve();
-    if (!recovery) {
-      const current = runtime.recoverOrphans().finally(() => {
-        if (recovery === current) recovery = undefined;
-      });
-      recovery = current;
-    }
-    return recovery;
+    // A sweep may wait for adopted workers. Let later timer ticks start their own sweep so
+    // newly orphaned tasks and retry intents are considered while those workers are running.
+    return runtime.recoverOrphans();
   };
   try {
     await stopRecordedAppServers(registryPath);

@@ -463,7 +463,7 @@ Generated files marked `linguist-generated=true` are excluded from estimate tota
 Rebase-stage conflicts with the integration branch receive one same-profile resolution attempt after the control plane starts that rebase in
 the task worktree; a second conflict goes to the manager as a specification conflict.
 
-Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
+Attempts persist the driver process identity alongside the worker identity. Each 60-second host tick starts an orphan sweep even if an earlier sweep is still following adopted workers. Task leases and per-job recovery guards prevent duplicate adoption while later ticks discover newly orphaned ready tasks and pending retry intents. Orphan recovery waits for each worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
 
 At settlement, Goal removes Docker containers carrying the exact `rezics.worker.attempt=<task>/<attempt>` label.
 Removal errors are logged and do not prevent attempt settlement; containers without that label are never selected.
