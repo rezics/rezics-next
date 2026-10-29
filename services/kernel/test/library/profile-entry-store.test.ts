@@ -75,6 +75,7 @@ test('pinned entries store data state IDs and private provenance without leaking
       { transactionId: id(81), time: later },
       nextPin,
     );
+    if (updated === null) throw new Error('Expected the matching entry CAS to succeed');
     expect(updated?.revision).toBe(2);
     expect(updated?.createdAt).toBe(at);
     expect(updated?.updatedAt).toBe(later);
