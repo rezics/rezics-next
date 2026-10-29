@@ -13,6 +13,7 @@ import type { PromotionGateResult, PromotionRun, Task } from './types.ts';
 import type { WorkerJob } from './job.ts';
 import type { Settings } from './types.ts';
 import { parseCapabilityManifest, validateGoalCapabilitiesText, validateScenarioReport } from './capabilities.ts';
+import { recordFlow } from './flow.ts';
 
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 export type PromotionOptions = {
@@ -1280,6 +1281,10 @@ export async function promote(options: PromotionOptions): Promise<void> {
       if (run.phase === 'publish-main') {
         const published = await publishMain(options, run);
         if (published) {
+          for (const taskId of run.promoteTaskIds ?? []) {
+            const task = store.task(taskId);
+            recordFlow(store.db, { taskId, attempt: task.currentAttempt, stage: 'promotion', action: 'promoted', at: new Date().toISOString() });
+          }
           const currentMain = head(settings.mainCheckout, settings.mainBranch);
           const currentCandidate = optionalHead(settings.mainCheckout, settings.stabilizeBranch);
           // Promotion may have started on an older candidate while integrated tasks advanced dev. Gate those tasks

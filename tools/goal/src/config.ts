@@ -27,6 +27,7 @@ import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
+import { DEFAULT_FLOW_THRESHOLDS, checkFlowAlarms, dispatchDailyStepAudit, flowReport, readFlow } from './flow.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
@@ -156,6 +157,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'integration',
       'pools',
       'notes',
+      'flow',
     ],
     'settings',
   );
@@ -199,6 +201,14 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
   keys(compact, ['sol', 'luna'], 'compactTokens');
   const pools: Pool[] = readPoolPolicies(local.pools ?? [], localFile);
+  const flowOverrides = object(local.flow ?? {}, 'flow');
+  keys(flowOverrides, ['efficiencyBelow','oldestQueueMs','landingP90Ms','attemptsPerIntegrated'], 'flow');
+  const flowThresholds = { ...DEFAULT_FLOW_THRESHOLDS, ...flowOverrides } as typeof DEFAULT_FLOW_THRESHOLDS;
+  if (!Number.isFinite(flowThresholds.efficiencyBelow) || flowThresholds.efficiencyBelow < 0 || flowThresholds.efficiencyBelow > 1 ||
+      !Number.isFinite(flowThresholds.oldestQueueMs) || flowThresholds.oldestQueueMs <= 0 ||
+      !Number.isFinite(flowThresholds.landingP90Ms) || flowThresholds.landingP90Ms <= 0 ||
+      !Number.isFinite(flowThresholds.attemptsPerIntegrated) || flowThresholds.attemptsPerIntegrated <= 0)
+    throw new Error('invalid flow alarm thresholds');
   return {
     version: 1,
     mainCheckout: main,
@@ -291,6 +301,8 @@ export type RuntimeOptions = {
 export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
+  const localSettings = existsSync(settings.localFile) ? object(JSON.parse(readFileSync(settings.localFile, 'utf8')), 'local settings') : {};
+  const flowThresholds = { ...DEFAULT_FLOW_THRESHOLDS, ...object(localSettings.flow ?? {}, 'flow') } as typeof DEFAULT_FLOW_THRESHOLDS;
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
   const startedCodeVersion = existsSync(join(settings.mainCheckout, 'tools/goal'))
     ? codeVersion(settings.mainCheckout, 'tools/goal')
@@ -494,6 +506,15 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     },
     promote: () => promoteNow(),
     verify: () => verifyDev({ settings, store, inbox, runGate: promotionGate }),
+    evaluateFlow() {
+      const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+      const flow = flowReport(readFlow(db, new Date(Date.now() - 30 * 86400_000).toISOString()), store.tasks());
+      checkFlowAlarms(db, flow, summary => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }), new Date(), flowThresholds);
+    },
+    dispatchDailyStepAudit() {
+      const template = join(import.meta.dir, '../templates/daily-step-audit.md');
+      dispatchDailyStepAudit(db, store.tasks(), () => tasks.dispatch(template));
+    },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
       await job.recoverOrphans(options);
       await afterSettle();
