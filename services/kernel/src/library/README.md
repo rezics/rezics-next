@@ -1148,29 +1148,23 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   No follower/target/history scan, global clock ordering, fanout, full backfill or owner/global COUNT. Count reads,
   maintained canonical support and full native API costs require their own evidence.
 - Growth check: `test/library/follow-count-source-storage.test.ts` uses the shared `checkGrowth` series rule at
-  scales 256, 1,024 and 4,096, with one warm-up and five measured repetitions per scale. The selected native owner
-  and hot partition stay fixed while unrelated source owners/targets and own negative history grow. Every run
-  has a fresh released subject and idempotency keys, with its negative follow prepared through ordinary commands
-  outside captures. All eighteen spare subjects are provisioned before the first scale's capture, keeping the
-  native subject neighbourhood fixed across scales. Both measured follow/unfollow replacements include ordinary
-  command, Access, receipt, outbox, write-basis and nested hook work. Constant rows/statements and logarithmic blocks use the shared kernel bounds;
-  each repetition additionally requires positive source/counter work and zero sequential scans on those relations.
-  The local `growth.json` evidence retains populations, every repetition and the actual series verdict;
-  `plans.json` retains the actual auto_explain documents, including nested plans, rows/removals, loops and buffers.
-  Synthetic negative growth cardinality and isolated rollback/overflow/DDL invariants remain primitive-only,
-  separate from native positive fixture/HTTP/owner-command evidence. The native writer and cutover cases pass.
-  Calibrated growth remains inconclusive under the shared series classifier. At scales 256, 1,024 and 4,096, the
-  measured whole-command row costs were `[620, 626, 433, 435, 437]`, `[441, 443, 445, 447, 449]` and
-  `[453, 455, 457, 459, 461]`; medians were 437, 445 and 457 against uncertainty 22 at each scale. The verdict
-  was `GrowthEvidenceError` for rows, not a passing constant-growth result. The axes were own negative history and
-  unrelated owner/target rows at the scale value, with the selected owner, hot partition and 18 native subject
-  fixtures fixed. Each scale had one warm-up and five measured follow/unfollow replacements on distinct subjects
-  with distinct idempotency keys; each negative pair was created through ordinary native commands outside capture.
-  Actual auto_explain plans showed two rows and 20/21 blocks for `library.follow_count_source`, two rows and 24/25
-  blocks for `library.follow_count_owner`, with no sequential scans on either relation. The whole-command row
-  series remains unresolved; no allowance or cost-accounting change is justified by this capture. Failure output
-  retains every measured repetition, relation population, the classifier verdict and per-run plan costs; the
-  accompanying `plans.json` retains nested auto_explain documents with rows/removals, loops and buffers.
+  scales 256, 1,024 and 4,096, with five warm-ups and five measured repetitions per scale. Each warm-up and
+  measured run consumes its own released subject and fresh idempotency keys; all 30 negative follows are prepared
+  through ordinary native commands before capture. The selected owner and hot partition stay fixed while unrelated
+  source owners/targets, own negative source history and same-partition Semantic revision history grow at the three
+  scales. Before the first scale, the fixture creates an unrelated native subject and seeds 8,192 additional
+  production-shaped `semantic.revision` rows for its route, subject, release and kind. The ordinary shared lifecycle
+  settles and analyzes these rows before every capture. Every run records whole-command rows, statements, blocks,
+  nested `auto_explain` documents and backend ids. The measured exact `core.receipt` lookup is attributed with the
+  shared statement-occurrence records; raw warm-up plans retain its actual normalized statement, backend and plan
+  shape so the custom-to-generic transition and steady measured plan can be checked from observations. Every
+  measured `semantic.revision` node must use the same bounded primary-key point plan at the smallest and largest
+  scales, with no sequential scan or unrelated revision filtering. The source and counter relations also require
+  positive work and zero sequential scans. Synthetic negative cardinality and isolated rollback/overflow/DDL
+  invariants remain primitive-only; every positive measured follow/unfollow uses the native fixture and production
+  commands. `growth.json` retains populations, per-occurrence accounting and the actual series verdict; `plans.json`
+  retains raw nested plans with rows/removals, loops and buffers.
+  **Calibrated result: pending the committed acceptance run.**
 
 ### Follow read
 

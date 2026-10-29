@@ -60,6 +60,33 @@ function live(snapshot: Awaited<ReturnType<typeof inspect>>, count: number) {
   expect(snapshot.owner).toMatchObject([{ observed_live_count: String(count), bootstrap_complete: false }]);
 }
 
+function normalizeStatement(statement: string): string {
+  return statement.replace(/'(?:''|[^'])*'|\$\d+|\?\d*|\b\d+(?:\.\d+)?\b/g, '?').replace(/\s+/g, ' ').trim();
+}
+
+function planEntries(document: unknown): { queryText: string; plan: Record<string, unknown> }[] {
+  const entries = Array.isArray(document) ? document : [document];
+  return entries.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const value = entry as Record<string, unknown>;
+    return typeof value['Query Text'] === 'string' && typeof value.Plan === 'object' && value.Plan !== null
+      ? [{ queryText: value['Query Text'], plan: value.Plan as Record<string, unknown> }]
+      : [];
+  });
+}
+
+function revisionPlanNodes(node: Record<string, unknown>): Record<string, unknown>[] {
+  const current = node.Schema === 'semantic' && node['Relation Name'] === 'revision' ? [node] : [];
+  return [
+    ...current,
+    ...(Array.isArray(node.Plans)
+      ? node.Plans.flatMap((child) =>
+          typeof child === 'object' && child !== null ? revisionPlanNodes(child as Record<string, unknown>) : [],
+        )
+      : []),
+  ];
+}
+
 // Every positive business fact below uses released definitions and real native commands.
 test('actual native follow writers atomically retain per-original source replacement revisions pending age and own outgoing counter changes while replay no-op explicit-unfollow precedence rollback and bigint overflow preserve exact source truth', async () => {
   const owner = fixture.owner.actor;
@@ -280,10 +307,28 @@ test('native source hook rows and statements stay constant with logarithmic bloc
   const owner = fixture.owner.actor;
   const before = await inspect();
   const slots: { target: string; followKey: string; unfollowKey: string; pendingSince: string }[] = [];
-  const populations: { scale: number; ownNegativeHistory: number; unrelatedOwnersAndTargets: number; slots: number }[] =
-    [];
-  const runs: { scale: number; repetition: number; target: string; plans: unknown[] }[] = [];
+  const semanticRevisionBaseline = 8192;
+  let revisionHistorySubject: string | undefined;
+  const populations: {
+    scale: number;
+    ownNegativeHistory: number;
+    unrelatedOwnersAndTargets: number;
+    samePartitionRevisionHistory: number;
+    semanticRevisionBaseline: number;
+    slots: number;
+  }[] = [];
+  const runs: {
+    scale: number;
+    repetition: number;
+    phase: 'warmup' | 'measured';
+    target: string;
+    followKey: string;
+    unfollowKey: string;
+    backendPids: number[];
+    plans: unknown[];
+  }[] = [];
   let activeRun: (typeof runs)[number] | undefined;
+  const invocations = new Map<number, number>();
   // Retain the actual nested auto_explain documents alongside the shared harness's
   // per-occurrence accounting; this listener neither changes nor filters its costs.
   const listeners = new Map<PoolClient, (notice: { message?: string | undefined }) => void>();
@@ -291,8 +336,10 @@ test('native source hook rows and statements stay constant with logarithmic bloc
     if (listeners.has(client)) return;
     const listener = (notice: { message?: string | undefined }) => {
       const message = notice.message;
-      if (activeRun && message?.startsWith('duration:') && message.includes('plan:\n'))
+      if (activeRun && message?.startsWith('duration:') && message.includes('plan:\n')) {
+        activeRun.backendPids.push(client.processID);
         activeRun.plans.push(JSON.parse(message.slice(message.indexOf('plan:\n') + 6)));
+      }
     };
     listeners.set(client, listener);
     client.on('notice', listener);
@@ -300,16 +347,43 @@ test('native source hook rows and statements stay constant with logarithmic bloc
   db.pool.on('acquire', listen);
   const evidence = new URL('../../../../.temp/follow-count-source/', import.meta.url);
   await mkdir(evidence, { recursive: true });
+  let calibrationEvidence: unknown;
   try {
     const report = await checkGrowth(db, {
       name: 'Native follow source replacements',
       scales: [256, 1024, 4096],
       rule: 'series',
-      warmups: 1,
+      // The calibrated core.receipt statement needs five consumable warm-ups;
+      // below, backend-keyed plans prove the observed transition and measured plan.
+      warmups: 5,
       repetitions: 5,
       includeBackends: true,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(_db, scale, previous) {
+        if (previous === 0) {
+          revisionHistorySubject = await fixture.createSubject('game', 'Unrelated native revision history');
+          await db.admin.query(
+            `INSERT INTO semantic.revision (route,subject_id,revision,kind,release,recorded_transaction_id)
+             SELECT $1,$2,n+1,'adopt',$3,
+                    ('30000000-0000-7000-8000-' || lpad(to_hex(n),12,'0'))::uuid
+             FROM generate_series(1,$4::int) n`,
+            [routeOf(revisionHistorySubject)!, revisionHistorySubject, fixture.originalDigest, semanticRevisionBaseline],
+          );
+        }
+        if (!revisionHistorySubject) throw new Error('Native revision history subject was not provisioned');
+        await db.admin.query(
+          `INSERT INTO semantic.revision (route,subject_id,revision,kind,release,recorded_transaction_id)
+           SELECT $1,$2,n+1,'adopt',$3,
+                  ('30000000-0000-7000-8000-' || lpad(to_hex(n),12,'0'))::uuid
+           FROM generate_series($4::int+1,$5::int) n`,
+          [
+            routeOf(revisionHistorySubject)!,
+            revisionHistorySubject,
+            fixture.originalDigest,
+            semanticRevisionBaseline + previous,
+            semanticRevisionBaseline + scale,
+          ],
+        );
         await db.admin.query(
           `INSERT INTO library.follow
        (route,account_id,target_id,target_type,state,reason,created_at,updated_at,transaction_id)
@@ -324,7 +398,7 @@ test('native source hook rows and statements stay constant with logarithmic bloc
         // Keep this fixed native subject neighbourhood constant across scales; only
         // the declared unrelated source population and own negative history grow.
         if (previous === 0) {
-          for (let slot = 0; slot < 18; slot++) {
+          for (let slot = 0; slot < 30; slot++) {
             const target = await fixture.createSubject('game');
             await follows.follow(owner, target, entryKey());
             await follows.unfollow(owner, target, entryKey());
@@ -337,11 +411,29 @@ test('native source hook rows and statements stay constant with logarithmic bloc
             slot.pendingSince = negative.pending_since;
           }
         }
-        populations.push({ scale, ownNegativeHistory: scale, unrelatedOwnersAndTargets: scale, slots: slots.length });
+        populations.push({
+          scale,
+          ownNegativeHistory: scale,
+          unrelatedOwnersAndTargets: scale,
+          samePartitionRevisionHistory: scale,
+          semanticRevisionBaseline,
+          slots: slots.length,
+        });
       },
       async operation(_db, scale, repetition) {
-        const slot = slots[repetition]!;
-        activeRun = { scale, repetition, target: slot.target, plans: [] };
+        const invocation = invocations.get(scale) ?? 0;
+        invocations.set(scale, invocation + 1);
+        const slot = slots[scale === 256 ? invocation : scale === 1024 ? 10 + invocation : 20 + invocation]!;
+        activeRun = {
+          scale,
+          repetition,
+          phase: invocation < 5 ? 'warmup' : 'measured',
+          target: slot.target,
+          followKey: slot.followKey,
+          unfollowKey: slot.unfollowKey,
+          backendPids: [],
+          plans: [],
+        };
         runs.push(activeRun);
         try {
           const followed = await follows.follow(owner, slot.target, slot.followKey);
@@ -359,9 +451,158 @@ test('native source hook rows and statements stay constant with logarithmic bloc
         }
       },
     });
+    const receiptSql = await Bun.file(new URL('../../src/command/read-receipt.sql', import.meta.url)).text();
+    const receiptStatement = normalizeStatement(receiptSql.replace(/(?<!:):(\w+)/g, '?'));
+    const isReceiptStatement = (statement: string) => normalizeStatement(statement) === receiptStatement;
+    const perRun = runs.map((run) => {
+      const receiptPlans = run.plans.flatMap((document, index) =>
+        planEntries(document)
+          .filter(({ queryText }) => isReceiptStatement(queryText))
+          .map(({ queryText, plan }) => ({ backend: run.backendPids[index], queryText, plan })),
+      );
+      return {
+        scale: run.scale,
+        repetition: run.repetition,
+        phase: run.phase,
+        target: run.target,
+        followKey: run.followKey,
+        unfollowKey: run.unfollowKey,
+        receiptPlanOccurrences: receiptPlans.map(({ backend, queryText, plan }) => ({
+          backend,
+          statement: normalizeStatement(queryText),
+          planShape: JSON.stringify({
+            node: plan['Node Type'],
+            relation: plan['Relation Name'],
+            index: plan['Index Name'],
+            indexCondition: plan['Index Cond'],
+            filter: plan.Filter,
+            planRows: plan['Plan Rows'],
+            startupCost: plan['Startup Cost'],
+            totalCost: plan['Total Cost'],
+          }),
+        })),
+        revisionNodes: run.plans.flatMap((document) =>
+          planEntries(document).flatMap(({ queryText, plan }) =>
+            revisionPlanNodes(plan).map((node) => ({
+              statement: normalizeStatement(queryText),
+              nodeType: node['Node Type'],
+              indexName: node['Index Name'],
+              indexCondition: node['Index Cond'],
+              filter: node.Filter,
+              rowsRemovedByFilter: node['Rows Removed by Filter'] ?? 0,
+            })),
+          ),
+        ),
+      };
+    });
+    const measuredReceiptOccurrences = report.samples.flatMap((sample) =>
+      sample.occurrenceRepetitions.flatMap((occurrences) =>
+        occurrences.statements
+          .filter(({ statement }) => isReceiptStatement(statement))
+          .map(({ backend, statement, error, plans, rows, blocks }) => ({
+            scale: sample.scale,
+            backend,
+            statement,
+            error,
+            plans: [...plans],
+            rows,
+            blocks,
+          })),
+      ),
+    );
+    const receiptPlanSequences = new Map<number, { scale: number; phase: 'warmup' | 'measured'; planShape: string }[]>();
+    for (const run of perRun) {
+      for (const occurrence of run.receiptPlanOccurrences) {
+        if (occurrence.backend === undefined) continue;
+        const sequence = receiptPlanSequences.get(occurrence.backend) ?? [];
+        sequence.push({ scale: run.scale, phase: run.phase, planShape: occurrence.planShape });
+        receiptPlanSequences.set(occurrence.backend, sequence);
+      }
+    }
+    const receiptBackendEvidence = [...receiptPlanSequences].map(([backend, sequence]) => {
+      const perScale = [256, 1024, 4096].map((scale) => {
+        const scaleSequence = sequence.filter((occurrence) => occurrence.scale === scale);
+        const warmups = scaleSequence.filter(({ phase }) => phase === 'warmup');
+        const measured = scaleSequence.filter(({ phase }) => phase === 'measured');
+        const steadyWarmup = warmups.at(-1)?.planShape;
+        const planTransitions = scaleSequence.flatMap((occurrence, index) =>
+          index > 0 && occurrence.planShape !== scaleSequence[index - 1]!.planShape
+            ? [{ execution: index + 1, phase: occurrence.phase, from: scaleSequence[index - 1]!.planShape, to: occurrence.planShape }]
+            : [],
+        );
+        return {
+          scale,
+          executions: scaleSequence.length,
+          warmupExecutions: warmups.length,
+          warmupPlanShapes: warmups.map(({ planShape }) => planShape),
+          measuredPlanShapes: measured.map(({ planShape }) => planShape),
+          planTransitions,
+          measuredMatchesSteadyWarmup: steadyWarmup !== undefined && measured.every(({ planShape }) => planShape === steadyWarmup),
+        };
+      });
+      return {
+        backend,
+        executions: sequence.length,
+        perScale,
+      };
+    });
+    const measuredStatementCountsByBackend = new Map<number, number>();
+    for (const occurrence of measuredReceiptOccurrences) {
+      if (occurrence.backend === undefined) continue;
+      measuredStatementCountsByBackend.set(occurrence.backend, (measuredStatementCountsByBackend.get(occurrence.backend) ?? 0) + 1);
+    }
+    const revisionPlanShapes = perRun
+      .filter(({ phase }) => phase === 'measured')
+      .flatMap(({ scale, revisionNodes }) => revisionNodes.map((node) => ({ scale, ...node })));
+    const firstRevisionShape = revisionPlanShapes.find(({ scale }) => scale === 256);
+    const lastRevisionShape = revisionPlanShapes.find(({ scale }) => scale === 4096);
+    const measurement = {
+      semanticRevisionBaseline,
+      samePartitionRevisionHistory: populations.map(({ scale, samePartitionRevisionHistory }) => ({ scale, rows: samePartitionRevisionHistory })),
+      perRun,
+      measuredReceiptOccurrences,
+      measuredStatementCountsByBackend: Object.fromEntries(measuredStatementCountsByBackend),
+      receiptBackendEvidence,
+      revisionPlanShapes,
+      revisionPointPlanShapeStable: firstRevisionShape !== undefined &&
+        lastRevisionShape !== undefined &&
+        firstRevisionShape.nodeType === lastRevisionShape.nodeType &&
+        firstRevisionShape.indexName === lastRevisionShape.indexName &&
+        firstRevisionShape.indexCondition === lastRevisionShape.indexCondition,
+    };
+    calibrationEvidence = measurement;
+    await Bun.write(new URL('growth.json', evidence), JSON.stringify({ populations, report, measurement }, null, 2));
+    expect(runs).toHaveLength(30);
+    expect(slots).toHaveLength(30);
+    expect(measuredReceiptOccurrences.length).toBeGreaterThan(0);
+    expect(receiptBackendEvidence.some(({ executions }) => executions >= 6)).toBe(true);
+    expect(receiptBackendEvidence.every(({ perScale }) => perScale.every(({ warmupExecutions, measuredPlanShapes, measuredMatchesSteadyWarmup }) =>
+      measuredPlanShapes.length === 0 || (warmupExecutions >= 5 && measuredMatchesSteadyWarmup),
+    ))).toBe(true);
+    for (const [backend, count] of measuredStatementCountsByBackend)
+      expect(
+        receiptBackendEvidence
+          .find((item) => item.backend === backend)
+          ?.perScale.reduce((total, sample) => total + sample.measuredPlanShapes.length, 0),
+      ).toBe(count);
+    expect(
+      receiptBackendEvidence.some(({ perScale }) =>
+        perScale.some(({ executions, planTransitions }) =>
+          executions >= 6 && planTransitions.some(({ phase }) => phase === 'warmup'),
+        ),
+      ),
+    ).toBe(true);
+    expect(revisionPlanShapes.length).toBeGreaterThan(0);
+    expect(revisionPlanShapes.every(({ nodeType, indexName, indexCondition, filter, rowsRemovedByFilter }) =>
+      ['Index Scan', 'Index Only Scan'].includes(String(nodeType)) &&
+      typeof indexName === 'string' && indexName.includes('revision') &&
+      typeof indexCondition === 'string' && indexCondition.includes('route') && indexCondition.includes('subject_id') &&
+      filter === undefined && Number(rowsRemovedByFilter) === 0,
+    )).toBe(true);
+    expect(measurement.revisionPointPlanShapeStable).toBe(true);
     // Keep every repetition, statement attribution and relation population, rather
     // than treating returned row counts or an isolated sample as physical work.
-    await Bun.write(new URL('growth.json', evidence), JSON.stringify({ populations, report }, null, 2));
+    await Bun.write(new URL('growth.json', evidence), JSON.stringify({ populations, report, calibrationEvidence }, null, 2));
     for (const sample of report.samples) {
       for (const cost of sample.repetitions) {
         expect(cost.rows).toBeGreaterThan(0);
@@ -390,8 +631,7 @@ test('native source hook rows and statements stay constant with logarithmic bloc
         desired_eligible: false,
         pending_since: slot.pendingSince,
       });
-    for (const run of runs.filter(({ repetition }) => repetition % 6 !== 0))
-      expect(run.plans.length).toBeGreaterThan(0);
+    for (const run of runs) expect(run.plans.length).toBeGreaterThan(0);
   } catch (error) {
     for (const { scale, repetition, target, plans } of runs) {
       const { rows, blocks, relations } = costOf({ statements: [], plans });
@@ -403,7 +643,7 @@ test('native source hook rows and statements stay constant with logarithmic bloc
     if (error instanceof GrowthBoundError) {
       await Bun.write(
         new URL('growth.json', evidence),
-        JSON.stringify({ populations, samples: error.samples }, null, 2),
+        JSON.stringify({ populations, samples: error.samples, calibrationEvidence, runs }, null, 2),
       );
       for (const sample of error.samples)
         console.info(
@@ -416,14 +656,15 @@ test('native source hook rows and statements stay constant with logarithmic bloc
           }),
         );
     } else if (error instanceof Error && error.name === 'GrowthEvidenceError') {
-      const repetitions = runs.map(({ scale, repetition, target, plans }) => {
+      const repetitions = runs.map(({ scale, repetition, phase, target, plans, backendPids }) => {
         const cost = costOf({ statements: [], plans });
         return {
           scale,
           repetition,
-          phase: repetition % 6 === 0 ? 'warmup' : 'measured',
+          phase,
           target,
-          autoExplainStatements: plans.length,
+          backendPids,
+          autoExplainPlanDocuments: plans.length,
           cost: {
             plans: cost.plans,
             rows: cost.rows,
@@ -434,7 +675,7 @@ test('native source hook rows and statements stay constant with logarithmic bloc
       });
       await Bun.write(
         new URL('growth.json', evidence),
-        JSON.stringify({ populations, seriesVerdict: error.message, repetitions }, null, 2),
+        JSON.stringify({ populations, seriesVerdict: error.message, repetitions, calibrationEvidence }, null, 2),
       );
       console.info(
         'Native follow source insufficient-evidence verdict:',
