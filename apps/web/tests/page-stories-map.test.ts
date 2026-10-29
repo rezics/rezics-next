@@ -19,6 +19,12 @@ const cells = [
 const references = new Set<string>();
 const missingRows = new Set<string>();
 
+function isStoryCell(value: string, hasStoryExport: (reference: string) => boolean): boolean {
+  if (value === 'missing' || /^planned:\s+\S.*$/.test(value)) return true;
+  if (!/^apps\/web\/src\/stories\/[^#]+\.stories\.tsx#[A-Za-z_$][\w$]*$/.test(value)) return false;
+  return hasStoryExport(value);
+}
+
 for (const row of cells) {
   const [, route, state, viewer, desktop, phone] = row;
   if (route.startsWith('apps/web/src/routes/')) {
@@ -27,6 +33,7 @@ for (const row of cells) {
         missingRows.add(
           `${route.trim()} | ${state.trim()} | ${viewer.trim()} | ${mode === desktop ? 'desktop' : 'phone'}`,
         );
+      else if (mode.trim().startsWith('planned:')) continue;
       else references.add(mode.trim());
     }
   }
@@ -48,7 +55,7 @@ test('page story map has a section for every route file and tabulates states by 
     if (!route.startsWith('apps/web/src/routes/')) continue;
     for (const value of [desktop.trim(), phone.trim()])
       expect(
-        value === 'missing' || /^apps\/web\/src\/stories\/[^#]+\.stories\.tsx#[A-Za-z_$][\w$]*$/.test(value),
+        isStoryCell(value, (reference) => references.has(reference)),
         `${route}: invalid story cell ${value}`,
       ).toBe(true);
   }
@@ -61,6 +68,15 @@ test('page story map has a section for every route file and tabulates states by 
     );
   }
   expect(routeFiles.length).toBeGreaterThan(0);
+});
+
+test('page story cells accept planned dependencies and reject incomplete or unresolved cells', () => {
+  const hasStoryExport = (reference: string) =>
+    reference === 'apps/web/src/stories/library-entries.stories.tsx#SignedIn';
+  expect(isStoryCell('planned: member library export API', hasStoryExport)).toBe(true);
+  expect(isStoryCell('planned:', hasStoryExport)).toBe(false);
+  expect(isStoryCell('apps/web/src/stories/library-entries.stories.tsx#MissingExport', hasStoryExport)).toBe(false);
+  expect(isStoryCell('', hasStoryExport)).toBe(false);
 });
 
 test('complex route sections include the required control and state rows', () => {
