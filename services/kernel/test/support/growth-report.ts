@@ -75,10 +75,11 @@ function planCost(root: PlanNode): { rows: number; blocks: number; node?: string
       for (const child of node.Plans) if (typeof child === 'object' && child !== null) visit(child as PlanNode);
   };
   visit(root);
+  const node = costliestNamed.name ?? costliest.name;
   return {
     rows,
     blocks,
-    ...((costliestNamed.name ?? costliest.name) ? { node: costliestNamed.name ?? costliest.name } : {}),
+    ...(node === undefined ? {} : { node }),
   };
 }
 
