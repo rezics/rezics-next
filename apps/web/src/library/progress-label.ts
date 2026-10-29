@@ -38,7 +38,25 @@ export function progressView(progress: ProgressLabelInput | null, locale: string
 
   if (progress.mode === 'cursor_position') {
     const locator = progress.locator?.trim();
-    return locator ? { text: locator, percent: null } : inProgress;
+    if (!locator) return inProgress;
+    const partAndChapter = /^(?:part|Part)\s+(\d+)\s*[,;:]?\s*(?:chapter|Chapter)\s+(\d+)$/i.exec(locator);
+    if (partAndChapter) {
+      return {
+        text: m.library_progress_locator_part_chapter(
+          { part: number.format(Number(partAndChapter[1])), chapter: number.format(Number(partAndChapter[2])) },
+          options,
+        ),
+        percent: null,
+      };
+    }
+    const chapter = /^(?:chapter|Chapter)\s+(\d+)$/i.exec(locator);
+    if (chapter) {
+      return {
+        text: m.library_progress_locator_chapter({ chapter: number.format(Number(chapter[1])) }, options),
+        percent: null,
+      };
+    }
+    return { text: locator, percent: null };
   }
 
   const amount =

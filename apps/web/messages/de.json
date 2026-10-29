@@ -589,5 +589,8 @@
   "inbox_unavailable_item": "Dieser Eintrag ist nicht mehr verfügbar.",
   "inbox_load_more": "Mehr laden",
   "inbox_unread_count": "{count} ungelesene Benachrichtigungen",
-  "nav_inbox": "Posteingang"
+  "nav_inbox": "Posteingang",
+  "library_progress_locator_part_chapter": "Teil {part}, Kapitel {chapter}",
+  "library_progress_locator_chapter": "Kapitel {chapter}",
+  "library_progress_update": "Fortschritt aktualisieren"
 }

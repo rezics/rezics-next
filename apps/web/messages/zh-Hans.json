@@ -589,5 +589,8 @@
   "inbox_unavailable_item": "此内容已不可用。",
   "inbox_load_more": "加载更多",
   "inbox_unread_count": "{count} 条未读通知",
-  "nav_inbox": "收件箱"
+  "nav_inbox": "收件箱",
+  "library_progress_locator_part_chapter": "第{part}部分，第{chapter}章",
+  "library_progress_locator_chapter": "第{chapter}章",
+  "library_progress_update": "更新进度"
 }

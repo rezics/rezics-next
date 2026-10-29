@@ -784,6 +784,7 @@ test(
     const current = id(20);
     const { page, access } = await open(`/en/library/progress/${current}`);
     try {
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('50');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
       await page.locator('main').getByText('p. 50/200', { exact: true }).waitFor();
@@ -800,6 +801,7 @@ test(
 
       const seen = sessions.get(current)!.revision;
       diverge(current);
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('80');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
       const alert = page.getByRole('alert');
@@ -830,6 +832,7 @@ test(
     const batch = Array.from({ length: 100 }, (_, index) => `ep-${String(index + 1).padStart(3, '0')}`);
     const { page, access } = await open(`/en/library/progress/${current}`);
     try {
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       const units = page.getByRole('region', { name: 'Completed units', exact: true });
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill(batch.join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
@@ -939,6 +942,7 @@ test(
     const current = id(21);
     const { page, access } = await open(`/en/library/progress/${current}`);
     try {
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('120');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
       await page.locator('main').getByText('min 120/120', { exact: true }).waitFor();

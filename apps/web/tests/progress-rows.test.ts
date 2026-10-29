@@ -12,8 +12,9 @@ test('the progress index and session use the shared progress row', async () => {
 
 test('session completion and abandonment are offered in the progress row menu', async () => {
   const text = await source('progress-session.tsx');
-  expect(text).toMatch(/<ProgressRow[\s\S]*?menu=/);
-  expect(text).toContain('DropdownMenuItem');
+  expect(text).toContain('@rezics/ui/menu');
+  expect(text).toContain('m.library_progress_complete()');
+  expect(text).toContain('m.library_progress_abandon()');
 });
 
 test('published logs show state and relative time without progress bars', async () => {

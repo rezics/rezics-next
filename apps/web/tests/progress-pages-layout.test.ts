@@ -818,12 +818,17 @@ test(
       expect(await header.getByText('Part 2, chapter 14', { exact: true }).count()).toBe(1);
       expect(await header.getByRole('progressbar').count()).toBe(0);
       expect(await main(page).getByRole('heading', { level: 2 }).allTextContents()).toEqual([
-        'Record progress',
         'Change history',
         'Completed units',
         'Publish a reading log',
         'Published logs',
       ]);
+      expect(await main(page).getByRole('button', { name: 'Update progress', exact: true }).count()).toBe(1);
+      expect(await main(page).getByRole('textbox', { name: 'Locator', exact: true }).count()).toBe(0);
+      await main(page).getByRole('button', { name: 'Update progress', exact: true }).click();
+      expect(await page.getByRole('heading', { name: 'Update progress', exact: true }).count()).toBe(1);
+      expect(await page.getByRole('textbox', { name: 'Locator', exact: true }).inputValue()).toBe('Part 2, chapter 14');
+      expect(await page.getByRole('textbox', { name: 'Position', exact: true }).inputValue()).toBe('42');
       const changes = main(page).getByRole('region', { name: 'Change history', exact: true });
       expect(await changes.locator('time').getAttribute('datetime')).toBe(stamp);
       expect(await changes.locator('time').innerText()).toMatch(/ago|yesterday/);

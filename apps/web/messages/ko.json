@@ -589,5 +589,8 @@
   "inbox_unavailable_item": "이 항목은 더 이상 볼 수 없습니다.",
   "inbox_load_more": "더 보기",
   "inbox_unread_count": "읽지 않은 알림 {count}개",
-  "nav_inbox": "받은 알림"
+  "nav_inbox": "받은 알림",
+  "library_progress_locator_part_chapter": "제{part}부, {chapter}장",
+  "library_progress_locator_chapter": "제{chapter}장",
+  "library_progress_update": "진행 상황 업데이트"
 }

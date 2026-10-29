@@ -1,21 +1,28 @@
 import { expect, test } from 'bun:test';
+import { progressDefaultUnit } from '../src/library/progress-page.tsx';
 
 const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text();
 
 test('progress pages show current progress before opening an update form', async () => {
   const page = await read('../src/library/progress-page.tsx');
+  const session = await read('../src/library/progress-session.tsx');
   expect(page).toContain('<ProgressRow');
-  expect(page).toContain('progressView(session');
-  expect(page).toContain('library_progress_update');
-  expect(page).toContain('defaultValue={session.amount');
-  expect(page).toContain('open={editing}');
-  expect(page).not.toMatch(/<Input[^>]+name="amount"/);
+  expect(session).toContain('progressView(session');
+  expect(session).toContain('library_progress_update');
+  expect(session).toContain("setAmount(session.amount ?? '')");
+  expect(session).toContain('open={editing}');
+  expect(session).toMatch(/editing \?\s*\(\s*phone \?/);
 });
 
 test('default progress units follow subject type', async () => {
+  expect(progressDefaultUnit(['schema:Book'])).toBe('page');
+  expect(progressDefaultUnit(['schema:Text'])).toBe('page');
+  expect(progressDefaultUnit(['schema:Movie'])).toBe('episode');
+  expect(progressDefaultUnit(['schema:VideoGame'])).toBe('percent');
   const page = await read('../src/library/progress-page.tsx');
-  expect(page).toMatch(/type[^\n]*(?:book|text)[\s\S]{0,180}unit[^\n]*page/);
-  expect(page).toMatch(/type[^\n]*video[\s\S]{0,180}unit[^\n]*episode/);
+  expect(page).toContain('function progressDefaultUnit');
+  expect(page).toMatch(/video\|movie[^\n]*return 'episode'/);
+  expect(page).toMatch(/return 'page'/);
 });
 
 test('progress labels use localized messages for locator parts and chapters', async () => {
@@ -33,9 +40,9 @@ test('progress labels use localized messages for locator parts and chapters', as
 
 test('session changes list each changed field once and use a real progress icon', async () => {
   const session = await read('../src/library/progress-session.tsx');
-  expect(session).toContain('library_progress_change_amount');
-  expect(session).toContain('library_progress_change_locator');
-  expect(session).toContain('library_progress_change_position');
+  expect(session.match(/m\.library_progress_amount\(\)/g)?.length).toBe(2);
+  expect(session).toContain('m.library_progress_locator()');
+  expect(session).toContain('m.library_progress_position()');
   expect(session).not.toContain('>…</');
 });
 
@@ -45,10 +52,11 @@ test('progress selectors use the shared responsive menu', async () => {
     read('../src/library/progress-picker.tsx'),
     read('../src/library/progress-session.tsx'),
   ]);
-  for (const source of [page, picker, session]) {
-    expect(source).toContain("@rezics/ui/menu");
+  for (const source of [page, session]) {
+    expect(source).toContain('@rezics/ui/menu');
     expect(source).not.toContain('@rezics/ui/shadcn/dropdown-menu');
   }
+  expect(picker).not.toContain('@rezics/ui/shadcn/dropdown-menu');
 });
 
 test('progress lists and logs use ListRow, with row links above their own controls', async () => {
@@ -62,4 +70,3 @@ test('progress lists and logs use ListRow, with row links above their own contro
     expect(source).not.toMatch(/divide-y|border-y|border-b|rounded-(?:lg|xl)\s+bg-card/);
   }
 });
-

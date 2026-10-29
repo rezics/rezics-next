@@ -73,6 +73,7 @@ test('cursor positions use their locator as the row label on the pages and Conti
     locator: 'Part 2, chapter 14',
   });
   expect(progressView(cursor, 'en')).toEqual({ text: 'Part 2, chapter 14', percent: null });
+  expect(progressView(cursor, 'zh-Hans')).toEqual({ text: '第2部分，第14章', percent: null });
   expect(progressView({ ...cursor, locator: null }, 'en')).toEqual({ text: 'In progress', percent: null });
 
   const index = await source('../src/library/progress-page.tsx');

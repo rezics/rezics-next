@@ -589,5 +589,8 @@
   "inbox_unavailable_item": "Este elemento ya no está disponible.",
   "inbox_load_more": "Cargar más",
   "inbox_unread_count": "{count} notificaciones sin leer",
-  "nav_inbox": "Notificaciones"
+  "nav_inbox": "Notificaciones",
+  "library_progress_locator_part_chapter": "Parte {part}, capítulo {chapter}",
+  "library_progress_locator_chapter": "Capítulo {chapter}",
+  "library_progress_update": "Actualizar progreso"
 }

@@ -4,17 +4,13 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@rezics/ui/shadcn/dropdown-menu';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { EllipsisIcon } from 'lucide-react';
 import { progressIndexSubjects } from './progress-subjects';
 import { ProgressPicker, pickerSubject } from './progress-picker';
 import { ProgressRow } from '@rezics/ui/progress-row';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
 import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -58,6 +54,13 @@ const buttonClass =
 
 const subscribe = () => () => {};
 
+export function progressDefaultUnit(types: readonly string[] | undefined): ProgressUnitWrite {
+  const values = (types ?? []).map((type) => type.toLowerCase());
+  if (values.some((type) => /videogame|game/.test(type))) return 'percent';
+  if (values.some((type) => /video|movie|tvseries|tvseason|tv.*episode/.test(type))) return 'episode';
+  return 'page';
+}
+
 export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   const router = useRouter();
   const sessions = progressIndexSubjects(page.sessions);
@@ -78,7 +81,9 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   }
   const subject = chosen[0]?.id ?? '';
   const [mode, setMode] = useState<ProgressMode>('scalar_amount');
-  const [unit, setUnit] = useState<ProgressUnitWrite>('page');
+  const [unit, setUnit] = useState<ProgressUnitWrite>(() =>
+    progressDefaultUnit(sessions.find((session) => session.subject?.id === page.subjectId)?.subject?.types),
+  );
   const [total, setTotal] = useState('');
   const [key, setKey] = useState(page.idempotencyKey);
   const [alert, setAlert] = useState<string | null>(null);
@@ -121,7 +126,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
 
       <>
         {sessions.length ? (
-          <ol className="divide-y divide-border/60 border-y border-border/60">
+          <ol className="space-y-3">
             {sessions.map((session) => (
               <SessionRow key={session.id} session={session} ratio={ratio} />
             ))}
@@ -154,7 +159,13 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                   <input type="hidden" name="subjectId" value={subject} />
                   <div className="space-y-2">
                     <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                    <ProgressPicker value={chosen} onValueChange={setChosen} />
+                    <ProgressPicker
+                      value={chosen}
+                      onValueChange={(value) => {
+                        setChosen(value);
+                        if (value[0]) setUnit(progressDefaultUnit(value[0].types));
+                      }}
+                    />
                   </div>
                 </>
               ) : (
@@ -270,20 +281,21 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
     }
   }
   return (
-    <li className="relative flex items-start gap-4 py-5 sm:gap-5">
-      <div className="w-12 shrink-0 sm:w-24">
+    <ListRow className="flex items-start gap-4 py-5 sm:gap-5">
+      <div className="w-[72px] shrink-0 sm:w-24">
         <SubjectCover subject={session.subject} ratio={ratio} size="fill" />
       </div>
       <div className="min-w-0 flex-1 space-y-2">
         <div>
           {readable ? (
-            <Link
-              to="/library/progress/$id"
-              params={{ id: session.id }}
-              className="work-title line-clamp-2 text-lg font-medium after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
-            >
-              {session.subject?.label ?? m.library_subject_unavailable()}
-            </Link>
+            <>
+              <ListRowLink href={`/${getLocale()}/library/progress/${encodeURIComponent(session.id)}`}>
+                {session.subject?.label ?? m.library_subject_unavailable()}
+              </ListRowLink>
+              <span className="work-title line-clamp-2 text-lg font-medium">
+                {session.subject?.label ?? m.library_subject_unavailable()}
+              </span>
+            </>
           ) : (
             <span className="work-title line-clamp-2 text-lg font-medium">
               {session.subject?.label ?? m.library_subject_unavailable()}
@@ -299,40 +311,42 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
           label={progress?.text ?? m.home_continue_in_progress()}
           menu={
             <Exposure operation="progress_session.complete">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  className="relative z-10"
-                  render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
-                >
-                  <EllipsisIcon aria-hidden="true" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {session.subject ? (
-                    <DropdownMenuItem
-                      render={
-                        <Link
-                          to={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).to}
-                          params={
-                            subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).params
-                          }
-                        />
-                      }
-                    >
-                      {m.library_progress_open_subject()}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {session.state === 'active' ? (
-                    <>
-                      <DropdownMenuItem onClick={() => setConfirming('complete')}>
-                        {m.library_progress_complete()}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setConfirming('abandon')}>
-                        {m.library_progress_abandon()}
-                      </DropdownMenuItem>
-                    </>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <ListRowControl>
+                <Menu
+                  title={m.library_collection_actions()}
+                  trigger={
+                    <Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()}>
+                      <EllipsisIcon aria-hidden="true" />
+                    </Button>
+                  }
+                  entries={[
+                    ...(session.subject
+                      ? [
+                          {
+                            type: 'link' as const,
+                            label: m.library_progress_open_subject(),
+                            href: subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale())
+                              .href,
+                          },
+                        ]
+                      : []),
+                    ...(session.state === 'active'
+                      ? [
+                          {
+                            type: 'item' as const,
+                            label: m.library_progress_complete(),
+                            onSelect: () => setConfirming('complete'),
+                          },
+                          {
+                            type: 'item' as const,
+                            label: m.library_progress_abandon(),
+                            onSelect: () => setConfirming('abandon'),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </ListRowControl>
             </Exposure>
           }
         />
@@ -356,6 +370,6 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
           </p>
         ) : null}
       </div>
-    </li>
+    </ListRow>
   );
 }

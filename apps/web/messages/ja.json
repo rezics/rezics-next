@@ -589,5 +589,8 @@
   "inbox_unavailable_item": "この項目は現在利用できません。",
   "inbox_load_more": "さらに読み込む",
   "inbox_unread_count": "未読通知 {count} 件",
-  "nav_inbox": "受信箱"
+  "nav_inbox": "受信箱",
+  "library_progress_locator_part_chapter": "第{part}部、第{chapter}章",
+  "library_progress_locator_chapter": "第{chapter}章",
+  "library_progress_update": "進捗を更新"
 }

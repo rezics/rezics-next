@@ -10,6 +10,7 @@ import type { PublishedLogPage } from './logs-read';
 import type { ProgressSessionPage } from './progress-reads';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -120,9 +121,14 @@ function PublishedLogs({
         {m.library_logs_heading()}
       </h2>
       {page.logs.length ? (
-        <ol className="divide-y divide-border/60 border-y border-border/60">
+        <ol className="space-y-3">
           {page.logs.map((log) => (
-            <li key={log.id} className="space-y-2 py-3">
+            <ListRow key={log.id} className="space-y-2 py-3">
+              <Exposure operation="published_log.read">
+                <ListRowLink href={`/${getLocale()}/logs/${encodeURIComponent(log.id)}`}>
+                  {m.library_logs_open()}
+                </ListRowLink>
+              </Exposure>
               <p className="flex min-w-0 items-baseline gap-2 overflow-hidden text-sm whitespace-nowrap">
                 {log.account ? (
                   <>
@@ -141,7 +147,7 @@ function PublishedLogs({
                 </span>
               </p>
               {log.note ? <p className="whitespace-pre-wrap">{log.note}</p> : null}
-              <p>
+              <ListRowControl>
                 <Exposure operation="published_log.read">
                   <Link
                     to="/logs/$id"
@@ -151,8 +157,8 @@ function PublishedLogs({
                     {m.library_logs_open()}
                   </Link>
                 </Exposure>
-              </p>
-            </li>
+              </ListRowControl>
+            </ListRow>
           ))}
         </ol>
       ) : (

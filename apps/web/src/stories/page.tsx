@@ -328,14 +328,30 @@ export const libraryFollowingReady = libraryReady(
   () => m.library_following_heading(),
   () => libraryFollowsRecording.follows[0]?.target.label,
 );
-export const libraryProgressReady = libraryReady(
-  () => m.library_progress_heading(),
-  () => libraryProgressSessionsRecording.progressSessions[0]?.subject.label,
-);
-export const libraryProgressSessionReady = libraryReady(
-  () => m.library_progress_heading(),
-  () => libraryChangesRecording.changes[0]?.intent.locator,
-);
+export async function libraryProgressReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  const seeded = libraryProgressSessionsRecording.progressSessions[0]?.subject.label;
+  await view.findByRole('heading', { level: 1, name: m.library_progress_heading() });
+  if (seeded) await view.findAllByText(seeded, { exact: false });
+  const [first] = await view.findAllByRole('listitem');
+  if (first) await userEvent.hover(first);
+}
+export async function libraryProgressSessionReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  await view.findByRole('heading', { level: 1, name: m.library_progress_heading() });
+  await view.findByRole('button', { name: m.library_progress_update() });
+  await view.findByText(m.library_progress_state_active(), { exact: true });
+}
+
+export async function libraryProgressUpdateOpen(context: { canvasElement: HTMLElement }) {
+  await libraryProgressSessionReady(context);
+  const view = viewOf(context);
+  await userEvent.click(await view.findByRole('button', { name: m.library_progress_update() }));
+  await within(context.canvasElement).findByRole('dialog');
+  await within(context.canvasElement).findByRole('textbox', { name: m.library_progress_locator() });
+}
 export const libraryCollectionReady = libraryReady(
   () => libraryCollectionRecording.collection.title,
   () => libraryCollectionMembersRecording.members[0]?.subject.label,
