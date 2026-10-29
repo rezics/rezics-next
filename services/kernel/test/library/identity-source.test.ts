@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { resolveSubject, readableSubjects } from '../../src/library/subject-anchor.ts';
 import { epochFixture, type EpochFixture } from '../semantic/support/identity-epoch.ts';
-import { home, seedLegacyGroup } from '../semantic/support/identity-epoch.ts';
+import { home, seedLegacyGroup, seedLegacyRoot } from '../semantic/support/identity-epoch.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 
 let fixture: EpochFixture;
@@ -23,6 +23,28 @@ test('Library member filtering consumes the current native mapping and preserves
   expect(await readableSubjects({ pool: fixture.pool, access: fixture.access }, actor, [created.subject.id])).toEqual([
     created.subject.id,
   ]);
+});
+
+test('a historical root is unavailable before bootstrap while a hooked birth already resolves', async () => {
+  const original = await seedLegacyRoot(fixture, 0x5b10);
+  const fresh = (await fixture.create('Hooked Library birth', 0x5b10)).subject.id;
+  const actor = await fixture.actor();
+  await expect(resolveSubject({ pool: fixture.pool, access: fixture.access }, actor, original)).rejects.toMatchObject({
+    reason: 'bootstrap',
+  });
+  expect(await resolveSubject({ pool: fixture.pool, access: fixture.access }, actor, fresh)).toEqual({
+    subjectId: fresh,
+    requestedSubjectId: null,
+  });
+  for (let page = 0; page < 100; page++) {
+    const progress = await stepIdentityEpochBootstrap(fixture.pool, home(original));
+    expect(progress.work.rows).toBeLessThanOrEqual(100);
+    if (progress.state === 'caught-up') break;
+  }
+  expect(await resolveSubject({ pool: fixture.pool, access: fixture.access }, actor, original)).toEqual({
+    subjectId: original,
+    requestedSubjectId: null,
+  });
 });
 
 test('bounded native legacy bootstrap supplies the Library members reader with the direct terminal mapping', async () => {

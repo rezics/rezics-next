@@ -102,6 +102,21 @@ export async function epochFixture() {
 }
 export type EpochFixture = Awaited<ReturnType<typeof epochFixture>>;
 
+/** A historical revision-1 root predating native creation mapping hooks. */
+export async function seedLegacyRoot(f: EpochFixture, route: number) {
+  const id = newId(route);
+  const transactionId = randomUUID();
+  await f.admin.query(
+    `WITH born AS (
+      INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,current_facts,current_release)
+      VALUES ($1,$2,'schema:Person',$3,0,$4) RETURNING route,subject_id,recorded_transaction_id
+    ) INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
+      SELECT route,subject_id,1,'create',$4,recorded_transaction_id FROM born`,
+    [route, id, transactionId, bundledDigest],
+  );
+  return id;
+}
+
 /** Native migrated legacy population for admission/bootstrap, not a completion certificate.
  * Roots are actual createSubject results. All members, revision history and direct redirects exist.
  * The STORE owner must cover this population during its real bootstrap before permitting admission.
