@@ -867,6 +867,8 @@ Bearer scope claims are bounded once at authenticator creation to 129 characters
 - Touches: Public update: P, boundary Q, lock one account, Q, update one account, Q (two body statements plus three Q). Coordination reserve locks one account and inserts one hold via `lifecycle_coordination_pkey` (two statements); membership admission also point-locks/updates the account inverse count and inserts its exact inverse key under the 1000 cap. Raise fence locks account then updates it/inserts one fence receipt (two statements); clear updates one account; fence state/receipt reads are one point statement each. All native body work stays on the account anchor.
 - Bound: Update `P+3Q` plus constant rows, `L(A)` body blocks; coordination/fence point blocks `L(A)+L(C)+L(F)` as applicable, plus exact inverse work for membership admission. Integrated check measures constant rows/statements and logarithmic blocks. Triggers use row-local checks or indexed EXISTS, not hold enumeration. Native workflow boundaries and continuation resume use `deadlineFor` with the named 10 s continuation budget; no added reads.
 - Growth check: `test/access/growth-commands.test.ts`: `Account update, coordination and fences stays within its bound as A grows` `test/access/access-deadlines.test.ts`.
+  `test/access/account-profile-http.test.ts` measures one HTTP profile update, including its avatar check and display-name event,
+  at three account scales: constant statements and rows, logarithmic blocks.
 
 ### Membership change
 
@@ -979,6 +981,14 @@ The registry check is an in-memory set lookup with fewer than 64 entries: consta
 work and no additional relation or growth check. Existing claim storage bounds remain unchanged.
 
 ### Public identity read
+
+`PATCH /v1/accounts/{accountId}` (`account.update`, action `account:update`) updates the public profile through
+`updateAccount`. It accepts a nonempty partial patch of `displayName`, `biography`, `avatar`, `links`, `publicViews`
+and organization-only `speakersListed`, preserves omitted values, clears nullable fields with null, merges view flags,
+requires the account's own available avatar media and existing account or operator management authority, and uses the
+ordinary account-command idempotency and problem responses; unknown fields and malformed values answer 400
+`invalid_request`.
+The mounted action catalogue includes the authenticated `account:manage` operand needed for automated profiles.
 
 `GET /v1/accounts` accepts exactly one of `ids` (1–100 comma-separated account UUIDs, deduplicated in first-request
 order), `handle` (one handle, normalized to lowercase using the lookup rules), or `agent` (one catalogue subject UUID).

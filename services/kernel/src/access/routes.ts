@@ -27,7 +27,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
 import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
-import { normalizeLookupHandle } from './lifecycle.ts';
+import { createLifecycleCommands, LifecycleDeniedError, normalizeLookupHandle } from './lifecycle.ts';
 import {
   readAgentPages,
   readPublicAccountByAgent,
@@ -213,6 +213,57 @@ const shelf = t.Object(
   closed,
 );
 const nullable = <S extends TSchema>(schema: S) => t.Union([schema, t.Null()]);
+const profilePatch = t.Object(
+  {
+    displayName: t.Optional(nullable(t.String({ maxLength: 4096 }))),
+    biography: t.Optional(nullable(t.String({ maxLength: 4096 }))),
+    avatar: t.Optional(
+      nullable(t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' })),
+    ),
+    links: t.Optional(
+      t.Array(
+        t.Object(
+          {
+            label: t.String({ minLength: 1, maxLength: 64 }),
+            url: t.String({
+              maxLength: 2048,
+              pattern: '^(?!.*[\\u0000-\\u0020\\u007f])[hH][tT][tT][pP][sS]://[^/@\\s]+(?:[/?#]|$)',
+              description: 'Absolute HTTPS URL without credentials.',
+            }),
+          },
+          closed,
+        ),
+        { maxItems: 5 },
+      ),
+    ),
+    publicViews: t.Optional(
+      t.Object(
+        {
+          posts: t.Optional(t.Boolean()),
+          reviews: t.Optional(t.Boolean()),
+          collections: t.Optional(t.Boolean()),
+          realms: t.Optional(t.Boolean()),
+        },
+        closed,
+      ),
+    ),
+    speakersListed: t.Optional(t.Boolean()),
+  },
+  { ...closed, minProperties: 1 },
+);
+function validProfilePatch(patch: Static<typeof profilePatch>): boolean {
+  // Lifecycle strings use UTF-16 length; links use characters and URL parsing.
+  if ([patch.displayName, patch.biography].some((value) => typeof value === 'string' && value.length > 4096))
+    return false;
+  return (patch.links ?? []).every(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+    } catch {
+      return false;
+    }
+  });
+}
 // A JSON Merge Patch over the shelf: null removes a part or an entry, an array replaces.
 const shelfPatch = t.Object(
   {
@@ -290,7 +341,7 @@ function publicRoleGrant(value: Static<typeof roleGrant>): Static<typeof roleGra
 }
 
 /** Standard-schema validation preserves closed unions instead of sanitizing unknown fields. */
-function strict<S extends TSchema>(schema: S) {
+function strict<S extends TSchema>(schema: S, valid: (value: Static<S>) => boolean = () => true) {
   const validator = Compile(schema);
   return {
     '~standard': {
@@ -298,7 +349,7 @@ function strict<S extends TSchema>(schema: S) {
       vendor: 'typebox',
       types: undefined as { input: Static<S>; output: Static<S> } | undefined,
       validate(value: unknown) {
-        return validator.Check(value)
+        return validator.Check(value) && valid(value as Static<S>)
           ? { value: value as Static<S> }
           : { issues: [{ message: 'Value does not match the request schema' }] };
       },
@@ -421,7 +472,44 @@ export function accessRoutes(
       access: dependencies.access(),
       clock: dependencies.clock,
     }));
+  let lifecycle: ReturnType<typeof createLifecycleCommands> | undefined;
+  const lifecycleCommands = () =>
+    (lifecycle ??= createLifecycleCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
   return app
+    .patch(
+      '/v1/accounts/:accountId',
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(profilePatch, validProfilePatch),
+        response: {
+          200: withHeaders(t.Object({ accountId: id }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures,
+        },
+        detail: { ...detail('account.update'), 'x-action': 'account:update' },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const outcome = await admission.run('normal', job, () =>
+            lifecycleCommands().updateAccount(
+              { actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), patch: body },
+            ),
+          );
+          session.record(outcome);
+          set.headers['cache-control'] = 'private, no-store';
+          return outcome.value;
+        } catch (error) {
+          if (error instanceof LifecycleDeniedError) throw new ProblemError('forbidden');
+          return denied(error);
+        }
+      },
+    )
     .post(
       customMethod('/v1/accounts/:accountId', 'requestVerification'),
       {
