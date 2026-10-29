@@ -188,6 +188,11 @@ minutes; the attempt records the refusal and the primary and secondary windows i
 one pool within an hour temporarily exclude its allowance for one hour. Other native quota failures exclude all
 aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
 
+Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
+pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If the file
+cannot be read or its pool entries are invalid, the process keeps its startup pool policies and sends one error event
+to the supermanager inbox.
+
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
 `branchPrefix`, `terminationGraceMs`, `silenceMs`,
 `gate`, `formatCommand` (an argv array, defaulting to `node_modules/.bin/oxfmt`), `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even

@@ -6,7 +6,7 @@ import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts'
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
-import { choosePoolWithFallback } from './pools.ts';
+import { choosePoolWithFallback, PoolPolicyReloader } from './pools.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { awaitHostCapacity, launch, startsFirst, workerPrompt, type RunningWorker } from './launch.ts';
@@ -149,12 +149,21 @@ export class TaskHeldForDependenciesError extends Error {
   }
 }
 export class WorkerTasks {
+  private readonly poolPolicies: PoolPolicyReloader;
   constructor(
     readonly settings: Settings,
     readonly store: WorkerStore,
     readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch,
-  ) {}
+  ) {
+    this.poolPolicies = new PoolPolicyReloader(settings.localFile, settings.pools, (summary) => {
+      new SqliteManagerInbox(store.db, settings.integration.inboxDirectory).deliver({
+        managerId: settings.integration.supermanager,
+        kind: 'instruction',
+        summary,
+      });
+    });
+  }
   private branchHead(branch: string, createFromMain: boolean): string {
     const reference = `refs/heads/${branch}`;
     try {
@@ -586,9 +595,10 @@ export class WorkerTasks {
         return this.retryTask(taskId, startOptions);
       }
       this.ensureWorktree(task);
+      const pools = this.poolPolicies.read();
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const oldConfigDirectory = old
-        ? this.settings.pools.find((candidate) => candidate.name === old.pool)?.configDirectory
+        ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
       const table = readRouting(this.settings.routingFile);
       const pinned = nextBrief.model !== undefined;
@@ -604,7 +614,7 @@ export class WorkerTasks {
         !pinned && old && routable(old.profile)
           ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
           : routeTask(nextBrief, task.sequence, table);
-      const readings = this.settings.pools.map((pool) =>
+      const readings = pools.map((pool) =>
         withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory),
       );
       const history = this.store
@@ -642,7 +652,7 @@ export class WorkerTasks {
       const { profile, pool } = choosePoolWithFallback(
         pinned ? route.profile : (options.profile ?? switched ?? route.profile),
         fallbacks,
-        this.settings.pools,
+        pools,
         readings,
         {
           history,
