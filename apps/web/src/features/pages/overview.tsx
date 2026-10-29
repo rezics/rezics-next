@@ -232,7 +232,7 @@ export function Failed({ slot, id, title, locale }: { slot: string; id: string; 
 }
 
 function limitOf(props: Record<string, unknown>): number {
-  return typeof props.limit === 'number' && props.limit >= 1 ? props.limit : 12;
+  return typeof props.limit === 'number' && props.limit >= 1 ? Math.min(props.limit, 12) : 12;
 }
 
 /** The holders a `links` read returned, in the kernel's order. */
@@ -332,7 +332,7 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
   const { value, section } = state;
   const id = String(props.id);
   if (!section?.ok) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
-  const limit = limitOf(props);
+  const limit = props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props);
   const found = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit);
   if (!found) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
   if (found.items.length === 0) return null;
@@ -349,7 +349,7 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       href={viewHref(value, view)}
       locale={value.locale}
     >
-      <CoverList items={listed.items} value={value} label={text.text || title} preview />
+      <CoverList items={listed.items} value={value} label={text.text || title} preview={props.paged !== true} />
     </Preview>
   );
 }
@@ -390,7 +390,7 @@ export function RelationGroups(props: Record<string, unknown>) {
     const property = typeof node.props.property === 'string' ? node.props.property : '';
     const definition = Object.hasOwn(value.relations, property) ? value.relations[property] : undefined;
     const group = definition?.group ?? 'other';
-    const listed = linkItems(section, limitOf(node.props));
+    const listed = linkItems(section, node.props.paged === true ? Number.POSITIVE_INFINITY : limitOf(node.props));
     if (!listed) {
       failed += 1;
       const parts = groupParts.get(group) ?? [];
@@ -500,7 +500,7 @@ export function SubjectList(props: Record<string, unknown>) {
   const { value, section } = state;
   const id = String(props.id);
   const title = pageText(props.title, value.locale);
-  const found = linkItems(section, limitOf(props));
+  const found = linkItems(section, props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props));
   if (!found) return <Failed slot="subject-list" id={id} title={title.text} locale={value.locale} />;
   if (found.items.length === 0) return null;
   const listed = { ...found, items: datedItems(found.items, value.locale) };
@@ -511,11 +511,11 @@ export function SubjectList(props: Record<string, unknown>) {
       title={title.text}
       titleLang={title.lang}
       count={listed.count}
-      more={listed.more}
+      more={props.paged !== true && listed.more}
       href={viewHref(value, 'relations', typeof props.property === 'string' ? props.property : undefined)}
       locale={value.locale}
     >
-      <CoverList items={listed.items} value={value} label={title.text} preview />
+      <CoverList items={listed.items} value={value} label={title.text} preview={props.paged !== true} />
     </Preview>
   );
 }
@@ -551,7 +551,8 @@ export function CollectionList(props: Record<string, unknown>) {
   const title = pageText(props.title, value.locale);
   if (!section?.ok || section.read.kind !== 'collections' || !Array.isArray(section.body.collections))
     return <Failed slot="collection-list" id={id} title={title.text} locale={value.locale} />;
-  const collections = section.body.collections.filter(isRecord).slice(0, limitOf(props));
+  const allCollections = section.body.collections.filter(isRecord);
+  const collections = props.paged === true ? allCollections : allCollections.slice(0, limitOf(props));
   if (collections.length === 0) return null;
   const counted = isRecord(section.body.count) && typeof section.body.count.value === 'number';
   const total = counted

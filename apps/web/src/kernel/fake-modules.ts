@@ -61,6 +61,7 @@ function discover(): Discovered {
     recordings = import.meta.glob<KernelRecording>('./recorded/*.json', { eager: true, import: 'default' });
     fixtures = import.meta.glob<FixtureFile>('./fixtures/*.json', { eager: true, import: 'default' });
   }
+  // Includes fake/view-continuation.ts: subject view owner pages and their refusal fixture.
   discovered = {
     routes: ordered({
       ...Object.fromEntries(Object.entries(modules).filter(([file]) => !file.endsWith('/library-continue.ts'))),

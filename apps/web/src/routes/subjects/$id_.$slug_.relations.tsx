@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { readRelationsPage, RelationsView } from '../../features/pages/relations-view';
+import { validateViewCursor } from '../../features/pages/view-cursor';
 import { SubjectLink, viewTabLabels } from '../../features/pages/route-support';
 import { SubjectFrame, subjectFrame } from '../../features/pages/subject-frame';
 import { subjectPageType } from '../../features/pages/subject';
@@ -30,7 +31,7 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
       typeof locale !== 'string' ||
       locale.length > 35 ||
       typeof search !== 'string' ||
-      search.length > 2048
+      search.length > 2048 + (typeof cursor === 'string' ? encodeURIComponent(cursor).length : 0)
     )
       throw notFound();
     if (
@@ -69,7 +70,7 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
         statusCode: 301,
       });
     }
-    if (!links) throw notFound();
+    if (!links || links.status === 400) throw notFound();
     const canonical = await loadSubject(client, data.id, data.locale as never);
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
@@ -92,16 +93,20 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
       type: type ? await typeFrame(type, data.locale) : {},
       relations: await relationLabels(properties, data.locale),
       body,
+      cursor: data.cursor,
       reader,
       paths: subjectViewPaths(canonical.value.paths, 'relations'),
     };
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
-  validateSearch: (search: Record<string, unknown>): { property?: string; cursor?: string } => ({
-    ...(typeof search.property === 'string' && search.property.length <= 128 ? { property: search.property } : {}),
-    ...(typeof search.cursor === 'string' && search.cursor.length <= 2048 ? { cursor: search.cursor } : {}),
-  }),
+  // Validate the cursor in the loader so invalid input answers the not-found document.
+  validateSearch: (search: Record<string, unknown>): { property?: string; cursor?: unknown } => {
+    return {
+      ...(typeof search.property === 'string' && search.property.length <= 128 ? { property: search.property } : {}),
+      cursor: search.cursor,
+    };
+  },
   loaderDeps: ({ search }) => ({ property: search.property, cursor: search.cursor }),
   loader: ({ params, deps, location }) =>
     readRelations({
@@ -110,12 +115,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         slug: params.slug,
         locale: getLocale(),
         property: deps.property,
-        cursor: deps.cursor,
+        cursor: validateViewCursor(deps.cursor),
         search: location.searchStr,
       },
     }),
   head: ({ loaderData }) => ({
-    meta: [{ title: [loaderData?.title, m.subject_relations()].filter(Boolean).join(' · ') }],
+    meta: [
+      ...(loaderData?.cursor !== undefined ? [{ name: 'robots', content: 'noindex, follow' }] : []),
+      { title: [loaderData?.title, m.subject_relations()].filter(Boolean).join(' · ') },
+    ],
   }),
   component: RelationsRoute,
 });

@@ -969,6 +969,9 @@ language through the client's `accept-language`.
 - **Touches:** In parallel, one subject read for the title, one `GET /v1/subjects/<id>/links` page of at most 100
   holders for one property (`?property=`) or all of them, and for a signed-in reader one preferences read; then the
   cached definitions read for the labels of the properties on the page. The continuation is the kernel's opaque cursor
+
+Full subject views page through their owner list read with the first page's parameters and a cursor. Pages beyond the first are marked `noindex, follow`.
+
 - **Bound:** 2 K (+ 1 K signed in for the session credential, 1 D for preferences) and at most 2 K for definitions on a
   cold cache; one page of at most 100 rows however large the in-degree, so rendering is O(page) and independent of the
   count; 0 R/A

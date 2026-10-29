@@ -1,8 +1,17 @@
 import type { KernelClient } from '@rezics/client';
-import { planReads, platformRegistry, VIEWS, type CompositionDocument, type View } from '@rezics/composition';
+import {
+  planReads,
+  platformRegistry,
+  VIEWS,
+  type CompositionDocument,
+  type PageRead,
+  type View,
+} from '@rezics/composition';
 import type { ComponentProps, ReactNode } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Cover, type CoverLabels, type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
+import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { originalLanguage, originalTitle } from '../../subject/language';
@@ -79,7 +88,7 @@ export function subjectFrame(overview: SubjectPageData, locale: string): Subject
 export type ViewPagesLoad =
   | { kind: 'missing' }
   | { kind: 'redirect'; id: string; target?: 'account' }
-  | { kind: 'page'; page: SubjectPageData; overview: SubjectPageData };
+  | { kind: 'page'; page: SubjectPageData; overview: SubjectPageData; next?: string };
 
 /** One `pages.read` of the view and one of the overview, whose previews give the tab bar its counts and the frame its subject. */
 export async function loadViewPages(
@@ -87,12 +96,50 @@ export async function loadViewPages(
   id: string,
   view: View,
   locale = 'en',
+  cursor?: string,
 ): Promise<ViewPagesLoad> {
-  const result = await loadSubjectPage(client, id, view, locale);
+  const [result, overview] = await Promise.all([
+    loadSubjectPage(client, id, view, locale),
+    loadSubjectPage(client, id, undefined, locale),
+  ]);
   if (result.kind !== 'page') return result;
-  const overview = await loadSubjectPage(client, id, undefined, locale);
   if (overview.kind !== 'page') return overview;
-  return { kind: 'page', page: result.page, overview: overview.page };
+  let next: string | undefined;
+  const reads = planReads(
+    platformRegistry,
+    result.page.document as CompositionDocument,
+    pageContext(result.page),
+  ).reads;
+  const primary = Object.entries(reads).find(
+    (entry): entry is [string, Extract<PageRead, { kind: 'links' | 'collections' }>] =>
+      entry[1].kind === 'links' || entry[1].kind === 'collections',
+  );
+  if (primary) {
+    const [key, read] = primary;
+    if (cursor === undefined) {
+      const body = result.page.reads[key]?.body;
+      if (isRecord(body) && typeof body.next === 'string') next = body.next;
+    } else {
+      const response =
+        read.kind === 'links'
+          ? await client.subjects({ id }).links.get({
+              query: {
+                property: read.property,
+                ...(read.filter ? { filter: read.filter } : {}),
+                ...(read.type ? { type: read.type } : {}),
+                limit: read.limit,
+                cursor,
+              },
+            })
+          : await client.subjects({ id }).collections.get({ query: { limit: read.limit, cursor } });
+      if (response.status === 400) return { kind: 'missing' };
+      result.page.reads[key] = { status: response.status, body: response.error ? {} : response.data };
+      if (!response.error && response.data) {
+        if (typeof response.data.next === 'string') next = response.data.next;
+      }
+    }
+  }
+  return { kind: 'page', page: result.page, overview: overview.page, ...(next !== undefined ? { next } : {}) };
 }
 
 /** The tabs with the current view among them: the reader is on it, so the bar always offers it, in the documented order. */
@@ -198,9 +245,10 @@ type SubjectViewPageProps = Omit<ComponentProps<typeof SubjectPage>, 'heading' |
   frame: ReactNode;
   label: string;
   actions?: ReactNode;
+  nextHref?: string;
 };
 
-export function SubjectViewPage({ frame, label, actions, ...page }: SubjectViewPageProps) {
+export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: SubjectViewPageProps) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-8">
       {frame}
@@ -209,6 +257,11 @@ export function SubjectViewPage({ frame, label, actions, ...page }: SubjectViewP
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       <SubjectPage {...page} />
+      {nextHref ? (
+        <a data-slot="next-page" href={nextHref} className={buttonVariants({ variant: 'outline' })}>
+          {m.subject_relations_more({}, { locale: page.locale as never })}
+        </a>
+      ) : null}
     </div>
   );
 }
