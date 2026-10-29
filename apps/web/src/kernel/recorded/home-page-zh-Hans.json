@@ -152,7 +152,7 @@
             "cover": null
           },
           {
-            "id": "01a17a3b-6bd9-706f-b395-987536454933",
+            "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
             "type": "schema:Book",
             "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である", "zh-Hans": "我是猫" },
             "summary": null,
@@ -166,9 +166,9 @@
             "cover": null
           },
           {
-            "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+            "id": "01a1773a-f700-7078-8000-000000000003",
             "type": "schema:Book",
-            "labels": { "en": "Kokoro", "ja": "こころ", "zh-Hans": "心" },
+            "labels": { "en": "Norwegian Wood", "ja": "ノルウェイの森", "zh-Hans": "挪威的森林" },
             "summary": null,
             "cover": null
           },
@@ -180,9 +180,9 @@
             "cover": null
           },
           {
-            "id": "01a17a3b-6bab-705b-935e-d6dc0cacd82d",
+            "id": "01a1773a-f700-7078-8000-000000000001",
             "type": "schema:Book",
-            "labels": { "en": "Norwegian Wood", "ja": "ノルウェイの森", "zh-Hans": "挪威的森林" },
+            "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
             "summary": null,
             "cover": null
           },
@@ -194,7 +194,7 @@
             "cover": null
           },
           {
-            "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+            "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
             "type": "schema:Book",
             "labels": {
               "en": "The Little Prince",
@@ -233,7 +233,7 @@
             "cover": null
           },
           {
-            "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
+            "id": "01a1773a-f700-7078-8000-000000000001",
             "type": "schema:Book",
             "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
             "summary": null,
