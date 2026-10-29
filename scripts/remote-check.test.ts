@@ -394,6 +394,7 @@ if (script.includes('/proc/loadavg')) {
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
+  setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_MULTI_SLOT_MARKER')) {
   const id = script.match(/# REMOTE_CHECK_MULTI_SLOT_ID ([a-zA-Z0-9-]+)/)?.[1] ?? 'unknown';
   const slots = Number(script.match(/# REMOTE_CHECK_MULTI_SLOT_COUNT (\\d+)/)?.[1] ?? 0);
@@ -416,6 +417,7 @@ if (script.includes('/proc/loadavg')) {
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
+  setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_LANDING_MARKER')) {
   const id = script.match(/# REMOTE_CHECK_LANDING_ID ([a-zA-Z0-9-]+)/)?.[1] ?? 'unknown';
   const slots = Number(script.match(/# REMOTE_CHECK_LANDING_COUNT (\d+)/)?.[1] ?? 0);
@@ -439,6 +441,7 @@ if (script.includes('/proc/loadavg')) {
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
+  setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {
   const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
   const reservationBytes = Number(script.match(/# REMOTE_CHECK_MEMORY_RESERVATION_BYTES (\\d+)/)?.[1] ?? Math.round(2.5 * 2 ** 30));
