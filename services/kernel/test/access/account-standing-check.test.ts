@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { accountStandingCheck, createResourcePublicEligibility } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
+import resourceRoles from '../../src/access/resource-roles.json';
 import { createRealmMembership } from '../../src/community/membership.ts';
 import { createPool } from '../../src/database/pool.ts';
 import {
@@ -225,12 +226,12 @@ const cases: [string, boolean, (fixture: Fixture) => Promise<void>][] = [
     },
   ],
   [
-    'Realm owner role',
-    true,
+    'Realm member is not an owner',
+    false,
     async ({ f, grant }) => {
       const id = await realm(f);
       await pool.query(
-        "INSERT INTO community.realm_member(route,realm_id,account_id,role,valid,reservation_id,transaction_id) VALUES($1,$2,$3,'owner','(,)',$4,$5)",
+        "INSERT INTO community.realm_member(route,realm_id,account_id,role,valid,reservation_id,transaction_id) VALUES($1,$2,$3,'member','(,)',$4,$5)",
         [routeOf(id), id, f.actorId, newId(routeOf(id)!), f.transactionId],
       );
       await grant(id, 'owner');
@@ -302,6 +303,41 @@ for (const [name, allowed, setup] of cases) {
       f,
       f.ids.map(() => allowed),
     );
+  });
+}
+
+for (const role of ['community.realm.owner', 'community.realm.moderator'] as const) {
+  test(`${role}: standing equals the full-scope session without a membership row`, async () => {
+    const f = await fixture();
+    const id = await realm(f.f);
+    const target = { route: f.page.route, id };
+    const realmAction = 'realm:read';
+    const realmActions = new Map(resourceRoles.roles[role].map((name) => [name, { anonymous: false }]));
+    const access = admittedAccess({ actions: realmActions });
+    // Realm ownership and moderation are resource roles granted to the account,
+    // independent of the Realm's member group.
+    await pool.query(
+      `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+       VALUES($1,$2,$3,$4,'(,)',$5)`,
+      [target.route, id, f.f.actorId, role, f.f.transactionId],
+    );
+    const ctx = context();
+    const actor = await authenticateAccount(access, ctx, {
+      accountId: f.f.actorId,
+      clientId: 'first-party',
+      scopes: [...realmActions.keys()],
+    });
+    const session = await (await accessCheck(access, actor, realmAction, target, ctx))(pool);
+    expect(session).toBe(true);
+    for (const input of [target, { route: target.route, resourceType: 'community.realm', ids: [id] }])
+      expect(
+        await accountStandingCheck(access, {
+          accountId: actor.accountId,
+          action: realmAction,
+          target: input,
+          context: ctx,
+        }),
+      ).toEqual({ [id]: session });
   });
 }
 
