@@ -6,7 +6,7 @@ import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED } from './recor
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
-import { checkWaitMs } from './launch.ts';
+import { capacityWaiters, checkWaitMs } from './launch.ts';
 
 // Each check is a state the control plane should never stay in. A violation that persists means work has silently
 // stopped, which nobody notices from the inside: on 2026-10-26 eight tasks sat in running without a worker for up to
@@ -402,6 +402,7 @@ export function violations(
   store: Pick<WorkerStore, 'tasks' | 'attempt' | 'retryIntents'>,
   now: number,
   tasks = store.tasks(),
+  stateDirectory?: string,
 ): { key: string; summary: string }[] {
   const found: { key: string; summary: string }[] = [];
   const pending = new Set(
@@ -410,6 +411,7 @@ export function violations(
       .filter((intent) => intent.status === 'pending')
       .map((intent) => `${intent.taskId}:${intent.attempt}`),
   );
+  const waiting = stateDirectory ? capacityWaiters(stateDirectory) : new Set<string>();
   for (const task of tasks) {
     if (!task.currentAttempt || !['running', 'ready'].includes(task.state)) continue;
     const attempt = store.attempt({ taskId: task.id, attempt: task.currentAttempt });
@@ -419,6 +421,7 @@ export function violations(
     if (idle < NO_WORKER_MS) continue;
     const intent = pending.has(`${task.id}:${attempt.attempt}`);
     if (task.state === 'ready' && !intent) continue;
+    if (task.state === 'ready' && intent && waiting.has(task.id)) continue;
     const minutes = Math.round(idle / 60_000);
     found.push({
       key: `no-worker:${task.id}:${attempt.attempt}`,
@@ -453,7 +456,11 @@ export function watch(
   }
   const tasks = store.tasks();
   const longAttempts = longAttemptIncidents(store, tasks, now, limitFor);
-  const found = [...violations(store, now, tasks), ...failureIncidents(store, tasks, now), ...longAttempts];
+  const found = [
+    ...violations(store, now, tasks, stateDirectory),
+    ...failureIncidents(store, tasks, now),
+    ...longAttempts,
+  ];
   const hostIncidents = probeCheckHosts(state, stateDirectory, now, probe);
   const stabilize = head(checkout, branches.stabilize);
   const dev = head(checkout, branches.integration);
