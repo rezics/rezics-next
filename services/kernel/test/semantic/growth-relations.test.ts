@@ -89,6 +89,7 @@ let people: string[] = [];
 let peopleLabels: Fact[][] = [];
 let relationFacts: Fact[] = [];
 let population: Population;
+let growthHead: SessionComponent | undefined;
 
 function createPopulation(): Population {
   let current: Population;
