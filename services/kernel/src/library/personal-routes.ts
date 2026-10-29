@@ -42,6 +42,7 @@ type Dependencies = {
 const closed = { additionalProperties: false } as const;
 const id = t.String();
 const nullable = t.Union([id, t.Null()]);
+const incarnationId = t.String({ format: 'uuid' });
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const stateInput = libraryVocabularyIdSchema;
 const statusInput = libraryVocabularyIdSchema;
@@ -51,7 +52,14 @@ const pageQuery = {
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 };
 const entrySchema = t.Object(
-  { subjectId: id, state: libraryStoredVocabularySchema, revision, createdAt: id, updatedAt: id },
+  {
+    subjectId: id,
+    incarnationId: t.Optional(t.Union([incarnationId, t.Null()])),
+    state: libraryStoredVocabularySchema,
+    revision,
+    createdAt: id,
+    updatedAt: id,
+  },
   closed,
 );
 const copyFields = {
@@ -131,12 +139,20 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
 }
 function entryView({
   subjectId,
+  incarnationId,
   state,
   revision,
   createdAt,
   updatedAt,
-}: Pick<Entry, 'subjectId' | 'state' | 'revision' | 'createdAt' | 'updatedAt'>) {
-  return { subjectId, state, revision, createdAt, updatedAt };
+}: Pick<Entry, 'subjectId' | 'incarnationId' | 'state' | 'revision' | 'createdAt' | 'updatedAt'>) {
+  return {
+    subjectId,
+    ...(incarnationId === undefined ? {} : { incarnationId }),
+    state,
+    revision,
+    createdAt,
+    updatedAt,
+  };
 }
 function shelfEntryView(entry: ShelfEntry) {
   const { lastActivityAt, finishedAt, activeProgressSession: session } = entry;
@@ -282,7 +298,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ subjectId: id }),
         headers,
-        body: t.Object({ state: stateInput, revision: t.Optional(revision) }, closed),
+        body: t.Object(
+          { state: stateInput, revision: t.Optional(revision), incarnationId: t.Optional(incarnationId) },
+          closed,
+        ),
         response: {
           200: entryResponse,
           201: entryResponse,
@@ -315,7 +334,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ subjectId: id }),
         headers,
-        query: t.Object({ revision: t.Optional(revision) }, closed),
+        query: t.Object({ revision: t.Optional(revision), incarnationId: t.Optional(incarnationId) }, closed),
         response: { 204: t.Void(), ...failures },
         detail: detail('library_entry.delete', 'library_entry:delete', true),
       },
@@ -327,7 +346,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             // Conceal absent rows before reporting a revision conflict.
             await entries().readEntry(actor, params.subjectId);
             if (query.revision === undefined) throw new ProblemError('conflict');
-            return entries().deleteEntry(actor, params.subjectId, query.revision, key);
+            return entries().deleteEntry(actor, params.subjectId, query.revision, key, query.incarnationId);
           }),
         );
         session.record(result);

@@ -128,11 +128,13 @@ test('game recipe and record states use one HTTP entry slot and descriptive acti
     expect(first.libraryEntry.state).toBe(entryStates[vertical]);
     expect(Object.keys(first.libraryEntry).sort()).toEqual([
       'createdAt',
+      'incarnationId',
       'revision',
       'state',
       'subjectId',
       'updatedAt',
     ]);
+    expect(first.libraryEntry.incarnationId).toBe((await fact(subjectId)).incarnation_id);
     privateFree(first);
     const listed = await native.commands.listEntries(native.owner.actor, { limit: 100 });
     expect(String(listed.entries.find((entry) => entry.subjectId === subjectId)?.state)).toBe(entryStates[vertical]);

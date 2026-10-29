@@ -28,7 +28,7 @@ import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
 import stampOwnerSequence from './entry-owner-write-sequence.sql';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
-type PutEntryInput = { state: EntryState; revision?: number };
+type PutEntryInput = { state: EntryState; revision?: number; incarnationId?: string };
 type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
 type QueryClient = Pick<PoolClient, 'query'>;
 type EntryPageRow = Awaited<ReturnType<typeof entryPage.run>>[number];
@@ -40,8 +40,8 @@ const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
 export class LibraryEntryInvalidError extends TypeError {
-  constructor() {
-    super('Unknown library entry state');
+  constructor(message = 'Unknown library entry state') {
+    super(message);
     this.name = 'LibraryEntryInvalidError';
   }
 }
@@ -70,14 +70,27 @@ function revision(value: unknown): number {
   return value;
 }
 
+function incarnationId(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.exec(value)?.[0] !== value
+  )
+    throw new LibraryEntryInvalidError('Entry incarnation must be a UUID');
+  return value;
+}
+
 function putInput(input: unknown): PutEntryInput {
   if (typeof input !== 'object' || input === null || Array.isArray(input))
     throw new TypeError('Library entry input must be an object');
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).some((key) => key !== 'state' && key !== 'revision'))
+  if (Object.keys(value).some((key) => key !== 'state' && key !== 'revision' && key !== 'incarnationId'))
     throw new TypeError('Library entry input contains an unknown field');
   const parsed: PutEntryInput = { state: state(value.state) };
   if (value.revision !== undefined) parsed.revision = revision(value.revision);
+  if (value.incarnationId !== undefined) {
+    if (parsed.revision === undefined) throw new LibraryEntryInvalidError('Entry incarnation requires a revision');
+    parsed.incarnationId = incarnationId(value.incarnationId);
+  }
   return parsed;
 }
 
@@ -94,6 +107,7 @@ function asEntry(row: EntryPageRow): Entry {
     accountId: row.accountId,
     subjectId: row.subjectId,
     requestedSubjectId: row.requestedSubjectId,
+    incarnationId: row.incarnationId,
     state: asState(row.state),
     revision: row.revision,
     createdAt: new Date(row.createdAt).toISOString(),
@@ -190,11 +204,13 @@ export function createEntryCommands(config: Dependencies) {
           requestedSubjectId: null,
         });
 
+    // Absence retains the exact pre-incarnation receipt input.
     const requestInput = {
       subjectId: resolved.subjectId,
       requestedSubjectId: resolved.requestedSubjectId,
       state: parsed.state,
       revision: parsed.revision ?? null,
+      ...(parsed.incarnationId === undefined ? {} : { incarnationId: parsed.incarnationId }),
     };
     const expectedRevision = parsed.revision;
     try {
@@ -257,6 +273,7 @@ export function createEntryCommands(config: Dependencies) {
               parsed.state,
               context,
               source.pin,
+              parsed.incarnationId,
             );
             if (!changed) throw new LibraryConflictError();
             entry = changed;
@@ -290,9 +307,16 @@ export function createEntryCommands(config: Dependencies) {
     }
   }
 
-  async function deleteEntry(actor: Actor, subjectId: string, expectedRevision: number, requestKey: string) {
+  async function deleteEntry(
+    actor: Actor,
+    subjectId: string,
+    expectedRevision: number,
+    requestKey: string,
+    expectedIncarnationId?: string,
+  ) {
     const owner = account(actor, 'library_entry:delete');
     const expected = revision(expectedRevision);
+    const guard = expectedIncarnationId === undefined ? undefined : incarnationId(expectedIncarnationId);
     requireRoute(owner.accountId);
     requireRoute(subjectId);
     const existing = await snapshot(actor, 'library_entry:delete', (client, accountOwner, route) =>
@@ -306,12 +330,12 @@ export function createEntryCommands(config: Dependencies) {
         action: 'library_entry:delete',
         kind: 'library.entry.delete',
         requestKey,
-        input: { subjectId, revision: expected },
+        input: { subjectId, revision: expected, ...(guard === undefined ? {} : { incarnationId: guard }) },
       },
       async (tx, command) => {
         const route = requireRoute(owner.accountId);
         await allocateOwnerWriteSeq(tx, owner.accountId);
-        const removed = await store.deleteEntry(tx, route, owner.accountId, resolved.subjectId, expected);
+        const removed = await store.deleteEntry(tx, route, owner.accountId, resolved.subjectId, expected, guard);
         if (!removed) throw new LibraryConflictError();
         return { value: removed, events: [entryEvent(DELETED_EVENT, owner.accountId, removed.subjectId)] };
       },

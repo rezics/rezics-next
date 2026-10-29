@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { newId } from '../route/route.ts';
 import copyDelete from './entry-store-copy-delete.sql';
 import copyInsert from './entry-store-copy-insert.sql';
 import copyPage from './entry-store-copy-page.sql';
@@ -53,6 +54,7 @@ function asEntry(row: EntryResult): Entry {
     accountId: row.accountId,
     subjectId: row.subjectId,
     requestedSubjectId: row.requestedSubjectId,
+    incarnationId: row.incarnationId,
     state: row.state,
     revision: row.revision,
     createdAt: iso(row.createdAt),
@@ -119,6 +121,7 @@ export async function insertEntry(
     account_id: entry.accountId,
     subject_id: entry.subjectId,
     requested_subject_id: entry.requestedSubjectId,
+    incarnation_id: newId(route),
     state: entry.state,
     library_profile_pin: acceptedPin,
     ...write(context),
@@ -157,6 +160,7 @@ export async function updateEntryState(
   state: EntryState,
   context: WriteContext,
   pin?: LibraryProfilePin,
+  expectedIncarnationId?: string,
 ): Promise<Entry | null> {
   const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
   if (acceptedPin === null) assertState(state);
@@ -167,6 +171,7 @@ export async function updateEntryState(
     revision,
     state,
     library_profile_pin: acceptedPin,
+    expected_incarnation_id: expectedIncarnationId ?? null,
     ...write(context),
   });
   return row ? asEntry(row) : null;
@@ -178,12 +183,14 @@ export async function deleteEntry(
   accountId: string,
   subjectId: string,
   revision: number,
+  expectedIncarnationId?: string,
 ): Promise<Entry | null> {
   const row = await entryDelete.run(queryClient(client), {
     route,
     account_id: accountId,
     subject_id: subjectId,
     revision,
+    expected_incarnation_id: expectedIncarnationId ?? null,
   });
   return row ? asEntry(row) : null;
 }

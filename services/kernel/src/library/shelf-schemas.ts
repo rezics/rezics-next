@@ -50,6 +50,7 @@ export const shelfEntrySchema = embedded(
   t.Object(
     {
       subjectId: text,
+      incarnationId: t.Optional(t.Union([uuid, t.Null()])),
       state: libraryStoredVocabularySchema,
       revision,
       createdAt: text,
