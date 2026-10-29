@@ -314,6 +314,8 @@ export const SharedPlaceholders: Story = {
                     index === 4
                       ? {
                           media: 'sample',
+                          focalPoint: null,
+                          credit: null,
                           width: 200,
                           height: 300,
                           placeholder: { color: '#435c67', thumbhash: '' },
