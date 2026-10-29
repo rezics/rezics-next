@@ -3,20 +3,6 @@ import { readFileSync } from 'node:fs';
 import { createContext, Script } from 'node:vm';
 
 export const MAX_ANALYSIS_STEPS = 100_000;
-let steps = 0;
-// The pinned browser checker implements Scala.js nanoTime with performance.now.
-// Give that *existing* checker a private, deterministic cancellation counter.
-// No host clock is patched. Each native cancellation checkpoint spends work;
-// the counter also interrupts DFA construction, which has no native size limit.
-const engine = {
-  module: { exports: {} as typeof import('recheck') },
-  performance: {
-    now() {
-      if (++steps > MAX_ANALYSIS_STEPS) throw new Error('Pattern analysis operation budget exhausted');
-      return (steps * 3000) / MAX_ANALYSIS_STEPS;
-    },
-  },
-};
 // Admission bounds the *expanded* expression before recheck allocates its NFA.
 // Counts include nested multiplication, not just the spelling of {n}. Saturate
 // by refusing immediately, before any expansion or integer overflow is possible.
@@ -130,42 +116,57 @@ function admitted(source: string): boolean {
 }
 
 const checkerPath = import.meta.resolve('recheck/lib/browser.js');
-const context = createContext({
-  ...engine,
-  report(message: string) {
-    // In recheck 4.5.0, structural cap failures log before the auto/fuzz
-    // fallback. Refuse them, and all fuzz diagnostics, before seeding/matching.
-    if (!['parse:', 'automaton:', 'recall:'].some((stage) => message.startsWith(stage))) {
-      throw new Error('Pattern requires analysis outside the structural budget');
-    }
-  },
-});
-new Script(readFileSync(new URL(checkerPath), 'utf8'), { filename: checkerPath }).runInContext(context);
+// The pinned browser checker implements Scala.js nanoTime with performance.now.
+// Keep the counter and all checkpoint callbacks in the checker's own realm:
+// no host clock is patched, and crossing realms cannot add work per checkpoint.
+const context = createContext({ module: { exports: {} } });
+new Script(
+  `
+  let rezicsPatternSteps = 0;
+  globalThis.performance = { now() {
+    if (++rezicsPatternSteps > ${MAX_ANALYSIS_STEPS}) throw new Error('Pattern analysis operation budget exhausted');
+    return rezicsPatternSteps * 3000 / ${MAX_ANALYSIS_STEPS};
+  } };
+` + readFileSync(new URL(checkerPath), 'utf8'),
+  { filename: checkerPath },
+).runInContext(context);
 // The Scala.js parameter decoder requires objects/functions from its own realm.
 // Compile a fixed wrapper; the untrusted pattern is passed only as a string argument.
-const checkPattern = new Script(`(pattern) => module.exports.checkSync(pattern, 'u', {
-  // Explicit automaton mode bypasses these limits in the pinned checker.
-  checker: 'auto',
-  maxPatternSize: 257,
-  maxRepeatCount: ${MAX_EXPANSION + 1},
-  maxNFASize: ${MAX_TRANSITIONS},
-  timeout: 3000,
-  maxRecallStringSize: 1024,
-  recallTimeout: -1,
-  logger: message => report(message)
-})`).runInContext(context) as (pattern: string) => ReturnType<(typeof import('recheck'))['checkSync']>;
+const checkPattern = new Script(`(pattern) => {
+  rezicsPatternSteps = 0;
+  try {
+    const result = module.exports.checkSync(pattern, 'u', {
+      // Explicit automaton mode bypasses these limits in the pinned checker.
+      checker: 'auto',
+      maxPatternSize: 257,
+      maxRepeatCount: ${MAX_EXPANSION + 1},
+      maxNFASize: ${MAX_TRANSITIONS},
+      timeout: 3000,
+      maxRecallStringSize: 1024,
+      recallTimeout: -1,
+      logger(message) {
+        // Structural cap failures log before the auto/fuzz fallback. Refuse
+        // these and all fuzz diagnostics before seeding or matching begins.
+        if (!['parse:', 'automaton:', 'recall:'].some(stage => message.startsWith(stage))) {
+          throw new Error('Pattern requires analysis outside the structural budget');
+        }
+      }
+    });
+    return { safe: result.status === 'safe' && result.checker === 'automaton', steps: rezicsPatternSteps };
+  } catch {
+    return { safe: false, steps: rezicsPatternSteps };
+  }
+}`).runInContext(context) as (pattern: string) => { safe: boolean; steps: number };
 
 /** The compiler and release validator's sole pattern safety authority. No proof cache. */
 export function analyzePattern(pattern: unknown): { safe: boolean; steps: number } {
-  steps = 0;
-  if (typeof pattern !== 'string' || pattern.length > 256) return { safe: false, steps };
+  if (typeof pattern !== 'string' || pattern.length > 256) return { safe: false, steps: 0 };
   try {
     new RegExp(pattern, 'u');
-    if (!admitted(pattern)) return { safe: false, steps };
-    const result = checkPattern(pattern);
-    return { safe: result.status === 'safe' && result.checker === 'automaton', steps };
+    if (!admitted(pattern)) return { safe: false, steps: 0 };
+    return checkPattern(pattern);
   } catch {
-    return { safe: false, steps };
+    return { safe: false, steps: 0 };
   }
 }
 

@@ -56,7 +56,8 @@ async function evaluate(step: number, reverse: boolean, inputs: string[], fixedS
           let compiler;
           try {
             const release = await compileCatalogue({ root: 'main.yaml', schemas: { 'main.yaml': JSON.stringify({
-              id: 'urn:clock', name: 'clock', version: '1', prefixes: { ex: 'https://example.org/' },
+              id: 'urn:clock', name: 'clock', version: '1', default_range: 'string',
+              prefixes: { ex: 'https://example.org/', linkml: 'https://w3id.org/linkml/' }, imports: ['linkml:types'],
               classes: { T: { class_uri: 'ex:T', slots: ['p'] } },
               slots: { p: { slot_uri: 'ex:p', pattern, annotations: { datatype } } }
             }) }, presentation: { en: JSON.stringify({ types: { 'ex:T': 'type' }, properties: { 'ex:p': 'property' } }) } });
@@ -88,13 +89,15 @@ async function evaluate(step: number, reverse: boolean, inputs: string[], fixedS
   return JSON.parse(stdout) as [string, string, unknown[], unknown[]?][];
 }
 
-test('pattern safety verdicts are structural and independent of clock or host load', async () => {
+for (const step of [3001, 0]) {
   for (const reverse of [false, true]) {
-    const advancing = await evaluate(3001, reverse, [], true);
-    for (const [, , issues] of advancing) expect(issues).toEqual([]);
-    expect(advancing).toEqual(await evaluate(0, reverse, [], true));
+    const suffix = step === 3001 && !reverse ? '' : ` (clock ${step}, reverse ${reverse})`;
+    test(`pattern safety verdicts are structural and independent of clock or host load${suffix}`, async () => {
+      const results = await evaluate(step, reverse, [], true);
+      for (const [, , issues] of results) expect(issues).toEqual([]);
+    });
   }
-});
+}
 
 async function assertVerdicts(step: number, reverse: boolean, patterns: string[]) {
   const results = await evaluate(step, reverse, patterns);
@@ -123,20 +126,20 @@ async function assertVerdicts(step: number, reverse: boolean, patterns: string[]
   return results;
 }
 
-test('compiler and release validator share deterministic hostile-pattern refusal', async () => {
-  const patterns = [safe[0]!, hostile[0]!];
-  const advancing = await assertVerdicts(3001, false, patterns);
-  expect(advancing).toEqual(await assertVerdicts(0, false, patterns));
-});
-
-// Keep each cold/order comparison its own bounded unit: no test deadline changes.
-for (const pattern of [...safe, ...hostile]) {
-  test(`cold and repeated compiler/release verdicts: ${pattern}`, async () => {
-    for (const reverse of [false, true]) {
-      const advancing = await assertVerdicts(3001, reverse, [pattern]);
-      expect(advancing).toEqual(await assertVerdicts(0, reverse, [pattern]));
+for (const step of [3001, 0]) {
+  for (const reverse of [false, true]) {
+    const suffix = step === 3001 && !reverse ? '' : ` (clock ${step}, reverse ${reverse})`;
+    test(`compiler and release validator share deterministic hostile-pattern refusal${suffix}`, async () => {
+      await assertVerdicts(step, reverse, [safe[0]!, hostile[0]!]);
+    });
+    // Every variant has an identical exact oracle, including repeated evaluations
+    // in each cold subprocess. Separate units preserve the existing test deadline.
+    for (const pattern of [...safe, ...hostile]) {
+      test(`cold and repeated compiler/release verdicts: ${pattern} (clock ${step}, reverse ${reverse})`, async () => {
+        await assertVerdicts(step, reverse, [pattern]);
+      });
     }
-  });
+  }
 }
 
 test('structural expansion and graph limits bound short patterns with enormous analysis work', async () => {
