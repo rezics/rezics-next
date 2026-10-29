@@ -10,7 +10,7 @@ test('retry --brief on a held task replaces its brief and keeps it held until de
     const dependency = h.tasks.dispatch(h.briefFile);
     const task = h.tasks.dispatch(h.briefFile);
     const worker = await h.tasks.retry(task.id);
-    await worker.done;
+    await worker.exited;
     h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
       current.state = 'held';
       current.brief.after = [dependency.id];
@@ -38,7 +38,7 @@ test('a refused retry writes no brief file', async () => {
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const worker = await h.tasks.retry(task.id);
-    await worker.done;
+    await worker.exited;
     h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => { current.state = 'integrated'; });
     const amended = join(h.root, '.temp/goal/amended.md');
     writeFileSync(amended, `${markdown}\nRefused amendment.\n`);
@@ -70,7 +70,7 @@ test('goal priority changes a running task in place and the next checks see the 
     expect(updated.brief.criticalPath).toBe(true);
     expect(h.store.attempt({ taskId: task.id, attempt: before.currentAttempt })).toEqual(attemptBefore);
     expect(readFileSync(join(updated.worktree, '.temp/goal/task-priority'), 'utf8')).toBe('critical\n');
-    await worker.done;
+    await worker.exited;
   } finally {
     h.dispose();
   }
