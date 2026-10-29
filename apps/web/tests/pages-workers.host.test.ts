@@ -58,7 +58,7 @@ test('the real Workers SSR path renders the Puck composition before client JavaS
     expect(header).toBeDefined();
     expect(header!).toMatch(/<h1\b[^>]*>The Little Prince<\/h1>/);
     expect(header!).toContain('data-slot="subject-creators"');
-    expect(header!).toContain('data-slot="actions"');
+    expect(header!).toMatch(/<button\b[^>]*aria-label="More actions"[^>]*>/);
     expect(header!).not.toContain(page.reads.r0.body.subject.descriptions.en);
     expect(main).toContain(
       'A pilot stranded in the Sahara meets a small prince who has left his asteroid, and learns from him what matters.',
@@ -71,11 +71,11 @@ test('the real Workers SSR path renders the Puck composition before client JavaS
     const landmarks = [
       '<h1',
       'data-slot="subject-creators"',
-      'data-slot="actions"',
+      'aria-label="More actions"',
       '</header>',
-      '<dl',
-      '>Editions</h2>',
       'A pilot stranded in the Sahara meets a small prince',
+      '<dl data-slot="subject-facts"',
+      '>Editions</h2>',
     ];
     let previous = -1;
     for (const landmark of landmarks) {
