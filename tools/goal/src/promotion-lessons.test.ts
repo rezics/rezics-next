@@ -25,7 +25,7 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
       gates++;
       return success;
     });
-    expect(gates).toBe(2); // candidate gate, then the next candidate gate
+    expect(gates).toBe(1); // the candidate gate
     expect(h.head('stabilize')).toBe(h.head('dev'));
   } finally {
     h.dispose();
