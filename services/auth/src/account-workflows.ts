@@ -272,14 +272,9 @@ export function clientAuthority(
         }
         const rows = (
           await connection.query<{ account_id: string; traversal_ordinal: string }>(
-            `SELECT page.account_id,page.traversal_ordinal
-             FROM (SELECT $1::text AS client_id,$2::bigint AS boundary OFFSET 0) cursor
-             CROSS JOIN LATERAL (
-               SELECT consent.account_id,consent.traversal_ordinal FROM auth_consent consent
-               WHERE (consent.client_id,consent.traversal_ordinal)>(cursor.client_id,cursor.boundary)
-                 AND consent.client_id=cursor.client_id
-               ORDER BY consent.traversal_ordinal LIMIT $3
-             ) page`,
+            `SELECT account_id,traversal_ordinal FROM auth_consent
+             WHERE client_id=$1 AND traversal_ordinal>$2
+             ORDER BY traversal_ordinal LIMIT $3`,
             [input.clientId, after, input.limit + 1],
           )
         ).rows;
