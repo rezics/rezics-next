@@ -46,10 +46,16 @@ test('native account erasure preserves authorization, invalidation order and unr
     const events: string[] = [];
     let outage = false;
     let inspectRead = false;
+    pool.on('connect', (client) => {
+      const query = client.query.bind(client);
+      client.query = ((...args: Parameters<typeof query>) => {
+        if (args[0] === 'DELETE FROM "user" WHERE id=$1') events.push('native-delete');
+        return query(...args);
+      }) as typeof client.query;
+    });
     const originalQuery = pool.query.bind(pool);
     let inflight = 0;
     pool.query = ((...args: Parameters<Pool['query']>) => {
-      if (args[0] === 'DELETE FROM "user" WHERE id=$1') events.push('native-delete');
       if (typeof args.at(-1) === 'function') return originalQuery(...args);
       inflight++;
       return Promise.resolve(originalQuery(...args)).finally(() => {
@@ -336,11 +342,20 @@ test('native account erasure preserves authorization, invalidation order and unr
     expect((await request('/session', undefined, cookie)).status).toBe(401);
     expect((await request('/token', {}, cookie)).status).toBe(401);
     expect(await snapshot()).toEqual(baseline);
+    const beforeErasure = (await pool.query<{ at: Date }>('SELECT clock_timestamp() AS at')).rows[0]!.at;
     inspectRead = true;
     await service.internal.eraseAccount(subject.accountId);
     inspectRead = false;
     expect(events).toEqual(['access-invalidation-committed', 'access-read', 'native-delete']);
     const erased = await snapshot(subject.accountId);
+    expect(erased.find(({ table }) => table === 'user')!.rows).toEqual([]);
+    const scheduled = await pool.query<{ due_at: Date; at: Date }>(
+      'SELECT due_at, clock_timestamp() AS at FROM auth_consent_erasure WHERE account_id=$1',
+      [subject.accountId],
+    );
+    expect(scheduled.rows).toHaveLength(1);
+    expect(scheduled.rows[0]!.due_at.getTime()).toBeGreaterThanOrEqual(beforeErasure.getTime() + 310_000);
+    expect(scheduled.rows[0]!.due_at.getTime()).toBeLessThanOrEqual(scheduled.rows[0]!.at.getTime() + 310_000);
     expect(erased.find(({ table }) => table === 'auth_consent')!.rows).toEqual(
       selected.find(({ table }) => table === 'auth_consent')!.rows,
     );

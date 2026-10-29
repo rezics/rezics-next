@@ -225,7 +225,8 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
     const examined = 2 + 5 * fixedFanout; // owner, credential; sessions/keys/assertions/recovery/openings
     expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
     for (const { cost } of report.samples) {
-      expect(cost.statements).toBe(1);
+      expect(cost.statements).toBe(2);
+      expect(cost.controlStatements).toBe(2);
       expect(cost.rows).toBe(examined);
       expect(cost.blocks).toBeGreaterThan(0);
       expect(cost.relations?.['public.auth_consent']).toBeUndefined();
@@ -247,9 +248,19 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
       { from: 0, to: 1 },
     );
     const { capture: raw } = await capture(database, () => service.internal.eraseAccount('plan-owner'));
-    expect(raw.statements).toEqual(['DELETE FROM "user" WHERE id=$1']);
+    expect(raw.statements).toEqual([
+      'BEGIN',
+      'DELETE FROM "user" WHERE id=$1',
+      `INSERT INTO auth_consent_erasure (account_id,due_at)
+             VALUES ($1,clock_timestamp()+interval '5 minutes 10 seconds')
+             ON CONFLICT (account_id) DO NOTHING`,
+      'COMMIT',
+    ]);
     const documents = raw.plans as PlanDocument[];
-    expect(documents).toHaveLength(13); // owner DELETE plus the FK cascade plans Postgres emits; consent is not one of them
+    const schedulePlans = documents.filter((entry) => entry.Plan['Relation Name'] === 'auth_consent_erasure');
+    expect(schedulePlans).toHaveLength(1);
+    // Owner DELETE plus its FK cascade plans; consent is not one of them.
+    expect(documents.filter((entry) => !schedulePlans.includes(entry))).toHaveLength(13);
     for (const [table, column, index] of [
       ['auth_recovery', 'account_id', 'auth_recovery_account_id_idx'],
       ['auth_session_opening', 'subject_account_id', 'auth_session_opening_subject_account_id_idx'],
@@ -290,7 +301,8 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
       );
       const { capture: fanoutCapture } = await capture(database, () => service.internal.eraseAccount(owner));
       const cost = costOf(fanoutCapture);
-      expect(cost.statements).toBe(1);
+      expect(cost.statements).toBe(2);
+      expect(cost.controlStatements).toBe(2);
       expect(cost.rows).toBe(2 + 5 * fanout);
       expect(cost.relations['public.auth_consent']).toBeUndefined();
       expect(cost.relations['public.auth_recovery']?.rows).toBe(fanout);
