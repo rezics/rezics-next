@@ -143,6 +143,13 @@ new broad gate or product repair is authorized by this specification delivery. A
 establishes delivery of this specification; it does not establish that the landing failure or native failures
 have been repaired. There are still no changes outside the five declared paths and no new source references.
 
+Retry acceptance on committed revision `1688306c52` reached terminal **exit 0**:
+`bun scripts/worker-check.ts -- test -s docs/research/imports-audit/native-composed-counted-costs.md`.
+Check ID: `6431d8df-44b9-4717-80dd-96249f6daa4e`;
+log: `.temp/goal/checks/worker-check-2026-10-29T17-10-36.232Z-dc71364a.log`.
+The check queued for an available slot and was awaited through the same ID to completion. No check started in
+this retry remains running. All four executable SHA-256 hashes below were reconfirmed unchanged.
+
 Exact first failure line from the API child (complete backend diagnostics retained):
 
 ```text
