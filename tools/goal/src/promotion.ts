@@ -1072,7 +1072,12 @@ export async function promote(options: PromotionOptions): Promise<void> {
         run = undefined;
       }
       if (!run) {
-        if (main === candidate || !isAncestor(settings.mainCheckout, main, candidate)) return;
+        if (
+          main === candidate ||
+          (!isAncestor(settings.mainCheckout, main, candidate) &&
+            !controlPlaneOnly(settings.mainCheckout, main, candidate))
+        )
+          return;
         const prepared = await regenerateDerivedHead(options, candidate, candidateBranch);
         if (prepared.retry) continue;
         candidate = prepared.head;
