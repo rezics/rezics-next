@@ -73,6 +73,7 @@ test("the Liked version increases on every change of the actor's like and love s
     ['love', 2n],
     ['laugh', 3n],
     ['sad', 3n],
+    ['laugh', 3n],
     ['like', 4n],
   ] as const) {
     await react(id, kind);
