@@ -103,6 +103,8 @@ describe('native Auth and web stack', () => {
   test('stop closes contexts and Auth while leaving the native stack available to stop itself', async () => {
     const stack = await startNativeWebStack();
     stacks.push(stack);
+    const nativeLogin = await fetch(`${stack.issuerOrigin}/login`);
+    const nativeLoginBody = await nativeLogin.text();
     const auth = await startAuthStack(stack);
     authStacks.push(auth);
     const [context, sameContext] = await Promise.all([auth.context('alice'), auth.context('alice')]);
@@ -116,11 +118,9 @@ describe('native Auth and web stack', () => {
     expect(bobContext.pages()).toHaveLength(0);
     expect(alicePage.isClosed()).toBe(true);
     expect(bobPage.isClosed()).toBe(true);
-    let authStatus = 0;
-    try {
-      authStatus = (await fetch(`${auth.origin}/login`)).status;
-    } catch {}
-    expect(authStatus).not.toBe(200);
+    const restoredLogin = await fetch(`${auth.origin}/login`);
+    expect(restoredLogin.status).toBe(nativeLogin.status);
+    expect(await restoredLogin.text()).toBe(nativeLoginBody);
     expect((await stack.kernel('/v1/definitions/active')).status).toBe(200);
   }, 180_000);
 });
@@ -129,12 +129,11 @@ describe('native Auth and web stack', () => {
 test('routes Auth pages and assets at the issuer and restores the original listener', async () => {
   const stack = await startNativeWebStack();
   stacks.push(stack);
-  const discovery = (await (await fetch(`${stack.authIssuer}/.well-known/openid-configuration`)).json()) as {
-    issuer: string;
-  };
-  const issuer = discovery.issuer;
+  const issuer = stack.issuerOrigin;
   const original = await fetch(`${issuer}/login`);
-  expect(original.status).toBe(404);
+  expect(original.status).toBe(200);
+  const originalBody = await original.text();
+  expect(originalBody).toContain('Sign in at /signin');
   const visited: string[] = [];
   const routed = await stack.routeAuthPages((request) => {
     visited.push(request.url);
@@ -171,6 +170,8 @@ test('routes Auth pages and assets at the issuer and restores the original liste
   expect(await signup.json()).toEqual({ error: 'registration_denied' });
   expect(visited.length).toBe(pageCalls);
   await stack.routeAuthPages();
-  expect((await fetch(`${issuer}/login`)).status).toBe(original.status);
+  const restored = await fetch(`${issuer}/login`);
+  expect(restored.status).toBe(original.status);
+  expect(await restored.text()).toBe(originalBody);
   expect((await stack.kernel('/v1/definitions/active')).status).toBe(200);
 }, 180_000);

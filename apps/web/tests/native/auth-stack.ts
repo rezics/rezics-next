@@ -95,7 +95,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
-      AUTH_ORIGIN: stack.authIssuer,
+      AUTH_ORIGIN: stack.issuerOrigin,
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
       TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
     },

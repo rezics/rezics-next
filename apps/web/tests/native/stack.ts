@@ -17,6 +17,8 @@ export type NativeKernelRequest = {
 export type NativeWebStack = {
   kernelOrigin: string;
   authIssuer: string;
+  /** The canonical issuer advertised by discovery, before the optional proxy listener. */
+  issuerOrigin: string;
   web: string;
   /** Read fixture identity for form entry, without creating a website session. */
   authPersona(persona: string): Promise<{ accountId: string; email: string; authorization: string }>;
@@ -531,6 +533,7 @@ async function startStack(): Promise<
     return {
       kernelOrigin,
       authIssuer: authServer.url.origin,
+      issuerOrigin: auth.issuer,
       web: webOrigin,
       async authPersona(persona) {
         const { accountId, bearer } = await getAccount(persona);
@@ -632,7 +635,10 @@ async function startStack(): Promise<
 // and a second (or failed) stack never reuses an earlier stack's database or sessions.
 type Observation = { requests: NativeKernelRequest[]; peakMemory: number };
 type HostReply =
-  | { ready: { kernelOrigin: string; authIssuer: string; web: string; databaseUrl: string }; observation: Observation }
+  | {
+      ready: { kernelOrigin: string; authIssuer: string; issuerOrigin: string; web: string; databaseUrl: string };
+      observation: Observation;
+    }
   | { id: number; value?: unknown; error?: string; observation: Observation }
   | { startupError: string }
   | { analysisDatabase: string };
@@ -684,14 +690,24 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   let closed: Promise<void> | undefined;
   let dead: Error | undefined;
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  let ready!: (value: { kernelOrigin: string; authIssuer: string; web: string; databaseUrl: string }) => void;
+  let ready!: (value: {
+    kernelOrigin: string;
+    authIssuer: string;
+    issuerOrigin: string;
+    web: string;
+    databaseUrl: string;
+  }) => void;
   let failed!: (error: Error) => void;
-  const startup = new Promise<{ kernelOrigin: string; authIssuer: string; web: string; databaseUrl: string }>(
-    (resolve, reject) => {
-      ready = resolve;
-      failed = reject;
-    },
-  );
+  const startup = new Promise<{
+    kernelOrigin: string;
+    authIssuer: string;
+    issuerOrigin: string;
+    web: string;
+    databaseUrl: string;
+  }>((resolve, reject) => {
+    ready = resolve;
+    failed = reject;
+  });
   const fail = (error: Error) => {
     dead = error;
     failed(error);
@@ -723,7 +739,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     });
   };
   try {
-    const { kernelOrigin, authIssuer, web, databaseUrl } = await startup;
+    const { kernelOrigin, authIssuer, issuerOrigin, web, databaseUrl } = await startup;
     // Retain the existing fixture's observable setup environment. The host has
     // its own environment, including Reylo config and pool timeout overrides.
     if (originalDatabaseUrl === undefined) process.env.DATABASE_URL = databaseUrl;
@@ -744,6 +760,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     return {
       kernelOrigin,
       authIssuer,
+      issuerOrigin,
       web,
       credentials,
       authPersona: (persona) =>
@@ -863,6 +880,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
       ready: {
         kernelOrigin: stack.kernelOrigin,
         authIssuer: stack.authIssuer,
+        issuerOrigin: stack.issuerOrigin,
         web: stack.web,
         databaseUrl: process.env.DATABASE_URL!,
       },
