@@ -7,7 +7,9 @@ test('SQLite probe reports executed statements and rows returned from the same e
   database.exec('CREATE TABLE counted (id INTEGER PRIMARY KEY, value TEXT)');
   const probe = createSqliteProbe(database, { growingTables: ['counted'] });
   try {
-    const insert = probe.measure(() => probe.database.prepare('INSERT INTO counted (id, value) VALUES (?, ?)').run(1, 'one'));
+    const insert = probe.measure(() =>
+      probe.database.prepare('INSERT INTO counted (id, value) VALUES (?, ?)').run(1, 'one'),
+    );
     expect(insert.counts).toEqual({ 'sqlite statements': 1, 'sqlite returned rows': 0 });
     expect(insert.statements[0]).toMatchObject({
       sql: 'INSERT INTO counted (id, value) VALUES (?, ?)',

@@ -19,8 +19,7 @@ client transport activity; they do not measure coordinator batching or server wo
   exactly nine fence calls at each history size. The command-width axis is separately sampled at 2, 8 and 32 aliases,
   below the 512-fact per-command cap. The actual seed acquisition reads 64, 512 and 4096 records once each, reaches
   EOF before the first transport effect, and reports linear input-record counts.
-- `importer-growth.test.ts` exercises client transport with 64, 512 and 4096 supplied commands in batches of at most
-  100. It asserts exactly `ceil(N / 100)` sends, one send for every supplied batch, no extra route calls, and linear
+- `importer-growth.test.ts` exercises client transport with 64, 512 and 4096 supplied commands in batches of at most 100. It asserts exactly `ceil(N / 100)` sends, one send for every supplied batch, no extra route calls, and linear
   counted request/command work. It makes no claim about stored/imported server rows.
 - `record-cpu-growth.test.ts` counts converter calls, SQLite prepares, SQLite executions and SQLite commits at its
   existing 16, 64 and 256 record scales. Existing exact marginal ceilings remain: at most 0.1 prepares, exactly 5

@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { countedSample, countedViolations, type CountedCheck, type CountedValues } from '../../kernel/test/support/growth-counters.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import { createImportPipelineDriver, pipelineWork } from './pipeline-driver.ts';
 
 const SCALES = [16, 64, 256] as const;

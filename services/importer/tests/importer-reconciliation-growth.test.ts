@@ -7,7 +7,12 @@ import { Importer } from '../src/importer.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 import { RUN_TABLES } from '../src/run-store.ts';
-import { countedSample, countedViolations, type CountedCheck, type CountedValues } from '../../kernel/test/support/growth-counters.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 const fixture = JSON.parse(
   readFileSync(join(import.meta.dir, '../../../specs/fixtures/imports/ledger/wikidata.jsonl'), 'utf8').split('\n')[0]!,
@@ -221,13 +226,28 @@ test('actual coordinator fixed work searches same-source keys/history at three s
       }
     }
     for (const group of samples.values())
-      expect(countedViolations(identityCheck({ bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' } }), group)).toEqual([]);
+      expect(
+        countedViolations(
+          identityCheck({ bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' } }),
+          group,
+        ),
+      ).toEqual([]);
     const fixedCheck = identityCheck({
       limits: { 'transport requests': 1, 'fence calls': 9 },
-      bounds: { 'transport requests': 'constant', 'fence calls': 'constant', 'sqlite statements': 'constant', 'sqlite returned rows': 'constant' },
+      bounds: {
+        'transport requests': 'constant',
+        'fence calls': 'constant',
+        'sqlite statements': 'constant',
+        'sqlite returned rows': 'constant',
+      },
     });
     expect(countedViolations(fixedCheck, coordinatorSamples)).toEqual([]);
-    expect(countedViolations(identityCheck({ limits: { 'input records read': 4096 }, bounds: { 'input records read': 'linear' } }), inputSamples)).toEqual([]);
+    expect(
+      countedViolations(
+        identityCheck({ limits: { 'input records read': 4096 }, bounds: { 'input records read': 'linear' } }),
+        inputSamples,
+      ),
+    ).toEqual([]);
     for (const sample of inputSamples) expect(sample.counted['input records read']!.value).toBe(sample.scale);
     // M is command width within one record. These values stay well below the
     // 512-fact per-command cap; M is separate from the 64/512/4096 history axis.
@@ -246,7 +266,12 @@ test('actual coordinator fixed work searches same-source keys/history at three s
       }
       commands.push({ scale: count, counted: countedSample([cost]) });
     }
-    expect(countedViolations(identityCheck({ bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'linear' } }), commands)).toEqual([]);
+    expect(
+      countedViolations(
+        identityCheck({ bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'linear' } }),
+        commands,
+      ),
+    ).toEqual([]);
   } finally {
     probe.restore();
     await importer.close();

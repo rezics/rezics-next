@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
-import { countedSample, countedViolations, type CountedCheck, type CountedValues } from '../../kernel/test/support/growth-counters.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import { createImportFetch } from '../src/import-fetch.ts';
 
 const ORIGIN = 'https://api.example.test';
@@ -67,11 +72,13 @@ test('client transport sends each supplied bounded batch once as input grows', a
     let sent = 0;
     while (sent < scale) {
       const body = batch(sent, Math.min(BATCH_SIZE, scale - sent));
-      const response = await client(new Request(BATCH_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }));
+      const response = await client(
+        new Request(BATCH_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+      );
       expect(response.status).toBe(200);
       sent += body.commands.length;
     }
