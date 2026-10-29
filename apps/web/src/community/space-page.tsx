@@ -145,7 +145,7 @@ export function SpacePage({ page }: { page: SpacePageData }) {
   return (
     <article className="max-w-5xl space-y-10 text-foreground">
       <header
-        className="relative isolate flex flex-wrap items-end justify-between gap-7 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
+        className="relative isolate flex flex-col gap-4 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
         style={{ backgroundColor: banner?.placeholder.color ?? colors.background, color: colors.foreground }}
       >
         {bannerSrc ? (
@@ -165,16 +165,16 @@ export function SpacePage({ page }: { page: SpacePageData }) {
             />
           </>
         ) : null}
-        <div className="relative z-0 min-w-0 flex-1 basis-64 space-y-3">
-          <PageHeading>{page.space.title}</PageHeading>
-          {page.space.summary ? (
-            <p className="max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
+        <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
+          <PageHeading className="min-w-0 flex-1">{page.space.title}</PageHeading>
+          {page.realm ? (
+            <div className="shrink-0">
+              <RealmMembership realm={page.realm} returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
+            </div>
           ) : null}
         </div>
-        {page.realm ? (
-          <div className="relative z-10 shrink-0">
-            <RealmMembership realm={page.realm} returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
-          </div>
+        {page.space.summary ? (
+          <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
         ) : null}
       </header>
       {page.realm ? <Home realm={page.realm} returnTo={location.publicHref.split(/[?#]/, 1)[0]!} /> : null}
