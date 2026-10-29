@@ -86,6 +86,8 @@ test('activity ascending growth retains logarithmic indexed work and declares it
             try {
               for (const c of cases) {
                 const result = await reader.page(client, route, owner, c.query, c.after);
+                // Flush extended-protocol portal-close notices before the capture ends.
+                await client.query('SET LOCAL auto_explain.log_min_duration = 0');
                 expect(result).toEqual({
                   entries: c.expected.map(({ typeId: _, ...r }) => ({
                     ...r,
