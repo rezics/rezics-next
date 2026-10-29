@@ -232,6 +232,20 @@ decode attempt bodies. The existing 15-second polling interval and ticket orderi
 - **Growth check:** `capacity-wait.test.ts` seeds 10, 100 and 1,000 attempts, verifies the indexed query plan and
   checks the running count at each scale.
 
+### Manager-host database reads
+
+Host recovery, dependency release, cancellation reporting and watchdog sweeps use the task and attempt state indexes.
+Settled dependency checks read state and commit/target scalars by task id; dispatch validation reads task ids only.
+`WorkerStore` caches decoded task and attempt bodies for the current SQLite `data_version`, and its own task/attempt
+writes invalidate that snapshot. Repeated store reads in a sweep or request reuse decoded rows.
+
+The `host-db-reads.test.ts` live-sized fixture has 3,000 settled task bodies averaging 7.5 KB and 5,000 settled
+attempt bodies averaging 8 KB, about 62.5 MB of settled JSON. Before active-row reads, a full sweep decoded all of
+those bodies (about 62.5 MB, plus active rows); after the change it decodes only five active task and five active
+attempt bodies (under 50 KB each in the fixture), about 77.5 KB total. Task-id and dependency-state request lookups,
+including the inbox-send path, decode zero task bodies. Repeated reads add no decoded bytes until an external
+connection changes `data_version` or this store writes a task or attempt.
+
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |
 | `GOAL_LOCAL_CONFIG`       | Local JSON file.                                                |

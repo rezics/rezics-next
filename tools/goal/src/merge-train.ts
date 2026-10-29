@@ -689,7 +689,7 @@ export type TrainOptions = {
   /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
   integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
   /** Batched dev landings; absent integration settings retain one-at-a-time behavior. */
-  integration?: { batchSize?: number; batchAcceptanceConcurrency?: number };
+  integration?: { batchSize?: number; batchAcceptanceConcurrency?: number; devLandingChecks?: boolean };
   queue: SqliteLandingQueue;
   fence: AttemptFence;
   sink: GateOutcomeSink;
@@ -1236,7 +1236,12 @@ export class MergeTrain {
         // results across a dev-move restart when the batch still produces that tree.
         const finalCandidate = prepared[prepared.length - 1]!.candidate;
         const finalTree = git(trainTree, 'rev-parse', `${finalCandidate}^{tree}`);
-        const acceptanceJobs = prepared.map((member) => ({
+        // With devLandingChecks off, a dev landing is mechanical: dev is verified after the merge, not before it.
+        const devChecks = o.integration?.devLandingChecks !== false;
+        if (!devChecks)
+          for (const member of prepared)
+            appendFileSync(member.result.logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+        const acceptanceJobs = (devChecks ? prepared : []).map((member) => ({
           member,
           command: member.entry.request.gate,
           key: `${JSON.stringify(member.entry.request.gate)}:${finalTree}`,
@@ -1299,7 +1304,7 @@ export class MergeTrain {
         await Promise.all(Array.from({ length: Math.min(concurrency, acceptanceJobs.length) }, runAcceptance));
         if (retry) continue;
         git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
-        if (integrationChecks.length) {
+        if (devChecks && integrationChecks.length) {
           const commands = integrationChecks.map((check) =>
             check.command.join(' ').includes('scripts/typecheck.ts')
               ? ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, ...check.command]
@@ -1790,13 +1795,19 @@ export class MergeTrain {
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
-        const affectedChecks = landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
+        // With devLandingChecks off, a dev landing is mechanical: dev is verified after the merge, not before it.
+        const skipDevChecks =
+          o.integration?.devLandingChecks === false && integratesIntoDev && !controlPlane && !stabilize;
+        if (skipDevChecks) appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+        const affectedChecks = skipDevChecks
+          ? []
+          : landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
         const priorAffectedResults: AffectedTestResult[] = workspace ? [] : [...(request.affectedTests ?? [])];
         const siblings = siblingTestCommand(
           siblingTestFiles(result.changedFiles, trainTree),
           testDefaults ? undefined : defaults.siblingTests.command,
         );
-        if (siblings) affectedChecks.push({ paths: [], command: siblings });
+        if (siblings && !skipDevChecks) affectedChecks.push({ paths: [], command: siblings });
         const landingAffectedResults = await Promise.all(
           affectedChecks.map((check) =>
             runAffectedTest(check.command, trainTree, logPath, {
@@ -2003,7 +2014,7 @@ export class MergeTrain {
         const integrationChecks = configuredChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );
-        if (!controlPlane && integratesIntoDev && integrationChecks.length) {
+        if (!skipDevChecks && !controlPlane && integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
           // The workspace typecheck covers only the workspaces this change can affect (scripts/typecheck.ts reads
@@ -2084,7 +2095,7 @@ export class MergeTrain {
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
             throw new Error('Acceptance changed the candidate commit');
         }
-        if ((!controlPlane || integratesIntoDev) && !workspace) {
+        if ((!controlPlane || integratesIntoDev) && !workspace && !skipDevChecks) {
           stage = 'gate';
           appendFileSync(
             logPath,

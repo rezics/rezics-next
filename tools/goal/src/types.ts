@@ -84,6 +84,7 @@ export type Settings = {
   integration: {
     batchSize: number;
     batchAcceptanceConcurrency: number;
+    devLandingChecks: boolean;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;

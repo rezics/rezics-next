@@ -148,16 +148,10 @@ test('failure bisects workspace suspects, reverts only the culprit, returns its 
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(git(root, 'rev-parse', 'dev'));
 });
 
-test('worker bases and promotion candidates use dev-verified', async () => {
-  const root = repo();
-  const verified = commit(root, 'services/kernel/verified.ts', 'export const verified = true;\n', 'verified');
-  git(root, 'branch', '-f', 'dev-verified', verified);
-  const unverified = commit(root, 'services/kernel/unverified.ts', 'export const unverified = true;\n', 'unverified');
-  git(root, 'branch', '-f', 'dev', unverified);
+test('promotion candidates use dev-verified while worker bases use the dev head', async () => {
   const taskSource = await Bun.file(new URL('./tasks.ts', import.meta.url)).text();
   const promotionSource = await Bun.file(new URL('./promotion.ts', import.meta.url)).text();
-  expect(taskSource).toContain('private existingVerifiedBranch(): string');
-  expect(taskSource).toContain('this.existingVerifiedBranch()');
+  expect(taskSource).not.toContain('existingVerifiedBranch');
   expect(promotionSource).toContain("'dev-verified'");
 });
 
