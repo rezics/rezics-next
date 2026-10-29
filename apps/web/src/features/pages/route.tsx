@@ -40,11 +40,11 @@ function problemError(value: unknown): Error {
   return new Error(code);
 }
 
-/** One `pages.read` for a route. Missing or not-yet-published pages use the site's static fallback. */
-export async function loadRoutePage(client: KernelClient, route: string, locale = 'en'): Promise<RoutePageLoad> {
+/** One `pages.read` for a route; an omitted locale leaves the read's labels available to the renderer. */
+export async function loadRoutePage(client: KernelClient, route: string, locale?: string): Promise<RoutePageLoad> {
   const result = await client.pages.$read.post({
     target: { route },
-    languages: requestLanguages(locale),
+    ...(locale === undefined ? {} : { languages: requestLanguages(locale) }),
   });
   if (result.status === 404) return { kind: 'missing' };
   if (

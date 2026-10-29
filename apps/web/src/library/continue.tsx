@@ -131,5 +131,9 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
 
 /** Keep the signed-in slot's final height while the browser waits for personal library data. */
 export function ContinueSection({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
-  return entries.length > 0 ? <ContinueRow entries={entries} locale={locale} /> : null;
+  return entries.length > 0 ? (
+    <ContinueRow entries={entries} locale={locale} />
+  ) : (
+    <div aria-hidden="true" className="min-h-[20rem] sm:min-h-[24rem]" />
+  );
 }

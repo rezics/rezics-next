@@ -64,6 +64,8 @@ Every indexed page sets, per locale:
 
 ## Structured data
 
+The home page's `WebSite` carries a `SearchAction` with a target URL template and a `query-input` that names its placeholder.
+
 Each indexed page embeds one JSON-LD graph from the same data it renders:
 
 - a subject as the explicitly selected Schema.org class for its concrete catalogue

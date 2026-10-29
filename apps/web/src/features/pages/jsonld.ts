@@ -170,6 +170,7 @@ export function homeJsonLd({ origin, locale }: { origin: string; locale: string 
     potentialAction: {
       '@type': 'SearchAction',
       target: `${site}/${encodeURIComponent(locale)}/search?q={search_term_string}`,
+      'query-input': 'required name=search_term_string',
     },
   };
 }
