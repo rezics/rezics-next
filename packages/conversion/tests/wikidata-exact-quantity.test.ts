@@ -4,8 +4,13 @@ import { convertWikidata } from '../src/wikidata';
 
 const subjectId = '00000000-0000-4000-8000-000000000001';
 const pointer = '/claims/P6570';
+type FixtureEntity = {
+  id: string;
+  lastrevid: number;
+  claims: Record<string, Array<{ qualifiers?: Record<string, unknown[]>; [key: string]: unknown }>>;
+};
 function entity(qualifiers?: Record<string, unknown[]>) {
-  const copy = structuredClone(record);
+  const copy = structuredClone(record) as unknown as FixtureEntity;
   copy.claims.P6570 = [
     {
       type: 'statement',
@@ -82,7 +87,7 @@ test('unknown qualifier bodies are rejected without being read', () => {
       throw new Error('unknown qualifier body was read');
     },
   });
-  source.claims.P6570![0]!.qualifiers = qualifiers as never;
+  source.claims.P6570![0]!.qualifiers = qualifiers;
 
   const output = convert(source);
   expect(
@@ -99,8 +104,8 @@ test('established nonmeasurement output remains unchanged by exact qualifier rej
     entity({ P459: [{ snaktype: 'somevalue', property: 'P459', datatype: 'wikibase-item' }] }),
   );
   const ordinary = (output: ReturnType<typeof convert>) =>
-    output.proposals.filter(
-      (command) => command.op === 'propose' && command.statement.property.id !== 'schema:wordCount',
-    );
+    output.proposals
+      .filter((command) => command.op === 'propose' && command.statement.property.id !== 'schema:wordCount')
+      .map((command) => command.statement);
   expect(ordinary(withRejectedMeasurement)).toEqual(ordinary(plain));
 });
