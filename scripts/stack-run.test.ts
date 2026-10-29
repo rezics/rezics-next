@@ -10,6 +10,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runOnCheckHost } from './stack-run.ts';
 
@@ -170,8 +171,8 @@ let root: string;
 let counter = 0;
 
 beforeAll(() => {
-  mkdirSync(join(repository, '.temp'), { recursive: true });
-  root = mkdtempSync(join(repository, '.temp/stack-run-test-'));
+  // Keep fixture workspaces outside the remote run root. The acceptance file may itself run on a check host.
+  root = mkdtempSync(join(tmpdir(), 'stack-run-test-'));
   mkdirSync(join(root, 'bin'));
   for (const [name, source] of [
     ['ssh', fakeSsh],
@@ -484,7 +485,7 @@ test('a worker cannot start a local stack container while a check host is reacha
   const worker = { ...reachable.env, GOAL_TASK_ID: 'worker' };
   for (const script of [databaseScript, searchScript]) {
     const child = Bun.spawn(['bun', script, 'up'], {
-      cwd: join(repository, 'services/kernel'),
+      cwd: root,
       env: worker,
       stdin: 'ignore',
       stdout: 'pipe',
