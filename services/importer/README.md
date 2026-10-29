@@ -115,7 +115,10 @@ Its unchanged installed SHA-256 is
 `c2a3e80acba22a911bc2d118b07286ceb7494c6c528da7be4572c8fa76b65bf7`, matching the frozen registry.
 The controller's three type-only corrections use the native `Statement` type for read observations and
 permit both proposal and native statements in the helper. No executable expression or assertion changed.
-The focused native acceptance and root typecheck are pending on this installation. All three adjacent
+The focused native acceptance and root typecheck each ran once on this installation and both failed at
+`known-reference-refresh.test.ts(73,53)` with TS2769: the matcher still rejects the native-only `data_type`
+property despite the union annotation. Neither native case executed, so the current run proves no native
+transition. No production schema or frozen assertion was changed to bypass that conflict. All three adjacent
 recovery files passed (11 cases, 158 assertions), with the extra recovery file run separately after a
 filename correction. The local reopen regression passed (2 cases, 16 assertions); the runtime and local
 regression bytes remain unchanged, so those qualified results are reused.

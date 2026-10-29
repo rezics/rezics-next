@@ -27,7 +27,34 @@ type `Candidate.statement` as `Statement`, and accept `BatchStatement | Statemen
 The complete three-hunk diff changes no executable expression or assertion. The exact installed worker hash
 matches the approved raw hash and the read-only frozen registry entry. No worker formatting was applied.
 The existing `SnakSchema` and `StatementSchema` require the native read datatype; portable proposals remain id-only.
-The focused native acceptance and root typecheck are pending on this installation.
+Both required checks ran once on committed revision `331553560c92ba8b0085125ea5dfad33e69d513c`.
+Both ended with exit 1 at the same frozen helper diagnostic before either native case executed:
+
+```text
+test/imports/known-reference-refresh.test.ts(73,53): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, and 'data_type' does not exist in type '{ id: string; }'.
+```
+
+The authorized `BatchStatement | Statement` annotation does not close the matcher overload error.
+The expected native qualifier still fails contextual typing at `toContainEqual`. Changing the native read
+schema or portable proposal shape would violate their existing contracts; another frozen helper amendment
+is not authorized. The worker preserved the installed file. This is a frozen acceptance/type conflict,
+not a tooling failure, and no current native transition or successful native assertion is claimed.
+
+| Required check | Terminal result | Receipt |
+| --- | --- | --- |
+| Focused native acceptance | Exit 1, compile failure before cases; 4,424.201 seconds queued, then ran on a | `c24ed1bd-2d86-4674-babf-06c56216869e`; `.temp/goal/checks/worker-check-2026-10-29T12-05-00.809Z-9efe7750.log` |
+| Root typecheck | Exit 1, same kernel test error; all other 12 workspaces completed without errors; 1,199.816 seconds queued, then ran on b | `3e9d7874-a93b-4f1e-9f97-f79f0aa0bad7`; `.temp/goal/checks/worker-check-2026-10-29T12-08-12.564Z-c501505c.log` |
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
+bun scripts/worker-check.ts -- bun scripts/typecheck.ts
+```
+
+Every queued wait resumed the same check ID until terminal status; no check was restarted or remains running.
+There was no infrastructure rerun. The README and report record these results; their subsequent documentation-only
+commit does not change the tested product, local regression or frozen acceptance bytes.
 
 Importer runtime, storage and the local regression are byte-identical to `c79e538dfd`. Reuse the qualified
 local 2-case/16-assertion receipt and post-retention adjacent 11-case/158-assertion receipts below; no rerun is
@@ -147,5 +174,5 @@ with existing bounded statement bytes. This is local bounded work, with no new h
 Read `docs/architecture.md`, `docs/scope.md`, the development workflow and Goal index, the imports capability contract,
 the importer README, the existing known-reference report, the frozen native acceptance, Open Library converter and
 context types, source registration and configured aliases, importer planning, run-store signatures, exact
-`RecordBindings.claim` and candidate APIs, and semantic relation-slot/candidate-listing contracts. No reference
+`RecordBindings.claim` and candidate APIs, and semantic relation-slot/candidate-listing contracts, the native read schemas and the controller's exact three-hunk type amendment. No reference
 project or legacy source was consulted. No files outside the declared paths were changed.
