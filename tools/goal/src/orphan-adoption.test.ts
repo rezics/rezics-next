@@ -29,9 +29,14 @@ function waitForFile(path: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const watcher = watch(dirname(path), () => {
       if (!existsSync(path)) return;
-      clearTimeout(timer); watcher.close(); resolve();
+      clearTimeout(timer);
+      watcher.close();
+      resolve();
     });
-    const timer = setTimeout(() => { watcher.close(); reject(new Error(`missing fixture signal: ${path}`)); }, 10_000);
+    const timer = setTimeout(() => {
+      watcher.close();
+      reject(new Error(`missing fixture signal: ${path}`));
+    }, 10_000);
   });
 }
 
@@ -43,16 +48,22 @@ test('a ready task orphaned after a recovery sweep started is adopted by the nex
   let timer: ReturnType<typeof setInterval> | undefined;
   let firstSweep: Promise<void> | undefined;
   let firstStartedResolve!: () => void;
-  const firstStarted = new Promise<void>(resolve => { firstStartedResolve = resolve; });
+  const firstStarted = new Promise<void>((resolve) => {
+    firstStartedResolve = resolve;
+  });
   let secondStartedResolve!: () => void;
-  const secondStarted = new Promise<void>(resolve => { secondStartedResolve = resolve; });
+  const secondStarted = new Promise<void>((resolve) => {
+    secondStartedResolve = resolve;
+  });
   let sweeps = 0;
   try {
     const adopted = h.tasks.dispatch(h.briefFile);
     worker = await h.tasks.retry(adopted.id);
     release = join(adopted.worktree, '.worker-release');
     await waitForFile(join(adopted.worktree, '.worker-started'));
-    h.store.updateAttempt(worker.attempt, attempt => { (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadDriver; });
+    h.store.updateAttempt(worker.attempt, (attempt) => {
+      (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadDriver;
+    });
 
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     timer = startOrphanRecoveryTimer(() => {
@@ -68,7 +79,7 @@ test('a ready task orphaned after a recovery sweep started is adopted by the nex
     }, 20);
     await firstStarted;
     const newlyOrphaned = h.tasks.dispatch(h.briefFile);
-    h.store.updateTask({ taskId: newlyOrphaned.id, attempt: 0 }, task => {
+    h.store.updateTask({ taskId: newlyOrphaned.id, attempt: 0 }, (task) => {
       task.createdAt = new Date(Date.now() - 10_000).toISOString();
     });
 
@@ -77,7 +88,7 @@ test('a ready task orphaned after a recovery sweep started is adopted by the nex
     expect(h.store.task(newlyOrphaned.id).currentAttempt).toBe(1);
     await job.recoverOrphans();
     expect(h.store.task(newlyOrphaned.id).currentAttempt).toBe(1);
-    expect(h.store.attempts(newlyOrphaned.id).map(attempt => attempt.attempt)).toEqual([1]);
+    expect(h.store.attempts(newlyOrphaned.id).map((attempt) => attempt.attempt)).toEqual([1]);
     clearInterval(timer);
     timer = undefined;
 
@@ -98,7 +109,7 @@ test('a task with a pending retry intent and no live process is restarted by the
     const task = h.tasks.dispatch(h.briefFile);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
-    h.store.updateAttempt(worker.attempt, attempt => {
+    h.store.updateAttempt(worker.attempt, (attempt) => {
       (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadDriver;
       attempt.state = 'exited';
       attempt.startedAt = new Date(Date.now() - 10_000).toISOString();
@@ -114,7 +125,9 @@ test('a task with a pending retry intent and no live process is restarted by the
     await job.drain();
 
     expect(h.store.task(task.id).currentAttempt).toBe(2);
-    expect(h.store.attempts(task.id).map(attempt => attempt.attempt)).toEqual([1, 2]);
+    expect(h.store.attempts(task.id).map((attempt) => attempt.attempt)).toEqual([1, 2]);
     expect(h.store.retryIntent(worker.attempt)?.status).toBe('started');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
