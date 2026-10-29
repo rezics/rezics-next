@@ -38,15 +38,7 @@ const entryScopes = [
   'library_entry:read',
   'library_entry:list',
 ];
-const scopes = [
-  ...entryScopes,
-  'follow:create',
-  'follow:delete',
-  'subject:create',
-  'access:grant',
-  'exposure:open',
-  'gate:any',
-];
+const scopes = [...entryScopes, 'follow:create', 'follow:delete', 'subject:create'];
 const actor = (accountId: string, permissions: readonly string[] = scopes): AccountActor => ({
   kind: 'account',
   accountId,
@@ -59,6 +51,7 @@ let owner = actor(newId(route));
 let other = actor(newId(route));
 const suspended = actor(newId(route));
 let noScope = actor(newId(route), ['subject:read']);
+const setupIdentity = actor(newId(route), ['access:grant', 'subject:read', 'exposure:open', 'gate:any']);
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(61)]]) };
 
@@ -178,6 +171,7 @@ beforeAll(async () => {
   database = await openGrowthDatabase();
   await bootstrapRelease(database.pool, await compileEntryRelease('original'));
   accounts = new Map<string, Account>();
+  await installAccount(setupIdentity.accountId, 'active');
   accounts.set(owner.accountId, await installAccount(owner.accountId, 'active'));
   accounts.set(other.accountId, await installAccount(other.accountId, 'active'));
   accounts.set(suspended.accountId, await installAccount(suspended.accountId, 'suspended'));
@@ -196,9 +190,10 @@ beforeAll(async () => {
   owner = await admit(owner);
   other = await admit(other);
   noScope = await admit(noScope);
-  await bootstrapGovernance(database.pool, owner.accountId);
+  const steward = await admit(setupIdentity);
+  await bootstrapGovernance(database.pool, steward.accountId);
   await createGrantCommands({ pool: database.pool, access, managementAction: 'access:grant' }).create(
-    { pool: database.pool, actor: owner, deadline: deadlineFor(30_000) },
+    { pool: database.pool, actor: steward, deadline: deadlineFor(30_000) },
     {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'active_accounts' },
@@ -210,7 +205,7 @@ beforeAll(async () => {
   const opened = await kernel.handle(
     new Request('http://kernel.test/v1/platform/exposure/personal_library:open', {
       method: 'POST',
-      headers: { authorization: `Bearer ${await accountToken(owner)}`, 'idempotency-key': `"${key()}"` },
+      headers: { authorization: `Bearer ${await accountToken(steward)}`, 'idempotency-key': `"${key()}"` },
     }),
   );
   expect(opened.status).toBe(200);

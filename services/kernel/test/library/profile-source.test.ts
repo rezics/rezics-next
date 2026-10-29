@@ -116,7 +116,7 @@ test('native profile source selects the whole primary-type profile and never an 
     acceptingType: entryTypes.game,
     profileId: 'fixture.game',
   });
-  expect(source.profile).toEqual(native.original.libraryProfiles!['fixture.game']);
+  expect(source.profile).toEqual(native.original.libraryProfiles!['fixture.game']!);
   expect(source.profile).not.toEqual(native.original.libraryProfiles!['fixture.root']);
   expect(source.component.partition).toBe(partitionOf(routeOf(id)!));
   expect(typeof source.component.position).toBe('bigint');
