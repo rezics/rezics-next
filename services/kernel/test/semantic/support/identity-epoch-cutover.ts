@@ -242,7 +242,7 @@ export async function approvedVerification(f: EpochFixture, catalogue: string) {
   const accounts = { person: newId(0x9c10), staff: newId(0x9c20) };
   const actions = ['account:update', 'account:verify_agent'];
   const real = await createRealAccess(f.admin, accounts, actions);
-  const access = real.access({ actions: new Map(actions.map((action) => [action, {}])) });
+  const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
   await bootstrapGovernance(f.pool, accounts.staff);
   await real.grant({ route: routeOf(accounts.person)!, id: accounts.person }, 'person', 'account:update');
   await real.grant(PLATFORM_RESOURCE, 'staff', 'account:verify_agent');
