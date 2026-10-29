@@ -118,7 +118,8 @@ test('established nonmeasurement output remains unchanged by exact qualifier rej
   );
   const ordinary = (output: ReturnType<typeof convert>) =>
     output.proposals
-      .filter((command) => command.op === 'propose' && command.statement.property.id !== 'schema:wordCount')
-      .map((command) => command.statement);
+      .flatMap((command) =>
+        command.op === 'propose' && command.statement.property.id !== 'schema:wordCount' ? [command.statement] : [],
+      );
   expect(ordinary(withRejectedMeasurement)).toEqual(ordinary(plain));
 });
