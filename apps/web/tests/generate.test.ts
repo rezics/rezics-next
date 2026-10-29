@@ -26,6 +26,7 @@ function runGeneration(failures: number, message: string, code?: string) {
 
   const result = Bun.spawnSync(['bun', '--preload', preload, generator], {
     cwd: app,
+    timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
   });
