@@ -68,7 +68,7 @@ export function continueProgress(session: (ProgressLabelInput & { id: string }) 
         total: session.total,
         completedUnitCount: session.completedUnitCount,
         locator: session.locator,
-        position: session.position,
+        ...(session.position === undefined ? {} : { position: session.position }),
       }
     : null;
 }
