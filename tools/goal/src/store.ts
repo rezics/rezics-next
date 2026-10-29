@@ -115,21 +115,21 @@ export class WorkerStore implements AttemptFence {
   task(id: string): Task {
     this.refreshSnapshot();
     const cached = this.taskSnapshot.get(id);
-    if (cached) return cached;
+    if (cached) return structuredClone(cached);
     const task = this.taskBody(this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(id));
     if (!task) throw new Error(`unknown task: ${id}`);
     this.taskSnapshot.set(id, task);
-    return task;
+    return structuredClone(task);
   }
   tasks(): Task[] {
     this.refreshSnapshot();
     return this.db.query('SELECT id, body FROM worker_tasks ORDER BY sequence').all().map((row) => {
       const value = row as { id: string; body: string };
       const cached = this.taskSnapshot.get(value.id);
-      if (cached) return cached;
+      if (cached) return structuredClone(cached);
       const task = this.taskBody(value)!;
       this.taskSnapshot.set(value.id, task);
-      return task;
+      return structuredClone(task);
     });
   }
   /** All non-terminal tasks, bounded by the worker_tasks_state expression index. */
@@ -141,10 +141,10 @@ export class WorkerStore implements AttemptFence {
       .map((row) => {
         const value = row as { id: string; body: string };
         const cached = this.taskSnapshot.get(value.id);
-        if (cached) return cached;
+        if (cached) return structuredClone(cached);
         const task = this.taskBody(value)!;
         this.taskSnapshot.set(value.id, task);
-        return task;
+        return structuredClone(task);
       });
   }
   taskIds(): string[] {
@@ -157,17 +157,26 @@ export class WorkerStore implements AttemptFence {
     return this.db.query("SELECT json_extract(body, '$.state') AS state, json_extract(body, '$.brief.target') AS target, coalesce(json_extract(body, '$.integratedCommit'), json_extract(body, '$.mergedCommit')) AS task_commit FROM worker_tasks WHERE id=?")
       .get(id) as { state: string; target?: string; task_commit?: string } | undefined;
   }
+  goalStatus(goal: string): { hasDependencies: boolean; inFlight: boolean; latestTaskId?: string } {
+    const value = this.db.query("SELECT coalesce(max(CASE WHEN coalesce(json_array_length(json_extract(body, '$.brief.after')), 0) > 0 THEN 1 ELSE 0 END), 0) AS has_dependencies, coalesce(max(CASE WHEN json_extract(body, '$.state') IN ('ready','running','landing','held','integrated') THEN 1 ELSE 0 END), 0) AS in_flight, (SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal')=? ORDER BY sequence DESC LIMIT 1) AS latest_task_id FROM worker_tasks WHERE json_extract(body, '$.brief.goal')=?")
+      .get(goal, goal) as { has_dependencies: number; in_flight: number; latest_task_id?: string };
+    return {
+      hasDependencies: value.has_dependencies !== 0,
+      inFlight: value.in_flight !== 0,
+      ...(value.latest_task_id ? { latestTaskId: value.latest_task_id } : {}),
+    };
+  }
   attempt(ref: AttemptRef): Attempt {
     this.refreshSnapshot();
     const key = `${ref.taskId}:${ref.attempt}`;
     const cached = this.attemptSnapshot.get(key);
-    if (cached) return cached;
+    if (cached) return structuredClone(cached);
     const attempt = this.attemptBody(
       this.db.query('SELECT task_id, attempt, body FROM worker_attempts WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
     );
     if (!attempt) throw new Error('unknown attempt');
     this.attemptSnapshot.set(key, attempt);
-    return attempt;
+    return structuredClone(attempt);
   }
   attempts(taskId?: string): Attempt[] {
     const rows = taskId
@@ -178,10 +187,10 @@ export class WorkerStore implements AttemptFence {
       const value = row as { task_id: string; attempt: number; body: string };
       const key = `${value.task_id}:${value.attempt}`;
       const cached = this.attemptSnapshot.get(key);
-      if (cached) return cached;
+      if (cached) return structuredClone(cached);
       const attempt = this.attemptBody(value)!;
       this.attemptSnapshot.set(key, attempt);
-      return attempt;
+      return structuredClone(attempt);
     });
   }
   /** Pending, running and exited attempts are the only attempts needed for host recovery. */
@@ -194,10 +203,10 @@ export class WorkerStore implements AttemptFence {
         const value = row as { task_id: string; attempt: number; body: string };
         const key = `${value.task_id}:${value.attempt}`;
         const cached = this.attemptSnapshot.get(key);
-        if (cached) return cached;
+        if (cached) return structuredClone(cached);
         const attempt = this.attemptBody(value)!;
         this.attemptSnapshot.set(key, attempt);
-        return attempt;
+        return structuredClone(attempt);
       });
   }
   /** Reads one state through the attempt state index; used for the host's pending launcher recovery. */
@@ -210,10 +219,10 @@ export class WorkerStore implements AttemptFence {
         const value = row as { task_id: string; attempt: number; body: string };
         const key = `${value.task_id}:${value.attempt}`;
         const cached = this.attemptSnapshot.get(key);
-        if (cached) return cached;
+        if (cached) return structuredClone(cached);
         const attempt = this.attemptBody(value)!;
         this.attemptSnapshot.set(key, attempt);
-        return attempt;
+        return structuredClone(attempt);
       });
   }
   /**

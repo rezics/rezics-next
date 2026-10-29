@@ -64,7 +64,7 @@ test('repeated store reads reuse the decoded snapshot and external writes invali
   const first = store.activeTasks();
   const firstAttempt = store.attempt({ taskId: 'active-2', attempt: 1 });
   expect(store.activeTasks()).toHaveLength(first.length);
-  expect(store.attempt({ taskId: 'active-2', attempt: 1 })).toBe(firstAttempt);
+  expect(store.attempt({ taskId: 'active-2', attempt: 1 })).toEqual(firstAttempt);
   expect(store.decodedRows()).toEqual({ tasks: 5, attempts: 1 });
 
   const external = new Database(path);

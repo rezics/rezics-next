@@ -600,10 +600,9 @@ export class WorkerJob implements GateOutcomeSink {
   private reportCancelledDependencies(): void {
     const store = this.tasks.store;
     const tasks = store.activeTasks();
-    const byId = new Map(tasks.map((task) => [task.id, task]));
     for (const task of tasks) {
       if (task.state !== 'held') continue;
-      const cancelled = task.brief.after.filter((id) => byId.get(id)?.state === 'cancelled');
+      const cancelled = task.brief.after.filter((id) => store.taskState(id) === 'cancelled');
       if (!cancelled.length) continue;
       const event = {
         managerId: task.brief.manager,
@@ -819,12 +818,10 @@ export class WorkerJob implements GateOutcomeSink {
     const store = this.tasks.store;
     const goals = new Set(taskIds.map((id) => store.task(id).brief.goal));
     for (const goal of goals) {
-      const goalTasks = store.activeTasks().filter((task) => task.brief.goal === goal);
-      if (!goalTasks.some((task) => (task.brief.after ?? []).length)) continue;
-      if (goalTasks.some((task) => ['ready', 'running', 'landing', 'held', 'integrated'].includes(task.state)))
-        continue;
-      const terminal = goalTasks.at(-1);
-      if (!terminal?.currentAttempt) continue;
+      const summary = store.goalStatus(goal);
+      if (!summary.hasDependencies || summary.inFlight || !summary.latestTaskId) continue;
+      const terminal = store.task(summary.latestTaskId);
+      if (!terminal.currentAttempt) continue;
       const ref = { taskId: terminal.id, attempt: terminal.currentAttempt };
       store.write(ref, () => {
         const duplicate = store
@@ -1119,12 +1116,8 @@ export class WorkerJob implements GateOutcomeSink {
             store.event(outcome, 'research-integrated', event);
             this.inbox.deliver(event);
           }
-          const goalTasks = store.activeTasks().filter((candidate) => candidate.brief.goal === task.brief.goal);
-          const goalInFlight = goalTasks.some((candidate) =>
-            ['ready', 'running', 'landing', 'held', 'integrated'].includes(candidate.state),
-          );
-          const goalHasDependencies = goalTasks.some((candidate) => (candidate.brief.after ?? []).length > 0);
-          if (goalHasDependencies && !goalInFlight) {
+          const goalSummary = store.goalStatus(task.brief.goal);
+          if (goalSummary.hasDependencies && !goalSummary.inFlight) {
             const event = {
               managerId: task.brief.manager,
               taskId: task.id,
