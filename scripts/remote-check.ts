@@ -76,16 +76,32 @@ export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; cod
 
 export const ROOT = '/srv/rezics-check';
 export function parseCommandPhases(contents: string): { durations: Record<string, number>; problems: string[] } {
-  const open = new Map<string, number>(); const durations: Record<string, number> = {}; const problems: string[] = [];
+  const open = new Map<string, number>();
+  const durations: Record<string, number> = {};
+  const problems: string[] = [];
   for (const [index, line] of contents.split(/\r?\n/).entries()) {
     if (!line) continue;
     const match = line.match(/^([^\t\r\n]+)\t(start|end)\t(\d+)$/);
-    if (!match) { problems.push(`line ${index + 1}: malformed`); continue; }
-    const [, phase, edge, raw] = match; const value = Number(raw);
-    if (!Number.isSafeInteger(value)) { problems.push(`line ${index + 1}: malformed timestamp`); continue; }
-    if (edge === 'start') { if (open.has(phase!)) problems.push(`line ${index + 1}: duplicate start for ${phase}`); else open.set(phase!, value); }
-    else if (!open.has(phase!)) problems.push(`line ${index + 1}: unmatched end for ${phase}`);
-    else { const started = open.get(phase!)!; open.delete(phase!); if (value < started) problems.push(`line ${index + 1}: end precedes start for ${phase}`); else durations[phase!] = (durations[phase!] ?? 0) + (value - started) / 1e9; }
+    if (!match) {
+      problems.push(`line ${index + 1}: malformed`);
+      continue;
+    }
+    const [, phase, edge, raw] = match;
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value)) {
+      problems.push(`line ${index + 1}: malformed timestamp`);
+      continue;
+    }
+    if (edge === 'start') {
+      if (open.has(phase!)) problems.push(`line ${index + 1}: duplicate start for ${phase}`);
+      else open.set(phase!, value);
+    } else if (!open.has(phase!)) problems.push(`line ${index + 1}: unmatched end for ${phase}`);
+    else {
+      const started = open.get(phase!)!;
+      open.delete(phase!);
+      if (value < started) problems.push(`line ${index + 1}: end precedes start for ${phase}`);
+      else durations[phase!] = (durations[phase!] ?? 0) + (value - started) / 1e9;
+    }
   }
   for (const phase of open.keys()) problems.push(`unmatched start for ${phase}`);
   return { durations, problems };

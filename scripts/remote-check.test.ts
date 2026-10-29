@@ -43,7 +43,9 @@ const kernelFiles = ['test/access-hook.test.ts', 'test/admission.test.ts'];
 setDefaultTimeout(60_000);
 
 test('ledger command phases pair monotonic markers and report malformed or unpaired lines', () => {
-  expect(parseCommandPhases('migrations\tstart\t1000000000\nmigrations\tend\t3500000000\nbad\ncompile\tstart\t4000000000')).toEqual({
+  expect(
+    parseCommandPhases('migrations\tstart\t1000000000\nmigrations\tend\t3500000000\nbad\ncompile\tstart\t4000000000'),
+  ).toEqual({
     durations: { migrations: 2.5 },
     problems: ['line 3: malformed', 'unmatched start for compile'],
   });

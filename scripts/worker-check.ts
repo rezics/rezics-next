@@ -190,14 +190,29 @@ export async function runWorkerCheck(
   const checkout = mainCheckout(root);
   let ledger: CheckLedgerEntry | undefined;
   const beginLedger = (host: string, slotWaitSeconds = 0): void => {
-    ledger = { runId: randomUUID(), ...(logicalCheckId ? { logicalCheckId } : {}), rerunNumber, host, argv: [...argv],
-      revision: (() => { try { return spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim(); } catch { return undefined; } })(),
-      start: new Date().toISOString(), terminalStatus: 'running', slotWaitSeconds };
+    ledger = {
+      runId: randomUUID(),
+      ...(logicalCheckId ? { logicalCheckId } : {}),
+      rerunNumber,
+      host,
+      argv: [...argv],
+      revision: (() => {
+        try {
+          return spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+        } catch {
+          return undefined;
+        }
+      })(),
+      start: new Date().toISOString(),
+      terminalStatus: 'running',
+      slotWaitSeconds,
+    };
     writeLedger(ledger, checkout);
   };
   const endLedger = (code: number, cause?: string): void => {
     if (!ledger) return;
-    ledger.end = new Date().toISOString(); ledger.exitStatus = code;
+    ledger.end = new Date().toISOString();
+    ledger.exitStatus = code;
     ledger.terminalStatus = cause ? 'infrastructure-failure' : code === 0 ? 'passed' : 'failed';
     if (cause) ledger.infrastructureCause = cause;
     writeLedger(ledger, checkout);
@@ -268,7 +283,8 @@ export async function runWorkerCheck(
       : undefined;
     if (remoteCode !== 75 || !transportReason || remoteSignal !== undefined) {
       const commandPhases: Record<string, number> = {};
-      for (const match of remoteOutput.matchAll(/remote-check: command phase ([^\s]+) ([0-9.]+) s/g)) commandPhases[match[1]!] = Number(match[2]);
+      for (const match of remoteOutput.matchAll(/remote-check: command phase ([^\s]+) ([0-9.]+) s/g))
+        commandPhases[match[1]!] = Number(match[2]);
       if (ledger && Object.keys(commandPhases).length) ledger.commandPhases = commandPhases;
       const peakMiB = remoteOutput.match(/peak memory (\d+) MiB on [^\r\n]+/)?.[1];
       if (peakMiB) {
@@ -437,7 +453,10 @@ export async function runWorkerCheck(
     process.stdout.write(`check: log ${relativeLogPath}\n`);
   }
   endLedger(signalNumber === undefined ? code : 128 + signalNumber);
-  if (ledger) { ledger.phases = { ...(ledger.phases ?? {}), command: (performance.now() - physicalStarted) / 1000 }; writeLedger(ledger, checkout); }
+  if (ledger) {
+    ledger.phases = { ...(ledger.phases ?? {}), command: (performance.now() - physicalStarted) / 1000 };
+    writeLedger(ledger, checkout);
+  }
   return signalNumber === undefined ? code : 128 + signalNumber;
 }
 
@@ -683,7 +702,15 @@ async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number
     writeRecord(record);
   };
   try {
-    const exitCode = await runWorkerCheck(record.argv, root, false, join(root, record.log), 60_000, id, record.reruns ?? 0);
+    const exitCode = await runWorkerCheck(
+      record.argv,
+      root,
+      false,
+      join(root, record.log),
+      60_000,
+      id,
+      record.reruns ?? 0,
+    );
     finish(exitCode);
     return exitCode;
   } catch (error) {

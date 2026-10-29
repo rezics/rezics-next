@@ -84,8 +84,10 @@ test('nested worker checks start with default placement environment', () => {
 });
 
 test('ledger records each physical worker execution with logical id and rerun number', async () => {
-  const root = mkdtempSync('/tmp/worker-check-ledger-'); dirs.push(root);
-  process.env.REZICS_CHECK_MEMORY = 'off'; process.env.REZICS_CHECK_SCOPE = 'off';
+  const root = mkdtempSync('/tmp/worker-check-ledger-');
+  dirs.push(root);
+  process.env.REZICS_CHECK_MEMORY = 'off';
+  process.env.REZICS_CHECK_SCOPE = 'off';
   const result = await runWorkerCheck(['true'], root, false, undefined, 60_000, 'logical-1', 1);
   expect(result).toBe(0);
   const ledgerRoot = join(root, '.temp/check-ledger');
