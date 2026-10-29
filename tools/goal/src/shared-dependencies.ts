@@ -46,6 +46,11 @@ function localWorkspaceLinks(root: string): void {
   }
 }
 function lstatSyncSafe(path: string): boolean { try { lstatSync(path); return true; } catch { return false; } }
+function ignoreNodeModules(worktree: string): void {
+  const nodeModules = join(worktree, 'node_modules');
+  mkdirSync(nodeModules, { recursive: true });
+  writeFileSync(join(nodeModules, '.gitignore'), '*\n');
+}
 function removeBuild(path: string): void {
   if (!existsSync(path)) return;
   const makeWritable = (dir: string) => {
@@ -81,7 +86,7 @@ export function installPrivate(worktree: string): void {
   rmSync(nodeModules, { recursive: true, force: true });
   runInstall(worktree);
   localWorkspaceLinks(worktree);
-  mkdirSync(nodeModules, { recursive: true });
+  ignoreNodeModules(worktree);
   writeFileSync(join(nodeModules, '.goal-private-dependencies'), dependencyKey(worktree));
 }
 export function installShared(worktree: string, storeRoot = join(dirname(worktree), '..', 'dependency-stores')): void {
@@ -123,6 +128,7 @@ export function installShared(worktree: string, storeRoot = join(dirname(worktre
     }
     const linkedStore = readlinkStore(worktree);
     if (linkedStore !== resolve(store)) { rmSync(join(worktree, 'node_modules'), { recursive: true, force: true }); copySkeleton(store, worktree); }
+    ignoreNodeModules(worktree);
   } finally { lease.release(); }
 }
 function readlinkStore(worktree: string): string | null { try { return resolve(dirname(join(worktree, 'node_modules', '.bun')), readlinkSync(join(worktree, 'node_modules', '.bun'))); } catch { return null; } }
