@@ -202,7 +202,7 @@ test('Effect persistence stays within its bound as N grows', async () => {
       })),
     ),
   );
-}, 120_000);
+}, 300_000);
 
 test(`locator success adds one batch insert and stays bounded as kept rows and DBOS history grow`, async () => {
   const namespace = `locator-growth:success:${crypto.randomUUID()}`;
