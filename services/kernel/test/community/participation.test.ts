@@ -87,11 +87,13 @@ function observeNativeGrowthPlans(database: GrowthDatabase): {
     };
 
   const file = '.temp/content-growth-native-plans.jsonl';
-  const plans: Array<NativeGrowthContext & {
-    statement: string | null;
-    nativePlanJson: string;
-    nativeNotice: string;
-  }> = [];
+  const plans: Array<
+    NativeGrowthContext & {
+      statement: string | null;
+      nativePlanJson: string;
+      nativeNotice: string;
+    }
+  > = [];
   const attached = new WeakSet<PoolClient>();
   let context: NativeGrowthContext | undefined;
   let flushed = false;
@@ -103,12 +105,7 @@ function observeNativeGrowthPlans(database: GrowthDatabase): {
       const current = context;
       const message = notice.message;
       const marker = 'plan:\n';
-      if (
-        !current ||
-        typeof message !== 'string' ||
-        !message.startsWith('duration:') ||
-        !message.includes(marker)
-      )
+      if (!current || typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker))
         return;
       const nativePlanJson = message.slice(message.indexOf(marker) + marker.length);
       let statement: string | null = null;
@@ -1139,16 +1136,10 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
       await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
     },
     async warmup(_database, scale, repetition) {
-      await nativePlans.run(
-        { check: 'Realm participation', scale, repetition, phase: 'warmup' },
-        readParticipation,
-      );
+      await nativePlans.run({ check: 'Realm participation', scale, repetition, phase: 'warmup' }, readParticipation);
     },
     async operation(_database, scale, repetition) {
-      return nativePlans.run(
-        { check: 'Realm participation', scale, repetition, phase: 'measured' },
-        readParticipation,
-      );
+      return nativePlans.run({ check: 'Realm participation', scale, repetition, phase: 'measured' }, readParticipation);
     },
   }).finally(() => nativePlans.flush());
 

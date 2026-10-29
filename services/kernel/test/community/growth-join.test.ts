@@ -93,11 +93,13 @@ function observeNativeGrowthPlans(database: GrowthDatabase): {
     };
 
   const file = '.temp/content-growth-native-plans.jsonl';
-  const plans: Array<NativeGrowthContext & {
-    statement: string | null;
-    nativePlanJson: string;
-    nativeNotice: string;
-  }> = [];
+  const plans: Array<
+    NativeGrowthContext & {
+      statement: string | null;
+      nativePlanJson: string;
+      nativeNotice: string;
+    }
+  > = [];
   const attached = new WeakSet<PoolClient>();
   let context: NativeGrowthContext | undefined;
   let flushed = false;
@@ -109,12 +111,7 @@ function observeNativeGrowthPlans(database: GrowthDatabase): {
       const current = context;
       const message = notice.message;
       const marker = 'plan:\n';
-      if (
-        !current ||
-        typeof message !== 'string' ||
-        !message.startsWith('duration:') ||
-        !message.includes(marker)
-      )
+      if (!current || typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker))
         return;
       const nativePlanJson = message.slice(message.indexOf(marker) + marker.length);
       let statement: string | null = null;
@@ -1009,15 +1006,13 @@ test.serial(
         );
       },
       async warmup(_database, scale, repetition) {
-        await nativePlans.run(
-          { check: 'Leave a Realm', scale, repetition, phase: 'warmup' },
-          () => runLeave(actors[repetition]!),
+        await nativePlans.run({ check: 'Leave a Realm', scale, repetition, phase: 'warmup' }, () =>
+          runLeave(actors[repetition]!),
         );
       },
       async operation(_database, scale, repetition) {
-        await nativePlans.run(
-          { check: 'Leave a Realm', scale, repetition, phase: 'measured' },
-          () => runLeave(actors[repetition]!),
+        await nativePlans.run({ check: 'Leave a Realm', scale, repetition, phase: 'measured' }, () =>
+          runLeave(actors[repetition]!),
         );
       },
     }).finally(() => nativePlans.flush());
