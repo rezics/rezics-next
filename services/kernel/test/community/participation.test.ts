@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import type { MembershipWorkInput } from '@rezics/auth/membership-workflows';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
@@ -63,6 +64,106 @@ let scopes: string[];
 let governance: Person;
 const peopleById = new Map<string, Person>();
 const provisioningApprovals = new Set<string>();
+
+type NativeGrowthContext = {
+  check: string;
+  scale: number;
+  repetition: number;
+  phase: 'warmup' | 'measured';
+};
+
+function observeNativeGrowthPlans(database: GrowthDatabase): {
+  run<T>(context: NativeGrowthContext, operation: () => Promise<T>): Promise<T>;
+  flush(): void;
+} {
+  if (process.env.CONTENT_GROWTH_NATIVE_PLANS !== '1')
+    return {
+      run<T>(_context: NativeGrowthContext, operation: () => Promise<T>): Promise<T> {
+        return operation();
+      },
+      flush() {
+        return undefined;
+      },
+    };
+
+  const file = '.temp/content-growth-native-plans.jsonl';
+  const plans: Array<NativeGrowthContext & {
+    backend: number | null;
+    statement: string | null;
+    nativePlanJson: string;
+    nativeNotice: string;
+  }> = [];
+  const attached = new WeakSet<PoolClient>();
+  let context: NativeGrowthContext | undefined;
+  let flushed = false;
+
+  const onAcquire = (client: PoolClient): void => {
+    if (attached.has(client)) return;
+    attached.add(client);
+    client.on('notice', (notice) => {
+      const current = context;
+      const message = notice.message;
+      const marker = 'plan:\n';
+      if (
+        !current ||
+        typeof message !== 'string' ||
+        !message.startsWith('duration:') ||
+        !message.includes(marker)
+      )
+        return;
+      const nativePlanJson = message.slice(message.indexOf(marker) + marker.length);
+      let statement: string | null = null;
+      try {
+        const parsed = JSON.parse(nativePlanJson) as unknown;
+        const entries = Array.isArray(parsed) ? parsed : [parsed];
+        const query = entries.find(
+          (entry): entry is Record<string, unknown> =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            !Array.isArray(entry) &&
+            typeof entry['Query Text'] === 'string',
+        );
+        if (query) statement = query['Query Text'] as string;
+      } catch {
+        // Retain the original notice even if PostgreSQL emits an unexpected plan document.
+      }
+      plans.push({
+        ...current,
+        backend: typeof client.processID === 'number' ? client.processID : null,
+        statement,
+        nativePlanJson,
+        nativeNotice: message,
+      });
+    });
+  };
+
+  database.pool.on('acquire', onAcquire);
+  return {
+    async run<T>(next: NativeGrowthContext, operation: () => Promise<T>): Promise<T> {
+      const previous = context;
+      context = next;
+      try {
+        return await operation();
+      } finally {
+        context = previous;
+      }
+    },
+    flush() {
+      if (flushed) return;
+      flushed = true;
+      database.pool.removeListener('acquire', onAcquire);
+      if (plans.length === 0) {
+        process.stdout.write('CONTENT_GROWTH_NATIVE_PLANS captured 0 notices\n');
+        return;
+      }
+      mkdirSync('.temp', { recursive: true });
+      const jsonl = `${plans.map((plan) => JSON.stringify(plan)).join('\n')}\n`;
+      appendFileSync(file, jsonl);
+      process.stdout.write(`CONTENT_GROWTH_NATIVE_PLANS file=${file} records=${plans.length}\n`);
+      process.stdout.write(`CONTENT_GROWTH_NATIVE_PLANS_BEGIN\n${jsonl}CONTENT_GROWTH_NATIVE_PLANS_END\n`);
+    },
+  };
+}
 
 type Person = { accountId: string; bearer: string };
 type Realm = {
@@ -1030,21 +1131,36 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
       };
     },
   };
+  const nativePlans = observeNativeGrowthPlans(db);
   const report = await checkGrowth(db, {
     name: 'Realm participation',
+    rule: 'series',
     scales: [256, 1024, 4096],
     bounds: growthBounds,
     async grow(database, scale, previous) {
       await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
     },
-    async operation() {
-      const result = await call('GET', `/v1/realms/${protectedRealm.realmId}/participation`, {
-        bearer: member.bearer,
-      });
-      expect(result.response.status).toBe(204);
-      return result.response.status;
+    async warmup(_database, scale, repetition) {
+      await nativePlans.run(
+        { check: 'Realm participation', scale, repetition, phase: 'warmup' },
+        readParticipation,
+      );
     },
-  });
+    async operation(_database, scale, repetition) {
+      return nativePlans.run(
+        { check: 'Realm participation', scale, repetition, phase: 'measured' },
+        readParticipation,
+      );
+    },
+  }).finally(() => nativePlans.flush());
+
+  async function readParticipation(): Promise<number> {
+    const result = await call('GET', `/v1/realms/${protectedRealm.realmId}/participation`, {
+      bearer: member.bearer,
+    });
+    expect(result.response.status).toBe(204);
+    return result.response.status;
+  }
   expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
   for (const sample of report.samples) {
     for (const [name, cost] of Object.entries(sample.cost.relations ?? {})) {
