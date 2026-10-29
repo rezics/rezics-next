@@ -166,7 +166,7 @@ export function SpacePage({ page }: { page: SpacePageData }) {
           </>
         ) : null}
         <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
-          <PageHeading className="min-w-0 flex-1">{page.space.title}</PageHeading>
+          <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
           {page.realm ? (
             <div className="shrink-0">
               <RealmMembership realm={page.realm} returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />

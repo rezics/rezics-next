@@ -111,7 +111,7 @@ function PersonalMembership({
               size="lg"
               type="button"
               variant="outline"
-              className="h-11 px-6 text-base"
+              className="h-11 px-6 text-base text-foreground"
               disabled={!csrfToken || busy}
               onClick={() => void change('leave')}
             >
