@@ -1740,6 +1740,13 @@ CREATE INDEX post_thread_page_idx ON content.post USING btree (route, thread_id,
 
 
 --
+-- Name: reaction_liked_subject; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX reaction_liked_subject ON content.reaction USING btree (route, actor_account_id, target_id) WHERE ((target_kind = 'subject'::text) AND (kind = ANY (ARRAY['like'::text, 'love'::text])));
+
+
+--
 -- Name: report_target_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 

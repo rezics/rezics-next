@@ -262,6 +262,41 @@ The last actor ID in a page is the cursor. Each page step stores its result in t
 continues after the last completed page. Re-running an uncheckpointed page is safe: an actor whose slot already moved
 has no source slot and produces no second change event. A final empty cursor check follows an exact multiple of 100.
 
+Subject reactions are stored in the reacting account's partition. `readLikedSubjectPage` lists its current subject
+likes and loves in subject id order, and `readLikedMembership` checks a bounded batch of subject ids. These readers
+return raw stored ids: a subject can be unreadable, terminal or not yet reconciled after a merge. Commerce's Liked
+binding owns disclosure and canonical identity; these functions are internal content reads, not public reads.
+
+| Read               | Cost                                                                                                                                                                                               |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Liked subject page | One actor-partition statement, using the partial index for an index seek plus at most `limit + 1` index entries and heap rows: O(log n + limit), independent of other reaction kinds and accounts. |
+| Liked membership   | One statement and one primary-key seek per requested id, for up to 256 ids: O(k log n).                                                                                                            |
+
+### Cost
+
+#### Subject reaction merge page
+
+- **Touches:** At most 100 reactor IDs in the merged subject's partition; at most 100 actor commands, each with a
+  constant number of statements in one actor partition; at most two reaction change events per actor.
+- **Bound:** O(100) commands and rows per page; `ceil(R / 100)` actor pages for R reactors, plus an empty cursor check
+  when R is an exact multiple of 100. Page work is independent of R.
+- **Growth check:** `test/content/subject-reaction-merge.test.ts`, `one merge page`, at 256, 1024 and 4096 reactors on
+  the merged subject. Rows and statements per page stay constant.
+
+### Cost
+
+#### Subject reaction slot
+
+- Touches: account admission; one subject readability probe in the subject's partition; one slot upsert or delete in the actor's partition; at most one change event.
+- Bound: constant rows and statements. Blocks O(log R) in the actor's partition.
+- Growth check: `test/content/growth-reactions.test.ts`, `Subject reaction slot`, at 64, 512 and 4096 reactions on the subject.
+
+#### Subject reaction relay
+
+- Touches: one contribution upsert, at most two total upserts, and one reactor upsert or delete, all in the subject's partition in one transaction.
+- Bound: constant statements. Blocks O(log R).
+- Growth check: `test/content/growth-reactions.test.ts`, `Subject reaction relay`, at 64, 512 and 4096 reactors.
+
 ## Covers
 
 When authorization is supplied, a cover claim requires execute authorization on the subject or `statement:propose` or `subject:create` on the Global Context, with the subject in the command partition.
