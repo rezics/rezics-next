@@ -246,7 +246,7 @@ async function boundedTraversal(prefix: string, generation: number) {
       cursor = result.next ?? undefined;
       if (cursor) {
         expect(cursor.length).toBeLessThanOrEqual(4864);
-        const decoded = decodeSearchCursor(
+        const decoded = await decodeSearchCursor(
           identity.tokenKeys,
           { operation: 'subjects.search', principal: 'anonymous', request: { filter, sort, limit: 1 } },
           cursor,

@@ -136,7 +136,7 @@ for (const [name, request, expected] of [
       expect(answer.next).toEqual(expect.any(String));
       // The ordinary cursor consumes rejected lookahead before the next disclosed hit.
       const binding = { operation: 'subjects.search', principal: 'anonymous', request: { sort: 'id', limit: 1 } };
-      expect(decodeSearchCursor(cursors, binding, answer.next!)).toMatchObject({
+      expect(await decodeSearchCursor(cursors, binding, answer.next!)).toMatchObject({
         ok: true,
         generation: 1,
         after: [id(2)],

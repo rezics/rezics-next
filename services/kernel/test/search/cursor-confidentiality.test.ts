@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import subjects from '../../db/search/indices/subjects.json';
 import { decodeSearchCursor, encodeSearchCursor, type SearchSortValue } from '../../src/search/cursor.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { LIST_CURSOR_BOUNDS } from '../../src/tokens/list-cursor.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const ring: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) };
@@ -75,7 +76,7 @@ for (const name of ['秘'.repeat(100), 'k'.repeat(2100)]) {
     expect(Buffer.byteLength(name)).toBeGreaterThan(256);
     const after = [name, id];
     const token = await encodeSearchCursor(ring, binding, { generation: 3, after }, issued);
-    expect(Buffer.byteLength(token)).toBeLessThanOrEqual(4096);
+    expect(Buffer.byteLength(token)).toBeLessThanOrEqual(LIST_CURSOR_BOUNDS.search.maxTokenLength);
     expect(await decodeSearchCursor(ring, binding, token, issued)).toEqual({ ok: true, generation: 3, after });
     expect(disclosed(token, [name, id])).toEqual([]);
   });
@@ -99,7 +100,7 @@ test('pinned OpenSearch ICU normalization can expand a bounded identity into a l
     expect(Buffer.byteLength(name)).toBeGreaterThan(256);
     const after = [name, id];
     const token = await encodeSearchCursor(ring, binding, { generation: 3, after }, issued);
-    expect(Buffer.byteLength(token)).toBeLessThanOrEqual(4096);
+    expect(Buffer.byteLength(token)).toBeLessThanOrEqual(LIST_CURSOR_BOUNDS.search.maxTokenLength);
     expect(await decodeSearchCursor(ring, binding, token, issued)).toEqual({ ok: true, generation: 3, after });
     expect(disclosed(token, [name, id])).toEqual([]);
   } finally {

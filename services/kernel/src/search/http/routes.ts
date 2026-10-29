@@ -14,6 +14,7 @@ import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { createSearchService } from '../service.ts';
+import { LIST_CURSOR_BOUNDS } from '../../tokens/list-cursor.ts';
 
 export type SearchService = ReturnType<typeof createSearchService>;
 
@@ -135,7 +136,7 @@ export function searchRoutes<App>(
               ]),
             ),
             limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
-            cursor: t.Optional(t.String()),
+            cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
             descriptions: t.Optional(t.Boolean()),
             languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
             properties: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 4 })),

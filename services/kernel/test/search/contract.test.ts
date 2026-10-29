@@ -103,31 +103,34 @@ test('bulk lines carry external versions and refuse unsafe positions', () => {
   expect(() => bulkLines('rezics-subjects-g1', unsafe)).toThrow(RangeError);
 });
 
-test('search cursors round-trip sort values and bind the request and principal', () => {
+test('search cursors round-trip sort values and bind the request and principal', async () => {
   const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) };
   const request = { text: '魔法', sort: 'relevance', page_size: 2 };
   const binding = { operation: 'subjects.search', request, principal: 'anonymous' };
   const after = [12.75, '魔法', book.id, null];
-  const token = encodeSearchCursor(ring, binding, { generation: 3, after });
-  expect(decodeSearchCursor(ring, binding, token)).toEqual({ ok: true, generation: 3, after });
+  const token = await encodeSearchCursor(ring, binding, { generation: 3, after });
+  expect(await decodeSearchCursor(ring, binding, token)).toEqual({ ok: true, generation: 3, after });
   const reordered = { ...binding, request: { page_size: 2, sort: 'relevance', text: '魔法' } };
-  expect(decodeSearchCursor(ring, reordered, token)).toEqual({ ok: true, generation: 3, after });
-  expect(decodeSearchCursor(ring, { ...binding, request: { ...request, text: '魔' } }, token)).toEqual({
+  expect(await decodeSearchCursor(ring, reordered, token)).toEqual({ ok: true, generation: 3, after });
+  expect(await decodeSearchCursor(ring, { ...binding, request: { ...request, text: '魔' } }, token)).toEqual({
     ok: false,
     reason: 'invalid',
   });
-  expect(decodeSearchCursor(ring, { ...binding, principal: `account:${author}` }, token)).toEqual({
+  expect(await decodeSearchCursor(ring, { ...binding, principal: `account:${author}` }, token)).toEqual({
     ok: false,
     reason: 'invalid',
   });
-  expect(decodeSearchCursor(ring, { ...binding, operation: 'subjects.suggest' }, token)).toEqual({
+  expect(await decodeSearchCursor(ring, { ...binding, operation: 'subjects.suggest' }, token)).toEqual({
     ok: false,
     reason: 'invalid',
   });
-  expect(decodeSearchCursor(ring, binding, `${token.slice(0, -2)}AA`)).toEqual({ ok: false, reason: 'invalid' });
+  expect(await decodeSearchCursor(ring, binding, `${token.slice(0, -2)}AA`)).toEqual({ ok: false, reason: 'invalid' });
   const issued = 1_800_000_000_000;
-  const old = encodeSearchCursor(ring, binding, { generation: 3, after: ['a'] }, issued);
-  expect(decodeSearchCursor(ring, binding, old, issued + 15 * 60_000 + 1)).toEqual({ ok: false, reason: 'expired' });
+  const old = await encodeSearchCursor(ring, binding, { generation: 3, after: ['a'] }, issued);
+  expect(await decodeSearchCursor(ring, binding, old, issued + 15 * 60_000 + 1)).toEqual({
+    ok: false,
+    reason: 'expired',
+  });
 });
 
 test('search problem codes are in the catalogue', () => {

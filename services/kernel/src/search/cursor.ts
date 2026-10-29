@@ -1,6 +1,6 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 
 export type SearchCursorBinding = { operation: string; request: unknown; principal: string };
@@ -22,7 +22,11 @@ function cursorBinding(binding: SearchCursorBinding) {
   const canonical = canonicalize(binding.request);
   if (canonical === undefined) throw new TypeError('Search request must be canonical JSON');
   const requestHash = createHash('sha256').update(canonical, 'utf8').digest('hex');
-  return { operation: binding.operation, parameters: { principal: binding.principal, request: requestHash } };
+  return {
+    route: binding.operation,
+    viewer: binding.principal === 'anonymous' ? null : binding.principal.slice('account:'.length),
+    query: { request: requestHash },
+  };
 }
 
 function encodeAfter(after: readonly SearchSortValue[]): string[] {
@@ -54,33 +58,37 @@ function decodeAfter(values: readonly string[]): SearchSortValue[] | null {
   return after;
 }
 
-export function encodeSearchCursor(
+export async function encodeSearchCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
   cursor: { generation: number; after: readonly SearchSortValue[] },
   now = Date.now(),
-): string {
-  return encodeCursor(
+): Promise<string> {
+  if (!Number.isSafeInteger(now)) throw new TypeError('Invalid search cursor time');
+  return encodeListCursor(
     ring,
     cursorBinding(binding),
     { epoch: cursor.generation, after: encodeAfter(cursor.after) },
-    now,
+    new Date(now),
+    { profile: 'search' },
   );
 }
 
-export function decodeSearchCursor(
+export async function decodeSearchCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
   token: string,
   now = Date.now(),
-): SearchCursorResult {
+): Promise<SearchCursorResult> {
   let scope;
   try {
     scope = cursorBinding(binding);
   } catch {
     return { ok: false, reason: 'invalid' };
   }
-  const decoded = decodeCursor(ring, scope, token, now);
+  const decoded = await decodeListCursor(ring, scope, token, new Date(Number.isSafeInteger(now) ? now : NaN), {
+    profile: 'search',
+  });
   if (!decoded.ok) return decoded;
   if (!decoded.after.every((value): value is string => typeof value === 'string'))
     return { ok: false, reason: 'invalid' };

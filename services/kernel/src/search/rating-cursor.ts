@@ -13,8 +13,6 @@ const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const PREFIX = 'rating-v1';
 // Native name_sort uses null for names beyond this UTF-16 bound; preserve that missing-last position.
 const MAX_NAME_LENGTH = 512;
-// The shared token decoder caps the entire encoded token at this length.
-const MAX_TOKEN_LENGTH = 4_096;
 
 function validContext(context: unknown): context is RatingCursorContext {
   if (context === null || typeof context !== 'object' || Array.isArray(context)) return false;
@@ -48,16 +46,16 @@ function validPosition(epoch: number | null, phase: unknown, after: unknown): af
   );
 }
 
-export function encodeRatingCursor(
+export async function encodeRatingCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
   context: RatingCursorContext,
   cursor: { generation: number; phase: RatingPhase; after: readonly SearchSortValue[] },
   now = Date.now(),
-): string {
+): Promise<string> {
   if (!validContext(context) || !cursor || !validPosition(context.priorEpoch, cursor.phase, cursor.after))
     throw new TypeError('Invalid rating cursor');
-  const token = encodeSearchCursor(
+  return encodeSearchCursor(
     ring,
     binding,
     {
@@ -66,19 +64,17 @@ export function encodeRatingCursor(
     },
     now,
   );
-  if (token.length > MAX_TOKEN_LENGTH) throw new TypeError('Rating cursor exceeds the token length limit');
-  return token;
 }
 
-export function decodeRatingCursor(
+export async function decodeRatingCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
   context: RatingCursorContext,
   token: string,
   now = Date.now(),
-): RatingCursorResult {
+): Promise<RatingCursorResult> {
   // Authenticate the original request/viewer/operation before inspecting eligibility metadata.
-  const decoded = decodeSearchCursor(ring, binding, token, now);
+  const decoded = await decodeSearchCursor(ring, binding, token, now);
   if (!decoded.ok) return decoded;
   const [prefix, questionId, populationId, priorEpoch, phase, ...after] = decoded.after;
   const signedContext = { questionId, populationId, priorEpoch };
