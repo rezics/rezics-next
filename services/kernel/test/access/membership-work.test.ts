@@ -438,6 +438,20 @@ test('concurrent joins, role changes and leave retain the superset and last-owne
     await superset(member);
     // Regardless of which mutation won, no second reservation authorizes alone.
     expect((await inverseRows(member)).length).toBeLessThanOrEqual(1);
+    // A terminal reservation may have refused every racing change. Establish
+    // the non-owner state explicitly before exercising last-owner protection.
+    const settled = await enqueueMembership(client, `membership-test:${key()}`, input);
+    expect(await settled.getResult()).toMatchObject({ status: 'completed' });
+    expect(
+      (
+        await pool.query(
+          'SELECT role FROM access.organization_member WHERE route=$1 AND organization_id=$2 AND member_account_id=$3 AND upper_inf(valid)',
+          [routeOf(group), group, member],
+        )
+      ).rows,
+    ).toEqual([{ role: 'member' }]);
+    await superset(member);
+    expect(await inverseRows(member)).toHaveLength(1);
     const ownerLeave = await enqueueMembership(client, `membership-test:${key()}`, {
       ...input,
       memberAccountId: owner,
