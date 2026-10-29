@@ -138,3 +138,9 @@ stack-lease-preload `04d94e46e48d9d85ec34fd4f371903f2bd72139034d31e607f662a23917
 lockfile `aad3bf47b7bfa11c8bbe68e356fa3ca0974099c4be148f763b2392ebc1945c79`.
 All four remaining pairs are still UNEXECUTED at this checkpoint. The next admission is previous
 `cli-credentials-outcomes`, with the original shell/package cwd and exact test arguments above.
+
+Previous `cli-credentials-outcomes` completed exit 0: outer 1 pass, 0 fail, 5 expectations;
+unchanged wrapper proves all 9 child cases pass. No failure identity or placement diagnostic.
+Receipt `57e628fb-1451-4813-a1e8-a0267e948ce8`; log (relative to measurement checkout)
+`.temp/goal/checks/worker-check-2026-10-29T05-01-20.531Z-9c940427.log`.
+Next is the canary half of this pair; other remaining suites are UNEXECUTED.
