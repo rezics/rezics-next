@@ -29,6 +29,14 @@ const titleOf = (value: unknown): string => {
 };
 const subjectPath = (id: string, label: string, locale = 'en') =>
   `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug(label)}`;
+function responseProblem(body: string): { code?: string } | null {
+  try {
+    return JSON.parse(body) as { code?: string } | null;
+  } catch {
+    return null;
+  }
+}
+
 const globalContext = '00000000-0000-8000-8000-000000000000';
 // Every command performs source-fence and authorization work under the same
 // two-second request deadline. Give each creation its own native request budget.
@@ -293,6 +301,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         })),
       ]),
     );
+    const expected = new Map([...pending].map(([route, ids]) => [route, new Set(ids)]));
     let missingTitles = [...data.search.matchingBooks];
     let searchPending = true;
     const deadline = performance.now() + 180_000;
@@ -304,7 +313,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     while (true) {
       for (const [kind, route] of routes) {
         if (!pending.has(route)) continue;
-        const missing = pending.get(route)!;
+        const missing = new Set(expected.get(route)!);
+        pending.set(route, missing);
         let cursor: string | null = null;
         let pages = 0;
         let emptyPages = 0;
@@ -319,8 +329,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
             const response = await kernel(`${route}?${query}`);
             if (!response.ok) {
               const body = await response.text();
-              const problem = JSON.parse(body) as { code?: string };
-              if (response.status === 503 && problem.code === 'semantic_not_ready') {
+              const problem = responseProblem(body);
+              if (response.status === 503 && problem?.code === 'semantic_not_ready') {
                 console.info(`web-publication-driver-feed: route=${route} unavailable=semantic_not_ready`);
                 unavailable = true;
                 break;
@@ -351,7 +361,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
             `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} empty-pages=${emptyPages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
           );
         }
-        if (unavailable || (cursor === null && missing.size === 0)) pending.delete(route);
+        if (unavailable || (pages > 0 && cursor === null && missing.size === 0)) pending.delete(route);
       }
       if (searchPending && performance.now() < deadline) {
         const response = await kernel('/v1/subjects:search', {
