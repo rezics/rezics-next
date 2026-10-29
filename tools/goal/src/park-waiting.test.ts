@@ -117,8 +117,9 @@ test('the worker protocol tells workers to run checks in the foreground and neve
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('one foreground command');
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(prompt).toContain('one blocking wait');
-    expect(prompt).toContain('never poll or rerun the check');
+    // One 300 s tool wait was the whole budget: workers ended attempts while their checks ran (2026-10-28).
+    expect(prompt).toContain('again and again until it prints an exit status');
+    expect(prompt).toContain('never finish your attempt while a check you started is still running');
   } finally {
     h.dispose();
   }
