@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import {
   assertGrowth,
   GrowthBoundError,
@@ -7,6 +8,9 @@ import {
   type GrowthSample,
   type Metric,
 } from './growth-bound.ts';
+import { assertGrowthAccessPaths, type AccessPathSample } from './growth-access-path.ts';
+import { capture, openGrowthDatabase, settle } from './growth.ts';
+import { costOf, type Cost } from './growth-cost.ts';
 
 const allBounds = (bound: Bound): Record<Metric, Bound> => ({
   rows: bound,
@@ -148,4 +152,157 @@ test('names sequentially scanned relations in a bound error', () => {
   }
   expect(errorWithoutScans).toBeInstanceOf(GrowthBoundError);
   expect((errorWithoutScans as Error).message).not.toContain('Sequential scans:');
+});
+
+test('an access-path rejection reports its exact measured relation, scale, pages, repetition and scan count', () => {
+  const relation = 'content.report';
+  const repetition: Cost = {
+    rows: 68,
+    blocks: 2,
+    statements: 1,
+    controlStatements: 0,
+    catalogStatements: 0,
+    plans: 1,
+    sharedHit: 2,
+    sharedRead: 0,
+    relations: { [relation]: { rows: 68, blocks: 2, nodes: 1, sequentialScans: 1 } },
+  };
+  const sample: AccessPathSample = {
+    scale: 256,
+    relationSizes: { [relation]: { reltuples: 520, relpages: 9 } },
+    repetitions: [repetition],
+  };
+
+  let error: unknown;
+  try {
+    assertGrowthAccessPaths('content reports', [sample], [relation]);
+  } catch (caught) {
+    error = caught;
+  }
+  expect(error).toBeInstanceOf(Error);
+  const diagnostic = (error as Error).message;
+  expect(diagnostic).toContain('content reports');
+  expect(diagnostic).toContain(relation);
+  expect(diagnostic).toContain('scale 256');
+  expect(diagnostic).toContain('9 pages');
+  expect(diagnostic).toContain('repetition 1');
+  expect(diagnostic).toContain('1 sequential scan');
+});
+
+test('settled PostgreSQL pages govern scans without changing measured costs or growth verdicts', async () => {
+  const database = await openGrowthDatabase();
+  const schema = `growth_access_path_${randomUUID().replaceAll('-', '')}`;
+  const smallRelation = `${schema}.small_table`;
+  const largeRelation = `${schema}.large_table`;
+  const smallSql = `"${schema}"."small_table"`;
+  const largeSql = `"${schema}"."large_table"`;
+  let schemaCreated = false;
+  try {
+    await database.admin.query(`CREATE SCHEMA "${schema}"`);
+    schemaCreated = true;
+    await database.admin.query(`CREATE TABLE ${smallSql} (id integer NOT NULL)`);
+    await database.admin.query(`INSERT INTO ${smallSql} (id) VALUES (1)`);
+    await database.admin.query(`CREATE TABLE ${largeSql} (id integer NOT NULL, payload text NOT NULL)`);
+
+    let largeSize: { reltuples: number; relpages: number } | undefined;
+    for (let batch = 0; batch < 4; batch++) {
+      const first = batch * 128 + 1;
+      const last = first + 127;
+      await database.admin.query(
+        `INSERT INTO ${largeSql} (id, payload)
+         SELECT rows.id, string_agg(md5((rows.id * 32 + chunks.n)::text), '' ORDER BY chunks.n)
+           FROM generate_series($1::integer, $2::integer) AS rows(id)
+           CROSS JOIN generate_series(1, 32) AS chunks(n)
+          GROUP BY rows.id`,
+        [first, last],
+      );
+      await settle(database, { relations: [smallRelation, largeRelation], analyze: true });
+      const size = await database.admin.query<{ reltuples: number; relpages: number }>(
+        `SELECT reltuples::float8 AS reltuples, relpages::integer AS relpages
+           FROM pg_class WHERE oid = $1::regclass`,
+        [largeRelation],
+      );
+      largeSize = {
+        reltuples: Number(size.rows[0]!.reltuples),
+        relpages: Number(size.rows[0]!.relpages),
+      };
+      if (largeSize.relpages > 8) break;
+    }
+
+    const smallSizeResult = await database.admin.query<{ reltuples: number; relpages: number }>(
+      `SELECT reltuples::float8 AS reltuples, relpages::integer AS relpages
+         FROM pg_class WHERE oid = $1::regclass`,
+      [smallRelation],
+    );
+    const smallSize = {
+      reltuples: Number(smallSizeResult.rows[0]!.reltuples),
+      relpages: Number(smallSizeResult.rows[0]!.relpages),
+    };
+    expect(smallSize.relpages).toBeGreaterThanOrEqual(0);
+    expect(smallSize.relpages).toBeLessThanOrEqual(8);
+    expect(largeSize).toBeDefined();
+    expect(largeSize!.relpages).toBeGreaterThan(8);
+
+    const smallCapture = await capture(database, () =>
+      database.pool.query(`SELECT id FROM ${smallSql} WHERE id >= 0`),
+    );
+    const largeCapture = await capture(database, () =>
+      database.pool.query(`SELECT id FROM ${largeSql} WHERE id >= 0`),
+    );
+    const smallCost = costOf(smallCapture.capture);
+    const largeCost = costOf(largeCapture.capture);
+    const smallScans = smallCost.relations[smallRelation]?.sequentialScans;
+    const largeScans = largeCost.relations[largeRelation]?.sequentialScans;
+    expect(smallCost.relations[smallRelation]?.rows).toBeGreaterThan(0);
+    expect(smallCost.relations[smallRelation]?.blocks).toBeGreaterThan(0);
+    expect(smallScans).toBeGreaterThan(0);
+    expect(largeCost.relations[largeRelation]?.rows).toBeGreaterThan(0);
+    expect(largeCost.relations[largeRelation]?.blocks).toBeGreaterThan(0);
+    expect(largeScans).toBeGreaterThan(0);
+
+    const makeSample = (
+      scale: number,
+      relation: string,
+      size: { reltuples: number; relpages: number },
+      cost: Cost,
+    ): AccessPathSample => ({
+      scale,
+      relationSizes: { [relation]: size },
+      repetitions: [cost],
+    });
+    const samples = [
+      makeSample(32, smallRelation, smallSize, smallCost),
+      makeSample(256, largeRelation, largeSize!, largeCost),
+    ];
+    const measuredBefore = JSON.stringify([smallCost, largeCost]);
+    const growthSamples = [smallCost, largeCost, largeCost].map((cost, index) => ({
+      scale: [1, 8, 64][index]!,
+      cost: { rows: cost.rows, blocks: cost.blocks, statements: cost.statements },
+    }));
+    const verdictBefore = growthViolations(growthSamples, allBounds('constant'));
+
+    expect(() => assertGrowthAccessPaths('tiny relation scan', [samples[0]!], [smallRelation])).not.toThrow();
+    let error: unknown;
+    try {
+      assertGrowthAccessPaths('large relation scan', [samples[1]!], [largeRelation]);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    const diagnostic = (error as Error).message;
+    expect(diagnostic).toContain('large relation scan');
+    expect(diagnostic).toContain(largeRelation);
+    expect(diagnostic).toContain('scale 256');
+    expect(diagnostic).toContain(`${largeSize!.relpages} pages`);
+    expect(diagnostic).toContain('repetition 1');
+    expect(diagnostic).toContain(`${largeScans} sequential scan`);
+    expect(JSON.stringify([smallCost, largeCost])).toBe(measuredBefore);
+    expect(growthViolations(growthSamples, allBounds('constant'))).toEqual(verdictBefore);
+  } finally {
+    try {
+      if (schemaCreated) await database.admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+    } finally {
+      await database.close();
+    }
+  }
 });
