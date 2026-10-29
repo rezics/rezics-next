@@ -455,7 +455,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
   test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
     const realm = await createRealmBoard('Growth measurement Realm');
     await grantRealmRole(realm.realmId, fixture.principal, 'community.realm.moderator');
-    // One warm-up and five measured commands per scale, all starting published at revision 1.
+    // Five warm-ups and five measured commands per scale, all starting published at revision 1.
     // Prepare every target before the first scale so target creation is not another growth axis.
     const thread = await create('Fixed measured content', realm.boardId);
     const targets: { id: string; route: number }[] = [thread];
@@ -520,7 +520,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
           };
         },
       },
-      { from: 0, to: 17 },
+      { from: 0, to: 29 },
     );
     const bytes = Buffer.from(JSON.stringify(snapshot('Unrelated distractor bytes')));
     const digest = createHash('sha256').update(bytes).digest();
@@ -529,6 +529,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
       scales: [32, 256, 2048],
       rule: 'series',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      warmups: 5,
       async grow(database, scale, previous) {
         // Start content, ACL and command history at 2,048 rows. Otherwise the tiny receipt
         // relation scans one more preceding command per run, confounding scale with write history.
