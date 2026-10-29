@@ -28,6 +28,7 @@ export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
   readonly auth: Omit<ContentSystem['auth'], 'websiteClient' | 'ordinaryClient'> & {
     readonly ordinaryClient: ContentSystem['auth']['ordinaryClient'] & { readonly scopes: readonly string[] };
     readonly ordinaryScopes: readonly string[];
+    readonly ordinaryClientScopes: readonly string[];
   };
   /** The full fixture registers its website client on this same real Auth service. */
   readonly nativeAuth: AuthService;
@@ -374,6 +375,7 @@ async function createNativeContentSystemWithOptions(
       auth: {
         ordinaryClient,
         ordinaryScopes: registeredOrdinaryScopes,
+        ordinaryClientScopes: registeredOrdinaryScopes,
         issue,
         // Ordinary Auth renews access via its signed native session cookie,
         // rather than the website-only OAuth refresh protocol. Pass that real
