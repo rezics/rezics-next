@@ -21,9 +21,9 @@ const titleOf = (value: unknown): string => {
 const subjectPath = (id: string, label: string, locale = 'en') =>
   `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug(label)}`;
 const globalContext = '00000000-0000-8000-8000-000000000000';
-// A request shares one deadline across all commands. Keep its work at the
-// kernel's eight normal admission permits rather than filling the API maximum.
-const fixtureBatchSize = 8;
+// Every command performs source-fence and authorization work under the same
+// two-second request deadline. Give each creation its own native request budget.
+const fixtureBatchSize = 1;
 
 function accountIdFromAuthorization(authorization: string): string {
   const token = authorization.match(/^Bearer ([^.]+)\.([^.]+)\./)?.[2];
