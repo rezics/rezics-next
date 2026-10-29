@@ -4,6 +4,7 @@ import { admitFilter, parseFilter } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
 import { runOperationalTransaction } from '../../../src/command/operational.ts';
 import {
   createMembersPreparation,
@@ -15,6 +16,7 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { cookies, nativeFixture, password } from '../../access/native-account-bindings-fixture.ts';
+import { deletePersona as deleteNativePersona } from '../../support/account-deletion.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
 import { registerTestClient, testKernel } from '../../support/test-kernel.ts';
@@ -51,7 +53,7 @@ export async function membersPreparationRuntime() {
     );
   expect((await send(personas.staff, 'POST', '/v1/platform/exposure/collections:open', {})).status).toBe(200);
   const clientId = `members_${crypto.randomUUID()}`;
-  const scopes = [...actionCatalogue(kernel).keys()].sort();
+  const scopes = [...new Set([...actionCatalogue(kernel).keys(), ...LIFECYCLE_ACTIONS.keys()])].sort();
   await registerTestClient(service, { clientId, firstParty: true, scopes });
   const context = () => ({ pool: db.pool, deadline: Date.now() + 5000 });
   const actor = (persona: Persona | null, pool: Pool = db.pool) =>
@@ -148,23 +150,7 @@ export async function membersPreparationRuntime() {
     ).rows;
   }
   async function deletePersona(owner: Persona) {
-    const key = crypto.randomUUID();
-    const operation = { kind: 'delete' as const, accountId: owner.accountId, authorization: 'request' };
-    // The actual Auth API is deleteAccount; fresh native sign-in and approval precede T.
-    const signed = await auth.request('/signin', {
-      account_id: owner.accountId,
-      password,
-      client_id: clientId,
-      scope: scopes,
-    });
-    expect(signed.status).toBe(200);
-    const token = await auth.request('/token', {}, cookies(signed));
-    expect(token.status).toBe(200);
-    const bearer = ((await token.json()) as { access_token: string }).access_token;
-    const approval = await auth
-      .approval()
-      .approve(bearer, { operationKey: key, operation }, { pool: db.pool, deadline: Date.now() + 10000 });
-    return auth.host.workflows.deleteAccount({ key, accountId: owner.accountId, authorization: approval.reference });
+    return deleteNativePersona({ version: 1, pool: db.pool, auth }, owner);
   }
   return {
     db,
@@ -216,17 +202,39 @@ export function definition(ordinal = 0): PreparationDefinition {
 export function uniquenessRace(pools: readonly Pool[]) {
   const ready = Promise.withResolvers<void>();
   let arrivals = 0;
+  const originals = new Map<import('pg').PoolClient, import('pg').PoolClient['query']>();
   const listeners = pools.map((pool) => {
     const observe = (client: import('pg').PoolClient) => {
-      const query = client.query.bind(client);
-      client.query = (async (...args: unknown[]) => {
+      if (originals.has(client)) return;
+      const query = client.query;
+      originals.set(client, query);
+      client.query = ((...args: unknown[]) => {
+        const first = args[0];
+        const text =
+          typeof first === 'string'
+            ? first
+            : typeof first === 'object' && first !== null && 'text' in first && typeof first.text === 'string'
+              ? first.text
+              : undefined;
         if (
-          typeof args[0] === 'string' &&
-          /\b(?:FROM|INTO|UPDATE) library\.members_preparation_owner\b/i.test(args[0]) &&
+          text !== undefined &&
+          /\b(?:FROM|INTO|UPDATE) library\.members_preparation_owner\b/i.test(text) &&
           arrivals < 2
         ) {
           if (++arrivals === 2) ready.resolve();
-          await ready.promise;
+          const callback =
+            typeof args.at(-1) === 'function'
+              ? args.at(-1)
+              : typeof first === 'object' && first !== null && 'callback' in first
+                ? first.callback
+                : undefined;
+          const resume = () => Reflect.apply(query, client, args);
+          if (typeof callback === 'function') {
+            // pg's callback overload returns void. Forward its original arguments/result unchanged.
+            void ready.promise.then(resume).catch((error: unknown) => callback(error));
+            return;
+          }
+          return ready.promise.then(resume);
         }
         return Reflect.apply(query, client, args);
       }) as typeof client.query;
@@ -237,6 +245,12 @@ export function uniquenessRace(pools: readonly Pool[]) {
   });
   return {
     arrivals: () => arrivals,
+    restore() {
+      for (const { pool, observe } of listeners) pool.off('connect', observe);
+      for (const [client, query] of originals) client.query = query;
+      originals.clear();
+      ready.resolve();
+    },
     async arm() {
       for (const { pool, observe } of listeners) {
         pool.off('connect', observe);

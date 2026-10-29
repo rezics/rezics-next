@@ -123,7 +123,7 @@ test('concurrent identical first requests force native contention retry and shar
         native.store(second).reserve(secondActor, f.collectionId, [definition()]),
       ]),
     { includeBackends: true },
-  );
+  ).finally(() => barrier.restore());
   expect(barrier.arrivals()).toBe(2);
   attemptBudgets(raced.capture);
   expect(raced.value[0].episodes).toEqual(raced.value[1].episodes);
@@ -173,8 +173,9 @@ test('native insufficient scope and pre-suspension bearer retain existing HTTP d
       new ProblemError('not_found'),
     );
     const suspended = await native.send(native.personas.suspended, 'GET', `/v1/collections/${f.collectionId}/members`);
-    expect(suspended.status).toBe(403);
-    expect(await suspended.json()).toMatchObject({ code: 'account_suspended', status: 403 });
+    expect(suspended.status).toBe(401);
+    expect(await suspended.json()).toMatchObject({ code: 'invalid_credentials', status: 401 });
+    expect(suspended.headers.get('WWW-Authenticate')).toBe('Bearer error="invalid_token"');
   });
   expect(denied.capture.statements.some((sql) => /\b(?:INSERT INTO|UPDATE|DELETE FROM)\b/i.test(sql))).toBe(false);
 });
@@ -382,10 +383,11 @@ test('fresh Auth deletePersona commits T between intent and step; late work and 
 
 test('preT native operational account share completes before T and Auth deletion waits on its actual row lock', async () => {
   const f = await native.fixture();
+  const episode = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
   const pool = native.db.openPool({ max: 1 });
   const held = Promise.withResolvers<number>();
   const release = Promise.withResolvers<void>();
-  const locator = native.locator(f.owner, f.collectionId);
+  const locator = episode.locator;
   const applying = runOperationalTransaction(
     pool,
     {
@@ -420,7 +422,7 @@ test('preT native operational account share completes before T and Auth deletion
     release.resolve();
   }
   const results = await Promise.allSettled([applying, deleting]);
-  expect(results[0]).toEqual({ status: 'fulfilled', value: false });
+  expect(results[0]).toEqual({ status: 'fulfilled', value: true });
   expect(results[1]!.status).toBe('fulfilled');
 });
 
@@ -490,7 +492,7 @@ for (const operation of ['first202', 'duplicate', 'quota-full retirement', 'forc
             await Promise.all([
               f.store.reserve(measuredActor, f.collectionId, [definition(40)]),
               native.store(second!).reserve(competingActor, f.collectionId, [definition(40)]),
-            ]);
+            ]).finally(() => barrier.restore());
             expect(barrier.arrivals()).toBe(2);
           } else await f.store.reserve(measuredActor, f.collectionId, [definition(40)]);
         },

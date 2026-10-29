@@ -4,38 +4,30 @@
 admission boundary. Its factory constructs successfully; all three operations throw explicitly. Native cases
 must fail at those operations, never accept their errors as satisfied behavior. This is neither native product
 acceptance nor a freeze. No schema, SQL implementation, route, worker registration or ready member result is added.
-The manager reviews this contract before commissioning the independent bounded producer.
+Contract review and native fixture evidence precede the independent bounded producer.
 
 The authorities are [owner predicates](../../../../docs/library-owner-queries.md), the [Members GET
 exception](../../../../docs/dynamic-collections.md#model-and-identity), [filtered lists](../../../../docs/filtered-lists.md)
 and [deletion](../../../../docs/deletion.md). Their numeric ceilings are authoritative; the numbers in acceptance
-examples instantiate them rather than introduce tunable constants. Existing absence claims about shared grammar
-or operational Core in those documents are stale: both actual producers are present. Owner execution, complete
-canonical readiness and partitioned identity remain incomplete.
+examples instantiate them rather than introduce tunable constants. Reservation metadata establishes no owner-query
+execution, canonical readiness or partitioned identity.
 
-## Actual dependencies read
+## Native authorities
 
-Core source is `5b5c3be17ea1c7c747d09cdcdcfa0ac89ca37cfe` (`dev5b5c3be17e` in the brief), with the same exact
-`command/operational.ts` bytes in this checkout. The branch alias itself is not a local ref. SHA-256 evidence:
+Use the actual [Core operational API](../command/README.md#operational-transactions) and
+[executor](../command/operational.ts), including its [native correctness cases](../../test/command/operational-transaction.test.ts)
+and [growth cases](../../test/command/operational-transaction-growth.test.ts). The
+[shared FilterDocument and admission](../../../../packages/filter/README.md) own structural meaning and saved
+expansion. Canonical JSON uses the existing `canonicalize` dependency, as in Collection command digests.
 
-| Native source | SHA-256 |
-| --- | --- |
-| `command/operational.ts` | `0ad898f9765a23ce11680b9c140083c14602de599da696654d78f5b41c7ea3cc` |
-| `command/README.md` | `d7bc1821cdfb375a26c5640a0201bd647930d9afda53a2b1ca99b1863e799566` |
-| `test/command/operational-transaction.test.ts` | `022e9be87a43e1d800558f8d2f41f1e1150f283a713bae64507d391555730f17` |
-| `test/command/operational-transaction-growth.test.ts` | `db5c2befd07f37ce46b3f485e3bcc465d29496820947f23054768111c811650c` |
-
-Read surfaces also include `command/support/operational-fixture.ts` and `operational-runtime.ts` under tests;
-`request/access.ts`, `access/account-share.ts`, `work/client.ts`, `work/queues.ts`, `work/registry.ts`, Library's
-`work.ts`/`work-module.ts`, Collection commands/readers/routes and their HTTP/read/source/worker fixtures;
-shared `test/support/personas.ts`, `test-kernel.ts`, `growth.ts`/`growth-capture.ts`, and
-`test/access/native-account-bindings-fixture.ts`. Auth's actual workflow method is `deleteAccount`
-(`services/auth/src/workflows.ts`), with fresh approval demonstrated by `native-workflow-refusals.test.ts`.
-The test helper names the persona use case `deletePersona`; it calls that actual API. It does not invent an Auth port.
-The actual shared `packages/filter/src/{filter,owner-filter,index}.ts` and README supply FilterDocument,
-parseFilter and admitFilter, including owner leaves and saved expansion. Canonical JSON uses the existing
-`canonicalize` dependency, as in native Collection command digests and Search cursor request binding.
-No external reference project is named by these reservation source authorities or required for this slice.
+The fixture consumes [shared native personas](../../test/support/personas.ts), the mounted production Collection
+APIs and real Access. Fresh deletion forwards once to the actual
+[shared deletePersona helper](../../test/support/account-deletion.ts), with its versioned options, the owned pool,
+native Auth and real owner Persona. Its registered test client includes mounted-action and actual
+[LIFECYCLE_ACTIONS](../access/lifecycle.ts) scopes, so ordinary fixture people consent legitimately to account
+deletion. No local approval/deletion protocol or second Auth/kernel executor is introduced. Native authentication
+and suspension follow the [viewer admission authority](../../../../docs/library-owner-queries.md#viewer-self-binding-and-admission)
+and [actual verifier](../access/authenticate.ts).
 
 ## Local API and authority
 
@@ -64,10 +56,12 @@ native attribution/delegation evidence, never an HTTP owner selector or an instr
 operator or an inferred human. The current API's account principal remains the verified Actor's account id;
 Access revalidates its actual delegation evidence on each attempt. Anonymous private reservation is concealed
 with native not_found. Foreign and insufficient-scope private Collection requests use that same existing shape;
-pre-suspension bearers retain the current `403 account_suspended` authentication behavior. The older owner-query
-prose's 401 sentence does not replace the actual shared authentication contract.
+a native pre-suspension bearer on the mounted members GET returns `401`, JSON Problem code
+`invalid_credentials`, and `WWW-Authenticate: Bearer error="invalid_token"`. Auth cannot issue a valid suspended
+bearer. Missing, invalid or revoked required credentials retain native `401`; the HTTP insufficient-scope rule
+remains `403 insufficient_scope`. The internal admitted-module private-read denials above retain `not_found`.
 
-Initial scope is a same-owner curated Collection created through mounted production POST and admitted by current
+The initial positive fixture uses a same-owner curated Collection created through mounted production POST and admitted by current
 `collection:read`, on the owner's route. The native fixture proves its mounted members GET succeeds and releases
 its read snapshot before reservation. It proves no logical Everything/state or foreign-source admission.
 Reservation must recheck the exact current active curated header and owner binding inside the fenced transaction;
@@ -75,7 +69,8 @@ the earlier successful read and an explicit grant alone cannot substitute for cu
 Use the existing private-read concealment: `accessCommandAuthorization` receives `not_found` as its denial,
 including when its native command-admission preparation refuses a terminal owner.
 A batch covers distinct definitions for that ONE Collection. This is sufficient to specify two reads and an intent
-with multiple locators without claiming all common-page reads are supported. Cross-Collection/source batches
+with multiple locators without claiming all common-page reads are supported. This initial interface does not
+narrow the required full common-page capability. Cross-Collection/source batches
 need the common-page owner's actual resource/page Access binding: Core accepts one authorization resource that
 must belong to the operational partition. There is no invented synthetic resource, owner-account read action or
 public source bypass here. Full cross-resource composition remains a named followup before common-page exposure.
@@ -163,16 +158,36 @@ own drained inventory/ACK is not whole-role NoData, overall erasure completion o
   preparation/finalization, SERIALIZABLE partition/account fences, owner control/LRU/uniqueness, retained intent and
   both DBOS enqueue statements on actual backends. No source input key is read by reservation.
 - Bound: the existing preparation-step statement allowance per ATTEMPT, in addition to the existing one-read or
-  composed read allowance, as adopted by Performance decision 29. This does not grant an extra allowance. Retry is
-  bounded by the native request command deadline (5000ms ceiling; shorter request wins), not a count cap. No
-  maxAttempts option, hidden rollback/control statement, local executor or subtraction. If the actual baseline
+  composed read allowance in [the shared budgets](../../../../docs/filtered-lists.md#budgets). This grants no extra
+  allowance. Retry is bounded by the [native request command deadline](../command/command.ts) (shorter request wins),
+  not a count cap. No maxAttempts option, hidden rollback/control statement, local executor or subtraction. If the actual baseline
   exceeds the authority, send captures to Performance before freeze. Each backend has one total connection,
   released before the next phase; the separate contenders in the race are separate requests.
 - Growth check: named native `first202`, `duplicate`, `quota-full retirement`, `forced-one-contention-retry`
   cases at 64/512/4096 independently against retired owner episodes/results and unrelated history. Count every
   Core/Access/control/rollback/DBOS statement; rows/statements constant and blocks logarithmic per backend. The
-  forced retry's attempt must have the same neighbourhood/budget as first admission. Grow retired history without
-  increasing live quota; do not relocate the hot owner. Read and intent captures remain separate.
+  successful retry must have the same actual statement sequence as an ordinary successful first admission at
+  that same scale. Its rows and blocks per statement follow the existing series rule across scales. Force native
+  `40001` at a fixed actual statement for a deterministic aborted prefix, including a real COMMIT-failure schedule.
+  Each aborted attempt comprises its actually executed prefix through failure plus ROLLBACK. Charge Core time,
+  Access, every control/body/DBOS statement and rollback within the existing per-backend, per-attempt ceiling.
+  Per-statement rows/blocks in that prefix must not exceed that statement's success baseline and must remain
+  constant across scales for the same fixed abort point. A successful attempt need not equal an aborted prefix;
+  aggregate totals, subtraction and extra allowances cannot prove this boundary. A COMMIT-failure rollback that
+  exceeds the ceiling requires actual capture review before freeze. Grow retired history without increasing live
+  quota; do not relocate the hot owner. Read and intent captures remain separate.
+
+The forced-contention series currently retains only aggregate growth evidence and cannot certify that retry proof.
+The required shared capture prerequisite is an exported statement-occurrence-to-plan association (including backend,
+error and absent-plan status) and measured-repetition raw capture access. Actual
+[`Capture`](../../test/support/growth-cost.ts) has parallel statement/error/backend arrays and separate plan/backend
+arrays, but no occurrence association. The capture implementation's internal `planCount` is not exported.
+[`statementAttributions`](../../test/support/growth-report.ts) groups normalized SQL across backends and attempts;
+[`checkGrowth`](../../test/support/growth.ts) exposes those grouped `statementRepetitions`, not the raw captures.
+Repeated SQL in a successful retry and an aborted prefix therefore cannot be safely assigned per-attempt plan costs
+through an existing shared port. Keep first202, duplicate, quota-full, forced contention and stale-history axes;
+fixed-prefix and real-COMMIT schedules with the comparisons above remain required before freeze. Do not guess
+capture fields, add local attribution/classification, alter the harness or count aggregate evidence as a pass.
 
 ### Retired header and late work
 
@@ -190,8 +205,11 @@ Auth, mounted Collection create/read, actual Access, one owned PostgreSQL and Wo
 reserve, touch and fenced admitStep. Body/enqueue faults use real PostgreSQL trigger failures. Quota and composed
 cases inspect real headers and DBOS inputs and forbid result deletion SQL; populated retained-result nondeletion
 still needs the later native result producer rather than fabricated ready members. The deletion schedules use
-fresh Auth approval and actual row-lock observation. Fixture success, reached missing method, actual pass at a
-revision and promotion are separate evidence. A red specification cannot certify the numeric bounds.
+the shared fresh Auth deletePersona helper and actual row-lock observation. The preT schedule first reserves a
+real live episode, then requires admitStep to return true for that locator in the held operational transaction
+before deletion can commit T. An absent-episode false result cannot satisfy that positive boundary. Fixture success,
+reached missing method, actual pass at a revision and promotion are separate evidence. A red specification cannot
+certify the numeric bounds.
 
 The native fixture's successful mounted create/read is a prerequisite for each case, not a substitute for its
 reservation assertions. Report setup failures separately from literal `reserve`, `touch` and `admitStep`
