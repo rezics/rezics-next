@@ -320,4 +320,4 @@ test("an account revision erasure page stays within its bound as other editors' 
     await driver.close();
     await closeCommunityDrivers();
   }
-}, 900000);
+}, 240000);
