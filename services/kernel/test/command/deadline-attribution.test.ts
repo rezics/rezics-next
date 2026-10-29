@@ -163,6 +163,7 @@ test('contention retry pauses are summed and counted on the eventual deadline li
   const spy = spyOn(console, 'error').mockImplementation((line) => {
     lines.push(String(line));
   });
+  const jitter = spyOn(Math, 'random').mockReturnValue(0.999);
   try {
     const response = await app.handle(new Request('http://localhost/retry'));
     expect(response.status).toBe(503);
@@ -170,8 +171,10 @@ test('contention retry pauses are summed and counted on the eventual deadline li
     expect(lines).toHaveLength(1);
     const line = JSON.parse(lines[0]!);
     expect(line.contention_retries).toBe(3);
-    expect(line.phases_ms.contention_pause).toBeGreaterThan(0);
+    // Three pauses of approximately 5, 10 and 20 ms must accumulate; the last alone is insufficient.
+    expect(line.phases_ms.contention_pause).toBeGreaterThanOrEqual(30);
   } finally {
+    jitter.mockRestore();
     spy.mockRestore();
   }
 });
