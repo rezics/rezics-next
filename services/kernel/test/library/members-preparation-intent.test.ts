@@ -5,8 +5,10 @@ import canonicalize from 'canonicalize';
 import { ProblemError } from '../../src/http/problem.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-command.ts';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
+import type { PreparingEpisode } from '../../src/library/members-preparation.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { capture, checkGrowth, statementOccurrences } from '../support/growth.ts';
+import { capture, checkGrowth } from '../support/growth.ts';
+import { statementOccurrences } from '../support/growth-report.ts';
 import {
   definition,
   membersPreparationRuntime,
@@ -58,7 +60,7 @@ test('native Library derived-preparation admission preserves current authorizati
   const episode = admitted.value.episodes[0]!;
   expect(episode.state).toBe('preparing');
   expect(episode.locator).toEqual({
-    route: routeOf(f.owner.accountId),
+    route: routeOf(f.owner.accountId)!,
     ownerAccountId: f.owner.accountId,
     collectionId: f.collectionId,
     episodeId: expect.any(String),
@@ -235,7 +237,7 @@ for (const boundary of ['body', 'enqueue'] as const) {
 
 test('quota boundary serializes concurrent 33rd and 34th definitions, preserves recent reads and retires only deterministic LRU headers', async () => {
   const f = await native.fixture();
-  const episodes = [];
+  const episodes: PreparingEpisode[] = [];
   for (let ordinal = 0; ordinal < 32; ordinal++)
     episodes.push(
       (await f.store.reserve(await native.actor(f.owner), f.collectionId, [definition(ordinal)])).episodes[0]!,
