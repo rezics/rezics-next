@@ -1212,7 +1212,7 @@ CREATE TABLE access.workflow_approval (
     CONSTRAINT workflow_approval_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT workflow_approval_operation_check CHECK (((jsonb_typeof(operation) = 'object'::text) AND (octet_length((operation)::text) <=
 CASE
-    WHEN ((operation ->> 'kind'::text) = 'client-reduction'::text) THEN 69119
+    WHEN ((operation ->> 'kind'::text) = 'client-reduction'::text) THEN 71167
     ELSE 16384
 END))),
     CONSTRAINT workflow_approval_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 255))),
