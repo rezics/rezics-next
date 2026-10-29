@@ -15,7 +15,6 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
     await promote({
       settings: h.settings,
       job: h.job,
-      runGate: async () => {
       runGate: async () => (++gates === 1 ? failure : success),
     });
     await h.job.drain();

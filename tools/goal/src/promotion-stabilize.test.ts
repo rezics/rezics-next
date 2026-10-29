@@ -75,7 +75,7 @@ test('a failing stabilize gate blocks that candidate without bisecting or revert
   }
 });
 
-test('a blocked stabilize candidate is gated again only after its head moves', async () => {
+test('a blocked stabilize candidate waits until its head moves, then gates the new head', async () => {
   const h = integrationHarness();
   try {
     await h.seed('stable');
@@ -94,7 +94,7 @@ test('a blocked stabilize candidate is gated again only after its head moves', a
     const moved = h.advanceDev('later');
     git(h.root, 'update-ref', 'refs/heads/stabilize', moved, candidate);
     await h.promote(runGate);
-    expect(gates).toBe(4);
+    expect(gates).toBe(2);
   } finally {
     h.dispose();
   }
