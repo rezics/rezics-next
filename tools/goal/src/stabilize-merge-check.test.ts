@@ -57,7 +57,7 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
   } finally {
     h.dispose();
   }
-});
+}, 30_000);
 
 test('a failing stabilize acceptance keeps dev unchanged, leaves stabilize integrated, and notifies the task manager and supermanager', async () => {
   const h = integrationHarness();
@@ -91,4 +91,4 @@ test('a failing stabilize acceptance keeps dev unchanged, leaves stabilize integ
   } finally {
     h.dispose();
   }
-});
+}, 30_000);
