@@ -15,6 +15,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { admittedAccess, accountToken, authenticateAccount } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { compileEntryRelease, entryTypes } from './support/profile-entry-fixture.ts';
@@ -186,6 +187,7 @@ beforeAll(async () => {
     pool: database.pool,
     tokens,
     routeKey: new Uint8Array(32).fill(73),
+    writeRate: createWriteRateLimiter({ secret: 'native-library-entry-baseline-rate-secret' }),
     access(config) {
       return (access = admittedAccess(config));
     },
