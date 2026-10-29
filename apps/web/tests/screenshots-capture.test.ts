@@ -5,18 +5,21 @@ import { join } from 'node:path';
 const source = readFileSync(join(import.meta.dir, '../scripts/screenshots.ts'), 'utf8');
 
 function extracted<T>(startName: string, endName: string, ending = `\nreturn ${startName};`): T {
-  const start = source.indexOf(`function ${startName}(`);
-  const end = source.indexOf(`\nasync function ${endName}(`, start);
+  const ordinaryStart = source.indexOf(`function ${startName}(`);
+  const start = ordinaryStart < 0 ? source.indexOf(`async function ${startName}(`) : ordinaryStart;
+  const asyncEnd = source.indexOf(`\nasync function ${endName}(`, start);
+  const ordinaryEnd = source.indexOf(`\nfunction ${endName}(`, start);
+  const end = asyncEnd < 0 ? ordinaryEnd : ordinaryEnd < 0 ? asyncEnd : Math.min(asyncEnd, ordinaryEnd);
   if (start < 0 || end < 0) throw new Error(`Could not extract ${startName}.`);
   return new Function(`${source.slice(start, end)}${ending}`)() as T;
 }
 
 type Job = { id: string; locale: string; theme: string };
 type CaptureResult = { files: string[]; failures: { job: Job; error: string }[] };
-type CaptureJobs = (jobs: readonly Job[], run: (job: Job) => Promise<string>) => Promise<CaptureResult>;
+type CaptureJobs = (jobs: readonly Job[], run: (job: Job, worker: number) => Promise<string>) => Promise<CaptureResult>;
 
 test('one failed story does not stop later screenshot jobs', async () => {
-  const captureJobs = extracted<CaptureJobs>('captureJobs', 'prepareFullPageCapture');
+  const captureJobs = extracted<CaptureJobs>('captureJobs', 'reportCaptureResults');
   const jobs = [
     { id: 'first', locale: 'en', theme: 'light' },
     { id: 'broken', locale: 'ja', theme: 'dark' },
@@ -36,7 +39,7 @@ test('one failed story does not stop later screenshot jobs', async () => {
 test('failures print one line per failed job after files and produce a nonzero result', () => {
   const report = extracted<
     (files: string[], failures: { job: Job; error: string }[], write: (s: string) => void) => number
-  >('reportCaptureResults', 'captureScreenshots');
+  >('reportCaptureResults', 'capture');
   const lines: string[] = [];
   const code = report(
     ['one.png', 'two.png'],
@@ -55,7 +58,7 @@ test('failures print one line per failed job after files and produce a nonzero r
 test('a run without failures retains its zero exit status and output', () => {
   const report = extracted<
     (files: string[], failures: { job: Job; error: string }[], write: (s: string) => void) => number
-  >('reportCaptureResults', 'captureScreenshots');
+  >('reportCaptureResults', 'capture');
   const lines: string[] = [];
   expect(report(['one.png'], [], (line) => lines.push(line))).toBe(0);
   expect(lines.join('')).toBe('one.png\n1\n');
