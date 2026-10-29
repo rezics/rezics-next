@@ -107,8 +107,114 @@ The first root typecheck exited 1 with three TS2379 errors in the two local test
 `CountedCheck` with an explicitly cast identity reader. All four configurations were corrected and committed.
 No shared API, evidence, bound, tolerance, host, dependency, setting, timeout or wrapper was changed.
 
-Final-code acceptance and root typecheck are pending. The initial timeout is not claimed to be a reproduced base
-failure, a counted-assertion failure, or passing evidence for the 22 run-plan outcomes. No baseline command was run.
+Final checks ran against committed revision `1bd562794bb4e0c9f0af17513bacf765ca388af7` after the last code edit and formatting.
+Both terminated with **exit status 0**. Each final command was started once; repeated `--wait` calls retained its
+original handle, including the wait calls that returned status 75. Acceptance waited 1368.229 seconds for a host
+slot, then ran in 16.02 seconds. Root typecheck waited 964.889 seconds, then completed all **13 workspaces** with no
+errors. Queueing was not treated as a failure. No check remains live.
+
+```sh
+bun scripts/worker-check.ts -- bun test services/importer/tests/run-store-outcomes.test.ts services/importer/tests/run-plans-outcomes.test.ts services/importer/tests/run-store-growth.test.ts services/importer/tests/run-store-pages.test.ts
+bun scripts/worker-check.ts -- bun scripts/typecheck.ts
+```
+
+Final acceptance: **11 pass / 0 fail**, 106 expect calls, all four named files. The unchanged run-state wrapper passed
+its assertions for a real **16 pass / 0 fail**, exit-0 child with no skip/todo. The unchanged run-plan wrapper passed
+its assertions for a real **22 pass / 0 fail**, exit-0 child with no skip/todo. Child output is buffered by each wrapper
+and emitted only on failure; these child counts are verified by the successful immutable wrapper assertions, not
+separate unbound-spec runs. All eight local growth tests and the local page test passed.
+
+The initial timeout remains recorded above; it was not reproduced on the base and is not claimed as a base defect.
+The final native wrapper run now verifies the complete run-plan suite. The second runs followed a committed type fix,
+not a timeout/host/dependency/settings change. No additional test run or whole-workspace gate was used. Subsequent
+changes only record this evidence in this report, so no passing check is repeated.
+
+Full terminal test output (after managed-host setup):
+
+```text
+services/importer/tests/run-store-growth.test.ts:
+(pass) fixed run-state operations stay indexed at three scales [664.93ms]
+(pass) Run control stays within its bound as R grows [1647.29ms]
+(pass) Run staging stays within its bound as R grows [1866.75ms]
+(pass) Run projection page stays within its bound as R grows [1754.78ms]
+(pass) Run vanished page stays within its bound as R grows [1668.43ms]
+(pass) Run key observation stays within its bound as R grows [1654.10ms]
+(pass) Run omission check stays within its bound as R grows [1567.44ms]
+(pass) Run finalize stays within its bound as R grows [1640.24ms]
+
+services/importer/tests/run-store-outcomes.test.ts:
+(pass) the complete durable run-state outcomes pass with production indexed storage [1900.90ms]
+
+services/importer/tests/run-plans-outcomes.test.ts:
+(pass) all bounded run-plan outcomes pass with production durable storage [1445.99ms]
+
+services/importer/tests/run-store-pages.test.ts:
+(pass) sealed source projections use bounded indexed pages at three scales [37.15ms]
+
+ 11 pass
+ 0 fail
+ 106 expect() calls
+Ran 11 tests across 4 files. [16.02s]
+remote-check: command 16.036 s on a
+remote-check: run used 18.877 CPU seconds over 16.439 s (1.15 cores), peak memory 1061 MiB on a
+worker-check: bun test services/importer peak 1.0 GiB (weight 2)
+check: exit status 0
+check: log .temp/goal/checks/worker-check-2026-10-29T13-39-46.933Z-8ff368ee.log
+```
+
+Full terminal root-typecheck workspace output (after managed-host setup):
+
+```text
+Workspace @rezics/auth-contract finished in 0.52s
+$ bun run typecheck  (packages/auth-contract)
+
+Workspace @rezics/filter finished in 0.62s
+$ bun run typecheck  (packages/filter)
+
+Workspace @rezics/composition finished in 0.77s
+$ bun run typecheck  (packages/composition)
+
+Workspace @rezics/document finished in 0.82s
+$ bun run typecheck  (packages/document)
+
+Workspace @rezics/ui finished in 1.27s
+$ bun run typecheck  (packages/ui)
+
+Workspace @rezics/client finished in 2.08s
+$ bun run typecheck  (packages/client)
+
+Workspace @rezics/conversion finished in 2.06s
+$ bun run typecheck  (packages/conversion)
+
+Workspace @rezics/definitions finished in 2.18s
+$ bun run typecheck  (packages/definitions)
+
+Workspace @rezics/importer finished in 1.88s
+$ bun run typecheck  (services/importer)
+
+Workspace @rezics/auth-pages finished in 14.76s
+$ bun run typecheck  (apps/auth)
+
+Workspace @rezics/web finished in 24.43s
+$ bun run typecheck  (apps/web)
+
+Workspace @rezics/kernel finished in 58.85s
+$ bun run typecheck  (services/kernel)
+
+Workspace @rezics/auth finished in 70.25s
+$ bun run typecheck  (services/auth)
+
+remote-check: command 95.686 s on c
+remote-check: run used 340.035 CPU seconds over 97.409 s (3.49 cores), peak memory 3696 MiB on c
+worker-check: bun scripts/typecheck.ts peak 3.6 GiB (weight 5)
+check: exit status 0
+check: log .temp/goal/checks/worker-check-2026-10-29T13-39-49.764Z-a7f88676.log
+```
+
+The complete logs remain at
+`.temp/goal/checks/worker-check-2026-10-29T13-39-46.933Z-8ff368ee.log` and
+`.temp/goal/checks/worker-check-2026-10-29T13-39-49.764Z-a7f88676.log`.
+The final code diff is six files, **160 insertions / 84 deletions**, plus this new evidence report.
 
 ## Full old/new portable hashes
 
