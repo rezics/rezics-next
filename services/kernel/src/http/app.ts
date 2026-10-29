@@ -38,6 +38,15 @@ import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-r
 import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import { withCommandTiming } from '../command/timing.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import {
+  bodyLimitOf,
+  bodyModeOf,
+  parseBoundedBody,
+  DEFAULT_BODY_LIMIT,
+  MAX_BODY_LIMIT,
+  IngressBodyBudget,
+} from './body.ts';
+import { ADMISSION_LIMITS } from './admission.ts';
 
 export const REQUEST_DEADLINE_MS = DEFAULT_REQUEST_DEADLINE_MS;
 
@@ -74,6 +83,20 @@ export function createApp({
   const requestIds = new WeakMap<Request, string>();
   const jsonBodyChecks = new Map<string, () => ReturnType<typeof Compile>>();
   const invalidJsonBodies = new WeakMap<Request, ValidationError>();
+  const boundedBodyErrors = new WeakMap<Request, unknown>();
+  const bodyReservations = new WeakMap<Request, number>();
+  let bodyBudget: IngressBodyBudget | undefined;
+  const selfParsingRoutes = new Set([
+    'POST /v1/boards',
+    'POST /v1/realms/:realmId/boards',
+    'POST /v1/threads',
+    'POST /v1/threads/:id/posts',
+    'POST /v1/posts/:id/revisions',
+    'POST /v1/reports',
+    'POST /v1/sourceFences/$takedown',
+    'POST /v1/media/:id/$takeDown',
+    'POST /v1/webhooks/stripe',
+  ]);
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
   let catalogue: MountedRouteCatalogue;
   const matchedRoutes = new WeakMap<Request, MountedRoute | undefined>();
@@ -102,6 +125,43 @@ export function createApp({
   const app = new Elysia()
     .onRequest(({ request }) => {
       idFor(request);
+    })
+    .onParse('global', async ({ request, route }) => {
+      const mounted = mountedFor(request, route);
+      if (!mounted) return;
+      const key = `${mounted.method.toUpperCase()} ${mounted.path}`;
+      if (selfParsingRoutes.has(key)) return;
+      const detail = mounted.hooks?.detail as Record<string, unknown> | undefined;
+      const limit = bodyLimitOf(detail);
+      const declared = Number(request.headers.get('content-length'));
+      const reservation =
+        request.headers.has('content-length') && Number.isSafeInteger(declared) && declared >= 0
+          ? Math.min(declared, limit)
+          : limit;
+      const largest = Math.max(
+        DEFAULT_BODY_LIMIT,
+        MAX_BODY_LIMIT,
+        ...catalogue.routes.map((candidate) =>
+          bodyLimitOf(candidate.hooks?.detail as Record<string, unknown> | undefined),
+        ),
+      );
+      const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * largest;
+      bodyBudget ??= new IngressBodyBudget(budget);
+      if (!bodyBudget.reserve(reservation)) throw new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
+      bodyReservations.set(request, reservation);
+      try {
+        return await parseBoundedBody(request, limit, bodyModeOf(detail));
+      } catch (error) {
+        boundedBodyErrors.set(request, error);
+        return {};
+      }
+    })
+    .onAfterResponse(({ request }) => {
+      const reservation = bodyReservations.get(request);
+      if (reservation !== undefined) {
+        bodyBudget?.release(reservation);
+        bodyReservations.delete(request);
+      }
     })
     .onError('global', ({ error, request, route }) => {
       let action: string | undefined;
@@ -159,9 +219,16 @@ export function createApp({
       return problem;
     })
     .onTransform('global', ({ body, request, route }) => {
+      const boundedError = boundedBodyErrors.get(request);
+      if (boundedError !== undefined) {
+        boundedBodyErrors.delete(request);
+        throw boundedError;
+      }
       const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
       if (mediaType !== 'application/json' && !mediaType?.endsWith('+json')) return;
       const mounted = mountedFor(request, route);
+      const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
+      if (bodyModeOf(detail) === 'raw') return;
       const check = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`)?.();
       if (check && !check.Check(body))
         invalidJsonBodies.set(request, new ValidationError('body', body, check.Errors(body), check.Type()));

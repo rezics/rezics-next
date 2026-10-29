@@ -634,6 +634,33 @@ only for lists that have not yet moved.
 
 ## Cost
 
+| Operation    | Touches                  | Bound                                                                           | Growth check                   |
+| ------------ | ------------------------ | ------------------------------------------------------------------------------- | ------------------------------ |
+| HTTP ingress | One request's wire bytes | O(limit) time and memory per request; reserved total at most the ingress budget | `test/http/body-limit.test.ts` |
+
+## HTTP ingress body bounds
+
+The shared reader enforces a 1 MiB default wire limit before JSON parsing and schema validation. Route owners keep
+canonical validity limits (such as the 4 MiB canonical definition release limit); HTTP wire limits cover the bytes
+that carry those canonical values. Definition publish allows `RELEASE_LIMITS.bytes + 65,536` bytes for its compact
+JSON envelope. `Bun.serve` uses the largest route limit as a final transport backstop.
+
+The ingress reservation budget is derived as `(ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * default limit +
+2 * largest route limit`. Each request reserves its declared length capped at its route limit, or the route limit
+when no length is declared. Reservations release after the response.
+
+| Mounted body route / family                     | Wire limit                       | Reader       |
+| ----------------------------------------------- | -------------------------------- | ------------ |
+| All body routes without `x-body-limit`          | 1 MiB                            | shared JSON  |
+| `POST /v1/definitions/releases`                 | canonical release limit + 64 KiB | shared JSON  |
+| `POST /v1/boards`, `/v1/realms/:realmId/boards` | existing bounded content parser  | route parser |
+| `POST /v1/threads`, `/v1/threads/:id/posts`     | existing bounded content parser  | route parser |
+| `POST /v1/posts/:id/revisions`                  | existing bounded content parser  | route parser |
+| `POST /v1/reports`                              | existing bounded report parser   | route parser |
+| `POST /v1/media/:id/$takeDown`                  | 8 KiB                            | route parser |
+| `POST /v1/sourceFences/$takedown`               | 16 KiB                           | route parser |
+| `POST /v1/webhooks/stripe`                      | 256 KiB                          | route parser |
+
 Every module README keeps one such table, checked by `test/support/growth-cost-table.ts`.
 Every read, write, check, authorization, projection and erasure must touch a bounded neighbourhood: an anchor plus bounded hops and results, costing roughly changes × log N, independent of engine speed or machine size.
 Here N and P mean rows of the relevant kind in the database and anchor partition, H is that partition's outbox history, C is consumer checkpoints, k is the command event count capped at 1,000 by `MAX_COMMAND_EVENTS` (the maximum per envelope for a batch), b ≤ 64 is envelopes, and j ≤ 32 is session components; grow subjects and histories, users' content over time (U × t), and media (M) independently.
