@@ -220,7 +220,9 @@ export type PromotionRun = {
 };
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
 export type Attempt = AttemptRef & {
-  state: 'pending' | 'running' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
+  state: 'pending' | 'running' | 'waiting' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
+  /** Detached check runs whose completion will resume this attempt's session. */
+  checks?: string[];
   previousBriefHash?: string;
   newBriefHash?: string;
   supersededFinalized?: boolean;

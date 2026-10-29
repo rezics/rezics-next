@@ -2,8 +2,9 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["status", "summary", "blocker", "approaches"],
+  "allOf": [{ "if": { "properties": { "status": { "const": "waiting" } } }, "then": { "required": ["checks"], "properties": { "checks": { "minItems": 1, "uniqueItems": true } } } }],
   "properties": {
-    "status": { "type": "string", "enum": ["success", "blocked"] },
+    "status": { "type": "string", "enum": ["success", "blocked", "waiting"] },
     "summary": { "type": "string" },
     "blocker": {
       "anyOf": [
@@ -14,6 +15,7 @@
         } }
       ]
     },
+    "checks": { "type": "array", "items": { "type": "string" } },
     "approaches": { "type": "array", "items": { "type": "object", "additionalProperties": false,
       "required": ["approach", "result"], "properties": { "approach": { "type": "string" }, "result": { "type": "string" } } } }
   }

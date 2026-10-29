@@ -268,7 +268,7 @@ function longAttemptIncidents(
     } catch {
       continue;
     }
-    if (!attempt || attempt.state !== 'running') continue;
+    if (!attempt || !['running', 'waiting'].includes(attempt.state)) continue;
     const elapsed = now - Date.parse(attempt.startedAt);
     if (!Number.isFinite(elapsed)) continue;
     const commands = recentCommands(attempt);

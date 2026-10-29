@@ -37,6 +37,29 @@ test('import creates a complete measurement record without launching a worker', 
   } finally { h.dispose(); }
 });
 
+test('import refuses to replace a waiting attempt', async () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = await h.tasks.retry(task.id);
+    h.store.updateAttempt(worker.attempt, (attempt) => {
+      attempt.state = 'waiting';
+      attempt.checks = ['check-id'];
+    });
+    expect(() =>
+      importAttempt(h.tasks, fixture, {
+        taskId: task.id,
+        startedAt: '2026-10-25T00:01:00Z',
+        endedAt: '2026-10-25T00:02:00Z',
+        profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'max', poolClass: 'codex' },
+        pool: 'fixture',
+      }),
+    ).toThrow('cannot import over a running or waiting attempt');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('out-of-order cumulative observations cannot make resumed token totals grow twice', () => {
   const log = [1000, 1300, 1000, 1300, 1500].map(input_tokens => JSON.stringify({ type: 'turn.completed', usage: { input_tokens } })).join('\n');
   expect(measureLog(log, { baseline: { input: 1000, cached: 0, output: 0 } }).tokens.input).toBe(500);

@@ -506,3 +506,23 @@ test('a long attempt whose last command spans lines is reported once, on one lin
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a waiting attempt older than its class limit is reported as a long attempt', () => {
+  const root = mkdtempSync(join(tmpdir(), 'goal-watchdog-waiting-'));
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' }).stdout.trim();
+  try {
+    git('init', '-q', '-b', 'main');
+    git('-c', 'user.name=Fixture', '-c', 'user.email=f@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'base');
+    git('branch', 'dev');
+    git('branch', 'stabilize');
+    const tasks = store(
+      [{ id: 'waiting', state: 'running' as const, currentAttempt: 1, brief: { goal: 'web', manager: 'web' } as Task['brief'] }],
+      [{ taskId: 'waiting', attempt: 1, state: 'waiting', startedAt: minutesAgo(200), logPath: join(root, 'attempt.jsonl') } as Partial<Attempt>],
+    );
+    const delivered: string[] = [];
+    watch(tasks, root, { stabilize: 'stabilize', integration: 'dev' }, root, (summary) => delivered.push(summary), now, async () => [], () => 60_000);
+    expect(delivered.filter((summary) => summary.startsWith('Long attempt:'))).toHaveLength(1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

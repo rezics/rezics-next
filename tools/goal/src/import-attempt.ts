@@ -13,7 +13,11 @@ export type ImportOptions = {
 /** Import recorded work without launching a model or pretending it was routed by today's table. */
 export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOptions): AttemptRecord {
   const store = tasks.store, task = store.task(options.taskId);
-  if (task.currentAttempt && store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state === 'running') throw new Error('cannot import over a running attempt');
+  if (
+    task.currentAttempt &&
+    ['running', 'waiting'].includes(store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state)
+  )
+    throw new Error('cannot import over a running or waiting attempt');
   const measured = measureLog(readFileSync(log, 'utf8'), { startedAt: options.startedAt, endedAt: options.endedAt,
     ...(options.baseline ? { baseline: options.baseline } : {}) });
   const table = readRouting(tasks.settings.routingFile);
