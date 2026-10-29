@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PageStory, libraryProgressReady, pagePaths } from './page';
-import { userEvent, within } from 'storybook/test';
+import { PageStory, libraryProgressReady, libraryProgressUnitMenuOpen, pagePaths } from './page';
 
 const viewports = {
   phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
@@ -28,11 +27,6 @@ export const Desktop: Story = {
 
 export const SelectorSheetOpen: Story = {
   name: 'Selector sheet open at 390',
-  play: async (context) => {
-    await libraryProgressReady(context);
-    const view = within(context.canvasElement);
-    await userEvent.click((await view.findAllByRole('button', { name: /actions/i }))[0]!);
-    await within(document.body).findByRole('dialog');
-  },
+  play: libraryProgressUnitMenuOpen,
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-progress']} />,
 };

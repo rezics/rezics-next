@@ -3,7 +3,6 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { EllipsisIcon } from 'lucide-react';
 import { progressIndexSubjects } from './progress-subjects';
@@ -188,23 +187,27 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                 <div className="space-y-2">
                   <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
                   {hydrated ? (
-                    <Select
-                      value={unit}
-                      onValueChange={(value) => {
-                        if (value) setUnit(value as ProgressUnitWrite);
-                      }}
-                    >
-                      <SelectTrigger id="progress-unit" className="w-full">
-                        <SelectValue>{unitLabel(unit)}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {unitChoices.map((choice) => (
-                          <SelectItem key={choice.value} value={choice.value}>
-                            {choice.label()}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Menu
+                      title={m.library_progress_unit()}
+                      trigger={
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between"
+                          aria-label={m.library_progress_unit()}
+                        >
+                          {unitLabel(unit)}
+                        </Button>
+                      }
+                      entries={[
+                        {
+                          type: 'radio',
+                          label: m.library_progress_unit(),
+                          value: unit,
+                          options: unitChoices.map((choice) => ({ value: choice.value, label: choice.label() })),
+                          onValueChange: (value) => setUnit(value as ProgressUnitWrite),
+                        },
+                      ]}
+                    />
                   ) : (
                     <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
                       {unitChoices.map((choice) => (

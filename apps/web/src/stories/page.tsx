@@ -352,6 +352,14 @@ export async function libraryProgressUpdateOpen(context: { canvasElement: HTMLEl
   await within(document.body).findByRole('dialog');
   await within(document.body).findByRole('textbox', { name: m.library_progress_locator() });
 }
+
+export async function libraryProgressUnitMenuOpen(context: { canvasElement: HTMLElement }) {
+  await libraryProgressReady(context);
+  const view = viewOf(context);
+  await userEvent.click(await view.findByRole('button', { name: m.library_progress_unit() }));
+  await within(document.body).findByRole('dialog');
+  await within(document.body).findByRole('radiogroup', { name: m.library_progress_unit() });
+}
 export const libraryCollectionReady = libraryReady(
   () => libraryCollectionRecording.collection.title,
   () => libraryCollectionMembersRecording.members[0]?.subject.label,
