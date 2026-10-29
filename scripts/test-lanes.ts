@@ -714,7 +714,7 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
         testCommand(file, report),
         { ...suite.environment(database), ...slot?.env },
         suite.directory,
-        { file, ...fileBounds(latest[file]), record: latest[file] },
+        { file, ...fileBounds(latest[file]), ...(latest[file] ? { record: latest[file] } : {}) },
       );
       try {
         reportsByFile.set(file, readFileSync(report, 'utf8'));
