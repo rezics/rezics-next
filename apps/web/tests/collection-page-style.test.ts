@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 const page = await readFile(new URL('../src/library/collection-page.tsx', import.meta.url), 'utf8');
 const row = await readFile(new URL('../src/library/subject-row.tsx', import.meta.url), 'utf8');
+const reads = await readFile(new URL('../src/library/reads.ts', import.meta.url), 'utf8');
 
 test('Collection page uses localized metadata and a localized relative time', () => {
   expect(page).toContain('<PageHeading>{page.title}</PageHeading>');
@@ -24,4 +25,6 @@ test('Collection members use shared cover tiles and ListRow with their own subje
 
 test('member subject titles use localized page title helpers', () => {
   expect(page).toMatch(/subjectPageTitle|pageText/);
+  expect(row).toContain('pageText(');
+  expect(reads).toContain('labelLanguage:');
 });

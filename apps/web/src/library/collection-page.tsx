@@ -15,6 +15,7 @@ import { csrfHeaders } from '../threads/composer';
 import { AccountRef } from './account-ref';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
+import { pageText } from '../features/pages/shared';
 import {
   deleteCollection,
   moveCollectionMember,
@@ -413,7 +414,11 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
           <CoverGrid ratio={ratio}>
             {members.map((member, index) => {
               const subject = member.subject;
-              const title = subject?.label ?? m.library_subject_unavailable();
+              const locale = getLocale();
+              const title = subject
+                ? pageText({ [subject.labelLanguage ?? locale]: subject.label }, locale, subject.labelLanguage).text ||
+                  subject.label
+                : m.library_subject_unavailable();
               const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
               return (
                 <ListRow key={member.id} className="space-y-3 rounded-xl p-2">

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
+import { pageText } from '../features/pages/shared';
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
 
@@ -68,7 +69,12 @@ export function SubjectIdentity({
   size?: CoverSize;
   children?: ReactNode;
 }) {
-  const href = subject ? subjectHref({ id: subject.id, label: subject.label }, getLocale()) : null;
+  const locale = getLocale();
+  const title = subject
+    ? pageText({ [subject.labelLanguage ?? locale]: subject.label }, locale, subject.labelLanguage).text ||
+      subject.label
+    : null;
+  const href = subject ? subjectHref({ id: subject.id, label: title! }, locale) : null;
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
       <SubjectCover subject={subject} ratio={ratio} size={size} />
@@ -76,7 +82,7 @@ export function SubjectIdentity({
         <p className="font-medium break-words">
           {subject ? (
             <Link to={href!.to} params={href!.params} className="text-primary underline-offset-4 hover:underline">
-              {subject.label}
+              {title}
             </Link>
           ) : (
             <span>{m.library_subject_unavailable()}</span>
