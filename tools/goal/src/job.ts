@@ -123,8 +123,11 @@ function reranFailingCommand(task: Task, attempt: Attempt, previous: Attempt): b
 }
 
 function isStaleToolBlocker(task: Task, attempt: Attempt, previous: Attempt): boolean {
-  const errorLine = (attempt.blocker ?? attempt.result).split(/\r?\n/, 1)[0]?.trim();
-  const previousError = (previous.blocker ?? previous.result).split(/\r?\n/, 1)[0]?.trim();
+  // A stale manifest restatement is a worker-authored blocker. Inferred launch, silence and CLI failures have no
+  // blocker field; treating repeated transport text in their result as a restatement would add an unintended retry.
+  if (!attempt.blocker || !previous.blocker) return false;
+  const errorLine = attempt.blocker.split(/\r?\n/, 1)[0]?.trim();
+  const previousError = previous.blocker.split(/\r?\n/, 1)[0]?.trim();
   if (!errorLine || errorLine !== previousError || checkStarted(task, attempt)) return false;
   return !reranFailingCommand(task, attempt, previous);
 }
