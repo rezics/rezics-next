@@ -45,7 +45,11 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
     const operators = operatorId ? await readPageAuthors(client, [operatorId]) : {};
     const identity = operatorId ? operators?.[operatorId] : undefined;
     const operator = identity
-      ? { id: identity.id, handle: identity.handle, displayName: identity.displayName }
+      ? {
+          id: identity.id,
+          handle: typeof identity.handle === 'string' ? identity.handle : null,
+          displayName: typeof identity.displayName === 'string' ? identity.displayName : null,
+        }
       : undefined;
     const page = view && data.cursor ? await continueAgentList(client, result.page, data.cursor) : result.page;
     return {

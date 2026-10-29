@@ -104,8 +104,11 @@ export async function loadSubjectPage(
     languages: requestLanguages(locale),
   });
   if (result.status === 404) return { kind: 'missing' };
-  if (result.status === 308 && result.data?.redirect) {
-    return { kind: 'redirect', id: result.data.redirect.to, target: 'account' };
+  if (result.status === 308) {
+    const response = result as unknown as { data?: unknown; error?: { value?: unknown } | null };
+    const body = response.data ?? response.error?.value;
+    if (isRecord(body) && isRecord(body.redirect) && typeof body.redirect.to === 'string')
+      return { kind: 'redirect', id: body.redirect.to, target: 'account' };
   }
   if (result.status === 200 && result.data) {
     const survivor = result.data.subject;
