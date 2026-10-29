@@ -40,9 +40,10 @@ test('optional Latin preserves null, exact empty and nonempty values without inv
   const resolved = convertVndb(input(''), { subjectId });
   expect(resolved.normalizedRecord.vn_titles[0]?.latin).toBe('');
   expect(resolved.proposals).toHaveLength(3);
-  const resolvedNames = resolved.proposals.flatMap((command) => command.op === 'propose' ? [command.statement] : [])
+  const resolvedNames = resolved.proposals
+    .flatMap((command) => (command.op === 'propose' ? [command.statement] : []))
     .filter((statement) => statement.property.id === 'schema:name')
-    .map((statement) => statement.value.type === 'value' ? statement.value.content : null);
+    .map((statement) => (statement.value.type === 'value' ? statement.value.content : null));
   expect(resolvedNames).toEqual([{ language: 'ja', text: '港の物語' }]);
   expect(checkBatchWrite({ commands: resolved.proposals })).toEqual([]);
 
@@ -59,8 +60,8 @@ test('optional Latin preserves null, exact empty and nonempty values without inv
   const nonempty = convertVndb(input('Minato no Monogatari'), { subjectId });
   expect(nonempty.normalizedRecord.vn_titles[0]?.latin).toBe('Minato no Monogatari');
   expect(nonempty.digest).not.toBe(empty.digest);
-  expect(nonempty.proposals)
-    .toEqual(expect.arrayContaining([
+  expect(nonempty.proposals).toEqual(
+    expect.arrayContaining([
       expect.objectContaining({
         op: 'propose',
         statement: expect.objectContaining({
@@ -68,7 +69,8 @@ test('optional Latin preserves null, exact empty and nonempty values without inv
           value: { type: 'value', content: { language: 'ja-Latn', text: 'Minato no Monogatari' } },
         }),
       }),
-    ]));
+    ]),
+  );
 });
 
 test('optional Latin and required primary title retain strict invalid controls and paths', () => {
