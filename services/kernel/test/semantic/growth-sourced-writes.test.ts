@@ -107,6 +107,7 @@ const batchRuns: {
 type NativePlan = { 'Query Text': string; Plan: Record<string, unknown> };
 const nativeAgentScans: Record<string, unknown>[] = [];
 let nativeRun: Map<string, { plan: NativePlan; work: { rows: number; blocks: number }[] }> | undefined;
+let nativeFailures: { statement: string; code?: string; message: string; detail?: string }[] | undefined;
 const observedClients = new WeakSet<PoolClient>();
 function nativePlanShape(node: Record<string, unknown>): unknown {
   const fields = [
@@ -132,6 +133,22 @@ function nativePlanShape(node: Record<string, unknown>): unknown {
 function observeNativeClient(client: PoolClient): void {
   if (observedClients.has(client)) return;
   observedClients.add(client);
+  // Observe rejected native promises without replacing their result or retrying.
+  // Plans alone omit the failing statement of an aborted command attempt.
+  const queryClient = client as unknown as { query: (...args: unknown[]) => unknown };
+  const query = queryClient.query.bind(client);
+  queryClient.query = (...args) => {
+    const failures = nativeFailures;
+    const result = query(...args);
+    if (failures && result instanceof Promise) {
+      const config = args[0] as string | { text?: string };
+      const statement = typeof config === 'string' ? config : (config.text ?? '<unnamed>');
+      void result.catch((error: { code?: string; message: string; detail?: string }) => {
+        failures.push({ statement, code: error.code, message: error.message, detail: error.detail });
+      });
+    }
+    return result;
+  };
   client.on('notice', (notice) => {
     const marker = 'plan:\n';
     if (!nativeRun || !notice.message?.startsWith('duration:') || !notice.message.includes(marker)) return;
@@ -1171,15 +1188,17 @@ async function runSourcedBatch(scale: number, repetition: number): Promise<unkno
     })}`,
   );
   nativeRun = new Map();
+  nativeFailures = [];
   let answer: Awaited<ReturnType<typeof batch>>;
   try {
     answer = await batch(commands);
   } finally {
     // Lossless compression keeps complete native plans and every occurrence's work
     // in the remote log without spending the result transport on repeated SQL text.
-    const evidence = JSON.stringify({ scale, repetition, statements: [...nativeRun.values()] });
+    const evidence = JSON.stringify({ scale, repetition, statements: [...nativeRun.values()], failures: nativeFailures });
     console.info(`SOURCED_NATIVE_PLANS_GZIP ${Buffer.from(Bun.gzipSync(Buffer.from(evidence))).toString('base64')}`);
     nativeRun = undefined;
+    nativeFailures = undefined;
   }
   // Preserve native failures (including every rejected command) for owner diagnosis.
   console.info(`SOURCED_BATCH_RESULTS ${JSON.stringify({ scale, repetition, body: answer.body })}`);
