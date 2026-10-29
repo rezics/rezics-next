@@ -344,6 +344,138 @@ describe('deployment sequencing', () => {
     expect(liveReads).toBe(1);
   });
 
+  test('a real deployment without a resolved commit fails before checking the tree or building', async () => {
+    const calls: string[] = [];
+    await expect(
+      runDeployment({
+        dryRun: false,
+        build: async () => {
+          calls.push('build');
+        },
+        smoke: async () => {
+          calls.push('smoke');
+        },
+        wrangler: async () => {
+          calls.push('wrangler');
+          return '';
+        },
+        fetchBuild: async () => {
+          calls.push('fetch');
+          return {};
+        },
+        isTreeClean: async () => {
+          calls.push('clean');
+          return [];
+        },
+        print: () => {},
+      }),
+    ).rejects.toThrow(/commit SHA is required/);
+    expect(calls).toEqual([]);
+  });
+
+  test('a forced deployment still refuses a dirty tree before building', async () => {
+    const calls: string[] = [];
+    const outputLines: string[] = [];
+    await expect(
+      runDeployment({
+        dryRun: false,
+        force: true,
+        commit: 'a'.repeat(40),
+        build: async () => {
+          calls.push('build');
+        },
+        smoke: async () => {
+          calls.push('smoke');
+        },
+        wrangler: async () => {
+          calls.push('wrangler');
+          return '';
+        },
+        fetchBuild: async () => {
+          calls.push('fetch');
+          return {};
+        },
+        isTreeClean: async () => ['apps/web/uncommitted.ts'],
+        print: (line) => outputLines.push(line),
+      }),
+    ).rejects.toThrow('apps/web/uncommitted.ts');
+    expect(calls).toEqual([]);
+    expect(outputLines.join('\n')).toContain('apps/web/uncommitted.ts');
+  });
+
+  test('an unreadable live build before publishing still deploys and verifies the routed commit', async () => {
+    const commit = 'a'.repeat(40);
+    const calls: string[] = [];
+    const outputLines: string[] = [];
+    await runDeployment({
+      dryRun: false,
+      commit,
+      isTreeClean: async () => {
+        calls.push('clean');
+        return [];
+      },
+      build: async () => {
+        calls.push('build');
+      },
+      smoke: async () => {
+        calls.push('smoke');
+      },
+      wrangler: async (args) => {
+        calls.push(`${args[0]} ${args[1]}`);
+        return args[1] === 'upload'
+          ? 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev'
+          : 'deployed';
+      },
+      fetchBuild: async () => {
+        const alreadyRead = calls.includes('fetch');
+        calls.push('fetch');
+        if (!alreadyRead) throw new Error('live build unavailable');
+        return { commit };
+      },
+      print: (line) => outputLines.push(line),
+    });
+    expect(calls).toEqual([
+      'clean',
+      'fetch',
+      'build',
+      'smoke',
+      'versions upload',
+      'versions deploy',
+      'triggers deploy',
+      'fetch',
+    ]);
+    expect(outputLines.join('\n')).toContain('Published ver-123');
+  });
+
+  test('a dry run validates a dirty tree without reading its state or the live build', async () => {
+    const calls: string[] = [];
+    await runDeployment({
+      dryRun: true,
+      build: async () => {
+        calls.push('build');
+      },
+      smoke: async () => {
+        calls.push('smoke');
+      },
+      wrangler: async (args) => {
+        calls.push(args.join(' '));
+        return 'dry run';
+      },
+      isTreeClean: async () => {
+        calls.push('clean');
+        return ['uncommitted.ts'];
+      },
+      fetchBuild: async () => {
+        calls.push('fetch');
+        return {};
+      },
+      print: () => {},
+    });
+    expect(calls).toHaveLength(3);
+    expect(calls.slice(0, 2)).toEqual(['build', 'smoke']);
+    expect(calls[2]).toStartWith('deploy --dry-run --config ');
+  });
+
   test('dry run invokes Wrangler dry run without publishing a version or routing the domain', async () => {
     const calls: string[][] = [];
     const outputLines: string[] = [];
