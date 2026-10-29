@@ -113,9 +113,9 @@ test(
   'the 390px navigation remains the header button sheet',
   async () => {
     const { context, page } = await open(390);
-    const openNavigation = page.getByRole('button', { name: /open navigation/i });
+    const openNavigation = page.locator('[data-open-navigation]');
     await openNavigation.click();
-    const sheet = page.locator('[data-sidebar="sidebar"][data-mobile="true"]');
+    const sheet = page.getByRole('dialog');
     await sheet.waitFor({ state: 'visible' });
     expect(await sheet.getByRole('navigation').count()).toBe(1);
     await context.close();
