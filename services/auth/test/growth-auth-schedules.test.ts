@@ -8,7 +8,7 @@ import { createAuthService } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { AUTH_MAINTENANCE_SCHEDULE, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
 import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
-import { checkGrowth, GrowthSettleInfrastructureError, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 if (process.argv.includes('--growth-child')) {
   void runGrowth();
@@ -77,7 +77,6 @@ async function runGrowth() {
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
   let seedHistory: () => Promise<number>;
-  let lastMeasuredStart: number | undefined;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -94,9 +93,30 @@ async function runGrowth() {
   });
   try {
     await workflows.start();
+    const scheduleStart = Date.now();
     await maintenance!.start('0 0 1 1 *');
     await DBOS.pauseSchedule(AUTH_MAINTENANCE_SCHEDULE);
     await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
+    const drained = new Set<string>();
+    let quietReads = 0;
+    while (quietReads < 2) {
+      const started = (
+        await db.admin.query(
+          `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status
+          WHERE queue_name=$1 AND created_at >= $2 ORDER BY created_at,workflow_uuid`,
+          [AUTH_MAINTENANCE_SCHEDULE, scheduleStart],
+        )
+      ).rows.map((row) => String(row.workflow_uuid));
+      const pending = started.filter((id) => !drained.has(id));
+      if (pending.length) {
+        await Promise.all(pending.map((id) => DBOS.retrieveWorkflow(id).getResult()));
+        for (const id of pending) drained.add(id);
+        quietReads = 0;
+      } else {
+        quietReads++;
+        if (quietReads < 2) await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
     await db.admin.query(`INSERT INTO auth_client VALUES ('growth-web',true,ARRAY['read']);
       INSERT INTO "user" (id,name,"emailVerified") SELECT 'fixed-'||i,'',false FROM generate_series(1,16) i`);
     const reports = [];
@@ -155,8 +175,7 @@ async function runGrowth() {
           for (const table of ['session', 'verification', 'auth_signing_key_archive', '"user"'])
             await db.admin.query(`VACUUM ANALYZE ${table}`);
         },
-        async operation(_, scale) {
-          if (scale === 64) lastMeasuredStart = Date.now();
+        async operation() {
           // Preparation and affected-row checks use only the uncaptured admin pool.
           // The same oldest 1000 rows are admitted regardless of background size.
           await db.admin
@@ -233,24 +252,6 @@ async function runGrowth() {
         })),
       }),
     );
-  } catch (error) {
-    if (error instanceof GrowthSettleInfrastructureError && lastMeasuredStart) {
-      const writers = await db.admin.query(
-        `SELECT name,workflow_uuid,status,queue_name,created_at
-        FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE created_at >= $1 ORDER BY created_at,workflow_uuid`,
-        [lastMeasuredStart],
-      );
-      const workflowIds = writers.rows.map((row) => row.workflow_uuid);
-      const operations = workflowIds.length
-        ? await db.admin.query(
-            `SELECT workflow_uuid,function_name FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs
-            WHERE workflow_uuid = ANY($1::text[]) ORDER BY workflow_uuid,function_id`,
-            [workflowIds],
-          )
-        : { rows: [] };
-      console.error(JSON.stringify({ writers: writers.rows, operationOutputs: operations.rows }));
-    }
-    throw error;
   } finally {
     await workflows.close();
     await db.close();
