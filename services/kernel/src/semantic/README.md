@@ -318,7 +318,11 @@ item metadata and type reads retain their native anchor/client/time contracts; n
 
 Stored personal original IDs, notes, dates, order and multiplicity remain. Canonical views choose the highest live
 native owner_write_seq with conflict visible, union labels and keep copies/sessions distinct. Undo is a new owner
-write. The actual Commerce sequence producer remains required; timestamps/UUIDs do not substitute. Collection
+write. Library's [native sequence prerequisite](../library/owner-write-sequence.md) already delivers the authorized
+allocator, private owner counter and nullable live/archive sequence columns. The missing boundary is production
+set/clear/Undo integration and bounded legacy cutover/readiness, not the primitive's existence. Null legacy values
+cannot select a canonical winner; timestamps/UUIDs do not substitute. Allocation adds its actual two body
+statements to the owner command, replay does not allocate, and failed allocation rolls back with the fact. Collection
 browsing shows one canonical card while editing preserves every stored occurrence. New writes address current
 terminals and corrections preserve unrelated later edits.
 

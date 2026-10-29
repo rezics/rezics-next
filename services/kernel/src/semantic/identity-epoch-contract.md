@@ -150,9 +150,12 @@ planned home, and reconcile the exact attempt there. Do not allocate a replaceme
 lost. Binding history cannot certify that remote admission occurred, and mapping cannot query remote admission.
 
 At P=1, a blocked attempt holds only resources lower than the next one it awaits. Every wait-for edge strictly
-increases this total order, including job homes, so a finite cycle is impossible. The highest held resource has no
-lower successor to wait on; with fair bounded native scheduling and eventual available owners it completes or
-cancels and releases, inductively enabling lower attempts. Native slot checks/fences/locks must realize those
+increases this total order, including job homes, so a finite cycle is impossible. Follow a blocked attempt to
+the holder of its requested resource: that holder can only await a strictly higher resource. On a finite set
+of resources this chain ends at an attempt with no capacity dependency, which fair bounded native scheduling
+and eventual available owners let complete or cancel and release. Release then enables its predecessors.
+This proves absence of a capacity cycle, not starvation freedom under endless competing relevant arrivals;
+retained recovery work must receive fair service alongside new admission. Native slot checks/fences/locks must realize those
 edges. A long unavailable owner may pause its dependent attempts, not disjoint partitions. No lease expiry,
 timing luck or repeated try/unwind is the liveness proof. Cancellation and reclamation allocate no new slot and
 must be runnable while capacity is full. Native schedules must prove both the ordering and those reserve-free paths.
@@ -225,6 +228,13 @@ without enumerating dependencies on the page. Closing that gap within existing S
 missing native producer proof, not a claimed consequence of an eventually delivered summary. If an actual plan
 cannot do so, its native case stays red; prose cannot turn a mutation version into a complete observation.
 
+The native negative must pause delivery after a real relevant claim commits but before the source receives
+its arm. Target an excluded or order-only original with that claim while keeping the source fact version
+and returned positive IDs unchanged. Start/final validation and an old continuation must refuse the stale clean basis. A second schedule
+lets arm, effects and finish all complete between probes: the changed committed scoped revision must still
+invalidate the page. Run both inside the existing inclusive page capture. Passing only after injecting a
+summary, adding a remote admission lookup or sampling returned IDs does not close this boundary.
+
 Jobs discover affected scopes through the native inverse dependency index. Scope registration racing a claim
 must handshake with that claim under the source/attempt fence: either the registered scope is included in arm
 custody, or registration stays unready until it consumes the job's current mapping/publication. Before canonical
@@ -265,6 +275,7 @@ NOT yet supply complete scoped observations or registration/summary custody:
 | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Library `collection-source.ts:createCollectionSource`                        | Source shape/observations; methods return unavailable             | Complete admitted native prepare/prefix/containsSubject/readRawStoredPrefix binding for structural owner and Collection plans, including false/NOT/order dependencies |
 | Library `collection-source-native.ts` and its header/members/facts/probe SQL | Actual header, stored-original ranges and bounded points          | Structural inverse directory, first registration/fence, source-local scoped summary consumption and final coherent observation                                        |
+| Library `owner-write-sequence.ts:allocateOwnerWriteSeq`                      | Delivered native allocator and private counter/entry columns      | Production set/clear/Undo integration, bounded legacy cutover and canonical readiness; the primitive alone supplies neither directory nor identity ACK                |
 | Library `owner-fact-version.ts:readOwnerFactVersion`                         | Indexed account-home mutation version                             | Complete dependency capture/registration and summary custody; broad mutation alarm alone is insufficient                                                              |
 | Search `scope-source.ts`                                                     | Admission scaffolding, unavailable native prepare/prefix/evaluate | Complete native canonical Source and physical namespace/source authorization, including negative/excluded/order population                                            |
 | Search `source.ts:SubjectSource`, Semantic `search-source.ts:subjectSource`  | Subject chunks/snapshots and bounded facet samples/probes         | Complete scoped producer observation and native canonical-index participant, not sampled returned IDs                                                                 |
@@ -311,9 +322,18 @@ candidate, support, first-apply registration, follow, total, pending/published f
 All six member, entry, label, session, copy and output drivers are included, with working/ready bases, accepted
 meaning and exhaustion evidence. Owner state chooses the highest live native `entry.owner_write_seq`, preserves
 conflicts, unions labels and keeps sessions/copies distinct. That sequence increments in the SAME successful
-set/clear/Undo transaction; Undo is a new write despite historic dates. The actual Commerce sequence/schema/helper
-producer remains missing; timestamps, UUIDs, type_source_position, per-slot revisions or invented legacy ordering
-cannot substitute. Clear and replay retain their native meaning.
+set/clear/Undo transaction; Undo is a new write despite historic dates. The delivered
+[owner sequence prerequisite](../library/owner-write-sequence.md) supplies
+`allocateOwnerWriteSeq(tx: CommandTransaction, accountId: string): Promise<bigint>`, private
+`library.owner_write_counter (route,account_id)` and nullable positive `owner_write_seq` columns on live/archive
+entries. It performs indexed initialization and increment in two statements in the same authorized owner command;
+replay skips allocation and failed/noEffect allocation rolls back. These are actual primitives, not missing
+schema or an invented callable. Production entry set/clear/Undo writers and bounded legacy migration/cutover
+remain missing: null legacy sequences are not ready or ordered. Successful equal-value set still allocates;
+archive sequences never compete as live state and Undo allocates afresh. Timestamps, UUIDs,
+`type_source_position`, per-slot revisions or invented legacy ordering cannot substitute. Clear and replay retain
+their native meaning. The counter requires its own exact Library terminal cleanup after T fences writers;
+Semantic reference exhaustion cannot certify that cleanup.
 
 Directory discovery is structural `(original,scope)` existence/extrema, not one locator per fact. It covers never-
 positive first apply and hidden/excluded/order support too. Its EOF requires drained native registrations and
@@ -726,6 +746,7 @@ never full publication success. Native setup failures before a named assertion a
 | Scope summary custody        | First dependency registration versus claim/arm in both orders; lower allocated job publishes after higher, lower cancels after higher, delayed arm/finish/cancel, source move and repair, scope retirement/cursor ref release. Native committed scoped revision detects clean-to-clean change and has no global active marker.                                                                                                                                                      |
 | Native receipt/effect        | Same position wrong transactionId, wrong owner/scope, unfinished prior page, actual per-home withdrawal/addition/fence custody. Crash after effect commit before DBOS result journal and before control ACK resumes SAME receipt once.                                                                                                                                                                                                                                              |
 | First apply and Library      | LEGITIMATE old-epoch apply at the actual destination commits before gate and is included in rekey; gate-first atomically rejects/redrives it. A stale epoch at a guessed NEW destination is insufficient. Real follow ACK with directory incomplete refuses publication; all six structural drivers/first registrations/last eligible original then complete under SAME participant. No canonical_source_fact write assertion substitutes.                                          |
+| Library owner write order    | Retain existing native allocator rollback/replay, wrong-home/authorization, bigint and independent-owner cases. Separately require actual set/equal-set/clear/Undo writer allocation, legacy-null readiness refusal and bounded cutover, live/archive distinction, and separate exact terminal counter cleanup under Library erasure custody. Helper-only consumer probes do not prove those production paths.                                                                      |
 | Public HTTP                  | Native POST body/Auth/quoted key/202 ONLY after admitted/Location and same authorized replay; conflicting key; poll pending/completed/unknown/denied/revoked/hidden original concealment. Native held pre-suspension token 401 invalid_credentials/Bearer invalid_token and Auth sign-in 403 actual shape, never invented valid suspended bearer.                                                                                                                                   |
 | Accounts publication         | Verify and reversal keep successful DTO and wait before approval/page/finish/clear. Busy/capacity retry same native decision/reversal intent, crash before/after job return; already-verified/reversal replay waits publication; no worker held during durable sleep.                                                                                                                                                                                                               |
 | Cutover topology and birth   | EXPLICIT real scheduler/bootstrap closure on all 4096 including empty/unselected homes and actual owner epochs; lower-key births after frontier, failed birth rollback/revision1, ordinary/import correct source home and named/unnamed person/org/software account-agent births. Legacy seed before final guard. Missing native bootstrap callable remains red.                                                                                                                    |
@@ -758,6 +779,11 @@ Their superseded global-summary alternatives do not remain a second contract.
 The integrated deep report's CAS/basis distinction, read-only replay ordering, once-per-home/job quota and physical
 payload/fence accounting apply here; its receipt-home-first priority scheduling and global OPEN/CLOSE alternatives
 remain superseded by ordered first-resource capacity and source-scoped committed summaries.
+
+The delivered Library allocator/schema and `test/library/owner-write-sequence.test.ts` are evidence only for
+the primitive. Its test-only entry consumer is explicitly not production writer integration or a canonical
+publication receipt. Composed producer Cost must add the two allocation statements and their counter/index
+work to its actual command body where allocation is required; repair/rekey/purge must not allocate.
 
 Read-only reference evidence: PostgreSQL `src/backend/commands/trigger.c`, `indexcmds.c`,
 `src/backend/utils/time/snapmgr.c`, `src/backend/access/heap/heapam.c` in

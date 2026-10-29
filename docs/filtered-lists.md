@@ -181,8 +181,19 @@ custody, not hidden full groups. Accounts uses actual Core runOperationalTransac
 owner work/DBOS intent; Core adds no event/receipt/outbox/write-basis/position/intent table/relay. Its DBOS history
 belongs to shared-history and Library derived data to Library A5. Missing owner producers cannot manufacture ACKs.
 This specification integration needs full coowner and ALL-nine-item Performance confirmation before types or runtime.
-Stored personal originals are not rewritten. Canonical personal views select the owner's latest state while keeping
-conflict visible, union labels, and keep copies and sessions separate. New writes address current terminals.
+Stored personal originals are not rewritten. Canonical personal views select the highest live native
+`owner_write_seq` while keeping conflict visible, union labels, and keep copies and sessions separate. The
+[delivered sequence primitive](../services/kernel/src/library/owner-write-sequence.md) does not make legacy null
+values ordered or complete production set/clear/Undo integration. Those writers and bounded legacy readiness
+remain required; Undo gets a new sequence despite restored dates, and archives never compete as live state.
+New writes address current terminals.
+
+A required native page race holds source-arm delivery after a relevant claim commits, with positive returned
+IDs and the broad fact mutation alarm unchanged. Excluded/NOT/order-only dependencies must still invalidate
+start/final validation and old cursors. A clean-to-clean arm/effect/finish between probes must change the scoped
+committed revision. Neither case receives an extra statement, connection, remote admission read or public raw
+allowance; actual complete native bindings and inclusive cost capture must prove both before readiness.
+
 [Semantic](../services/kernel/src/semantic/README.md#identity) owns creation and durable identity publication;
 this list contract does not invent its native command ABI.
 
