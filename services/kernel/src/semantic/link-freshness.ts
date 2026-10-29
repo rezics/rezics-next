@@ -9,7 +9,7 @@ import readProjectionPending from './merge-read-projection-pending.sql';
 import { withReadTransaction } from './read.ts';
 
 export const FRESHNESS_WAIT_MS = 2_000;
-const FRESHNESS_POLL_MS = 100;
+export const FRESHNESS_POLL_MS = 100;
 const LINKS_CONSUMER = 'semantic_links';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

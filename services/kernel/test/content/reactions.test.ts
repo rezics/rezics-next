@@ -5,7 +5,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
 import { setupContent } from '../../src/content/setup.ts';
@@ -83,7 +83,9 @@ export async function reactionFixture() {
   });
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
   const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: action.endsWith(':read') }])),
+    actions: new Map(
+      actions.map((action) => [action, INTERNAL_ACTIONS.get(action) ?? { anonymous: action.endsWith(':read') }]),
+    ),
     auth: {
       issuer,
       audience: 'https://api.rezics.test',
