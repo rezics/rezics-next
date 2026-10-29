@@ -7,7 +7,6 @@ import type { WorkerStore } from './store.ts';
 import type { Attempt, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import { checkWaitMs } from './launch.ts';
-import { spawnSync } from 'node:child_process';
 
 // Each check is a state the control plane should never stay in. A violation that persists means work has silently
 // stopped, which nobody notices from the inside: on 2026-10-26 eight tasks sat in running without a worker for up to

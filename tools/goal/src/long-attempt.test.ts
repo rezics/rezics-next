@@ -58,7 +58,7 @@ test('an attempt over the default two hour limit reports its duration, commits, 
       .join('\n'),
   );
   writeFileSync(logPath.replace(/\.jsonl$/, '.check-wait'), '60000\n120000\n');
-  const store = runningStore({ worktree: worker.worktree, base: git(repo.main, 'rev-parse', 'main') }, { logPath });
+  const store = runningStore({ worktree: worker.worktree, base: git(repo.main, ['rev-parse', 'main']) }, { logPath });
   const delivered: { summary: string; managerId?: string; kind?: string }[] = [];
   try {
     expect(runWatch(store, state, delivered)).toBe(1);
@@ -88,7 +88,7 @@ test('repeated process inspection in recent commands reports polling once when n
       .map((command) => JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command } }))
       .join('\n'),
   );
-  const store = runningStore({ worktree: worker.worktree, base: git(repo.main, 'rev-parse', 'main') }, { logPath });
+  const store = runningStore({ worktree: worker.worktree, base: git(repo.main, ['rev-parse', 'main']) }, { logPath });
   const delivered: { summary: string; managerId?: string; kind?: string }[] = [];
   try {
     expect(runWatch(store, state, delivered)).toBe(2);
