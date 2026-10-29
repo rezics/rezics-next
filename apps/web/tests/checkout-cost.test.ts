@@ -506,6 +506,7 @@ test('offer page stays within its bound as s grows', async () => {
     expect(heldOrders).toHaveLength(s);
     const warmed = await fetch(`${origin}/en/offers/${targetOfferId}`);
     expect(warmed.status).toBe(200);
+    await warmed.arrayBuffer();
     kernelCalls.length = 0;
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/offers/${targetOfferId}`);
