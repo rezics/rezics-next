@@ -245,7 +245,8 @@ test('native Codex shell launchers report repeated process inspection without tr
     expect(delivered[0]).toMatchObject({ managerId: 'manager-a', kind: 'stalled' });
     expect(delivered[0]!.summary).toContain('Polling:');
     expect(delivered[0]!.summary).toContain(ps);
-    expect(delivered[0]!.summary).toContain(pgrep);
+    // Manager event summaries are one line: the multi-line command arrives with its line break as a space.
+    expect(delivered[0]!.summary).toContain(pgrep.replace('\n', ' '));
     expect(runWatch(store, state, delivered, now + 5 * 60_000)).toBe(0);
   } finally {
     repo.close();
