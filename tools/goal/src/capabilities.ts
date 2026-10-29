@@ -83,7 +83,7 @@ function scopeRows(scopeMarkdown: string): { name: string; owners: string[] }[] 
       if (row.length < 3 || !/^In(?:\b|:)/.test(row[2]!)) return [];
       const owners = row[1]!
         .split(/[,;]/)
-        .map((part) => part.split('(')[0]!.trim())
+        .map((part) => part.split('(')[0]!.trim().split(/\s+/)[0]!)
         .filter(Boolean);
       return [{ name: row[0]!, owners }];
     });
