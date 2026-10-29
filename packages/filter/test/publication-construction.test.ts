@@ -85,3 +85,72 @@ test('ordinary Filter outcomes keep stable one-level order own-data access and m
   expect(facetProperties(release, ['grow:Root'])).toEqual([]);
   expect(reads).toBe(0);
 });
+
+test('raw mutable FilterRelease calls refresh patterns qualifiers typed facets and the untyped facet union', () => {
+  const release = constructionFixture(0, 8);
+  const qualifier = release.properties['grow:code']!.qualifiers[0]!;
+  const withQualifier = {
+    statement: {
+      property: 'grow:code',
+      in: ['A'],
+      qualifiers: [{ property: qualifier, in: ['x'] }],
+    },
+  } as const;
+  expect(validateFilter(withQualifier, release, { saved: false })).toEqual([]);
+
+  // The same property object is edited between raw calls. Pattern and qualifier
+  // indexes must follow its current own data on every call.
+  (release.properties['grow:code']!.value as { pattern?: string }).pattern = '^B+$';
+  expect(validateFilter(withQualifier, release, { saved: false })).toEqual([
+    { problem: 'invalid_request', pointer: '/statement/in/0', code: 'invalid_format' },
+  ]);
+  (release.properties['grow:code']!.value as { pattern?: string }).pattern = '^[A-Z]+$';
+  release.properties['grow:code']!.qualifiers = [];
+  expect(validateFilter(withQualifier, release, { saved: false })).toEqual([
+    { problem: 'unsupported_query', pointer: '/statement/qualifiers/0/property', code: 'unsupported' },
+  ]);
+
+  // Facets are direct only and raw display/admission observes edits to the same
+  // type, its base and another type contributing to the untyped union.
+  release.types['grow:Base'] = {
+    ...structuredClone(release.types['grow:Root']!),
+    iri: 'https://construction.example/Base',
+    bases: [],
+    facets: ['schema:genre'],
+  };
+  release.types['grow:Root']!.bases = ['grow:Base'];
+  expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code', 'schema:genre']);
+  const untyped = { statement: { property: 'schema:genre', range: { gte: 1 } } } as const;
+  expect(validateFilter(untyped, release, { saved: false })).toEqual([]);
+  release.types['grow:Base']!.facets = [];
+  expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code']);
+  expect(validateFilter(untyped, release, { saved: false })).toEqual([
+    { problem: 'unsupported_query', pointer: '/statement/property', code: 'unsupported' },
+  ]);
+});
+
+test('raw Filter construction ignores inherited, accessor-backed and sparse definition lists', () => {
+  let reads = 0;
+  const release = constructionFixture();
+  const rootType = release.types['grow:Root']!;
+  Object.defineProperty(rootType, 'facets', {
+    configurable: true,
+    get() {
+      reads++;
+      return ['grow:code'];
+    },
+  });
+  expect(facetProperties(release, ['grow:Root'])).toEqual([]);
+  expect(reads).toBe(0);
+
+  Object.defineProperty(rootType, 'facets', {
+    configurable: true,
+    value: Object.assign(Object.create({ inherited: 'grow:code' }), { own: 'schema:genre' }),
+  });
+  expect(facetProperties(release, ['grow:Root'])).toEqual([]);
+
+  const sparse = new Array<string>(1);
+  rootType.facets = sparse;
+  expect(facetProperties(release, ['grow:Root'])).toEqual([]);
+  expect(reads).toBe(0);
+});
