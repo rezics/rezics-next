@@ -9,7 +9,8 @@ nothing until a person submits a create command; subsequent definition releases 
 
 [Filtered lists](filtered-lists.md) owns complete indexed observations, current disclosure, direct/prepared plans,
 freshness, canonical identity and cost. [Zone membership](zone-membership.md) owns source composition obligations.
-The resource substrate is integrated; actual membership/page/default execution and Zone-specific withholding,
+The resource substrate and independent static configured-page reads are integrated; source-dependent
+membership/page/default execution and Zone-specific withholding,
 purge, account cleanup and scheduler work remain incomplete. Typed schemas, immutable loaders, cursor capacity
 and helper setup do not establish those capabilities; the
 [integration audit](research/semantic-integration-audit-zone-composition.md) remains evidence, not a completion gate.
@@ -134,8 +135,8 @@ implement scans or an unreviewed query engine to fill this dependency. Refer als
 ## Configuration, publication and Access
 
 The resource base mounts create, metadata, owned listing, configuration, publish, delete and restore.
-It exposes resource metadata; page reads, source lists, union evaluation and destructive lifecycle work
-remain separate implementations. No unavailable page or worker endpoint is mounted by the resource base.
+The independent static runtime additionally mounts `readPage`; source lists, union evaluation and destructive
+lifecycle work remain separate implementations.
 The code-first `Zone*Schema` exports in `src/zones/contract.ts` define the resource envelopes.
 
 Creation authorizes the parent before touching the new partition. Allocate a routed Zone ID and copy the
@@ -232,6 +233,42 @@ defaults or new colours/fonts. Subject template appearance overlays home tokens 
 changes mixed-list frames; subject headers retain semantic type frames and existing portrait/5:7 behavior.
 Use the common safe href validator for existing LinkGrid links; there are no arbitrary URL configuration
 fields, custom CSS, HTML, script, stylesheet, font, iframe or executable page hooks.
+
+### Static configured-page runtime and Cost
+
+`POST /v1/zones/{id}:readPage` currently completes admitted configured documents whose common `planReads`
+plan contains no data reads, including empty documents. It uses the current caller's `zone:read`, never the
+owner-only configuration HTTP route or `zone:configure`. Current eligibility, native Access at authoritative
+T, the selected document, public shell and partition epoch/position are read in the same Zone-home
+`REPEATABLE READ` snapshot. The response records that actual session observation without a synthetic
+projection caught-up claim. The Zone connection is released before the common active-profile lookup.
+The active immutable profile supplies the real digest; the template is `{scope:'route',key:relativeRoute}`.
+The common read executor receives the empty plan and performs no subrequests. Languages retain common
+validation and do not translate configured copy. Static pages require no preparation and return complete 200.
+
+Unknown or withheld pages/documents return concealed 404. The copied document empties covered text and
+omits covered appearance tokens; navigation and labels use the existing public shell withholding rules.
+The selected document's safe appearance overlays the safe home appearance. Internal configuration, mounts,
+scope and owner attribution do not cross this boundary. Valid-shaped unusable POST cursors fresh-start
+under current authority; invalid query/body shapes remain 400 and GET cursors are unchanged.
+
+Cost: this path prepares the existing anchored Zone eligibility/Access evidence, then reads the exact
+`(route,zone_id)` head, current native Access evidence and the one Zone partition observation. Eligibility
+verification uses the same exact head key. There are no source, subject, Collection, history or owner-list
+reads. The in-memory route selection and navigation visit at most 16 admitted pages; each document retains
+the existing 65,536 canonical UTF-8 byte, 256-node and depth-8 limits. Only the selected document is copied
+and redacted. After release, the existing Global active-profile index reads its newest activation and, on
+an immutable-cache miss, the exact digest body (existing 1,048,576-byte / 128-template admission). Point
+rows and statements are independent of unrelated Zones/history; index buffers follow index depth. The
+common plan executes zero distinct data reads and zero output slots, within the existing 16/128 bounds.
+The request's native deadline also bounds the Zone snapshot's statements and is checked around profile
+lookup and response construction. This adds no query budget, projection or maintenance work.
+
+Subject targets and configured documents requiring data remain `503 semantic_not_ready` Problem with
+`Retry-After`, without partial documents or replacement cursors, until actual source-dependent runtime
+ports are available. The declared closed 202 progress envelope is reserved for real retained preparation;
+this static implementation emits none. Static completion does not establish any remaining union,
+direct-target, freshness, canonical-order, privacy-repair or default-worker obligation below.
 
 ### Retained preparation and current query safety
 

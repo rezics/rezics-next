@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { withHeaders } from '@elysia/openapi';
 import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
@@ -17,7 +18,11 @@ import {
   ZoneMetadataResponseSchema,
   ZoneConfigurationResponseSchema,
   ZoneListSchema,
+  ZonePageRequestSchema,
+  ZonePageResponseSchema,
 } from './contract.ts';
+import { ZonePageQuerySchema, ZonePageReadProgressSchema } from './page-continuation.ts';
+import { readStaticZonePage } from './page-runtime.ts';
 import { createZoneCommands, zoneIfMatch } from './resource-commands.ts';
 import { createZoneReads, requireZoneAccount } from './resource-reads.ts';
 
@@ -73,7 +78,7 @@ function cache(set: { headers: Record<string, string | number | readonly string[
   set.headers['cache-control'] = 'private, no-store';
   if (revision) set.headers.etag = `"${revision}"`;
 }
-/** Only resource routes are mounted here. Page/union and lifecycle workers have separate owners. */
+/** Resource routes and independent static pages; source-dependent execution has separate owners. */
 export function zoneRoutes(
   app: ReturnType<typeof definitionRoutes>,
   dependencies: {
@@ -165,6 +170,39 @@ export function zoneRoutes(
         const result = await admission.run('normal', job, () => reads().configuration(actor, params.id, job.deadline));
         cache(set, result.zone.revision);
         return result;
+      },
+    )
+    .post(
+      customMethod('/v1/zones/:id', 'readPage'),
+      {
+        params,
+        query: zoneSchema(ZonePageQuerySchema),
+        body: zoneSchema(ZonePageRequestSchema),
+        response: {
+          ...failures,
+          200: zoneSchema(ZonePageResponseSchema),
+          202: zoneSchema(ZonePageReadProgressSchema),
+          503: withHeaders(failures[503], { 'retry-after': t.String() }),
+        },
+        detail: detail('read_page', 'zone:read', true),
+      },
+      async ({ params, body, actor, request, admission, job, session, set }) => {
+        const result = await admission.run('normal', job, () =>
+          readStaticZonePage(
+            { ...dependencies, access: dependencies.access() },
+            {
+              actor,
+              id: params.id,
+              body,
+              request,
+              dispatch: (request) => Promise.resolve(app.handle(request)),
+              deadline: job.deadline,
+            },
+          ),
+        );
+        session.record(result.component);
+        cache(set);
+        return result.value;
       },
     )
     .put(

@@ -1,6 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
+import type { CompositionDocument } from '@rezics/composition';
 import { createHash } from 'node:crypto';
 import { readAccount } from '../access/account-data.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -32,7 +34,9 @@ export function zonePublic(row: ZoneHead): ZonePublic {
   const homeIndex = configuration.pages.findIndex((page) => page.route === '');
   const home = configuration.pages[homeIndex];
   const appearance: ZonePublic['appearance'] = {
-    ...((home?.document.root.props.appearance as ZonePublic['appearance'] | undefined) ?? {}),
+    ...(!zoneWithheld(row, `/pages/${homeIndex}/document`)
+      ? ((home?.document.root.props.appearance as ZonePublic['appearance'] | undefined) ?? {})
+      : {}),
   };
   for (const key of Object.keys(appearance) as (keyof typeof appearance)[]) {
     if (zoneWithheld(row, `/pages/${homeIndex}/document/root/props/appearance/${key}`)) delete appearance[key];
@@ -44,7 +48,9 @@ export function zonePublic(row: ZoneHead): ZonePublic {
     visibility: row.visibility,
     appearance,
     navigation: configuration.pages
-      .filter((_, index) => !zoneWithheld(row, `/pages/${index}`) && !zoneWithheld(row, `/pages/${index}/document`))
+      .filter(
+        (_, index) => !zoneWithheld(row, `/pages/${index}/route`) && !zoneWithheld(row, `/pages/${index}/document`),
+      )
       .map((page) => ({ route: page.route })),
   };
 }
@@ -57,11 +63,20 @@ export function zoneOwned(row: ZoneHead): ZoneOwned {
     restoreUntil: row.restoreUntil === null ? null : new Date(row.restoreUntil).toISOString(),
   };
 }
-export async function zoneReadTransaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+export async function zoneReadTransaction<T>(
+  pool: Pool,
+  work: (client: PoolClient) => Promise<T>,
+  deadline?: number,
+): Promise<T> {
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
+      if (deadline !== undefined) {
+        requireAccessDeadline(deadline);
+        await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
+      }
       const result = await work(client);
+      if (deadline !== undefined) requireAccessDeadline(deadline);
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -69,6 +84,26 @@ export async function zoneReadTransaction<T>(pool: Pool, work: (client: PoolClie
       throw error;
     }
   });
+}
+
+/** Copy the admitted document, never the retained original. Appearance tokens are omitted;
+ * covered text is empty safe text. Unexpected covered subtrees conceal the page. */
+function publicDocument(row: ZoneHead, index: number): CompositionDocument {
+  const document = structuredClone(row.configuration!.pages[index]!.document);
+  const base = `/pages/${index}/document`;
+  const appearance = `${base}/root/props/appearance`;
+  function redact(value: object, pointer: string) {
+    for (const [key, child] of Object.entries(value)) {
+      const path = `${pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+      if (zoneWithheld(row, path)) {
+        if (path === appearance || path.startsWith(`${appearance}/`)) Reflect.deleteProperty(value, key);
+        else if (typeof child === 'string') Reflect.set(value, key, '');
+        else throw new ProblemError('not_found');
+      } else if (child !== null && typeof child === 'object') redact(child, path);
+    }
+  }
+  redact(document, base);
+  return document;
 }
 
 export function createZoneReads(dependencies: { pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }) {
@@ -214,9 +249,54 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
       };
     });
   }
+  async function page(actor: Actor, id: string, route: string | null, deadline: number) {
+    const identity = zoneIdentity(id);
+    const check = await accessCheck(
+      access,
+      actor,
+      'zone:read',
+      { ...identity, eligibility: zoneReadEligibility(identity) },
+      { pool, deadline },
+    );
+    return zoneReadTransaction(
+      pool,
+      async (client) => {
+        const time = await mintReadTime(client, clock);
+        const row = await readZoneHead(client, identity.route, id);
+        if (!row || !zoneReadable(row) || !row.configuration) throw new ProblemError('not_found');
+        if (!(await check(client, time))) {
+          if (actor.kind === 'account') {
+            const account = await readAccount(client, routeOf(actor.accountId)!, actor.accountId);
+            if (!account || account.state !== 'active' || account.fenced) throw new ProblemError('forbidden');
+          }
+          throw new ProblemError('not_found');
+        }
+        // Direct subjects need the real source/membership ports; absence is never empty membership.
+        if (route === null) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+        const index = row.configuration.pages.findIndex((page) => page.route === route);
+        if (index < 0 || zoneWithheld(row, `/pages/${index}/route`) || zoneWithheld(row, `/pages/${index}/document`))
+          throw new ProblemError('not_found');
+        const document = publicDocument(row, index);
+        const zone = zonePublic(row);
+        zone.appearance = {
+          ...zone.appearance,
+          ...(document.root.props.appearance as ZonePublic['appearance'] | undefined),
+        };
+        const partition = await readPartition(client, partitionOf(identity.route));
+        if (!partition) throw new ProblemError('partition_unavailable');
+        return {
+          zone,
+          document,
+          component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+        };
+      },
+      deadline,
+    );
+  }
   return {
     metadata: (actor: Actor, id: string, deadline: number) => read(actor, id, false, deadline),
     configuration: (actor: Actor, id: string, deadline: number) => read(actor, id, true, deadline),
     list,
+    page,
   };
 }
