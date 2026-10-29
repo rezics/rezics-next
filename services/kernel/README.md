@@ -366,6 +366,19 @@ vacuum runs after `grow`; before each measured repetition it also vacuums `dbos.
 idempotent enqueue updates an existing status row and pruning that tuple chain keeps buffer cost from depending on
 maintenance timing. Do not analyze or vacuum the checked database by hand in `grow`.
 
+When a bound fails, `GrowthBoundError` keeps its scale and relation summary and adds the statements with the largest
+first-to-last-scale growth for each failing metric. Each statement line shows its normalized first line, its value at
+every scale, and the plan node that used the most buffers (including its relation or index when present). Statements
+that appeared in only some repetitions are listed as intermittent with their repetition numbers. SQL literals and
+parameters are normalized together while leading SQL comments remain, so comments can identify a tagged statement.
+The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
+blocks and count across measured repetitions.
+
+Use the optional `prepare(db, scale, repetition)` hook for periodic setup that would otherwise occur in only some
+measured runs, such as refreshing a schema or checkpointing. It runs outside capture before every measured repetition,
+after the harness's `dbos.workflow_status` preparation, and never before warm-ups. A periodic step needs its own growth
+check; `prepare` keeps its work out of this operation's measurements, not out of coverage.
+
 Each measured repetition starts from equivalent state. When the operation writes, give every warm-up and
 repetition its own fresh keys, subjects or probes, as production spreads its writes, so that no repetition updates
 rows an earlier one wrote. The harness does not rewrite or compact relations between repetitions: that would hide

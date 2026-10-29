@@ -26,6 +26,7 @@ import {
 } from './growth-cost.ts';
 import { classifySeries, type SeriesClassification } from './growth-model.ts';
 import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
+import { formatStatementAttribution, profileStatements, statementAttributions } from './growth-report.ts';
 import {
   countedSample,
   countedViolations,
@@ -80,6 +81,8 @@ export type GrowthCheck = {
   operation(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
   /** One unmeasured run of the same code path on spare state, used for warm-ups in place of `operation`. */
   warmup?(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
+  /** Unmeasured setup before each measured repetition, after harness preparation; never runs before warm-ups. */
+  prepare?(db: GrowthDatabase, scale: number, repetition: number): Promise<void>;
 };
 
 /** What growing the data to a scale cost: the statements and written rows of `grow`, and the time of `grow` and of the vacuum after it. */
@@ -96,7 +99,16 @@ export type ReportSample = {
   readonly repetitions: readonly Cost[];
   readonly relationSizes: Readonly<Record<string, RelationSize>>;
   readonly seeding: SeedingCost;
+  readonly statementRepetitions: readonly (readonly StatementAttribution[])[];
   readonly counted?: CountedSample;
+};
+
+export type StatementAttribution = {
+  readonly statement: string;
+  readonly rows: number;
+  readonly blocks: number;
+  readonly count: number;
+  readonly node?: string;
 };
 
 export type GrowthReport = {
@@ -167,6 +179,7 @@ function appendProfile(report: GrowthReport): void {
         ? { counted: samples.map(({ counted }) => counted ?? {}) }
         : {}),
       relationSizes: samples.map(({ relationSizes }) => relationSizes),
+      statements: profileStatements(samples),
       shadow: Object.fromEntries(
         Object.entries(shadow).map(([metric, verdict]) => [
           metric,
@@ -342,6 +355,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     }
 
     const costs: Cost[] = [];
+    const statementRepetitions: StatementAttribution[][] = [];
     const countedRuns: Record<string, number>[] = [];
     for (let run = 0; run < repetitions; run++) {
       // DBOS return-existing enqueues update workflow_status; vacuum its tuple chain before every measured repetition.
@@ -349,6 +363,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
       );
       if (workflowStatus.rows[0]!.exists) await db.admin.query('VACUUM (ANALYZE) "dbos".workflow_status');
+      if (check.prepare) await check.prepare(db, scale, repetition);
       const measured = await capture(db, () => check.operation(db, scale, repetition), {
         ...(check.includeBackends === undefined ? {} : { includeBackends: check.includeBackends }),
       });
@@ -372,6 +387,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       }
       assertCatalogBound(check.name, scale, measured.capture, samples);
       costs.push(cost);
+      statementRepetitions.push(statementAttributions(measured.capture));
       repetition++;
     }
     samples.push({
@@ -381,6 +397,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       ...(check.counted === undefined ? {} : { counted: countedSample(countedRuns) }),
       relationSizes: sizesForMeasuredRelations(costs, availableRelationSizes),
       seeding,
+      statementRepetitions,
     });
     previous = scale;
   }
@@ -432,6 +449,10 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
             ];
       if (countedFailures.length > 0 || metricViolations.length > 0) {
         const error = new GrowthBoundError(metricViolations, samples, check.byteBounds);
+        error.message += formatStatementAttribution(
+          samples,
+          metricViolations.map(({ metric }) => metric),
+        );
         if (countedFailures.length > 0)
           error.message += `${error.message ? '\n' : ''}${countedFailures
             .map(({ unit, scale, value, limit, kind }) =>
@@ -477,6 +498,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           )
             .map(([family, fit]) => `${family} factor ${fit.factor}`)
             .join(', ')}`;
+          error.message += formatStatementAttribution(samples, [metric]);
           throw error;
         }
       }
@@ -517,6 +539,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           )
             .map(([family, fit]) => `${family} factor ${fit.factor}`)
             .join(', ')}`;
+          error.message += formatStatementAttribution(samples, [metric]);
           throw error;
         }
       }
