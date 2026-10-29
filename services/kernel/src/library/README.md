@@ -1159,11 +1159,18 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   `plans.json` retains the actual auto_explain documents, including nested plans, rows/removals, loops and buffers.
   Synthetic negative growth cardinality and isolated rollback/overflow/DDL invariants remain primitive-only,
   separate from native positive fixture/HTTP/owner-command evidence. The native writer and cutover cases pass.
-  Calibrated growth remains unproven: the fixed subject population capture returned `GrowthEvidenceError` for rows.
-  Added per-run plan diagnostics have not executed because check preparation stalled on both the initial runner
-  and its automatic retry. Failed bounds retain repetition costs and relation populations as well as native plans;
-  insufficient-evidence failures also report per-run plan costs through the shared harness. There is no passing
-  calibrated verdict or change to allowances or cost accounting.
+  Calibrated growth remains inconclusive under the shared series classifier. At scales 256, 1,024 and 4,096, the
+  measured whole-command row costs were `[620, 626, 433, 435, 437]`, `[441, 443, 445, 447, 449]` and
+  `[453, 455, 457, 459, 461]`; medians were 437, 445 and 457 against uncertainty 22 at each scale. The verdict
+  was `GrowthEvidenceError` for rows, not a passing constant-growth result. The axes were own negative history and
+  unrelated owner/target rows at the scale value, with the selected owner, hot partition and 18 native subject
+  fixtures fixed. Each scale had one warm-up and five measured follow/unfollow replacements on distinct subjects
+  with distinct idempotency keys; each negative pair was created through ordinary native commands outside capture.
+  Actual auto_explain plans showed two rows and 20/21 blocks for `library.follow_count_source`, two rows and 24/25
+  blocks for `library.follow_count_owner`, with no sequential scans on either relation. The whole-command row
+  series remains unresolved; no allowance or cost-accounting change is justified by this capture. Failure output
+  retains every measured repetition, relation population, the classifier verdict and per-run plan costs; the
+  accompanying `plans.json` retains nested auto_explain documents with rows/removals, loops and buffers.
 
 ### Follow read
 
