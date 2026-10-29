@@ -30,15 +30,27 @@ export async function cutoverFixture() {
   const url = new URL(source);
   url.pathname = `/${name}`;
   await admin.query(`CREATE DATABASE "${name}"`);
+  const ownedPools: pg.Pool[] = [];
   try {
     migrate(url.toString());
     // epochFixture reads DATABASE_URL synchronously before its first await. Restore it immediately;
     // only the returned real pools retain the owned URL. No owner result or readiness is substituted.
     let pending: ReturnType<typeof epochFixture>;
+    const Pool = pg.Pool;
+    // The existing fixture allocates both real pools synchronously, but has no failure cleanup.
+    // Observe construction only while calling it; retain actual owned resources for rejection cleanup.
+    pg.Pool = new Proxy(Pool, {
+      construct(target, args, newTarget) {
+        const pool = Reflect.construct(target, args, newTarget) as pg.Pool;
+        if (args[0]?.connectionString === url.toString()) ownedPools.push(pool);
+        return pool;
+      },
+    });
     process.env.DATABASE_URL = url.toString();
     try {
       pending = epochFixture();
     } finally {
+      pg.Pool = Pool;
       process.env.DATABASE_URL = source;
     }
     const fixture = await pending;
@@ -57,11 +69,15 @@ export async function cutoverFixture() {
       },
     };
   } catch (error) {
+    const cleanup = await Promise.allSettled(ownedPools.map((pool) => pool.end()));
     try {
       await dropTestDatabase(admin, name);
     } finally {
       await admin.end();
     }
+    const failures = cleanup.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+    if (failures.length)
+      throw new AggregateError([error, ...failures], 'Native epoch fixture setup and cleanup failed');
     throw error;
   }
 }
