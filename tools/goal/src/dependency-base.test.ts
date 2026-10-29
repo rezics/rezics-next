@@ -25,7 +25,7 @@ test('a dependent starts from dev when its dependency landed after dev-verified,
   }
 });
 
-test('a dependent whose dependencies are all verified starts from dev-verified', async () => {
+test('a dependent whose dependencies are all verified still starts from the dev head', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -34,12 +34,11 @@ test('a dependent whose dependencies are all verified starts from dev-verified',
       current.integratedCommit = h.head();
     });
     git(h.root, 'update-ref', 'refs/heads/dev-verified', h.head());
-    const verified = h.head();
-    h.advanceDev('unverified-change');
+    const devHead = h.advanceDev('unverified-change');
     const dependent = h.dispatch('dependent-file', [dependency.id], ['true']);
     await h.start(dependent);
 
-    expect(h.store.task(dependent.id).base).toBe(verified);
+    expect(h.store.task(dependent.id).base).toBe(devHead);
   } finally {
     h.dispose();
   }

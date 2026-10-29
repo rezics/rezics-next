@@ -184,37 +184,13 @@ export class WorkerTasks {
     }
   }
   private taskBaseBranch(brief: { goal?: string; target?: 'stabilize'; after?: readonly string[] }): string {
-    if (brief.goal === 'control-plane') return this.settings.mainBranch;
-    if (brief.target === 'stabilize') return this.settings.stabilizeBranch;
-    const verified = this.existingVerifiedBranch();
-    if (verified === this.settings.integrationBranch) return verified;
-    // A dependency that landed on dev but is not verified yet is missing from dev-verified: start from dev, which has
-    // it, or the dependent starts without the code it waited for.
-    for (const id of brief.after ?? []) {
-      let commit: string | undefined;
-      try {
-        const dependency = this.store.task(id);
-        commit = dependency.integratedCommit ?? dependency.mergedCommit;
-      } catch {
-        continue;
-      }
-      if (
-        commit &&
-        spawnSync('git', ['merge-base', '--is-ancestor', commit, `refs/heads/${verified}`], {
-          cwd: this.settings.mainCheckout,
-        }).status !== 0
-      )
-        return this.settings.integrationBranch;
-    }
-    return verified;
-  }
-  private existingVerifiedBranch(): string {
-    try {
-      this.branchHead('dev-verified', false);
-      return 'dev-verified';
-    } catch {
-      return this.settings.integrationBranch;
-    }
+    // Dev tasks start from the dev head, as trunk-based work does; dev-verified gates promotion only. Starting from
+    // dev-verified while the verifier lagged by hundreds of commits made landings conflict (11 an hour on 10-29).
+    return brief.goal === 'control-plane'
+      ? this.settings.mainBranch
+      : brief.target === 'stabilize'
+        ? this.settings.stabilizeBranch
+        : this.settings.integrationBranch;
   }
   /**
    * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A
