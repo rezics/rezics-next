@@ -326,7 +326,10 @@ test('closed gate returns the same platform_closed to anonymous and ordinary acc
 
   const invalid = await get('/v1/gated-fixture', 'not-a-valid-bearer');
   expect(invalid.response.status).toBe(401);
-  expect(invalid.body).toMatchObject({ status: 401, code: 'authentication_required' });
+  expect(invalid.body).toMatchObject({ status: 401, code: 'invalid_credentials' });
+  expect(invalid.response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+  expect(handlerCalls).toBe(before.handlerCalls);
+  expect(domainReads).toBe(before.domainReads);
   const publicRoute = await get('/v1/public-fixture');
   expect(publicRoute.response.status).toBe(200);
   expect(publicRoute.body).toEqual({ value: 'public' });

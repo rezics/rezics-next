@@ -344,8 +344,10 @@ test('seller price revision through HTTP binds target intent preserves captured 
       await problem(await patch(unscoped, a.value.id, { unitAmountMinor: 2400 }, key), 403, 'forbidden');
       for (const bearer of ['anonymous', 'invalid.token.bytes']) {
         const response = await patch(bearer, a.value.id, { unitAmountMinor: 2400 }, key);
-        expect(response.headers.get('www-authenticate')).toBeTruthy();
-        await problem(response, 401, 'authentication_required');
+        expect(response.headers.get('www-authenticate')).toBe(
+          bearer === 'anonymous' ? 'Bearer' : 'Bearer error="invalid_token"',
+        );
+        await problem(response, 401, bearer === 'anonymous' ? 'authentication_required' : 'invalid_credentials');
       }
     }
     await problem(await patch(seller.bearer, 'not-an-offer'), 404, 'not_found');
@@ -359,7 +361,8 @@ test('seller price revision through HTTP binds target intent preserves captured 
   await unchanged(async () => {
     for (const key of [requestKey, deniedKey]) {
       const response = await patch(seller.bearer, a.value.id, { unitAmountMinor: 2400 }, key);
-      await problem(response, 401, 'authentication_required');
+      expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      await problem(response, 401, 'invalid_credentials');
     }
   });
   const final = await inspect();

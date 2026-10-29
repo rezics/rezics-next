@@ -298,7 +298,9 @@ test('shelf port transport keeps old entries and rejects closed queries and unau
     await json(await get(path), 400, 'invalid_request');
   for (const path of ['/v1/libraryEntries?orderBy=createdAt', '/v1/libraryShelfSummary', '/v1/libraryShelfTypes']) {
     await json(await get(path, 'anonymous'), 401, 'authentication_required');
-    await json(await get(path, 'suspended'), 401, 'authentication_required');
+    const suspended = await get(path, 'suspended');
+    expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    await json(suspended, 401, 'invalid_credentials');
     await json(await get(path, 'progressOnly'), 403, 'forbidden');
   }
   expect(calls).toHaveLength(before);

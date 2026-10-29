@@ -112,7 +112,6 @@ export function createApp({
         mounted = undefined;
         action = undefined;
       }
-      const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
       if (isSuspendedAccountAuthenticationError(error) && action?.startsWith('zone:')) {
         // Zone's direct-public-read contract distinguishes a verified suspended actor from bad auth.
         // Other resources retain their native authentication response; no suspended actor is admitted.
@@ -138,20 +137,6 @@ export function createApp({
           }),
           { status: 403, headers: { 'content-type': 'application/problem+json' } },
         );
-      }
-      if (
-        error instanceof AuthenticationError &&
-        error.status === 401 &&
-        /(?:^|[\s,])error\s*=\s*(?:"invalid_token"|invalid_token)(?=$|[\s,])/i.test(error.challenge) &&
-        typeof detail?.['x-exposure'] === 'string' &&
-        detail['x-exposure'].startsWith('gate:')
-      ) {
-        // Reject invalid bearers before gate lookup without exposing token validity.
-        return problemResponse(new AuthenticationError(401, 'Bearer'), {
-          method: request.method,
-          id: idFor(request),
-          ...(action ? { action } : {}),
-        });
       }
       // Native validation can fail before beforeHandle; retain the original body pointers.
       const bodyError = error instanceof ValidationError ? invalidJsonBodies.get(request) : undefined;
