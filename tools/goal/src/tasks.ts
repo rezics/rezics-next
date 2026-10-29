@@ -474,9 +474,7 @@ export class WorkerTasks {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
     if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId);
-    let lease = leased
-      ? undefined
-      : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    let lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
@@ -520,20 +518,20 @@ export class WorkerTasks {
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
       if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief }, [...byId.values()])) {
         if (!heldAmendment) {
-        const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
-        mkdirSync(dirname(briefPath), { recursive: true });
-        writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
-        this.store.updateHeldRetryTask(
-          { taskId, attempt: task.currentAttempt },
-          (current) => {
-            current.brief = nextBrief;
-            current.briefPath = briefPath;
-            current.taskClass = nextTaskClass;
-            current.state = 'held';
-            if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
-          },
-          { abandonPending: true },
-        );
+          const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
+          mkdirSync(dirname(briefPath), { recursive: true });
+          writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
+          this.store.updateHeldRetryTask(
+            { taskId, attempt: task.currentAttempt },
+            (current) => {
+              current.brief = nextBrief;
+              current.briefPath = briefPath;
+              current.taskClass = nextTaskClass;
+              current.state = 'held';
+              if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
+            },
+            { abandonPending: true },
+          );
         }
         return null;
       }
