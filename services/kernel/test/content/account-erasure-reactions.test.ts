@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { Release } from '@rezics/definitions';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { eraseAccountReactionsPage, type ReactionErasureCursor } from '../../src/content/account-erasure-reactions.ts';
 import { createReactionCountEffect } from '../../src/content/reaction-projection.ts';
@@ -11,7 +10,6 @@ import { createReportOutcomeEffect } from '../../src/content/report-outcomes.ts'
 import { createModerationDecisionEffect } from '../../src/content/moderation-decisions.ts';
 import { setupContent } from '../../src/content/setup.ts';
 import { projectBatch } from '../../src/events/log.ts';
-import type { Resource } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
@@ -27,7 +25,7 @@ let people: Awaited<ReturnType<typeof createPersonas>>;
 let subjectId: string;
 let boardId: string;
 
-async function call(method: string, path: string, person: Persona, body?: unknown, status = 200) {
+async function call(method: string, path: string, person: Persona, body?: unknown, status = 200, head?: string) {
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
@@ -35,28 +33,14 @@ async function call(method: string, path: string, person: Persona, body?: unknow
         authorization: `Bearer ${person.bearer}`,
         'content-type': 'application/json',
         'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
   const value = await response.json();
-  expect({ status: response.status, ...(response.status === status ? {} : { value }) }).toEqual({ status });
+  expect({ status: response.status, ...(response.status === status ? {} : { path, value }) }).toEqual({ status });
   return value;
-}
-
-async function grant(person: Persona, actions: string[], resource: Resource = PLATFORM_RESOURCE) {
-  await call(
-    'POST',
-    '/v1/grants',
-    people.staff,
-    {
-      resource,
-      subject: { kind: 'account', id: person.accountId },
-      actions,
-      valid: '(,)',
-    },
-    201,
-  );
 }
 
 beforeAll(async () => {
@@ -73,7 +57,7 @@ beforeAll(async () => {
     }),
   });
   people = await createPersonas(kernel, { version: 1, pool: db.pool, auth });
-  // This phase needs one subject type, independent of the full product catalogue.
+  // Keep native community setup independent of the full product catalogue.
   const release: Release = {
     format: 'https://rezics.com/definitions/release/1',
     catalogue: { id: 'https://rezics.com/catalogue/erasure', version: '1.0.0' },
@@ -85,34 +69,82 @@ beforeAll(async () => {
         labels: { en: 'Concept' },
         mappings: [],
         bases: [],
+        properties: ['skos:inScheme'],
+        facets: [],
+      },
+      'skos:ConceptScheme': {
+        iri: 'http://www.w3.org/2004/02/skos/core#ConceptScheme',
+        labels: { en: 'Concept Scheme' },
+        mappings: [],
+        bases: [],
         properties: [],
         facets: [],
       },
     },
-    properties: {},
+    properties: {
+      'skos:inScheme': {
+        iri: 'http://www.w3.org/2004/02/skos/core#inScheme',
+        labels: { en: 'In scheme' },
+        mappings: [],
+        datatype: 'wikibase-item',
+        multivalued: true,
+        qualifiers: [],
+        value: { type: 'string', pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+        targets: ['skos:ConceptScheme'],
+      },
+    },
   };
   await bootstrapRelease(db.pool, release);
   await setupContent(db.pool);
-  await grant(people.staff, ['subject:create', 'board:create']);
-  subjectId = (
-    await call('POST', '/v1/subjects', people.staff, { type: 'skos:Concept', labels: { en: 'Erasure subject' } }, 201)
+  const schemeId = (
+    await call(
+      'POST',
+      '/v1/subjects',
+      people.staff,
+      { type: 'skos:ConceptScheme', labels: { en: 'Erasure scheme' } },
+      201,
+    )
   ).subject.id;
+  subjectId = (
+    await call(
+      'POST',
+      '/v1/subjects',
+      people.staff,
+      {
+        type: 'skos:Concept',
+        labels: { en: 'Erasure subject' },
+        statements: {
+          'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
+        },
+      },
+      201,
+    )
+  ).subject.id;
+  const space = (await call('POST', '/v1/spaces', people.staff, { title: 'Erasure space' }, 201)).space;
+  const realm = (
+    await call(
+      'POST',
+      '/v1/realms',
+      people.staff,
+      {
+        spaceId: space.spaceId,
+        title: 'Erasure realm',
+        visibility: 'public',
+        contextId: GLOBAL_CONTEXT,
+      },
+      201,
+    )
+  ).realm;
+  await call('PUT', `/v1/realms/${realm.realmId}/boardScheme`, people.staff, { schemeId }, 200, realm.headRevisionId);
   boardId = (
     await call(
       'POST',
-      '/v1/boards',
+      `/v1/realms/${realm.realmId}/boards`,
       people.staff,
       { conceptId: subjectId, title: 'Erasure board', visibility: 'published', purpose: 'discussion' },
       201,
     )
   ).board.id;
-  for (const person of [people.alice, people.bob, people.orgOwner, people.operator]) {
-    await grant(person, ['thread:create', 'reaction:set', 'report:create', 'board:read', 'thread:read', 'post:read'], {
-      route: routeOf(boardId)!,
-      id: boardId,
-    });
-    await grant(person, ['reaction:set'], { route: 0, id: GLOBAL_CONTEXT });
-  }
 }, 360000);
 
 afterAll(async () => {
