@@ -293,9 +293,11 @@ test('eight maximum locator keys fit within a 4 KiB page and prefix seeks stay l
       );
     },
     async warmup() {
-      const measured = await capture(db, read);
-      const scans = measured.capture.plans
-        .flatMap(nodes)
+      const measured = await db.pool.query<{ 'QUERY PLAN': unknown }>(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${seek}`,
+        args,
+      );
+      const scans = nodes(measured.rows[0]!['QUERY PLAN'])
         .filter((node) => node['Relation Name'] === 'history_locator' && Number(node['Actual Loops']) > 0);
       expect(scans.length).toBeGreaterThan(0);
       for (const scan of scans) {
