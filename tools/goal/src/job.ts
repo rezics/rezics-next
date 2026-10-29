@@ -126,7 +126,8 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       if (task.currentAttempt !== ref.attempt) return;
-      if (!['landing', 'ready'].includes(task.state)) {
+      if (task.state === 'held') return;
+      if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
           value.nextAttempt = task.currentAttempt;
