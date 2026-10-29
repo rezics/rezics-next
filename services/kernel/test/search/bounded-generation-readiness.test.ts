@@ -385,7 +385,7 @@ test('partial and unavailable physical mapping reads fail typed readiness even f
   }
 }, 180_000);
 
-test('an alias switch after readiness pins the verified physical generation including zero-hit queries', async () => {
+test('an alias switch keeps the original physical target pinned and requires restart including zero hits', async () => {
   const env = await deployment();
   await rebuild(env);
   await createLegacy(env.prefix, 3);
@@ -399,6 +399,7 @@ test('an alias switch after readiness pins the verified physical generation incl
     });
     let switched = false;
     const targets: string[] = [];
+    const observedIds: string[][] = [];
     const racing: OpenSearch = {
       bulk: (...args) => engine.bulk(...args),
       async request<T>(...args: Parameters<OpenSearch['request']>) {
@@ -412,14 +413,24 @@ test('an alias switch after readiness pins the verified physical generation incl
             ],
           });
         }
-        if (args[1].endsWith('/_search/template')) targets.push(args[1]);
+        if (args[1].endsWith('/_search/template')) {
+          targets.push(args[1]);
+          const body = response.body as { hits: { hits: { _id: string }[] } };
+          observedIds.push(body.hits.hits.map(({ _id }) => _id));
+        }
         return response;
       },
     };
-    const result = await page(app(env.prefix, racing), { filter: queryFilter, sort: 'name', limit: 100 });
+    const response = await request(app(env.prefix, racing), { filter: queryFilter, sort: 'name', limit: 100 });
+    expect(response.status).toBe(409);
+    const problem = await response.json();
+    expect(problem).toMatchObject({ code: 'search_restart_required' });
+    for (const key of ['subjects', 'next', 'total', 'as_of', 'generation', 'epoch'])
+      expect(problem).not.toHaveProperty(key);
     expect(switched).toBe(true);
     expect(targets).toEqual([`/${indices.subjectIndexName(env.prefix, 2)}/_search/template`]);
-    expect(result.subjects).toHaveLength(queryFilter === filter ? subjects.length : 0);
+    expect(observedIds).toHaveLength(1);
+    expect(observedIds[0]!.toSorted()).toEqual(queryFilter === filter ? subjects.map(({ id }) => id).sort() : []);
     await readyFailure(app(env.prefix), { filter: queryFilter, sort: 'name', limit: 1 });
   }
 }, 180_000);

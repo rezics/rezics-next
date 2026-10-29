@@ -175,7 +175,6 @@ export function createSearchService({
   if (!Number.isSafeInteger(facetSample) || facetSample < 1)
     throw new RangeError('facetSample must be a positive safe integer');
   let templates: Promise<void> | undefined;
-  let alias: { generation: number; expiresAt: number } | undefined;
   let aliasRead: Promise<number> | undefined;
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
 
