@@ -131,6 +131,15 @@ test('no two story subjects share a cover image', async () => {
   }
 });
 
+test('each work has one identity in the shared story subject set', async () => {
+  const seen = new Set<string>();
+  for (const subject of await subjects()) {
+    const labels = Object.values(subject.labels).sort().join('\u0000');
+    expect(seen.has(labels), `${subject.id} duplicates labels for another work`).toBe(false);
+    seen.add(labels);
+  }
+});
+
 test('record.ts seeds its recorded subjects from the shared subject set', () => {
   const recorder = readFileSync(join(import.meta.dir, '../scripts/record.ts'), 'utf8');
   expect(recorder).toMatch(/story-subjects/);
