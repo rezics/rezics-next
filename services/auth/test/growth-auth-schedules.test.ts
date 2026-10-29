@@ -16,7 +16,11 @@ if (process.argv.includes('--growth-child')) {
     const fixture = testDatabase();
     try {
       const child = Bun.spawn([process.execPath, import.meta.path, '--growth-child'], {
-        env: { ...process.env, AUTH_SCHEDULE_GROWTH_URL: fixture.url },
+        env: {
+          ...process.env,
+          AUTH_SCHEDULE_GROWTH_URL: fixture.url,
+          GROWTH_PROFILE: process.env.GROWTH_PROFILE ?? '/dev/stderr',
+        },
         stdout: 'pipe',
         stderr: 'pipe',
         timeout: 170000,
@@ -28,6 +32,7 @@ if (process.argv.includes('--growth-child')) {
       ]);
       if (code !== 0) throw new Error(`Native scheduled growth failed: ${output}\n${errors}`);
       expect(output).toContain('one durable Auth tick');
+      console.log(output.trim());
     } finally {
       fixture.close();
     }
@@ -162,7 +167,15 @@ async function runGrowth() {
               `SELECT (SELECT count(*) FROM session)::int AS sessions,(SELECT count(*) FROM verification)::int AS verifications`,
             )
           ).rows[0];
-          const tick = await DBOS.triggerSchedule(AUTH_MAINTENANCE_SCHEDULE);
+          // Enqueue the installed scheduled workflow explicitly: the harness
+          // treats sched-* IDs (including triggerSchedule) as background work.
+          const schedule = await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE);
+          expect(schedule).not.toBeNull();
+          const tick = await DBOS.enqueueWorkflowWithOptions(
+            { workflowName: schedule!.workflowName, queueName: schedule!.queueName! },
+            new Date(),
+            null,
+          );
           await tick.getResult();
           const after = (
             await db.admin.query(
@@ -212,6 +225,7 @@ async function runGrowth() {
             rows: sample.cost.rows,
             blocks: sample.cost.blocks,
             statements: sample.cost.statements,
+            relations: sample.cost.relations,
           })),
         })),
       }),
