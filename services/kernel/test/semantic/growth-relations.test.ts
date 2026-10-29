@@ -490,6 +490,27 @@ function middleCursor(size: number): string {
   );
 }
 
+async function actualHead(database: GrowthDatabase): Promise<SessionComponent> {
+  const result = await database.admin.query<{ partition_no: number; epoch: number; position: string }>(
+    'SELECT partition_no, epoch, position FROM core.partition WHERE partition_no = $1',
+    [partitionOf(anchorRoute)],
+  );
+  const head = result.rows[0];
+  if (!head) throw new Error('Growth partition disappeared');
+  return { partition: head.partition_no, epoch: head.epoch, position: BigInt(head.position) };
+}
+
+async function setCheckpoint(database: GrowthDatabase, position: bigint): Promise<void> {
+  const head = await actualHead(database);
+  await database.admin.query(
+    `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+     VALUES ($1, 'semantic_links', $2, $3)
+     ON CONFLICT (partition_no, consumer) DO UPDATE
+     SET epoch = EXCLUDED.epoch, position = EXCLUDED.position, updated_at = now()`,
+    [head.partition, head.epoch, position],
+  );
+}
+
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
   await bootstrapRelease(db.pool, bundledRelease);
