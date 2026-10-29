@@ -294,9 +294,10 @@ common plan executes zero distinct data reads and zero output slots, within the 
 The request's native deadline also bounds the Zone snapshot's statements and is checked around profile
 lookup and response construction. This adds no query budget, projection or maintenance work.
 
-Subject targets and configured documents requiring data remain `503 semantic_not_ready` Problem with
-`Retry-After`, without partial documents or replacement cursors, until actual source-dependent runtime
-ports are available. The declared closed 202 progress envelope is reserved for real retained preparation;
+Subject targets and configured documents requiring data first require native `zone_sources` admission
+after current Zone readability: ungranted callers receive `403 platform_closed`. Explicitly admitted
+development callers still receive `503 semantic_not_ready` Problem with `Retry-After`, without partial
+documents or replacement cursors, until actual source-dependent runtime ports are available. The declared closed 202 progress envelope is reserved for real retained preparation;
 this static implementation emits none. Static completion does not establish any remaining union,
 direct-target, freshness, canonical-order, privacy-repair or default-worker obligation below.
 
