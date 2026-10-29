@@ -37,7 +37,7 @@ function Calendar({
         className
       )}
       captionLayout={captionLayout}
-      locale={locale}
+      {...(locale ? { locale } : {})}
       formatters={{
         formatMonthDropdown: (date) =>
           date.toLocaleString(locale?.code, { month: "short" }),
@@ -162,7 +162,7 @@ function Calendar({
           )
         },
         DayButton: ({ ...props }) => (
-          <CalendarDayButton locale={locale} {...props} />
+          <CalendarDayButton {...(locale ? { locale } : {})} {...props} />
         ),
         WeekNumber: ({ children, ...props }) => {
           return (
