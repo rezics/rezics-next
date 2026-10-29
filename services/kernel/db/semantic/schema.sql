@@ -492,7 +492,9 @@ CREATE TABLE semantic.identity_epoch_bootstrap_custody (
     source_generation bigint NOT NULL,
     native_transaction_id uuid NOT NULL,
     native_epoch integer NOT NULL,
-    native_position bigint NOT NULL
+    native_position bigint NOT NULL,
+    stage text DEFAULT 'add'::text NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_custody_stage_check CHECK ((stage = ANY (ARRAY['withdraw'::text, 'add'::text])))
 );
 
 
@@ -544,7 +546,9 @@ CREATE TABLE semantic.identity_epoch_bootstrap_row (
     original uuid NOT NULL,
     terminal uuid NOT NULL,
     source_revision bigint NOT NULL,
-    present boolean NOT NULL
+    present boolean NOT NULL,
+    previous_partition integer,
+    previous_terminal uuid
 );
 
 
@@ -1284,7 +1288,7 @@ ALTER TABLE ONLY semantic.identity_epoch_ack
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_bootstrap_custody
-    ADD CONSTRAINT identity_epoch_bootstrap_custody_pkey PRIMARY KEY (partition_no, source_partition, source_generation);
+    ADD CONSTRAINT identity_epoch_bootstrap_custody_pkey PRIMARY KEY (partition_no, source_partition, source_generation, stage);
 
 
 --
