@@ -373,6 +373,7 @@ function workerFixture(): { root: string; memory: string; remoteEvents: string; 
     join(scripts, 'remote-check.ts'),
     `import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.WORKER_REMOTE_EVENTS!, 'remote\\n');
+appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.args', JSON.stringify(process.argv.slice(2)));
 if (process.env.WORKER_REMOTE_MODE === 'transport') {
   console.error('remote-check: connection to host failed during rsync before a result');
   console.error('remote-check: transport failure marker');
@@ -424,6 +425,8 @@ test('worker checks at least 2 GiB run remotely and record the remote peak under
     recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
     expect(await runWorkerCheck(command, fixture.root)).toBe(0);
     expect(readFileSync(fixture.remoteEvents, 'utf8')).toBe('remote\n');
+    const remoteArgv = JSON.parse(readFileSync(fixture.remoteEvents + '.args', 'utf8')) as string[];
+    expect(remoteArgv.slice(0, 3)).toEqual(['--memory-gib', '2', fixture.root]);
     expect(JSON.parse(readFileSync(join(fixture.memory, 'peaks.json'), 'utf8'))[commandClass]).toEqual([
       2 * 2 ** 30,
       2 * 2 ** 30,

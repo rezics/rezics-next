@@ -97,7 +97,7 @@ tsc exits or fails to start. An existing `DATABASE_URL` bypasses placement and d
 | `identity`          | Nonempty path to the caller's SSH private key. SSH uses only the specified identity and batch authentication.                                                                                                    |
 | `memoryMaxGiB`      | Positive memory limit in GiB. Admission uses this for capacity when slice memory cannot be read. Provision the slice with the matching value.                                                                    |
 | `cpuQuotaPercent`   | Positive CPU quota; 100 means one processor. This is the admission fallback when slice `cpu.max` is unreadable or unlimited. Provision the matching quota.                                                       |
-| `slots`             | Positive integer ceiling on concurrent slot units, including the express slot. This does not change systemd limits.                                                                                              |
+| `slots`             | Positive integer ceiling on concurrent slot units, including the express slot. Slot counts in the hosts file are a processor bound and do not change systemd limits.                                                                                              |
 | `processorsPerSlot` | Positive finite processor count required per slot. Defaults to 2.                                                                                                                                                |
 | `fallback`          | Optional boolean. Non-gate checks prefer hosts without this field or with `false` whenever one can start now. A `true` host is selected when no other host can start the run; gate placement ignores this field. |
 
@@ -105,10 +105,10 @@ Editing JSON alone does not resize the slice. Provisioning takes memory and CPU 
 
 ### Admission and queueing
 
-Each slot requires the host's configured `processorsPerSlot` (default **2**) and **2.5 GiB**. For each answering host, compute:
+Each slot requires the host's configured `processorsPerSlot` (default **2**). Runs reserve their command class's measured memory: `worker-check` passes its class weight, while other callers without a request retain the **2.5 GiB** default. For each answering host, compute:
 
 ```text
-C = min(configured slots, floor(slice memory / 2.5 GiB), floor(slice processors / processorsPerSlot))
+C = min(configured slots, floor(slice processors / processorsPerSlot))
 O = max(0, C - 1)        ordinary capacity
 G = max(0, O - 1)        gate capacity
 ```
@@ -116,6 +116,7 @@ G = max(0, O - 1)        gate capacity
 Slice processors are the quota divided by the period in `cpu.max`.
 Slice memory is `memory.max`; configured values supply the fallbacks above.
 Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/tmp` has less than 4 GiB free, or `/tmp` has fewer than 65,536 free inodes. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity. Because check-host `/tmp` is tmpfs, the byte floor protects the same RAM needed by checks, while the inode floor catches exhaustion before the byte limit is reached.
+Under the host reservation lock, admission requires the memory reserved by held slots plus the new request to fit within the slice's `memory.max` (or configured `memoryMaxGiB` fallback). A host is skipped when its 1-minute load exceeds 1.5 times its slice processors or its machine `MemAvailable` is below 4 GiB. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity. A free slot's stale reservation file does not count.
 Headroom is `max(0, memory.max - memory.current)` in the shared slice.
 When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
 Slots reserve admission capacity. They do not impose a separate CPU or memory cap on each run.
@@ -123,7 +124,7 @@ Slots reserve admission capacity. They do not impose a separate CPU or memory ca
 One slot is express capacity. Only a non-gate, one-slot run with an explicit estimate of at most
 120,000 ms qualifies. It takes an ordinary slot first, then express if needed.
 Long and unestimated runs cannot take express. Estimates classify runs; they do not stop overruns.
-With memory headroom, express lets short work proceed while ordinary work is full.
+When its memory reservation fits, express lets short work proceed while ordinary work is full.
 There is no FIFO queue or enforced 120-second deadline for remote runs; `--estimate-ms` classifies slot eligibility only.
 
 A waiting gate holds a host's `gate-wait.lock` over SSH. While that marker is held, non-gates may occupy
@@ -134,7 +135,7 @@ No host with positive `G` is an error, so gates need capacity of at least three.
 
 The gate's drain wait is bounded by the remaining lifetime of the original slot holders on its reserved host,
 plus probing and acquisition overhead. Later non-gate arrivals cannot fill the reserved capacity.
-This assumes the holders finish, the host stays reachable and enough memory headroom becomes available.
+This assumes the holders finish, the host stays reachable and enough reserved memory becomes available.
 It is not a fixed wall-clock timeout. The bound starts when the gate obtains its marker;
 competing gates may first wait for that marker.
 
@@ -147,7 +148,7 @@ An excessive request fails before waiting; lower the run's concurrency and slot 
 
 Hosts rank by resource-backed free slots, then by measured memory headroom.
 Single-slot acquisition first prefers hosts without a waiting gate.
-Free slots account for held locks, express eligibility, gate reservations and memory headroom.
+Free slots account for held locks, express eligibility, gate reservations and whether the requested memory reservation fits.
 Admission retries races against other callers. The default probe interval is five seconds;
 `REMOTE_CHECK_POLL_MS` overrides it.
 
@@ -272,7 +273,7 @@ Measure complete runs on a quiet slice and repeat with the intended mix of concu
 Choose concurrent runs so their measured core demand fits the slice's processors and their memory peaks fit its memory.
 For similar one-slot runs, start with the smaller of `floor(slice processors / measured cores per run)`
 and `floor(slice GiB / measured peak GiB per run)`, leaving headroom for variation.
-Then respect the hard admission ceiling of two processors and 2.5 GiB per slot.
+Set `processorsPerSlot` to the measured processor demand per run (default two). Set each caller's memory request to its measured class peak with reasonable headroom; callers without a request use 2.5 GiB.
 Include express capacity when setting `slots`; ordinary concurrency is one lower.
 Use multiple slots for heavier runs and keep their requests within the non-gate cap.
 Increasing `slots` beyond slice capacity adds no usable capacity.

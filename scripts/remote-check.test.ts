@@ -307,6 +307,10 @@ if (script.includes('/proc/loadavg')) {
   const available = config.available ?? 16 * 2 ** 30;
   const slots = config.slots ?? 2;
   const ordinaryCapacity = Math.max(0, slots - 1);
+  const memoryReserved = Array.from({ length: ordinaryCapacity }, (_, index) => index)
+    .filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index))
+    .reduce((sum, index) => sum + Number(readFileSync(dir + '/' + hostKey + '.slot.' + index + '.memory', 'utf8') || 0), 0)
+    + (existsSync(dir + '/' + hostKey + '.slot.express') ? Number(readFileSync(dir + '/' + hostKey + '.slot.express.memory', 'utf8') || 0) : 0);
   const ordinarySlotsUsed = Array.from({ length: ordinaryCapacity }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
   const expressSlotUsed = existsSync(dir + '/' + hostKey + '.slot.express');
   const gateWaiting = existsSync(dir + '/' + hostKey + '.gate-marker');
@@ -325,6 +329,7 @@ if (script.includes('/proc/loadavg')) {
     memoryCurrent,
     memoryMaximum,
     memoryHeadroom,
+    memoryReserved,
     ordinarySlotsUsed,
     expressSlotUsed,
     gateWaiting,
@@ -336,6 +341,7 @@ if (script.includes('/proc/loadavg')) {
   console.log('MEMORY_CURRENT ' + memoryCurrent);
   console.log('MEMORY_MAX ' + memoryMaximum);
   console.log('MEMORY_HEADROOM ' + memoryHeadroom);
+  console.log('MEMORY_RESERVED ' + memoryReserved);
   console.log('PROCESSORS ' + processors);
   console.log('SLICE_PROCESSORS ' + sliceProcessors);
   console.log('LOAD ' + load);
@@ -385,6 +391,7 @@ if (script.includes('/proc/loadavg')) {
   process.stdin.resume();
 } else if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {
   const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
+  const reservationBytes = Number(script.match(/# REMOTE_CHECK_MEMORY_RESERVATION_BYTES (\\d+)/)?.[1] ?? Math.round(2.5 * 2 ** 30));
   const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
   const call = count('slot');
   if (call < (config.busy ?? 0)) {
@@ -427,6 +434,14 @@ if (script.includes('/proc/loadavg')) {
     }
   }
   const slotLimit = Number(script.match(/# REMOTE_CHECK_SLOT_LIMIT (\\d+)/)?.[1] ?? ordinaryCapacity);
+  const reserved = Array.from({ length: ordinaryCapacity }, (_, index) => index)
+    .filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index))
+    .reduce((sum, index) => sum + Number(readFileSync(dir + '/' + hostKey + '.slot.' + index + '.memory', 'utf8') || 0), 0)
+    + (existsSync(dir + '/' + hostKey + '.slot.express') ? Number(readFileSync(dir + '/' + hostKey + '.slot.express.memory', 'utf8') || 0) : 0);
+  if (reserved + reservationBytes > (config.memoryMax ?? (16 * 2 ** 30))) {
+    log({ kind: 'slot', granted: false, reason: 'memory', reserved, requestedBytes: reservationBytes, script });
+    process.exit(75);
+  }
   const occupied = Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index));
   const expressOccupied = existsSync(dir + '/' + hostKey + '.slot.express');
   const taking = dir + '/' + hostKey + '.taking';
@@ -462,7 +477,10 @@ if (script.includes('/proc/loadavg')) {
     log({ kind: 'slot', granted: false, reason: 'capacity', requested, slotClass, script, occupied: occupiedCount, slotLimit, call });
     process.exit(75);
   }
-  for (const slot of selected) mkdirSync(dir + '/' + hostKey + '.slot.' + slot);
+  for (const slot of selected) {
+    mkdirSync(dir + '/' + hostKey + '.slot.' + slot);
+    writeFileSync(dir + '/' + hostKey + '.slot.' + slot + '.memory', String(reservationBytes));
+  }
   writeFileSync(dir + '/' + hostKey + '.granted', String(grants + selected.length));
   rmSync(taking, { recursive: true, force: true });
   for (const slot of selected) log({ kind: 'slot', granted: true, requested, slotClass, script, call, slot });
@@ -470,6 +488,7 @@ if (script.includes('/proc/loadavg')) {
   const release = () => {
     for (const slot of selected) {
       rmSync(dir + '/' + hostKey + '.slot.' + slot, { recursive: true, force: true });
+      rmSync(dir + '/' + hostKey + '.slot.' + slot + '.memory', { force: true });
       log({ kind: 'release', slot });
     }
     process.exit(0);
@@ -604,6 +623,7 @@ type HostConfig = {
   slots?: number;
   processorsPerSlot?: number;
   ordinaryBusy?: number;
+  busyMemoryGiB?: number;
   expressBusy?: boolean;
   down?: boolean;
   exit?: number;
@@ -734,7 +754,10 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
     const hostKey = `ops@${name}.test`.replace(/[^a-z0-9]/gi, '_');
     const occupiedSlots =
       config.ordinaryBusySlots ?? Array.from({ length: config.ordinaryBusy ?? 0 }, (_, index) => index);
-    for (const index of occupiedSlots) mkdirSync(join(dir, `${hostKey}.slot.${index}`));
+    for (const index of occupiedSlots) {
+      mkdirSync(join(dir, `${hostKey}.slot.${index}`));
+      writeFileSync(join(dir, `${hostKey}.slot.${index}.memory`), String((config.busyMemoryGiB ?? 2.5) * 2 ** 30));
+    }
     if (config.expressBusy) mkdirSync(join(dir, `${hostKey}.slot.express`));
   }
   const env: Record<string, string> = {
@@ -1196,6 +1219,64 @@ test('a host with 1.5 processors per slot and 11 slice processors offers 7 slots
   const slotScript = String(events().find((event) => event.kind === 'slot')?.script);
   expect(slotScript).toContain('# REMOTE_CHECK_ORDINARY_COUNT 6');
   expect(slotScript).toContain('# REMOTE_CHECK_SLOT_LIMIT 6');
+});
+
+test('a processor-bounded host does not lose slots to its memoryMaxGiB', async () => {
+  const { env, events } = scenario({
+    a: { available: 16 * 2 ** 30, memoryMax: 4 * 2 ** 30, memoryMaxGiB: 4, memoryHeadroom: 4 * 2 ** 30, sliceProcessors: 12, slots: 8 },
+  });
+  const result = await remote(env, workspace(), ['true'], ['--slots', '3', '--memory-gib', '1']);
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'slot')?.script).toContain('# REMOTE_CHECK_ORDINARY_COUNT 5');
+});
+
+test('memory reservations that exceed a host limit queue with the host and both amounts', async () => {
+  const { env } = scenario({
+    a: { slots: 3, memoryMax: 8 * 2 ** 30, memoryMaxGiB: 8, ordinaryBusy: 1, busyMemoryGiB: 6 },
+  });
+  const directory = workspace();
+  const run = startRemote(env, directory, ['true'], ['--memory-gib', '4']);
+  await waitFor(() => existsSync(join(env.FAKE_DIR!, 'ops_a_test.connection')));
+  await Bun.sleep(80);
+  const hostKey = 'ops_a_test';
+  rmSync(join(env.FAKE_DIR!, `${hostKey}.slot.0`), { recursive: true, force: true });
+  rmSync(join(env.FAKE_DIR!, `${hostKey}.slot.0.memory`), { force: true });
+  expect(await run.child.exited).toBe(0);
+  const waiting = await run.stderr;
+  expect(waiting).toContain('a 0/2 free');
+  expect(waiting).toContain('6 GiB reserved + 4 GiB requested of 8 GiB');
+});
+
+test('a request fits beside held reservations when their total equals the host memory limit', async () => {
+  const { env, events } = scenario({
+    a: { slots: 3, memoryMax: 8 * 2 ** 30, memoryMaxGiB: 8, memoryHeadroom: 8 * 2 ** 30, ordinaryBusy: 1, busyMemoryGiB: 4 },
+  });
+  const result = await remote(env, workspace(), ['true'], ['--memory-gib', '4']);
+  expect(result.code).toBe(0);
+  expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(1);
+});
+
+test('releasing a slot frees its memory reservation for a queued run', async () => {
+  const { env, events } = scenario({
+    a: { slots: 4, memoryMax: 8 * 2 ** 30, memoryMaxGiB: 8, memoryHeadroom: 8 * 2 ** 30, runDurationMs: 100 },
+  });
+  const directory = workspace();
+  const holder = startRemote(env, directory, ['true'], ['--memory-gib', '6']);
+  await waitFor(() => events().some((event) => event.kind === 'run'));
+  const waiting = startRemote(env, directory, ['true'], ['--memory-gib', '4']);
+  await Bun.sleep(80);
+  expect(waiting.child.exitCode).toBeNull();
+  writeFileSync(join(env.FAKE_DIR!, 'clock'), '100');
+  expect(await holder.child.exited).toBe(0);
+  expect(await waiting.child.exited).toBe(0);
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(2);
+});
+
+test('a caller without a memory request keeps the 2.5 GiB reservation', async () => {
+  const { env, events } = scenario({ a: {} });
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'slot')?.script).toContain(`# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${CHECK_SLOT_MEMORY_BYTES}`);
 });
 
 test('a host without processorsPerSlot keeps 2 processors per slot', () => {

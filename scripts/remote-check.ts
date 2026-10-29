@@ -22,7 +22,7 @@
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. A run holds <n> slots (default 1) on one
 // host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
-// Admission depends only on free slots and memory headroom, whatever the host's load average. Each run has a nested
+// Admission depends on free slots and held memory reservations, whatever the host's load average. Each run has a nested
 // slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
@@ -45,6 +45,8 @@ export type RemoteCheck = {
   cwd?: string;
   command: string[];
   slots?: number;
+  /** Memory reservation in GiB; callers without a class weight retain the 2.5 GiB legacy reservation. */
+  memoryGiB?: number;
   estimateMs?: number;
   maxMs?: number;
   /** Test seam for the client heartbeat cadence. */
@@ -182,6 +184,12 @@ function validateMaxMs(maxMs: number | undefined): void {
   }
 }
 
+function validateMemoryGiB(memoryGiB: number | undefined): void {
+  if (memoryGiB !== undefined && (!Number.isSafeInteger(memoryGiB) || memoryGiB < 1)) {
+    throw new Error(`--memory-gib must be a positive integer, received ${memoryGiB}`);
+  }
+}
+
 function isShortRun(slots: number, estimateMs: number | undefined, gate: boolean): boolean {
   return !gate && slots === 1 && estimateMs !== undefined && estimateMs <= EXPRESS_SLOT_ESTIMATE_LIMIT_MS;
 }
@@ -309,12 +317,17 @@ if [ -z "$slice_processors" ]; then
   slice_processors=$(awk -v quota="${host.cpuQuotaPercent}" 'BEGIN { printf "%.6f\\n", quota / 100 }')
 fi
 ordinary_slots_used=0
+memory_reserved=0
 i=0
 while [ "$i" -lt ${Math.max(0, host.slots - 1)} ]; do
   lock=${ROOT}/slots/$i.lock
   if [ -e "$lock" ]; then
     exec 9<"$lock"
-    if flock -n 9; then flock -u 9; else ordinary_slots_used=$((ordinary_slots_used + 1)); fi
+    if flock -n 9; then flock -u 9; else
+      ordinary_slots_used=$((ordinary_slots_used + 1))
+      reservation=${ROOT}/slots/$i.memory
+      if [ -r "$reservation" ]; then read -r amount < "$reservation" || amount=0; case "$amount" in ''|*[!0-9]*) amount=0 ;; esac; memory_reserved=$((memory_reserved + amount)); fi
+    fi
     exec 9<&-
   fi
   i=$((i + 1))
@@ -323,7 +336,11 @@ express_slot_used=0
 express_lock=${ROOT}/slots/express.lock
 if [ -e "$express_lock" ]; then
   exec 9<"$express_lock"
-  if flock -n 9; then flock -u 9; else express_slot_used=1; fi
+  if flock -n 9; then flock -u 9; else
+    express_slot_used=1
+    reservation=${ROOT}/slots/express.memory
+    if [ -r "$reservation" ]; then read -r amount < "$reservation" || amount=0; case "$amount" in ''|*[!0-9]*) amount=0 ;; esac; memory_reserved=$((memory_reserved + amount)); fi
+  fi
   exec 9<&-
 fi
 gate_waiting=0
@@ -364,7 +381,7 @@ for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
 done
 flock -u 6
 exec 6>&-
-printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\n' "$processors" "$slice_processors" "$load" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id"`;
+printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nMEMORY_RESERVED %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\n' "$processors" "$slice_processors" "$load" "$memory_reserved" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id"`;
 }
 
 /** Holds a marker while a gate waits, so single-slot checks can prefer unmarked hosts. */
@@ -415,6 +432,7 @@ function slotScript(
   estimateMs: number | undefined,
   gate: boolean,
   multiWaiterId: string | undefined,
+  memoryReservationBytes: number,
 ): string {
   const ordinaryLocks = (start: number, end: number, action: 'count' | 'take' | 'skip'): string =>
     Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
@@ -427,6 +445,8 @@ if flock -n ${fd}; then
     action === 'take'
       ? `if [ "$acquired" -lt ${count} ] && [ "$((ordinary_used + acquired))" -lt "$ordinary_admission_limit" ]; then
     acquired=$((acquired + 1))
+    printf '%s\\n' ${memoryReservationBytes} > "${ROOT}/slots/${slot}.memory"
+    reserved_slots="$reserved_slots ${slot}"
   else
     flock -u ${fd}
     exec ${fd}>&-
@@ -449,6 +469,8 @@ fi`;
   if flock -n ${expressFd}; then
     if [ "$acquired" -lt ${count} ]; then
       acquired=$((acquired + 1))
+      printf '%s\\n' ${memoryReservationBytes} > "${ROOT}/slots/express.memory"
+      reserved_slots="$reserved_slots express"
     else
       flock -u ${expressFd}
       exec ${expressFd}>&-
@@ -551,6 +573,7 @@ for unit in $(systemctl list-units --all --type=slice --plain --no-legend 'rezic
 done
 REMOTE_CHECK_SLOT_TAKE=1
 # REMOTE_CHECK_SLOT_COUNT ${count}
+# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${memoryReservationBytes}
 # REMOTE_CHECK_ORDINARY_COUNT ${ordinaryCapacity}
 # REMOTE_CHECK_SLOT_CLASS ${shortRun ? 'short' : 'ordinary'}
 # REMOTE_CHECK_ESTIMATE_MS ${estimateMs ?? 'none'}
@@ -561,8 +584,35 @@ REMOTE_CHECK_SLOT_TAKE=1
 exec 8>"${ROOT}/slots/reserve.lock"
 flock -x -n 8 || exit ${SLOT_BUSY}
 ${markerPolicy}
+held_memory=0
+slot=0
+while [ "$slot" -lt ${Math.max(0, host.slots - 1)} ]; do
+  lock=${ROOT}/slots/$slot.lock
+  if [ ! -e "$lock" ]; then slot=$((slot + 1)); continue; fi
+  exec 9<"$lock"
+  if flock -n 9; then flock -u 9; else
+    read -r amount < "${ROOT}/slots/$slot.memory" 2>/dev/null || amount=0
+    case "$amount" in ''|*[!0-9]*) amount=0 ;; esac
+    held_memory=$((held_memory + amount))
+  fi
+  exec 9<&-
+  slot=$((slot + 1))
+done
+express_lock=${ROOT}/slots/express.lock
+if [ -e "$express_lock" ]; then
+  exec 9<"$express_lock"
+  if flock -n 9; then flock -u 9; else
+    read -r amount < "${ROOT}/slots/express.memory" 2>/dev/null || amount=0
+    case "$amount" in ''|*[!0-9]*) amount=0 ;; esac
+    held_memory=$((held_memory + amount))
+  fi
+  exec 9<&-
+fi
+memory_max_bytes=$(awk -v memory_gib="${host.memoryMaxGiB}" 'BEGIN { printf "%.0f", memory_gib * 1073741824 }')
+if [ "$((held_memory + ${count} * ${memoryReservationBytes}))" -gt "$memory_max_bytes" ]; then exit ${SLOT_BUSY}; fi
 occupied=0
 acquired=0
+reserved_slots=
 ordinary_used=0
 # REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS
 ${countBusyOrdinary}
@@ -570,7 +620,10 @@ if [ "$wait_behind_older_multi" -eq 1 ]; then exit ${SLOT_BUSY}; fi
 ${takeOrdinary}
 ${expressTake}
 ${countOtherOrdinary}
-if [ "$acquired" -ne ${count} ] || [ "$((occupied + acquired))" -gt ${slotLimit} ]; then exit ${SLOT_BUSY}; fi
+if [ "$acquired" -ne ${count} ] || [ "$((occupied + acquired))" -gt ${slotLimit} ]; then
+  for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
+  exit ${SLOT_BUSY}
+fi
 flock -u 8
 exec 8>&-
 flock -u 6
@@ -597,6 +650,7 @@ if IFS= read -r run_id; then
   fi
 fi
 cleanup_orphan() {
+  for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
   if [ -n "$run_id" ] && [ -n "$run_directory" ] && [ ! -e "$run_directory/exit-status" ]; then
     ${cleanupCommands()}
   fi
@@ -912,6 +966,7 @@ type HostProbe = {
   tmpBytes: number;
   tmpInodes: number;
   memoryHeadroom: number;
+  memoryReserved: number;
   memoryMaximum: number | null;
   ordinarySlotsUsed: number;
   expressSlotUsed: boolean;
@@ -929,25 +984,19 @@ type RankedHost = {
   freeSlots: number;
   slotLimit: number;
   memoryHeadroom: number;
+  memoryReserved: number;
   gateWaiting: boolean;
   ordinarySlotsUsed: number;
   expressSlotUsed: boolean;
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
-  const memoryMaximum = probe.memoryMaximum ?? host.memoryMaxGiB * 2 ** 30;
-  const memorySlots = Math.floor(memoryMaximum / CHECK_SLOT_MEMORY_BYTES);
   const processorSlots = Math.floor(probe.sliceProcessors / host.processorsPerSlot);
-  return Math.min(host.slots, memorySlots, processorSlots);
+  return Math.min(host.slots, processorSlots);
 }
 
-function probeCapacity(probe: HostProbe, capacity: number): number {
-  let freeSlots = 0;
-  for (let count = 1; count <= capacity; count += 1) {
-    if (probe.memoryHeadroom < count * CHECK_SLOT_MEMORY_BYTES) break;
-    freeSlots = count;
-  }
-  return freeSlots;
+function probeCapacity(capacity: number): number {
+  return capacity;
 }
 
 function rankHost(
@@ -957,6 +1006,7 @@ function rankHost(
   estimateMs: number | undefined,
   gate: boolean,
   multiWaiterId?: string,
+  memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
 ): RankedHost {
   const capacity = hostCapacity(host, probe);
   const ordinaryCapacity = Math.max(0, capacity - 1);
@@ -973,7 +1023,8 @@ function rankHost(
           ? ordinaryCapacity
           : ordinaryCapacity - probe.multiWaitingSlots
         : ordinaryCapacity;
-  const resourceSlots = probeCapacity(probe, capacity);
+  const resourceSlots = probeCapacity(capacity);
+  const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
   const shortRun = isShortRun(slots, estimateMs, gate);
   let freeSlots: number;
   let slotLimit: number;
@@ -989,6 +1040,7 @@ function rankHost(
     freeSlots = Math.min(resourceSlots, Math.max(0, admissionLimit - probe.ordinarySlotsUsed));
     slotLimit = Math.min(admissionLimit, probe.ordinarySlotsUsed + resourceSlots);
   }
+  if (probe.memoryReserved + slots * memoryReservationBytes > memoryMaximum) freeSlots = 0;
   if (waitsBehindOlderMulti) freeSlots = 0;
   return {
     host,
@@ -1000,6 +1052,7 @@ function rankHost(
     freeSlots,
     slotLimit,
     memoryHeadroom: probe.memoryHeadroom,
+    memoryReserved: probe.memoryReserved,
     gateWaiting: probe.gateWaiting,
     ordinarySlotsUsed: probe.ordinarySlotsUsed,
     expressSlotUsed: probe.expressSlotUsed,
@@ -1042,6 +1095,7 @@ function parseProbe(output: string): HostProbe | null {
   const tmpBytesValue = value('TMP_BYTES');
   const tmpInodesValue = value('TMP_INODES');
   const headroomValue = value('MEMORY_HEADROOM');
+  const reservedValue = value('MEMORY_RESERVED');
   const processors = Number(processorValue);
   const sliceProcessors = Number(sliceProcessorValue);
   const load = Number(loadValue);
@@ -1049,6 +1103,7 @@ function parseProbe(output: string): HostProbe | null {
   const tmpBytes = Number(tmpBytesValue);
   const tmpInodes = Number(tmpInodesValue);
   const memoryHeadroom = Number(headroomValue);
+  const memoryReserved = Number(reservedValue);
   const ordinarySlotsUsedValue = value('ORDINARY_SLOTS_USED') ?? value('SLOTS_USED');
   const ordinarySlotsUsed = Number(ordinarySlotsUsedValue);
   const expressSlotUsedValue = value('EXPRESS_SLOT_USED') ?? '0';
@@ -1071,6 +1126,7 @@ function parseProbe(output: string): HostProbe | null {
     tmpBytesValue === null ||
     tmpInodesValue === null ||
     headroomValue === null ||
+    reservedValue === null ||
     !Number.isSafeInteger(processors) ||
     processors < 1 ||
     !Number.isFinite(sliceProcessors) ||
@@ -1085,6 +1141,8 @@ function parseProbe(output: string): HostProbe | null {
     tmpInodes < 0 ||
     !Number.isSafeInteger(memoryHeadroom) ||
     memoryHeadroom < 0 ||
+    !Number.isSafeInteger(memoryReserved) ||
+    memoryReserved < 0 ||
     ordinarySlotsUsedValue === null ||
     !Number.isSafeInteger(ordinarySlotsUsed) ||
     ordinarySlotsUsed < 0 ||
@@ -1109,6 +1167,7 @@ function parseProbe(output: string): HostProbe | null {
     tmpBytes,
     tmpInodes,
     memoryHeadroom,
+    memoryReserved,
     memoryMaximum: sliceMemory ? Number(maximum) : null,
     ordinarySlotsUsed,
     expressSlotUsed,
@@ -1225,6 +1284,7 @@ async function takeSlots(
   estimateMs: number | undefined,
   gate: boolean,
   multiWaiterId: string | undefined,
+  memoryReservationBytes: number,
   signal: AbortSignal,
 ): Promise<Lease | null> {
   return takeSession(
@@ -1239,6 +1299,7 @@ async function takeSlots(
       estimateMs,
       gate,
       multiWaiterId,
+      memoryReservationBytes,
     ),
     /^SLOTS? \d+$/m,
     signal,
@@ -1269,6 +1330,7 @@ async function rankedHosts(
   multiWaiterId?: string,
   loggedSkips: Map<string, string> = new Map(),
   loggedSkipLines: Set<string> = new Set(),
+  memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
 ): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
@@ -1299,7 +1361,7 @@ async function rankedHosts(
     probes
       .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
       .filter(({ host, probe }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
-      .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate, multiWaiterId))
+      .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate, multiWaiterId, memoryReservationBytes))
       // Equal slot counts prefer the host with more measured slice memory headroom.
       .sort(
         (left, right) =>
@@ -1322,8 +1384,9 @@ async function acquireOnce(
   estimateMs: number | undefined,
   signal: AbortSignal,
   gate = false,
+  memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
 ): Promise<Lease | null> {
-  const ranked = await rankedHosts(hosts, signal, requestedSlots, estimateMs, gate);
+  const ranked = await rankedHosts(hosts, signal, requestedSlots, estimateMs, gate, false, undefined, new Map(), new Set(), memoryReservationBytes);
   let slots = requestedSlots;
   if (ranked.length > 0) {
     if (gate) {
@@ -1354,6 +1417,7 @@ async function acquireOnce(
       estimateMs,
       gate,
       undefined,
+      memoryReservationBytes,
       signal,
     );
     if (lease && signal.aborted) {
@@ -1383,6 +1447,7 @@ async function acquire(
   onAnswered?: () => void,
   gate = false,
   waitRepeatMs = 60_000,
+  memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
 ): Promise<Lease | null> {
   let answered = false;
   let slots = requestedSlots;
@@ -1397,7 +1462,7 @@ async function acquire(
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   const printWaiting = (): void => {
     const state = waitingHosts.length
-      ? waitingHosts.map(({ host, freeSlots, slotLimit }) => `${host.name} ${freeSlots}/${slotLimit} free`).join(', ')
+      ? waitingHosts.map(({ host, freeSlots, slotLimit, memoryReserved }) => `${host.name} ${freeSlots}/${slotLimit} free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${slots * memoryReservationBytes / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB`).join(', ')
       : 'no responding hosts';
     const reasons = [...skippedHosts.values()];
     console.error(
@@ -1428,6 +1493,7 @@ async function acquire(
         multiWaiterId,
         skippedHosts,
         loggedSkipLines,
+        memoryReservationBytes,
       );
       if (multiWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
         if (marker) await marker.release();
@@ -1479,6 +1545,7 @@ async function acquire(
           estimateMs,
           gate,
           multiWaiterId,
+          memoryReservationBytes,
           signal,
         );
         if (lease && signal.aborted) {
@@ -1840,7 +1907,9 @@ async function runWithTransportRetries(
   giveUpIfUnanswered: boolean,
   onAnswered?: () => void,
 ): Promise<number | null> {
+  validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
+  const memoryReservationBytes = options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
   const failedHosts = new Set<string>();
   let lastFailure: RemoteTransportError | undefined;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1863,9 +1932,10 @@ async function runWithTransportRetries(
         onAnswered,
         options.gate ?? false,
         options.waitRepeatMs,
+        memoryReservationBytes,
       );
     } else {
-      lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false);
+      lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false, memoryReservationBytes);
       if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
         lease = await acquire(
           hosts,
@@ -1877,6 +1947,7 @@ async function runWithTransportRetries(
           onAnswered,
           options.gate ?? false,
           options.waitRepeatMs,
+          memoryReservationBytes,
         );
       }
     }
@@ -1951,6 +2022,7 @@ function parse(argv: string[]): RemoteCheck {
   if (!hostsFile) throw new Error('KERNEL_CHECK_REMOTE must name the hosts file');
   let cwd: string | undefined;
   let slots: number | undefined;
+  let memoryGiB: number | undefined;
   let estimateMs: number | undefined;
   let maxMs: number | undefined;
   let gate = false;
@@ -1983,7 +2055,7 @@ function parse(argv: string[]): RemoteCheck {
       validateEstimateMs(estimateMs);
       continue;
     }
-    if ((flag !== '--cwd' && flag !== '--slots') || rest.length === 0) throw new Error(`Unknown option: ${flag}`);
+    if ((flag !== '--cwd' && flag !== '--slots' && flag !== '--memory-gib') || rest.length === 0) throw new Error(`Unknown option: ${flag}`);
     const value = rest.shift()!;
     if (flag === '--cwd') cwd = value;
     else if (flag === '--slots') {
@@ -1991,12 +2063,16 @@ function parse(argv: string[]): RemoteCheck {
       if (!Number.isSafeInteger(slots) || slots < 1)
         throw new Error(`--slots must be a positive integer, received ${value}`);
     }
+    else if (flag === '--memory-gib') {
+      memoryGiB = Number(value);
+      validateMemoryGiB(memoryGiB);
+    }
   }
   const workspace = rest.shift();
   const separator = rest.shift();
   if (!workspace || separator !== '--' || rest.length === 0) {
     throw new Error(
-      'Usage: remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--gate] <workspace> -- <command...>',
+      'Usage: remote-check.ts [--cwd <directory>] [--slots <n>] [--memory-gib <n>] [--estimate-ms <n>] [--gate] <workspace> -- <command...>',
     );
   }
   if (!existsSync(workspace)) throw new Error(`Workspace does not exist: ${workspace}`);
@@ -2015,6 +2091,7 @@ function parse(argv: string[]): RemoteCheck {
     command: rest,
     ...(cwd === undefined ? {} : { cwd }),
     ...(slots === undefined ? {} : { slots }),
+    ...(memoryGiB === undefined ? {} : { memoryGiB }),
     ...(estimateMs === undefined ? {} : { estimateMs }),
     ...(maxMs === undefined ? {} : { maxMs }),
     ...(gate ? { gate } : {}),

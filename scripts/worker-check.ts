@@ -163,7 +163,7 @@ export async function runWorkerCheck(
     let remoteOutput = '';
     const remote = spawn(
       resolveRepositoryBun(['bun'], root)[0]!,
-      [join(root, 'scripts/remote-check.ts'), root, '--', ...argv],
+      [join(root, 'scripts/remote-check.ts'), '--memory-gib', String(weight), root, '--', ...argv],
       {
         cwd: root,
         env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
