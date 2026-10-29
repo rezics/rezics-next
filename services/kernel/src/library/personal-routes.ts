@@ -475,10 +475,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          command(async () => {
-            const current = await copies().readCopy(actor, params.copyId);
-            return copies().deleteCopy(actor, params.copyId, current.revision, key);
-          }),
+          command(() => copies().deleteCopy(actor, params.copyId, undefined, key)),
         );
         session.record(result);
         set.status = 204;

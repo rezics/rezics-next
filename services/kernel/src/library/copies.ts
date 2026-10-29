@@ -348,17 +348,23 @@ export function createCopyCommands(config: Dependencies) {
     );
   }
 
-  async function deleteCopy(actor: Actor, copyId: string, revision: number, requestKey: string) {
+  async function deleteCopy(actor: Actor, copyId: string, revision: number | undefined, requestKey: string) {
     const owner = await gate(actor, 'copy:delete');
-    const expected = revisionValue(revision);
+    const expected = revision === undefined ? undefined : revisionValue(revision);
     const route = sameAccountRoute(owner.accountId, copyId);
     return runner.ownAccount(
       owner,
-      { action: 'copy:delete', kind: 'library.copy.delete', requestKey, input: { copyId, revision: expected } },
+      {
+        action: 'copy:delete',
+        kind: 'library.copy.delete',
+        requestKey,
+        input: { copyId, ...(expected === undefined ? {} : { revision: expected }) },
+      },
       async (tx) => {
         const current = await lockOwned(tx, route, owner.accountId, copyId);
-        if (current.revision !== expected) throw new CopyConflictError();
-        const copy = await store.deleteCopy(tx, route, copyId, expected);
+        if (expected !== undefined && current.revision !== expected) throw new CopyConflictError();
+        // HTTP has no revision input. Observe its CAS only after authorized receipt replay.
+        const copy = await store.deleteCopy(tx, route, copyId, expected ?? current.revision);
         if (!copy) throw new CopyConflictError();
         return { value: copy, events: [event(DELETED_EVENT, owner.accountId, copy.id)] };
       },
