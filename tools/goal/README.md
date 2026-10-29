@@ -63,6 +63,14 @@ one per ten minutes. Requests retry transient socket absence during handoff, and
 small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
 of an attempt log, beginning at a complete line boundary; the recent commands and final failure events remain visible.
 
+Workers start checks with `worker-check --run`, keep working while check slots are queued, and end their turn with a
+`waiting` result containing the check ids when only checks remain. A waiting attempt keeps its worktree and session but
+does not count toward the worker cap. The manager host watches the durable check results in that worktree and resumes
+the same session when all checks finish, passing their exit statuses, failure summaries and log paths; a missing run or
+failed check host also wakes the session with that fact. Waiting time remains part of the long-attempt limit. This
+avoids the measured polling cost: in 342 attempts, 3,001 of 18,639 tool calls were waits, rereading about 230k tokens
+each, or roughly 690M input tokens; waiting workers also held slots while only two or three of 44 workers did work.
+
 ## Shared module workspaces (opt in)
 
 Isolated worktrees remain the default. Local settings can name modules as path globs:

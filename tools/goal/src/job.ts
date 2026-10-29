@@ -1,5 +1,5 @@
 import { taskCommits } from './workspace.ts';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
@@ -41,7 +41,8 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityWaiters, checkWaitMs } from './launch.ts';
+import { capacityWaiters, checkWaitMs, launch, workerPrompt } from './launch.ts';
+import { awaitHostCapacity, startsFirst } from './launch.ts';
 import { removeFinishedWorktree } from './worktree-lifetime.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
@@ -312,6 +313,99 @@ export class WorkerJob implements GateOutcomeSink {
     if (task.workspace) return taskCommits(task).length > 0;
     return Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])) > 0;
   }
+  private checkWakeMessage(attempt: Attempt, task: Task): string | null {
+    const checks = attempt.checks ?? [];
+    if (!checks.length) return 'The waiting attempt has no saved check ids; resume and report this recovery issue.';
+    const directory = join(task.worktree, '.temp/goal/checks');
+    const details: string[] = [];
+    for (const id of checks) {
+      const resultPath = join(directory, 'results', `${id}.json`);
+      if (!existsSync(resultPath)) {
+        const runPaths = [join(directory, 'runs', `${id}.json`), join(directory, `${id}.json`)];
+        const runPath = runPaths.find(existsSync);
+        if (runPath) {
+          try {
+            const run = JSON.parse(readFileSync(runPath, 'utf8')) as Record<string, unknown>;
+            const state = String(run.state ?? run.status ?? '').toLowerCase();
+            if (!state || ['queued', 'starting', 'running', 'in_progress'].includes(state)) return null;
+            details.push(
+              `check ${id}: check host stopped in state ${state}; exit status unavailable; log path ${String(run.logPath ?? run.log_path ?? 'unavailable')}`,
+            );
+            continue;
+          } catch {
+            details.push(
+              `check ${id}: check host left an unreadable run record; exit status unavailable; log path ${runPath}`,
+            );
+            continue;
+          }
+        }
+        details.push(
+          `check ${id}: run vanished or check host failed before writing a result; exit status unavailable; log path unavailable`,
+        );
+        continue;
+      }
+      try {
+        const document = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, unknown>;
+        const value =
+          document.result && typeof document.result === 'object'
+            ? (document.result as Record<string, unknown>)
+            : document;
+        const status =
+          value.exitStatus ??
+          value.exit_status ??
+          value.exitCode ??
+          value.exit_code ??
+          value.exit ??
+          value.code ??
+          value.status ??
+          'unknown';
+        const summary =
+          value.failureSummary ??
+          value.failure_summary ??
+          value.failure ??
+          value.summary ??
+          value.errorLine ??
+          value.error ??
+          (Number(status) === 0 ? 'passed' : 'check failed without a summary');
+        const log = value.logPath ?? value.log_path ?? value.log ?? join(directory, `worker-check-${id}.log`);
+        details.push(
+          `check ${id}: exit status ${String(status)}; ${String(summary)
+            .replace(/[\r\n]+/g, ' ')
+            .slice(0, 400)}; log path ${String(log)
+            .replace(/[\r\n]+/g, ' ')
+            .slice(0, 1000)}`,
+        );
+      } catch (error) {
+        details.push(
+          `check ${id}: check host failed to write a readable result (${String(error)}); log path ${resultPath}`,
+        );
+      }
+    }
+    return details.some((line) => line.startsWith('check ') && line.includes('run vanished'))
+      ? `The checks completed or failed to run. Resume this same session with their results:\n${details.join('\n')}`
+      : details.length === checks.length
+        ? `All checks have finished. Resume this same session with their results:\n${details.join('\n')}`
+        : null;
+  }
+  private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
+    const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
+    if (!pool) throw new Error(`Waiting attempt refers to missing pool ${attempt.pool}`);
+    await awaitHostCapacity(this.tasks.store, this.tasks.settings.stateDirectory, startsFirst(task), task.id);
+    const prompt = [
+      `The checks you started have finished or could not be found. ${message}`,
+      'Continue the same task and session. Do not wait or poll for these checks again. Finish with the required exit object.',
+    ].join('\n\n');
+    const worker = await launch(
+      this.tasks.store,
+      task,
+      attempt,
+      pool,
+      prompt,
+      this.tasks.settings.codex,
+      attempt.session ?? undefined,
+    );
+    await this.follow(worker);
+  }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     try {
       await this.followAttempt(worker);
@@ -476,7 +570,7 @@ export class WorkerJob implements GateOutcomeSink {
     try {
       const store = this.tasks.store;
       const current = store.attempt(ref);
-      if (!['pending', 'running', 'exited'].includes(current.state)) return;
+      if (!['pending', 'running', 'waiting', 'exited'].includes(current.state)) return;
       // Settlement records the worker's exit before awaiting affected checks. A driver error before enqueue still
       // needs an environment outcome; errors after a classified exit or a landing request already have an owner.
       if (
@@ -719,12 +813,21 @@ export class WorkerJob implements GateOutcomeSink {
     const live = adoptRunning || !candidates.length ? null : liveGroups();
     // Adopted attempts are followed at once: followed in turn, one long-running worker held back every later settle.
     const follows: Promise<void>[] = [];
-    for (const { attempt: candidate, taskState, currentAttempt } of candidates) {
+    for (const { attempt: candidate, taskState, currentAttempt } of [...candidates].sort(
+      (a, b) => Number(b.attempt.state === 'waiting') - Number(a.attempt.state === 'waiting'),
+    )) {
       await yieldSweep();
       const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
       // Candidate metadata was read from the task/attempt join before touching the per-task lease.
       if (taskState !== 'running' || currentAttempt !== ref.attempt) continue;
-      if (live && candidate.state === 'running' && candidate.process && live.has(candidate.process.group)) continue;
+      if (
+        candidate.state !== 'waiting' &&
+        live &&
+        candidate.state === 'running' &&
+        candidate.process &&
+        live.has(candidate.process.group)
+      )
+        continue;
       let lease: DirectoryLease;
       try {
         lease = this.acquireOrphanLease(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
@@ -737,7 +840,7 @@ export class WorkerJob implements GateOutcomeSink {
         if (store.task(ref.taskId).currentAttempt !== ref.attempt) continue;
         const attempt = store.attempt(ref);
         if (
-          !['running', 'exited'].includes(attempt.state) ||
+          !['running', 'waiting', 'exited'].includes(attempt.state) ||
           (attempt.driver && sameProcess(attempt.driver)) ||
           !ownsRunLog(attempt.logPath)
         )
@@ -759,6 +862,21 @@ export class WorkerJob implements GateOutcomeSink {
         // worker's lifetime made every adopted task impossible to stop or retry. A live driver keeps others away.
         const driver = processIdentity();
         if (!driver) throw new Error('Cannot identify driver process');
+        if (attempt.state === 'waiting') {
+          const message = this.checkWakeMessage(attempt, store.task(ref.taskId));
+          if (!message) continue;
+          store.updateAttempt(ref, (current) => {
+            current.driver = driver;
+          });
+          lease.release();
+          followed = true;
+          follows.push(
+            this.resumeWaiting(attempt, store.task(ref.taskId), message).catch((error) =>
+              this.endAsEnvironment(ref, error),
+            ),
+          );
+          continue;
+        }
         store.updateAttempt(ref, (current) => {
           current.driver = driver;
         });

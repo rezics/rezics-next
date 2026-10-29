@@ -103,6 +103,7 @@ export type LogMeasurement = {
   blocker: string | null;
   failureKind: AttemptFailure | null;
   usageLimitRefusal: boolean;
+  waitingChecks: string[] | null;
 };
 
 function codexSessionUsage(
@@ -200,6 +201,7 @@ export function measureLog(
     blocker: null,
     failureKind: null,
     usageLimitRefusal: false,
+    waitingChecks: null,
   };
   const seen = new Set<string>();
   // The last answer that ended a turn with a report or a blocker; see the end of the loop.
@@ -319,6 +321,13 @@ export function measureLog(
       result.failureKind = exit.blocker.kind;
       result.blocker = exit.blocker.detail;
     }
+    if (
+      exit.status === 'waiting' &&
+      Array.isArray(exit.checks) &&
+      exit.checks.length > 0 &&
+      exit.checks.every((id: unknown) => typeof id === 'string' && /^[\w-]+$/.test(id))
+    )
+      result.waitingChecks = [...new Set(exit.checks as string[])];
   } catch {
     /* Historical human-readable handoffs remain importable. */
   }

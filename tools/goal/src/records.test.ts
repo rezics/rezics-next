@@ -7,21 +7,29 @@ import { importAttempt } from './import-attempt.ts';
 
 const fixture = join(import.meta.dir, 'fixtures/resumed.jsonl');
 test('resumed rollout records increments within the attempt window, ignoring repeated cumulative snapshots', () => {
-  const measured = measureLog(readFileSync(fixture, 'utf8'), { startedAt: '2026-10-25T00:01:00Z', endedAt: '2026-10-25T00:02:00Z' });
+  const measured = measureLog(readFileSync(fixture, 'utf8'), {
+    startedAt: '2026-10-25T00:01:00Z',
+    endedAt: '2026-10-25T00:02:00Z',
+  });
   expect(measured.tokens).toEqual({ input: 800, cached: 500, output: 80 });
   expect(measured.steps).toEqual({ decision: 0, read: 1, edit: 1, wait: 0, check: 1, commit: 1 });
   expect(measured.session).toBe('fixture-session');
-  const exec = [1000, 1300, 1300].map(input_tokens => JSON.stringify({ type: 'turn.completed', usage: { input_tokens } })).join('\n');
+  const exec = [1000, 1300, 1300]
+    .map((input_tokens) => JSON.stringify({ type: 'turn.completed', usage: { input_tokens } }))
+    .join('\n');
   expect(measureLog(exec, { baseline: { input: 1000, cached: 0, output: 0 } }).tokens.input).toBe(300);
-  expect(classifyStep('wait', '')).toBe('wait'); expect(classifyStep('reasoning', '')).toBe('decision');
+  expect(classifyStep('wait', '')).toBe('wait');
+  expect(classifyStep('reasoning', '')).toBe('decision');
 });
 test('reasoning items are not steps', () => {
-  const lines = [{ type: 'thread.started', thread_id: 'session' },
-    ...[1, 2, 3].map(n => ({ type: 'item.completed', item: { id: `r${n}`, type: 'reasoning', text: 'thinking' } })),
+  const lines = [
+    { type: 'thread.started', thread_id: 'session' },
+    ...[1, 2, 3].map((n) => ({ type: 'item.completed', item: { id: `r${n}`, type: 'reasoning', text: 'thinking' } })),
     { type: 'item.completed', item: { id: 'c1', type: 'command_execution', command: 'ls' } },
     { type: 'item.completed', item: { id: 'c2', type: 'command_execution', command: 'bun test' } },
-    { type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }];
-  const measured = measureLog(lines.map(line => JSON.stringify(line)).join('\n'));
+    { type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } },
+  ];
+  const measured = measureLog(lines.map((line) => JSON.stringify(line)).join('\n'));
   expect(Object.values(measured.steps).reduce((a, b) => a + b, 0)).toBe(2);
 });
 
@@ -29,53 +37,144 @@ test('import creates a complete measurement record without launching a worker', 
   const h = harness();
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const record = importAttempt(h.tasks, fixture, { taskId: task.id, startedAt: '2026-10-25T00:01:00Z', endedAt: '2026-10-25T00:02:00Z',
-      profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'max', poolClass: 'codex' }, pool: 'fixture' });
-    expect(record.tokens.input).toBe(800); expect(record.classifierVersion).toBe(CLASSIFIER_VERSION);
-    expect(record.steps).toBe(4); expect(record.tableVersion).toBe(`imported-before-${(await Bun.file(join(import.meta.dir, '../routing.json')).json()).version}`);
+    const record = importAttempt(h.tasks, fixture, {
+      taskId: task.id,
+      startedAt: '2026-10-25T00:01:00Z',
+      endedAt: '2026-10-25T00:02:00Z',
+      profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'max', poolClass: 'codex' },
+      pool: 'fixture',
+    });
+    expect(record.tokens.input).toBe(800);
+    expect(record.classifierVersion).toBe(CLASSIFIER_VERSION);
+    expect(record.steps).toBe(4);
+    expect(record.tableVersion).toBe(
+      `imported-before-${(await Bun.file(join(import.meta.dir, '../routing.json')).json()).version}`,
+    );
     expect(h.store.records()).toEqual([record]);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
+});
+
+test('import refuses to replace a waiting attempt', async () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = await h.tasks.retry(task.id);
+    h.store.updateAttempt(worker.attempt, (attempt) => {
+      attempt.state = 'waiting';
+      attempt.checks = ['check-id'];
+    });
+    expect(() =>
+      importAttempt(h.tasks, fixture, {
+        taskId: task.id,
+        startedAt: '2026-10-25T00:01:00Z',
+        endedAt: '2026-10-25T00:02:00Z',
+        profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'max', poolClass: 'codex' },
+        pool: 'fixture',
+      }),
+    ).toThrow('cannot import over a running or waiting attempt');
+  } finally {
+    h.dispose();
+  }
 });
 
 test('out-of-order cumulative observations cannot make resumed token totals grow twice', () => {
-  const log = [1000, 1300, 1000, 1300, 1500].map(input_tokens => JSON.stringify({ type: 'turn.completed', usage: { input_tokens } })).join('\n');
+  const log = [1000, 1300, 1000, 1300, 1500]
+    .map((input_tokens) => JSON.stringify({ type: 'turn.completed', usage: { input_tokens } }))
+    .join('\n');
   expect(measureLog(log, { baseline: { input: 1000, cached: 0, output: 0 } }).tokens.input).toBe(500);
 });
 
 test('CLI imports a preexisting log from a brief without starting a model or landing it', async () => {
   const { runWorkerCommand } = await import('./worker-commands.ts');
-  const h = harness(), output: string[] = [];
+  const h = harness(),
+    output: string[] = [];
   try {
-    await runWorkerCommand('import-attempt', [fixture, '--brief', h.briefFile, '--start', '2026-10-25T00:01:00Z', '--end', '2026-10-25T00:02:00Z',
-      '--pool', 'fixture', '--model', 'gpt-6-luna', '--effort', 'max'], { tasks: h.tasks, print: s => output.push(s), env: {} });
+    await runWorkerCommand(
+      'import-attempt',
+      [
+        fixture,
+        '--brief',
+        h.briefFile,
+        '--start',
+        '2026-10-25T00:01:00Z',
+        '--end',
+        '2026-10-25T00:02:00Z',
+        '--pool',
+        'fixture',
+        '--model',
+        'gpt-6-luna',
+        '--effort',
+        'max',
+      ],
+      { tasks: h.tasks, print: (s) => output.push(s), env: {} },
+    );
     const record = JSON.parse(output[0]!);
-    expect(record.tokens.input).toBe(800); expect(record.diffLines).toBeNull(); expect(record.hostMs).toBeNull();
-    expect(h.store.attempts()[0]!.process).toBeNull(); expect(h.store.tasks()[0]!.state).toBe('stopped');
-    expect(h.store.events().filter(e => e.kind === 'landing-requested')).toEqual([]);
-  } finally { h.dispose(); }
+    expect(record.tokens.input).toBe(800);
+    expect(record.diffLines).toBeNull();
+    expect(record.hostMs).toBeNull();
+    expect(h.store.attempts()[0]!.process).toBeNull();
+    expect(h.store.tasks()[0]!.state).toBe('stopped');
+    expect(h.store.events().filter((e) => e.kind === 'landing-requested')).toEqual([]);
+  } finally {
+    h.dispose();
+  }
 });
 
 test('capture-directory import uses historical metadata without launching a CLI or changing its source checkout', async () => {
   const { mkdirSync, writeFileSync } = await import('node:fs');
   const { runWorkerCommand } = await import('./worker-commands.ts');
-  const h = harness(), output: string[] = [];
+  const h = harness(),
+    output: string[] = [];
   try {
-    const capture = join(h.settings.stateDirectory, 'capture'); mkdirSync(capture);
-    writeFileSync(join(capture, 'events.jsonl'), JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 100, cached_input_tokens: 80, output_tokens: 10 } }));
-    writeFileSync(join(capture, 'meta.start.json'), JSON.stringify({ task: 'historical', worktree: h.root, cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', pool: 'historical-pool', start: '2026-10-25T00:00:00Z', criticalPath: true, poolReadingBefore: '0% weekly' }));
+    const capture = join(h.settings.stateDirectory, 'capture');
+    mkdirSync(capture);
+    writeFileSync(
+      join(capture, 'events.jsonl'),
+      JSON.stringify({
+        type: 'turn.completed',
+        usage: { input_tokens: 100, cached_input_tokens: 80, output_tokens: 10 },
+      }),
+    );
+    writeFileSync(
+      join(capture, 'meta.start.json'),
+      JSON.stringify({
+        task: 'historical',
+        worktree: h.root,
+        cli: 'codex',
+        model: 'gpt-6.1-sol',
+        effort: 'high',
+        pool: 'historical-pool',
+        start: '2026-10-25T00:00:00Z',
+        criticalPath: true,
+        poolReadingBefore: '0% weekly',
+      }),
+    );
     writeFileSync(join(capture, 'meta.end.json'), JSON.stringify({ end: '2026-10-25T00:01:00Z', exit: 0 }));
-    await runWorkerCommand('import-attempt', [capture], { tasks: h.tasks, env: {}, print: value => output.push(value) });
+    await runWorkerCommand('import-attempt', [capture], {
+      tasks: h.tasks,
+      env: {},
+      print: (value) => output.push(value),
+    });
     const record = JSON.parse(output[0]!);
-    expect(record.tokens).toEqual({ input: 100, cached: 80, output: 10 }); expect(record.criticalPath).toBe(true);
-    expect(record.before.windows[0].usedPercent).toBe(0); expect(record.tableVersion).toBe('pre-control-plane');
-    expect(h.store.tasks()[0]!.branch).toBe(''); expect(h.store.attempts()[0]!.exitCode).toBe(0);
-  } finally { h.dispose(); }
+    expect(record.tokens).toEqual({ input: 100, cached: 80, output: 10 });
+    expect(record.criticalPath).toBe(true);
+    expect(record.before.windows[0].usedPercent).toBe(0);
+    expect(record.tableVersion).toBe('pre-control-plane');
+    expect(h.store.tasks()[0]!.branch).toBe('');
+    expect(h.store.attempts()[0]!.exitCode).toBe(0);
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a recovered CLI transport error is not an attempt failure after a completed turn', () => {
   const log = [
     { type: 'error', message: 'Reconnecting' },
     { type: 'turn.completed', usage: { input_tokens: 10 } },
-  ].map(value => JSON.stringify(value)).join('\n');
+  ]
+    .map((value) => JSON.stringify(value))
+    .join('\n');
   expect(measureLog(log).failureKind).toBeNull();
 });

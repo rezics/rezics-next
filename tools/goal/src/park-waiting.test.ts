@@ -105,7 +105,7 @@ test.skipIf(!hasWorkerCheck)(
   },
 );
 
-test('the worker protocol tells workers to run checks in the foreground and never poll', () => {
+test('the worker protocol starts checks asynchronously and suspends until the host resumes it', () => {
   const h = harness();
   try {
     const settings = loadSettings({ cwd: h.root, env: {} });
@@ -129,22 +129,15 @@ test('the worker protocol tells workers to run checks in the foreground and neve
       branch: 'worker/test',
       brief: { markdown: 'Check the change.', kind: 'implementation' },
     } as unknown as Task;
-    // A base without the wrapper (a stabilize cut older than it) is told to run checks directly.
+    // The protocol is explicit even when this old fixture has no check runner file.
     const bare = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(bare).toContain('This base has no scripts/worker-check.ts');
-    // Checks can queue for a long time; uncommitted work at the class time limit was classified as stalled.
-    expect(bare).toContain('before you start a check');
-    expect(bare).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    expect(bare).toContain('bun scripts/worker-check.ts --run -- <command...>');
+    expect(bare).toContain('{"status":"waiting","checks":["<id>",...]}');
+    expect(bare).toContain('Never poll');
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(prompt).toContain('one foreground command');
-    expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(prompt).toContain('again and again until it prints an exit status');
-    expect(prompt).toContain('never finish your attempt while a check you started is still running');
-    expect(prompt).toContain('exit status 75 with `check: still running`');
-    expect(prompt).toContain('after the one automatic rerun');
-    expect(prompt).not.toContain('one blocking wait');
+    expect(prompt).toBe(bare);
   } finally {
     h.dispose();
   }
