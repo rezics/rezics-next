@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
+import { compileCatalogue } from '@rezics/definitions/compile';
+import { fixture } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { Value } from 'typebox/value';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
@@ -12,8 +11,9 @@ import { CopyConflictError, CopyInvalidError, createCopyCommands } from '../../s
 import type { Copy } from '../../src/library/entry-model.ts';
 import type { AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
+import { authenticateAccount } from '../support/admitted-access.ts';
+import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import {
   assertGrowth,
   measure,
@@ -37,13 +37,13 @@ const persona = (accountId: string, permissions = scopes): AccountActor => ({
   requestedBy: null,
   authnEpoch: 1,
 });
-const owner = persona(newId(route));
-const other = persona(newId(route));
+let owner = persona(newId(route));
+let other = persona(newId(route));
 const suspended = persona(newId(route));
-const noScope = persona(owner.accountId, ['subject:read']);
+let noScope = persona(owner.accountId, ['subject:read']);
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(61)]]) };
-const routeKey = new Uint8Array(32).fill(67);
+let native: NativeProfileFixture;
 let database: GrowthDatabase;
 let commands: ReturnType<typeof createCopyCommands>;
 let edition: string;
@@ -57,17 +57,7 @@ const key = () => randomUUID();
 type Counts = { copies: number; updated: number; deleted: number };
 
 async function subject(label: string): Promise<string> {
-  const request = key();
-  const result = await createSubject(database.pool, {
-    actor: owner,
-    target: subjectTarget(routeKey, owner.accountId, request),
-    idempotencyKey: request,
-    digest: createHash('sha256').update(request).digest(),
-    item: { type: 'schema:Book', labels: { en: label } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  return result.subject.id;
+  return native.createSubject('game', label);
 }
 
 async function snapshot(): Promise<Counts> {
@@ -104,8 +94,16 @@ async function denyRead(subjectId: string): Promise<void> {
 
 beforeAll(async () => {
   database = await openGrowthDatabase(databaseUrl);
-  await bootstrapRelease(database.pool, bundledRelease);
-  const accounts = new Map<string, Account>();
+  native = await createProfileEntryFixture({ pool: database.pool, clock });
+  const release = await compileCatalogue(
+    fixture({
+      id: 'fixture.baseline-holdings',
+      copies: {
+        kinds: [{ id: 'physical', statuses: [{ id: 'ordered' }, { id: 'owned' }, { id: 'lent' }, { id: 'disposed' }] }],
+      },
+    }),
+  );
+  await native.activate(await native.publish(release));
   for (const actor of [owner, other, suspended]) {
     await database.admin.query(
       `INSERT INTO access.account
@@ -113,17 +111,18 @@ beforeAll(async () => {
        VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
       [route, actor.accountId, actor === suspended ? 'suspended' : 'active', newId(route)],
     );
-    accounts.set(actor.accountId, (await readAccount(database.admin, route, actor.accountId))!);
   }
-  const access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
-    accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
-  });
+  const access = native.access;
+  const context = { pool: database.pool, deadline: deadlineFor(30_000) };
+  owner = await authenticateAccount(access, context, owner);
+  other = await authenticateAccount(access, context, other);
+  noScope = await authenticateAccount(access, context, noScope);
   commands = createCopyCommands({ pool: database.pool, access, tokens, clock });
   edition = await subject('Owned edition');
 });
 
 afterAll(async () => {
+  if (native) await native.close();
   if (database) await database.close();
 });
 
@@ -134,6 +133,7 @@ test('an account records two private copies of one edition and changes each by r
     owner,
     {
       subjectId: edition,
+      kind: 'physical',
       status: 'owned',
       location: 'Study',
       source: 'Bookshop',
@@ -144,7 +144,7 @@ test('an account records two private copies of one edition and changes each by r
   );
   tick();
   const secondAt = clock().toISOString();
-  const second = await commands.createCopy(owner, { subjectId: edition, status: 'ordered' }, key());
+  const second = await commands.createCopy(owner, { subjectId: edition, kind: 'physical', status: 'ordered' }, key());
   expect(second.value.id).not.toBe(first.value.id);
   expect(first.replayed).toBe(false);
   expect(first.partition).toBe(partitionOf(route));
@@ -152,6 +152,7 @@ test('an account records two private copies of one edition and changes each by r
   expect(first.value).toMatchObject({
     accountId: owner.accountId,
     subjectId: edition,
+    kind: 'physical',
     status: 'owned',
     location: 'Study',
     source: 'Bookshop',
@@ -165,6 +166,7 @@ test('an account records two private copies of one edition and changes each by r
   expect(second.value).toMatchObject({
     accountId: owner.accountId,
     subjectId: edition,
+    kind: 'physical',
     status: 'ordered',
     location: null,
     source: null,
@@ -192,6 +194,7 @@ test('an account records two private copies of one edition and changes each by r
   expect(changed.value).toMatchObject({
     id: first.value.id,
     subjectId: edition,
+    kind: 'physical',
     status: 'lent',
     location: 'Friend',
     source: 'Bookshop',
@@ -225,6 +228,7 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
   await denyRead(denied);
   const valid = {
     subjectId: edition,
+    kind: 'physical',
     status: 'owned' as const,
     location: 'L'.repeat(200),
     source: 'S'.repeat(200),
@@ -263,12 +267,12 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
   for (const input of rejected) {
     await expect(commands.createCopy(owner, input, key())).rejects.toBeInstanceOf(CopyInvalidError);
   }
-  await expect(commands.createCopy(owner, { subjectId: newId(route), status: 'owned' }, key())).rejects.toBeInstanceOf(
-    LibraryNotFoundError,
-  );
-  await expect(commands.createCopy(owner, { subjectId: denied, status: 'owned' }, key())).rejects.toBeInstanceOf(
-    LibraryNotFoundError,
-  );
+  await expect(
+    commands.createCopy(owner, { subjectId: newId(route), kind: 'physical', status: 'owned' }, key()),
+  ).rejects.toBeInstanceOf(LibraryNotFoundError);
+  await expect(
+    commands.createCopy(owner, { subjectId: denied, kind: 'physical', status: 'owned' }, key()),
+  ).rejects.toBeInstanceOf(LibraryNotFoundError);
   await expect(
     commands.updateCopy(owner, created.value.id, { revision: 1, location: 'x'.repeat(201) }, key()),
   ).rejects.toMatchObject({ name: 'CopyInvalidError', field: 'location' });
@@ -288,12 +292,12 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
 
 test('replays return the original copy and a reused key with a different body conflicts', async () => {
   const request = key();
-  const input = { subjectId: edition, status: 'lent' as const, note: 'Shelf' };
+  const input = { subjectId: edition, kind: 'physical', status: 'lent' as const, note: 'Shelf' };
   tick();
   const created = await commands.createCopy(owner, input, request);
   const before = await snapshot();
   expect(
-    await commands.createCopy(owner, { note: 'Shelf', status: 'lent', subjectId: edition }, request),
+    await commands.createCopy(owner, { note: 'Shelf', kind: 'physical', status: 'lent', subjectId: edition }, request),
   ).toMatchObject({
     value: created.value,
     replayed: true,
@@ -330,7 +334,11 @@ test('replays return the original copy and a reused key with a different body co
 
 test('a stale or concurrent revision does not change the copy', async () => {
   tick();
-  const created = await commands.createCopy(owner, { subjectId: edition, status: 'owned', note: 'Race' }, key());
+  const created = await commands.createCopy(
+    owner,
+    { subjectId: edition, kind: 'physical', status: 'owned', note: 'Race' },
+    key(),
+  );
   const results = await Promise.allSettled([
     commands.updateCopy(owner, created.value.id, { revision: 1, note: 'A' }, key()),
     commands.updateCopy(owner, created.value.id, { revision: 1, note: 'B' }, key()),
@@ -370,12 +378,20 @@ test('a stale or concurrent revision does not change the copy', async () => {
 
 test('another account, anonymous and suspended personas never read or change a copy', async () => {
   tick();
-  const owned = await commands.createCopy(owner, { subjectId: edition, status: 'owned', note: 'Private' }, key());
+  const owned = await commands.createCopy(
+    owner,
+    { subjectId: edition, kind: 'physical', status: 'owned', note: 'Private' },
+    key(),
+  );
   const before = await snapshot();
   const people: Actor[] = [anonymous, suspended, noScope];
   const errors: Error[] = [];
   for (const person of people) {
-    errors.push(await refusal(() => commands.createCopy(person, { subjectId: edition, status: 'owned' }, key())));
+    errors.push(
+      await refusal(() =>
+        commands.createCopy(person, { subjectId: edition, kind: 'physical', status: 'owned' }, key()),
+      ),
+    );
     errors.push(await refusal(() => commands.readCopy(person, owned.value.id)));
     errors.push(await refusal(() => commands.listCopies(person)));
     errors.push(
@@ -405,7 +421,11 @@ test('another account, anonymous and suspended personas never read or change a c
   expect(await snapshot()).toEqual(before);
 
   tick();
-  const theirs = await commands.createCopy(other, { subjectId: edition, status: 'lent', note: 'Other' }, key());
+  const theirs = await commands.createCopy(
+    other,
+    { subjectId: edition, kind: 'physical', status: 'lent', note: 'Other' },
+    key(),
+  );
   expect(theirs.value.id).not.toBe(owned.value.id);
   expect(theirs.value.accountId).toBe(other.accountId);
   expect(await commands.readCopy(other, theirs.value.id)).toEqual(theirs.value);
@@ -425,11 +445,14 @@ test('signed cursors page one account and stay bound to that account', async () 
   const trio: Copy[] = [];
   for (const note of ['Cursor A', 'Cursor B', 'Cursor C']) {
     tick();
-    trio.push((await commands.createCopy(owner, { subjectId: edition, status: 'owned', note }, key())).value);
+    trio.push(
+      (await commands.createCopy(owner, { subjectId: edition, kind: 'physical', status: 'owned', note }, key())).value,
+    );
   }
   tick();
-  const hidden = (await commands.createCopy(other, { subjectId: edition, status: 'owned', note: 'Hidden' }, key()))
-    .value;
+  const hidden = (
+    await commands.createCopy(other, { subjectId: edition, kind: 'physical', status: 'owned', note: 'Hidden' }, key())
+  ).value;
   const seen: string[] = [];
   let cursor: string | null = null;
   let finished = false;
@@ -474,14 +497,23 @@ test("a subject filter lists only the account's copies of that subject in creati
   const unrelated = await subject('Other filtered copy edition');
 
   tick();
-  const first = (await commands.createCopy(owner, { subjectId: target, status: 'owned', note: 'First' }, key())).value;
+  const first = (
+    await commands.createCopy(owner, { subjectId: target, kind: 'physical', status: 'owned', note: 'First' }, key())
+  ).value;
   tick();
-  await commands.createCopy(owner, { subjectId: unrelated, status: 'owned', note: 'Unrelated' }, key());
+  await commands.createCopy(
+    owner,
+    { subjectId: unrelated, kind: 'physical', status: 'owned', note: 'Unrelated' },
+    key(),
+  );
   tick();
-  const second = (await commands.createCopy(owner, { subjectId: target, status: 'ordered', note: 'Second' }, key()))
-    .value;
+  const second = (
+    await commands.createCopy(owner, { subjectId: target, kind: 'physical', status: 'ordered', note: 'Second' }, key())
+  ).value;
   tick();
-  const otherAccount = (await commands.createCopy(other, { subjectId: target, status: 'owned' }, key())).value;
+  const otherAccount = (
+    await commands.createCopy(other, { subjectId: target, kind: 'physical', status: 'owned' }, key())
+  ).value;
 
   const firstPage = await commands.listCopies(owner, { subjectId: target, limit: 1 });
   expect(firstPage.copies.map((copy) => copy.id)).toEqual([first.id]);
@@ -512,7 +544,11 @@ test('events are closed, ID-only, and use the account as their subject in its pa
   expect(Value.Check(updated, { subjectId: edition })).toBe(false);
 
   tick();
-  const created = await commands.createCopy(owner, { subjectId: edition, status: 'disposed', note: 'Secret' }, key());
+  const created = await commands.createCopy(
+    owner,
+    { subjectId: edition, kind: 'physical', status: 'disposed', note: 'Secret' },
+    key(),
+  );
   tick();
   await commands.updateCopy(owner, created.value.id, { revision: 1, disposedOn: '2030-02-02' }, key());
   await commands.deleteCopy(owner, created.value.id, 2, key());
@@ -545,8 +581,9 @@ test('events are closed, ID-only, and use the account as their subject in its pa
 
 test('statement counts stay equal at three scales of unrelated copies', async () => {
   tick();
-  const stable = (await commands.createCopy(owner, { subjectId: edition, status: 'owned', note: 'Stable' }, key()))
-    .value;
+  const stable = (
+    await commands.createCopy(owner, { subjectId: edition, kind: 'physical', status: 'owned', note: 'Stable' }, key())
+  ).value;
   const scales = [1, 8, 64] as const;
   const createSamples: GrowthSample[] = [];
   const updateSamples: GrowthSample[] = [];
@@ -570,7 +607,7 @@ test('statement counts stay equal at three scales of unrelated copies', async ()
       ],
     );
     const created = await measure(database, () =>
-      commands.createCopy(owner, { subjectId: edition, status: 'ordered' }, key()),
+      commands.createCopy(owner, { subjectId: edition, kind: 'physical', status: 'ordered' }, key()),
     );
     const updated = await measure(database, () =>
       commands.updateCopy(owner, stable.id, { revision, note: `Scale ${scale}` }, key()),
@@ -613,7 +650,8 @@ test('statement counts stay equal at three scales of unrelated copies', async ()
 
 test('subject-filtered copy page keeps statement counts equal at three scales of unrelated copies', async () => {
   const target = await subject('Copy page growth target');
-  const stable = (await commands.createCopy(owner, { subjectId: target, status: 'owned' }, key())).value;
+  const stable = (await commands.createCopy(owner, { subjectId: target, kind: 'physical', status: 'owned' }, key()))
+    .value;
   const scales = [1, 8, 64] as const;
   const samples: GrowthSample[] = [];
   let previous = 0;

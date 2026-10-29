@@ -1,26 +1,42 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, type CommandTransaction } from '../command/command.ts';
+import { authoritativeTimeValue, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute, sameAccountRoute } from './command-support.ts';
+import {
+  createLibraryCommandRunner,
+  LibraryNotFoundError,
+  requireRoute,
+  sameAccountRoute,
+  WORK_STEP_DEADLINE_MS,
+} from './command-support.ts';
 import type { Copy, CopyChanges, CopyStatus } from './entry-model.ts';
 import * as store from './entry-store.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { hasCopyStatus } from './profile.ts';
+import { readLibraryProfileSource } from './profile-source.ts';
 
 const UPDATED_EVENT = 'com.rezics.library.copy.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.copy.deleted.v1';
-const CREATE_FIELDS = ['subjectId', 'status', 'location', 'source', 'acquiredOn', 'disposedOn', 'note'] as const;
+const CREATE_FIELDS = [
+  'subjectId',
+  'kind',
+  'status',
+  'location',
+  'source',
+  'acquiredOn',
+  'disposedOn',
+  'note',
+] as const;
 const UPDATE_FIELDS = ['revision', 'status', 'location', 'source', 'acquiredOn', 'disposedOn', 'note'] as const;
 const TEXT_LIMITS = { location: 200, source: 200, note: 1000 } as const;
-const STATUSES = new Set<CopyStatus>(['ordered', 'owned', 'lent', 'disposed']);
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
@@ -29,7 +45,8 @@ type TextField = keyof typeof TEXT_LIMITS;
 type DateField = 'acquiredOn' | 'disposedOn';
 type CopyInput = {
   subjectId: string;
-  status: CopyStatus;
+  kind?: string;
+  status?: CopyStatus;
   location: string | null;
   source: string | null;
   acquiredOn: string | null;
@@ -97,9 +114,9 @@ function subjectId(value: unknown): string {
   return value;
 }
 
-function statusValue(value: unknown): CopyStatus {
-  if (typeof value !== 'string' || !STATUSES.has(value as CopyStatus)) throw new CopyInvalidError('status');
-  return value as CopyStatus;
+function vocabularyValue(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !/^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/.test(value)) throw new CopyInvalidError(field);
+  return value;
 }
 
 function textValue(value: unknown, field: TextField): string | null {
@@ -125,10 +142,10 @@ function parseCreate(input: unknown): CopyInput {
   const value = plain(input);
   const foreign = unexpected(value, CREATE_FIELDS);
   if (foreign !== null) throw new CopyInvalidError(foreign);
-  const status = statusValue(value.status);
   return {
     subjectId: subjectId(value.subjectId),
-    status,
+    ...(Object.hasOwn(value, 'kind') ? { kind: vocabularyValue(value.kind, 'kind') } : {}),
+    ...(Object.hasOwn(value, 'status') ? { status: vocabularyValue(value.status, 'status') } : {}),
     location: textValue(Object.hasOwn(value, 'location') ? value.location : null, 'location'),
     source: textValue(Object.hasOwn(value, 'source') ? value.source : null, 'source'),
     acquiredOn: dateValue(Object.hasOwn(value, 'acquiredOn') ? value.acquiredOn : null, 'acquiredOn'),
@@ -142,7 +159,7 @@ function parseUpdate(input: unknown): CopyPatch {
   const foreign = unexpected(value, UPDATE_FIELDS);
   if (foreign !== null) throw new CopyInvalidError(foreign);
   const patch: CopyPatch = { revision: revisionValue(value.revision) };
-  if (Object.hasOwn(value, 'status')) patch.status = statusValue(value.status);
+  if (Object.hasOwn(value, 'status')) patch.status = vocabularyValue(value.status, 'status');
   if (Object.hasOwn(value, 'location')) patch.location = textValue(value.location, 'location');
   if (Object.hasOwn(value, 'source')) patch.source = textValue(value.source, 'source');
   if (Object.hasOwn(value, 'acquiredOn')) patch.acquiredOn = dateValue(value.acquiredOn, 'acquiredOn');
@@ -226,22 +243,53 @@ export function createCopyCommands(config: Dependencies) {
     });
   }
 
+  async function prepareSource(owner: AccountActor, subjectId: string, at: AuthoritativeTime) {
+    try {
+      return {
+        source: await readLibraryProfileSource(
+          { pool, access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+          subjectId,
+        ),
+      };
+    } catch (error) {
+      if (error instanceof ProblemError && error.code === 'semantic_not_ready') return { error };
+      throw error;
+    }
+  }
+
   async function createCopy(actor: Actor, input: unknown, requestKey: string) {
     const owner = await gate(actor, 'copy:create');
     const parsed = parseCreate(input);
-    // The subject lives on its own anchor. The copy command then writes one point in the account partition.
-    const resolved = await resolveSubject({ pool, access }, owner, parsed.subjectId);
-    if (!resolved) throw new LibraryNotFoundError();
-    return runner.ownAccount(
+    return runner.ownAccountPrepared(
       owner,
-      { action: 'copy:create', kind: 'library.copy.create', requestKey, input: parsed },
-      async (tx, command) => {
+      {
+        action: 'copy:create',
+        kind: 'library.copy.create',
+        requestKey,
+        input: parsed,
+        prepare: (attempt) => prepareSource(owner, parsed.subjectId, attempt.time),
+      },
+      async (tx, command, prepared) => {
+        if (parsed.kind === undefined) throw new CopyInvalidError('kind');
+        if (parsed.status === undefined) throw new CopyInvalidError('status');
+        if ('error' in prepared) throw prepared.error;
+        const source = prepared.source;
+        if (!source) throw new LibraryNotFoundError();
+        if (source.kind !== 'supported' || !hasCopyStatus(source.profile, parsed.kind, parsed.status))
+          throw new ProblemError('unsupported_library_profile');
         const route = requireRoute(owner.accountId);
         const copy = await store.insertCopy(
           tx,
           route,
-          { ...parsed, subjectId: resolved.subjectId, id: newId(route), accountId: owner.accountId },
+          {
+            ...parsed,
+            status: parsed.status,
+            subjectId: source.subjectId,
+            id: newId(route),
+            accountId: owner.accountId,
+          },
           { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+          { kind: parsed.kind, pin: source.pin },
         );
         return { value: copy, events: [event(UPDATED_EVENT, owner.accountId, copy.id)] };
       },
@@ -252,16 +300,48 @@ export function createCopyCommands(config: Dependencies) {
     const owner = await gate(actor, 'copy:update');
     const patch = parseUpdate(input);
     const route = sameAccountRoute(owner.accountId, copyId);
-    return runner.ownAccount(
+    return runner.ownAccountPrepared(
       owner,
-      { action: 'copy:update', kind: 'library.copy.update', requestKey, input: { copyId, ...patch } },
-      async (tx, command) => {
+      {
+        action: 'copy:update',
+        kind: 'library.copy.update',
+        requestKey,
+        input: { copyId, ...patch },
+        async prepare(attempt) {
+          // Release the owner's read checkout before visiting source and Global anchors.
+          const current = await readOnly(owner, (client) => store.readCopy(client, route, copyId));
+          return current?.accountId === owner.accountId
+            ? prepareSource(owner, current.subjectId, attempt.time)
+            : { source: null };
+        },
+      },
+      async (tx, command, prepared) => {
         const current = await lockOwned(tx, route, owner.accountId, copyId);
         if (current.revision !== patch.revision) throw new CopyConflictError();
-        const copy = await store.updateCopy(tx, route, copyId, patch.revision, merged(current, patch), {
-          transactionId: command.transactionId,
-          time: authoritativeTimeValue(command.time),
-        });
+        const fact = await store.readCopyFact(tx, route, copyId);
+        if (!fact || fact.copy.accountId !== owner.accountId) throw new LibraryNotFoundError();
+        const changes = merged(fact.copy, patch);
+        if ('error' in prepared) throw prepared.error;
+        const source = prepared.source;
+        if (!source || source.subjectId !== fact.copy.subjectId) throw new LibraryNotFoundError();
+        if (
+          source.kind !== 'supported' ||
+          fact.kind === null ||
+          !hasCopyStatus(source.profile, fact.kind, changes.status)
+        )
+          throw new ProblemError('unsupported_library_profile');
+        const copy = await store.updateCopy(
+          tx,
+          route,
+          copyId,
+          patch.revision,
+          changes,
+          {
+            transactionId: command.transactionId,
+            time: authoritativeTimeValue(command.time),
+          },
+          { kind: fact.kind, pin: source.pin },
+        );
         if (!copy) throw new CopyConflictError();
         return { value: copy, events: [event(UPDATED_EVENT, owner.accountId, copy.id)] };
       },

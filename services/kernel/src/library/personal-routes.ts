@@ -74,6 +74,7 @@ const copySchema = t.Object(
   {
     id,
     subjectId: id,
+    kind: t.Optional(t.Union([libraryStoredVocabularySchema, t.Null()])),
     status: libraryStoredVocabularySchema,
     revision,
     location: nullable,
@@ -181,8 +182,19 @@ function shelfEntryView(entry: ShelfEntry) {
           },
   };
 }
-function copyView({ id, subjectId, status, revision, location, source, acquiredOn, disposedOn, note }: Copy) {
-  return { id, subjectId, status, revision, location, source, acquiredOn, disposedOn, note };
+function copyView({ id, subjectId, kind, status, revision, location, source, acquiredOn, disposedOn, note }: Copy) {
+  return {
+    id,
+    subjectId,
+    ...(kind === undefined ? {} : { kind }),
+    status,
+    revision,
+    location,
+    source,
+    acquiredOn,
+    disposedOn,
+    note,
+  };
 }
 function followView({ targetId, targetType, state, reason, updatedAt }: Follow) {
   return { targetId, targetType, state, reason, updatedAt };
@@ -357,7 +369,25 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/copies',
       {
         headers,
-        body: t.Object({ ...copyFields, subjectId: id, status: statusInput }, closed),
+        body: t.Object(
+          {
+            ...copyFields,
+            subjectId: id,
+            kind: t.Optional(
+              t.String({
+                ...libraryVocabularyIdSchema,
+                description: 'Declared kind required for a fresh create; optional only for replay of an old receipt.',
+              }),
+            ),
+            status: t.Optional(
+              t.String({
+                ...statusInput,
+                description: 'Declared status required for a fresh create; optional only for replay of an old receipt.',
+              }),
+            ),
+          },
+          closed,
+        ),
         response: { 201: copyResponse, ...failures },
         detail: detail('copy.create', 'copy:create', true),
       },

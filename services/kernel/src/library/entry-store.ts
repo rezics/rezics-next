@@ -35,7 +35,7 @@ type EntryResult = Omit<NonNullable<Awaited<ReturnType<typeof entryRead.run>>>, 
 type CopyResult = Omit<
   NonNullable<Awaited<ReturnType<typeof copyRead.run>>>,
   'status' | 'kind' | 'libraryProfilePin'
-> & { status: string };
+> & { status: string; kind?: string | null };
 type CopyAcceptance = Readonly<{ pin: LibraryProfilePin; kind: string }>;
 
 const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
@@ -68,6 +68,7 @@ function asCopy(row: CopyResult): Copy {
     id: row.id,
     accountId: row.accountId,
     subjectId: row.subjectId,
+    ...(row.kind === undefined ? {} : { kind: row.kind }),
     status: row.status,
     location: row.location,
     source: row.source,
