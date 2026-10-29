@@ -52,6 +52,8 @@ export type RemoteCheck = {
   /** Allows the promotion gate to use all but one slot of its host. */
   gate?: boolean;
   pollMs?: number;
+  /** Test seam for retry backoff; defaults to 100 ms. */
+  retryBackoffMs?: number;
   /** Called for each probe round that finds at least one responding host. */
   answered?: () => void;
   /** Called with the host's name once its slot is held and the command is about to start. */
@@ -605,9 +607,13 @@ export function runScript(id: string, directory: string, cwd: string, command: s
       aarch64) build=aarch64 ;;
       *) echo "remote-check: unsupported check-host architecture $(uname -m)" >&2; exit 1 ;;
     esac
-    mkdir -p .temp/pinned-bun
-    curl -fsSL "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C .temp/pinned-bun
-    bun="$PWD/.temp/pinned-bun/package/bin/bun"
+    if [ -n "${REMOTE_CHECK_PINNED_BUN_PATH:-}" ]; then
+      bun="$REMOTE_CHECK_PINNED_BUN_PATH"
+    else
+      mkdir -p .temp/pinned-bun
+      curl -fsSL "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C .temp/pinned-bun
+      bun="$PWD/.temp/pinned-bun/package/bin/bun"
+    fi
     if ! "$bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
       echo "remote-check: downloaded Bun does not match packageManager $expected_bun" >&2
       exit 1
@@ -1699,7 +1705,7 @@ async function runWithTransportRetries(
   let lastFailure: RemoteTransportError | undefined;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (attempt > 0) {
-      const delay = 100 * 2 ** (attempt - 1);
+      const delay = (options.retryBackoffMs ?? 100) * 2 ** (attempt - 1);
       console.error(`remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`);
       await sleep(delay, signal);
     }
@@ -1772,7 +1778,7 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (attempt > 0) {
       console.error(`remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`);
-      await sleep(100 * 2 ** (attempt - 1), signal);
+      await sleep((options.retryBackoffMs ?? 100) * 2 ** (attempt - 1), signal);
     }
     const preferred = hosts.filter((host) => !failedHosts.has(host.name));
     const lease = await acquireOnce(
@@ -1853,6 +1859,10 @@ function parse(argv: string[]): RemoteCheck {
   }
   if (!existsSync(workspace)) throw new Error(`Workspace does not exist: ${workspace}`);
   const pollMs = process.env.REMOTE_CHECK_POLL_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_POLL_MS);
+  const retryBackoffMs =
+    process.env.REMOTE_CHECK_RETRY_BACKOFF_MS === undefined
+      ? undefined
+      : Number(process.env.REMOTE_CHECK_RETRY_BACKOFF_MS);
   return {
     hosts: readHosts(hostsFile),
     workspace,
@@ -1864,6 +1874,7 @@ function parse(argv: string[]): RemoteCheck {
     ...(gate ? { gate } : {}),
     ...(returns === undefined ? {} : { returns }),
     ...(pollMs === undefined ? {} : { pollMs }),
+    ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),
   };
 }
 

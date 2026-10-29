@@ -841,10 +841,12 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   expect(script).toContain('systemd-run --scope');
   expect(script).toMatch(/--slice=rezics-check-[a-z0-9_]+\.slice/);
   expect(script).toContain('KERNEL_CHECK_ON_REMOTE=1');
-  expect(script).toContain('bun install --frozen-lockfile');
+  expect(script).toContain('"$bun" install --frozen-lockfile');
   expect(script).toContain(`bun scripts/check.ts ${kernelFiles.join(' ')}`);
   expect(script).toContain('services/kernel');
-  expect(script.indexOf('bun install --frozen-lockfile')).toBeLessThan(script.indexOf('scripts/check.ts'));
+  expect(script.indexOf('"$bun" install --frozen-lockfile')).toBeLessThan(script.indexOf('scripts/check.ts'));
+  expect(script.indexOf('curl -fsSL')).toBeLessThan(script.indexOf('Bun.revision'));
+  expect(script.indexOf('Bun.revision')).toBeLessThan(script.indexOf('"$bun" install --frozen-lockfile'));
   // The slot is released and the run directory removed.
   const kinds = seen.filter((event) => event.address === 'ops@b.test').map((event) => event.kind);
   expect(kinds.slice(-2)).toEqual(['cleanup', 'release']);
@@ -1254,6 +1256,8 @@ test('rsync connection errors retry on another host before the command runs', as
       a: { available: 8e9, rsyncFailures: 1, rsyncFailureCode: exit },
       b: { available: 8e9 },
     });
+    env.REMOTE_CHECK_POLL_MS = '1';
+    env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
     const result = await remote(env, workspace(), ['true']);
 
     expect(result.code).toBe(0);
@@ -1320,7 +1324,7 @@ test("a run whose upload finds no base on the host uploads the whole workspace a
   expect(args).not.toContain('--checksum');
   expect(args.some((argument) => argument.startsWith('--copy-dest='))).toBe(false);
   expect((upload.files as string[]).sort()).toEqual(expected);
-  expect(seen.find((event) => event.kind === 'run')!.script).toContain('bun install --frozen-lockfile');
+  expect(seen.find((event) => event.kind === 'run')!.script).toContain('"$bun" install --frozen-lockfile');
   expect(seen.find((event) => event.kind === 'run')!.script).toContain('REMOTE_CHECK_BASE_REFRESH');
 });
 
@@ -1381,6 +1385,8 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
       a: { available: 8e9, rsyncFailures: 1, rsyncFailureCode: code },
       b: { available: 8e9 },
     });
+    env.REMOTE_CHECK_POLL_MS = '1';
+    env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
     const result = await remote(env, workspace(), ['true']);
     expect(result.code).toBe(0);
     expect(
@@ -1400,6 +1406,8 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
     a: { available: 8e9, preCommandFailures: 1 },
     b: { available: 8e9 },
   });
+  ssh.env.REMOTE_CHECK_POLL_MS = '1';
+  ssh.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
   const result = await remote(ssh.env, workspace(), ['true']);
   expect(result.code).toBe(0);
   expect(result.stderr).toContain('retrying transport failure on a with code 255');
@@ -1411,6 +1419,8 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
   ).toEqual(['ops@b.test']);
 
   const exhausted = scenario({ a: { available: 8e9, rsyncFailures: 5, rsyncFailureCode: 30 } });
+  exhausted.env.REMOTE_CHECK_POLL_MS = '1';
+  exhausted.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
   const failed = await remote(exhausted.env, workspace(), ['true']);
   expect(failed.code).toBe(75);
   expect(exhausted.events().filter((event) => event.kind === 'rsync')).toHaveLength(3);
@@ -2238,6 +2248,7 @@ test('a gate wait is bounded by its original slot holders with 1, 10 and 100 que
     const { env, events } = scenario({
       b: { available: 20e9, slots: 4, runDurationMs: durationMs },
     });
+    env.REMOTE_CHECK_POLL_MS = '1';
     const workspaceDirectory = workspace();
     const holders = Array.from({ length: 2 }, () => startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder']));
     let gate: ReturnType<typeof startRemote> | undefined;
@@ -2308,6 +2319,7 @@ test('a multi-slot wait is bounded by its original slot holders with 1, 10 and 1
     const { env, events } = scenario({
       b: { available: 20e9, slots: 4, runDurationMs: durationMs },
     });
+    env.REMOTE_CHECK_POLL_MS = '1';
     const workspaceDirectory = workspace();
     const holders = Array.from({ length: 2 }, () => startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder']));
     let multi: ReturnType<typeof startRemote> | undefined;
@@ -2338,7 +2350,7 @@ test('a multi-slot wait is bounded by its original slot holders with 1, 10 and 1
       for (let index = 0; index < queueLength; index += 1) {
         const queueEnv = {
           ...env,
-          REMOTE_CHECK_POLL_MS: '100',
+          REMOTE_CHECK_POLL_MS: '1',
           GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, `multi-queued-${index}-wait-ms`),
         };
         queued.push(startRemote(queueEnv, workspaceDirectory, ['sh', '-c', 'echo queued']));
@@ -2531,7 +2543,13 @@ writeFileSync(stateFile, JSON.stringify(state));
         ],
         {
           cwd: repository,
-          env: { ...process.env, ...env, PATH: `${bin}:${process.env.PATH}`, RUN_FIXTURE: directory },
+          env: {
+            ...process.env,
+            ...env,
+            REMOTE_CHECK_PINNED_BUN_PATH: join(bin, 'bun'),
+            PATH: `${bin}:${process.env.PATH}`,
+            RUN_FIXTURE: directory,
+          },
           input: '',
           encoding: 'utf8',
           timeout: 10_000,
@@ -2551,7 +2569,7 @@ async function generatedRun() {
 
 test('the run checks installed packages after the command and before recording its exit status', async () => {
   const { run } = await generatedRun();
-  const install = run.indexOf('bun install --frozen-lockfile');
+  const install = run.indexOf('"$bun" install --frozen-lockfile');
   const marker = run.indexOf('.bun-install-complete');
   const command = run.indexOf('\n        "$@"');
   const packageCheck = run.indexOf('modified_files=$(find');
@@ -2568,6 +2586,10 @@ test('each run and every container it starts share one run slice', async () => {
   const fixture = runFixture();
   const result = fixture.execute(scripts.run);
   expect(result.status, result.stderr).toBe(7);
+  const bunInvocations = fixture.events().filter((event) => event.command === 'bun').map((event) => event.args);
+  expect(bunInvocations).toHaveLength(2);
+  expect(bunInvocations[0]).toEqual(['--eval', expect.any(String), expect.any(String)]);
+  expect(bunInvocations[1]).toEqual(['install', '--frozen-lockfile']);
   const scope = fixture.events().find((event) => event.command === 'systemd-run');
   expect(scope.run).toMatch(/^[a-z0-9-]+$/);
   expect(scope.slice).toBe(`rezics-check-${scope.run.replaceAll('-', '_')}.slice`);
