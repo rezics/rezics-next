@@ -1373,8 +1373,15 @@ export class MergeTrain {
         const batchChecks = [
           ...integrationChecks,
           ...(batchSibling ? [{ paths: [], command: batchSibling }] : []),
-        ].filter((check, index, checks) => checks.findIndex((candidate) => JSON.stringify(candidate.command) === JSON.stringify(check.command)) === index);
-        if (batchAffectedChecks.length && !batchChecks.some((check) => check.command[0] === 'bun' && check.command[1] === 'install'))
+        ].filter(
+          (check, index, checks) =>
+            checks.findIndex((candidate) => JSON.stringify(candidate.command) === JSON.stringify(check.command)) ===
+            index,
+        );
+        if (
+          batchAffectedChecks.length &&
+          !batchChecks.some((check) => check.command[0] === 'bun' && check.command[1] === 'install')
+        )
           batchChecks.unshift({ paths: [], command: ['bun', 'install', '--frozen-lockfile'] });
         let failedBatch:
           | { kind: 'acceptance' | 'integration'; output: string; timedOut: boolean; failedCommand?: readonly string[] }
@@ -1555,7 +1562,10 @@ export class MergeTrain {
           );
           for (const checked of results) {
             if (checked.status === 'unverified') {
-              appendFileSync(batchLog, `Batch affected check unverified (landing allowed): ${checked.command.join(' ')}\n`);
+              appendFileSync(
+                batchLog,
+                `Batch affected check unverified (landing allowed): ${checked.command.join(' ')}\n`,
+              );
               continue;
             }
             if (checked.status === 'failed') {

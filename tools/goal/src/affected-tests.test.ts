@@ -37,7 +37,9 @@ test('workers defer configured affected checks until landing', async () => {
     h.ensureDev();
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const { argv } = failureCheck(h, 'absent', 'unused');
-    h.settings.affectedTests = [{ paths: ['**'], command: command(`require('node:fs').appendFileSync(${JSON.stringify(runs)}, 'run\\n')`) }];
+    h.settings.affectedTests = [
+      { paths: ['**'], command: command(`require('node:fs').appendFileSync(${JSON.stringify(runs)}, 'run\\n')`) },
+    ];
     const task = h.dispatch('feature');
     await h.start(task);
     expect(lines(runs)).toHaveLength(0);

@@ -10,10 +10,12 @@ const setChecks = (h: ReturnType<typeof integrationHarness>, checks: Integration
 };
 
 test('default affected checks keep only the kernel entry', () => {
-  expect(defaults.affectedTests).toEqual([{
-    paths: ['services/kernel/**'],
-    command: ['env', 'KERNEL_CHECK_AFFECTED_MAX=60', 'bun', 'run', '--cwd', 'services/kernel', 'check'],
-  }]);
+  expect(defaults.affectedTests).toEqual([
+    {
+      paths: ['services/kernel/**'],
+      command: ['env', 'KERNEL_CHECK_AFFECTED_MAX=60', 'bun', 'run', '--cwd', 'services/kernel', 'check'],
+    },
+  ]);
 });
 
 test('a batch runs a matching affected check once for the union of member paths', async () => {
@@ -22,10 +24,12 @@ test('a batch runs a matching affected check once for the union of member paths'
     h.ensureDev();
     h.settings.integration.batchSize = 2;
     const runs = join(h.settings.stateDirectory, 'affected-batch-runs');
-    h.settings.affectedTests = [{
-      paths: ['packages/ui/**'],
-      command: ['sh', '-c', `printf '%s\\n' "$PWD" >> '${runs}'`],
-    }];
+    h.settings.affectedTests = [
+      {
+        paths: ['packages/ui/**'],
+        command: ['sh', '-c', `printf '%s\\n' "$PWD" >> '${runs}'`],
+      },
+    ];
     setChecks(h, []);
     const first = h.dispatch('packages/ui/one.ts');
     const second = h.dispatch('packages/ui/two.ts');
@@ -69,13 +73,16 @@ test('a failed batch affected check lands no combined candidate and passing memb
     h.ensureDev();
     h.settings.integration.batchSize = 2;
     const runs = join(h.settings.stateDirectory, 'affected-batch-failure-runs');
-    h.settings.affectedTests = [{
-      paths: ['packages/ui/**'],
-      command: [
-        'sh', '-c',
-        `count=$(($(wc -l < '${runs}' 2>/dev/null || printf 0) + 1)); printf '%s\\n' "$count" >> '${runs}'; test "$count" -ne 1`,
-      ],
-    }];
+    h.settings.affectedTests = [
+      {
+        paths: ['packages/ui/**'],
+        command: [
+          'sh',
+          '-c',
+          `count=$(($(wc -l < '${runs}' 2>/dev/null || printf 0) + 1)); printf '%s\\n' "$count" >> '${runs}'; test "$count" -ne 1`,
+        ],
+      },
+    ];
     setChecks(h, []);
     const first = h.dispatch('packages/ui/one.ts');
     const second = h.dispatch('packages/ui/two.ts');

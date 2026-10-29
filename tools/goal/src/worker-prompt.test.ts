@@ -90,7 +90,9 @@ test('the worker prompt forbids touching resources the attempt did not start', (
   expect(prompt).toContain('Check slots are the scarce shared resource');
   expect(prompt).toContain('run your acceptance command once after your last relevant edit');
   expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
-  expect(prompt).toContain('The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests');
+  expect(prompt).toContain(
+    'The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests',
+  );
   expect(prompt).toContain('a regression found there comes back as a retry with the failing log');
   expect(prompt).not.toMatch(/plus the root typecheck|run the tests that cover every file/i);
 });
