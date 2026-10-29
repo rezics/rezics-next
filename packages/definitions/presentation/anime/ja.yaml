@@ -1,9 +1,12 @@
 types:
+  rezics:AnimeRelease: 'アニメ刊行版'
   schema:Episode: エピソード
   schema:Movie: 映画
   schema:TVSeason: シーズン
   schema:TVSeries: 'TVアニメ'
 properties:
+  bf:hasPart: '収録作品'
+  marcrel:fds: '映画配給者'
   schema:copyrightNotice: 著作権表示
   schema:duration: 再生時間
   schema:endDate: 終了日
@@ -14,9 +17,12 @@ properties:
   wdt:P449: 放送当初のネットワーク
   wdt:P973: 詳細情報URL
 inverseProperties:
+  bf:hasPart: 'この作品を収録する刊行版'
+  marcrel:fds: '配給した刊行版'
   schema:isPartOf: 'エピソード'
   wdt:P449: '初回放送作品'
 typeDescriptions:
+  rezics:AnimeRelease: '作品自体とは別に識別される、アニメの刊行版または頒布版。'
   schema:TVSeries: 'テレビ番組シリーズ'
 libraryProfiles:
   anime.series:

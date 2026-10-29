@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { Statement, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   createReleasedDiscoveryFixture,
   discoveryKey,
@@ -99,7 +100,47 @@ test('release platform language qualifiers belong to one actual statement and ne
   );
   expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
   const switchFact = await fixture.adopt(release, japanese);
-  const pcFact = await fixture.adopt(release, english);
+  // Classification values share one property slot; the next CAS selects both associated statements.
+  const pcProposed = await fixture.request(
+    'editor',
+    'POST',
+    `/v1/subjects/${release.id}/candidates`,
+    { statement: english },
+    discoveryKey(),
+  );
+  expect(pcProposed.status, JSON.stringify(pcProposed.body)).toBe(201);
+  const pcCandidate = pcProposed.body.candidate as string;
+  const pcAccepted = await fixture.request(
+    'acceptor',
+    'POST',
+    `/v1/subjects/${release.id}/candidates/${pcCandidate}:accept`,
+    { context: GLOBAL_CONTEXT, expected_head: null },
+    discoveryKey(),
+  );
+  expect(pcAccepted.status, JSON.stringify(pcAccepted.body)).toBe(200);
+  const pcAdopted = await fixture.request(
+    'acceptor',
+    'POST',
+    `/v1/subjects/${release.id}:adopt`,
+    {
+      context: GLOBAL_CONTEXT,
+      property: 'schema:gamePlatform',
+      mode: 'replace',
+      selection: [
+        { candidate: switchFact.candidate, rank: japanese.rank ?? 'normal' },
+        { candidate: pcCandidate, rank: english.rank ?? 'normal' },
+      ],
+      expected_head: switchFact.adoptionHead,
+    },
+    discoveryKey(),
+  );
+  expect(pcAdopted.status, JSON.stringify(pcAdopted.body)).toBe(200);
+  const pcFact = {
+    candidate: pcCandidate,
+    release: release.release,
+    acceptanceHead: (pcAccepted.body.acceptance as { head: number }).head,
+    adoptionHead: (pcAdopted.body.adoption as { head: number }).head,
+  };
   await fixture.adopt(otherRelease, english);
   await fixture.catchUp([work, release, otherRelease]);
   const facts = selected(await read(release));
@@ -203,7 +244,7 @@ test('compact and expanded selected platform support preserve unknown and source
     expect(matches(selected(await read(holder)), platforms.switch, 'en')).toBe(false);
 
   const before = await read(expanded);
-  // A candidate from another actual release cannot populate this target's slot.
+  // A candidate from another actual release cannot populate this holder's property slot.
   const foreign = await fixture.request(
     'acceptor',
     'POST',
@@ -211,7 +252,6 @@ test('compact and expanded selected platform support preserve unknown and source
     {
       context: before.context,
       property: 'schema:gamePlatform',
-      target: platforms.switch.id,
       mode: 'replace',
       selection: [{ candidate: a.id, rank: 'preferred' }],
       expected_head: receipt.adoptionHead,
@@ -227,7 +267,6 @@ test('compact and expanded selected platform support preserve unknown and source
     {
       context: before.context,
       property: 'schema:gamePlatform',
-      target: platforms.switch.id,
       mode: 'replace',
       selection: [],
       expected_head: null,
@@ -247,7 +286,7 @@ test('compact and expanded selected platform support preserve unknown and source
   expect(invalid.status, JSON.stringify(invalid.body)).toBe(400);
   expect(await read(expanded)).toEqual(before);
 
-  await fixture.grant('steward', ['moderation:hide'], before.context);
+  await fixture.grant('steward', ['moderation:hide', 'moderation:takedown'], before.context);
   const hidden = await fixture.request(
     'steward',
     'POST',

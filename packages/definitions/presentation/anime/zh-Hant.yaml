@@ -1,9 +1,12 @@
 types:
+  rezics:AnimeRelease: '動畫發行版'
   schema:Episode: 集
   schema:Movie: 電影
   schema:TVSeason: '季'
   schema:TVSeries: 'TV 動畫'
 properties:
+  bf:hasPart: '收錄作品'
+  marcrel:fds: '影片發行方'
   schema:copyrightNotice: 版權聲明
   schema:duration: 片長
   schema:endDate: 結束日期
@@ -14,9 +17,12 @@ properties:
   wdt:P449: 首播平台
   wdt:P973: 詳細描述網址
 inverseProperties:
+  bf:hasPart: '收錄此作品的發行版'
+  marcrel:fds: '發行的影片版本'
   schema:isPartOf: '集數'
   wdt:P449: '首播作品'
 typeDescriptions:
+  rezics:AnimeRelease: '具有獨立識別身分的動畫出版或發行版本，與作品本身分開。'
   schema:TVSeason: '編播季'
   schema:TVSeries: '電視系列節目'
 libraryProfiles:

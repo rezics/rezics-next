@@ -61,3 +61,17 @@ before-2000:
           property: schema:datePublished
           range:
             lte: 1999
+releases:
+  labels:
+    en: 'Anime releases'
+    de: 'Anime-Veröffentlichungen'
+    es: 'Ediciones de anime'
+    fr: 'Éditions d’anime'
+    ja: 'アニメ刊行版'
+    ko: '애니메이션 발행판'
+    zh-Hans: '动画发行版'
+    zh-Hant: '動畫發行版'
+  filter:
+    type:
+      in:
+        - rezics:AnimeRelease

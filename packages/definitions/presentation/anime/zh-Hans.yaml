@@ -1,9 +1,12 @@
 types:
+  rezics:AnimeRelease: '动画发行版'
   schema:Episode: 集
   schema:Movie: 电影
   schema:TVSeason: '季'
   schema:TVSeries: 'TV 动画'
 properties:
+  bf:hasPart: '收录作品'
+  marcrel:fds: '影片发行方'
   schema:copyrightNotice: 版权声明
   schema:duration: 时长
   schema:endDate: 结束日期
@@ -14,9 +17,12 @@ properties:
   wdt:P449: 首播平台
   wdt:P973: 详情描述网址
 inverseProperties:
+  bf:hasPart: '收录此作品的发行版'
+  marcrel:fds: '发行的影片版本'
   schema:isPartOf: '集数'
   wdt:P449: '首播作品'
 typeDescriptions:
+  rezics:AnimeRelease: '独立标识的动画出版或发行版本，与作品本身分开。'
   schema:TVSeason: '编播季'
   schema:TVSeries: '电视系列节目'
 libraryProfiles:

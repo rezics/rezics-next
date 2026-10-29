@@ -137,7 +137,7 @@ test('anime release is a distinct publicly readable catalogue subject with work 
     datatype: 'wikibase-item',
     multivalued: true,
     targets: ['schema:Organization', 'schema:Person'],
-    qualifiers: ['schema:position', 'wdt:P1932', 'wdt:P3831'],
+    qualifiers: ['schema:position', 'wdt:P1932', 'wdt:P3831', 'wdt:P518'],
     relation: { group: 'credit', inverse: 'rezics:filmDistributionOf', order: 'position' },
   });
   for (const property of ['bf:hasPart', 'marcrel:fds']) {

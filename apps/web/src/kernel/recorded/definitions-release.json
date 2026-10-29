@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702",
+  "digest": "sha256:0bd5f18476a913d662af6eb0305a877020322e061d255f34e988e857c5cc7028",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -335,9 +335,7 @@
           "wdt:P179",
           "schema:datePublished",
           "schema:contributor",
-          "schema:inLanguage",
-          "schema:wordCount",
-          "wdt:P7937"
+          "schema:inLanguage"
         ],
         "labels": {
           "de": "Buch",
@@ -380,13 +378,11 @@
           "schema:name",
           "schema:sameAs",
           "schema:url",
-          "schema:wordCount",
           "wdt:P155",
           "wdt:P179",
           "wdt:P361",
           "wdt:P5732",
-          "wdt:P648",
-          "wdt:P7937"
+          "wdt:P648"
         ],
         "descriptions": {
           "de": "Schrifttum",
@@ -714,14 +710,7 @@
       "schema:Recipe": {
         "iri": "http://schema.org/Recipe",
         "bases": ["schema:Thing"],
-        "facets": [
-          "schema:author",
-          "schema:keywords",
-          "schema:datePublished",
-          "schema:cookTime",
-          "schema:recipeYield",
-          "schema:suitableForDiet"
-        ],
+        "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"],
         "labels": {
           "de": "Kochrezept",
           "en": "recipe",
@@ -747,7 +736,6 @@
           "schema:recipeInstructions",
           "schema:recipeYield",
           "schema:sameAs",
-          "schema:suitableForDiet",
           "schema:url",
           "wdt:P186"
         ],
@@ -1300,6 +1288,97 @@
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "schemaOrgType": "https://schema.org/DefinedTermSet"
       },
+      "rezics:AnimeRelease": {
+        "iri": "https://rezics.com/vocab/AnimeRelease",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:exampleOfWork",
+          "bf:hasPart",
+          "marcrel:fds",
+          "schema:inLanguage",
+          "schema:datePublished",
+          "wdt:P437",
+          "schema:publisher",
+          "schema:translator",
+          "schema:author",
+          "schema:illustrator",
+          "schema:director",
+          "schema:musicBy",
+          "schema:producer",
+          "schema:productionCompany",
+          "wdt:P58",
+          "wdt:P725"
+        ],
+        "labels": {
+          "de": "Anime-Veröffentlichung",
+          "en": "anime release",
+          "es": "edición de anime",
+          "fr": "édition d’anime",
+          "ja": "アニメ刊行版",
+          "ko": "애니메이션 발행판",
+          "zh-Hans": "动画发行版",
+          "zh-Hant": "動畫發行版"
+        },
+        "mappings": [],
+        "coverRatio": "5:7",
+        "properties": [
+          "bf:hasPart",
+          "marcrel:fds",
+          "rezics:alternativeSetting",
+          "rezics:alternativeVersion",
+          "rezics:artbookCounterpart",
+          "rezics:bangumiLegacyVersion",
+          "rezics:bangumiRelatedTo",
+          "rezics:collaborationWith",
+          "rezics:crossMediaCounterpart",
+          "rezics:editionCounterpart",
+          "rezics:expansionCounterpart",
+          "rezics:sameCharacters",
+          "rezics:sameSetting",
+          "rezics:sideStoryOf",
+          "rezics:spinOffOf",
+          "rezics:storyArc",
+          "rezics:summaryOf",
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:author",
+          "schema:contributor",
+          "schema:copyrightNotice",
+          "schema:datePublished",
+          "schema:director",
+          "schema:exampleOfWork",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:producer",
+          "schema:productionCompany",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:translator",
+          "schema:url",
+          "wdt:P155",
+          "wdt:P179",
+          "wdt:P361",
+          "wdt:P437",
+          "wdt:P58",
+          "wdt:P725"
+        ],
+        "descriptions": {
+          "de": "Eine eigenständig identifizierte Veröffentlichung oder Vertriebsversion von Anime-Inhalten.",
+          "en": "An independently identified publication or distributed version of anime content.",
+          "es": "Una publicación o versión distribuida de contenido de anime con identidad propia.",
+          "fr": "Une publication ou version distribuée de contenu d’anime identifiée indépendamment.",
+          "ja": "作品自体とは別に識別される、アニメの刊行版または頒布版。",
+          "ko": "작품 자체와 별개로 식별되는 애니메이션의 발행판 또는 배급판.",
+          "zh-Hans": "独立标识的动画出版或发行版本，与作品本身分开。",
+          "zh-Hant": "具有獨立識別身分的動畫出版或發行版本，與作品本身分開。"
+        },
+        "schemaOrgType": "https://schema.org/CreativeWork"
+      },
       "schema:Organization": {
         "iri": "http://schema.org/Organization",
         "bases": ["schema:Thing"],
@@ -1599,6 +1678,19 @@
           "ko": "모든 만화 단행본",
           "zh-Hans": "所有漫画单行本",
           "zh-Hant": "全部漫畫單行本"
+        }
+      },
+      "anime/releases": {
+        "filter": { "type": { "in": ["rezics:AnimeRelease"] } },
+        "labels": {
+          "de": "Anime-Veröffentlichungen",
+          "en": "Anime releases",
+          "es": "Ediciones de anime",
+          "fr": "Éditions d’anime",
+          "ja": "アニメ刊行版",
+          "ko": "애니메이션 발행판",
+          "zh-Hans": "动画发行版",
+          "zh-Hant": "動畫發行版"
         }
       },
       "book/before-2000": {
@@ -1911,7 +2003,8 @@
       "foaf": "http://xmlns.com/foaf/0.1/",
       "skos": "http://www.w3.org/2004/02/skos/core#",
       "rezics": "https://rezics.com/vocab/",
-      "schema": "http://schema.org/"
+      "schema": "http://schema.org/",
+      "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
     "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.0" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.1" },
@@ -2776,6 +2869,41 @@
         "qualifiers": [],
         "multivalued": true
       },
+      "bf:hasPart": {
+        "iri": "http://id.loc.gov/ontologies/bibframe/hasPart",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "enthaltenes Werk",
+          "en": "included work",
+          "es": "obra incluida",
+          "fr": "œuvre incluse",
+          "ja": "収録作品",
+          "ko": "수록 작품",
+          "zh-Hans": "收录作品",
+          "zh-Hant": "收錄作品"
+        },
+        "targets": ["schema:Episode", "schema:Movie", "schema:TVSeason", "schema:TVSeries"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "relation": {
+          "group": "membership",
+          "order": "name",
+          "acyclic": true,
+          "inverse": "bf:partOf",
+          "inverseLabels": {
+            "de": "Veröffentlichungen mit diesem Werk",
+            "en": "Publications containing this work",
+            "es": "Publicaciones que incluyen esta obra",
+            "fr": "Publications contenant cette œuvre",
+            "ja": "この作品を収録する刊行版",
+            "ko": "이 작품을 수록한 발행판",
+            "zh-Hans": "收录此作品的发行版",
+            "zh-Hant": "收錄此作品的發行版"
+          }
+        },
+        "qualifiers": [],
+        "multivalued": true
+      },
       "foaf:focus": {
         "iri": "http://xmlns.com/foaf/0.1/focus",
         "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
@@ -2827,6 +2955,40 @@
         "mappings": ["wd:P856"],
         "qualifiers": [],
         "multivalued": false
+      },
+      "marcrel:fds": {
+        "iri": "http://id.loc.gov/vocabulary/relators/fds",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Filmverleih",
+          "en": "film distributor",
+          "es": "distribuidor cinematográfico",
+          "fr": "distributeur de films",
+          "ja": "映画配給者",
+          "ko": "영화 배급자",
+          "zh-Hans": "影片发行方",
+          "zh-Hant": "影片發行方"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "relation": {
+          "group": "credit",
+          "order": "position",
+          "inverse": "rezics:filmDistributionOf",
+          "inverseLabels": {
+            "de": "Filmveröffentlichungen",
+            "en": "Film distributions",
+            "es": "Distribuciones cinematográficas",
+            "fr": "Distributions de films",
+            "ja": "配給した刊行版",
+            "ko": "배급한 발행판",
+            "zh-Hans": "发行的影片版本",
+            "zh-Hant": "發行的影片版本"
+          }
+        },
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
       },
       "rezics:note": {
         "iri": "https://rezics.com/vocab/note",
@@ -3886,34 +4048,6 @@
         "qualifiers": [],
         "multivalued": false
       },
-      "schema:wordCount": {
-        "iri": "http://schema.org/wordCount",
-        "units": ["1"],
-        "value": {
-          "type": "object",
-          "required": ["amount", "unit"],
-          "properties": {
-            "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
-          },
-          "additionalProperties": false
-        },
-        "labels": {
-          "de": "Wortanzahl",
-          "en": "word count",
-          "es": "número de palabras",
-          "fr": "nombre de mots",
-          "ja": "単語数",
-          "ko": "단어 수",
-          "zh-Hans": "词数",
-          "zh-Hant": "詞數"
-        },
-        "minimum": 0,
-        "datatype": "quantity",
-        "mappings": ["wd:P6570"],
-        "qualifiers": [],
-        "multivalued": false
-      },
       "schema:inLanguage": {
         "iri": "http://schema.org/inLanguage",
         "value": {
@@ -4448,40 +4582,6 @@
         "mappings": ["wd:P1873"],
         "qualifiers": ["schema:minValue"],
         "multivalued": false
-      },
-      "schema:suitableForDiet": {
-        "iri": "http://schema.org/suitableForDiet",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-        "labels": {
-          "de": "geeignet für Ernährungsform",
-          "en": "suitable for diet",
-          "es": "apto para la dieta",
-          "fr": "convient au régime alimentaire",
-          "ja": "対応する食事法",
-          "ko": "적합한 식단",
-          "zh-Hans": "适用饮食",
-          "zh-Hant": "適用飲食"
-        },
-        "targets": ["skos:Concept"],
-        "datatype": "wikibase-item",
-        "mappings": [],
-        "relation": {
-          "group": "classification",
-          "order": "name",
-          "inverse": "rezics:recipeForDiet",
-          "inverseLabels": {
-            "de": "Rezepte für diese Ernährungsform",
-            "en": "Recipes for this diet",
-            "es": "Recetas para esta dieta",
-            "fr": "Recettes pour ce régime alimentaire",
-            "ja": "この食事法に対応するレシピ",
-            "ko": "이 식단에 적합한 레시피",
-            "zh-Hans": "适用此饮食的食谱",
-            "zh-Hant": "適用此飲食的食譜"
-          }
-        },
-        "qualifiers": [],
-        "multivalued": true
       },
       "rezics:bangumiRelatedTo": {
         "iri": "https://rezics.com/vocab/bangumiRelatedTo",

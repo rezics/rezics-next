@@ -1,9 +1,12 @@
 types:
+  rezics:AnimeRelease: 'édition d’anime'
   schema:Episode: épisode
   schema:Movie: film
   schema:TVSeason: 'saison'
   schema:TVSeries: série télévisée
 properties:
+  bf:hasPart: 'œuvre incluse'
+  marcrel:fds: 'distributeur de films'
   schema:copyrightNotice: mention de droit d’auteur
   schema:duration: durée
   schema:endDate: date de fin
@@ -14,9 +17,12 @@ properties:
   wdt:P449: diffuseur original
   wdt:P973: décrit à l’URL
 inverseProperties:
+  bf:hasPart: 'Publications contenant cette œuvre'
+  marcrel:fds: 'Distributions de films'
   schema:isPartOf: 'Épisodes'
   wdt:P449: 'Premières diffusions'
 typeDescriptions:
+  rezics:AnimeRelease: 'Une publication ou version distribuée de contenu d’anime identifiée indépendamment.'
   schema:TVSeason: 'saison de série télévisée'
 libraryProfiles:
   anime.series:

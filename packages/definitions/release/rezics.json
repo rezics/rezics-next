@@ -9,15 +9,107 @@
     "version": "0.17.1"
   },
   "prefixes": {
+    "rezics": "https://rezics.com/vocab/",
     "schema": "http://schema.org/",
     "bf": "http://id.loc.gov/ontologies/bibframe/",
     "wd": "http://www.wikidata.org/entity/",
     "skos": "http://www.w3.org/2004/02/skos/core#",
     "wdt": "http://www.wikidata.org/prop/direct/",
-    "foaf": "http://xmlns.com/foaf/0.1/",
-    "rezics": "https://rezics.com/vocab/"
+    "marcrel": "http://id.loc.gov/vocabulary/relators/",
+    "foaf": "http://xmlns.com/foaf/0.1/"
   },
   "types": {
+    "rezics:AnimeRelease": {
+      "iri": "https://rezics.com/vocab/AnimeRelease",
+      "labels": {
+        "de": "Anime-Veröffentlichung",
+        "en": "anime release",
+        "es": "edición de anime",
+        "fr": "édition d’anime",
+        "ja": "アニメ刊行版",
+        "ko": "애니메이션 발행판",
+        "zh-Hans": "动画发行版",
+        "zh-Hant": "動畫發行版"
+      },
+      "mappings": [],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
+      "properties": [
+        "bf:hasPart",
+        "marcrel:fds",
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:storyArc",
+        "rezics:summaryOf",
+        "schema:abstract",
+        "schema:alternateName",
+        "schema:author",
+        "schema:contributor",
+        "schema:copyrightNotice",
+        "schema:datePublished",
+        "schema:director",
+        "schema:exampleOfWork",
+        "schema:genre",
+        "schema:illustrator",
+        "schema:image",
+        "schema:inLanguage",
+        "schema:keywords",
+        "schema:musicBy",
+        "schema:name",
+        "schema:producer",
+        "schema:productionCompany",
+        "schema:publisher",
+        "schema:sameAs",
+        "schema:translator",
+        "schema:url",
+        "wdt:P155",
+        "wdt:P179",
+        "wdt:P361",
+        "wdt:P437",
+        "wdt:P58",
+        "wdt:P725"
+      ],
+      "facets": [
+        "schema:exampleOfWork",
+        "bf:hasPart",
+        "marcrel:fds",
+        "schema:inLanguage",
+        "schema:datePublished",
+        "wdt:P437",
+        "schema:publisher",
+        "schema:translator",
+        "schema:author",
+        "schema:illustrator",
+        "schema:director",
+        "schema:musicBy",
+        "schema:producer",
+        "schema:productionCompany",
+        "wdt:P58",
+        "wdt:P725"
+      ],
+      "coverRatio": "5:7",
+      "schemaOrgType": "https://schema.org/CreativeWork",
+      "descriptions": {
+        "de": "Eine eigenständig identifizierte Veröffentlichung oder Vertriebsversion von Anime-Inhalten.",
+        "en": "An independently identified publication or distributed version of anime content.",
+        "es": "Una publicación o versión distribuida de contenido de anime con identidad propia.",
+        "fr": "Une publication ou version distribuée de contenu d’anime identifiée indépendamment.",
+        "ja": "作品自体とは別に識別される、アニメの刊行版または頒布版。",
+        "ko": "작품 자체와 별개로 식별되는 애니메이션의 발행판 또는 배급판.",
+        "zh-Hans": "独立标识的动画出版或发行版本，与作品本身分开。",
+        "zh-Hant": "具有獨立識別身分的動畫出版或發行版本，與作品本身分開。"
+      }
+    },
     "schema:Episode": {
       "iri": "http://schema.org/Episode",
       "labels": {
@@ -1448,6 +1540,44 @@
     }
   },
   "properties": {
+    "bf:hasPart": {
+      "iri": "http://id.loc.gov/ontologies/bibframe/hasPart",
+      "labels": {
+        "de": "enthaltenes Werk",
+        "en": "included work",
+        "es": "obra incluida",
+        "fr": "œuvre incluse",
+        "ja": "収録作品",
+        "ko": "수록 작품",
+        "zh-Hans": "收录作品",
+        "zh-Hant": "收錄作品"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "membership",
+        "order": "name",
+        "inverse": "bf:partOf",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Veröffentlichungen mit diesem Werk",
+          "en": "Publications containing this work",
+          "es": "Publicaciones que incluyen esta obra",
+          "fr": "Publications contenant cette œuvre",
+          "ja": "この作品を収録する刊行版",
+          "ko": "이 작품을 수록한 발행판",
+          "zh-Hans": "收录此作品的发行版",
+          "zh-Hant": "收錄此作品的發行版"
+        }
+      },
+      "targets": ["schema:Episode", "schema:Movie", "schema:TVSeason", "schema:TVSeries"]
+    },
     "schema:copyrightNotice": {
       "iri": "http://schema.org/copyrightNotice",
       "labels": {
@@ -1588,6 +1718,43 @@
         "minLength": 1,
         "maxLength": 1500
       }
+    },
+    "marcrel:fds": {
+      "iri": "http://id.loc.gov/vocabulary/relators/fds",
+      "labels": {
+        "de": "Filmverleih",
+        "en": "film distributor",
+        "es": "distribuidor cinematográfico",
+        "fr": "distributeur de films",
+        "ja": "映画配給者",
+        "ko": "영화 배급자",
+        "zh-Hans": "影片发行方",
+        "zh-Hant": "影片發行方"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:filmDistributionOf",
+        "inverseLabels": {
+          "de": "Filmveröffentlichungen",
+          "en": "Film distributions",
+          "es": "Distribuciones cinematográficas",
+          "fr": "Distributions de films",
+          "ja": "配給した刊行版",
+          "ko": "배급한 발행판",
+          "zh-Hans": "发行的影片版本",
+          "zh-Hant": "發行的影片版本"
+        }
+      },
+      "targets": ["schema:Organization", "schema:Person"]
     },
     "schema:isPartOf": {
       "iri": "http://schema.org/isPartOf",
@@ -5047,6 +5214,23 @@
       "filter": {
         "type": {
           "in": ["schema:Movie"]
+        }
+      }
+    },
+    "anime/releases": {
+      "labels": {
+        "de": "Anime-Veröffentlichungen",
+        "en": "Anime releases",
+        "es": "Ediciones de anime",
+        "fr": "Éditions d’anime",
+        "ja": "アニメ刊行版",
+        "ko": "애니메이션 발행판",
+        "zh-Hans": "动画发行版",
+        "zh-Hant": "動畫發行版"
+      },
+      "filter": {
+        "type": {
+          "in": ["rezics:AnimeRelease"]
         }
       }
     },

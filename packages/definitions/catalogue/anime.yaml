@@ -1,19 +1,54 @@
 id: https://rezics.com/catalogue/anime
 name: anime
 version: 1.0.0
-description: Anime work, season, episode and film profile terms.
+description: Anime work, season, episode, film and publication release profile terms.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
   wdt: http://www.wikidata.org/prop/direct/
   rezics: https://rezics.com/vocab/
+  bf: http://id.loc.gov/ontologies/bibframe/
+  marcrel: http://id.loc.gov/vocabulary/relators/
 default_range: string
 imports:
   - linkml:types
   - core
   - classification
 classes:
+  AnimeRelease:
+    is_a: CreativeWork
+    class_uri: rezics:AnimeRelease
+    description: >-
+      An independently identified publication or distributed embodiment of anime content,
+      distinct from its work, season or episode, a playback file, personal copy or distribution event.
+      Languages and formats describe one identified publication, not a Cartesian product of releases.
+      A single-work publication uses exampleOfWork; an anthology contains its actual works with
+      animeReleaseContains. Credits and publication facts describe this release only and are never
+      copied from its work. Source-record version is not a cut or edition designation.
+    slots:
+      - alternateName
+      - abstract
+      - exampleOfWork
+      - animeReleaseContains
+      - filmDistributor
+      - inLanguage
+      - datePublished
+      - distributionFormat
+      - copyrightNotice
+      - publisher
+      - translator
+      - author
+      - illustrator
+      - director
+      - musicBy
+      - producer
+      - productionCompany
+      - screenwriter
+      - voiceActor
+    annotations:
+      facets: exampleOfWork animeReleaseContains filmDistributor inLanguage datePublished distributionFormat publisher translator author illustrator director musicBy producer productionCompany screenwriter voiceActor
+      schema_org_type: https://schema.org/CreativeWork
   TVSeries:
     is_a: CreativeWorkSeries
     class_uri: schema:TVSeries
@@ -256,6 +291,34 @@ classes:
       facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage author illustrator screenwriter producer
       schema_org_type: https://schema.org/Episode
 slots:
+  animeReleaseContains:
+    slot_uri: bf:hasPart
+    description: An independently identified anime work included in this anthology publication.
+    any_of:
+      - range: TVSeries
+      - range: Movie
+      - range: TVSeason
+      - range: Episode
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: membership
+      inverse: bf:partOf
+      relation_order: name
+      acyclic: true
+  filmDistributor:
+    slot_uri: marcrel:fds
+    description: A person or organization credited with distributing this moving-image publication.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:filmDistributionOf
+      relation_order: position
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes
     description: The number of episodes or installments in the work or season.

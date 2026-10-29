@@ -1,9 +1,12 @@
 types:
+  rezics:AnimeRelease: '애니메이션 발행판'
   schema:Episode: 에피소드
   schema:Movie: 영화
   schema:TVSeason: 시즌
   schema:TVSeries: 텔레비전 시리즈
 properties:
+  bf:hasPart: '수록 작품'
+  marcrel:fds: '영화 배급자'
   schema:copyrightNotice: 저작권 고지
   schema:duration: 다음 시간 동안 진행됨
   schema:endDate: 종료일
@@ -14,8 +17,12 @@ properties:
   wdt:P449: 다음에서 본방송을 함
   wdt:P973: 기술되어 있는 URL
 inverseProperties:
+  bf:hasPart: '이 작품을 수록한 발행판'
+  marcrel:fds: '배급한 발행판'
   schema:isPartOf: '에피소드'
   wdt:P449: '최초 방영 작품'
+typeDescriptions:
+  rezics:AnimeRelease: '작품 자체와 별개로 식별되는 애니메이션의 발행판 또는 배급판.'
 libraryProfiles:
   anime.series:
     states:

@@ -1,9 +1,12 @@
 types:
+  rezics:AnimeRelease: 'anime release'
   schema:Episode: episode
   schema:Movie: film
   schema:TVSeason: 'season'
   schema:TVSeries: television series
 properties:
+  bf:hasPart: 'included work'
+  marcrel:fds: 'film distributor'
   schema:copyrightNotice: copyright notice
   schema:duration: duration
   schema:endDate: end date
@@ -14,9 +17,12 @@ properties:
   wdt:P449: original broadcaster
   wdt:P973: described at URL
 inverseProperties:
+  bf:hasPart: 'Publications containing this work'
+  marcrel:fds: 'Film distributions'
   schema:isPartOf: 'Episodes'
   wdt:P449: 'Original broadcasts'
 typeDescriptions:
+  rezics:AnimeRelease: 'An independently identified publication or distributed version of anime content.'
   schema:TVSeason: 'television series season'
 libraryProfiles:
   anime.series:

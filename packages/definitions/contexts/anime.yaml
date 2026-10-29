@@ -8,4 +8,6 @@ labels:
   de: Anime-Gemeinschaft
   fr: Communauté des anime
   es: Comunidad de anime
+# Publication containment and distributor credits also retain Global's adopted facts;
+# neither property needs suppression for the anime community. This adds no tracking capability.
 defaults: {}
