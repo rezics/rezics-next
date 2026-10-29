@@ -22,6 +22,7 @@ test('Collection members use shared cover tiles and ListRow with their own subje
   expect(page).toContain('<ListRowLink');
   expect(page).toContain('<ListRowControl');
   expect(page).not.toContain('divide-y divide-border/60 border-y border-border/60');
+  expect(row).toContain("size = 'sm'");
   expect(row).toContain('cover={subject?.cover ?? null}');
   expect(row).not.toMatch(/Avatar|initials\(/);
 });
