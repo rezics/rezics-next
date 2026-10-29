@@ -51,7 +51,7 @@ let owner = actor(newId(route));
 let other = actor(newId(route));
 const suspended = actor(newId(route));
 let noScope = actor(newId(route), ['subject:read']);
-const setupIdentity = actor(newId(route), ['access:grant', 'subject:read', 'exposure:open', 'gate:any']);
+const setupIdentity = actor(newId(route), ['access:grant', 'subject:create', 'subject:read', 'exposure:open', 'gate:any']);
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(61)]]) };
 

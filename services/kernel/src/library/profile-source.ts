@@ -1,4 +1,6 @@
 import type { Pool } from 'pg';
+import { readAccount } from '../access/account-data.ts';
+import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
@@ -33,6 +35,17 @@ async function readSource(deps: Dependencies, subjectId: string): Promise<Librar
   const { pool, access, actor, at, deadline } = deps;
   authoritativeTimeValue(at);
   requireAccessDeadline(deadline);
+  // A previously authenticated actor may have been suspended since admission.
+  // Release this point read before checking out any subject or Global anchor.
+  if (actor.kind === 'account') {
+    const accountRoute = routeOf(actor.accountId);
+    if (accountRoute === null) return null;
+    const account = await readAccount(deadlineClient(pool, deadline), accountRoute, actor.accountId);
+    if (
+      !account || account.kind !== 'actor' || account.state !== 'active' || account.fenced ||
+      actor.authnEpoch === undefined || BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+    ) return null;
+  }
   const visited = new Set<string>();
   while (true) {
     requireAccessDeadline(deadline);
