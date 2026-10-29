@@ -1200,7 +1200,8 @@ function rankHost(
   const isOldestMultiWaiter = hasMultiWaiter && multiWaiterId !== undefined && probe.multiWaitingId === multiWaiterId;
   const waitsBehindOlderMulti = hasMultiWaiter && slots > 1 && multiWaiterId !== undefined && !isOldestMultiWaiter;
   const hasLandingWaiter = probe.landingWaitingSlots > 0;
-  const isOldestLandingWaiter = hasLandingWaiter && landingWaiterId !== undefined && probe.landingWaitingId === landingWaiterId;
+  const isOldestLandingWaiter =
+    hasLandingWaiter && landingWaiterId !== undefined && probe.landingWaitingId === landingWaiterId;
   const waitsBehindLanding = hasLandingWaiter && !gate && !isOldestLandingWaiter;
   const ordinaryAdmissionLimit = gate
     ? ordinaryCapacity
@@ -1211,10 +1212,10 @@ function rankHost(
           ? ordinaryCapacity
           : 0
         : hasMultiWaiter
-        ? isOldestMultiWaiter
-          ? ordinaryCapacity
-          : ordinaryCapacity - probe.multiWaitingSlots
-        : ordinaryCapacity;
+          ? isOldestMultiWaiter
+            ? ordinaryCapacity
+            : ordinaryCapacity - probe.multiWaitingSlots
+          : ordinaryCapacity;
   const resourceSlots = probeCapacity(capacity);
   const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
   const shortRun = priority !== 'landing' && isShortRun(slots, estimateMs, gate);
@@ -1235,10 +1236,11 @@ function rankHost(
   if (probe.memoryReserved + slots * memoryReservationBytes > memoryMaximum) freeSlots = 0;
   if (waitsBehindOlderMulti) freeSlots = 0;
   if (
-    waitsBehindLanding && !shortRun ||
+    (waitsBehindLanding && !shortRun) ||
     (priority === 'landing' && probe.gateWaiting) ||
     (priority === 'landing' && hasLandingWaiter && !isOldestLandingWaiter)
-  ) freeSlots = 0;
+  )
+    freeSlots = 0;
   return {
     host,
     capacity,
@@ -1537,7 +1539,13 @@ async function takeMultiSlotMarker(
   return takeSession(host, multiSlotMarkerScript(id, slots), /^MULTI_SLOT_MARKER$/m, signal);
 }
 
-async function takeLandingMarker(host: Host, id: string, slots: number, arrivalOrder: string, signal: AbortSignal): Promise<SessionLease | null> {
+async function takeLandingMarker(
+  host: Host,
+  id: string,
+  slots: number,
+  arrivalOrder: string,
+  signal: AbortSignal,
+): Promise<SessionLease | null> {
   return takeSession(host, landingMarkerScript(id, slots, arrivalOrder), /^LANDING_MARKER$/m, signal);
 }
 
@@ -1585,7 +1593,19 @@ async function rankedHosts(
     probes
       .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
       .filter(({ host, probe }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
-      .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate, priority, multiWaiterId, memoryReservationBytes, landingWaiterId))
+      .map(({ host, probe }) =>
+        rankHost(
+          host,
+          probe,
+          slots,
+          estimateMs,
+          gate,
+          priority,
+          multiWaiterId,
+          memoryReservationBytes,
+          landingWaiterId,
+        ),
+      )
       // Equal slot counts prefer the host with more measured slice memory headroom.
       .sort(
         (left, right) =>
@@ -1612,7 +1632,20 @@ async function acquireOnce(
   priority: 'landing' | undefined = undefined,
 ): Promise<Lease | null> {
   const landingWaiterId = priority === 'landing' ? randomUUID() : undefined;
-  const ranked = await rankedHosts(hosts, signal, requestedSlots, estimateMs, gate, false, undefined, new Map(), new Set(), memoryReservationBytes, priority, landingWaiterId);
+  const ranked = await rankedHosts(
+    hosts,
+    signal,
+    requestedSlots,
+    estimateMs,
+    gate,
+    false,
+    undefined,
+    new Map(),
+    new Set(),
+    memoryReservationBytes,
+    priority,
+    landingWaiterId,
+  );
   let slots = requestedSlots;
   if (ranked.length > 0) {
     if (gate) {
@@ -1626,7 +1659,11 @@ async function acquireOnce(
         );
       }
     } else {
-      const cap = requestedSlotCap(ranked, priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate), requestedSlots);
+      const cap = requestedSlotCap(
+        ranked,
+        priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate),
+        requestedSlots,
+      );
       if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
     }
   }
@@ -1690,7 +1727,7 @@ async function acquire(
     ? String(Math.floor((performance.timeOrigin + performance.now()) * 1_000))
     : undefined;
   const multiWaiterId = !gate && priority !== 'landing' && slots > 1 ? randomUUID() : undefined;
-  const priorityClass = gate ? 'gate' : priority ?? (slots > 1 ? 'multi-slot' : 'ordinary');
+  const priorityClass = gate ? 'gate' : (priority ?? (slots > 1 ? 'multi-slot' : 'ordinary'));
   const wait = checkWaitRecorder();
   const skippedHosts = new Map<string, string>();
   const loggedSkipLines = new Set<string>();
@@ -1766,7 +1803,11 @@ async function acquire(
             }
           }
         } else {
-          const cap = requestedSlotCap(ranked, priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate), requestedSlots);
+          const cap = requestedSlotCap(
+            ranked,
+            priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate),
+            requestedSlots,
+          );
           if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
         }
       } else if (giveUpIfUnanswered && !answered) return null;
@@ -1778,7 +1819,12 @@ async function acquire(
         markerHost = undefined;
       }
       const markedLandingHost = ranked.find(({ host }) => host.name === landingMarkerHost)?.host;
-      if (landingWaiterId && landingMarkerHost && markedLandingHost?.fallback && globallyStartable.some(({ host }) => !host.fallback)) {
+      if (
+        landingWaiterId &&
+        landingMarkerHost &&
+        markedLandingHost?.fallback &&
+        globallyStartable.some(({ host }) => !host.fallback)
+      ) {
         if (landingMarker) await landingMarker.release();
         landingMarker = undefined;
         landingMarkerHost = undefined;
@@ -2085,7 +2131,15 @@ async function runLeased(
         'ssh',
         ...sshOptions(host),
         host.address,
-        runScript(id, directory, options.cwd ?? '.', options.command, host.name, options.progressIntervalMs, options.gate ? 'gate' : options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
+        runScript(
+          id,
+          directory,
+          options.cwd ?? '.',
+          options.command,
+          host.name,
+          options.progressIntervalMs,
+          options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
+        ),
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     );
@@ -2221,7 +2275,15 @@ async function runWithTransportRetries(
         options.priority,
       );
     } else {
-      lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false, memoryReservationBytes, options.priority);
+      lease = await acquireOnce(
+        retryHosts,
+        slots,
+        options.estimateMs,
+        signal,
+        options.gate ?? false,
+        memoryReservationBytes,
+        options.priority,
+      );
       if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
         lease = await acquire(
           hosts,

@@ -433,7 +433,9 @@ test('landing priority: stackRun carries landing to admission and check entry po
   const result = await stack({ ...env, REMOTE_CHECK_PRIORITY: 'landing' }, ['true']);
   expect(result.code).toBe(0);
   expect(result.stderr).toContain('stack-run: the run priority landing on a');
-  expect(events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain('# REMOTE_CHECK_PRIORITY landing');
+  expect(events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain(
+    '# REMOTE_CHECK_PRIORITY landing',
+  );
   expect(events().find((event) => event.kind === 'run')?.script).toContain("printf 'remote-check: run priority %s");
 
   const kernel = readFileSync(join(repository, 'services/kernel/scripts/check.ts'), 'utf8');
@@ -450,11 +452,15 @@ test('landing priority: stackRun carries landing to admission and check entry po
 
 test('landing priority: workers drop landing and report it once, and other values are usage errors', async () => {
   const worker = scenario({ a: { available: 20e9 } });
-  const workerResult = await stack({ ...worker.env, REMOTE_CHECK_PRIORITY: 'landing', GOAL_TASK_ID: 'worker' }, ['true']);
+  const workerResult = await stack({ ...worker.env, REMOTE_CHECK_PRIORITY: 'landing', GOAL_TASK_ID: 'worker' }, [
+    'true',
+  ]);
   expect(workerResult.code).toBe(0);
   expect(workerResult.stderr.match(/worker environment ignores REMOTE_CHECK_PRIORITY=landing/g)).toHaveLength(1);
   expect(worker.events().some((event) => event.kind === 'landing-marker')).toBe(false);
-  expect(worker.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain('# REMOTE_CHECK_PRIORITY ordinary');
+  expect(worker.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain(
+    '# REMOTE_CHECK_PRIORITY ordinary',
+  );
 
   const invalid = scenario({ a: { available: 20e9 } });
   const refused = await stack({ ...invalid.env, REMOTE_CHECK_PRIORITY: 'urgent' }, ['true']);

@@ -3888,7 +3888,9 @@ test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', asyn
 });
 
 test('landing priority: a waiting landing run starts before ordinary and multi-slot waiters when its slots free', async () => {
-  const { env, events } = scenario({ b: { available: 20e9, slots: 6, cpuQuotaPercent: 1200, ordinaryBusySlots: [0, 1, 2, 3, 4] } });
+  const { env, events } = scenario({
+    b: { available: 20e9, slots: 6, cpuQuotaPercent: 1200, ordinaryBusySlots: [0, 1, 2, 3, 4] },
+  });
   const directory = workspace();
   const busySlots = [0, 1, 2, 3, 4].map((slot) => join(env.FAKE_DIR!, 'ops_b_test.slot.' + slot));
   let landing: ReturnType<typeof startRemote> | undefined;
@@ -3898,40 +3900,103 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
     ordinary = startRemote(env, directory, ['sh', '-c', 'echo ordinary'], ['--estimate-ms', '999999']);
     multi = startRemote(env, directory, ['sh', '-c', 'echo multi'], ['--slots', '2']);
     await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
-    landing = startRemote({ ...env, REMOTE_CHECK_PRIORITY: 'landing' }, directory, ['sh', '-c', 'echo landing'], ['--slots', '3']);
+    landing = startRemote(
+      { ...env, REMOTE_CHECK_PRIORITY: 'landing' },
+      directory,
+      ['sh', '-c', 'echo landing'],
+      ['--slots', '3'],
+    );
     await waitFor(() => events().some((event) => event.kind === 'landing-marker'));
     for (const slot of busySlots) rmSync(slot, { recursive: true, force: true });
     const landingDeadline = Date.now() + 5_000;
-    while (!events().some((event) => event.kind === 'run' && String(event.script).includes('echo landing')) && Date.now() < landingDeadline) {
+    while (
+      !events().some((event) => event.kind === 'run' && String(event.script).includes('echo landing')) &&
+      Date.now() < landingDeadline
+    ) {
       await Bun.sleep(10);
     }
     expect(
       events().some((event) => event.kind === 'run' && String(event.script).includes('echo landing')),
-      JSON.stringify(events().map(({ kind, requested, granted, reason, landingWaitingSlots, landingMarkerFiles, landingMarkers }) => ({ kind, requested, granted, reason, landingWaitingSlots, landingMarkerFiles, landingMarkers }))),
+      JSON.stringify(
+        events().map(
+          ({ kind, requested, granted, reason, landingWaitingSlots, landingMarkerFiles, landingMarkers }) => ({
+            kind,
+            requested,
+            granted,
+            reason,
+            landingWaitingSlots,
+            landingMarkerFiles,
+            landingMarkers,
+          }),
+        ),
+      ),
     ).toBe(true);
-    await waitFor(() => events().some((event) =>
-      event.kind === 'slot' && event.granted &&
-      String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
-      String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
-    ), 10_000);
+    await waitFor(
+      () =>
+        events().some(
+          (event) =>
+            event.kind === 'slot' &&
+            event.granted &&
+            String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
+            String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
+        ),
+      10_000,
+    );
     const grants = events().filter((event) => event.kind === 'slot' && event.granted);
     const landingGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_PRIORITY landing'));
-    const ordinaryGrant = grants.findIndex((event) =>
-      String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
-      String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
+    const ordinaryGrant = grants.findIndex(
+      (event) =>
+        String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
+        String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
     );
-    const multiGrant = grants.findIndex((event, index) => index > landingGrant && String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'));
+    const multiGrant = grants.findIndex(
+      (event, index) => index > landingGrant && String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'),
+    );
     expect(landingGrant).toBeGreaterThanOrEqual(0);
-    expect(ordinaryGrant, JSON.stringify({ landingExit: landing.child.exitCode, landingStderr: landing.child.exitCode === null ? undefined : await landing.stderr, ordinary: grants.filter((event) => String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999')).map(({ actualAdmissionLimit, landingMarkerIds, slotClass }) => ({ actualAdmissionLimit, landingMarkerIds, slotClass })), order: grants.map((event) => ({ priority: String(event.script).match(/# REMOTE_CHECK_PRIORITY (\w+)/)?.[1], estimate: String(event.script).match(/# REMOTE_CHECK_ESTIMATE_MS (\w+)/)?.[1] })), timeline: events().map(({ kind, id, requested, actualAdmissionLimit, landingMarkerIds, arrivalOrder, sequence, reason }) => ({ kind, id, requested, actualAdmissionLimit, landingMarkerIds, arrivalOrder, sequence, reason })) })).toBeGreaterThan(landingGrant);
+    expect(
+      ordinaryGrant,
+      JSON.stringify({
+        landingExit: landing.child.exitCode,
+        landingStderr: landing.child.exitCode === null ? undefined : await landing.stderr,
+        ordinary: grants
+          .filter((event) => String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999'))
+          .map(({ actualAdmissionLimit, landingMarkerIds, slotClass }) => ({
+            actualAdmissionLimit,
+            landingMarkerIds,
+            slotClass,
+          })),
+        order: grants.map((event) => ({
+          priority: String(event.script).match(/# REMOTE_CHECK_PRIORITY (\w+)/)?.[1],
+          estimate: String(event.script).match(/# REMOTE_CHECK_ESTIMATE_MS (\w+)/)?.[1],
+        })),
+        timeline: events().map(
+          ({ kind, id, requested, actualAdmissionLimit, landingMarkerIds, arrivalOrder, sequence, reason }) => ({
+            kind,
+            id,
+            requested,
+            actualAdmissionLimit,
+            landingMarkerIds,
+            arrivalOrder,
+            sequence,
+            reason,
+          }),
+        ),
+      }),
+    ).toBeGreaterThan(landingGrant);
     expect(multiGrant).toBeGreaterThan(landingGrant);
-    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo ordinary')), 10_000);
+    await waitFor(
+      () => events().some((event) => event.kind === 'run' && String(event.script).includes('echo ordinary')),
+      10_000,
+    );
     await Promise.all([ordinary.child.exited, multi.child.exited]);
     expect(ordinary.child.exitCode).toBe(0);
     expect(multi.child.exitCode).toBe(0);
   } finally {
     for (const run of [multi, ordinary, landing]) {
       if (!run) continue;
-      try { run.child.kill('SIGTERM'); } catch {}
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
       await run.child.exited;
       await Promise.all([run.stdout, run.stderr]);
     }
@@ -3941,10 +4006,7 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
 test('landing priority: ordinary and multi-slot runs leave its slots free while short runs may use express', async () => {
   const { env, events } = scenario({ b: { available: 20e9, slots: 4, hang: true, hangRuns: 2 } });
   const directory = workspace();
-  const holders = [
-    startRemote(env, directory, ['true'], ['--slots', '2']),
-    startRemote(env, directory, ['true']),
-  ];
+  const holders = [startRemote(env, directory, ['true'], ['--slots', '2']), startRemote(env, directory, ['true'])];
   let landing: ReturnType<typeof startRemote> | undefined;
   let ordinary: ReturnType<typeof startRemote> | undefined;
   let multi: ReturnType<typeof startRemote> | undefined;
@@ -3966,7 +4028,9 @@ test('landing priority: ordinary and multi-slot runs leave its slots free while 
   } finally {
     for (const run of [multi, ordinary, landing, ...holders]) {
       if (!run) continue;
-      try { run.child.kill('SIGTERM'); } catch {}
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
       await run.child.exited;
       await Promise.all([run.stdout, run.stderr]);
     }
@@ -3989,7 +4053,13 @@ test('landing priority: a waiting gate starts first and landing runs on one host
     await waitFor(() => events().some((event) => event.kind === 'gate-marker'));
     for (const slot of busySlots) rmSync(slot, { recursive: true, force: true });
     await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo gate')));
-    await waitFor(() => events().filter((event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_PRIORITY landing')).length === 2);
+    await waitFor(
+      () =>
+        events().filter(
+          (event) =>
+            event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_PRIORITY landing'),
+        ).length === 2,
+    );
     const grants = events().filter((event) => event.kind === 'slot' && event.granted);
     const gateGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_GATE_REQUEST 1'));
     const landingGrantIds = grants
@@ -4001,7 +4071,18 @@ test('landing priority: a waiting gate starts first and landing runs on one host
       .map((event) => String(event.id))
       .filter((id, index, ids) => ids.indexOf(id) === index);
     expect(gateGrant).toBeGreaterThanOrEqual(0);
-    expect(landingGrantIds, JSON.stringify(events().map(({ kind, id, sequence, arrivalOrder, requested }) => ({ kind, id, sequence, arrivalOrder, requested })))).toEqual(arrivalIds);
+    expect(
+      landingGrantIds,
+      JSON.stringify(
+        events().map(({ kind, id, sequence, arrivalOrder, requested }) => ({
+          kind,
+          id,
+          sequence,
+          arrivalOrder,
+          requested,
+        })),
+      ),
+    ).toEqual(arrivalIds);
     expect(grants.findIndex((event) => String(event.script).includes(landingGrantIds[0]!))).toBeGreaterThan(gateGrant);
     expect(grants.findIndex((event) => String(event.script).includes(landingGrantIds[1]!))).toBeGreaterThan(
       grants.findIndex((event) => String(event.script).includes(landingGrantIds[0]!)),
@@ -4009,7 +4090,9 @@ test('landing priority: a waiting gate starts first and landing runs on one host
   } finally {
     for (const run of [gate, second, first]) {
       if (!run) continue;
-      try { run.child.kill('SIGTERM'); } catch {}
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
       await run.child.exited;
       await Promise.all([run.stdout, run.stderr]);
     }
@@ -4026,7 +4109,9 @@ test('landing priority: invalid values are usage errors and direct CLI admission
   const valid = scenario({ a: { available: 8e9 } });
   const result = await remote({ ...valid.env, REMOTE_CHECK_PRIORITY: 'landing' }, workspace());
   expect(result.code).toBe(0);
-  expect(valid.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain('# REMOTE_CHECK_PRIORITY landing');
+  expect(valid.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain(
+    '# REMOTE_CHECK_PRIORITY landing',
+  );
   const runScript = String(valid.events().find((event) => event.kind === 'run')?.script);
   expect(runScript).toContain('remote-check: run priority %s on %s');
   expect(runScript).toContain('landing a');
