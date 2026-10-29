@@ -51,6 +51,7 @@ test('native current mapping remains bounded as unrelated subject history grows'
     authorization,
   });
   const anchor = created.subject.id;
+  await settle(db, { analyze: true });
   const report = await checkGrowth(db, {
     name: 'native identity mapping across unrelated subjects',
     scales: [64, 512, 4096],
@@ -72,7 +73,6 @@ test('native current mapping remains bounded as unrelated subject history grows'
          SELECT route,subject_id,1,'create',$3,recorded_transaction_id FROM subjects`,
         [entries, route, bundledDigest],
       );
-      await settle(database, { analyze: true });
     },
     async operation(database) {
       const mapping = await identityEpochStore.readMapping(database.pool, anchor);
