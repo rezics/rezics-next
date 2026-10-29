@@ -42,11 +42,11 @@ The six frozen [page outcomes](../../../../specs/pages-outcomes.test.ts) have a 
 aggregate-derived JSON-LD receipts in development history. The [completion audit](../../../../docs/research/search-pages-completion-audit.md#execution-evidence-actually-inspected)
 records their revisions and counts: six native cases passed in that receipt and two Workers cases passed in an
 earlier receipt, followed by a later Workers run that failed one of two cases. Those receipts are real artifacts,
-not absent tests, but they do not establish a final-revision or root-gate pass. Release evidence must give the
-current revision and case counts. A passing run for the corrected About-order oracle is not recorded in the available
-evidence: it must retain
-About prose before facts and tags, and About before Parts and Relations, while preserving real HTTP SSR before
-JavaScript, public-body and JSON-LD assertions, authorization checks and both Workers cases. A historical 2/2
+not absent tests, but they do not establish a final-revision or root-gate pass. The Workers oracle now checks About
+prose before facts and tags, and About before Parts and Relations, while preserving real HTTP SSR before JavaScript,
+public-body and JSON-LD assertions, authorization checks, both Workers cases and the non-agent routing-GET ceiling
+of one. The latest recorded workerd execution predates that correction and failed one of two cases; the corrected
+two-case execution is unverified. Release evidence must give the current revision and case counts. A historical 2/2
 cannot replace that receipt. Formatting, imports, converter checks, ordinary Bun `renderToString` and root typecheck
 alone do not replace the native cases.
 
