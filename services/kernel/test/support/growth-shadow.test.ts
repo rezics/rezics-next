@@ -156,6 +156,7 @@ test("the growth profile line carries each scale's repetitions, relation sizes a
         expect(profile.shadow[metric].families[family]).toEqual({ a, b, t: factor });
       }
     }
+    if (!('staircase' in report.shadow.blocks)) throw new Error('Blocks shadow verdict lacks its staircase');
     expect(profile.shadow.blocks.staircase).toEqual(report.shadow.blocks.staircase);
     expect(profile.shadow.blocks.staircase).toHaveLength(report.samples.length);
 

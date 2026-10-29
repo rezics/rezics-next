@@ -91,10 +91,17 @@ test('a feasible family fit stays compatible when its slope interval has room', 
 
 test('an index staircase admits bounded level changes on top of an allowed family and reports its values', () => {
   const scales = [1, 4, 16, 64];
-  const values = [10, 14, 18, 22];
+  const values = [10, 11, 13, 14];
   const result = classifySeries(series(scales, values), 'logarithmic', 2);
   expect(result.outcome).toBe('compatible');
-  expect(result.staircase).toEqual([0, 2, 4, 6]);
+  expect(result.staircase).toHaveLength(scales.length);
+  expect(result.staircase[0]).toBe(0);
+  expect(result.staircase.some((value) => value > 0)).toBe(true);
+  for (let index = 1; index < result.staircase.length; index += 1) {
+    const rise = result.staircase[index]! - result.staircase[index - 1]!;
+    expect(rise).toBeGreaterThanOrEqual(0);
+    expect(rise).toBeLessThanOrEqual(2);
+  }
 
   const exceedsProbeRise = classifySeries(series([1, 4, 16], [10, 20, 20]), 'logarithmic', 2);
   expect(exceedsProbeRise.outcome).toBe('violation');

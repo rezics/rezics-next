@@ -52,7 +52,7 @@ async function check(
     operation: async (database, _scale, repetition) =>
       withConnection(database.pool, async (client) => {
         if (options.variable) {
-          const count = repetition % 2 === 0 ? 1 : 12;
+          const count = repetition % 2 === 0 ? 1 : 100;
           const first = 100_000 + repetition * 100;
           await client.query('BEGIN');
           await client.query(

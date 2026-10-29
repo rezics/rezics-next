@@ -256,7 +256,7 @@ function staircaseFit(
   // Variables are intercept, family slope, then cumulative staircase values after the first scale.
   const variables = count + 1;
   let inequalities: Inequality[] = [];
-  const add = (terms: readonly [number, number][], limit: number): void => {
+  const add = (terms: readonly (readonly [number, number])[], limit: number): void => {
     const coefficients = Array<number>(variables).fill(0);
     for (const [variable, value] of terms) coefficients[variable] = value;
     inequalities.push({ coefficients, limit });
