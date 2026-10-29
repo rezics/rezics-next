@@ -2,7 +2,7 @@
 
 The approved helper reproduces the reported excess-property error with the installed compiler. The proposed
 change factors only the expected property expression into a local variable before Bun contextualizes the matcher
-argument. Final compiler evidence is pending below. This is a bounded compiler witness and a proposed frozen-file
+argument. The final affected kernel compiler run passes with this factoring. This is a bounded compiler witness and a proposed frozen-file
 amendment, not native acceptance, admission, or a runtime outcome claim.
 
 ## Installed types and decision
@@ -135,7 +135,72 @@ bun scripts/worker-check.ts -- env TYPECHECK_CHANGED=services/kernel/test/import
 bun scripts/worker-check.ts --wait 45a5d530-7a91-48f3-bf70-8fc8da3ff28a
 ```
 
-Final result pending. Compatibility remains unverified until the terminal result is recorded.
+Check ID: `45a5d530-7a91-48f3-bf70-8fc8da3ff28a`. Terminal exit status: `0`.
+The first wait returned status `75` with `check: still running`; the same `--wait` command was issued again and
+returned terminal status `0`. No second compiler run or infrastructure rerun was started. The affected kernel
+workspace passed, including its normal compiler and construct steps. This validates this helper with the installed
+types; it does not claim that the complete proposed frozen acceptance was compiled or executed.
+Full check log:
+
+```text
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 1/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 1/6 free, a 1/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: skipped c: load 36.5 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, c 0/3 free, a 0/4 free); skipped c: load 36.5 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (a 1/4 free, b 0/6 free, c 0/3 free); skipped c: load 36.5 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, c 0/3 free, a 0/4 free); skipped c: load 36.5 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, c 0/3 free, a 0/4 free); skipped c: load 36.5 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, c 0/3 free, a 0/4 free); skipped c: load 36.5 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (c 1/3 free, b 0/6 free, a 0/4 free); skipped c: load 36.5 exceeds limit 36
+remote-check: slot wait 602.589 s on c
+
+Number of files: 5,326 (reg: 4,995, dir: 330, link: 1)
+Number of created files: 32 (reg: 30, dir: 2)
+Number of deleted files: 0
+Number of regular files transferred: 128
+Total file size: 57,630,277 bytes
+Total transferred file size: 2,544,464 bytes
+Literal data: 632,615 bytes
+Number of 4 KiB logical blocks touched: 684
+Matched data: 1,911,849 bytes
+File list size: 196,577
+File list generation time: 0.955 seconds
+File list transfer time: 0.000 seconds
+Total bytes sent: 433,961
+Total bytes received: 38,200
+
+sent 433,961 bytes  received 38,200 bytes  188,864.40 bytes/sec
+total size is 57,630,277  speedup is 122.06
+remote-check: rsync 2.251 s on c
+remote-check: running on c
+bun install v1.4.4-canary.1 (a0cc096ce)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+
++ @types/bun@1.4.4
++ bun@1.4.4-canary.20261027.1
++ oxfmt@0.74.0
++ oxlint@1.89.0
++ typescript@7.1.0-beta
+
+896 packages installed [1406.00ms]
+remote-check: bun install 1.425 s on c
+Checking 1 of 13 workspaces the change can affect.
+Workspace @rezics/kernel finished in 98.32s
+$ bun run typecheck  (services/kernel)
+
+remote-check: command 123.540 s on c
+remote-check: run used 148.946 CPU seconds over 125.231 s (1.19 cores), peak memory 2826 MiB on c
+worker-check: env TYPECHECK_CHANGED=services/kernel/test/imports/known-reference-matcher-type-probe.ts bun scripts/typecheck.ts peak 2.8 GiB (weight 4)
+check: exit status 0
+check: log .temp/goal/checks/worker-check-2026-10-29T14-35-39.284Z-c06f17d0.log
+```
+
+Artifact delivery acceptance is `test -s docs/research/imports-audit/known-reference-matcher-type-probe.md`,
+run separately through the standard worker-check wrapper after this report is committed.
 
 ## Proposed acceptance bytes
 
