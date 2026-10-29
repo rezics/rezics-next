@@ -159,12 +159,30 @@ test('the full default website catalogue commits membership and content actor sn
   } finally {
     spaceConnection.release();
   }
-  await pool.query(
-    `INSERT INTO community.realm
+  const realmConnection = await pool.connect();
+  const realmRevision = newId(route);
+  const contextId = newId(route);
+  try {
+    await realmConnection.query('BEGIN');
+    await realmConnection.query(
+      `INSERT INTO community.realm
     (route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
     VALUES ($1,$2,$3,'active','public',$4,$5,statement_timestamp(),$6)`,
-    [route, realm, space, newId(route), newId(route), actor.accountId],
-  );
+      [route, realm, space, contextId, realmRevision, actor.accountId],
+    );
+    await realmConnection.query(
+      `INSERT INTO community.realm_revision
+       (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+       VALUES ($1,$2,$3,NULL,'Scope bound','', 'public',$4,statement_timestamp(),$5)`,
+      [route, realm, realmRevision, contextId, actor.accountId],
+    );
+    await realmConnection.query('COMMIT');
+  } catch (error) {
+    await realmConnection.query('ROLLBACK');
+    throw error;
+  } finally {
+    realmConnection.release();
+  }
   await pool.query(
     `INSERT INTO content.thread
     (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
