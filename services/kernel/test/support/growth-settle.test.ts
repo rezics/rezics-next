@@ -38,40 +38,58 @@ async function relationState() {
 }
 
 test('settle waits for an older snapshot and removes the first index-probe excess after bare VACUUM', async () => {
-  await db.admin.query(`TRUNCATE ${table}`);
-  await db.admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,3000) i`);
-  await settle(db, { relations: [table], analyze: true });
   const holder = new pg.Client({ connectionString: db.url });
   await holder.connect();
-  await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-  await holder.query(`SELECT count(*) FROM ${table}`);
-  await db.admin.query(`DELETE FROM ${table} WHERE id <= 2800`);
-  await db.admin.query(`VACUUM (INDEX_CLEANUP ON) ${table}`);
+  // This mechanism concerns an index scan; an unselective sequential scan cannot expose dead index entries.
+  await holder.query('SET enable_seqscan = off');
+  await holder.query('SET enable_bitmapscan = off');
+  let waiting: Promise<number> | undefined;
+  async function dirtyWithSnapshot() {
+    await db.admin.query(`TRUNCATE ${table}`);
+    await db.admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,3000) i`);
+    await settle(db, { relations: [table], analyze: true });
+    await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await holder.query(`SELECT count(*) FROM ${table}`);
+    await db.admin.query(`DELETE FROM ${table} WHERE id <= 2800`);
+    await db.admin.query(`VACUUM (INDEX_CLEANUP ON) ${table}`);
+  }
   async function probe() {
-    const result = await db.admin.query<{
-      'QUERY PLAN': Array<{ Plan: { 'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number } }>;
+    const result = await holder.query<{
+      'QUERY PLAN': Array<{ Plan: { 'Node Type': string; 'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number } }>;
     }>(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT id FROM ${table} WHERE id <= 3000`);
     const plan = result.rows[0]!['QUERY PLAN'][0]!.Plan;
+    expect(plan['Node Type']).toBe('Index Only Scan');
     return (plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0);
   }
-  const dirtyFirst = await probe();
-  const dirtyNext = await probe();
-  expect(dirtyFirst).toBeGreaterThan(dirtyNext);
-  let completed = false;
-  const waiting = settle(db, { relations: [table], timeoutMs: 5000, pollMs: 20 }).then((elapsed) => {
-    completed = true;
-    return elapsed;
-  });
-  await new Promise((resolve) => setTimeout(resolve, 120));
-  expect(completed).toBe(false);
-  await holder.query('COMMIT');
-  await holder.end();
-  await waiting;
-  const first = await probe();
-  const next = await probe();
-  expect(first).toBe(next);
-  const state = await relationState();
-  expect(state.visible).toBe(state.pages);
+  try {
+    await dirtyWithSnapshot();
+    // Once the old snapshot ends, the first scan can mark the dead entries left by bare VACUUM.
+    await holder.query('COMMIT');
+    const dirtyFirst = await probe();
+    const dirtyNext = await probe();
+    expect(dirtyFirst).toBeGreaterThan(dirtyNext);
+
+    // Recreate the dirty state so settle, rather than a preceding probe, must remove the excess.
+    await dirtyWithSnapshot();
+    let completed = false;
+    waiting = settle(db, { relations: [table], timeoutMs: 5000, pollMs: 20 }).then((elapsed) => {
+      completed = true;
+      return elapsed;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(completed).toBe(false);
+    await holder.query('COMMIT');
+    await waiting;
+    const first = await probe();
+    const next = await probe();
+    expect(first).toBe(next);
+    const state = await relationState();
+    expect(state.visible).toBe(state.pages);
+  } finally {
+    await holder.query('ROLLBACK');
+    await holder.end();
+    await waiting;
+  }
 });
 
 test('settle times out with an infrastructure error that identifies the holding backend', async () => {
