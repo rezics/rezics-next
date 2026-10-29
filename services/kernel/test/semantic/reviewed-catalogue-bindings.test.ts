@@ -6,6 +6,7 @@ import type { HttpResponse, StatementInput } from '../../../../specs/semantic-dr
 import pinned from '../../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json';
 import type { Item } from '../../src/semantic/item.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { routeOf } from '../../src/route/route.ts';
 import {
   createReleasedDiscoveryFixture,
   discoveryKey,
@@ -119,6 +120,11 @@ test('reviewed public tag and form bindings require actual native Concept scheme
   const otherActor = created(await batch({ ...command, key: randomUUID() }, 'acceptor'), 200);
   expect(replay).toEqual(first);
   expect(otherActor).toEqual(first);
+  const durable = await f.inspect<{ subject_id: string }>(
+    'SELECT subject_id FROM semantic.external_claim WHERE route = $1 AND source = $2 AND external_id = $3',
+    [routeOf(first.id), source.source, source.external_id],
+  );
+  expect(durable.rows).toEqual([{ subject_id: first.id }]);
   const actual = status(await f.request('anonymous', 'GET', `/v1/subjects/${first.id}`), 200).subject as Item;
   expect(actual.type).toBe('skos:Concept');
   expect(actual.release).toBe(f.release.digest);
@@ -135,11 +141,15 @@ test('reviewed public tag and form bindings require actual native Concept scheme
   });
   expect(values(await read(holder), 'skos:inScheme')).toEqual([scheme.id]);
   const canonical = await f.createSubject('skos:Concept', 'Separate canonical harem control');
-  await f.adopt(canonical, statement('schema:sameAs', qHarem));
+  const canonicalPin = 'https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445';
+  await f.adopt(canonical, statement('schema:sameAs', qHarem, [canonicalPin]));
   expect(canonical.id).not.toBe(first.id);
   // Required standard native edge: expected proposal 201, acceptance/adoption 200, then public read.
   // Current bundled release lacks skos:closeMatch. Never accept its 400/422 as a producer pass.
-  const correspondence = await f.adopt(holder, statement('skos:closeMatch', canonical.id));
+  const correspondence = await f.adopt(
+    holder,
+    statement('skos:closeMatch', canonical.id, [subjectURL, archiveURL, canonicalPin]),
+  );
   expect(correspondence.candidate).toBeString();
   expect(values(await read(holder), 'skos:closeMatch')).toEqual([canonical.id]);
   expect(values(await read(holder), 'schema:sameAs')).not.toContain(qHarem);
@@ -279,8 +289,8 @@ test('native claim replay checks current authority before returning an existing 
   };
   created(await batch(command), 201);
   // Ordinary standing editorial grants do not include trusted batch authority.
-  const denied = status(await batch(command, 'outsider'), 200) as BatchWriteResult;
-  expect(denied.results[0]!.status).toBe(403);
+  const denied = status(await batch(command, 'outsider'), 403);
+  expect(denied.effect_status).toBe('not_applied');
   const revoked = await batch(command, 'suspended');
   status(revoked, 401);
   expect(created(await batch({ ...command, key: randomUUID() }), 200).id).toBeString();
@@ -339,7 +349,7 @@ test('retracted claim-backed correspondence is absent from current public bindin
     references: proposal.statement.references,
   };
   const retracted = (status(await batch(retraction), 200) as BatchWriteResult).results[0]!;
-  expect(retracted.status, JSON.stringify(retracted)).toBe(201);
+  expect(retracted.status, JSON.stringify(retracted)).toBe(200);
   expect(values(await read(holder), 'schema:sameAs')).toEqual([]);
 }, 120_000);
 
