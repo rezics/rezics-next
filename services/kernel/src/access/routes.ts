@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -954,7 +955,7 @@ export function accessRoutes(
           const requested = query.ids.split(',');
           if (
             requested.length < 1 ||
-            requested.length > 100 ||
+            requested.length > MAX_CONSENTED_SCOPES ||
             requested.some((accountId) => !accountIdPattern.test(accountId))
           )
             throw new ProblemError('invalid_request');
