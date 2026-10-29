@@ -234,3 +234,12 @@ test('no web or UI test imports another test module, statically or with import()
   }
   expect(violations).toEqual([]);
 });
+
+test('a slow start cannot consume the warm-up budget either', async () => {
+  const server = await startDevServer({
+    ...fake({ readyDelay: 4500 }),
+    budgets: { ready: 7000, firstResponse: 2000, warmUp: 4000 },
+    warmUpPaths: ['/fresh-warm-up-budget'],
+  });
+  await server.stop();
+}, 15_000);
