@@ -600,17 +600,27 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
                   transaction_id: actor,
                 },
               ],
-              'content.media_variant': [
-                {
+              'content.media_variant': ['webp', 'avif'].flatMap((format) =>
+                [320, 640, 960, 1280, 1920, 2560].map((width) => ({
                   route: r,
                   media_id: id,
-                  format: 'webp',
-                  width: 320,
+                  format,
+                  width,
                   height: 200,
-                  media_type: 'image/webp',
+                  media_type: `image/${format}`,
                   byte_count: 64,
                   sha256: derivativeHash,
-                  key: `m/${id}/webp-320`,
+                  key: `m/${id}/${format}-${width}`,
+                  transaction_id: actor,
+                })),
+              ),
+              'access.resource_role_grant': [
+                {
+                  route: r,
+                  resource_id: id,
+                  subject_id: owner.accountId,
+                  grant_role: 'creator',
+                  valid: '(,)',
                   transaction_id: actor,
                 },
               ],

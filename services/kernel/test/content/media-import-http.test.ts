@@ -390,6 +390,25 @@ test('checkGrowth proves rows statements and buffers match declared cost', async
                   transaction_id: actor,
                 },
               ],
+              'access.resource_role_grant': [
+                {
+                  route: placement.route,
+                  resource_id: id,
+                  subject_id: accountId,
+                  grant_role: 'creator',
+                  valid: '(,)',
+                  transaction_id: actor,
+                },
+              ],
+              'access.resource_initialization': [
+                {
+                  route: placement.route,
+                  resource_id: id,
+                  resource_type: 'content.media',
+                  creator_id: accountId,
+                  initialized_at: '2026-01-01T00:00:00Z',
+                },
+              ],
               'semantic.subject': [
                 { route: placement.route, subject_id: id, type: 'schema:Book', recorded_transaction_id: id },
               ],
@@ -454,6 +473,15 @@ test('checkGrowth proves rows statements and buffers match declared cost', async
         'content.media': ['route', 'media_id'],
         'content.media_variant': ['route', 'media_id'],
         'content.source_fences': ['route', 'source', 'external_id', 'field_group'],
+        'access.resource_role_grant': [
+          'route',
+          'resource_id',
+          'subject_id',
+          'subject_kind',
+          'subject_role',
+          'grant_role',
+          'valid',
+        ],
         'semantic.subject': ['route', 'subject_id'],
         'semantic.context': ['route', 'context_id'],
         'access.resource_grant': [
