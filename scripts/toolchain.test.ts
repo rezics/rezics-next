@@ -44,7 +44,7 @@ test('the repository and check-host provisioner pin the tested canary build', as
   expect(manifest.packageManager).toBe(`bun@${manifest.devDependencies.bun}`);
   const revision = run([bun, '--eval', 'console.log(Bun.revision)']);
   expect(revision.code).toBe(0);
-  expect(revision.output.trim()).toBe('1.4.4-canary.1+a0cc096ce');
+  expect(revision.output.trim()).toBe('a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
   const provision = await Bun.file(join(root, 'scripts/provision-check-host.sh')).text();
   expect(provision).toContain(`bun_version=${manifest.devDependencies.bun}`);
   expect(provision).toContain('bun_revision=a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
