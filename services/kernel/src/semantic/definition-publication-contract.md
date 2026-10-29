@@ -201,10 +201,14 @@ Semantic parser or permission capability.
 
 Root assigned ingress to Performance: `http/body.ts`, `app.ts`, `server.ts`, the Definitions route declaration,
 owned-byte/wire-count accessors, process byte reservations and native ingress acceptance. The producer is
-registered but not delivered; no accessor signature or raw mode is inferred. Its parse-once-before-admission
-brief and Performance's no-parent-parse recommendation remain an explicit integration question. Do not detach
-a buffer still owned by ingress or claim the framework parent parse has disappeared. Pre-admission bodies
-consume ingress reservations independently of original request permits.
+registered but not delivered; no accessor signature is inferred. The amended ingress brief resolves the mode
+design: default JSON mode parses once; `detail['x-body-mode']='raw'` performs no decode, parse or body-schema
+check in the request path and exposes owned bytes/wire count. Its native acceptance must send non-JSON bytes
+to a raw handler. Definitions remains in JSON mode in that ingress task. The later Semantic implementation
+switches it to raw and moves parse, validation, canonicalization and both digests into the job. Registering raw
+mode alone does not remove the current parent parse. Do not detach a buffer still owned by ingress or infer
+mutable-buffer transfer ownership before delivered-code review. Both modes retain wire/reservation bounds;
+pre-admission bodies consume ingress reservations independently of original request permits.
 
 For idle job baseline H0 bytes, amplification c bytes/byte, wire maximum B_wire_max and actual ingress budget I,
 process accounted bytes are `K*(H0+c*B_wire_max) + I + bounded result bytes`, plus separately bounded runtime-read
