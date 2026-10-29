@@ -77,13 +77,20 @@ const repositoryPackage = JSON.parse(readFileSync(join(import.meta.dir, '../pack
 const PINNED_BUN_VERSION = repositoryPackage.packageManager?.startsWith('bun@')
   ? repositoryPackage.packageManager.slice(4)
   : '';
-const pinnedBun = Bun.spawnSync([
-  join(import.meta.dir, '../node_modules/.bin/bun'),
-  '--eval',
-  'console.log(Bun.revision)',
-]);
-if (pinnedBun.exitCode !== 0) throw new Error('Could not read pinned Bun revision');
-const PINNED_BUN_REVISION = pinnedBun.stdout.toString().trim();
+// Read when a remote run script is built, not at import: the train's derived regeneration imports this module (through
+// stack-run) in a worktree without node_modules, and the eager spawn failed every such landing with ENOENT (10-29).
+let pinnedBunRevision: string | undefined;
+function pinnedBunRevisionValue(): string {
+  if (pinnedBunRevision !== undefined) return pinnedBunRevision;
+  const pinnedBun = Bun.spawnSync([
+    join(import.meta.dir, '../node_modules/.bin/bun'),
+    '--eval',
+    'console.log(Bun.revision)',
+  ]);
+  if (pinnedBun.exitCode !== 0) throw new Error('Could not read pinned Bun revision');
+  pinnedBunRevision = pinnedBun.stdout.toString().trim();
+  return pinnedBunRevision;
+}
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 const REMOTE_TRANSPORT_FAILURE = 75;
@@ -622,7 +629,7 @@ export function runScript(id: string, directory: string, cwd: string, command: s
   const systemdScript = `host=$REMOTE_CHECK_HOST
     install_started=$(date +%s%N)
     expected_bun=${quote(PINNED_BUN_VERSION)}
-    expected_revision=${quote(PINNED_BUN_REVISION)}
+    expected_revision=${quote(pinnedBunRevisionValue())}
     case "$(uname -m)" in
       x86_64) build=x64; grep -q avx2 /proc/cpuinfo || build=x64-baseline ;;
       aarch64) build=aarch64 ;;

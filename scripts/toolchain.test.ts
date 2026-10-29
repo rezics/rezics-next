@@ -74,7 +74,9 @@ test('worker and remote checks select and verify the pinned repository Bun', asy
   expect(remote).toContain(`expected_bun=${manifest.packageManager.slice(4)}`);
   expect(remote).toContain('Bun.revision === process.argv[1]');
   expect(remote).toContain('https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz');
-  expect(remote).toContain('"$PWD/.temp/pinned-bun/package/bin/bun"');
+  // The verified pinned Bun is cached per host and version; a run downloads only on a cache miss.
+  expect(remote).toContain('pinned_cache=/srv/rezics-check/pinned-bun/$expected_bun-$build');
+  expect(remote).toContain('bun="$pinned_cache/package/bin/bun"');
   expect(remote).toContain('"$bun" install --frozen-lockfile');
   expect(remote).not.toContain('/usr/local/bin/bun');
 });
