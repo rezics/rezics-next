@@ -719,6 +719,8 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 
 ### Bearer verification
 
+Bearer scope claims are bounded once at authenticator creation to 129 characters per distinct known scope (`openid`, `offline_access`, `media:complete` and every mounted action), defaulting to 12,900 characters without a catalogue, while each scope retains its 128-character limit and character rules.
+
 - Touches: `actorOf` parses headers (absent header gives anonymous with no SQL); `authenticate.ts` locally verifies ES256 JWT and claims against JWKS, then performs the existing one acting-account point read (0–1 rows) via `account_pkey` on the account anchor; with `requested_by`, adds time plus 0–1 `principal_assignment` via its `(route,principal_id,request_id)` B-tree and 0–1 principal `account` via its key, both on the principal partition. Invalid bearer evidence retains HTTP 401. No writes. Grow A and D, fixing token, JWKS and identities.
 - Bound: Constant rows; 1 or 3 SQL statements; blocks `L(A)+d(L(D)+L(A))`. Per-factory JWKS cache lasts 300 s, fetch timeout 2 s and request deadline apply; warm matching keys need no fetch, cold/expired/unknown keys can fetch (cooldown 0). JWT bytes and JWKS key count are additional input costs, not A-dependent; the adapter does not cap their raw sizes.
 - Growth check: `test/access/growth-authenticate.test.ts`: `Bearer verification stays within its bound as A grows`

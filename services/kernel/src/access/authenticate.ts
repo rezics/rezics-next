@@ -115,7 +115,7 @@ function settings(config?: AuthenticationConfig): AuthenticationConfig {
   return { ...value };
 }
 
-function claims(payload: JWTPayload, config: AuthenticationConfig, at: Date): void {
+function claims(payload: JWTPayload, config: AuthenticationConfig, at: Date, scopeClaimLimit: number): void {
   const now = Math.floor(at.getTime() / 1000);
   if (
     payload.iss !== config.issuer ||
@@ -127,7 +127,7 @@ function claims(payload: JWTPayload, config: AuthenticationConfig, at: Date): vo
     !payload.client_id ||
     payload.client_id.length > 1024 ||
     typeof payload.scope !== 'string' ||
-    payload.scope.length > 12900 ||
+    payload.scope.length > scopeClaimLimit ||
     (payload.scope !== '' &&
       payload.scope.split(' ').some((scope) => !scope || scope.length > 128 || !scopePattern.test(scope))) ||
     !Number.isSafeInteger(payload.authn_epoch) ||
@@ -154,7 +154,12 @@ function claims(payload: JWTPayload, config: AuthenticationConfig, at: Date): vo
 }
 
 /** Each factory owns its key cache and its opaque, immutable request identities. */
-export function createAuthenticator(configuration?: AuthenticationConfig, clock: KernelClock = systemClock) {
+export function createAuthenticator(
+  configuration?: AuthenticationConfig,
+  clock: KernelClock = systemClock,
+  knownScopeCount = 100,
+) {
+  const scopeClaimLimit = knownScopeCount * 129;
   const approvalScope = Object.freeze({});
   const durableScope = Object.freeze({});
   const identities = new WeakMap<AccountActor, Identity>();
@@ -214,7 +219,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       );
       if (protectedHeader.typ !== 'at+jwt' || typeof protectedHeader.kid !== 'string' || !protectedHeader.kid)
         throw invalid();
-      claims(payload, config, at);
+      claims(payload, config, at, scopeClaimLimit);
       const accountId = payload.sub!;
       const client = deadlineClient(context.pool, context.deadline);
       // Authentication keeps its single actor point read on the account anchor.

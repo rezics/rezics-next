@@ -114,7 +114,8 @@ export function createAccess(config: AccessConfig): Access {
   // built-in platform role; it is intentionally absent from the mounted route catalogue.
   actions.set('gate:any', { anonymous: false });
   const clock = config.clock ?? (() => new Date(Date.now()));
-  const authentication = createAuthenticator(config.auth, clock);
+  const knownScopeCount = new Set(['openid', 'offline_access', 'media:complete', ...config.actions.keys()]).size;
+  const authentication = createAuthenticator(config.auth, clock, knownScopeCount);
   const admission = createCommandAdmission(authentication.identity, clock);
   const prepared = new WeakMap<object, Prepared>();
   const permissions = permissionAccess({
