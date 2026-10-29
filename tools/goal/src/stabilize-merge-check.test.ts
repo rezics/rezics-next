@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SqliteManagerInbox } from './inbox.ts';
 import { git } from './merge.ts';
@@ -45,9 +45,19 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
     };
     await h.train(runner);
 
-    expect(h.outcomes.map(({ passed, stage, firstFailure }) => ({ passed, stage, firstFailure }))).toEqual([
-      { passed: true, stage: 'merge', firstFailure: undefined },
-      { passed: true, stage: 'merge', firstFailure: undefined },
+    for (const outcome of h.outcomes) {
+      if (!outcome.passed) throw new Error(readFileSync(outcome.logPath, 'utf8'));
+    }
+    expect(
+      h.outcomes.map(({ passed, stage, firstFailure, logPath }) => ({
+        passed,
+        stage,
+        firstFailure,
+        log: readFileSync(logPath, 'utf8'),
+      })),
+    ).toEqual([
+      { passed: true, stage: 'merge', firstFailure: undefined, log: expect.any(String) },
+      { passed: true, stage: 'merge', firstFailure: undefined, log: expect.any(String) },
     ]);
     expect(checked.map(({ command }) => command)).toEqual([
       ['fixture-acceptance', 'first'],
