@@ -11,6 +11,7 @@ import { accountOf } from '../src/features/pages/account-read';
 import { accountSchemaType } from '../src/features/pages/account';
 import { subjectAccountRedirect } from '../src/features/pages/subject';
 import { routes as agentRoutes } from '../src/kernel/fake/agent-one-page';
+import { loadViewPages } from '../src/features/pages/subject-frame';
 
 const redirectedClient = (data: unknown) =>
   ({
@@ -203,4 +204,26 @@ test('the operator fake answers its own identity without replacing unrelated pub
       accounts: [{ handle: 'operator', displayName: 'Operator Name' }],
     });
   }
+});
+
+test('a redirected subject view stops after its page read without loading the overview', async () => {
+  const requests: unknown[] = [];
+  const client = {
+    pages: {
+      $read: {
+        post: async (request: unknown) => {
+          requests.push(request);
+          return { status: 308, data: { redirect: { from: 'subject', to: 'helper' } } };
+        },
+      },
+    },
+  } as never;
+  expect(await loadViewPages(client, '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', 'reviews', 'zh-Hans')).toEqual({
+    kind: 'redirect',
+    id: 'helper',
+    target: 'account',
+  });
+  expect(requests).toEqual([
+    { target: { subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', view: 'reviews' }, languages: ['zh-Hans'] },
+  ]);
 });
