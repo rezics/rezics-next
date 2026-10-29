@@ -45,6 +45,7 @@ if (script.includes('MemAvailable')) {
   console.log(
     'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM ' + (config.available ?? 16 * 2 ** 30) +
       '\\nAVAILABLE ' + (config.available ?? 16 * 2 ** 30) +
+      '\\nMEMORY_RESERVED 0' +
       '\\nPROCESSORS 16\\nSLICE_PROCESSORS ' + ((config.cpuQuotaPercent ?? 800) / 100) +
       '\\nLOAD 0\\nORDINARY_SLOTS_USED ' + ordinarySlotsUsed +
       '\\nEXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0) + '\\nGATE_WAITING 0' +

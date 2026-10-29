@@ -3910,7 +3910,11 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
     ).toBe(true);
     const grants = events().filter((event) => event.kind === 'slot' && event.granted);
     const landingGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_PRIORITY landing'));
-    const ordinaryGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999'));
+    const ordinaryGrant = grants.findIndex((event) =>
+      String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
+      String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1') &&
+      String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999'),
+    );
     const multiGrant = grants.findIndex((event, index) => index > landingGrant && String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'));
     expect(landingGrant).toBeGreaterThanOrEqual(0);
     expect(ordinaryGrant, JSON.stringify({ ordinary: grants.filter((event) => String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999')).map(({ actualAdmissionLimit, landingMarkerIds, slotClass }) => ({ actualAdmissionLimit, landingMarkerIds, slotClass })), order: grants.map((event) => ({ priority: String(event.script).match(/# REMOTE_CHECK_PRIORITY (\w+)/)?.[1], estimate: String(event.script).match(/# REMOTE_CHECK_ESTIMATE_MS (\w+)/)?.[1] })) })).toBeGreaterThan(landingGrant);
@@ -4018,7 +4022,7 @@ test('landing priority: invalid values are usage errors and direct CLI admission
   const result = await remote({ ...valid.env, REMOTE_CHECK_PRIORITY: 'landing' }, workspace());
   expect(result.code).toBe(0);
   expect(valid.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain('# REMOTE_CHECK_PRIORITY landing');
-  expect(valid.events().find((event) => event.kind === 'run')?.script).toContain(
-    "printf 'remote-check: run priority %s on %s\\n' landing a",
-  );
+  const runScript = String(valid.events().find((event) => event.kind === 'run')?.script);
+  expect(runScript).toContain('remote-check: run priority %s on %s');
+  expect(runScript).toContain('landing a');
 });
