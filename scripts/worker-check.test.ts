@@ -686,3 +686,20 @@ test('memory wait heartbeats keep a queued check alive across successive bounded
     }
   }
 });
+
+test('a worker already on a check host runs its command locally without relaying again', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  try {
+    workerEnv(fixture, join(fixture.root, 'hosts.json'));
+    writeFileSync(join(fixture.root, 'hosts.json'), JSON.stringify({ hosts: [] }));
+    process.env.KERNEL_CHECK_ON_REMOTE = '1';
+    expect(await runWorkerCheck(localCommand(fixture.localMarker), fixture.root, false)).toBe(0);
+    expect(existsSync(fixture.localMarker)).toBe(true);
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+  } finally {
+    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE', 'KERNEL_CHECK_ON_REMOTE']) {
+      if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key]!;
+    }
+  }
+});

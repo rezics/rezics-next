@@ -134,6 +134,7 @@ export async function runWorkerCheck(
   const file = recordedLog ?? logPath(root);
   const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
+  wait.begin();
   const env = { ...process.env };
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
@@ -143,7 +144,7 @@ export async function runWorkerCheck(
   const weight = checkMemoryWeight(readPeaks(directory)[commandClass] ?? [], capacity);
   const remoteHostsFile = env.KERNEL_CHECK_REMOTE;
   let remoteEligible = false;
-  if (!localOnly && remoteHostsFile && weight >= 2) {
+  if (!localOnly && env.KERNEL_CHECK_ON_REMOTE !== '1' && remoteHostsFile && weight >= 2) {
     try {
       accessSync(remoteHostsFile, constants.R_OK);
       remoteEligible = true;
