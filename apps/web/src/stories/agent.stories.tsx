@@ -18,6 +18,12 @@ export const VerifiedPersonSignedIn: Story = {
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={`/@${agentPageRecording.handle}`} />,
 };
+/** Automated software with its operator linked from the account's public identity. */
+export const Automated: Story = {
+  name: 'Automated agent',
+  play: pageReady,
+  render: () => <PageStory visitor="Signed Out" path="/@helper" />,
+};
 /** A reader's account: its own agent node, a placeholder avatar and only the activity views. */
 export const Reader: Story = {
   name: 'Reader',

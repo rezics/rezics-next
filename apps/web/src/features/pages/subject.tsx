@@ -5,6 +5,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
 import { accountOf } from './account-read';
+import { keepSearch } from '../../subject/load-subject';
 import type { Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject } from '../../subject/types';
@@ -39,6 +40,13 @@ export type SubjectPageLoad =
   | { kind: 'page'; page: SubjectPageData };
 
 export type SubjectActionsInput = { id: string; type: string; locale: string };
+
+/** The canonical document redirect for a verified agent's subject address. */
+export function subjectAccountRedirect(locale: string, handle: string, view?: View, search = '') {
+  const base = `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`;
+  const href = view && view !== 'overview' ? `${base}/${encodeURIComponent(view)}` : base;
+  return { statusCode: 308 as const, href: keepSearch(href, search) };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

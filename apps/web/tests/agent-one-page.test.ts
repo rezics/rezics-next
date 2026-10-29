@@ -1,4 +1,11 @@
 import { expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import agentRecording from '../src/kernel/recorded/agent-page.json';
+import { agentPageHead, agentPagePaths } from '../src/features/pages/agent-page';
+import { readPageAuthors } from '../src/identity/read';
+import { SubjectPage } from '../src/features/pages/subject';
 import { loadSubjectPage } from '../src/features/pages/subject';
 import { accountOf } from '../src/features/pages/account-read';
 import { accountSchemaType } from '../src/features/pages/account';
@@ -100,4 +107,56 @@ test('ordinary and organization account descriptors remain distinguishable', () 
   expect(accountOf({ accounts: [{ id: 'org', state: 'active', kind: 'organization', links: [] }] })?.kind).toBe(
     'organization',
   );
+});
+
+test('an automated agent uses SoftwareApplication JSON-LD and shows its operator as a page link', () => {
+  const page = structuredClone(agentRecording) as any;
+  page.account = { id: page.account, handle: page.handle };
+  const profileRead = Object.values(page.reads).find((read: any) => Array.isArray(read.body?.accounts)) as any;
+  profileRead.body.accounts[0].automated = true;
+  profileRead.body.accounts[0].operatorId = 'operator-account';
+  const paths = agentPagePaths('helper');
+  const head = agentPageHead(page, 'en', 'https://rezics.test', paths);
+  const jsonLd = JSON.parse(head.scripts.find((script: any) => script.type === 'application/ld+json')!.children);
+  expect(jsonLd['@graph'][0].mainEntity['@type']).toBe('SoftwareApplication');
+
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(['exposure', 'anonymous'], []);
+  const html = renderToString(
+    createElement(QueryClientProvider, {
+      client: queryClient,
+      children: createElement(SubjectPage, {
+        page,
+        locale: 'en',
+        messages: {
+          unknown: 'Unknown',
+          none: 'None',
+          unlabelled: 'Unlabelled',
+          sources: 'Sources',
+          aliases: 'Aliases',
+          details: 'Details',
+        },
+        operator: { id: 'operator-account', handle: 'operator', displayName: 'Operator Name' },
+        base: '/en/@helper',
+        renderJsonLd: false,
+      } as never),
+    }),
+  );
+  expect(html).toContain('Operated by');
+  expect(html).toMatch(/href="\/en\/@operator"[^>]*>Operator Name<\/a>/);
+});
+
+test("the account page's optional operator lookup is one public identity read", async () => {
+  const calls: string[] = [];
+  const client = {
+    accounts: {
+      get: async ({ query }: { query: { ids: string } }) => {
+        calls.push(query.ids);
+        return { data: { accounts: [{ id: 'operator-account', handle: 'operator', displayName: 'Operator Name' }] } };
+      },
+    },
+  } as never;
+  const identities = await readPageAuthors(client, ['operator-account', 'operator-account']);
+  expect(calls).toEqual(['operator-account']);
+  expect(identities?.['operator-account']).toMatchObject({ handle: 'operator', displayName: 'Operator Name' });
 });

@@ -9,6 +9,7 @@ import {
   subjectPageJsonLd,
   subjectPageTitle,
   subjectPageType,
+  subjectAccountRedirect,
 } from '../../features/pages/subject';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectTabs } from '../../features/pages/views';
@@ -66,14 +67,24 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
+    const result = await loadSubjectPage(client, data.id, data.view as View | undefined, data.locale);
+    if (result.kind === 'missing') throw notFound();
+    if (result.kind === 'redirect') {
+      if (result.target === 'account') {
+        const target = subjectAccountRedirect(data.locale, result.id, data.view as View | undefined, data.search);
+        throw redirect({ href: target.href, statusCode: target.statusCode });
+      }
+      const survivor = await loadSubject(client, result.id, data.locale as never);
+      if (survivor.kind === 'missing') throw notFound();
+      throw redirect({ href: keepSearch(subjectUrlForView(survivor.value, data.view), data.search), statusCode: 301 });
+    }
     const canonical = await loadSubject(client, data.id, data.locale as never);
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect({ href: keepSearch(subjectUrlForView(canonical.value, data.view), data.search), statusCode: 301 });
 
     const request = getRequest();
-    const [result, library, reader, reactions, ratings] = await Promise.all([
-      loadSubjectPage(client, data.id, data.view as View | undefined, data.locale),
+    const [library, reader, reactions, ratings] = await Promise.all([
       loadSubjectLibrarySlot(
         client,
         request,
@@ -86,17 +97,6 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
       loadSubjectReactions(client, request, env as Partial<SessionEnv>, data.id),
       loadSubjectRatings(client, request, env as Partial<SessionEnv>, data.id),
     ]);
-    if (result.kind === 'missing') throw notFound();
-    if (result.kind === 'redirect') {
-      if (result.target === 'account')
-        throw redirect({
-          href: keepSearch(`/${encodeURIComponent(data.locale)}/@${encodeURIComponent(result.id)}`, data.search),
-          statusCode: 308,
-        });
-      const survivor = await loadSubject(client, result.id, data.locale as never);
-      if (survivor.kind === 'missing') throw notFound();
-      throw redirect({ href: keepSearch(subjectUrlForView(survivor.value, data.view), data.search), statusCode: 301 });
-    }
     const type = subjectPageType(result.page);
     const [frame, relations] = await Promise.all([
       type ? typeFrame(type, data.locale) : Promise.resolve<Awaited<ReturnType<typeof typeFrame>>>({}),
