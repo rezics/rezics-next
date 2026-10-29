@@ -9,6 +9,7 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   chmodSync,
   writeFileSync,
@@ -140,6 +141,16 @@ export function installPrivate(worktree: string): void {
   ignoreNodeModules(worktree);
   writeFileSync(join(nodeModules, '.goal-private-dependencies'), dependencyKey(worktree));
 }
+/** Removes write permission below `path` and keeps each file's execute bits, so package binaries still run. */
+export function sealReadOnly(path: string): void {
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    const child = join(path, entry.name);
+    if (entry.isDirectory()) sealReadOnly(child);
+    else if (!entry.isSymbolicLink()) chmodSync(child, statSync(child).mode & 0o555);
+  }
+  chmodSync(path, 0o555);
+}
+
 export function installShared(worktree: string, storeRoot = join(dirname(worktree), '..', 'dependency-stores')): void {
   if (!existsSync(join(worktree, 'package.json'))) return;
   const key = dependencyKey(worktree);
@@ -182,15 +193,7 @@ export function installShared(worktree: string, storeRoot = join(dirname(worktre
           installPrivate(worktree);
           return;
         }
-        const makeReadOnly = (path: string) => {
-          for (const entry of readdirSync(path, { withFileTypes: true })) {
-            const child = join(path, entry.name);
-            if (entry.isDirectory() && !entry.isSymbolicLink()) makeReadOnly(child);
-            else if (!entry.isSymbolicLink()) chmodSync(child, 0o444);
-          }
-          chmodSync(path, 0o555);
-        };
-        makeReadOnly(join(temp, 'node_modules', '.bun'));
+        sealReadOnly(join(temp, 'node_modules', '.bun'));
         rmSync(store, { recursive: true, force: true });
         renameSync(temp, store);
       } catch (error) {
