@@ -1281,6 +1281,78 @@ test('a caller without a memory request keeps the 2.5 GiB reservation', async ()
   expect(events().find((event) => event.kind === 'slot')?.script).toContain(`# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${CHECK_SLOT_MEMORY_BYTES}`);
 });
 
+test('real slot locks enforce reservations, ignore stale files and free memory on release', async () => {
+  const scripts = new Map<number, string>();
+  for (const memoryGiB of [4, 6]) {
+    const { env, events } = scenario({ a: { slots: 3, memoryMaxGiB: 8 } });
+    expect((await remote(env, workspace(), ['true'], ['--memory-gib', String(memoryGiB)])).code).toBe(0);
+    const script = String(events().find((event) => event.kind === 'slot')!.script);
+    // Exercise the generated admission and holder with real flock, without running host-wide stale-run cleanup.
+    scripts.set(memoryGiB, script.slice(script.indexOf('REMOTE_CHECK_SLOT_TAKE=1')));
+  }
+  for (const heldGiB of [4, 6]) {
+    const directory = mkdtempSync(join(root, 'memory-locks-'));
+    mkdirSync(join(directory, 'slots'));
+    mkdirSync(join(directory, 'bases'));
+    // An unlocked slot's old reservation must not count, even when it exceeds the entire host limit.
+    writeFileSync(join(directory, 'slots/0.memory'), String(100 * 2 ** 30));
+    const localScript = (memoryGiB: number) => scripts.get(memoryGiB)!.replaceAll('/srv/rezics-check', directory);
+    const output = join(directory, 'holder-output');
+    const holder = Bun.spawn(['bash', '-c', localScript(heldGiB)], {
+      stdin: 'pipe',
+      stdout: Bun.file(output),
+      stderr: 'pipe',
+    });
+    const stderr = new Response(holder.stderr).text();
+    holder.stdin.write('\n');
+    try {
+      await waitFor(() => existsSync(output) && readFileSync(output, 'utf8').includes('SLOTS 1'));
+      expect(readFileSync(join(directory, 'slots/0.memory'), 'utf8').trim()).toBe(String(heldGiB * 2 ** 30));
+      const contender = spawnSync('bash', ['-c', localScript(4)], { input: '\n', encoding: 'utf8', timeout: 5_000 });
+      expect(contender.status, contender.stderr).toBe(heldGiB === 4 ? 0 : 75);
+      if (heldGiB === 4) expect(contender.stdout).toContain('SLOTS 1');
+    } finally {
+      holder.stdin.end();
+      expect(await holder.exited, await stderr).toBe(0);
+    }
+    expect(existsSync(join(directory, 'slots/0.memory'))).toBe(false);
+    const next = spawnSync('bash', ['-c', localScript(4)], { input: '\n', encoding: 'utf8', timeout: 5_000 });
+    expect(next.status, next.stderr).toBe(0);
+    expect(next.stdout).toContain('SLOTS 1');
+  }
+});
+
+test('try-once callers apply their memory request when ranking and acquiring hosts', async () => {
+  for (const memoryGiB of [4, 2]) {
+    const { env, events } = scenario({
+      a: { slots: 3, memoryMaxGiB: 8, memoryMax: 8 * 2 ** 30, ordinaryBusy: 1, busyMemoryGiB: 6 },
+    });
+    const options = { hosts: readHosts(env.KERNEL_CHECK_REMOTE!), workspace: workspace(), command: ['true'], memoryGiB };
+    const child = Bun.spawn([
+      process.execPath,
+      '--eval',
+      `const { tryRemoteCheck } = await import(${JSON.stringify(remoteCheck)});
+       console.log(JSON.stringify(await tryRemoteCheck(${JSON.stringify(options)}, new AbortController().signal)));`,
+    ], { env, stdout: 'pipe', stderr: 'pipe' });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(code, stderr).toBe(0);
+    expect(JSON.parse(stdout).status).toBe(memoryGiB === 4 ? 'no-slot' : 'ran');
+    const granted = events().find((event) => event.kind === 'slot' && event.granted);
+    if (memoryGiB === 4) expect(granted).toBeUndefined();
+    else expect(granted?.script).toContain(`# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${2 * 2 ** 30}`);
+  }
+});
+
+test('memory requests must be positive integers before any host is contacted', async () => {
+  for (const value of ['0', '-1', '2.5', 'NaN', 'Infinity']) {
+    const { env, events } = scenario({ a: {} });
+    const result = await remote(env, workspace(), ['true'], ['--memory-gib', value]);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('--memory-gib must be a positive integer');
+    expect(events()).toEqual([]);
+  }
+});
+
 test('a host without processorsPerSlot keeps 2 processors per slot', () => {
   const { env } = scenario({ a: {} });
   expect(readHosts(env.KERNEL_CHECK_REMOTE!)[0]?.processorsPerSlot).toBe(CHECK_SLOT_PROCESSORS);

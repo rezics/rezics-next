@@ -117,7 +117,7 @@ export function installedPackageCacheCheck(
   const marker = `${directory}/.bun-install-complete`;
   const packageTree = `${directory}/node_modules/.bun`;
   return `
-    modified_files=$(find ${quote(packageTree)} -type f -links +1 -cnewer ${quote(marker)} -print 2>/dev/null)
+    modified_files=$(find ${quote(packageTree)} -type f -links +1 -newer ${quote(marker)} -print 2>/dev/null)
     if [ -n "$modified_files" ]; then
       modified_count=$(printf '%s\n' "$modified_files" | wc -l | tr -d ' ')
       printf 'remote-check: the run modified %s installed package files shared with the host package cache on %s:\n' "$modified_count" ${quote(hostName)} >&2
@@ -631,15 +631,16 @@ exec 8>&-
 flock -u 6
 exec 6>&-
 mkdir -p ${ROOT}/bases
-exec 9>"${ROOT}/bases/.lock"
-flock -x 9
+exec 5>"${ROOT}/bases/.lock"
+flock -x 5
 current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
 for base in ${ROOT}/bases/*; do
   [ -d "$base" ] || continue
   [ "$base" = "$current" ] && continue
   if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
 done
-flock -u 9
+flock -u 5
+exec 5>&-
 echo "SLOTS ${count}"
 run_id=
 run_directory=
@@ -652,10 +653,10 @@ if IFS= read -r run_id; then
   fi
 fi
 cleanup_orphan() {
-  for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
   if [ -n "$run_id" ] && [ -n "$run_directory" ] && [ ! -e "$run_directory/exit-status" ]; then
     ${cleanupCommands()}
   fi
+  for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
 }
 trap cleanup_orphan EXIT
 cat >/dev/null`;
@@ -1984,7 +1985,9 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
  */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
   validateEstimateMs(options.estimateMs);
+  validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
+  const memoryReservationBytes = options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
   const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
@@ -2002,6 +2005,7 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
       options.estimateMs,
       signal,
       options.gate ?? false,
+      memoryReservationBytes,
     );
     if (!lease) return { status: 'no-slot' };
     try {

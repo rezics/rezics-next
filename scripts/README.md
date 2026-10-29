@@ -105,7 +105,10 @@ Editing JSON alone does not resize the slice. Provisioning takes memory and CPU 
 
 ### Admission and queueing
 
-Each slot requires the host's configured `processorsPerSlot` (default **2**). Runs reserve their command class's measured memory: `worker-check` passes its class weight, while other callers without a request retain the **2.5 GiB** default. For each answering host, compute:
+Each slot requires the host's configured `processorsPerSlot` (default **2**). Slot counts in the hosts file are a
+processor bound. Runs reserve their command class's measured memory: `worker-check` passes its class weight with
+`--memory-gib <positive integer>`, while other callers without a request retain the **2.5 GiB** default per slot.
+Multi-slot requests retain one reservation per requested slot. For each answering host, compute:
 
 ```text
 C = min(configured slots, floor(slice processors / processorsPerSlot))
@@ -117,6 +120,10 @@ Slice processors are the quota divided by the period in `cpu.max`.
 Slice memory is `memory.max`; configured values supply the fallbacks above.
 Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/tmp` has less than 4 GiB free, or `/tmp` has fewer than 65,536 free inodes. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity. Because check-host `/tmp` is tmpfs, the byte floor protects the same RAM needed by checks, while the inode floor catches exhaustion before the byte limit is reached.
 Under the host reservation lock, admission requires the memory reserved by held slots plus the new request to fit within the slice's `memory.max` (or configured `memoryMaxGiB` fallback). A host is skipped when its 1-minute load exceeds 1.5 times its slice processors or its machine `MemAvailable` is below 4 GiB. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity. A free slot's stale reservation file does not count.
+Under the host reservation lock, admission requires the memory reserved by held slots plus the new request to fit
+within the host's configured `memoryMaxGiB`. A host is skipped when its 1-minute load exceeds 1.5 times its slice
+processors or its machine `MemAvailable` is below 4 GiB. These thresholds apply to gates and multi-slot runs too;
+skipped hosts are logged and the check waits for capacity. A free slot's stale reservation file does not count.
 Headroom is `max(0, memory.max - memory.current)` in the shared slice.
 When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
 Slots reserve admission capacity. They do not impose a separate CPU or memory cap on each run.
