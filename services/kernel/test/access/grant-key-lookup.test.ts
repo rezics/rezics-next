@@ -81,7 +81,18 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
         );
         expect(scans.length).toBeGreaterThan(0);
         for (const node of scans) {
-          expect(node['Node Type'], JSON.stringify({ scale, plans: observed.capture.plans })).toBe('Index Only Scan');
+          expect(
+            node['Node Type'],
+            JSON.stringify({
+              scale,
+              indexes: (
+                await database.admin.query(
+                  "SELECT indexdef FROM pg_indexes WHERE schemaname = 'access' AND tablename = 'resource_grant'",
+                )
+              ).rows,
+              scans,
+            }),
+          ).toBe('Index Only Scan');
           expect(node['Index Name']).toBe('resource_grant_pkey_lookup');
           const condition = String(node['Index Cond']);
           for (const key of ['route', 'resource_id', 'subject_kind', 'subject_id', 'subject_role', 'action'])
