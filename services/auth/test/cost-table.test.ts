@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { costTableProblems, readCostTable } from '../../kernel/test/support/growth-cost-table.ts';
 
-const missingGrowthChecks = ['Passkey registration and removal'];
+const missingGrowthChecks: string[] = [];
 
 test('the Auth README Cost table cites an existing growth check for every row', () => {
   const readme = join(import.meta.dir, '../README.md');
