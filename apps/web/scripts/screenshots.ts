@@ -30,6 +30,30 @@ type StoryPreview = {
   __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
 };
 
+type ProgressReporter = ReturnType<typeof createProgressReporter>;
+
+/** Writes capture progress to stderr while leaving stdout available for the file list. */
+export function createProgressReporter(
+  write: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
+  now: () => number = Date.now,
+) {
+  let buildStartedAt: number | undefined;
+  return {
+    buildStarted() {
+      buildStartedAt = now();
+      write('Storybook build started.');
+    },
+    buildFinished() {
+      const duration = buildStartedAt === undefined ? 0 : Math.max(0, now() - buildStartedAt);
+      write(`Storybook build finished in ${(duration / 1_000).toFixed(1)}s.`);
+      buildStartedAt = undefined;
+    },
+    captured(index: number, total: number, file: string) {
+      write(`captured ${index}/${total} ${file}`);
+    },
+  };
+}
+
 function usage(): string {
   return 'Usage: bun run screenshots [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>] [--out <dir>]';
 }
@@ -150,9 +174,10 @@ function serve(directory: string) {
   });
 }
 
-async function build(directory: string, cacheDir: string): Promise<void> {
+async function build(directory: string, cacheDir: string, progress: ProgressReporter): Promise<void> {
   const storybook = join(app, 'node_modules/.bin/storybook');
   await mkdir(cacheDir, { recursive: true });
+  progress.buildStarted();
   const child = Bun.spawn([storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'], {
     cwd: app,
     stdin: 'ignore',
@@ -175,6 +200,30 @@ async function build(directory: string, cacheDir: string): Promise<void> {
   } finally {
     clearTimeout(timer);
     building = undefined;
+    progress.buildFinished();
+  }
+}
+
+/** Navigates to a story, retrying only a browser network-interface change once. */
+export async function navigateStory(
+  page: Pick<Page, 'goto'>,
+  id: string,
+  url: string,
+  writeProgress: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
+): ReturnType<Page['goto']> {
+  const options = { waitUntil: 'load' as const, timeout: 60_000 };
+  try {
+    return await page.goto(url, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('net::ERR_NETWORK_CHANGED')) throw error;
+    writeProgress(`Retrying navigation for story ${id} after net::ERR_NETWORK_CHANGED.`);
+    try {
+      return await page.goto(url, options);
+    } catch (retryError) {
+      const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+      throw new Error(`Story ${id} navigation failed after retry: ${retryMessage}`, { cause: retryError });
+    }
   }
 }
 
@@ -231,7 +280,7 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
   page.on('pageerror', onPageError);
   page.on('console', onConsole);
   try {
-    await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
+    await navigateStory(page, job.id, url);
     await settle(page, job.id, pageErrors);
     await prepareFullPageCapture(page);
     const file = join(out, `${job.id}.${job.locale}.${job.theme}.png`);
@@ -295,6 +344,7 @@ async function capture(
   jobs: readonly Job[],
   out: string,
   width: number,
+  progress: ProgressReporter,
 ): Promise<CaptureResult> {
   const pages: Page[] = [];
   for (let index = 0; index < Math.min(captureLimit, jobs.length); index += 1) {
@@ -305,7 +355,17 @@ async function capture(
     });
     pages.push(await context.newPage());
   }
-  return captureJobs(jobs, (job, worker) => captureOne(pages[worker]!, origin, job, out), pages.length);
+  let completed = 0;
+  return captureJobs(
+    jobs,
+    async (job, worker) => {
+      const file = await captureOne(pages[worker]!, origin, job, out);
+      completed += 1;
+      progress.captured(completed, jobs.length, file);
+      return file;
+    },
+    pages.length,
+  );
 }
 
 function workspaceRelative(path: string): string | undefined {
@@ -338,6 +398,7 @@ async function captureScreenshots(options: Options): Promise<number> {
   const site = join(buildDir, 'site');
   let server: ReturnType<typeof Bun.serve> | undefined;
   let browser: Browser | undefined;
+  const progress = createProgressReporter();
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -353,7 +414,7 @@ async function captureScreenshots(options: Options): Promise<number> {
     });
   }
   try {
-    await build(site, join(buildDir, 'cache'));
+    await build(site, join(buildDir, 'cache'), progress);
     const indexFile = Bun.file(join(site, 'index.json'));
     if (!(await indexFile.exists())) throw new Error('Storybook build did not write index.json.');
     const index = (await indexFile.json()) as { entries?: Record<string, { id?: string; type?: string }> };
@@ -368,7 +429,8 @@ async function captureScreenshots(options: Options): Promise<number> {
     const jobs = stories.flatMap((id) =>
       options.locales.flatMap((locale) => options.themes.map((theme) => ({ id, locale, theme }))),
     );
-    const { files, failures } = await capture(browser, origin, jobs, options.out, options.width);
+<<<<<<< HEAD
+    const { files, failures } = await capture(browser, origin, jobs, options.out, options.width, progress);
     return reportCaptureResults(files, failures, (text) => process.stdout.write(text));
   } finally {
     await stop();
