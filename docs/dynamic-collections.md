@@ -58,7 +58,7 @@ Soft-deleted facts can keep identities resolvable for undo but never contribute 
 
 ### Logical identity and first-write materialization
 
-Derive each built-in ID with the existing `route/route.ts` `derivedId`, owner UUID namespace, and owner's route. The exact domain-separated names are `JSON.stringify(['library.collection.builtin', 1, 'everything'])` and
+For Everything and state, derive each built-in ID with the existing `route/route.ts` `derivedId`, owner UUID namespace, and owner's route. The exact domain-separated names are `JSON.stringify(['library.collection.builtin', 1, 'everything'])` and
 `JSON.stringify(['library.collection.builtin', 1, 'state', profileId, stateSetId, stateId])`. Read and write use the same helper.
 Release digest, accepting type, labels, current time, visibility, and stored/materialized state are not identity inputs; a
 conflicting nonmatching row at the deterministic ID fails closed without changing the logical ID. Logical built-ins have revision 0; their first authorized owner write commits revision 1 under native CAS. Built-ins cannot be deleted. State labels and materialization never change identity.
@@ -137,14 +137,14 @@ Collection cannot become public through follow or mount; existing Zone rules dec
 
 ## Access and disclosure
 
-Every dynamic Collection is private until its curator explicitly changes visibility. Reads authorize the Collection before searching
+Liked is always private. Other dynamic Collections are private until their curator explicitly changes visibility. Reads authorize the Collection before searching
 candidates. A private or unknown Collection has the same not-found response for another account and an anonymous viewer. Suspended valid bearers receive 403 `account_suspended` everywhere, including public/unlisted reads. Missing/invalid/revoked credentials use 401 where required; there is no anonymous-floor exception. Changing visibility uses the existing Collection authorization and revision check. Unlisted and public
 visibility continue to use the existing direct-read and listing rules.
 
 The curator's private descriptor may identify the built-in profile and state. It never appears for another viewer. A public or
 unlisted members page returns only its ordinary Collection metadata and subject summaries that pass the current viewer's native original AND terminal eligibility, Access, consent, foreign target and source-tuple fence checks. It returns no state, label, progress, holding, query body, predicate, profile pin, private candidate count, or
 private member count. Collection membership never grants subject access. Filtering by an owner's personal facts remains owner-only.
-These exclusions concern private fact values; the agreed `builtinKind` and accepted `builtinLabels` presentation remain public.
+These exclusions concern private fact values; publishable built-ins retain the agreed public `builtinKind` and accepted `builtinLabels` presentation. Liked has no public presentation DTO.
 An inaccessible subject is omitted and consumes candidate budget just like any other rejected candidate.
 
 Private facts and private dynamic results do not enter public Search/FTS, public Collection membership, subject Collection counts,

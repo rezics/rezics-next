@@ -95,7 +95,7 @@ is not implemented.
 
 Built-ins have stable deterministic identities and private defaults. Empty logical Everything and owner state
 reference discovery need no stored header or write scope. Dynamic DTOs omit curated count, creation/update times,
-order epoch and occurrence fields; no fake zeros. Every account also has a stable private logical Liked, including
+order epoch and occurrence fields; no fake zeros. Every account also has a stable logical Liked that is always private, including
 empty `200`; that adopted meaning does not establish implemented identity or members runtime. First authorized
 materialization moves revision 0 to 1 atomically with native Collection resource grants and `shareAccount`, without a read-grant override. Denied writes create nothing.
 

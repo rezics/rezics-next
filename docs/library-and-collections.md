@@ -37,7 +37,7 @@ Grid/list/table layouts are presentation only and do not change membership or au
   Support is derived representation, never a second authority; digest ordering is not semantic chronology.
 - **Liked** derives from the owner's current SUBJECT `like` or `love` reaction. Switching between those preserves
   membership; clearing or another kind removes it. Thread/post reactions do not qualify. A reaction alone adds
-  nothing to Everything or explicit state. Every account has a stable private logical Liked, including a genuine
+  nothing to Everything or explicit state. Every account has a stable logical Liked that is always private, including a genuine
   empty `200`. Content owns the owner-scoped reaction adapter; copying into a curated Collection creates independent
   occurrences. Logical identity, shared members integration and complete Content source-version coverage remain
   implementation requirements, not delivered Liked runtime.
@@ -173,7 +173,7 @@ never grant permission. Healthy catalogue freshness is at most 60 seconds; more 
 readiness. Privacy reductions take effect immediately. Owners see their own writes on their next read.
 
 Private facts never enter public indexes, full text, totals, facets or subject membership projections. Public lists
-expose no totals/facets over unchecked candidates. Dynamic Collections are private until explicitly published and
+expose no totals/facets over unchecked candidates. Publishable dynamic Collections are private until explicitly published and
 disclose permitted subject membership, never the private facts or predicates that selected it. Only public membership
 contributes to public listing counts; private/unlisted membership never does. Public/unlisted reads still
 check each subject's current native authority; a follow or Zone mount grants nothing. Unknown and hidden private
