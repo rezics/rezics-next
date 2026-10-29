@@ -125,6 +125,9 @@ export function installedPackageCacheCheck(
       printf 'remote-check: the run modified %s installed package files shared with the host package cache on %s:\n' "$modified_count" ${quote(hostName)} >&2
       run_root=${quote(directory)}
       cache_root=${quote(cacheRoot)}
+      inode_file="$run_root/.modified-package-inodes.$$"
+      cache_matches_file="$run_root/.modified-package-cache-matches.$$"
+      : > "$inode_file"
       shown=0
       printf '%s\n' "$modified_files" | while IFS= read -r file; do
         [ -n "$file" ] || continue
@@ -133,7 +136,13 @@ export function installedPackageCacheCheck(
           shown=$((shown + 1))
         fi
         inode=$(stat -c '%i' -- "$file")
-        cache_file=$(find "$cache_root" -type f -inum "$inode" -print -quit 2>/dev/null)
+        printf '%s\n' "$inode" >> "$inode_file"
+      done
+      find "$cache_root" -type f -printf '%i %p\n' 2>/dev/null | awk '
+        NR == FNR { changed[$1] = 1; next }
+        $1 in changed { print substr($0, index($0, " ") + 1) }
+      ' "$inode_file" - > "$cache_matches_file"
+      while IFS= read -r cache_file; do
         if [ -n "$cache_file" ]; then
           relative=\${cache_file#"$cache_root"/}
           first=\${relative%%/*}
@@ -145,7 +154,8 @@ export function installedPackageCacheCheck(
           fi
           rm -rf -- "$entry"
         fi
-      done
+      done < "$cache_matches_file"
+      rm -f -- "$inode_file" "$cache_matches_file"
       if [ "$code" -eq 0 ]; then code=1; fi
     fi`;
 }

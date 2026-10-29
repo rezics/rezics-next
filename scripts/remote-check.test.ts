@@ -1043,6 +1043,56 @@ test('an in-place write to a shared installed package fails and removes its host
   }
 });
 
+test('cache-shared installed package files use one host package cache walk', () => {
+  const directory = mkdtempSync(join(root, 'package-cache-walk-'));
+  const cache = join(directory, 'cache');
+  const run = join(directory, 'run');
+  const bin = join(directory, 'bin');
+  const findLog = join(directory, 'find.log');
+  mkdirSync(bin);
+  const findWrapper = join(bin, 'find');
+  writeFileSync(
+    findWrapper,
+    '#!/bin/sh\nif [ "$1" = "$CACHE_ROOT" ]; then printf "%s\\n" "$*" >> "$FIND_LOG"; fi\nexec /usr/bin/find "$@"\n',
+  );
+  chmodSync(findWrapper, 0o755);
+
+  const entries: string[] = [];
+  for (let index = 0; index < 20; index += 1) {
+    const scoped = index % 2 === 0;
+    const entry = scoped ? `@scope${index}/pkg${index}@1.0.0@@@1` : `pkg${index}@1.0.0@@@1`;
+    const cacheFile = join(cache, entry, 'file.js');
+    const runFile = join(run, 'node_modules/.bun', entry, 'file.js');
+    mkdirSync(join(cacheFile, '..'), { recursive: true });
+    mkdirSync(join(runFile, '..'), { recursive: true });
+    writeFileSync(cacheFile, 'original');
+    linkSync(cacheFile, runFile);
+    entries.push(scoped ? join(cache, entry.split('/')[0], entry.split('/')[1]) : join(cache, entry));
+  }
+
+  const installedTime = new Date(Date.now() - 5_000);
+  for (const entry of entries) {
+    const cacheFile = join(entry, 'file.js');
+    utimesSync(cacheFile, installedTime, installedTime);
+  }
+  const marker = join(run, '.bun-install-complete');
+  writeFileSync(marker, '');
+  const markerTime = new Date(Date.now() - 2_000);
+  utimesSync(marker, markerTime, markerTime);
+  const runFiles = entries.map((entry) => join(run, 'node_modules/.bun', entry.slice(cache.length + 1), 'file.js'));
+  const script = `code=0\n${runFiles.map((file) => `printf changed > ${JSON.stringify(file)}`).join('\n')}\n${installedPackageCacheCheck(run, 'check-a', cache)}\nprintf '%s\\n' "$code"`;
+  const result = spawnSync('bash', ['-c', script], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, CACHE_ROOT: cache, FIND_LOG: findLog },
+  });
+
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout.trim()).toBe('1');
+  expect(result.stderr).toContain('modified 20 installed package files shared with the host package cache on check-a');
+  expect(readFileSync(findLog, 'utf8').trim().split('\n')).toHaveLength(1);
+  for (const entry of entries) expect(existsSync(entry)).toBe(false);
+});
+
 test('new package files and files replaced by a new inode do not fail or evict cache entries', () => {
   const directory = mkdtempSync(join(root, 'package-cache-'));
   const cache = join(directory, 'cache');
