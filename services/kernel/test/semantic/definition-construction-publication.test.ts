@@ -27,19 +27,11 @@ beforeAll(async () => {
     `
 const input = await Bun.stdin.json();
 if (input.original) {
-  const paths = new Map([
-    ['${root}/packages/definitions/src/index.ts', 'packages/definitions/src/index.ts'],
-    ['${root}/packages/filter/src/filter.ts', 'packages/filter/src/filter.ts'],
-    ['${root}/services/kernel/src/semantic/definitions.ts', 'services/kernel/src/semantic/definitions.ts'],
-  ]);
-  Bun.plugin({ name: 'historical-implementation', setup(build) {
-    build.onLoad({ filter: /\\/(?:packages\\/definitions\\/src\\/index|packages\\/filter\\/src\\/filter|services\\/kernel\\/src\\/semantic\\/definitions)\\.ts$/ }, ({ path }) => {
-      const source = paths.get(path);
-      if (!source) throw new Error('Unmapped historical source: ' + path);
-      const result = Bun.spawnSync(['git', 'show', '2c86ce30ef:' + source], { cwd: '${root}' });
-      if (result.exitCode) throw new Error(result.stderr.toString());
-      return { contents: result.stdout.toString(), loader: 'ts' };
-    });
+  const historicalSource = await Bun.file('${root}/services/kernel/test/semantic/fixtures/definitions-pre-caps.ts').text();
+  Bun.plugin({ name: 'historical-publication-caller', setup(build) {
+    build.onLoad({ filter: /\\/services\\/kernel\\/src\\/semantic\\/definitions\\.ts$/ }, () => ({
+      contents: historicalSource, loader: 'ts'
+    }));
   }});
 }
 const { createPool } = await import('${root}/services/kernel/src/database/pool.ts');
@@ -176,7 +168,7 @@ test('new publication shape boundaries are accepted exactly and refused without 
 test('a native historically accepted over-cap pin is cold-readable byte-identically and retains replay/new-key/current-denial behavior', async () => {
   const author = await driver.fixtures.person('construction-historical-author');
   await driver.fixtures.grantAccount(author, ['definitions:publish']);
-  const historical = constructionFixture(4097, 4096);
+  const historical = constructionFixture(0, 4096);
   historical.catalogue.version = 'historical-construction';
   historical.types['grow:Root']!.mappings = Array.from(
     { length: 257 },

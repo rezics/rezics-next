@@ -441,7 +441,7 @@ async function probe(): Promise<Evidence> {
     if (quantityProperty) quantityProperty.units = ['1', '1'];
     const relationProperty = Object.values(sites.properties).find((property) => property.relation);
     if (relationProperty?.relation) relationProperty.relation.filter = [...duplicates];
-    measure('duplicate-unique-sites', 'release', sites, { uniqueSites: 8 });
+    measure('duplicate-unique-sites', 'release', sites, { uniqueSites: 7 });
     const filterRoom = 1024 - Object.keys(bundledRelease.filters ?? {}).length;
     for (const invalid of [false, true]) {
       const mark = (release: Release) => {

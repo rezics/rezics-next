@@ -121,7 +121,7 @@ test('raw mutable FilterRelease calls refresh patterns qualifiers typed facets a
   };
   release.types['grow:Root']!.bases = ['grow:Base'];
   expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code', 'schema:genre']);
-  const untyped = { statement: { property: 'schema:genre', range: { gte: 1 } } } as const;
+  const untyped = { statement: { property: 'schema:genre', in: ['x'] } } as const;
   expect(validateFilter(untyped, release, { saved: false })).toEqual([]);
   release.types['grow:Base']!.facets = [];
   expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code']);
