@@ -18,6 +18,7 @@ import { capture, captureMeasuredRun, settle, settleAdmin, trackGrow, type Growt
 import {
   catalogStatementBound,
   costOf,
+  isControlStatement,
   medianCost,
   withoutCatalogTexts,
   type Capture,
@@ -118,9 +119,9 @@ export type ReportSample = {
   readonly statementRepetitions: readonly (readonly StatementAttribution[])[];
   readonly occurrenceRepetitions: readonly StatementOccurrences[];
   /** Backend PIDs used by each accepted measured repetition, when known. */
-  readonly backendRepetitions: readonly (readonly number[])[];
+  readonly backendRepetitions?: readonly (readonly number[])[];
   /** Measured runs discarded because they touched a backend not seen earlier at this scale. */
-  readonly coldBackendDiscards: number;
+  readonly coldBackendDiscards?: number;
   readonly counted?: CountedSample;
   readonly attempts?: AttemptSample;
 };
@@ -154,24 +155,35 @@ function attemptRecords(capture: Capture, occurrences: StatementOccurrences): At
     if (backend === undefined) throw new TypeError('attempts require a backend PID for every statement');
     const text = capture.statements[occurrence.index]!;
     if (/^\s*(?:BEGIN|START\s+TRANSACTION)\b/i.test(text)) {
-      if (active.has(backend)) throw new TypeError(`backend ${backend} began a transaction before ending its previous attempt`);
+      if (active.has(backend))
+        throw new TypeError(`backend ${backend} began a transaction before ending its previous attempt`);
       active.set(backend, [occurrence.index]);
       continue;
     }
     const attempt = active.get(backend);
     if (!attempt) continue;
     attempt.push(occurrence.index);
-    if (/^\s*(?:COMMIT|END|ROLLBACK|ABORT)\b/i.test(text)) {
-      const sqlstate = attempt.map((index) => capture.statementErrors?.[index] ?? null)
+    if (/^\s*(?:COMMIT|END|ABORT|ROLLBACK(?!\s+(?:WORK\s+|TRANSACTION\s+)?TO\b))\b/i.test(text)) {
+      const sqlstate = attempt
+        .map((index) => capture.statementErrors?.[index] ?? null)
         .find((code) => code === '40001' || code === '40P01');
-      const error = sqlstate ?? (capture.statementErrors?.[occurrence.index] ?? null);
-      const outcome: AttemptOutcome = error === null ? 'committed' : `aborted:${error}`;
+      if (
+        !sqlstate &&
+        (/^\s*(?:ROLLBACK|ABORT)\b/i.test(text) || attempt.some((index) => capture.statementErrors?.[index]))
+      )
+        throw new GrowthEvidenceError(
+          `backend ${backend}: transaction ended without a commit or retry SQLSTATE (40001 or 40P01)`,
+        );
+      const outcome: AttemptOutcome = sqlstate ? `aborted:${sqlstate}` : 'committed';
       const statements = attempt.filter((index) => !isControlStatement(capture.statements[index]!)).length;
       records.push({ backend, outcome, statements, occurrences: [...attempt] });
       active.delete(backend);
     }
   }
-  if (active.size) throw new TypeError(`capture ended with unterminated transaction attempts on backends ${[...active.keys()].join(', ')}`);
+  if (active.size)
+    throw new TypeError(
+      `capture ended with unterminated transaction attempts on backends ${[...active.keys()].join(', ')}`,
+    );
   return records;
 }
 
@@ -200,43 +212,81 @@ function summarizeAttempts(commands: number, runs: readonly AttemptRecord[][]): 
 
 export function validateAttemptSamples(check: GrowthCheck, samples: readonly ReportSample[]): void {
   if (!check.attempts) return;
-  const ledgers = samples.map(({ attempts, scale }) => {
+  const ledgerText = samples
+    .map(({ scale, attempts }) => `scale ${scale}: ${JSON.stringify(attempts?.repetitions)}`)
+    .join('\n');
+  const fail = (message: string): never => {
+    const error = new GrowthBoundError([], samples);
+    error.message = `${check.name}: ${message}\nper-scale attempt ledger:\n${ledgerText}`;
+    throw error;
+  };
+  let committedCount: number | undefined;
+  for (const { attempts, scale, occurrenceRepetitions } of samples) {
     if (!attempts) throw new TypeError(`${check.name}: missing attempt ledger at scale ${scale}`);
-    for (const [index, run] of attempts.repetitions.entries()) {
+    for (const [repetition, run] of attempts.repetitions.entries()) {
       const committed = run.ledger.filter(({ outcome }) => outcome === 'committed');
-      if (committed.length !== check.attempts!.commands)
-        throw new Error(`${check.name}: attempts declared ${check.attempts!.commands} commands at scale ${scale}, repetition ${index}, but observed ${committed.length} committed attempts`);
+      if (committed.length !== check.attempts.commands)
+        fail(
+          `attempts declared ${check.attempts.commands} commands at scale ${scale}, repetition ${repetition}, but observed ${committed.length} committed attempts`,
+        );
+      for (const [index, attempt] of run.ledger.entries()) {
+        if (attempt.outcome !== 'committed') continue;
+        committedCount ??= attempt.statements;
+        if (attempt.statements !== committedCount) {
+          const statements = attempt.occurrences.map(
+            (occurrence) =>
+              occurrenceRepetitions[repetition]?.statements.find(({ index }) => index === occurrence)?.statement ??
+              `occurrence ${occurrence}`,
+          );
+          fail(
+            `committed attempt ${index} on backend ${attempt.backend} at scale ${scale}, repetition ${repetition}: statement counts differ; expected ${committedCount}, got ${attempt.statements}; statements: ${statements.join('; ')}`,
+          );
+        }
+      }
     }
-    return attempts.repetitions.map(({ ledger }) => ledger);
-  });
-  const committedCounts = ledgers.flatMap((runs) => runs.map((ledger) => ledger.filter(({ outcome }) => outcome === 'committed').map(({ statements }) => statements).sort((a, b) => a - b)));
-  const expected = committedCounts[0] ?? [];
-  for (const [runIndex, counts] of committedCounts.entries()) {
-    if (counts.length !== expected.length || counts.some((count, index) => count !== expected[index]))
-      throw new Error(`${check.name}: committed attempt ${runIndex} statement counts differ; expected [${expected.join(', ')}], got [${counts.join(', ')}]`);
   }
-  const committedMaximum = Math.max(0, ...committedCounts.flatMap((counts) => counts));
-  for (const runs of ledgers) for (const ledger of runs) for (const attempt of ledger)
-    if (attempt.outcome !== 'committed' && attempt.statements > committedMaximum)
-      throw new Error(`${check.name}: aborted attempt ${attempt.outcome} ran ${attempt.statements} statements, exceeding committed attempt count ${committedMaximum}`);
+  for (const { attempts, scale } of samples)
+    for (const [repetition, run] of attempts!.repetitions.entries())
+      for (const [index, attempt] of run.ledger.entries())
+        if (attempt.outcome !== 'committed' && attempt.statements > committedCount!)
+          fail(
+            `aborted attempt ${index} (${attempt.outcome}) at scale ${scale}, repetition ${repetition} ran ${attempt.statements} statements, exceeding committed attempt count ${committedCount}`,
+          );
+  // Retry incidence has no measurement uncertainty. Compare the observed mean rates, allowing decreases.
   const attemptsByScale = samples.map(({ attempts }) => attempts!.attemptsPerCommand);
   if (attemptsByScale.some((count, index) => index > 0 && count > attemptsByScale[index - 1]!))
-    throw new Error(`${check.name}: attempts per command grew with scale: ${attemptsByScale.join(', ')}`);
+    fail(`attempts per command grew with scale: ${attemptsByScale.join(', ')}`);
 
   for (const metric of ['rows', 'blocks'] as const) {
-    const fingerprints = new Set(samples.flatMap(({ occurrenceRepetitions }) =>
-      occurrenceRepetitions.flatMap(({ statements }) => statements.map(({ statement }) => statement))));
+    const fingerprints = new Set(
+      samples.flatMap(({ occurrenceRepetitions }) =>
+        occurrenceRepetitions.flatMap(({ statements }) => statements.map(({ statement }) => statement)),
+      ),
+    );
     for (const fingerprint of fingerprints) {
       const points = samples.map((sample) => ({
         scale: sample.scale,
         repetitions: sample.occurrenceRepetitions.map(({ statements }) =>
-          Math.max(0, ...statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric]))),
-        uncertainty: Math.max(GROWTH_UNCERTAINTY[metric].absolute, GROWTH_UNCERTAINTY[metric].relative * Math.max(0,
-          ...sample.occurrenceRepetitions.flatMap(({ statements }) => statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric])))),
+          Math.max(0, ...statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric])),
+        ),
+        uncertainty: Math.max(
+          GROWTH_UNCERTAINTY[metric].absolute,
+          GROWTH_UNCERTAINTY[metric].relative *
+            Math.max(
+              0,
+              ...sample.occurrenceRepetitions.flatMap(({ statements }) =>
+                statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric]),
+              ),
+            ),
+        ),
       }));
       const verdict = classifySeries(points, check.bounds[metric], metric === 'blocks' ? (check.indexProbes ?? 0) : 0);
       if (verdict.outcome === 'violation')
-        throw new Error(`${check.name}: statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
+        fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
+      if (verdict.outcome === 'insufficient-evidence')
+        throw new GrowthEvidenceError(
+          `${check.name}: insufficient evidence for statement ${fingerprint} ${metric} per execution`,
+        );
     }
   }
 }
@@ -254,7 +304,10 @@ export type GrowthReport = {
   readonly rule: 'step' | 'series';
   readonly bounds: Readonly<Record<Metric, Bound>>;
   readonly byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>;
-  readonly samples: readonly ReportSample[];
+  readonly samples: readonly (ReportSample & {
+    readonly backendRepetitions: readonly (readonly number[])[];
+    readonly coldBackendDiscards: number;
+  })[];
   readonly shadow: Readonly<Record<Metric, ShadowVerdict>>;
   readonly counted?: Readonly<Record<string, { readonly limits?: number; readonly bounds?: Bound }>>;
 };
@@ -453,8 +506,6 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   if (check.attempts) {
     if (!Number.isSafeInteger(check.attempts.commands) || check.attempts.commands <= 0)
       throw new TypeError(`${check.name}: attempts.commands must be a positive safe integer`);
-    if (check.includeBackends === false)
-      throw new TypeError(`${check.name}: attempts require includeBackends`);
   }
   if (check.indexProbes !== undefined) {
     if (!Number.isSafeInteger(check.indexProbes) || check.indexProbes <= 0)
@@ -488,7 +539,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
 
   let previous = 0;
   let repetition = 0;
-  const samples: ReportSample[] = [];
+  const samples: Array<GrowthReport['samples'][number]> = [];
   for (const scale of scales) {
     const growStart = performance.now();
     const grown = await trackGrow(db, () => check.grow(db, scale, previous));
@@ -600,7 +651,6 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         repetition++;
         accepted = true;
       }
-
     }
     samples.push({
       scale,
