@@ -65,6 +65,10 @@ test('progress lists and logs use ListRow, with row links above their own contro
   ]) {
     const source = await read(path);
     expect(source).toContain('ListRow');
-    expect(source).not.toMatch(/divide-y|border-y|border-b|rounded-(?:lg|xl)\s+bg-card/);
+    const rowOpenings = [...source.matchAll(/<ListRow\b[^>]*>/g)].map(([opening]) => opening);
+    expect(rowOpenings.length).toBeGreaterThan(0);
+    expect(rowOpenings.join('\n')).not.toMatch(/divide-y|border-y|border-b|rounded-(?:lg|xl)\s+bg-card/);
+    expect(source).toContain('ListRowLink');
+    expect(source).toContain('ListRowControl');
   }
 });
