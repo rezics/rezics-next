@@ -13,6 +13,7 @@ test('run() passes detached train mode to its runtime factory without changing t
     const status = await run(['status'], async (options) => {
       received = options;
       return {
+        settings: { stateDirectory: '/tmp/goal-cli-test' },
         db: { close() {} },
         store: { tasks: () => [] },
         job: { drain: async () => {} },
