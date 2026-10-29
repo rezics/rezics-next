@@ -17,6 +17,7 @@ import type {
 } from '../../../../specs/content-user-cases-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -84,6 +85,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
   const search = searchUrl ? createOpenSearch(searchUrl) : undefined;
   const holds = new Set<HeldPage>();
   let worker: Awaited<ReturnType<typeof startUserCasesWorker>> | undefined;
+  let workClient: WorkClient | undefined;
   let closing: Promise<void> | undefined;
   const close = () =>
     (closing ??= (async () => {
@@ -98,6 +100,11 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
       }
       try {
         await worker?.stop();
+      } catch (error) {
+        errors.push(error);
+      }
+      try {
+        await workClient?.close();
       } catch (error) {
         errors.push(error);
       }
@@ -117,10 +124,14 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
     })());
   try {
     const moderator = await governance(system);
+    const databaseUrl = pool.options.connectionString;
+    if (!databaseUrl) throw new Error('Content fixture database URL is missing');
+    workClient = await createWorkClient(databaseUrl, pool);
     const kernel = createKernel({
       pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
+      workClient,
       clock: () => new Date(fixtureTime),
       content: { cursorNow: () => fixtureTime },
       access: () => system.access,
