@@ -73,6 +73,26 @@ test('unknown and unresolved item qualifiers withhold the whole exact quantity',
   expect(unresolved.diagnostics.some((diagnostic) => diagnostic.pointer === pointer)).toBe(true);
 });
 
+test('unknown qualifier bodies are rejected without being read', () => {
+  const source = entity();
+  const qualifiers: Record<string, unknown[]> = {};
+  Object.defineProperty(qualifiers, 'P459', {
+    enumerable: true,
+    get() {
+      throw new Error('unknown qualifier body was read');
+    },
+  });
+  source.claims.P6570![0]!.qualifiers = qualifiers as never;
+
+  const output = convert(source);
+  expect(
+    output.proposals.filter(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:wordCount',
+    ),
+  ).toEqual([]);
+  expect(output.diagnostics.some((diagnostic) => diagnostic.pointer === pointer)).toBe(true);
+});
+
 test('established nonmeasurement output remains unchanged by exact qualifier rejection', () => {
   const plain = convert(entity());
   const withRejectedMeasurement = convert(

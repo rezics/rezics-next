@@ -308,7 +308,11 @@ export function convertWikidata(
       if (count > wikidataLimits.snaks) fail('Source snak limit exceeded', pointer);
       result[property] = items.flatMap((item) => {
         const parsed = snak(item, property, pointer);
-        return parsed === undefined ? [] : [parsed];
+        if (parsed === undefined) {
+          if (exact && !reference) omitted = true;
+          return [];
+        }
+        return [parsed];
       });
     }
     return { result, omitted };
