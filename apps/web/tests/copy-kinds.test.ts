@@ -58,7 +58,7 @@ describe('profile copy declarations', () => {
 });
 
 // Exercise the page's actual forms and rows, then post their successful controls through its server action.
-import { mock } from 'bun:test';
+import { mock, afterAll } from 'bun:test';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
@@ -85,6 +85,7 @@ const views = await import('../src/library/copies-page');
 const profiles = await import('../src/library/copies-profiles');
 const actions = await import('../src/library/copies-form-action');
 const fakeModule = await import('../src/kernel/fake/copies-kinds');
+afterAll(() => fakeModule.resetCopyProfileScenario());
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
 const key = '10203040-5060-4070-8090-102030405060';
 const request = () =>

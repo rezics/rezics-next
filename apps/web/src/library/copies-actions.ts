@@ -42,7 +42,7 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const page = await loadCopiesPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     await nameSubjectTypes(page.copies.map((copy) => copy.subject));
-    const release = await readRelease();
+    const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
     const locale = getLocale();
     const profiles = new Map<string, ReturnType<typeof resolveCopyProfile>>();
     for (const copy of page.copies) {

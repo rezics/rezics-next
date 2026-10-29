@@ -171,7 +171,7 @@ export function CopyForm({
   subjectId: string | null;
   addKey: string;
   onClose: () => void;
-  onCreated: (copy: SavedCopy) => void;
+  onCreated: (copy: CopyItem) => void;
   onSaved: (copy: CopyItem) => void;
   onRemoved: (id: string) => void;
   onKey: (key: string) => void;
@@ -252,7 +252,16 @@ export function CopyForm({
           );
           return;
         }
-        onCreated(result.copy);
+        onCreated({
+          ...result.copy,
+          kind: result.copy.kind ?? null,
+          subject: null,
+          profile: choices,
+          kindLabel: selected?.label ?? m.library_other(),
+          statusLabel:
+            selected?.statuses.find((status) => status.id === result.copy.status)?.label ?? m.library_other(),
+          idempotencyKey: crypto.randomUUID(),
+        });
         onKey(crypto.randomUUID());
       }
       onClose();
@@ -492,7 +501,9 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
       </div>
       <ListRowControl>
         <button type="button" className={quiet} onClick={onEdit}>
-          {m.library_copy_edit()}
+          {copy.kind && copy.kind !== 'legacy-unspecified' && copy.profile?.kinds.some((kind) => kind.id === copy.kind)
+            ? m.library_copy_edit()
+            : m.library_copy_delete()}
         </button>
       </ListRowControl>
     </ListRow>
@@ -578,13 +589,7 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
               ...current,
               {
                 ...copy,
-                kind: copy.kind ?? null,
                 subject: current.find((item) => item.subject?.id === page.subjectId)?.subject ?? null,
-                profile: page.profile,
-                kindLabel: page.profile?.kinds.find((kind) => kind.id === copy.kind)?.label,
-                statusLabel: page.profile?.kinds
-                  .find((kind) => kind.id === copy.kind)
-                  ?.statuses.find((status) => status.id === copy.status)?.label,
                 idempotencyKey: crypto.randomUUID(),
               },
             ])

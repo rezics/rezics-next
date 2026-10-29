@@ -325,6 +325,7 @@ export async function submitCopy(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (typeof authorization !== 'string') return authorization;
+    // The generated client awaits the documented immutable kind field; the spread preserves it on the wire.
     const result = await client.copies.post(
       {
         subjectId: draft.subjectId,

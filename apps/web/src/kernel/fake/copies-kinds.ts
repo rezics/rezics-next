@@ -12,6 +12,9 @@ type Copy = {
 };
 let scenario: { copies: Copy[]; refusal?: boolean } | undefined;
 let story = false;
+export function resetCopyProfileScenario() {
+  scenario = undefined;
+}
 export function setCopyProfileScenario(next: { copies: Copy[]; refusal?: boolean }) {
   scenario = structuredClone(next);
 }
@@ -49,7 +52,8 @@ const answer = async ({ request }: { request: Request }) => {
   if (!scenario) return;
   const path = new URL(request.url).pathname;
   if (request.method === 'GET') return { status: 200, copies: scenario.copies, next: null };
-  if (scenario.refusal) return { status: 422, code: 'unsupported_library_profile', effect_status: 'not_applied' };
+  if (scenario.refusal && request.method !== 'DELETE')
+    return { status: 422, code: 'unsupported_library_profile', effect_status: 'not_applied' };
   if (request.method === 'DELETE') {
     scenario.copies = scenario.copies.filter((copy) => copy.id !== path.split('/').at(-1));
     return { status: 200 };
