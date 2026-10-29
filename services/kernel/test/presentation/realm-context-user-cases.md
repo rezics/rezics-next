@@ -701,3 +701,95 @@ ENOENT: No such file or directory: failed to link package: check-error@2.1.3 (op
 Failed to install 1 package
 check: log .temp/goal/checks/worker-check-2026-10-29T11-40-01.828Z-8008a984.log
 ```
+
+### Root typecheck retry output
+
+The single unchanged-command retry of `bun scripts/worker-check.ts -- bun run typecheck` exited 0.
+Local log: `.temp/goal/checks/worker-check-2026-10-29T11-41-43.875Z-9573bcf2.log`.
+The earlier Lix timeout is not a passing check; this completed retry supplies root typecheck evidence for the
+unchanged formatted test file. Native acceptance remains blocked by dependency installation after its automatic
+rerun. All started checks have finished. No additional acceptance run, whole-kernel check or full web gate was run.
+
+```text
+remote-check: skipped b: load 44.37 exceeds limit 22.5
+remote-check: skipped c: load 49.43 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (a 0/1 free); skipped b: load 44.37 exceeds limit 22.5; c: load 49.43 exceeds limit 36
+remote-check: slot wait 49.124 s on b
+
+Number of files: 5,306 (reg: 4,977, dir: 328, link: 1)
+Number of created files: 12 (reg: 12)
+Number of deleted files: 0
+Number of regular files transferred: 65
+Total file size: 57,491,343 bytes
+Total transferred file size: 1,620,462 bytes
+Literal data: 370,945 bytes
+Matched data: 1,249,517 bytes
+File list size: 196,584
+File list generation time: 2.563 seconds
+File list transfer time: 0.000 seconds
+Total bytes sent: 363,176
+Total bytes received: 30,205
+
+sent 363,176 bytes  received 30,205 bytes  29,139.33 bytes/sec
+total size is 57,491,343  speedup is 146.15
+remote-check: rsync 13.649 s on b
+remote-check: running on b
+bun install v1.4.4-canary.1 (a0cc096ce)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+
++ @types/bun@1.4.4
++ bun@1.4.4-canary.20261027.1
++ oxfmt@0.74.0
++ oxlint@1.89.0
++ typescript@7.1.0-beta
+
+896 packages installed [562.00ms]
+remote-check: bun install 0.613 s on b
+$ bun scripts/typecheck.ts
+Workspace @rezics/auth-contract finished in 0.51s
+$ bun run typecheck  (packages/auth-contract)
+
+Workspace @rezics/filter finished in 0.52s
+$ bun run typecheck  (packages/filter)
+
+Workspace @rezics/document finished in 0.64s
+$ bun run typecheck  (packages/document)
+
+Workspace @rezics/composition finished in 0.84s
+$ bun run typecheck  (packages/composition)
+
+Workspace @rezics/ui finished in 1.35s
+$ bun run typecheck  (packages/ui)
+
+Workspace @rezics/definitions finished in 2.44s
+$ bun run typecheck  (packages/definitions)
+
+Workspace @rezics/client finished in 2.66s
+$ bun run typecheck  (packages/client)
+
+Workspace @rezics/conversion finished in 2.66s
+$ bun run typecheck  (packages/conversion)
+
+Workspace @rezics/importer finished in 2.83s
+$ bun run typecheck  (services/importer)
+
+Workspace @rezics/auth-pages finished in 18.43s
+$ bun run typecheck  (apps/auth)
+
+Workspace @rezics/web finished in 27.48s
+$ bun run typecheck  (apps/web)
+
+Workspace @rezics/auth finished in 134.38s
+$ bun run typecheck  (services/auth)
+
+Workspace @rezics/kernel finished in 177.75s
+$ bun run typecheck  (services/kernel)
+
+remote-check: command 183.707 s on b
+remote-check: run used 300.679 CPU seconds over 184.576 s (1.63 cores), peak memory 3667 MiB on b
+remote-check: could not remove /srv/rezics-check/runs/mvth4o94-a1d624e9 on b
+worker-check: bun run typecheck peak 3.6 GiB (weight 4)
+check: exit status 0
+check: log .temp/goal/checks/worker-check-2026-10-29T11-41-43.875Z-9573bcf2.log
+```
