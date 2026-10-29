@@ -23,6 +23,7 @@ import { pageHead, pageLinks, type PagePaths } from '../shell/head.ts';
 import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
 import { prepareExposure } from '../kernel/exposure';
+import { isSignedInPath } from '../session/guard';
 
 const setClosedResponseStatus = createIsomorphicFn()
   .server(() => setResponseStatus(403, 'Forbidden'))
@@ -38,7 +39,8 @@ export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
   credentialMode: ReadCredentialMode;
 }>()({
-  beforeLoad: ({ context }) => prepareExposure(context.queryClient),
+  beforeLoad: ({ context, location }) =>
+    isSignedInPath(location.pathname) ? undefined : prepareExposure(context.queryClient),
   head: ({ matches }) => {
     const locale = getLocale();
     const last = matches.at(-1);
