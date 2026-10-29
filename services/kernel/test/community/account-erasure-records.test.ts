@@ -413,7 +413,7 @@ test.serial(
         work.retrieveWorkflow(retainedOut.creation_idempotency_key).getResult({ pollingIntervalMs: 10 }),
       ).rejects.toThrow('Membership workflow step failed: reserve');
       const steps = await work.listWorkflowSteps(retainedOut.creation_idempotency_key);
-      expect(steps.map((step) => step.functionName)).toEqual(['accounts.membership.reserve']);
+      expect(steps?.map((step) => step.name)).toEqual(['accounts.membership.reserve']);
       expect(await membership()).toEqual(before);
     } finally {
       await work.close();
