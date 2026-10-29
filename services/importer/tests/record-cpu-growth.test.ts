@@ -17,6 +17,7 @@ const check: CountedCheck = {
   read: (value: unknown) => value as CountedValues,
   bounds: {
     'converter calls': 'linear',
+    'SQLite prepares': 'constant',
     'SQLite executions': 'linear',
     'SQLite commits': 'linear',
   },
@@ -65,6 +66,10 @@ test('importer processor counted work per record stays within its established ce
     samples.push({ scale, work, counted: countedSample([values]) });
   }
 
+  console.info(
+    'importer processor raw work:',
+    JSON.stringify(samples.map(({ scale, work }) => ({ scale, ...work }))),
+  );
   expect(countedViolations(check, samples)).toEqual([]);
 
   // Marginal work per record between the smallest and the largest dump, free of the fixed

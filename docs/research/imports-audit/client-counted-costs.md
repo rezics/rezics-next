@@ -26,6 +26,19 @@ client transport activity; they do not measure coordinator batching or server wo
   converter calls, at most 3.1 transactions and at most 165 executions per added record; prepare growth remains
   constant and per-record work may not drift upward.
 
+## Restored prepare bound
+
+The migration at `2d207cfb8af1f9a082cd355bda6fdff3bff196dc` collected `SQLite prepares` but omitted it from
+`CountedCheck.bounds`. The pre-migration case required constant prepare growth under the incorrect blocks label.
+The existing shared check now restores that obligation as `'SQLite prepares': 'constant'`, using zero default
+slack. The marginal ceiling of 0.1 prepares per added record remains, but alone allows extra prepares and does not
+prove constant growth. All three scales, exact marginal ceilings, transaction and commit rate checks, behavior
+assertions, temporary-directory cleanup and timeout are preserved. Bounded diagnostics report all three raw samples.
+
+The prior receipt reported four passing tests and 9,015 assertions; it predates this focused correction and does not
+prove the omitted bound. These are machine-independent work counts, not real CPU timings or whole-importer/server
+scaling evidence.
+
 ## Documentation handoff
 
 The importer README Cost row and the former title “Kernel call stays within its bound as R grows” need an owner-side
