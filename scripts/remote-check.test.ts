@@ -295,7 +295,7 @@ if (script.includes('/proc/loadavg')) {
   const memoryMaximum = config.memoryUnreadable ? '-' : configuredMaximum;
   const memoryCurrent = config.memoryUnreadable
     ? '-'
-    : (config.memoryCurrent ?? configuredMaximum - (config.memoryHeadroom ?? config.available ?? configuredMaximum));
+    : (config.memoryCurrent ?? Math.max(0, configuredMaximum - (config.memoryHeadroom ?? config.available ?? configuredMaximum)));
   const memoryHeadroom = config.memoryUnreadable
     ? (config.available ?? 0)
     : configuredMaximum - Number(memoryCurrent);

@@ -631,16 +631,18 @@ exec 8>&-
 flock -u 6
 exec 6>&-
 mkdir -p ${ROOT}/bases
-exec 5>"${ROOT}/bases/.lock"
-flock -x 5
+# Keep the parent slot descriptors open while base cleanup reuses descriptor 9.
+(
+exec 9>"${ROOT}/bases/.lock"
+flock -x 9
 current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
 for base in ${ROOT}/bases/*; do
   [ -d "$base" ] || continue
   [ "$base" = "$current" ] && continue
   if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
 done
-flock -u 5
-exec 5>&-
+flock -u 9
+)
 echo "SLOTS ${count}"
 run_id=
 run_directory=
