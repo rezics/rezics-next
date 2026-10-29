@@ -606,7 +606,7 @@ export function runScript(id: string, directory: string, cwd: string, command: s
       *) echo "remote-check: unsupported check-host architecture $(uname -m)" >&2; exit 1 ;;
     esac
     mkdir -p .temp/pinned-bun
-    curl -fsSL "https://registry.npmjs.org/@oven/bun-linux-\${build}/-/bun-linux-\${build}-\${expected_bun}.tgz" | tar -xz -C .temp/pinned-bun
+    curl -fsSL "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C .temp/pinned-bun
     bun="$PWD/.temp/pinned-bun/package/bin/bun"
     if ! "$bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
       echo "remote-check: downloaded Bun does not match packageManager $expected_bun" >&2
