@@ -68,7 +68,9 @@ function loggedCommands(logPath: string): string[] {
           if (item.type === 'command_execution' && typeof item.command === 'string') return [item.command];
           if (event.type === 'assistant')
             return (event.message?.content ?? [])
-              .filter((part: Record<string, any>) => part.type === 'tool_use' && typeof part.input?.command === 'string')
+              .filter(
+                (part: Record<string, any>) => part.type === 'tool_use' && typeof part.input?.command === 'string',
+              )
               .map((part: Record<string, any>) => part.input.command as string);
           if (payload.type === 'function_call') {
             const input = payload.arguments ?? payload.input;
@@ -865,12 +867,7 @@ export class WorkerJob implements GateOutcomeSink {
       const previousWasStaleRetry =
         ref.attempt > 1 &&
         store.events(task.id, ref.attempt - 1).some((event) => event.kind === 'stale-tool-blocker-retry');
-      if (
-        kind === 'tool' &&
-        previous &&
-        !previousWasStaleRetry &&
-        isStaleToolBlocker(task, attempt, previous)
-      ) {
+      if (kind === 'tool' && previous && !previousWasStaleRetry && isStaleToolBlocker(task, attempt, previous)) {
         store.event(ref, 'stale-tool-blocker-retry', {
           error: (attempt.blocker ?? attempt.result).split(/\r?\n/, 1)[0],
           previousAttempt: previous.attempt,

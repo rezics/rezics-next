@@ -153,7 +153,10 @@ test('a worker reports persistent tool and infrastructure failures as a tool blo
 test('the retry prompt says a manifest failure is history and must be rerun before reporting it as a blocker', () => {
   const evidence = mkdtempSync(join(tmpdir(), 'goal-retry-prompt-'));
   try {
-    writeFileSync(join(evidence, 'failure.json'), JSON.stringify({ manifest: 'First failing command: bun test broken.test.ts' }));
+    writeFileSync(
+      join(evidence, 'failure.json'),
+      JSON.stringify({ manifest: 'First failing command: bun test broken.test.ts' }),
+    );
     const task = {
       worktree: '/work/trees/t1',
       branch: 'worker/t1',

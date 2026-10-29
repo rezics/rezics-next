@@ -67,7 +67,7 @@ test('a stale tool blocker with no check or matching command gets one relaunch a
     expect(h.store.events(taskId, 2).map((event) => event.kind)).toContain('stale-tool-blocker-retry');
     expect(h.store.record({ taskId, attempt: 2 })?.escalation).not.toBe('stalled');
     const prompt = readFileSync(join(h.store.task(taskId).worktree, '.temp/goal-test-prompts', '3'), 'utf8');
-    expect(prompt).toContain("The retry manifest records a failure from an earlier attempt");
+    expect(prompt).toContain('The retry manifest records a failure from an earlier attempt');
     expect(prompt).toContain('Hosts and tools may have been fixed since then');
     expect(prompt).toContain('Rerun the failing command before reporting any blocker');
   });
