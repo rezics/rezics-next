@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { routeOf } from '../../src/route/route.ts';
+import { readConceptSchemeReference } from '../../src/semantic/concept-scheme-reference.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { SubjectRedirectError } from '../../src/semantic/merges.ts';
 import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
@@ -55,6 +56,8 @@ test.serial('only the current selected expanded Global membership authorizes a R
 test.serial(
   'wrong scheme, wrong type, unknown values and unselected rejected candidates refuse without effects',
   async () => {
+    await refused(newId(routeOf(world.conceptId)!));
+    await refused(await world.subject('skos:Concept'));
     const wrong = await world.subject('skos:ConceptScheme');
     await refused(await world.subject('skos:Concept', wrong));
     await refused(await world.subject('skos:ConceptScheme'));
@@ -261,4 +264,28 @@ test.serial('a hidden foreign scheme denies the otherwise current membership', a
   const id = await world.subject('skos:Concept', world.schemeId);
   await world.checked('POST', `/v1/subjects/${world.schemeId}:hide`, { reason: 'Hidden foreign scheme' }, 200);
   await refused(id);
+});
+
+test.serial('only a live native authoritative time object is accepted before I/O', async () => {
+  const deadline = Date.now() + 10_000;
+  const actor = await world.kernel.testAccess.authenticate(world.owner.bearer, { pool: world.db.pool, deadline });
+  const observer = observeSql(world.db.pool);
+  try {
+    for (const nativeT of [new Date(), new Date().toISOString(), { at: new Date().toISOString() }]) {
+      await expect(
+        readConceptSchemeReference(world.db.pool, {
+          access: world.kernel.testAccess,
+          actor,
+          routeKey: world.routeKey,
+          nativeT: nativeT as never,
+          deadline,
+          concept: { resource: { route: routeOf(world.conceptId)!, id: world.conceptId }, evidence: null },
+          scheme: { resource: { route: routeOf(world.schemeId)!, id: world.schemeId }, evidence: null },
+        }),
+      ).rejects.toBeInstanceOf(TypeError);
+    }
+    expect(observer.records).toHaveLength(0);
+  } finally {
+    await observer.close();
+  }
 });
