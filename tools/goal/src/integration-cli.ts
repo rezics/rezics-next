@@ -153,7 +153,9 @@ export function hostRequest(socketPath: string, request: HostRequest): Promise<a
         }
         setTimeout(connect, 25);
       };
-      socket.setTimeout(Math.max(1, deadline - Date.now()), () => socket.destroy(new Error('Manager host request timed out')));
+      socket.setTimeout(Math.max(1, deadline - Date.now()), () =>
+        socket.destroy(new Error('Manager host request timed out')),
+      );
       socket.once('connect', () => {
         connected = true;
         socket.write(`${JSON.stringify(request)}\n`);

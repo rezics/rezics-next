@@ -434,14 +434,18 @@ function rolloutFor(configDirectory: string, session: string): string | null {
   }
   return null;
 }
-export function readMeasurement(attempt: Attempt, options: MeasurementOptions & { maxLogBytes?: number } = {}): LogMeasurement {
+export function readMeasurement(
+  attempt: Attempt,
+  options: MeasurementOptions & { maxLogBytes?: number } = {},
+): LogMeasurement {
   let text = '';
   if (options.maxLogBytes !== undefined) text = readLogTail(attempt.logPath, options.maxLogBytes);
-  else try {
-    text = readFileSync(attempt.logPath, 'utf8');
-  } catch {
-    /* A failed spawn has no stream. */
-  }
+  else
+    try {
+      text = readFileSync(attempt.logPath, 'utf8');
+    } catch {
+      /* A failed spawn has no stream. */
+    }
   const interval = { startedAt: attempt.startedAt, ...(attempt.endedAt ? { endedAt: attempt.endedAt } : {}) };
   const measurement = measureLog(text, { ...interval, ...(options.baseline ? { baseline: options.baseline } : {}) });
   const completed = text.split('\n').some((line) => {

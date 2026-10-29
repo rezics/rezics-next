@@ -279,18 +279,18 @@ function longAttemptIncidents(
     if (longRunning || polling) {
       const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commitCount(task)} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
       if (longRunning)
-      found.push({
-        key: `long-attempt:${task.id}:${attempt.attempt}`,
-        managerId: task.brief.manager,
-        kind: 'stalled',
-        summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
-      });
+        found.push({
+          key: `long-attempt:${task.id}:${attempt.attempt}`,
+          managerId: task.brief.manager,
+          kind: 'stalled',
+          summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
+        });
       if (polling)
         found.push({
-        key: `attempt-polling:${task.id}:${attempt.attempt}`,
-        managerId: task.brief.manager,
-        kind: 'stalled',
-        summary: `Polling: ${common}; recent commands repeatedly inspect processes (${processCommands.join(' | ')}) instead of waiting through scripts/worker-check.ts`,
+          key: `attempt-polling:${task.id}:${attempt.attempt}`,
+          managerId: task.brief.manager,
+          kind: 'stalled',
+          summary: `Polling: ${common}; recent commands repeatedly inspect processes (${processCommands.join(' | ')}) instead of waiting through scripts/worker-check.ts`,
         });
     }
   }
