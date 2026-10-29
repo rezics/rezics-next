@@ -647,6 +647,20 @@
             "references": []
           }
         ]
+      },
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0003",
+        "width": 640,
+        "height": 960,
+        "placeholder": { "thumbhash": "", "color": "#5d4a2f" },
+        "variants": [{ "format": "webp", "width": 320 }],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": { "name": "Rezics", "url": "https://rezics.com" },
+          "license": "CC0-1.0",
+          "obligations": []
+        }
       }
     },
     {
@@ -676,6 +690,20 @@
             "references": []
           }
         ]
+      },
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0005",
+        "width": 640,
+        "height": 960,
+        "placeholder": { "thumbhash": "", "color": "#2f5d50" },
+        "variants": [{ "format": "webp", "width": 320 }],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": { "name": "Rezics", "url": "https://rezics.com" },
+          "license": "CC0-1.0",
+          "obligations": []
+        }
       }
     },
     {
@@ -705,6 +733,20 @@
             "references": []
           }
         ]
+      },
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0007",
+        "width": 600,
+        "height": 800,
+        "placeholder": { "thumbhash": "", "color": "#5d4a2f" },
+        "variants": [{ "format": "webp", "width": 320 }],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": { "name": "Rezics", "url": "https://rezics.com" },
+          "license": "CC0-1.0",
+          "obligations": []
+        }
       }
     },
     {
@@ -734,6 +776,20 @@
             "references": []
           }
         ]
+      },
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0009",
+        "width": 800,
+        "height": 600,
+        "placeholder": { "thumbhash": "", "color": "#2f5d50" },
+        "variants": [{ "format": "webp", "width": 320 }],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": { "name": "Rezics", "url": "https://rezics.com" },
+          "license": "CC0-1.0",
+          "obligations": []
+        }
       }
     },
     {
