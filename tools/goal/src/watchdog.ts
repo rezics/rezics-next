@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { sameProcess } from './process.ts';
-import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED } from './records.ts';
+import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED, readLogTail } from './records.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
@@ -202,7 +202,7 @@ function recentCommands(attempt: Attempt): string[] {
     return [value.trim()];
   };
   try {
-    return readFileSync(attempt.logPath, 'utf8')
+    return readLogTail(attempt.logPath)
       .split(/\r?\n/)
       .flatMap((line) => {
         try {
@@ -244,15 +244,6 @@ function inspectsProcesses(command: string): boolean {
   return /(?:^|[;&|\n])\s*(?:\S*\/)?(?:ps|pgrep)(?:\s|$)/.test(script);
 }
 
-function commitCount(task: Task): number {
-  const result = spawnSync('git', ['-C', task.worktree, 'rev-list', '--count', `${task.base}..HEAD`], {
-    encoding: 'utf8',
-    timeout: 5_000,
-  });
-  const count = Number(result.stdout?.trim());
-  return result.status === 0 && Number.isSafeInteger(count) && count >= 0 ? count : 0;
-}
-
 function longAttemptIncidents(
   store: Pick<WorkerStore, 'attempt'>,
   tasks: Task[],
@@ -273,7 +264,7 @@ function longAttemptIncidents(
     if (!Number.isFinite(elapsed)) continue;
     const commands = recentCommands(attempt);
     const waitsForCheck = commands.some((command) => /(?:^|[\s/])worker-check\.ts\b/.test(command));
-    const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commitCount(task)} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
+    const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
     if (elapsed >= Math.max(1, limitFor(task)))
       found.push({
         key: `long-attempt:${task.id}:${attempt.attempt}`,
