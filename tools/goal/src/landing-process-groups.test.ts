@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gateRunner, processGroupRunner } from './merge.ts';
@@ -23,6 +24,11 @@ const alive = (pid: number) => {
 async function expectStopped(pid: number) {
   for (let attempt = 0; attempt < 20 && alive(pid); attempt++) await new Promise((resolve) => setTimeout(resolve, 25));
   expect(alive(pid)).toBe(false);
+}
+
+async function until(condition: () => boolean) {
+  for (let attempt = 0; attempt < 100 && !condition(); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(condition()).toBe(true);
 }
 
 test('a landing command cannot leave a background child alive after its leader exits', async () => {
@@ -56,6 +62,25 @@ test('an affected check uses a process group too, and timeout kills its child', 
     expect(result.passed).toBe(false);
     await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('stopping the train kills its active command group', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'goal-process-group-stop-'));
+  let train: ReturnType<typeof spawn> | undefined;
+  try {
+    const pidFile = join(directory, 'child.pid');
+    const moduleUrl = new URL('./merge.ts', import.meta.url).href;
+    const script = `import { processGroupRunner } from ${JSON.stringify(moduleUrl)}; await processGroupRunner()(['sh','-c',${JSON.stringify(`sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`)}],${JSON.stringify(directory)},${JSON.stringify(join(directory, 'command.log'))});`;
+    train = spawn(process.execPath, ['-e', script], { stdio: 'ignore' });
+    await until(() => train!.pid !== undefined && existsSync(pidFile));
+    const childPid = Number(readFileSync(pidFile, 'utf8').trim());
+    train.kill('SIGTERM');
+    await new Promise<void>((resolve) => train!.once('close', () => resolve()));
+    await expectStopped(childPid);
+  } finally {
+    train?.kill('SIGKILL');
     rmSync(directory, { recursive: true, force: true });
   }
 });

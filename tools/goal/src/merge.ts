@@ -44,6 +44,18 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
 export type GateRunner = (argv: readonly string[], cwd: string, logPath: string) => Promise<GateResult>;
 
+const activeCommandGroups = new Set<number>();
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  const stopGroups = () => {
+    for (const pid of activeCommandGroups) {
+      try { process.kill(-pid, 'SIGKILL'); } catch {}
+    }
+    process.removeListener(signal, stopGroups);
+    process.kill(process.pid, signal);
+  };
+  process.on(signal, stopGroups);
+}
+
 /** Run a command in an isolated process group and reap the entire group on every exit path. */
 export function processGroupRunner(
   timeoutMs?: number,
@@ -60,6 +72,7 @@ export function processGroupRunner(
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
+      if (child.pid !== undefined) activeCommandGroups.add(child.pid);
       let output = '';
       let timedOut = false;
       let settled = false;
@@ -80,6 +93,7 @@ export function processGroupRunner(
       }, timeoutMs);
       const cleanup = () => {
         if (timer !== undefined) clearTimeout(timer);
+        if (child.pid !== undefined) activeCommandGroups.delete(child.pid);
         killGroup();
       };
       child.once('error', (error) => {
