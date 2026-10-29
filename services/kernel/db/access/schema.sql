@@ -1007,10 +1007,9 @@ CREATE TABLE access.organization_close (
     receipt_id uuid NOT NULL,
     handle text,
     step integer DEFAULT 0 NOT NULL,
-    cursor_member uuid,
-    cursor_valid tstzrange,
     complete boolean DEFAULT false NOT NULL,
     handle_key text NOT NULL,
+    cursor_row_key uuid,
     CONSTRAINT organization_close_check CHECK ((route = ((get_byte(uuid_send(organization_id), 10) * 256) + get_byte(uuid_send(organization_id), 11))))
 );
 
@@ -1026,6 +1025,7 @@ CREATE TABLE access.organization_member (
     role text NOT NULL,
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
+    row_key uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT organization_member_check CHECK ((route = ((get_byte(uuid_send(organization_id), 10) * 256) + get_byte(uuid_send(organization_id), 11)))),
     CONSTRAINT organization_member_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'member'::text]))),
     CONSTRAINT organization_member_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -1629,6 +1629,13 @@ CREATE INDEX organization_member_next_role ON access.organization_member USING b
 --
 
 CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
+
+
+--
+-- Name: organization_member_row_key; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX organization_member_row_key ON access.organization_member USING btree (route, organization_id, row_key);
 
 
 --
