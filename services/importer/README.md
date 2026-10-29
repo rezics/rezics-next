@@ -120,8 +120,9 @@ with frozen-helper TS2353 before native execution. Current-tree root typecheck p
 `39e12edb2885ffd974fa849f9de53b0fa3d21ab1` (check `95993fff-f007-4bce-830a-78972966d876`).
 Focused native acceptance then passed on `2f7e1cc68802bb34d6906dfb0dbb1000669002fa`
 (check `1e7682fe-3eb8-4f38-93d9-a9207c83bab2`): 2 cases, 135 assertions. Both known-claim and
-late-learning flows reached real target-addressed candidate acceptance/adoption, stable replay,
-old unresolved history and independent community adoption; revoked-grant replay returned 403.
+late-learning flows reached real target-addressed candidate acceptance/adoption and stable replay.
+Late learning preserved old unresolved history and independent community adoption; revoked-grant
+replay returned 403.
 The unknown author retained its external identifier and exact native read datatype. This proves
 the two bounded default Open Library flows, with no new full-imports or growth claim.
 All three adjacent recovery files passed (11 cases, 158 assertions), with the extra recovery file
