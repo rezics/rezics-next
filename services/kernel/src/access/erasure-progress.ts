@@ -202,9 +202,10 @@ export async function discoverErasurePage(
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN');
     try {
-      // The contract requires seeks even for tiny partitions where a scan can look cheaper.
-      await tx.query('SET LOCAL enable_seqscan = off');
-      await tx.query('SET LOCAL enable_bitmapscan = off');
+      // Require an ordered seek even when tiny or stale statistics make scanning and sorting look cheaper.
+      await tx.query(`SELECT set_config('enable_seqscan','off',true),
+        set_config('enable_bitmapscan','off',true), set_config('enable_sort','off',true),
+        set_config('enable_incremental_sort','off',true)`);
       // The obligation is immutable and permanent. Never restore or consult an initiating actor.
       const obligation = await tx.query('SELECT version FROM access.erasure WHERE route=$1 AND account_id=$2', [
         route,

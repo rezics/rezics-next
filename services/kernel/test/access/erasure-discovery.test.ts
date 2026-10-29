@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { discoverErasurePage, ERASURE_DISCOVERY_ROLES } from '../../src/access/erasure-progress.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-command.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { capture, checkGrowth, costOf, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;
 const at = '2026-10-01T00:00:00Z';
@@ -148,6 +148,7 @@ async function residue(table: string, role: string, id: string, routing: string)
       subject_account_id: nativeId,
       operator_account_id: newId(2),
       reservation_id: newId(route),
+      terminal: true,
     },
     organization_close: {
       organization_id: nativeId,
@@ -207,6 +208,7 @@ async function residue(table: string, role: string, id: string, routing: string)
     'resource_initialization',
     'organization_close',
     'erasure_acknowledgement',
+    'committed_continuation',
   ])
     if (table === name) delete (row as Record<string, unknown>).transaction_id;
   await insert(table, row);
@@ -268,7 +270,10 @@ for (const [store, role, routing] of ERASURE_DISCOVERY_ROLES) {
     expect(before.length).toBeGreaterThan(0);
     await db.admin.query(`VACUUM (ANALYZE) access.${store}`);
     const { value, capture: measured } = await capture(db, () => discover(id, store, role));
-    expect(value.keys.length).toBe(before.length);
+    const low = routing === 'owner' ? routeOf(id)! : 0;
+    const high = routing === 'partitions' ? 15 : low;
+    const inPartition = before.filter(({ row }) => row.route >= low && row.route <= high);
+    expect(value.keys.length).toBe(inPartition.length);
     expect(value.partition).toBe(routing === 'owner' ? 4 : 0);
     expect(await snapshot()).toEqual(before);
     const scans = measured.plans.flatMap(nodes).filter((node) => node['Relation Name'] === store);
@@ -304,8 +309,13 @@ test('pages select 100 keys with one lookahead; store/role cursors cross partiti
   expect((await db.admin.query('SELECT 1 FROM access.membership_inverse WHERE account_id=$1', [id])).rowCount).toBe(0);
   const results = [];
   for (let page = 0; page < 4; page++) {
-    const { value, cost } = await measure(db, () => discover(id, 'organization_member', 'member_account_id', page));
-    expect(cost.relations['access.organization_member']?.rows).toBeLessThanOrEqual(101);
+    const { value, capture: measured } = await capture(db, () =>
+      discover(id, 'organization_member', 'member_account_id', page),
+    );
+    expect(
+      costOf(measured).relations['access.organization_member']?.rows,
+      JSON.stringify(measured.plans),
+    ).toBeLessThanOrEqual(101);
     results.push(value);
   }
   expect(results.map((result) => [result.partition, result.keys.length])).toEqual([
@@ -467,12 +477,14 @@ for (const path of ['page', 'deep', 'empty', 'denied', 'retry']) {
     let selected: string | undefined;
     const report = await checkGrowth(db, {
       name: `Access erasure discovery ${path}`,
-      scales: [1, 100, 10000],
+      // The harness caps its scale parameter at 4096; square it to seed the contracted populations.
+      scales: [1, 10, 100],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       indexProbes: 5,
       async grow(database, scale, previous) {
-        await history(newId(64), 1, scale - previous);
-        const ids = Array.from({ length: scale - previous }, () => newId(64));
+        const added = scale * scale - previous * previous;
+        await history(newId(64), 1, added);
+        const ids = Array.from({ length: added }, () => newId(64));
         await database.admin.query(
           `INSERT INTO access.account(route,account_id,kind,state,transaction_id) SELECT 64,id,'actor','deleted',id FROM unnest($1::uuid[]) id`,
           [ids],
@@ -510,6 +522,7 @@ for (const path of ['page', 'deep', 'empty', 'denied', 'retry']) {
         expect(keys).toBe(selected);
       },
     });
+    expect(report.samples.map(({ scale }) => scale * scale)).toEqual([1, 100, 10000]);
     expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
     expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
     for (const { cost } of report.samples) {
