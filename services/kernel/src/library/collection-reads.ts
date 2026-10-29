@@ -396,7 +396,11 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
       await readOnly(pool, async (client) => {
         for (const pair of considered) {
           const row = await collectionRead.run(queryOf(client), { route: pair.collectionRoute, id: pair.collectionId });
-          if (!row || row.state !== 'active' || row.visibility !== 'public') continue;
+          // Publication is eventual. A detected withdrawn positive cannot certify an exact count.
+          if (!row || row.state !== 'active' || row.visibility !== 'public')
+            throw new ProblemError('dependency_unavailable');
+          const views = await readPublicViews(client, [row.curatorAccountId]);
+          if (views.get(row.curatorAccountId)?.collections !== true) continue;
           shown.push({
             id: row.id,
             curatorAccountId: row.curatorAccountId,

@@ -8,6 +8,7 @@ import memberSubjects from './work-member-subjects.sql';
 
 const COLLECTION_LISTING_WORKFLOW = 'library.collectionListing';
 const PAGE_SIZE = 100;
+const SEGMENT_PAGES = 2;
 
 export function registerLibraryWork({ pool, client, addEffects }: WorkContext): void {
   const syncPage = DBOS.registerStep(
@@ -26,10 +27,28 @@ export function registerLibraryWork({ pool, client, addEffects }: WorkContext): 
     },
     { name: 'library.syncCollectionPage', ...COMMAND_STEP_RETRIES },
   );
+  const continueListing = DBOS.registerStep(
+    async (collectionId: string, after: string, root: string) => {
+      await client.enqueue(
+        {
+          workflowName: COLLECTION_LISTING_WORKFLOW,
+          workflowID: `${root}:${after}`,
+          workflowIDReusePolicy: 'return-existing',
+          queueName: 'workflows',
+        },
+        collectionId,
+        after,
+        root,
+      );
+    },
+    { name: 'library.continueCollectionListing', ...COMMAND_STEP_RETRIES },
+  );
   DBOS.registerWorkflow(
-    async (collectionId: string) => {
-      let after: string | null = '00000000-0000-0000-0000-000000000000';
-      while (after !== null) after = await syncPage(collectionId, after);
+    async (collectionId: string, start = '00000000-0000-0000-0000-000000000000', root = DBOS.workflowID!) => {
+      let after: string | null = start;
+      for (let page = 0; page < SEGMENT_PAGES && after !== null; page++) after = await syncPage(collectionId, after);
+      // A finite segment retains only an immutable source locator in existing DBOS work.
+      if (after !== null) await continueListing(collectionId, after, root);
     },
     { name: COLLECTION_LISTING_WORKFLOW },
   );

@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
+import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import * as store from '../../src/library/collection-store.ts';
@@ -57,9 +58,24 @@ async function collection(db: Pool, subjectId: string, visibility: CollectionVis
   }
 }
 
+// Store fixtures still publish through the native command fence: stamps are core positions.
+async function sourceWrite(
+  collectionId: string,
+  body: (client: Parameters<typeof store.readCollection>[0], context: ReturnType<typeof context>) => Promise<void>,
+) {
+  await runCommand(pool, { partition: partitionOf(sourceRoute), clock }, async (tx, command) => {
+    await body(tx, { time: authoritativeTimeValue(command.time), transactionId: command.transactionId });
+    return {
+      value: null,
+      events: [
+        { type: 'com.rezics.library.collection.listing.changed.v1', subject: collectionId, data: { collectionId } },
+      ],
+    };
+  });
+}
+
 async function visibility(collectionId: string, value: CollectionVisibility) {
-  const client = await pool.connect();
-  try {
+  await sourceWrite(collectionId, async (client, context) => {
     const row = (await store.readCollection(client, sourceRoute, collectionId))!;
     expect(
       await store.updateCollection(
@@ -68,22 +84,17 @@ async function visibility(collectionId: string, value: CollectionVisibility) {
         collectionId,
         row.revision,
         { title: row.title, description: row.description, visibility: value },
-        context(),
+        context,
       ),
     ).not.toBeNull();
-  } finally {
-    client.release();
-  }
+  });
 }
 
 async function remove(collectionId: string, memberId?: string) {
-  const client = await pool.connect();
-  try {
-    if (memberId) await store.deleteMember(client, sourceRoute, collectionId, memberId, context());
-    else await store.tombstoneCollection(client, sourceRoute, collectionId, context());
-  } finally {
-    client.release();
-  }
+  await sourceWrite(collectionId, async (client, context) => {
+    if (memberId) await store.deleteMember(client, sourceRoute, collectionId, memberId, context);
+    else await store.tombstoneCollection(client, sourceRoute, collectionId, context);
+  });
 }
 
 const sync = (subjectId: string, collectionId: string) =>

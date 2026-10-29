@@ -3,18 +3,25 @@ import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import type { CollectionView, MemberView } from '../../src/library/collection-reads.ts';
 import { syncSubjectListing } from '../../src/library/listing.ts';
+import { libraryWorkModule } from '../../src/library/work-module.ts';
+import type { CloudEvent } from '../../src/events/log.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
+import { nativeFixture, cookies, password } from '../access/native-account-bindings-fixture.ts';
+import { testKernel, registerTestClient } from '../support/test-kernel.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const owner = newId(0x6c31);
@@ -462,6 +469,50 @@ test('the anonymous subject page exposes only current public Collections with mu
     }),
   ).toContainEqual(expected);
   await json(await request('PATCH', path(shelf.id), { revision: shelf.revision, visibility: 'private' }));
+  // The source command publishes an event, and cross-home publication completes in native work.
+  const workClient = await createWorkClient(db.url);
+  const worker = await composeWork([libraryWorkModule], {
+    databaseUrl: db.url,
+    pool: db.pool,
+    client: workClient,
+    env: {},
+  });
+  try {
+    await worker.launch();
+    const row = (
+      await db.admin.query(
+        "SELECT * FROM core.outbox WHERE partition_no=$1 AND subject=$2 AND type='com.rezics.library.collection.listing.changed.v1' ORDER BY position DESC LIMIT 1",
+        [routeOf(shelf.id)! >> 4, shelf.id],
+      )
+    ).rows[0]!;
+    const event: CloudEvent = {
+      specversion: '1.0',
+      id: row.id,
+      source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
+      type: row.type,
+      subject: shelf.id,
+      time: row.recorded_at.toISOString(),
+      sequence: String(row.position).padStart(19, '0'),
+      datacontenttype: 'application/json',
+      data: row.data,
+    };
+    await (
+      await workClient.enqueue(
+        {
+          workflowName: 'effect',
+          queueName: 'effects',
+          queuePartitionKey: String(row.partition_no),
+          workflowID: randomUUID(),
+        },
+        'library_collection_listing',
+        event,
+      )
+    ).getResult({ pollingIntervalMs: 10 });
+    await workClient.retrieveWorkflow(event.id).getResult({ pollingIntervalMs: 10 });
+  } finally {
+    await worker.shutdown();
+    await workClient.close();
+  }
   expect(
     await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous', { extraKeys: ['count'] }),
   ).not.toContainEqual(expected);
@@ -494,3 +545,128 @@ test('add-member requests and member pages keep equal statements across three un
   expect(new Set(adds).size).toBe(1);
   expect(new Set(pages).size).toBe(1);
 });
+
+test('native Auth suspension rejects the old Collection bearer and sign-in without hiding anonymous known-ID public reads', async () => {
+  const native = await openGrowthDatabase();
+  const auth = await nativeFixture(native.pool);
+  try {
+    const service = auth.host.service;
+    const kernel = testKernel({
+      pool: native.pool,
+      auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+      writeRate: createWriteRateLimiter({ secret: 'collection-native-auth-regression-secret' }),
+    });
+    const actions = [...actionCatalogue(kernel).keys()];
+    await registerTestClient(service, { clientId: 'collections-native', firstParty: true, scopes: actions });
+    const root = await auth.person(`root_${randomUUID().replaceAll('-', '')}`);
+    const curator = await auth.person(`curator_${randomUUID().replaceAll('-', '')}`);
+    await bootstrapGovernance(native.pool, root.accountId);
+    async function issue(accountId: string) {
+      const signed = await auth.request('/signin', {
+        account_id: accountId,
+        password,
+        client_id: 'collections-native',
+        scope: actions,
+      });
+      expect(signed.status).toBe(200);
+      const issued = await auth.request('/token', {}, cookies(signed));
+      expect(issued.status).toBe(200);
+      return ((await issued.json()) as { access_token: string }).access_token;
+    }
+    const rootBearer = await issue(root.accountId);
+    const curatorBearer = await issue(curator.accountId);
+    const call = (bearer: string | null, method: string, path: string, body?: unknown) =>
+      kernel.handle(
+        new Request(`http://kernel.test${path}`, {
+          method,
+          headers: {
+            ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(randomUUID()),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
+    expect((await call(rootBearer, 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+    await bootstrapRelease(native.pool, bundledRelease);
+    expect(
+      (
+        await call(rootBearer, 'POST', '/v1/grants', {
+          resource: PLATFORM_RESOURCE,
+          subject: { kind: 'active_accounts' },
+          actions: ['subject:create'],
+          valid: '(,)',
+        })
+      ).status,
+    ).toBe(201);
+    const createdSubject = await call(rootBearer, 'POST', '/v1/subjects', {
+      type: 'schema:Book',
+      labels: { en: 'Native curator discovery' },
+    });
+    expect(createdSubject.status).toBe(201);
+    const subjectId = ((await createdSubject.json()) as { subject: { id: string } }).subject.id;
+    const ids: string[] = [];
+    for (const visibility of ['public', 'unlisted', 'private']) {
+      const response = await call(curatorBearer, 'POST', '/v1/collections', {
+        title: `Native ${visibility}`,
+        visibility,
+      });
+      expect(response.status).toBe(201);
+      ids.push(((await response.json()) as { collection: CollectionView }).collection.id);
+    }
+    expect((await call(curatorBearer, 'POST', `/v1/collections/${ids[0]}/members`, { subjectId })).status).toBe(201);
+    await syncSubjectListing({ pool: native.pool }, { subjectId, collectionId: ids[0]! });
+    expect((await (await call(null, 'GET', `/v1/subjects/${subjectId}/collections`)).json()).collections).toHaveLength(
+      1,
+    );
+    expect(
+      (
+        await call(rootBearer, 'POST', `/v1/accounts/${curator.accountId}:suspend`, {
+          reason: 'Native Collection regression',
+        })
+      ).status,
+    ).toBe(200);
+    for (const path of [
+      `/v1/collections/${ids[0]}`,
+      `/v1/collections/${ids[1]}`,
+      `/v1/collections?curatorAccountId=${curator.accountId}`,
+    ]) {
+      const refused = await call(curatorBearer, 'GET', path);
+      expect(refused.status).toBe(401);
+      expect(refused.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      expect((await refused.json()).code).toBe('invalid_credentials');
+    }
+    for (const id of ids.slice(0, 2)) expect((await call(null, 'GET', `/v1/collections/${id}`)).status).toBe(200);
+    expect((await call(null, 'GET', `/v1/collections/${ids[2]}`)).status).toBe(404);
+    const discovery = await call(null, 'GET', `/v1/collections?curatorAccountId=${curator.accountId}`);
+    expect(discovery.status).toBe(200);
+    expect(await discovery.json()).toEqual({ collections: [], next: null });
+    const publicSubjectPage = await call(null, 'GET', `/v1/subjects/${subjectId}/collections`);
+    expect(publicSubjectPage.status).toBe(200);
+    expect((await publicSubjectPage.json()).collections).toEqual([]);
+    const sessions = async () =>
+      (await auth.authPool.query('SELECT id FROM session WHERE "userId"=$1 ORDER BY id', [curator.accountId])).rows;
+    const before = await sessions();
+    const refused = await auth.request('/signin', {
+      account_id: curator.accountId,
+      password,
+      client_id: 'collections-native',
+      scope: actions,
+    });
+    expect(refused.status).toBe(403);
+    expect(JSON.stringify(await refused.json())).toContain('ACCOUNT_SUSPENDED');
+    expect(refused.headers.getSetCookie()).toEqual([]);
+    expect(await sessions()).toEqual(before);
+    const wrong = await auth.request('/signin', {
+      account_id: curator.accountId,
+      password: 'wrong password',
+      client_id: 'collections-native',
+      scope: actions,
+    });
+    expect(wrong.status).toBe(401);
+    expect(await sessions()).toEqual(before);
+  } finally {
+    await auth.close();
+    await native.close();
+  }
+}, 180_000);

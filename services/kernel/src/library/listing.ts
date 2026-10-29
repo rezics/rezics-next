@@ -1,12 +1,12 @@
-import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, runCommand } from '../command/command.ts';
+import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf } from '../route/route.ts';
 import { requireRoute } from './command-support.ts';
 import apply from './listing-apply.sql';
 import page from './listing-page.sql';
-import readSource from './listing-source.sql';
+import { observeListingSource } from './listing-source-observer.ts';
+import type { ListingObservation } from './listing-freshness-contract.ts';
 
 class Unchanged extends Error {}
 const unchanged = { changed: false } as const;
@@ -16,33 +16,25 @@ export async function syncSubjectListing(
   { pool, clock }: { pool: Pool; clock?: () => Date },
   { subjectId, collectionId }: { subjectId: string; collectionId: string },
 ) {
+  const source = await observeListingSource(pool, { subjectId, collectionId });
+  return applySubjectListing({ pool, clock }, source);
+}
+
+/** Apply a released native observation; source stamps order first deliveries as well as retries. */
+export async function applySubjectListing(
+  { pool, clock }: { pool: Pool; clock?: () => Date },
+  source: ListingObservation,
+) {
+  const { subjectId, collectionId, collectionRoute, multiplicity, stamp } = source;
   const route = requireRoute(subjectId);
-  const collectionRoute = requireRoute(collectionId);
-  // One statement sees both the Collection state and its members in the same source snapshot.
-  const source = await withConnection(pool, (client) =>
-    readSource.run(
-      { query: client.query.bind(client) },
-      { route: collectionRoute, collection_id: collectionId, subject_id: subjectId },
-    ),
-  );
-  const multiplicity = source?.multiplicity ?? 0;
-  // Include the source transaction so public/private/public cycles cannot replay an obsolete receipt.
-  const digest = createHash('sha256')
-    .update(JSON.stringify([subjectId, collectionId, source?.transactionId ?? null, multiplicity]))
-    .digest();
+  if (requireRoute(collectionId) !== collectionRoute || partitionOf(collectionRoute) !== stamp.partition)
+    throw new TypeError('Listing source binding changed');
   try {
     const result = await runCommand(
       pool,
       {
         partition: partitionOf(route),
         clock,
-        // The subject namespaces this internal receipt; no request actor or write basis is supplied.
-        receipt: {
-          actorAccountId: subjectId,
-          kind: 'library.subject.listing.sync',
-          key: digest.toString('hex'),
-          digest,
-        },
       },
       async (tx, command) => {
         const rows = await apply.run(tx, {
@@ -51,18 +43,24 @@ export async function syncSubjectListing(
           collection_id: collectionId,
           collection_route: collectionRoute,
           multiplicity,
+          source_partition: stamp.partition,
+          source_epoch: stamp.epoch,
+          source_position: stamp.position.toString(),
+          ever_public: source.everPublic || source.currentlyPublic,
           time: authoritativeTimeValue(command.time),
           transaction_id: command.transactionId,
         });
         const value = rows[0];
-        if (!value) throw new Unchanged();
+        if (!value?.advanced) throw new Unchanged();
+        // Ordering metadata is derived bookkeeping, not a public domain change.
+        if (!value.projectionChanged) return noEffect(value);
         return {
           value,
           events: [{ type: 'com.rezics.library.subject.listed.v1', subject: subjectId, data: { subjectId } }],
         };
       },
     );
-    return { ...result, changed: true as const };
+    return { ...result, changed: result.value.projectionChanged };
   } catch (error) {
     if (error instanceof Unchanged) return unchanged;
     throw error;
