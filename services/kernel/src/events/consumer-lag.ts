@@ -7,6 +7,7 @@ export type ConsumerLag = {
 };
 
 export async function readConsumerLag(client: PoolClient, consumer: string): Promise<ConsumerLag | null> {
+  // The SQL mapper returns a nullable row for this primary-key lookup.
   const row = await readConsumerLagQuery.run(client, { consumer });
   return row
     ? {
