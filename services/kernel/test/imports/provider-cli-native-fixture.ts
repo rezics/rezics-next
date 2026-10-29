@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
-import type { SourceId } from '@rezics/conversion';
+import type { SourceId } from '../../../../packages/conversion/src/index.ts';
 import type {
   BatchCommand,
   BatchStatement,
@@ -164,7 +164,9 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
             expect(registration.source).toBe(source);
             expect(registration.converter_revision).toBe(converterRevision);
             expect(converterModule).toBe(
-              import.meta.resolve(`@rezics/conversion/${source === 'openlibrary' ? 'open-library' : source}`),
+              import.meta.resolve(
+                `../../../../packages/conversion/src/${source === 'openlibrary' ? 'open-library' : source}.ts`,
+              ),
             );
             expect(decoderModule).toBe(import.meta.resolve('../../../importer/src/dumps.ts'));
             const store = importer.session.store;
