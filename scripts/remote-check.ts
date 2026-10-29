@@ -1221,11 +1221,12 @@ async function rankedHosts(
     const probe = entry.probe;
     if (probe === null) continue;
     const limit = probe.sliceProcessors * CHECK_HOST_MAX_LOAD_PER_PROCESSOR;
-    const reason = probe.load > limit
-      ? `${entry.host.name}: load ${probe.load} exceeds limit ${limit}`
-      : probe.availableMemory < CHECK_HOST_MIN_AVAILABLE_BYTES
-        ? `${entry.host.name}: MemAvailable ${probe.availableMemory} bytes is under ${CHECK_HOST_MIN_AVAILABLE_BYTES} bytes`
-        : undefined;
+    const reason =
+      probe.load > limit
+        ? `${entry.host.name}: load ${probe.load} exceeds limit ${limit}`
+        : probe.availableMemory < CHECK_HOST_MIN_AVAILABLE_BYTES
+          ? `${entry.host.name}: MemAvailable ${probe.availableMemory} bytes is under ${CHECK_HOST_MIN_AVAILABLE_BYTES} bytes`
+          : undefined;
     if (!reason) continue;
     skipped.push({ host: entry.host, probe });
     loggedSkips.set(entry.host.name, reason);
