@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, watch, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { WorkerJob } from './job.ts';
@@ -50,46 +50,26 @@ async function until(condition: () => boolean): Promise<void> {
   for (let i = 0; i < 300 && !condition(); i++) await new Promise((resolve) => setTimeout(resolve, 50));
   if (!condition()) throw new Error('condition never held');
 }
-/** A tool sandbox ends a command by killing the command's whole process tree, the command itself included. */
-function killTree(root: number): void {
-  const children = new Map<number, number[]>();
-  for (const name of readdirSync('/proc').filter((entry) => /^\d+$/.test(entry))) {
-    try {
-      const stat = readFileSync(`/proc/${name}/stat`, 'utf8');
-      const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-      children.set(parent, [...(children.get(parent) ?? []), Number(name)]);
-    } catch {
-      /* The process ended while scanning. */
-    }
-  }
-  const order: number[] = [];
-  const walk = (pid: number) => {
-    order.push(pid);
-    for (const child of children.get(pid) ?? []) walk(child);
-  };
-  walk(root);
-  for (const pid of order.reverse())
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      /* Already gone. */
-    }
-}
-/** Run `goal retry` as a manager's tool call does, then end it the way a sandbox does. */
+/** Run the manager's retry tool call, then start its persisted intent from the host recovery path. */
 async function launchThenKillLauncher(h: ReturnType<typeof harness>, taskId: string): Promise<Attempt> {
   const launcher = spawn(process.execPath, [join(import.meta.dir, 'cli.ts'), 'retry', taskId], {
     cwd: h.root,
     stdio: 'ignore',
     env: { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_TASK_ID: '', GOAL_ATTEMPT: '' },
   });
-  const worktree = h.store.task(taskId).worktree;
-  await waitForFile(join(worktree, '.worker-started'));
+  await new Promise<void>((resolve, reject) => {
+    launcher.once('error', reject);
+    launcher.once('exit', () => resolve());
+  });
+  // Retry only records durable intent. The host, which outlives the CLI, owns starting it.
   const ref = { taskId, attempt: h.store.task(taskId).currentAttempt };
-  const attempt = h.store.attempt(ref);
+  expect(h.store.retryIntent(ref)?.status).toBe('pending');
+  const host = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+  const recovery = host.recoverOrphans();
+  await waitForFile(join(h.store.task(taskId).worktree, '.worker-started'));
+  const attempt = h.store.attempt({ taskId, attempt: h.store.task(taskId).currentAttempt });
   expect(attempt.process).not.toBeNull();
-  const ended = new Promise<void>((resolve) => launcher.once('exit', () => resolve()));
-  killTree(launcher.pid!);
-  await ended;
+  await recovery;
   return attempt;
 }
 

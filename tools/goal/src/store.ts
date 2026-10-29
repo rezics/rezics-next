@@ -318,7 +318,9 @@ export class WorkerStore implements AttemptFence {
   }
   retryIntents(): RetryIntent[] {
     return this.db
-      .query('SELECT body FROM worker_retry_intents ORDER BY task_id, attempt')
+      // SQLite's rowid is the durable insertion order for intents. A replacement
+      // intent receives a new rowid, so recovery follows the order managers queued them.
+      .query('SELECT body FROM worker_retry_intents ORDER BY rowid')
       .all()
       .map((row) => decode<RetryIntent>(row)!);
   }
