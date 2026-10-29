@@ -24,10 +24,10 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
-Derived files declare an `integration` or `promotion` stage in `defaults.json`. The integration stage regenerates files
-during rebase. Promotion-stage files may declare `inputs`; a dev landing that changes one of those inputs runs the
-declared generator against the rebased candidate and includes changed outputs in its landing commit. Promotion still
-runs promotion-stage generators on the `dev` head before its final gates.
+Derived files declare an `integration` or `promotion` stage in `defaults.json`. Rebase conflicts regenerate declared
+files from either stage, including on dev landings and retries. Promotion-stage files may declare `inputs`; a dev
+landing that changes one of those inputs runs the declared generator against the rebased candidate and includes changed
+outputs in its landing commit. Promotion still runs promotion-stage generators on the `dev` head before its final gates.
 
 Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
 ` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller runs the
@@ -414,7 +414,7 @@ failing workspace checks on the same candidate up to twice; each rerun is record
 failures block immediately. A passing gate publishes `main` from that head and moves the branch to the dev head,
 starting the next window. Deleting the branch returns promotion to gating dev.
 
-`defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. During a rebase, if every conflict is a declared generated path, the train keeps the integration side, runs each matching command in the train worktree, stages its generated outputs and continues through the ordinary landing checks. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed generated and non-generated rebase conflict stays with the worker; non-generated-only conflicts keep the existing resolution behavior. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
+`defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown or an already supported import-only conflict; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Other non-generated conflicts stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left
