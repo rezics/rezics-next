@@ -77,6 +77,12 @@ The rerun gets a fresh log and records its reason, host and old log; its own exi
 line. Treat that infrastructure line as a `tool` blocker, even if the rerun passed. A completed command that exits
 75 prints `check: exit status 75`, while a wait that yields prints `check: still running`.
 
+When the command runs `scripts/typecheck.ts` without an existing `TYPECHECK_CHANGED`, worker-check prefixes it with the
+same `env TYPECHECK_CHANGED=<newline-joined changed files>` form as landing, using tracked changes since the merge base
+with `dev` plus untracked files. It reports the file count and merge base in the check log; without a `dev` ref or merge
+base it runs unscoped and records that reason. This scope is computed before placement, so local and remote checks use
+the same command arguments.
+
 The gate requests four slots per group by default (`GATE_REMOTE_SLOTS` overrides this).
 It partitions eligible hosts between groups when at least two qualify by configured slot count.
 Otherwise both groups use the original hosts file. Admission still checks actual slice capacity.

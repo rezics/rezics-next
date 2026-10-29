@@ -316,7 +316,6 @@ export async function runWorkerCheck(
   if (argv[0] === '--') argv = argv.slice(1);
   if (argv.length === 0) throw new Error('Usage: worker-check.ts [--local] -- <command...>');
   const root = resolve(cwd);
-  const command = resolveRepositoryBun(argv, root);
   const file = recordedLog ?? logPath(root);
   const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
@@ -326,6 +325,8 @@ export async function runWorkerCheck(
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
   const commandClass = checkClass(argv, root);
+  argv = scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`));
+  const command = resolveRepositoryBun(argv, root);
   const checkout = mainCheckout(root);
   let ledger: CheckLedgerEntry | undefined;
   const beginLedger = (host: string, slotWaitSeconds = 0): void => {
@@ -728,6 +729,37 @@ export async function runWorkerCheck(
     writeLedger(ledger, checkout);
   }
   return signalNumber === undefined ? code : 128 + signalNumber;
+}
+
+/** Match landing's changed-file scope for the root typecheck before choosing local or remote placement. */
+export function scopeRootTypecheck(
+  argv: readonly string[],
+  cwd: string,
+  environment: NodeJS.ProcessEnv,
+  write: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
+): string[] {
+  if (!argv.some((argument) => argument === 'scripts/typecheck.ts') || environment.TYPECHECK_CHANGED !== undefined)
+    return [...argv];
+
+  const git = (args: string[]) => spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const dev = git(['rev-parse', '--verify', 'dev^{commit}']);
+  const base = dev.status === 0 ? git(['merge-base', 'HEAD', 'dev']) : undefined;
+  if (base?.status !== 0 || !base?.stdout.trim()) {
+    write('worker-check: scripts/typecheck.ts running unscoped (dev ref or merge base unavailable)');
+    return [...argv];
+  }
+
+  const mergeBase = base.stdout.trim();
+  const diff = git(['diff', '--name-only', '--no-renames', mergeBase]);
+  const untracked = git(['ls-files', '--others', '--exclude-standard']);
+  if (diff.status !== 0 || untracked.status !== 0) {
+    write('worker-check: scripts/typecheck.ts running unscoped (could not list changed files)');
+    return [...argv];
+  }
+  const changed = [...new Set([...diff.stdout.split('\n'), ...untracked.stdout.split('\n')].filter(Boolean))];
+  const changedValue = changed.join('\n');
+  write(`worker-check: scripts/typecheck.ts scoped to ${changed.length} changed files from ${mergeBase}`);
+  return ['env', `TYPECHECK_CHANGED=${changedValue}`, ...argv];
 }
 
 /** Use the caller only when it is the repository's pinned Bun; otherwise select the installed repository binary. */

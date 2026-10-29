@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -13,7 +13,7 @@ import {
 import { join } from 'node:path';
 import { hostname } from 'node:os';
 import { acquireStackSlot } from './stack-lease.ts';
-import { processTreeCpuTicks, runWorkerCheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
+import { processTreeCpuTicks, runWorkerCheck, scopeRootTypecheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
 
 const dirs: string[] = [];
@@ -187,6 +187,110 @@ function withQuietAdmission<T>(run: () => Promise<T>): Promise<T> {
     }
   });
 }
+
+function git(cwd: string, ...args: string[]): string {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(' ')} failed`);
+  return result.stdout.trim();
+}
+
+function typecheckRepo(root: string, includeDev = true): void {
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  writeFileSync(join(root, '.gitignore'), '.temp/\n');
+  for (const name of ['committed.txt', 'staged.txt', 'unstaged.txt', 'deleted.txt'])
+    writeFileSync(join(root, name), 'base\n');
+  writeFileSync(join(root, 'scripts/typecheck.ts'), "console.log(process.env.TYPECHECK_CHANGED ?? 'unset')\n");
+  git(root, 'init', '-b', includeDev ? 'dev' : 'worker');
+  git(root, 'config', 'user.email', 'worker-check@example.test');
+  git(root, 'config', 'user.name', 'Worker Check');
+  git(root, 'add', '.');
+  git(root, 'commit', '-m', 'base');
+  const base = git(root, 'rev-parse', 'HEAD');
+  if (includeDev) git(root, 'switch', '-c', 'worker');
+  writeFileSync(join(root, 'committed.txt'), 'branch\n');
+  git(root, 'add', 'committed.txt');
+  git(root, 'commit', '-m', 'branch change');
+  writeFileSync(join(root, 'staged.txt'), 'staged\n');
+  git(root, 'add', 'staged.txt');
+  writeFileSync(join(root, 'unstaged.txt'), 'unstaged\n');
+  rmSync(join(root, 'deleted.txt'));
+  writeFileSync(join(root, 'untracked.txt'), 'new\n');
+  expect(base).toMatch(/^[0-9a-f]{40}$/);
+}
+
+test('typecheck scope: worker typecheck includes committed, staged, unstaged, deleted and untracked files', async () => {
+  const root = mkdtempSync('/tmp/worker-check-typecheck-scope-');
+  dirs.push(root);
+  typecheckRepo(root);
+  const expected = ['committed.txt', 'deleted.txt', 'staged.txt', 'unstaged.txt', 'untracked.txt'];
+  const oldChanged = process.env.TYPECHECK_CHANGED;
+  delete process.env.TYPECHECK_CHANGED;
+  try {
+    await withQuietAdmission(async () => {
+      const status = await runWorkerCheck(['bun', 'scripts/typecheck.ts'], root);
+      expect(status).toBe(0);
+    });
+  } finally {
+    if (oldChanged === undefined) delete process.env.TYPECHECK_CHANGED;
+    else process.env.TYPECHECK_CHANGED = oldChanged;
+  }
+  const logDirectory = join(root, '.temp/goal/checks');
+  const log = readFileSync(join(logDirectory, readdirSync(logDirectory).find((name) => name.endsWith('.log'))!), 'utf8');
+  expect(log).toContain(`worker-check: scripts/typecheck.ts scoped to ${expected.length} changed files from `);
+  const summaryIndex = log.indexOf('\n', log.indexOf('worker-check: scripts/typecheck.ts scoped'));
+  expect(log.slice(summaryIndex + 1).trim().split('\n')).toEqual(expected);
+});
+
+test('typecheck scope: scoped argv is an env prefix shared before local or remote placement', () => {
+  const root = mkdtempSync('/tmp/worker-check-typecheck-argv-');
+  dirs.push(root);
+  typecheckRepo(root);
+  const env: NodeJS.ProcessEnv = {};
+  const lines: string[] = [];
+  const input = ['bun', 'scripts/typecheck.ts', '--verbose'];
+  const scoped = scopeRootTypecheck(input, root, env, (line) => lines.push(line));
+  const localPlacementArgv = [...scoped];
+  const remotePlacementArgv = [...scoped];
+  expect(localPlacementArgv).toEqual(remotePlacementArgv);
+  expect(localPlacementArgv.slice(0, 2)).toEqual(['env', `TYPECHECK_CHANGED=${[
+    'committed.txt',
+    'deleted.txt',
+    'staged.txt',
+    'unstaged.txt',
+    'untracked.txt',
+  ].join('\n')}`]);
+  expect(localPlacementArgv.slice(2)).toEqual(input);
+  expect(lines[0]).toContain('scoped to 5 changed files from');
+});
+
+test('typecheck scope: an existing TYPECHECK_CHANGED is kept unchanged', () => {
+  const root = mkdtempSync('/tmp/worker-check-typecheck-existing-');
+  dirs.push(root);
+  typecheckRepo(root);
+  const env = { TYPECHECK_CHANGED: 'caller\nvalue' };
+  const input = ['bun', 'scripts/typecheck.ts'];
+  expect(scopeRootTypecheck(input, root, env, () => {})).toEqual(input);
+  expect(env.TYPECHECK_CHANGED).toBe('caller\nvalue');
+});
+
+test('typecheck scope: missing dev ref runs unscoped and explains why', () => {
+  const root = mkdtempSync('/tmp/worker-check-typecheck-no-dev-');
+  dirs.push(root);
+  typecheckRepo(root, false);
+  const lines: string[] = [];
+  const input = ['bun', 'scripts/typecheck.ts'];
+  expect(scopeRootTypecheck(input, root, {}, (line) => lines.push(line))).toEqual(input);
+  expect(lines).toEqual(['worker-check: scripts/typecheck.ts running unscoped (dev ref or merge base unavailable)']);
+});
+
+test('typecheck scope: commands other than root typecheck get no TYPECHECK_CHANGED', () => {
+  const root = mkdtempSync('/tmp/worker-check-typecheck-other-');
+  dirs.push(root);
+  const env: NodeJS.ProcessEnv = {};
+  const input = ['bun', 'scripts/other.ts'];
+  expect(scopeRootTypecheck(input, root, env, () => {})).toEqual(input);
+  expect(env.TYPECHECK_CHANGED).toBeUndefined();
+});
 
 test('worker-check keeps exit status and writes a log plus failure summary with admission disabled', async () => {
   const directory = mkdtempSync('/tmp/worker-check-test-');
