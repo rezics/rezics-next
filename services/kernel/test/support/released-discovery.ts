@@ -3,17 +3,34 @@ import type { Release } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
 import type { FilterDocument as Filter } from '@rezics/filter';
 import { randomUUID } from 'node:crypto';
+import type { QueryResult, QueryResultRow } from 'pg';
 import type { HttpResponse, Persona, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { isRelationProperty } from '../../src/semantic/item.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { createSemanticDriver, type SemanticOutcomeDriver } from '../semantic/outcome-driver.ts';
+import {
+  createSemanticDriver,
+  type ReleasedDiscoveryFeature,
+  type SemanticOutcomeDriver,
+} from '../semantic/outcome-driver.ts';
+export { releasedDiscoveryFeatures, type ReleasedDiscoveryFeature } from '../semantic/outcome-driver.ts';
 
 export const releasedDiscoveryVersion = 1 as const;
 type Account = Awaited<ReturnType<SemanticOutcomeDriver['fixtures']['person']>>;
 export type DiscoveryPersona = Persona | 'alice' | 'bob' | 'outsider' | 'unscoped';
+export type DiscoveryAccountName = 'alice' | 'bob' | 'outsider' | 'unscoped';
+export type DiscoveryScopedTransport = Readonly<{
+  accountId: string;
+  request(
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<HttpResponse>;
+}>;
 export type Prerequisite = Readonly<{
   state: 'prerequisite';
   owner: 'semantic' | 'commerce' | 'content' | 'accounts';
@@ -82,6 +99,16 @@ export interface ReleasedDiscoveryFixture {
   readonly privacy: Prerequisite;
   readonly profiles: Prerequisite;
   readonly platform: Prerequisite;
+  readonly setup: {
+    openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
+    spaceCreation(persona: DiscoveryAccountName): Promise<void>;
+  };
+  scoped(persona: 'alice' | 'bob', scopes: readonly string[]): Promise<DiscoveryScopedTransport>;
+  /** Trusted test SQL on the owned kernel database, within the existing native read-only transaction. */
+  inspect<Row extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    values?: readonly unknown[],
+  ): Promise<QueryResult<Row>>;
   request(
     persona: DiscoveryPersona,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -160,6 +187,10 @@ export async function createReleasedDiscoveryFixture(
       driver.fixtures.person('discovery-unscoped', { scopes: [] }),
     ]);
     const personas = { alice, bob, outsider, unscoped };
+    let closed = false;
+    const requireOpen = () => {
+      if (closed) throw new Error('Released discovery fixture is closed');
+    };
     const request: ReleasedDiscoveryFixture['request'] = (persona, method, path, body, headers) => {
       if (persona === 'alice' || persona === 'bob' || persona === 'outsider' || persona === 'unscoped')
         return driver.fixtures.send(personas[persona], method, path, body, headers);
@@ -303,6 +334,30 @@ export async function createReleasedDiscoveryFixture(
         'Adopt released same-statement platform/language/date qualifier grammar: inLanguage currently string, not a Concept or credit role.',
       ),
       request,
+      setup: {
+        openFeatures: (groups) => driver.fixtures.openFeatures(groups),
+        async spaceCreation(persona) {
+          requireOpen();
+          if (!Object.hasOwn(personas, persona)) throw new Error('Space setup requires a named discovery account');
+          await driver.fixtures.grantAccount(personas[persona], ['space:create']);
+        },
+      },
+      async scoped(persona, scopes) {
+        requireOpen();
+        if (persona !== 'alice' && persona !== 'bob') throw new Error('Scope variants require Alice or Bob');
+        const account = await driver.fixtures.scopeVariant(personas[persona], scopes);
+        return Object.freeze({
+          accountId: account.accountId,
+          request: (method, path, body, headers) => {
+            requireOpen();
+            return driver.fixtures.send(account, method, path, body, headers);
+          },
+        } satisfies DiscoveryScopedTransport);
+      },
+      async inspect(sql, values) {
+        requireOpen();
+        return withReadTransaction(driver.fixtures.pool, (client) => client.query(sql, values ? [...values] : []));
+      },
       grant: (persona, actions, resourceId) => driver.grant(persona, actions, resourceId),
       createSubject,
       adopt,
@@ -487,7 +542,10 @@ export async function createReleasedDiscoveryFixture(
           if (!done) throw new Error(`Native link projection did not catch up in partition ${partition}`);
         }
       },
-      close: () => driver.close(),
+      close: () => {
+        closed = true;
+        return driver.close();
+      },
     };
     return fixture;
   } catch (error) {

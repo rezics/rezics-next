@@ -44,6 +44,10 @@ The result is the closed `ReleasedDiscoveryFixture` interface:
 | `recipes()`                                              | Closed `Record<RecipeName, CreatedSubject>`, fact receipts and exact completed-session prerequisite.                                                                 |
 | `personal`, `sources`, `privacy`, `profiles`, `platform` | Closed `{state:'prerequisite', owner, required}` descriptors. These are not callable fake APIs or seeded scenario evidence.                                          |
 | `request(persona, method, path, body?, headers?)`        | Original native HTTP status, headers and parsed body. Uses existing Auth/Access; no response normalization.                                                          |
+| `setup.openFeatures(groups)`                             | Explicit native governor opening of only `personal_library` and/or `reading_progress`; no additional default opening.                                                |
+| `setup.spaceCreation(persona)`                           | Grants only Global `space:create` to one existing named discovery account through the internal native governor.                                                      |
+| `scoped(persona, scopes)`                                | Fresh same-account native Auth issuance for Alice or Bob; returns an account ID and scoped request transport.                                                        |
+| `inspect<Row>(sql, values?)`                             | Trusted test-only typed PostgreSQL query result from the owned kernel database in the existing read-only transaction.                                                |
 | `createSubject(type, name, statements?)`                 | Native `POST /v1/subjects`; returns only the actual `subject.id`, initial revision and accepting release.                                                            |
 | `adopt(subject, statement)`                              | Native proposal, Context acceptance and adoption; returns candidate ID, acceptance/adoption heads, revision and release.                                             |
 | `read(subject, persona?)`                                | Native subject GET; default anonymous.                                                                                                                               |
@@ -60,9 +64,58 @@ administration, not an allow-all Access replacement. “Outsider” has no edito
 standing create/propose rights still apply. A name is not a denial flag.
 
 The existing driver's `suspended` persona carries a pre-suspension bearer. Native suspension fences authentication
-and advances its floor, so this credential is revoked and must remain 401 invalid_credentials. It cannot prove the
-required **valid** suspended bearer 403 account_suspended. `privacy.required` records the precise Accounts producer
-prerequisite; no fake token, direct account-state update or changed authentication architecture supplies it here.
+and advances its floor, so public-route revocation controls remain HTTP 401 `invalid_credentials` with
+`WWW-Authenticate: Bearer error="invalid_token"`. The verified-suspended 403 branch is defensive; there is no native
+valid-suspended factory. No fake token or direct account-state update supplies such a persona here.
+
+## Explicit native setup and inspection
+
+The support module exports `releasedDiscoveryFeatures`, the frozen tuple
+`['personal_library', 'reading_progress']`, and its `ReleasedDiscoveryFeature` union. The actual additive signatures
+on `ReleasedDiscoveryFixture` are:
+
+```ts
+setup: {
+  openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
+  spaceCreation(persona: DiscoveryAccountName): Promise<void>;
+};
+scoped(persona: 'alice' | 'bob', scopes: readonly string[]): Promise<DiscoveryScopedTransport>;
+inspect<Row extends QueryResultRow = QueryResultRow>(sql: string, values?: readonly unknown[]): Promise<QueryResult<Row>>;
+```
+
+`DiscoveryAccountName` is `'alice' | 'bob' | 'outsider' | 'unscoped'`; `DiscoveryScopedTransport` is a readonly
+`{accountId, request(method, path, body?, headers?)}` handle. Its method accepts `GET | POST | PUT | DELETE` and returns
+the original `HttpResponse`. The scoped bearer stays inside that handle; existing full-scope handles stay usable.
+Requested scopes must be known mounted client scopes and a subset of the original account's scopes. Issuance uses
+that account's real email/password through current Auth `/signin` and `/token`; native Access verifies unchanged
+account ID and exact scopes. The underlying driver adds `fixtures.scopeVariant(account, scopes)` while preserving
+`person(name, options)` and its incompatible-scope reuse rejection.
+
+No setup call is implicit. The base's original collections opening, grants, pool, runtime, relay and cleanup remain
+in use. `openFeatures` validates the whole list before mutation and delegates to the driver's same-named fixture
+operation. Each distinct group uses the internal governor's real credentials for
+`POST /v1/platform/exposure/{group}:open`, a fresh quoted `Idempotency-Key`, existing `send` transport and unmodified
+native session/response headers. Success requires HTTP 200; failure rejects with the exact native `HttpResponse`
+(status, headers and raw parsed problem). Repeated opening uses native idempotent no-op semantics.
+`personal_library` covers Library plus mounted reaction/rating families that declare it; `reading_progress` covers
+progress. Public Content endpoints need no extra group. Space creation separately uses `fixtures.grantAccount` for
+only `space:create` on Global, retaining the chosen account's actual bearer/scopes. No governor handle, arbitrary
+grant operation, gate grant, commerce group or Content reaction standing workaround is introduced.
+
+Inspection delegates directly to `withReadTransaction` on `driver.fixtures.pool`, retaining its native
+`REPEATABLE READ READ ONLY` snapshot, deadline, rollback and connection release. Only query results escape; no pool,
+client or alternative database is returned. This is a trusted fixture SQL boundary, not a sandbox for hostile SQL
+transaction control. PostgreSQL rejects an ordinary mutation with `25006`; inspection and scoped transports expire
+when the fixture closes. Consumers must close the fixture even after a rejected query.
+
+`test/semantic/released-discovery-capabilities.test.ts` qualifies these primitives with initially closed 403 gates,
+exact opening rows, actual released Book active-role state and stored progress rows, same-Alice read-only no-effect denial,
+independent full-scope/Bob controls, explicit Space creation and read-only inspection. It does not qualify Liked,
+completed history, canonical state, Search workers or the remaining producer scenarios below. Content's native
+Global `reaction:set` standing remains its owner's prerequisite; this setup never grants it per subject. The current
+mounted progress writer still stores a null `library_profile_pin`; profile-consumer runtime adoption remains outside
+this setup capability. The existing gated-route error handler normalizes invalid bearers to 401
+`authentication_required`/`Bearer`; this fixture preserves that native response as well.
 
 The native kernel retains the real write-rate limiter with a fixed test startup budget of 1000 new-account writes
 per 60 seconds, admitting this bounded population without rate-limit noise. No global environment override or

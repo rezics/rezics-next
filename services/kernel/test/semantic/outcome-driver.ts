@@ -27,6 +27,8 @@ import { setupContent } from '../../src/content/setup.ts';
 import { sharedAuth, type OwnedResourceObserver } from './outcome-auth.ts';
 
 type Account = { accountId: string; bearer: string };
+export const releasedDiscoveryFeatures = Object.freeze(['personal_library', 'reading_progress'] as const);
+export type ReleasedDiscoveryFeature = (typeof releasedDiscoveryFeatures)[number];
 
 const password = 'semantic outcome registration password with enough entropy';
 const clientId = 'semantic-outcomes';
@@ -97,6 +99,8 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authJwksUrl: string;
     };
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
+    scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
+    openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
     grantAccount(account: Account, actions: string[], resourceId?: string): Promise<void>;
     send(
       account: Account | null,
@@ -272,6 +276,7 @@ async function startDriver(
       return ((await issued.json()) as { access_token: string }).access_token;
     }
 
+    const credentials = new WeakMap<Account, { email: string; scopes: readonly string[] }>();
     const people = new Map<string, { scopes: string; account: Promise<Account> }>();
     async function person(name: string, options?: { scopes?: readonly string[] }): Promise<Account> {
       const requested = options?.scopes === undefined ? scopes : options.scopes;
@@ -298,10 +303,35 @@ async function startDriver(
           email,
           password,
         });
-        return { accountId: result.accountId, bearer: await issue(email, chosen) };
+        const account = { accountId: result.accountId, bearer: await issue(email, chosen) };
+        credentials.set(account, { email, scopes: chosen });
+        return account;
       });
       people.set(name, { scopes: canonical, account });
       return account;
+    }
+
+    async function scopeVariant(account: Account, requested: readonly string[]): Promise<Account> {
+      if (completion) throw new Error('Semantic outcome fixture is closed');
+      const original = credentials.get(account);
+      if (!original) throw new Error('Scope variants require an existing native fixture account');
+      if (!Array.isArray(requested)) throw new Error('Semantic fixture scopes must be an array');
+      for (const scope of requested) {
+        if (!knownScopes.has(scope) || !original.scopes.includes(scope))
+          throw new Error(`Scope variant must be a known subset of the original scopes: ${String(scope)}`);
+      }
+      const chosen = [...new Set(requested)].sort();
+      const bearer = await issue(original.email, chosen);
+      const actor = await access.authenticate(bearer, { pool: pool!, deadline: Date.now() + 10_000 });
+      if (
+        actor.kind !== 'account' ||
+        actor.accountId !== account.accountId ||
+        JSON.stringify([...actor.scopes].sort()) !== JSON.stringify(chosen)
+      )
+        throw new Error('Native scope variant changed account identity or requested scopes');
+      const variant = { accountId: actor.accountId, bearer };
+      credentials.set(variant, { email: original.email, scopes: chosen });
+      return variant;
     }
 
     const [governor, editor, acceptor, steward, suspended] = await Promise.all([
@@ -494,6 +524,19 @@ async function startDriver(
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
         },
         person,
+        scopeVariant,
+        async openFeatures(groups) {
+          if (completion) throw new Error('Semantic outcome fixture is closed');
+          if (!Array.isArray(groups) || groups.some((group) => !releasedDiscoveryFeatures.includes(group)))
+            throw new Error('Released discovery features must be personal_library or reading_progress');
+          for (const group of new Set(groups)) {
+            const response = await send(governor, 'POST', `/v1/platform/exposure/${group}:open`, undefined, {
+              'Idempotency-Key': key(),
+            });
+            // Preserve the native status, problem and headers for missing policy/runtime prerequisites.
+            if (response.status !== 200) throw response;
+          }
+        },
         grantAccount: (account, actions, resourceId) => grantAccount(account, actions, resourceId),
         send: (account, method, path, body, headers) => send(account, method, path, body, headers),
       },
