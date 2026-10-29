@@ -69,7 +69,8 @@ describe('capability completion contract', () => {
   });
 
   test('scope rows with multiple owners and reasons without an explanation are validated', () => {
-    const scope = '| System | Owner | First public scope |\n| --- | --- | --- |\n| Notifications | content; accounts for preferences | In |';
+    const scope =
+      '| System | Owner | First public scope |\n| --- | --- | --- |\n| Notifications | content; accounts for preferences | In |';
     const manifest = parseCapabilityManifest(fixture('Notifications'), 'accounts');
     expect(validateCapabilityManifest(manifest, scope)).toEqual([]);
     const emptyReason = parseCapabilityManifest(
