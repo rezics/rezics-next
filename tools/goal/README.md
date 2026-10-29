@@ -553,6 +553,20 @@ the train.
 
 ## Commands and managers
 
+### Check result reuse
+
+Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
+allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_BROWSERS_PATH`, and `TZ`), the Git tree
+ids for the command workspace and its `workspace:` dependency closure (or the whole tree for a root command), global
+inputs such as the lockfile, root package manifest, scripts, contracts, specs, patches, and lint/format configuration,
+and the Bun revision, service images, OS/architecture, and key schema version. Results expire after seven days.
+
+Failures, timeouts, interrupted or partial runs, infrastructure failures, dirty or modified worktrees, install and
+generator commands, and checks that depend on external live state (including mail, payments, clocks, and capability
+reports) are never reused. `integration.checkResultReuse` defaults to `false`. In this shadow mode a matching result is
+logged as `check-results: hit <key>`, but the check still runs; misses are logged too. If a fresh run fails after a hit,
+the supermanager receives one alert with links to the earlier and fresh logs.
+
 ```sh
 bun tools/goal/src/cli.ts status [task]
 bun tools/goal/src/cli.ts retry <task> [--brief <file>]

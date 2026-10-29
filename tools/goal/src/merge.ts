@@ -3,6 +3,13 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { FirstFailure } from './contracts.ts';
+import {
+  checkResultKey,
+  reusableCommand,
+  CHECK_RESULT_SCHEMA,
+  type CheckResult,
+  type CheckResults,
+} from './check-results.ts';
 
 export function git(cwd: string, ...args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
@@ -119,13 +126,88 @@ export function processGroupRunner(
   };
 }
 
+export type CheckResultGateOptions = {
+  root: string;
+  results: CheckResults;
+  producer?: string;
+  host?: string;
+  shadow?: boolean;
+  enabled?: boolean;
+  alert?: (message: string) => void;
+};
+
 export function gateRunner(
   timeoutMs = 600_000,
   stateDirectory?: string,
-  environment: NodeJS.ProcessEnv = {},
+  environment: NodeJS.ProcessEnv | CheckResultGateOptions = {},
+  reuse?: CheckResultGateOptions,
 ): GateRunner {
-  const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...environment });
-  return (argv, cwd, logPath) => run(argv, cwd, logPath);
+  if ('root' in environment && 'results' in environment) {
+    reuse = environment as CheckResultGateOptions;
+    environment = {};
+  }
+  const env = environment as NodeJS.ProcessEnv;
+  const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...env });
+  return async (argv, cwd, logPath) => {
+    let key: ReturnType<typeof checkResultKey> | undefined;
+    let cached: CheckResult | undefined;
+    let cleanBefore = false;
+    let head: string | undefined;
+    const startedAt = Date.now();
+    if (reuse && reusableCommand(argv)) {
+      try {
+        cleanBefore = git(cwd, 'status', '--porcelain').length === 0;
+        if (cleanBefore) {
+          head = git(cwd, 'rev-parse', 'HEAD');
+          key = checkResultKey({ root: reuse.root, cwd, command: argv, env: { ...process.env, ...env } });
+          cached = reuse.results.lookup(key.key);
+          appendFileSync(logPath, `check-results: ${cached ? 'hit' : 'miss'} ${key.key}\n`);
+          if (cached && reuse.enabled && !reuse.shadow)
+            return { passed: true, output: 'reused check result', timedOut: false };
+        }
+      } catch {
+        /* An incomplete committed snapshot is not reusable. */
+      }
+    }
+    try {
+      const result = await run(argv, cwd, logPath);
+      try {
+        if (
+          key &&
+          cleanBefore &&
+          !result.timedOut &&
+          git(cwd, 'status', '--porcelain').length === 0 &&
+          git(cwd, 'rev-parse', 'HEAD') === head &&
+          result.passed
+        ) {
+          reuse!.results.record({
+            key: key.key,
+            unit: key.unit,
+            passed: true,
+            producer: reuse!.producer ?? 'gateRunner',
+            host: reuse!.host ?? process.env.HOSTNAME ?? 'unknown',
+            duration: Date.now() - startedAt,
+            logPath,
+            time: Date.now(),
+            schemaVersion: CHECK_RESULT_SCHEMA,
+          });
+        }
+        if (cached && !result.passed)
+          reuse?.alert?.(
+            `Fresh check failed after reusable result hit ${key!.key}; cached log: ${cached.logPath}; fresh log: ${logPath}`,
+          );
+      } catch {
+        /* Persistence or alert delivery cannot change the fresh check result. */
+      }
+      return result;
+    } catch (error) {
+      if (cached)
+        reuse?.alert?.(
+          `Fresh check failed after reusable result hit ${key!.key}; cached log: ${cached.logPath}; fresh log: ${logPath}`,
+        );
+      throw error;
+    }
+  };
 }
 
 /** Extract assertion content, ignoring reporter ordering, source locations and timing decoration. */

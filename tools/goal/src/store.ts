@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite';
+import { CheckResults, checkResultsMigration } from './check-results.ts';
 import { groupMembers } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
@@ -61,10 +62,12 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
     version: 6,
     sql: `CREATE INDEX worker_tasks_state ON worker_tasks(json_extract(body, '$.state'));`,
   },
+  checkResultsMigration(),
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
 export class WorkerStore implements AttemptFence {
+  readonly checkResults: CheckResults;
   private readVersion = -1;
   private readonly taskSnapshot = new Map<string, Task>();
   private readonly attemptSnapshot = new Map<string, Attempt>();
@@ -75,6 +78,7 @@ export class WorkerStore implements AttemptFence {
   constructor(readonly db: Database) {
     migrate(db, workerMigrations);
     ensureFlow(db);
+    this.checkResults = new CheckResults(db);
   }
   /** Counts bodies decoded since the previous reset; useful for guarding host read budgets. */
   decodedRows(): { tasks: number; attempts: number } {
