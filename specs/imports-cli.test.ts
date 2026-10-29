@@ -9,7 +9,12 @@ import {
   type BatchWriteRequest,
   type BatchWriteResult,
 } from '@rezics/definitions/bulk';
-import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedSample,
+} from '../services/kernel/test/support/growth-counters.ts';
 import {
   exit,
   loadCliDriver,
@@ -208,9 +213,10 @@ class Harness {
     expect(result.openHandles).toBe(0);
     expect(encode(result.stdout + result.stderr).length).toBeLessThanOrEqual(4096);
     for (const marker of markers) expect(result.stdout + result.stderr).not.toContain(marker);
-    expect(result.cost.statements).toBe(result.sql.length);
-    expect(result.cost.rows).toBe(result.sql.reduce((sum, statement) => sum + statement.rows, 0));
-    expect(result.cost.blocks).toBe(0); // SQLite buffers unavailable.
+    expect(result.counts).toEqual({
+      'sqlite statements': result.sql.length,
+      'sqlite returned rows': result.sql.reduce((sum, statement) => sum + statement.rows, 0),
+    });
     for (const statement of result.sql) expect(statement.sql).not.toMatch(/\bCOUNT\s*\(|\bOFFSET\b/i);
     for (const request of result.requests) {
       expect(new URL(request.url).origin).toBe(origin);
@@ -493,8 +499,24 @@ test('overlapping same-source invocations report busy while a different source r
 
 test('fixed changes retain indexed bounded costs across three state scales and streaming stays proportional to supplied bytes', async () => {
   await scenario(async (h) => {
-    const fixed: GrowthSample[] = [];
-    const streaming: GrowthSample[] = [];
+    const fixedCheck: CountedCheck<Execution> = {
+      read: (result) => result.counts,
+      bounds: { 'sqlite statements': 'constant', 'sqlite returned rows': 'constant' },
+      slack: {
+        'sqlite statements': { absolute: 0, relative: 0 },
+        'sqlite returned rows': { absolute: 2, relative: 0.1 },
+      },
+    };
+    const streamingCheck: CountedCheck<Execution> = {
+      read: (result) => ({ 'input bytes': result.input.bytes, 'input records': result.input.records }),
+      bounds: { 'input bytes': 'linear', 'input records': 'linear' },
+      slack: {
+        'input bytes': { absolute: 2, relative: 0.1 },
+        'input records': { absolute: 0, relative: 0 },
+      },
+    };
+    const fixed: { scale: number; counted: CountedSample }[] = [];
+    const streaming: { scale: number; counted: CountedSample }[] = [];
     for (const scale of [1, 8, 64]) {
       h.state = resolve(h.directory, `scale-${scale}.sqlite`);
       await h.driver.seed(h.state, scale);
@@ -512,7 +534,7 @@ test('fixed changes retain indexed bounded costs across three state scales and s
           expect(statement.plan.length).toBeGreaterThan(0);
         }
       }
-      fixed.push({ scale, cost: result.cost });
+      fixed.push({ scale, counted: countedSample([fixedCheck.read(result, scale)]) });
       const text = Array.from({ length: scale }, (_, i) => record('wikidata', 'Streaming title', 100 + i)).join('');
       const stream = await h.run('wikidata', { stdin: chunks(text, scale) });
       // A disjoint snapshot intentionally trips mass protection after the streaming pass.
@@ -520,9 +542,9 @@ test('fixed changes retain indexed bounded costs across three state scales and s
       expect(stream.input).toMatchObject({ bytes: encode(text).length, records: scale, passes: 1 });
       expect(stream.input.peakBufferedBytes).toBeLessThanOrEqual(65536 * 2);
       expect(stream.input.maxPageRecords).toBeLessThanOrEqual(100);
-      streaming.push({ scale, cost: { rows: stream.input.bytes, statements: stream.input.records, blocks: 0 } });
+      streaming.push({ scale, counted: countedSample([streamingCheck.read(stream, scale)]) });
     }
-    assertGrowth(fixed, { rows: 'constant', statements: 'constant', blocks: 'constant' });
-    assertGrowth(streaming, { rows: 'linear', statements: 'linear', blocks: 'constant' });
+    expect(countedViolations(fixedCheck, fixed)).toEqual([]);
+    expect(countedViolations(streamingCheck, streaming)).toEqual([]);
   });
 });

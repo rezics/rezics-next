@@ -27,7 +27,7 @@ type SqliteCapture = {
   database: Database;
   start(): void;
   attachCoordinator(importer: Parameters<NonNullable<ImportCliObserver['onCoordinator']>>[0]['importer']): void;
-  finish(): { sql: Execution['sql']; cost: Execution['cost'] };
+  finish(): { sql: Execution['sql']; counts: Execution['counts'] };
 };
 
 function createSqliteCapture(database: Database): SqliteCapture {
@@ -37,7 +37,7 @@ function createSqliteCapture(database: Database): SqliteCapture {
   let verified = false;
   let verificationFailure: unknown;
   const statementProxies = new WeakMap<object, object>();
-  let cachedFinish: { sql: Execution['sql']; cost: Execution['cost'] } | undefined;
+  let cachedFinish: { sql: Execution['sql']; counts: Execution['counts'] } | undefined;
 
   const measure = <T>(operation: () => T): T => {
     if (!enabled || depth > 0) return operation();
@@ -149,10 +149,9 @@ function createSqliteCapture(database: Database): SqliteCapture {
         }));
         cachedFinish = {
           sql,
-          cost: {
-            statements: sql.length,
-            rows: sql.reduce((sum, statement) => sum + statement.rows, 0),
-            blocks: 0,
+          counts: {
+            'sqlite statements': sql.length,
+            'sqlite returned rows': sql.reduce((sum, statement) => sum + statement.rows, 0),
           },
         };
       }
@@ -366,6 +365,15 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       active.delete(pending);
     }
     const evidence = capture?.finish();
+    if (
+      !evidence &&
+      (fileWrites.size > 0 ||
+        runners.length > 0 ||
+        tokenReads.length > 0 ||
+        requests.length > 0 ||
+        Object.values(input).some((value) => value !== 0))
+    )
+      throw new Error('Missing SQLite capture outside observed no-I/O preflight');
     return {
       code: result.code,
       stdout: result.stdout,
@@ -377,7 +385,8 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       requests,
       openHandles: result.openHandles,
       input,
-      cost: evidence?.cost ?? { rows: 0, statements: 0, blocks: 0 },
+      // Only the observed no-I/O preflight above can have no capture.
+      counts: evidence?.counts ?? { 'sqlite statements': 0, 'sqlite returned rows': 0 },
     };
   };
 
