@@ -145,9 +145,14 @@ test('without DATABASE_URL, auth uses kernel placement and the host owns its mig
       expect(receivedEnv).toBe(env);
       return runAuthTypecheck(env, {
         place: async () => null, // The shared helper recognizes the host's run directory.
-        ownDatabase: () => {
+        prepareCompilerDatabase: async () => {
           events.push('host database');
-          return { url: 'postgres://host.test/auth', container: 'host', close: () => events.push('close') };
+          return {
+            url: 'postgres://host.test/auth',
+            remove: () => {
+              events.push('close');
+            },
+          };
         },
         typecheck: async (databaseEnv) => {
           expect(databaseEnv.DATABASE_URL).toBe('postgres://host.test/auth');
@@ -156,7 +161,7 @@ test('without DATABASE_URL, auth uses kernel placement and the host owns its mig
         },
       });
     },
-    ownDatabase: () => {
+    prepareCompilerDatabase: async () => {
       throw new Error('must not start a database on the worker');
     },
   });
@@ -171,9 +176,14 @@ test('without DATABASE_URL and no answering host, auth uses and closes its local
     { PATH: process.env.PATH },
     {
       place: async () => null,
-      ownDatabase: () => {
+      prepareCompilerDatabase: async () => {
         events.push('database');
-        return { url: 'postgres://local.test/auth', container: 'local', close: () => events.push('close') };
+        return {
+          url: 'postgres://local.test/auth',
+          remove: () => {
+            events.push('close');
+          },
+        };
       },
       typecheck: async (env) => {
         expect(env.DATABASE_URL).toBe('postgres://local.test/auth');
@@ -194,7 +204,7 @@ test('with DATABASE_URL, auth runs here against that database without placement 
     place: async () => {
       throw new Error('must not place an existing database remotely');
     },
-    ownDatabase: () => {
+    prepareCompilerDatabase: async () => {
       throw new Error('must not start a database');
     },
     typecheck: async (receivedEnv) => {
@@ -221,11 +231,11 @@ test('auth preserves tsc failure status and diagnostic lines with an existing, l
   writeFileSync(
     fixture,
     `import { runAuthTypecheck } from ${JSON.stringify(join(repository, 'services/auth/scripts/typecheck.ts'))};
-const ownDatabase = () => ({ url: 'postgres://fixture.test/auth', container: 'fixture', close() {} });
+const prepareCompilerDatabase = async () => ({ url: 'postgres://fixture.test/auth', remove() {} });
 process.exitCode = await runAuthTypecheck(process.env, {
-  ownDatabase,
+  prepareCompilerDatabase,
   place: async (_run, env) => process.argv[2] === 'host'
-    ? runAuthTypecheck(env, { ownDatabase, place: async () => null })
+    ? runAuthTypecheck(env, { prepareCompilerDatabase, place: async () => null })
     : null,
 });
 `,

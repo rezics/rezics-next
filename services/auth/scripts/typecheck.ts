@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { prepareCompilerDatabase } from '../../../scripts/compiler-database.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
-import { ownDatabase } from './database.ts';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repository = resolve(directory, '../..');
@@ -22,7 +22,7 @@ export async function runAuthTypecheck(
   dependencies: {
     place?: typeof runOnCheckHost;
     typecheck?: typeof typecheck;
-    ownDatabase?: typeof ownDatabase;
+    prepareCompilerDatabase?: typeof prepareCompilerDatabase;
   } = {},
 ): Promise<number> {
   const runCommands = dependencies.typecheck ?? typecheck;
@@ -39,12 +39,12 @@ export async function runAuthTypecheck(
   );
   if (placed !== null) return placed;
 
-  // Auth's check helper creates and migrates a separate throwaway database.
-  const database = (dependencies.ownDatabase ?? ownDatabase)();
+  // Use the same compiler database as Auth's check: imported kernel SQL also needs its schema.
+  const database = await (dependencies.prepareCompilerDatabase ?? prepareCompilerDatabase)();
   try {
     return await runCommands({ ...env, DATABASE_URL: database.url });
   } finally {
-    database.close();
+    await database.remove();
   }
 }
 
