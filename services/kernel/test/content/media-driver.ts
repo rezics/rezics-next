@@ -75,7 +75,11 @@ const { createImageJob } = await import('../../src/content/image-job.ts');
 const { createCollectionJob } = await import('../../src/content/collection-job.ts');
 const { createErasureJob } = await import('../../src/content/erasure-job.ts');
 
-type MediaScenario = { system: ContentSystem; anchors: Awaited<ReturnType<typeof provisionMediaContainers>> };
+type MediaScenario = {
+  system: ContentSystem;
+  anchors: Awaited<ReturnType<typeof provisionMediaContainers>>;
+  erasureJob: ReturnType<typeof createErasureJob>;
+};
 let scenario: MediaScenario | undefined;
 
 type SharedContentSystem = {
@@ -761,7 +765,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         return { claim: claimResult, collection: collectionResult };
       },
     };
-    mediaScenario = { system, anchors: { containers, posts } };
+    mediaScenario = { system, anchors: { containers, posts }, erasureJob: erasure };
     scenario = mediaScenario;
     return driver;
   } catch (error) {

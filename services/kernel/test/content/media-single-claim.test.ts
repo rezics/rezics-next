@@ -3,8 +3,6 @@ import { fromPlainText } from '@rezics/document';
 import type { ContentMediaDriver } from '../../../../specs/content-media-driver.ts';
 import { newId } from '../../src/route/route.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
-import { createErasureJob } from '../../src/content/erasure-job.ts';
-import { createMediaStorage } from './support/storage.ts';
 import { createContentMediaDriver, currentMediaScenario } from './media-driver.ts';
 
 let driver: ContentMediaDriver;
@@ -147,20 +145,16 @@ test('erasing a post erases only the media that post claimed', async () => {
   await historicalReference(system.database.pool, first.revisionId, [firstImage, secondImage], '2025-01-01');
   const before = await row(secondImage);
   expect((await send('DELETE', `/v1/posts/${first.id}`)).status).toBe(204);
-  const cleanupStorage = createMediaStorage();
-  try {
-    // Drain the same native cleanup called by the post-erased worker.
-    await clearErasedPostRevisions(
-      system.database.pool,
-      { postId: first.id },
-      Date.now() + 10_000,
-      createErasureJob(system.database.pool, cleanupStorage.storage),
-    );
-  } finally {
-    await cleanupStorage.close();
-  }
+  // Drain the same native cleanup and storage capability called by the post-erased worker.
+  await clearErasedPostRevisions(
+    system.database.pool,
+    { postId: first.id },
+    Date.now() + 10_000,
+    currentMediaScenario().erasureJob,
+  );
   expect((await row(firstImage)).erased).toBe(true);
   expect(await driver.download('author', firstImage, 'derivative')).toEqual({ outcome: 'denied' });
+  expect(await driver.derivatives(firstImage)).toEqual([]);
   expect(await row(secondImage)).toEqual(before);
   expect((await driver.download('author', secondImage, 'derivative')).outcome).toBe('permitted');
   expect(before.claimed_item_id).toBe(second.id);
