@@ -69,43 +69,74 @@ growth. Actual-cause investigation remains separate.
 The frozen, controller-formatted test is preserved at Git blob `51646d618c1482af9fc53e8f671f28f17b0ba062`.
 This documentation continuation uses only `test -s docs/research/imports-audit/client-counted-costs.md` for artifact
 acceptance; the completed focused check is not rerun, and no typecheck or broader gate is required.
-converter calls, at most 3.1 transactions and at most 165 executions per added record. On the inspected base,
-prepares are reported but absent from the counted growth bounds; this is not constant-prepare proof.
-Per-record work may not drift upward.
+## Recovered prerequisite and blocked cause capture
 
-## CPU amendment prerequisite mismatch
+Inspection on 2026-10-30 confirms the restored parent is an ancestor of the assigned branch.
+The actual controller-formatted CPU file has SHA256
+`f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f080e1c751`.
+This supersedes the earlier missing-prerequisite receipt: `cfd7a51a577b8f6825e940ed425f70854b5d8178f5732fc27d78ee9aadeb732b`
+was a raw preformat proposal, not the installed formatted bytes. The restored file contains the constant
+`SQLite prepares` bound with zero default slack and the raw three-scale diagnostic. It remains unchanged.
+Exact old and new formatted CPU hashes are both
+`f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f080e1c751`.
 
-Inspection on 2026-10-30 at `0378f4bb1cabf15eff4ef8269f9e0c746d0e6a0f` found that the prerequisite restored
-CPU case is absent. The authorized amendment requires preserving the restored constant prepare bound, diagnostics
-and frozen case, whose specified formatted SHA256 is
-`cfd7a51a577b8f6825e940ed425f70854b5d8178f5732fc27d78ee9aadeb732b`.
-The actual formatted file has SHA256
-`53c72ec5b9d4e15637c01fad80a61d01e2b5cd6f687c2fae8ff0d0bb0e11a851`.
-Its `check.bounds` contains only converter calls, SQLite executions and SQLite commits. SQLite prepares appear
-in sample values and the marginal ceiling of 0.1, but have no constant bound or independent exact equality
-assertion. It also has no raw-sample diagnostic output. `countedViolations` visits only declared bounds/limits,
-so an increase from 62 to 64 prepares would not fail that omitted bound.
+The driver now offers bounded literal-SQL diagnostics through `IMPORTER_PREPARE_TRACE=1` in its existing
+prepare wrapper: database ordinal, prepare-event ordinal and exact SQL, at most 128 events per handle and
+16384 characters per SQL. No bound values are logged. The callback is still installed once through
+`instrumentDatabase`; its identity, counter placement and execution/cache behavior are preserved.
+No public interface or runtime changed.
 
-The test and driver remain byte-for-byte unchanged: old and new actual CPU file hashes are both
-`53c72ec5b9d4e15637c01fad80a61d01e2b5cd6f687c2fae8ff0d0bb0e11a851`.
-The full CPU/driver diff is empty. Existing scales remain 16/64/256 and the timeout remains 120000 ms.
-No cause diagnostic or final CPU check was run: running this case cannot supply the required honest
-constant-bound RED, and restoring a different frozen case is outside the narrow scale amendment.
-The predecessor's stated 62/62/64 values are supplied evidence, not values reproduced by this attempt;
-actual per-scale event counts, distinct SQL sets and the proposed exact two-text difference remain unmeasured.
-The 256/1024/4096 amendment is held until the required restored case is present and the cause is observed.
+The required launch command was attempted once and retried twice:
 
-Source inspection confirms that `RunStore.query()` caches by literal SQL text and clears its cache when the
-prepare callback identity changes; `RecordBindings.statement()` caches by literal text for its handle.
-The existing driver installs `countWork` through `instrumentDatabase`, with prepare counting before preparation.
-`RunStore.pageStaged()` and `pageAcknowledged()` have distinct first/after-key SQL literals; that observation
-alone does not identify the measured two-site cause. Actual importer pending/staged/vanished page limits are
-100, and binding candidate pages enforce a maximum of 100. No cache, callback, counter or runtime was changed.
+```sh
+bun scripts/worker-check.ts --run -- env IMPORTER_PREPARE_TRACE=1 bun test services/importer/tests/record-cpu-growth.test.ts
+```
+
+Each attempt exited 1 immediately with the exact error `Invalid check id: --`. No check ID was returned,
+no slot was entered, and no CPU case ran. The current script parses `--run` as resuming an existing check ID,
+so the mandated separator is interpreted as that ID. No alternate launch syntax or runner repair was used.
+This is a tool failure before test execution, not a CPU assertion result. The focused final CPU check,
+affected importer typecheck and artifact acceptance have not run through the mandated runner.
+
+The predecessor's raw 16/64/256 values above remain preserved evidence, including the honest 62/62/64 RED;
+they were not reproduced by this attempt. Actual prepare-event counts, distinct literal sets and the
+256-minus-64 set difference are still unmeasured. The exact two-after-key cause is unconfirmed, so the
+256/1024/4096 amendment and independent exact-equality assertion remain held. No prewarming, padding,
+filtering, extra allowance, timeout change or product repair is authorized or introduced.
+
+Source inspection read the full `RunStore.query()` and `RecordBindings.statement()` cache implementations.
+Both cache by literal text; `RunStore.query()` additionally clears its cache on prepare callback replacement.
+The staged first/after SQLs are at `run-store.ts:489/496`; acknowledged first/after SQLs are at
+`run-store.ts:512/517`. These are candidate sites, not a measured cause. Pending and vanished pages use one
+literal each across cursor states. Actual importer pending/staged/vanished page limits at
+`importer.ts:501/978/1029` and candidate limit at `importer.ts:429` are all 100. Candidate paging also uses
+one literal. A smallest scale of at least 201 is the proposed branch-complete boundary; only an actual trace
+may establish which cold branches this fixture reaches. Original scales, all assertions, concurrency 16,
+transport/media behavior, cleanup and 120000 ms timeout remain intact.
+
+Full final CPU diff: empty. Full final driver diff:
+
+```diff
+@@
+-function countWork(database: Database): Database {
++let tracedDatabases = 0;
++function countWork(database: Database): Database {
++  const trace = process.env.IMPORTER_PREPARE_TRACE === '1';
++  const databaseNumber = trace ? ++tracedDatabases : 0;
++  let prepareEvent = 0;
+@@
+     pipelineWork.prepares++;
+     count(sql);
++    // Opt-in cold-cache evidence only: bounded literal SQL, never bound parameters.
++    if (trace && ++prepareEvent <= 128 && sql.length <= 16_384) {
++      console.info('importer prepare trace:', JSON.stringify({ database: databaseNumber, event: prepareEvent, sql }));
++    }
+```
 
 The integrated inventories `remaining-cost-unit-ports.md` at
 `472aa311ffe270eca9f01f7d7bf633281c76f14d` and `vndb-tables-binding-seams.md` at
 `14659f678751fc153ab67752628b9d9efc32c15d` are source inventories, not native passes. Their observations do
-not supply the missing CPU prerequisite. This documentation change preserves the distinction between SQLite
+not establish CPU branch coverage or equality. This documentation change preserves the distinction between SQLite
 executions/returned rows, input bytes/chunks, requests and retained bytes; unavailable SQLite blocks are not zero.
 Old row-like slack 2/10%, byte/block-like slack 4/50% and execution zero remain obligations wherever the old
 checks apply; counted defaults are zero and stricter explicit zero/exact ceilings remain binding. Raw SQL,
@@ -115,18 +146,19 @@ VNDB fourteen-case portable binding remains absent; production grouping retains 
 and `c_average`. Statistics six-case native binding and its source-statistic API effects remain distinct.
 No producer, adapter, fabricated materialization/baseline or zero-I/O observation is introduced here.
 
-Only this audit changes, with no outside-path changes or external reference-project research. Artifact
+Only this audit and the existing test driver change, with no outside-path changes or external reference-project research. Artifact
 nonemptiness can establish delivery of this evidence, but cannot establish CPU equality, native/API/growth
-acceptance, integration or promotion. The required next step is to supply the restored prerequisite case on
-the assigned branch before performing its one cause run and authorized scale amendment.
+acceptance, integration or promotion. The required next step is to reconcile the mandated launch syntax with the available runner before the one
+actual cause run. The scale amendment depends on observing exactly the required two-text difference.
 
 ## Documentation handoff
 
 The importer README Cost row and the former title “Kernel call stays within its bound as R grows” need an owner-side
 documentation update. Replace the old title's server-growth implication with the client transport description above.
-Keep PostgreSQL metrics assigned to native API checks. Actual server-side sourced batch-write growth is covered by
-`specs/imports-growth.test.ts` (run through `services/kernel/test/imports/growth-outcomes.test.ts`); its fixed 100-command
-sample records PostgreSQL execution evidence. No kernel `batchWrite` scale check was run by this client correction,
+Keep PostgreSQL metrics assigned to native API checks. The reviewed 100-command width witness belongs to
+`services/kernel/test/semantic/growth-sourced-writes.test.ts`, whose actual fixed batch includes 48 changes,
+48 fresh-key duplicates and four replays across several tuple homes. Its series limit remains open. Importer
+`M=64` and private 300-command scenarios do not establish that server width proof. No kernel `batchWrite` scale check was run by this client correction,
 so these results do not establish server-side batch-write scaling or close native API acceptance.
 
 Native API and growth suites remain separate evidence. This change measures no product timeout, admission, retry or
