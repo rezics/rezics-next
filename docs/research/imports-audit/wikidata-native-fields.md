@@ -150,5 +150,53 @@ is needed. Its SHA-256 remains
 The earlier infrastructure result does not establish an assertion failure.
 This attempt reruns only that focused native file, the root typecheck restricted
 to that file's affected workspace, and the nonempty artifact acceptance.
-Results will be recorded below after the committed checks finish. Only this
-report is changed; no outside-path file, helper, definition or existing test is edited.
+Only this report is changed; no outside-path file, helper, definition or existing
+test is edited. The source audit, converter/README, fixture/README, bundled
+mapping entries, pure assertions/driver, native runtime/observer and editor
+schemas were read again. The reference index was consulted; no external
+implementation was needed or copied.
+
+Both checks ran at committed revision
+`55ff0a5ffa7985839062b83ea17c97244a685d3a`, using the commands above.
+The focused native command exited **1** after waiting 3130.261 seconds for a
+slot on host b. It executed **2 tests: 1 pass, 1 fail, 272 expect() calls**
+in 38.96 seconds. There were zero load reruns. Its log is
+`.temp/goal/checks/worker-check-2026-10-29T14-50-48.367Z-2f309ca2.log`.
+
+The first failure was in
+`Wikidata synthetic native Book rich fields retain ranks qualifiers references and CC0 metadata through real editor selection`:
+
+```text
+services/kernel/test/imports/wikidata-native-fields.test.ts:124
+expect(delivered.status).not.toBe('busy');
+error: expect(received).not.toBe(expected)
+Expected: not "busy"
+```
+
+The actual production relay returned `busy` during `anonymous`, called at line
+243. The assertions preceding that read reached actual native candidates,
+receipts, editor acceptance/adoption, ranks, qualifiers, citations and conversion
+metadata. Anonymous field preservation and the later sentinel/effect assertions
+in that case were not reached; they are not claimed as passing.
+
+The other defined case,
+`Wikidata synthetic native revision refresh preserves independent adoption history receipts and restart idempotence`,
+passed. It completed real revision refresh, old/new candidate and receipt
+observations, independent adoption, source history, restart and request replay.
+The runner prints a dot for the pass and names only the failed case; the two-case
+file and aggregate counts identify this result. This is a real native pass for
+the synthetic record, not evidence about an observed live Wikidata entity.
+
+The affected-scope root typecheck exited **0**, checking one of thirteen
+workspaces (`@rezics/kernel`). Its log is
+`.temp/goal/checks/worker-check-2026-10-29T14-51-11.091Z-55d51faf.log`.
+The wrapper reported an ordinary assertion failure for the native run, not an
+infrastructure failure after an automatic rerun. No second native run was started.
+
+Decision: retain the existing base test and its relay assertion unchanged.
+The entire executable test and product code match this attempt's base; the sole
+change is this report. Under the assignment's base-failure rule, the observed
+native failure does not block specification delivery. The nonempty-file
+acceptance is run after committing this record, with its terminal result in the
+delivery summary. That artifact check proves specification delivery only. It
+does not turn the rich-field case's partial execution into a full native pass.
