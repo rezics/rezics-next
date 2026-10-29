@@ -168,3 +168,8 @@ No failures. Receipt `162b84f4-6fee-48dd-b7ed-ad0559d9c94f`; measurement log
 `.temp/goal/checks/worker-check-2026-10-29T05-02-15.938Z-093afc71.log`. Reconciliation pair complete.
 Both scenarios pass: actual coordinator fixed-work/linear-command growth and EOF-before-effects acquisition.
 Next: canary `pipeline-outcomes`, then previous, the final pair.
+
+Canary `pipeline-outcomes` completed exit 0: outer 1 pass, 0 fail, 5 expectations, proving 14 child passes.
+No failures. Receipt `97ae0653-cb63-4fa6-8838-d105f42bca19`; measurement log
+`.temp/goal/checks/worker-check-2026-10-29T05-02-30.769Z-cb22af27.log`. Captured HEAD/tree remain exact,
+tracked status clean. Next is previous pipeline, the final measurement. No placement defect occurred.
