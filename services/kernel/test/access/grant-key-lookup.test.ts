@@ -50,7 +50,7 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
     expect(scans.length).toBeGreaterThan(0);
     for (const node of scans) {
       expect(node['Node Type'], JSON.stringify({ scale, scans })).toBe('Index Only Scan');
-      expect(node['Index Name']).toBe('resource_grant_pkey_lookup');
+      expect(node['Index Name'], JSON.stringify({ scale, scans })).toBe('resource_grant_pkey_lookup');
       const condition = String(node['Index Cond']);
       // The partial index fixes route/resource; the remaining key is parameterized.
       for (const key of ['subject_kind', 'subject_id', 'subject_role', 'action'])
