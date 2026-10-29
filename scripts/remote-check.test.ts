@@ -384,15 +384,15 @@ if (script.includes('/proc/loadavg')) {
   mkdirSync(lock);
   log({ kind: 'gate-marker', fakeStartedAt: Number(readFileSync(dir + '/clock', 'utf8')) });
   console.log('GATE_MARKER');
-  const release = () => {
+  const release = (reason = 'stdin-end') => {
     rmSync(lock, { recursive: true, force: true });
-    log({ kind: 'gate-marker-release' });
+    log({ kind: 'gate-marker-release', reason });
     process.exit(0);
   };
-  process.stdin.on('end', release);
+  process.stdin.on('end', () => release('stdin-end'));
   process.stdin.on('data', () => {});
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
+  process.on('SIGTERM', () => release('SIGTERM'));
+  process.on('SIGHUP', () => release('SIGHUP'));
   process.stdin.resume();
   setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_MULTI_SLOT_MARKER')) {
@@ -406,16 +406,16 @@ if (script.includes('/proc/loadavg')) {
   writeFileSync(multiMarkerIndex, '1');
   log({ kind: 'multi-marker', id, slots, fakeStartedAt: beganAt, sequence });
   console.log('MULTI_SLOT_MARKER');
-  const release = () => {
+  const release = (reason = 'stdin-end') => {
     rmSync(marker, { force: true });
     if (!readdirSync(dir).some((name) => name.startsWith(multiMarkerPrefix))) rmSync(multiMarkerIndex, { force: true });
-    log({ kind: 'multi-marker-release', id });
+    log({ kind: 'multi-marker-release', id, reason });
     process.exit(0);
   };
-  process.stdin.on('end', release);
+  process.stdin.on('end', () => release('stdin-end'));
   process.stdin.on('data', () => {});
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
+  process.on('SIGTERM', () => release('SIGTERM'));
+  process.on('SIGHUP', () => release('SIGHUP'));
   process.stdin.resume();
   setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_LANDING_MARKER')) {
@@ -430,16 +430,16 @@ if (script.includes('/proc/loadavg')) {
   writeFileSync(landingMarkerIndex, '1');
   log({ kind: 'landing-marker', id, slots, arrivalOrder, fakeStartedAt: beganAt, sequence });
   console.log('LANDING_MARKER');
-  const release = () => {
+  const release = (reason = 'stdin-end') => {
     rmSync(marker, { force: true });
     if (!readdirSync(dir).some((name) => name.startsWith(landingMarkerPrefix))) rmSync(landingMarkerIndex, { force: true });
-    log({ kind: 'landing-marker-release', id });
+    log({ kind: 'landing-marker-release', id, reason });
     process.exit(0);
   };
-  process.stdin.on('end', release);
+  process.stdin.on('end', () => release('stdin-end'));
   process.stdin.on('data', () => {});
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
+  process.on('SIGTERM', () => release('SIGTERM'));
+  process.on('SIGHUP', () => release('SIGHUP'));
   process.stdin.resume();
   setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {
@@ -554,7 +554,7 @@ if (script.includes('/proc/loadavg')) {
     }
     process.exit(0);
   };
-  process.stdin.on('end', release);
+  process.stdin.on('end', () => release('stdin-end'));
   process.stdin.on('data', () => {});
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
