@@ -57,7 +57,7 @@ export const actionOnReport = createServerFn({ method: 'POST' })
       ...(typeof value.statement === 'string' ? { statement: value.statement } : {}),
     };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<{ ok: true }> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
@@ -81,7 +81,7 @@ export const actionOnReport = createServerFn({ method: 'POST' })
     if (data.action === 'dismiss') {
       const result = await client.reports({ id: data.reportId }).$dismiss.post({ body: {}, headers });
       if (result.error) throw new Error('Report dismissal failed');
-      return result.data;
+      return { ok: true };
     }
     const command =
       data.targetKind === 'board' ? client.boards : data.targetKind === 'thread' ? client.threads : client.posts;
@@ -90,5 +90,5 @@ export const actionOnReport = createServerFn({ method: 'POST' })
       headers,
     });
     if (result.error) throw new Error('Board takedown failed');
-    return result.data;
+    return { ok: true };
   });

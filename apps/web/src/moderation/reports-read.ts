@@ -23,11 +23,18 @@ export type ReportReadSource = {
   threadReports: (id: string, cursor?: string) => Promise<ReportPage>;
 };
 export type ReportTargetReads = {
-  post: (id: string) => Promise<unknown | null>;
-  thread: (id: string) => Promise<unknown | null>;
-  board: (id: string) => Promise<unknown | null>;
+  post: (id: string) => Promise<ReportTargetValue | null>;
+  thread: (id: string) => Promise<ReportTargetValue | null>;
+  board: (id: string) => Promise<ReportTargetValue | null>;
 };
-export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']; value: unknown | null };
+export type ReportTargetValue =
+  | null
+  | string
+  | number
+  | boolean
+  | ReportTargetValue[]
+  | { [key: string]: ReportTargetValue };
+export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']; value: ReportTargetValue | null };
 
 /** Keeps report records private and resolves repeated target identities with one existing read each. */
 export async function readModerationReports(
@@ -95,7 +102,7 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
       ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
     };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<{ reports: Report[]; next: string | null; targets: ResolvedReportTarget[] }> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
@@ -125,15 +132,15 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
     const targets = await resolveReportTargets(page.reports, {
       post: async (id) => {
         const result = await client.posts({ id }).get(headers);
-        return result.error ? null : result.data;
+        return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
       },
       thread: async (id) => {
         const result = await client.threads({ id }).get(headers);
-        return result.error ? null : result.data;
+        return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
       },
       board: async (id) => {
         const result = await client.boards({ id }).get(headers);
-        return result.error ? null : result.data;
+        return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
       },
     });
     return { ...page, targets };

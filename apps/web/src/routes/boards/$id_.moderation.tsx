@@ -36,10 +36,10 @@ function ModerationReportsRoute() {
       reports={reports}
       targets={targets}
       next={next}
-      threadId={thread}
+      {...(thread ? { threadId: thread } : {})}
       onNext={(nextCursor) =>
         void navigate({
-          to: '/boards/$id_/moderation',
+          to: '/boards/$id/moderation',
           params: { id },
           search: { ...(thread ? { thread } : {}), cursor: nextCursor },
         })
