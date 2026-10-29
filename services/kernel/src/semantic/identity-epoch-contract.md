@@ -352,6 +352,16 @@ points, retries saved mapping progress, and refuses publication without particip
 explicitly at its native load; no fallback mapping, stub ACK, skip/todo or permanent unconditional throw test is used.
 Native repeated delivery covers lost-result replay, not process-death or full DBOS recovery proof.
 
+The cutover suite adds source-command rollback/retry, explicit larger-survivor/overlap/split/repoint replay,
+independent in-flight reversal, both export/custody/ACK interruption boundaries, OLD/NEW-key capture and saved-empty
+reopening. Its reclamation schedule preserves active immutable inputs, interrupts an actual native membership
+DELETE after publication, resumes first/deep generations, repeats empty work, and replays minimized receipts before
+later admission. The existing history schedule grows completed generations independently at 1/8/64. Erasure starts
+with actual signed Access and account/agent creation plus native tombstone; missing control custody must leave the
+same Semantic obligation pending. It does not claim cleanup completion from a status read or fabricate an erasure
+ACK. The missing cleanup producer and the full directory/first-apply receipt schedule remain explicit owner
+integration obligations; these tests do not certify those absent producers.
+
 The named suite is deliberately red on the current runtime. Required scenarios that need absent consumers stay in
 this matrix rather than pretending passing partial coverage establishes the whole outcome:
 
@@ -604,6 +614,20 @@ producer as runtime. Both reports identify the same missing writer boundary and 
 dirty-export timing differs, **control custody precedes source ACK**. Where their enforcement sketches differ,
 **both the home barrier and deferred same-transaction structural validation apply at final real caller handoff**.
 The corrected released-control meaning below replaces any interpretation of “stay local” as source-only I/O.
+
+The integrated report revisions inspected are `a73bcefb2fe9a901d22478bb4e3d774c06186c55` (current)
+and `e9ae39f06176b66a4026533812f07c6e00e46dec` (deep). Their integration changed Markdown formatting only.
+Neither report ran native probes. The preserved, unintegrated `49a51f6350` Store/bootstrap, four source queries,
+migration and native-store suite are evidence only: admission, home admission, reconciliation and publication
+still unconditionally throw, the cutover reader hardcodes missing writers, and no actual creation caller binds
+self initialization. In particular, its source export updates captured heads BEFORE control custody and its
+key-changing UPDATE capture selects only NEW. Both conflict with the adopted protocol below. Do not copy those
+behaviors into an implementation or infer delivery from their presence in a git object.
+
+The comparison's complete co-owner appendix and subsequent Library ruling apply together. This specification
+does not release runtime implementation: full parent review, Accounts/Search/Commerce confirmation, Performance
+review of every Cost subsection and freezing the formatted native bytes precede producer activation. An honest
+red native schedule is missing-capability evidence; it supplies neither a passed budget nor an ACK.
 
 ### Primitive delivery and final activation
 
@@ -864,6 +888,12 @@ acquire a reference: reclamation versus new reference races serialize. A failed 
 blocks reclamation and therefore later admission, not evidence deletion or a free additional full generation.
 Consumer/API replay reads minimized receipts, never resurrects a retired generation or reopens completed effects.
 
+The existing `resumeIdentityEpochJob` coordinator also resumes retained reclamation work for a published job;
+its published fast path cannot discard that work. It returns after the available reclamation segment commits or
+reports retryable unavailability, with further bounded segments retained by the same native work registration.
+This adds no callable port or completion flag: publication is still read from native custody and reclamation from
+its native frontier/receipt. Admission remains fenced until that prior reclamation actually completes.
+
 Use existing native job work to reclaim by indexed `(generation,original)` frontier, with at most 100 TOTAL raw
 keys per step including reference/lookahead/deletion work. Delete membership/index rows in bounded batches and
 commit deletion frontier, native receipt and wakeup atomically. Children precede descriptor; descriptor becomes a
@@ -872,6 +902,16 @@ replay returns the same receipt; it cannot create a fresh generation or advance 
 commit changes nothing; after commit resumes its exact saved frontier. First/deep/empty/replay/live-ref-refusal and
 crash paths grow retained-generation count independently of membership size. The reclaim executor/locator schema
 is MISSING implementation, not a new public helper or manual checkpoint.
+
+The bound also covers failures of publication and minimization. If the current job cannot finish, its at most
+two inputs and two flat outputs remain the only extra full generations; retry resumes those identities. Once
+published, a live consumer reference prevents deleting its input until that consumer accepts the exact minimized
+scope under native custody. Subsequent admission waits for reclamation even though point reads of the published
+generation remain usable. There is no allocation-on-retry or unbounded abandoned-output list. This is backpressure
+on structural admission, not a timeout that discards undo. For a merge G decreases by one at publication; at most
+two former current inputs become retired while the new output becomes current. For a split G increases by one;
+one input retires and at most two outputs become current. Repoint changes at most two groups. Thus each transition
+preserves G+4 without counting a retired generation as current or excluding partially deleted membership rows.
 
 ### Existing terminal-erasure inventory amendment
 

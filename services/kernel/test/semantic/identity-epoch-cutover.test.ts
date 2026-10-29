@@ -501,3 +501,419 @@ test('current generation reads stay independent of completed history while deep 
     }
   });
 });
+
+// Further additive schedules use the same native producers and leave all preceding acceptance unchanged.
+import { interruptNativeStatement } from './support/identity-epoch-cutover.ts';
+import { writeSubject } from '../../src/semantic/subject.ts';
+
+test('same transaction birth initialization rolls back with the actual source command and retries at revision one', async () => {
+  await isolatedCutover(async (f) => {
+    const original = newId(0x2d10);
+    const actor = await f.actor();
+    const rollback = new Error('native birth rollback after revision one');
+    const create = async (abort: boolean) =>
+      runCommand(
+        f.pool,
+        {
+          partition: home(original),
+          basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+          authorization: await f.authorization('subject:create'),
+        },
+        async (tx, { transactionId }) => {
+          const result = await writeSubject(tx, transactionId, {
+            target: { route: 0x2d10, id: original },
+            item: { type: 'schema:Person', labels: { en: 'Atomic source birth' } },
+            release,
+          });
+          if (abort) throw rollback;
+          return result;
+        },
+      );
+    const before = await f.snapshot([original]);
+    await expect(create(true)).rejects.toBe(rollback);
+    expect(await f.snapshot([original])).toEqual(before);
+    // No direct initializeSubject invocation: only the owning writeSubject path can supply creation proof.
+    const created = await create(false);
+    expect(created.value.revision).toBe(1);
+    const store = await nativeEpochStore();
+    expect(await store.readMapping(f.pool, original)).toMatchObject({ state: 'mapped', original, terminal: original });
+    await expect(
+      runCommand(f.pool, { partition: home(original) }, (tx) =>
+        store.initializeSubject(tx, original).then(() => noEffect(null)),
+      ),
+    ).rejects.toBeDefined();
+    expect(
+      (await f.admin.query('SELECT revision FROM semantic.revision WHERE subject_id=$1', [original])).rows,
+    ).toEqual([{ revision: 1 }]);
+  });
+});
+
+test('split repoint and overlapping input replay retain exact originals and explicit larger survivor', async () => {
+  await isolatedCutover(async (f) => {
+    const original = (await f.create('Split original', 0x3d10)).subject.id;
+    const destination = (await f.create('Split destination', 0x3e10)).subject.id;
+    const [smaller, larger] = [original, destination].sort() as [string, string];
+    const store = await nativeEpochStore();
+    const resume = await nativeCutoverCoordinator();
+    const merged = await ordinaryAdmission(f, store, {
+      kind: 'merge',
+      survivor: larger,
+      redirected: smaller,
+      release: release.digest,
+    });
+    const first = (await merged.execute()).value;
+    expect((await allChanges(f, store, first)).map((row) => row.original)).toEqual([smaller, larger]);
+    await resume(f.pool, first);
+    expect((await store.readJob(f.pool, first))?.state).toBe('published');
+    // Both endpoints now resolve to ONE immutable group: overlap must not double its cardinality or originals.
+    const overlapping = await ordinaryAdmission(f, store, {
+      kind: 'merge',
+      survivor: larger,
+      redirected: smaller,
+      release: release.digest,
+    });
+    const overlap = (await overlapping.execute()).value;
+    expect((await allChanges(f, store, overlap)).map((row) => row.original)).toEqual([smaller, larger]);
+    await resume(f.pool, overlap);
+    const undo = await ordinaryAdmission(f, store, {
+      kind: 'unmerge',
+      original: smaller,
+      undoJob: first,
+      verificationReceipt: null,
+      release: release.digest,
+    });
+    const split = (await undo.execute()).value;
+    const changes = await allChanges(f, store, split);
+    expect(changes.find((row) => row.original === smaller)).toEqual({
+      original: smaller,
+      previousTerminal: larger,
+      terminal: smaller,
+    });
+    await resume(f.pool, split);
+    expect(await store.readMapping(f.pool, smaller)).toMatchObject({ state: 'mapped', terminal: smaller });
+    expect(await store.readMapping(f.pool, larger)).toMatchObject({ state: 'mapped', terminal: larger });
+    const repoint = await ordinaryAdmission(f, store, {
+      kind: 'repoint',
+      original: smaller,
+      terminal: larger,
+      release: release.digest,
+    });
+    const pointed = (await repoint.execute()).value;
+    await resume(f.pool, pointed);
+    expect(await store.readMapping(f.pool, smaller)).toMatchObject({ state: 'mapped', terminal: larger });
+    expect((await undo.execute()).value).toEqual(split); // Deep undo replay never reopens the split.
+    expect(await store.readMapping(f.pool, smaller)).toMatchObject({ state: 'mapped', terminal: larger });
+  });
+});
+
+test('reversal independently remains in flight across unavailable handoff without clearing its durable intent', async () => {
+  await isolatedCutover(async (f) => {
+    const catalogue = (await f.create('Independent reversal catalogue')).subject.id;
+    const approved = await approvedVerification(f, catalogue);
+    const { account, workflow } = approved;
+    await ensureAccountAgent(f.pool, { account, kind: 'person', name: null });
+    await mergeVerifiedAgent(f.pool, workflow);
+    const store = await nativeEpochStore();
+    const verification = await store.findJob(f.pool, {
+      kind: 'account-agent.verify',
+      account,
+      receipt: workflow.receiptId,
+    });
+    expect(verification?.state).toBe('published');
+    await completeAgentVerification(f.pool, workflow, approved.clock);
+    const decision = await approved.commands.release(await approved.context('person'), {
+      accountId: account,
+      key: crypto.randomUUID(),
+    });
+    const inFlight = await withInFlightControlMove(f, () => unmergeVerifiedAgent(f.pool, decision.value));
+    expect(inFlight.state).toBe('unavailable');
+    if (inFlight.state !== 'unavailable') throw new Error('Reversal escaped its publication barrier');
+    expect(classifyUnavailability(inFlight.error)).toBeDefined();
+    expect(
+      (await f.admin.query('SELECT pending_agent_receipt_id FROM access.account WHERE account_id=$1', [account])).rows,
+    ).toEqual([{ pending_agent_receipt_id: decision.value.receiptId }]);
+    await unmergeVerifiedAgent(f.pool, decision.value);
+    const reversal = await store.findJob(f.pool, {
+      kind: 'account-agent.unverify',
+      account,
+      receipt: decision.value.receiptId,
+    });
+    expect(reversal?.state).toBe('published');
+    expect(reversal?.intent).toMatchObject({
+      kind: 'unmerge',
+      undoJob: verification?.ref,
+      verificationReceipt: workflow.receiptId,
+    });
+    await unmergeVerifiedAgent(f.pool, decision.value);
+    expect(
+      (await store.findJob(f.pool, { kind: 'account-agent.unverify', account, receipt: decision.value.receiptId }))
+        ?.ref,
+    ).toEqual(reversal?.ref);
+  });
+});
+
+test('source export survives failed control custody and exact native redelivery leaves a newer lower key pending', async () => {
+  await isolatedCutover(async (f) => {
+    const original = (await f.create('Dirty source', 0x4d10)).subject.id;
+    const terminal = (await f.create('Dirty destination', 0x4e10)).subject.id;
+    await crossHomeLegacy(f, terminal, 0x4d10);
+    // This is the inspected native bootstrap port, not a test-owned scheduler or readiness setter.
+    const path = new URL('../../src/semantic/identity-epoch-bootstrap.ts', import.meta.url);
+    const { stepIdentityEpochBootstrap } = await import(path.href);
+    const sourceHome = home(original);
+    await interruptNativeStatement(f, /INSERT\s+INTO\s+semantic\.identity_epoch_bootstrap_custody/i, () =>
+      stepIdentityEpochBootstrap(f.pool, sourceHome),
+    );
+    const exported = (
+      await f.admin.query(
+        'SELECT generation,transaction_id FROM semantic.identity_epoch_bootstrap_page WHERE partition_no=$1 ORDER BY generation',
+        [sourceHome],
+      )
+    ).rows;
+    expect(exported).toHaveLength(1);
+    expect(
+      (
+        await f.admin.query('SELECT 1 FROM semantic.identity_epoch_bootstrap_custody WHERE source_partition=$1', [
+          sourceHome,
+        ])
+      ).rows,
+    ).toHaveLength(0);
+    const pending = (
+      await f.admin.query(
+        'SELECT revision,captured_revision FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2',
+        [0x4d10, original],
+      )
+    ).rows[0];
+    expect(BigInt(pending.revision)).toBeGreaterThan(BigInt(pending.captured_revision));
+    const replay = await stepIdentityEpochBootstrap(f.pool, sourceHome);
+    expect(replay.native.transactionId).toBe(exported[0].transaction_id);
+    const lower = newId(0x4d10).replace(/^.{8}/, '00000000');
+    await birthAt(f, lower);
+    const lowerPending = (
+      await f.admin.query(
+        'SELECT revision,captured_revision FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2',
+        [0x4d10, lower],
+      )
+    ).rows[0];
+    expect(BigInt(lowerPending.revision)).toBeGreaterThan(BigInt(lowerPending.captured_revision));
+    let reachedLower = false;
+    for (let page = 0; page < 100; page++) {
+      await stepIdentityEpochBootstrap(f.pool, sourceHome);
+      const retained = (
+        await f.admin.query(
+          `SELECT 1 FROM semantic.identity_epoch_bootstrap_row r
+         JOIN semantic.identity_epoch_bootstrap_custody c
+           ON c.source_partition=r.partition_no AND c.native_transaction_id=r.transaction_id
+         WHERE r.partition_no=$1 AND r.original=$2`,
+          [sourceHome, lower],
+        )
+      ).rows;
+      if (retained.length) {
+        reachedLower = true;
+        break;
+      }
+    }
+    expect(reachedLower).toBe(true);
+    const store = await nativeEpochStore();
+    expect(await store.readMapping(f.pool, lower)).toMatchObject({ state: 'mapped', terminal: lower });
+  });
+});
+
+test('native capture retains both old and new redirect keys and deletion negatives after a saved empty source page', async () => {
+  await isolatedCutover(async (f) => {
+    const terminal = (await f.create('Capture terminal', 0x5f10)).subject.id;
+    const old = await crossHomeLegacy(f, terminal, 0x5e10);
+    const replacement = (await f.create('Replacement original', 0x5e10)).subject.id;
+    const path = new URL('../../src/semantic/identity-epoch-bootstrap.ts', import.meta.url);
+    const { stepIdentityEpochBootstrap } = await import(path.href);
+    const sourceHome = home(old);
+    let empty: { generation: bigint } | undefined;
+    for (let page = 0; page < 100; page++) {
+      const progress = await stepIdentityEpochBootstrap(f.pool, sourceHome);
+      if (progress.state === 'caught-up') {
+        empty = progress;
+        break;
+      }
+    }
+    expect(empty).toBeDefined();
+    // Exercise native OLD DML under capture before global writer handoff, on our owned database.
+    // This changes an indexed identity key without creating either a checkpoint or a readiness record.
+    await f.admin.query('UPDATE semantic.redirect SET subject_id=$1 WHERE subject_id=$2', [replacement, old]);
+    const oldNew = (
+      await f.admin.query(
+        `SELECT original::text,revision,captured_revision FROM semantic.identity_epoch_dirty
+       WHERE route=$1 AND original=ANY($2::uuid[]) ORDER BY original`,
+        [0x5e10, [old, replacement]],
+      )
+    ).rows;
+    expect(oldNew.map((row) => row.original)).toEqual([old, replacement].sort());
+    for (const row of oldNew) expect(BigInt(row.revision)).toBeGreaterThan(BigInt(row.captured_revision));
+    await f.admin.query('DELETE FROM semantic.redirect WHERE subject_id=$1', [replacement]);
+    const next = await stepIdentityEpochBootstrap(f.pool, sourceHome);
+    expect(BigInt(next.generation)).toBeGreaterThan(BigInt(empty!.generation));
+    // A replayed empty observation must not close a newer dirty head. Drive actual bounded source work.
+    for (let page = 0; page < 100; page++) {
+      const remaining = (
+        await f.admin.query(
+          `SELECT original FROM semantic.identity_epoch_dirty
+         WHERE route=$1 AND original=ANY($2::uuid[]) AND revision>captured_revision`,
+          [0x5e10, [old, replacement]],
+        )
+      ).rows;
+      if (remaining.length === 0) break;
+      await stepIdentityEpochBootstrap(f.pool, sourceHome);
+    }
+    const store = await nativeEpochStore();
+    for (const id of [old, replacement])
+      expect(await store.readMapping(f.pool, id)).toMatchObject({ state: 'mapped', original: id, terminal: id });
+  });
+});
+
+test('control custody precedes a failed source ack and newer dirty head survives exact page redelivery', async () => {
+  await isolatedCutover(async (f) => {
+    const terminal = (await f.create('ACK terminal', 0x6f10)).subject.id;
+    const original = await crossHomeLegacy(f, terminal, 0x6e10);
+    const path = new URL('../../src/semantic/identity-epoch-bootstrap.ts', import.meta.url);
+    const { stepIdentityEpochBootstrap } = await import(path.href);
+    const sourceHome = home(original);
+    await interruptNativeStatement(
+      f,
+      /UPDATE\s+semantic\.identity_epoch_dirty\s+(?:\w+\s+)?SET\s+captured_revision/i,
+      () => stepIdentityEpochBootstrap(f.pool, sourceHome),
+    );
+    const custody = (
+      await f.admin.query(
+        `SELECT source_generation,native_transaction_id FROM semantic.identity_epoch_bootstrap_custody
+       WHERE source_partition=$1 ORDER BY source_generation`,
+        [sourceHome],
+      )
+    ).rows;
+    expect(custody).toHaveLength(1); // Export alone is insufficient: ACK failure follows durable control custody.
+    const exportedHead = (
+      await f.admin.query(
+        'SELECT revision,captured_revision FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2',
+        [0x6e10, original],
+      )
+    ).rows[0];
+    expect(BigInt(exportedHead.revision)).toBeGreaterThan(BigInt(exportedHead.captured_revision));
+    await f.admin.query('DELETE FROM semantic.redirect WHERE subject_id=$1', [original]);
+    const newer = (
+      await f.admin.query(
+        'SELECT revision,captured_revision FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2',
+        [0x6e10, original],
+      )
+    ).rows[0];
+    expect(BigInt(newer.revision)).toBeGreaterThan(BigInt(exportedHead.revision));
+    // Redelivery must first finish custody/ACK for this exact retained page, not skip it via MAX(custody)+1.
+    const replay = await stepIdentityEpochBootstrap(f.pool, sourceHome);
+    expect(replay.native.transactionId).toBe(custody[0].native_transaction_id);
+    const afterAck = (
+      await f.admin.query(
+        'SELECT revision,captured_revision FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2',
+        [0x6e10, original],
+      )
+    ).rows[0];
+    expect(BigInt(afterAck.revision)).toBe(BigInt(newer.revision));
+    expect(BigInt(afterAck.captured_revision)).toBeLessThan(BigInt(afterAck.revision));
+    for (let page = 0; page < 100; page++) {
+      await stepIdentityEpochBootstrap(f.pool, sourceHome);
+      const pending = (
+        await f.admin.query(
+          `SELECT 1 FROM semantic.identity_epoch_dirty
+         WHERE route=$1 AND original=$2 AND revision>captured_revision`,
+          [0x6e10, original],
+        )
+      ).rows;
+      if (pending.length === 0) break;
+    }
+    const store = await nativeEpochStore();
+    expect(await store.readMapping(f.pool, original)).toMatchObject({ state: 'mapped', terminal: original });
+  });
+});
+
+test('reclamation refuses active immutable inputs and crash replay reclaims first and deep generations before later admission', async () => {
+  await isolatedCutover(async (f) => {
+    const original = (await f.create('Reclamation original', 0x7d10)).subject.id;
+    const terminal = (await f.create('Reclamation terminal', 0x7e10)).subject.id;
+    const store = await nativeEpochStore();
+    const mapping = await nativeMappingStep();
+    const resume = await nativeCutoverCoordinator();
+    // Match the owner's actual membership/generation DELETE, without choosing a new table or public port.
+    const deletion = /DELETE\s+FROM\s+semantic\.identity_epoch_\w*(?:generation|membership|group_member)\w*/i;
+    let undoJob: import('../../src/semantic/identity-epoch-contract.ts').IdentityJobRef | undefined;
+    const saved: {
+      request: Awaited<ReturnType<typeof ordinaryAdmission>>;
+      job: import('../../src/semantic/identity-epoch-contract.ts').IdentityJobRef;
+    }[] = [];
+    for (let history = 0; history < 3; history++) {
+      const intent: import('../../src/semantic/identity-epoch-contract.ts').IdentityIntent =
+        history === 1
+          ? { kind: 'unmerge', original, undoJob: undoJob!, verificationReceipt: null, release: release.digest }
+          : { kind: 'merge', redirected: original, survivor: terminal, release: release.digest };
+      const request = await ordinaryAdmission(f, store, intent);
+      const job = (await request.execute()).value;
+      if (intent.kind === 'merge') undoJob = job;
+      saved.push({ request, job });
+      const input = await allChanges(f, store, job);
+      const active = await observeCutoverSQL(f, () => mapping(f.pool, job));
+      expect(active.queries.filter((q) => deletion.test(q.sql))).toHaveLength(0);
+      expect(await allChanges(f, store, job)).toEqual(input); // Active fixed consumers still own the input.
+      await interruptNativeStatement(f, deletion, () => resume(f.pool, job));
+      expect((await store.readJob(f.pool, job))?.state).toBe('published');
+      const mapped = await store.readMapping(f.pool, original);
+      expect(mapped).toMatchObject({ state: 'mapped', terminal: history === 1 ? original : terminal });
+      // Publication survives a failed reclamation transaction. The SAME work resumes its saved frontier.
+      const reclaimed = await observeCutoverSQL(f, () => resume(f.pool, job));
+      const deletes = reclaimed.queries.filter((q) => deletion.test(q.sql));
+      expect(deletes.length).toBeGreaterThan(0);
+      for (const query of deletes) expect(query.rows).toBeLessThanOrEqual(100);
+      const empty = await observeCutoverSQL(f, () => resume(f.pool, job));
+      expect(empty.queries.filter((q) => deletion.test(q.sql) && q.rows > 0)).toHaveLength(0);
+      expect(await store.readMapping(f.pool, original)).toEqual(mapped);
+      for (const retained of saved) {
+        expect((await retained.request.execute()).value).toEqual(retained.job);
+        expect((await store.readJob(f.pool, retained.job))?.state).toBe('published');
+      }
+      // The next iteration admits only after real reclamation; old empty replay must not close its work.
+    }
+  });
+});
+
+import { createRealAccess } from './real-access.ts';
+import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { ERASURE_PARTICIPANTS, readErasureStatus } from '../../src/access/erasure.ts';
+
+test('account bearing native identity custody remains one semantic erasure obligation when its control locator is unavailable', async () => {
+  await isolatedCutover(async (f) => {
+    const account = newId(0x8d10);
+    const real = await createRealAccess(f.admin, { owner: account }, [...LIFECYCLE_ACTIONS.keys()]);
+    const access = real.access({ actions: LIFECYCLE_ACTIONS });
+    await real.grant({ route: 0x8d10, id: account }, 'owner', 'account:delete');
+    const agent = await ensureAccountAgent(f.pool, { account, kind: 'person', name: null });
+    const context = {
+      actor: await access.authenticate(real.bearer('owner'), { pool: f.pool, deadline: Date.now() + 5000 }),
+      deadline: Date.now() + 5000,
+    };
+    await createLifecycleCommands({ pool: f.pool, access }).tombstone(context, {
+      accountId: account,
+      key: crypto.randomUUID(),
+    });
+    const status = await readErasureStatus(f.pool, account);
+    expect(Object.keys(status!.participants).sort()).toEqual([...ERASURE_PARTICIPANTS[1]].sort());
+    expect(status?.participants.semantic?.outcome).toBe('pending');
+    expect(status?.participants.access?.outcome).toBe('pending');
+    const store = await nativeEpochStore();
+    await withoutOwner(f, store.controlPartition, async () => {
+      expect(await store.readMapping(f.pool, agent.subject.id)).toEqual({
+        state: 'unavailable',
+        reason: 'missing-owner',
+      });
+      const unavailable = await readErasureStatus(f.pool, account);
+      expect(unavailable?.participants.semantic?.outcome).toBe('pending');
+      expect(unavailable?.completedAt).toBeNull();
+    });
+    // Reading, owner absence and identity reclamation are never an erased/none ACK. The missing Semantic
+    // cleanup producer must later obtain native per-owner/minimized shared custody; this test supplies none.
+    expect((await readErasureStatus(f.pool, account))?.participants.semantic?.outcome).toBe('pending');
+  });
+});

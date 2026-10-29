@@ -476,3 +476,39 @@ export async function observeCutoverSQL<T>(f: EpochFixture, operation: () => Pro
     for (const [client, query] of wrapped) client.query = query;
   }
 }
+
+/** One injected transport failure before a real native statement. Source commits already made by
+ * the operation survive; the executor must roll back the failing transaction. No result is supplied.
+ */
+export async function interruptNativeStatement<T>(f: EpochFixture, pattern: RegExp, operation: () => Promise<T>) {
+  const { AsyncLocalStorage } = await import('node:async_hooks');
+  const context = new AsyncLocalStorage<boolean>();
+  const fault = new Error('cutover test: native delivery interrupted before statement dispatch');
+  const wrapped = new Map<pg.PoolClient, pg.PoolClient['query']>();
+  let reached = false;
+  const acquire = (client: pg.PoolClient) => {
+    if (!context.getStore() || wrapped.has(client)) return;
+    const query = client.query;
+    wrapped.set(client, query);
+    client.query = new Proxy(query, {
+      apply(target, self, args: unknown[]) {
+        const input = args[0];
+        const sql = typeof input === 'string' ? input : ((input as { text?: string })?.text ?? '');
+        if (context.getStore() && !reached && pattern.test(sql)) {
+          reached = true;
+          console.info('native cutover delivery failure', sql);
+          return Promise.reject(fault);
+        }
+        return Reflect.apply(target, self, args);
+      },
+    });
+  };
+  f.pool.on('acquire', acquire);
+  try {
+    await expect(context.run(true, operation)).rejects.toBe(fault);
+    expect(reached, `actual native operation must reach ${pattern}`).toBe(true);
+  } finally {
+    f.pool.off('acquire', acquire);
+    for (const [client, query] of wrapped) client.query = query;
+  }
+}
