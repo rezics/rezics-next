@@ -115,7 +115,6 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
   // peers, native credentials/clients, unrelated AND measured-owner history,
   // recovery bindings and expired verifications together, without planner hints.
   async function grow(database: GrowthDatabase, scale: number, previous: number) {
-    process.env.GROWTH_PROFILE ??= '/dev/stdout';
     const range = [previous * 1024 + 1, scale * 1024];
     await database.admin.query(
       `INSERT INTO "user" (id,name,email,"emailVerified")
