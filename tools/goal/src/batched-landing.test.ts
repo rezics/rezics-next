@@ -50,7 +50,7 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     await h.start(second);
     await h.start(controlPlane);
     await h.start(stabilize);
-    await h.train();
+    await h.train(async () => ({ passed: true, output: '', timedOut: false }));
 
     expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
     expect(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)?.passed).toBe(true);
@@ -99,7 +99,7 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     await h.start(third);
     await h.start(fourth);
 
-    await h.train();
+    await h.train(async () => ({ passed: true, output: '', timedOut: false }));
 
     const dev = [first, second, third, fourth];
     expect(h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ taskId }) => taskId)).toEqual(
