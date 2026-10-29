@@ -76,11 +76,16 @@ No speculative registration option or callback follows from a type declaration.
    accept in the actual Context and adopt the actual returned candidates with
    current expected heads. Keep acceptance and adoption receipts separately.
    Native candidate, head, revision and release values must come from responses.
-5. Read the current disclosed native graph through the public API. Check actual
+5. Read the current disclosed native graph and candidate listing through the public API. Check actual
    types, scheme membership, selected correspondence and distinct source and
    canonical subjects. An accepted but unselected, hidden, suppressed, retracted,
    inaccessible or fenced fact cannot supply current binding evidence. A receipt
    is an immutable observation, not perpetual authorization or disclosure.
+   Existing bulk retraction deliberately leaves Context adoptions unchanged:
+   a retracted correspondence can remain in the public Item. Require the current
+   listing's actual accepted, selected candidate with both `retracted` and
+   `retraction` null, in addition to the Item read. Never treat the retained
+   adoption as a ready binding or change bulk retraction's meaning here.
 6. Only the accepted producer output can populate existing conversion
    `resolvedReferences` after coowner key review. Keep actual requests and native
    results in the existing `RecordBindings` claim/journal handoff; never turn a
@@ -109,7 +114,10 @@ No default UUIDs, success stubs, hidden permission cache or fallback registry ex
 
 The type file derives native signatures with `Parameters` and awaited
 `ReturnType`, and reuses `Item`, `Statement`, `Source`, `BatchCommand`,
-`BatchStatement` and `BatchWriteResult`. Future evidence wrappers are expressly
+`BatchStatement` and `BatchWriteResult`, and derives candidate observations from
+`listCandidates`. Release mapping keys remain compact (`wd:P7937`); their external
+property meaning is the expanded P7937 URI, not a native Concept UUID.
+Future evidence wrappers are expressly
 proposed; they do not add fields to existing DTOs. Native expected-head names in
 function options are camelCase, whereas HTTP bodies use `expected_head`.
 
@@ -159,7 +167,7 @@ setup; failure of a missing producer does not suppress the available graph cases
 | independent native work-form and diet graph controls retain exact reviewed external meanings and real receipts                         | Available Book P7937 and Recipe diet, scheme memberships, exact external correspondence and actual acceptance/adoption receipts; no production seed claim                                                                                                              |
 | unselected and hidden correspondence cannot be disclosed as current reviewed binding evidence                                          | Ordinary native proposal, acceptance, selection and moderation remain distinct                                                                                                                                                                                         |
 | native claim replay checks current authority before returning an existing binding                                                      | Ordinary account denied batch authority; pre-suspension bearer revoked before replay; authorized fresh-key claim still resolves. Valid suspended403 is a separate missing native persona, not fabricated here                                                          |
-| retracted claim-backed correspondence is absent from current public binding evidence                                                   | Real source-owned proposal, native selection and terminal bulk retraction                                                                                                                                                                                              |
+| retracted claim-backed correspondence requires provenance even when its adoption remains public                                        | Real source-owned proposal, native selection and terminal bulk retraction; actual listing retains cited retraction while Context adoption remains. A retained Item assertion alone cannot certify a binding                                                            |
 | first-party vocabulary seeding requires a native source metadata ACK before any external claim bootstrap                               | Required native metadata **201**. Missing route is a red; no bootstrap dispatch is made after it. This is not proof of first-party sealed-run ordering                                                                                                                 |
 
 Required producer prerequisites are: an adopted namespace/encoding and Bangumi

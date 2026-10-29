@@ -2,13 +2,14 @@
 import type { BatchCommand, BatchStatement, BatchWriteResult, Source } from '@rezics/definitions/bulk';
 import type { Item, Statement } from './item.ts';
 import type { createSubject } from './subject.ts';
-import type { adoptCandidates, decideCandidate } from './candidates.ts';
+import type { adoptCandidates, decideCandidate, listCandidates } from './candidates.ts';
 import type { batchCommand } from './bulk.ts';
 
 type NativeCreation = Awaited<ReturnType<typeof createSubject>>;
 type NativeAcceptance = Awaited<ReturnType<typeof decideCandidate>>;
 type NativeAdoption = Awaited<ReturnType<typeof adoptCandidates>>;
 type NativeBatch = Awaited<ReturnType<typeof batchCommand>>;
+export type NativeCandidateObservation = Awaited<ReturnType<typeof listCandidates>>['candidates'][number];
 
 /** A logical vocabulary key, not a provider record number or native subject ID. */
 export type ProposedVocabularyIdentity = Readonly<{
@@ -44,6 +45,13 @@ export type NativeReviewedFact = Readonly<{
   acceptance: NativeAcceptance;
   adoption: NativeAdoption;
   publicRead: Item;
+  /** Retraction does not remove Context adoption. Require the current native listing too. */
+  currentCandidate: NativeCandidateObservation & {
+    decision: 'accepted';
+    rank: 'normal' | 'preferred';
+    retracted: null;
+    retraction: null;
+  };
 }>;
 
 export type NativeClaimObservation = Readonly<{

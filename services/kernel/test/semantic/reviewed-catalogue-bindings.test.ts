@@ -5,6 +5,7 @@ import type { BatchCommand, BatchWriteResult, Source } from '@rezics/definitions
 import type { HttpResponse, StatementInput } from '../../../../specs/semantic-driver.ts';
 import pinned from '../../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json';
 import type { Item } from '../../src/semantic/item.ts';
+import type { NativeCandidateObservation } from '../../src/semantic/reviewed-catalogue-bindings-contract.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
 import {
@@ -38,6 +39,16 @@ function status(response: HttpResponse, expected: number) {
 }
 async function read(subject: CreatedSubject): Promise<Item> {
   return status(await f.read(subject), 200).subject as Item;
+}
+async function candidates(subject: CreatedSubject, property: string): Promise<NativeCandidateObservation[]> {
+  return status(
+    await f.request(
+      'anonymous',
+      'GET',
+      `/v1/subjects/${subject.id}/candidates?property=${encodeURIComponent(property)}`,
+    ),
+    200,
+  ).candidates;
 }
 function values(item: Item, property: string) {
   return (item.statements[property] ?? []).map((s) => (s.value.type === 'value' ? s.value.content : s.value.type));
@@ -207,6 +218,12 @@ test('independent native work-form and diet graph controls retain exact reviewed
     const binding = await f.adopt(holder, statement(property, concept.id, [citation]));
     expect(values(await read(concept), 'skos:inScheme')).toEqual([scheme.id]);
     expect(values(await read(concept), 'schema:sameAs')).toEqual([meaning]);
+    expect((await candidates(concept, 'schema:sameAs')).find((row) => row.id === identity.candidate)).toMatchObject({
+      decision: 'accepted',
+      rank: 'preferred',
+      retracted: null,
+      retraction: null,
+    });
     expect(values(await read(holder), property)).toEqual([concept.id]);
     for (const receipt of [member, identity, binding]) {
       expect(receipt.acceptanceHead).toBeGreaterThan(0);
@@ -215,7 +232,7 @@ test('independent native work-form and diet graph controls retain exact reviewed
     }
     expect(concept.id).not.toBe(meaning);
   }
-  expect(f.release.definition.properties['wdt:P7937']!.mappings).toContain('http://www.wikidata.org/entity/P7937');
+  expect(f.release.definition.properties['wdt:P7937']!.mappings).toContain('wd:P7937');
 }, 120_000);
 
 test('unselected and hidden correspondence cannot be disclosed as current reviewed binding evidence', async () => {
@@ -296,7 +313,7 @@ test('native claim replay checks current authority before returning an existing 
   expect(created(await batch({ ...command, key: randomUUID() }), 200).id).toBeString();
 }, 120_000);
 
-test('retracted claim-backed correspondence is absent from current public binding evidence', async () => {
+test('retracted claim-backed correspondence requires provenance even when its adoption remains public', async () => {
   const holder = await f.createSubject('skos:Concept', 'Terminal correspondence control');
   const source = testSource(`retraction/${randomUUID()}`);
   const proposal: BatchCommand = {
@@ -340,6 +357,12 @@ test('retracted claim-backed correspondence is absent from current public bindin
     200,
   );
   expect(values(await read(holder), 'schema:sameAs')).toEqual([qForm]);
+  expect((await candidates(holder, 'schema:sameAs')).find((row) => row.id === candidate)).toMatchObject({
+    source,
+    decision: 'accepted',
+    retracted: null,
+    retraction: null,
+  });
   const retraction: BatchCommand = {
     op: 'retract',
     key: randomUUID(),
@@ -350,7 +373,17 @@ test('retracted claim-backed correspondence is absent from current public bindin
   };
   const retracted = (status(await batch(retraction), 200) as BatchWriteResult).results[0]!;
   expect(retracted.status, JSON.stringify(retracted)).toBe(200);
-  expect(values(await read(holder), 'schema:sameAs')).toEqual([]);
+  if (!('value' in retracted) || !('revision' in retracted.value))
+    throw new Error('Native retraction revision required');
+  expect((await candidates(holder, 'schema:sameAs')).find((row) => row.id === candidate)).toMatchObject({
+    source,
+    decision: 'accepted',
+    rank: 'preferred',
+    retracted: retracted.value.revision,
+    retraction: { source, references: retraction.references },
+  });
+  // Retraction deliberately leaves Context adoption unchanged. This read alone cannot certify a binding.
+  expect(values(await read(holder), 'schema:sameAs')).toEqual([qForm]);
 }, 120_000);
 
 test('first-party vocabulary seeding requires a native source metadata ACK before any external claim bootstrap', async () => {
