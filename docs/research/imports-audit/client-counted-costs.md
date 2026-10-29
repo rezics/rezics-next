@@ -173,6 +173,7 @@ The existing opt-in driver instrumentation is unchanged. Inspection reconfirms b
 the staged and acknowledged first/after SQLs, and the four reviewed importer page limits of 100.
 
 The first revalidated mandated cause-capture launch exited 1 with `Invalid check id: --`, before returning
-a check ID or executing a test. A bounded retry follows without changing the runner, dependency configuration,
+a check ID or executing a test. The first retry produced the same error and exit status. The final permitted
+retry follows without changing the runner, dependency configuration,
 frozen assertions, scales or runtime. Until a trace actually runs, the two-text cause remains unconfirmed and
 both the scale amendment and added exact-equality assertion remain conditional. No new native result is claimed.
