@@ -64,7 +64,7 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     const devLogs = h.outcomes
       .filter(({ taskId }) => [first.id, second.id].includes(taskId))
       .map(({ logPath }) => readFileSync(logPath, 'utf8'));
-    expect(controlPlaneLog).toContain('Integration check on');
+    expect(controlPlaneLog).toContain('Control-plane checks on');
     expect(controlPlaneLog).not.toContain('Batch integration check on');
     expect(stabilizeLog).not.toContain('Batch integration check on');
     expect(affectedLog).not.toContain('Batch integration check on');
@@ -118,7 +118,7 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     expect(logs[3]).not.toContain('Batch integration check on');
     for (const entry of [controlPlane, stabilize]) {
       const log = readFileSync(h.outcomes.find(({ taskId }) => taskId === entry.id)!.logPath, 'utf8');
-      expect(log).toContain('Integration check on');
+      expect(log).toContain('Control-plane checks on');
       expect(log).not.toContain('Batch integration check on');
     }
   } finally {
