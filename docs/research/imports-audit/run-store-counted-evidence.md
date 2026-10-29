@@ -8,7 +8,7 @@ No missing acceptance test was found: the existing complete portable suites and 
 
 ## Source and scope
 
-Base: `22ec9cb1cba1989612a0fa1026244930e49a4183`. Code revision: `8e1879488487c18c25bbb07ec02327b15307ced3`.
+Base: `22ec9cb1cba1989612a0fa1026244930e49a4183`. Code revision: `44f99b892c123748a3c06e34e567eb0cbccdc882`.
 The remaining-port inventory was read from its actual committed revision
 `5c47a835ca8f0804fee95df9bc28a696a5584366:docs/research/imports-audit/remaining-cost-unit-ports.md`,
 whose inspected source revision is `860ec3c071f213ccd3cd0ad288f7bf0777c20384`.
@@ -90,7 +90,25 @@ list axes, certify list-axis completeness, or establish all-importer, PostgreSQL
 
 ## Verification
 
-Pending managed acceptance and root typecheck. Results will be recorded after both checks terminate.
+The first committed revision ran the four-file acceptance once: exit 1, **10 pass / 1 fail**, 102 expect calls,
+11 tests across four files, 141.62 seconds. All eight local growth tests, the local page test and the run-state
+wrapper passed. The latter wrapper validates the real complete **16 pass / 0 fail** child summary and absence of
+skip/todo. The run-plan wrapper has **22** immutable declarations, but its child summary was unavailable: it timed
+out and Bun killed one dangling child. Its raw failure was:
+
+```text
+(fail) all bounded run-plan outcomes pass with production durable storage [120030.74ms]
+  ^ this test timed out after 120000ms.
+```
+
+The first root typecheck exited 1 with three TS2379 errors in the two local test files: the shared
+`countedViolations` signature accepts `CountedCheck<unknown>`, while the first configuration used
+`CountedCheck<CountedValues>`. The final configuration follows the existing importer counted-check pattern:
+`CountedCheck` with an explicitly cast identity reader. All four configurations were corrected and committed.
+No shared API, evidence, bound, tolerance, host, dependency, setting, timeout or wrapper was changed.
+
+Final-code acceptance and root typecheck are pending. The initial timeout is not claimed to be a reproduced base
+failure, a counted-assertion failure, or passing evidence for the 22 run-plan outcomes. No baseline command was run.
 
 ## Full old/new portable hashes
 
@@ -99,8 +117,8 @@ SHA-256 of complete file bytes; unchanged forwarders and frozen wrappers are inc
 | File                                                 | Before                                                             | After                                                              |
 | ---------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `specs/imports-run-store-driver.ts`                  | `019a7b1a8be734030c35085cab64d05a096748a8f63e2d74d1ffde4d3495ca74` | `afe331b8c69860ef429ebde7799a673614208d6350233a308ac3d3d3e536a28f` |
-| `specs/imports-run-store.test.ts`                    | `3761e52f00242c6aa92f9b429bfd3a898063670d75476326ae51d0f7c7807246` | `a584dfec5c3e7c0f8c062e373f589ed798956cfeab9ef8603c4b51e452505132` |
-| `specs/imports-run-plans.test.ts`                    | `994cb1686056cd117c5e2cab49053b953a64b2d407cd1db6ffe2935b8f15e58c` | `0ca2d7705acb4637dd6776e771cd028bbf296bf5116f3430c07ee34f2418ed28` |
+| `specs/imports-run-store.test.ts`                    | `3761e52f00242c6aa92f9b429bfd3a898063670d75476326ae51d0f7c7807246` | `4eca455fcedb0e22af294035ca2959149b7d7dad0e44f4d9ef4425c222e34442` |
+| `specs/imports-run-plans.test.ts`                    | `994cb1686056cd117c5e2cab49053b953a64b2d407cd1db6ffe2935b8f15e58c` | `c835bd140f5e1b93eab126de8f1c8d222efe73add88a674962d503c7ec2863db` |
 | `specs/imports-run-plans-driver.ts`                  | `fd20a65c1dca68b965a81b73ea2692f18707e9daab212b1f0463d72554080b1f` | `588a7c2d8cf42cfbc058cf5e4d77ef9958eb3cf87800e172932acd69da70b337` |
 | `services/importer/tests/run-store-driver.ts`        | `f5685781939f3da264112bb5ef616d50e82c7e0b77ca6dfd035fa27cc67f106d` | `f5685781939f3da264112bb5ef616d50e82c7e0b77ca6dfd035fa27cc67f106d` |
 | `services/importer/tests/run-plans-driver.ts`        | `60b65dcd138f6d72ae0983936f40fc8a455bf036275a0aa68a36363ac82b388e` | `60b65dcd138f6d72ae0983936f40fc8a455bf036275a0aa68a36363ac82b388e` |
@@ -110,11 +128,11 @@ SHA-256 of complete file bytes; unchanged forwarders and frozen wrappers are inc
 ## Full reconciliation diff
 
 The complete code diff (all six changed source/test files, full Git blob identities) follows. It can also be reproduced
-with `git diff --full-index 22ec9cb1cba1989612a0fa1026244930e49a4183 8e1879488487c18c25bbb07ec02327b15307ced3 -- specs/imports-run-store-driver.ts specs/imports-run-store.test.ts specs/imports-run-plans.test.ts specs/imports-run-plans-driver.ts services/importer/tests/run-store-growth.test.ts services/importer/tests/run-store-pages.test.ts`.
+with `git diff --full-index 22ec9cb1cba1989612a0fa1026244930e49a4183 44f99b892c123748a3c06e34e567eb0cbccdc882 -- specs/imports-run-store-driver.ts specs/imports-run-store.test.ts specs/imports-run-plans.test.ts specs/imports-run-plans-driver.ts services/importer/tests/run-store-growth.test.ts services/importer/tests/run-store-pages.test.ts`.
 
 ```diff
 diff --git a/services/importer/tests/run-store-growth.test.ts b/services/importer/tests/run-store-growth.test.ts
-index d74974e4c71e4c9f877d8afceea11ea046a01221..c92f8dd6fad16c0f380ada70eed9af90a88a3657 100644
+index d74974e4c71e4c9f877d8afceea11ea046a01221..bdab8def1f090f54b5422b9fc8a7fe957e63a7a8 100644
 --- a/services/importer/tests/run-store-growth.test.ts
 +++ b/services/importer/tests/run-store-growth.test.ts
 @@ -3,12 +3,27 @@ import { mkdtemp, rm } from 'node:fs/promises';
@@ -135,8 +153,8 @@ index d74974e4c71e4c9f877d8afceea11ea046a01221..c92f8dd6fad16c0f380ada70eed9af90
  import { RunStore } from '../src/run-store.ts';
  import { createSqliteProbe } from './support/sqlite-growth.ts';
 
-+const fixedCounts: CountedCheck<CountedValues> = {
-+  read: (counts) => counts,
++const fixedCounts: CountedCheck = {
++  read: (counts) => counts as CountedValues,
 +  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
 +  slack: {
 +    'sqlite returned rows': { absolute: 2, relative: 0.1 },
@@ -229,7 +247,7 @@ index d74974e4c71e4c9f877d8afceea11ea046a01221..c92f8dd6fad16c0f380ada70eed9af90
      throw new Error(`${name}: ${String(error)}\n${plans.join('\n')}`);
    }
 diff --git a/services/importer/tests/run-store-pages.test.ts b/services/importer/tests/run-store-pages.test.ts
-index 240d6feac03cdea6fe5e78ce938da5f4a1aaaa82..41d458f2edfce99673c6a60980602065fafdb53e 100644
+index 240d6feac03cdea6fe5e78ce938da5f4a1aaaa82..00b18e67b277a5f5e7d3147825fd9525e1a69a09 100644
 --- a/services/importer/tests/run-store-pages.test.ts
 +++ b/services/importer/tests/run-store-pages.test.ts
 @@ -1,11 +1,26 @@
@@ -246,8 +264,8 @@ index 240d6feac03cdea6fe5e78ce938da5f4a1aaaa82..41d458f2edfce99673c6a60980602065
  import { RUN_TABLES, RunStore, type SourceProjection } from '../src/run-store';
  import { createSqliteProbe } from './support/sqlite-growth';
 
-+const fixedCounts: CountedCheck<CountedValues> = {
-+  read: (counts) => counts,
++const fixedCounts: CountedCheck = {
++  read: (counts) => counts as CountedValues,
 +  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
 +  slack: {
 +    'sqlite returned rows': { absolute: 2, relative: 0.1 },
@@ -299,7 +317,7 @@ index 66ffdd88a08a5aeb3a6cae9a2961650db00140ab..7c6dc26bd752e76e929e5011e9ed9bfa
  import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
  import type { Evidence, Omission, Run, RunStoreDriver } from './imports-run-store-driver.ts';
 diff --git a/specs/imports-run-plans.test.ts b/specs/imports-run-plans.test.ts
-index 78ccc4066132feca856e1cb80cec3c751c08a335..b870770584bd0a39c1c98d466a5cc2703820b6b0 100644
+index 78ccc4066132feca856e1cb80cec3c751c08a335..4c88fa99c06b7371217ba66c33716cc943cab7f4 100644
 --- a/specs/imports-run-plans.test.ts
 +++ b/specs/imports-run-plans.test.ts
 @@ -9,8 +9,14 @@ import {
@@ -323,8 +341,8 @@ index 78ccc4066132feca856e1cb80cec3c751c08a335..b870770584bd0a39c1c98d466a5cc270
    type RunPlansDriver,
  } from './imports-run-plans-driver.ts';
 
-+const fixedCounts: CountedCheck<CountedValues> = {
-+  read: (counts) => counts,
++const fixedCounts: CountedCheck = {
++  read: (counts) => counts as CountedValues,
 +  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
 +  slack: {
 +    'sqlite returned rows': { absolute: 2, relative: 0.1 },
@@ -472,7 +490,7 @@ index eef7dcbdcc385921bb66d79c40b051f54741f959..8f33cca3ddf4fc1c072070fdf5d5cf5c
 +  return { 'sqlite returned rows': rows, 'sqlite statements': evidence.executions.length };
  }
 diff --git a/specs/imports-run-store.test.ts b/specs/imports-run-store.test.ts
-index 3d038978a8b224e3ff2ad1a60265be884517006a..a5048550395a0396796c5e0843507111349a7154 100644
+index 3d038978a8b224e3ff2ad1a60265be884517006a..826b5b98f7f684ba107a5a0b92ef403623e64b5e 100644
 --- a/specs/imports-run-store.test.ts
 +++ b/specs/imports-run-store.test.ts
 @@ -3,11 +3,17 @@ import { mkdtemp, rm } from 'node:fs/promises';
@@ -499,8 +517,8 @@ index 3d038978a8b224e3ff2ad1a60265be884517006a..a5048550395a0396796c5e0843507111
    type Pending,
  } from './imports-run-store-driver.ts';
 
-+const fixedCounts: CountedCheck<CountedValues> = {
-+  read: (counts) => counts,
++const fixedCounts: CountedCheck = {
++  read: (counts) => counts as CountedValues,
 +  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
 +  slack: {
 +    'sqlite returned rows': { absolute: 2, relative: 0.1 },
