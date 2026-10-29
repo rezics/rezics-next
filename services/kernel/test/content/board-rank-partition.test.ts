@@ -91,7 +91,8 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
         );
       }
       if (previous === 0) {
-        // Pad all shared indexes before the first scale without adding other due work.
+        // Keep the requested partitions selective in shared indexes at the first scale,
+        // with representative local history and a larger unrelated population.
         for (const baselineRoute of [route, warmupRoute, otherRoute]) {
           const baseline = makePopulation(baselineRoute);
           await seed(
@@ -110,7 +111,7 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
                 };
               },
             },
-            { from: 0, to: 4096 },
+            { from: 0, to: baselineRoute === otherRoute ? 131_072 : 4096 },
           );
         }
       }
