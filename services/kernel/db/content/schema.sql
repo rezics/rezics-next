@@ -1295,19 +1295,19 @@ CREATE TABLE content.thread (
 
 
 --
--- Name: author_item author_item_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.author_item
-    ADD CONSTRAINT author_item_pkey PRIMARY KEY (route, author_account_id, item_kind, item_id);
-
-
---
 -- Name: account_upload account_upload_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.account_upload
     ADD CONSTRAINT account_upload_pkey PRIMARY KEY (route, account_id, phase, id);
+
+
+--
+-- Name: author_item author_item_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.author_item
+    ADD CONSTRAINT author_item_pkey PRIMARY KEY (route, author_account_id, item_kind, item_id);
 
 
 --
