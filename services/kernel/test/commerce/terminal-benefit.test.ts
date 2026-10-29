@@ -1,107 +1,111 @@
-import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { bundledRelease } from '@rezics/definitions/bundled';
 import canonicalize from 'canonicalize';
 import { Pool, type PoolClient } from 'pg';
+import { compileCatalogue } from '@rezics/definitions/compile';
+import { releaseDigest } from '@rezics/definitions';
+import { fixture } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-command.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { CommandUnavailableError } from '../../src/command/command.ts';
-import { createCommerceCommands, stepCommandKey } from '../../src/commerce/commands.ts';
+import { createCommerceCommands, stepCommandKey, type CheckoutRefreshClaim } from '../../src/commerce/commands.ts';
 import type { CheckoutSnapshot, Order } from '../../src/commerce/model.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
+import { createPool } from '../../src/database/pool.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
-import { createPersonas, PERSONAS_VERSION, type Persona, type PersonasOptions } from '../support/personas.ts';
+import { createPersonas, type Persona, type PersonasOptions } from '../support/personas.ts';
 import { testKernel, type TestKernel } from '../support/test-kernel.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
 
-// Native command safety only: no DBOS routing/cutover, participant completion or retention claim.
+// Native service safety only: no DBOS routing, participant completion or retention exemption is inferred.
 setDefaultTimeout(30_000);
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 6 });
-const servicePool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
-const reader = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 2,
-  options: '-c default_transaction_read_only=on',
-});
+const pool = createPool(process.env.DATABASE_URL!);
+const servicePool = createPool(process.env.DATABASE_URL!);
+const reader = new Pool({ connectionString: process.env.DATABASE_URL, options: '-c default_transaction_read_only=on' });
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let kernel: TestKernel;
+let personas: Awaited<ReturnType<typeof createPersonas>>;
 let options: PersonasOptions;
-let first: Awaited<ReturnType<typeof createPersonas>>;
-let second: typeof first;
 let commands: ReturnType<typeof createCommerceCommands>;
-let scheduled: typeof commands;
+let native: ReturnType<typeof createCommerceCommands>;
 let fake: ReturnType<typeof startFakeStripe>;
 let stripe: ReturnType<typeof createStripePort>;
-let offerId: string;
-let targetSubjectId: string;
-const key = () => Bun.randomUUIDv7();
-type Trace = { pid: number; tx: number; sql: string; values: unknown[]; code?: string };
+let target: string;
+const key = () => crypto.randomUUID();
+const shares = /FROM access\.account\b[\s\S]*FOR SHARE/i;
+const orderLock = /FROM commerce\.purchase_order\b[\s\S]*FOR UPDATE/i;
+type Trace = { sql: string; values: unknown[]; pid: number; error?: string };
 const trace: Trace[] = [];
-let txSequence = 0;
-let failShare = false;
-let gate: { orderId: string; beforeAccount: boolean; reached(pid: number): void; wait: Promise<void> } | undefined;
-const accountShare = (sql: string) => /FROM access\.account\b[\s\S]*FOR SHARE/i.test(sql);
-const orderLock = (sql: string) => /FROM commerce\.purchase_order\b[\s\S]*FOR UPDATE/i.test(sql);
+const live = new Set<number>();
+let boundedShareFailure = false;
+let gate: { matches(sql: string): boolean; entered(row: Trace): void; wait: Promise<void> } | undefined;
 
-// Scheduling preserves native statements/results. Failure control asks PostgreSQL itself to cancel a
-// blocked account read; it never supplies lifecycle truth or an application exception.
+function arm(matches: (sql: string) => boolean) {
+  const entered = Promise.withResolvers<Trace>();
+  const released = Promise.withResolvers<void>();
+  gate = { matches, entered: entered.resolve, wait: released.promise };
+  return { entered: entered.promise, release: released.resolve };
+}
+
+// Scheduling/observation of real SQL only. No terminal callbacks, fabricated errors or replacement query results.
 servicePool.on('connect', (client: PoolClient) => {
   const query = client.query.bind(client);
-  let tx = 0;
+  let pid = 0;
+  let transaction = false;
   client.query = (async (...args: unknown[]) => {
     const config = args[0] as { text?: string; values?: unknown[] };
-    const sql = typeof args[0] === 'string' ? args[0] : (config?.text ?? '');
-    const values = (Array.isArray(args[1]) ? args[1] : config?.values) ?? [];
-    if (/^BEGIN/i.test(sql)) tx = ++txSequence;
-    const row: Trace = { pid: (client as PoolClient & { processID: number }).processID, tx, sql, values };
-    if (tx) trace.push(row);
-    if (
-      tx &&
-      gate &&
-      ((orderLock(sql) && values.includes(gate.orderId)) || (gate.beforeAccount && accountShare(sql)))
-    ) {
-      const waiting = gate;
-      gate = undefined;
-      waiting.reached(row.pid);
-      await waiting.wait;
+    const sql = typeof args[0] === 'string' ? args[0] : (config.text ?? '');
+    const values = (Array.isArray(args[1]) ? args[1] : config.values) ?? [];
+    if (/^BEGIN/i.test(sql)) {
+      pid ||= (await query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      transaction = true;
+      live.add(pid);
     }
-    if (tx && failShare && accountShare(sql)) {
-      await query("SET LOCAL lock_timeout = '0'");
-      await query("SET LOCAL statement_timeout = '100ms'");
+    const row: Trace = { sql, values, pid };
+    if (transaction) trace.push(row);
+    if (transaction && gate?.matches(sql)) {
+      const parked = gate;
+      gate = undefined;
+      parked.entered(row);
+      await parked.wait;
     }
     try {
-      return await (query as (...values: unknown[]) => Promise<unknown>)(...args);
+      // A shorter real server deadline bounds the deliberately blocked account-share query.
+      if (transaction && boundedShareFailure && shares.test(sql)) await query("SET LOCAL statement_timeout = '150ms'");
+      return await (query as (...args: unknown[]) => Promise<unknown>)(...args);
     } catch (error) {
       const code = (error as { code?: string }).code;
-      if (code !== undefined) row.code = code;
+      if (code) row.error = code;
       throw error;
     } finally {
-      if (/^(COMMIT|ROLLBACK)/i.test(sql)) tx = 0;
+      if (/^(COMMIT|ROLLBACK)/i.test(sql)) {
+        live.delete(pid);
+        transaction = false;
+      }
     }
   }) as PoolClient['query'];
 });
 
-async function request(persona: Persona | null, path: string, body?: unknown) {
+async function request(persona: Persona | null, method: string, path: string, body?: unknown) {
   return kernel.handle(
     new Request(`http://kernel.test${path}`, {
-      method: body === undefined ? 'GET' : 'POST',
+      method,
       headers: {
         ...(persona ? { authorization: `Bearer ${persona.bearer}` } : {}),
-        'content-type': 'application/json',
-        'idempotency-key': JSON.stringify(key()),
+        ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key()) }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
 }
-async function post(persona: Persona, path: string, body: unknown, status = 200) {
-  const response = await request(persona, path, body);
-  expect(response.status, await response.clone().text()).toBe(status);
+async function post(path: string, body: unknown, status = 201) {
+  const response = await request(personas.staff, 'POST', path, body);
+  if (response.status !== status) throw new Error(`${path}: ${response.status} ${await response.text()}`);
   return response.json();
 }
 
@@ -111,51 +115,42 @@ beforeAll(async () => {
   kernel = testKernel({
     pool,
     auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
-    writeRate: createWriteRateLimiter({ secret: 'terminal-benefit-native-rate-secret-32-bytes' }),
+    writeRate: createWriteRateLimiter({
+      secret: 'terminal-benefit-native-write-rate-secret',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+    }),
   });
-  options = { version: PERSONAS_VERSION, pool, auth };
-  first = await createPersonas(kernel, options);
-  second = await createPersonas(kernel, { ...options, governance: first.staff });
-  for (const group of ['purchases', 'selling']) await post(first.staff, `/v1/platform/exposure/${group}:open`, {});
-  for (const [resource, actions] of [
-    [PLATFORM_RESOURCE, ['offer:create']],
-    [{ route: 0, id: GLOBAL_CONTEXT }, ['subject:create']],
-  ] as const) {
-    await post(first.staff, '/v1/grants', {
-      resource,
-      subject: { kind: 'account', id: first.staff.accountId },
-      actions,
-      valid: '(,)',
-    });
-  }
-  await bootstrapRelease(pool, bundledRelease);
-  targetSubjectId = (
-    await post(
-      first.staff,
-      '/v1/subjects',
-      {
-        type: 'schema:Book',
-        labels: { en: 'Captured terminal benefit book' },
-      },
-      201,
-    )
-  ).subject.id;
+  options = { version: 1, pool, auth };
+  personas = await createPersonas(kernel, options);
   commands = createCommerceCommands({ pool, access: kernel.testAccess });
-  scheduled = createCommerceCommands({ pool: servicePool, access: kernel.testAccess });
-  offerId = (
-    await post(
-      first.staff,
-      '/v1/offers',
-      {
-        targetSubjectId,
-        title: 'Captured price and target',
-        currency: 'usd',
-        unitAmountMinor: 1200,
-        taxCode: 'txcd_10302000',
-      },
-      201,
-    )
-  ).offer.id;
+  native = createCommerceCommands({ pool: servicePool, access: kernel.testAccess });
+  for (const group of ['selling', 'purchases']) await post(`/v1/platform/exposure/${group}:open`, {}, 200);
+  await post('/v1/grants', {
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: personas.staff.accountId },
+    actions: ['offer:create', 'definitions:publish', 'definitions:activate', 'subject:create'],
+    valid: '(,)',
+  });
+  const release = await compileCatalogue(fixture());
+  const digest = releaseDigest(release);
+  await post('/v1/definitions/releases', { release });
+  const head = await request(personas.staff, 'GET', '/v1/definitions/active');
+  await post(
+    `/v1/definitions/releases/${digest}:activate`,
+    {
+      expected_head: head.status === 404 ? null : (await head.json()).head,
+    },
+    200,
+  );
+  target = (await post('/v1/subjects', { type: 'ex:Child', labels: { en: 'Captured terminal benefit' } })).subject.id;
+  const projection = linkProjection(pool);
+  for (const partition of new Set([0, partitionOf(routeOf(target)!)])) {
+    for (let step = 0; step < 20; step++) {
+      const result = await projection.run(partition);
+      if (result.status !== 'busy' && result.envelopes === 0) break;
+      if (step === 19) throw new Error('Native subject link projection did not drain');
+    }
+  }
   fake = startFakeStripe();
   stripe = createStripePort({
     apiKey: 'sk_test_terminal_benefit',
@@ -177,9 +172,27 @@ afterAll(async () => {
   }
 });
 
-async function checkout(buyer: Persona) {
+async function checkout() {
+  // Each independent case owns a fresh ordinary Auth buyer; the same Auth/kernel world is reused.
+  const fresh = await createPersonas(kernel, { ...options, governance: personas.staff });
+  const buyer = fresh.bob;
+  const seller = await kernel.testAccess.authenticate(personas.staff.bearer, { pool, deadline: Date.now() + 10000 });
+  const offer = (
+    await commands.createOffer(
+      seller,
+      {
+        targetSubjectId: target,
+        title: 'Captured terminal benefit',
+        currency: 'usd',
+        unitAmountMinor: 1200,
+        taxCode: 'txcd_10302000',
+      },
+      key(),
+    )
+  ).value;
   const actor = await kernel.testAccess.authenticate(buyer.bearer, { pool, deadline: Date.now() + 10000 });
-  const order = (await commands.createOrder(actor, offerId, key())).value;
+  const order = (await commands.createOrder(actor, offer.id, key())).value;
+  expect(live.size).toBe(0);
   const session = await stripe.createCheckoutSession(
     {
       orderId: order.id,
@@ -194,132 +207,126 @@ async function checkout(buyer: Persona) {
     },
     `order:${order.id}`,
   );
-  await commands.recordCheckout(order.id, { session });
-  return (await commands.readOrderForAccount(buyer.accountId, order.id))!;
+  await native.recordCheckout(order.id, { session });
+  return {
+    buyer,
+    offer,
+    seller,
+    order: (await native.readOrderForAccount(buyer.accountId, order.id))!,
+    session: session.id,
+  };
 }
-async function begin(order: Order, executor = commands, workflowId = `wf:${key()}`) {
-  const result = await executor.beginCheckoutRefresh({
+async function begin(order: Order, workflowId = `wf:${key()}`) {
+  const result = await native.beginCheckoutRefresh({
     orderId: order.id,
     sessionId: order.checkoutSessionId!,
     workflowId,
   });
-  if (result.kind !== 'claimed') throw new Error('Expected new physical native claim');
+  if (result.kind !== 'claimed') throw new Error('Fresh native admission must claim');
   return result.command.value;
 }
-type Mode = 'claimed' | 'legacy';
-async function prepare(order: Order, mode: Mode, executor = commands) {
-  const claim = mode === 'claimed' ? await begin(order, executor) : undefined;
-  const workflowId = claim?.workflowId ?? `wf:${key()}`;
-  const snapshot = await stripe.readCheckout(order.checkoutSessionId!);
-  return {
-    claim,
-    snapshot,
-    workflowId,
-    apply: () =>
-      claim
-        ? executor.applyClaimedCheckoutSnapshot(snapshot, claim)
-        : executor.applyCheckoutSnapshot(snapshot, workflowId),
-  };
+async function bytes(session: string) {
+  expect(live.size).toBe(0); // Official SDK I/O must run outside the native transaction.
+  return stripe.readCheckout(session);
 }
-async function paid(buyer: Persona) {
-  const order = await checkout(buyer);
-  fake.pay(order.checkoutSessionId!);
-  const attempt = await prepare(order, 'claimed');
-  expect((await attempt.apply()).changed).toBe(true);
-  return order;
+async function refresh(order: Order) {
+  const claim = await begin(order);
+  const snapshot = await bytes(order.checkoutSessionId!);
+  const applied = await native.applyClaimedCheckoutSnapshot(snapshot, claim);
+  return { claim, snapshot, applied };
 }
 async function receipt(order: Order, workflowId: string) {
   return (
     await reader.query(
-      `SELECT request_digest,transaction_id,epoch,position,response FROM core.receipt
-     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind='commerce.checkout.apply' AND idempotency_key=$3`,
+      `SELECT request_digest, transaction_id, epoch, position, response FROM core.receipt
+    WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+      AND command_kind='commerce.checkout.apply' AND idempotency_key=$3`,
       [partitionOf(routeOf(order.id)!), order.buyerAccountId, stepCommandKey(workflowId, 'apply')],
     )
   ).rows;
 }
 async function state(order: Order) {
-  const values = [routeOf(order.id), order.id];
+  const keys = [routeOf(order.id), order.id];
   const row = (
     await reader.query(
-      'SELECT revision,settlement,unit_amount_minor,target_subject_id,transaction_id FROM commerce.purchase_order WHERE route=$1 AND order_id=$2',
-      values,
+      `SELECT revision, settlement, transaction_id, unit_amount_minor::text,
+    target_subject_id::text FROM commerce.purchase_order WHERE route=$1 AND order_id=$2`,
+      keys,
     )
   ).rows[0];
   const entitlements = (
     await reader.query(
-      'SELECT entitlement_id,revision,account_id,offer_id,target_subject_id,revoked_at,revoke_reason,transaction_id FROM commerce.entitlement WHERE route=$1 AND order_id=$2',
-      values,
+      `SELECT entitlement_id::text, revision, revoked_at::text, revoke_reason,
+    account_id::text, target_subject_id::text, transaction_id FROM commerce.entitlement
+    WHERE route=$1 AND order_id=$2 ORDER BY entitlement_id`,
+      keys,
     )
   ).rows;
   const transactions = (
     await reader.query(
-      'SELECT balance_transaction_id,kind,amount_minor,fee_minor,net_minor,transaction_id FROM commerce.order_transaction WHERE route=$1 AND order_id=$2 ORDER BY balance_transaction_id',
-      values,
+      `SELECT balance_transaction_id, kind, amount_minor::text, transaction_id
+    FROM commerce.order_transaction WHERE route=$1 AND order_id=$2 ORDER BY balance_transaction_id`,
+      keys,
     )
   ).rows;
+  const ids = [order.id, ...entitlements.map((e) => e.entitlement_id)];
   const events = (
     await reader.query(
-      `SELECT id,epoch,position,type,subject,data FROM core.outbox WHERE partition_no=$1
-     AND (subject=$2 OR subject=ANY($3::text[])) ORDER BY position,event_seq`,
-      [partitionOf(routeOf(order.id)!), order.id, entitlements.map((e) => e.entitlement_id)],
+      `SELECT epoch, position, event_seq, type, subject, data FROM core.outbox
+    WHERE partition_no=$1 AND subject=ANY($2::text[]) ORDER BY position,event_seq`,
+      [partitionOf(routeOf(order.id)!), ids],
     )
   ).rows;
   const grants = (
     await reader.query(
-      'SELECT resource_id,action,valid::text,transaction_id FROM access.resource_grant WHERE route=$1 AND resource_id=ANY($2::uuid[]) AND subject_id=$3 ORDER BY resource_id,action',
-      [routeOf(order.id), [order.id, ...entitlements.map((e) => e.entitlement_id)], order.buyerAccountId],
+      `SELECT resource_id::text, subject_id::text, action, transaction_id
+    FROM access.resource_grant WHERE route=$1 AND resource_id=ANY($2::uuid[])
+    ORDER BY resource_id,subject_id,action`,
+      [routeOf(order.id), ids],
     )
   ).rows;
-  return { row, entitlements, transactions, events, grants };
+  const roles = (
+    await reader.query(
+      `SELECT resource_id::text, subject_id::text, grant_role, transaction_id
+    FROM access.resource_role_grant WHERE route=$1 AND resource_id=ANY($2::uuid[])
+    ORDER BY resource_id,subject_id,grant_role`,
+      [routeOf(order.id), ids],
+    )
+  ).rows;
+  return { row, entitlements, transactions, events, grants, roles };
 }
-async function atomic(order: Order, workflowId: string, snapshot: CheckoutSnapshot) {
-  const receipts = await receipt(order, workflowId);
-  expect(receipts).toHaveLength(1);
-  const r = receipts[0]!;
-  expect(Buffer.from(r.request_digest).toString('hex')).toBe(
+async function atomic(
+  order: Order,
+  workflowId: string,
+  snapshot: CheckoutSnapshot,
+  benefit: 'granted' | 'revoked' | 'restored' | null,
+) {
+  const saved = await receipt(order, workflowId);
+  expect(saved).toHaveLength(1);
+  const r = saved[0]!;
+  expect(Buffer.from(r.request_digest)).toEqual(
     createHash('sha256')
       .update(canonicalize({ orderId: order.id })!)
-      .digest('hex'),
+      .digest(),
   );
-  const current = await state(order);
-  expect(current.row.settlement).toBe('paid');
-  expect(current.row.transaction_id).toBe(r.transaction_id);
-  expect(current.transactions.map((t) => t.balance_transaction_id).sort()).toEqual(
+  const after = await state(order);
+  expect(after.row.transaction_id).toBe(r.transaction_id);
+  const events = after.events.filter((e) => e.epoch === r.epoch && e.position === r.position);
+  expect(events.filter((e) => e.type === 'com.rezics.commerce.order.updated.v1')).toHaveLength(1);
+  const named = after.transactions.filter((t) => t.transaction_id === r.transaction_id);
+  expect(named.length).toBeGreaterThan(0);
+  expect(named.map((t) => t.balance_transaction_id).sort()).toEqual(
+    events
+      .find((e) => e.type === 'com.rezics.commerce.transactions.recorded.v1')!
+      .data.transactionIds.slice()
+      .sort(),
+  );
+  expect(after.transactions.map((t) => t.balance_transaction_id)).toEqual(
     snapshot.transactions.map((t) => t.id).sort(),
   );
-  expect(
-    current.transactions.map((t) => ({
-      id: t.balance_transaction_id,
-      kind: t.kind,
-      amount: Number(t.amount_minor),
-      fee: Number(t.fee_minor),
-      net: Number(t.net_minor),
-    })),
-  ).toEqual(
-    [...snapshot.transactions]
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((t) => ({
-        id: t.id,
-        kind: t.kind,
-        amount: t.amountMinor,
-        fee: t.feeMinor,
-        net: t.netMinor,
-      })),
-  );
-  const events = current.events.filter((e) => e.epoch === r.epoch && e.position === r.position);
-  expect(events.filter((e) => e.type === 'com.rezics.commerce.order.updated.v1')).toHaveLength(1);
-  const named = current.transactions
-    .filter((t) => t.transaction_id === r.transaction_id)
-    .map((t) => t.balance_transaction_id)
-    .sort();
-  if (named.length) {
-    expect(events.filter((e) => e.type === 'com.rezics.commerce.transactions.recorded.v1')).toHaveLength(1);
-    expect(
-      events.find((e) => e.type === 'com.rezics.commerce.transactions.recorded.v1')!.data.transactionIds.sort(),
-    ).toEqual(named);
-  }
-  return current;
+  const benefits = events.filter((e) => e.type.startsWith('com.rezics.commerce.entitlement.'));
+  expect(benefits.map((e) => e.type)).toEqual(benefit ? [`com.rezics.commerce.entitlement.${benefit}.v1`] : []);
+  return after;
 }
 async function fenced(buyer: Persona, order: Order, entitlementId?: string) {
   for (const path of [
@@ -327,301 +334,301 @@ async function fenced(buyer: Persona, order: Order, entitlementId?: string) {
     '/v1/entitlements',
     ...(entitlementId ? [`/v1/entitlements/${entitlementId}`] : []),
   ]) {
-    const old = await request(buyer, path);
-    expect(old.status).toBe(401);
-    expect(old.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
-    expect(await old.json()).toMatchObject({ code: 'invalid_credentials' });
-  }
-  for (const viewer of [first.staff, null]) {
-    expect((await request(viewer, `/v1/orders/${order.id}`)).status).toBe(404);
-    if (entitlementId) expect((await request(viewer, `/v1/entitlements/${entitlementId}`)).status).toBe(404);
+    const response = await request(buyer, 'GET', path);
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    expect(await response.json()).toMatchObject({
+      type: 'https://rezics.com/problems/invalid_credentials',
+      status: 401,
+    });
   }
 }
-async function terminal(buyer: Persona) {
+async function concealed(order: Order, entitlementId?: string) {
+  for (const viewer of [personas.alice, null]) {
+    for (const path of [`/v1/orders/${order.id}`, ...(entitlementId ? [`/v1/entitlements/${entitlementId}`] : [])]) {
+      const response = await request(viewer, 'GET', path);
+      expect(response.status).toBe(viewer ? 404 : 401);
+      expect(await response.json()).toMatchObject({
+        type: `https://rezics.com/problems/${viewer ? 'not_found' : 'authentication_required'}`,
+      });
+    }
+  }
+}
+async function deleted(buyer: Persona) {
   const t = await deletePersona(options, buyer);
-  expect(Number.isFinite(Date.parse(t.at))).toBe(true);
-  expect(await readErasureStatus(pool, buyer.accountId)).toMatchObject({
-    at: t.at,
-    state: 'pending',
-    participants: { commerce: { outcome: 'pending' } },
-  });
+  const status = await readErasureStatus(reader, buyer.accountId);
+  expect(status).toMatchObject({ at: t.at, version: 1, state: 'pending', completedAt: null });
+  expect(status!.participants.commerce.outcome).toBe('pending');
   return t;
 }
-function arm(order: Order, beforeAccount = false) {
-  const reached = Promise.withResolvers<number>();
-  const released = Promise.withResolvers<void>();
-  gate = { orderId: order.id, beforeAccount, reached: reached.resolve, wait: released.promise };
-  return { reached: reached.promise, release: released.resolve };
-}
-async function until<T>(read: () => Promise<T>, accept: (value: T) => boolean): Promise<T> {
+async function blocking(blocker: number, done: () => boolean) {
   const deadline = Date.now() + 5000;
-  do {
-    const value = await read();
-    if (accept(value)) return value;
-    await Bun.sleep(10);
-  } while (Date.now() < deadline);
-  throw new Error('Native row-lock observation did not arrive within 5000ms');
-}
-function accountBeforeOrder(rows: Trace[], accountId: string) {
-  const orders = rows.filter((r) => orderLock(r.sql));
-  expect(orders.length).toBeGreaterThan(0);
-  for (const row of orders) {
-    const prior = rows.slice(0, rows.indexOf(row)).filter((r) => r.tx === row.tx && accountShare(r.sql));
-    expect(prior).toHaveLength(1);
-    expect(prior.map((r) => r.values).flat()).toContain(accountId);
+  while (!done() && Date.now() < deadline) {
+    const result = await reader.query(
+      `SELECT pid, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
+      WHERE datname=current_database() AND $1::integer=ANY(pg_blocking_pids(pid))`,
+      [blocker],
+    );
+    if (result.rows.length) return result.rows;
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
+  return [];
 }
 
-describe('fresh Auth account deletion fences native late paid and refund-reversal benefits while immutable financial service reconciliation and exact receipt replay remain usable', () => {
-  test('active buyer: paid grants, full refund revokes and provider refund failure restores the same entitlement exactly once', async () => {
-    const order = await checkout(first.alice);
-    // The order retains its terms after a real seller price revision.
-    const seller = await kernel.testAccess.authenticate(first.staff.bearer, { pool, deadline: Date.now() + 10000 });
-    await commands.reviseOffer(seller, offerId, { unitAmountMinor: 1500 }, key());
-    try {
-      fake.pay(order.checkoutSessionId!);
-      const paidApply = await prepare(order, 'claimed');
-      expect((await paidApply.apply()).changed).toBe(true);
-      const granted = await atomic(order, paidApply.workflowId, paidApply.snapshot);
-      expect(granted.entitlements).toHaveLength(1);
-      const entitlement = granted.entitlements[0]!;
-      expect(entitlement).toMatchObject({
-        account_id: first.alice.accountId,
-        target_subject_id: targetSubjectId,
-        revoked_at: null,
-      });
-      expect(Number(granted.row.unit_amount_minor)).toBe(1200);
-      expect(granted.row.target_subject_id).toBe(targetSubjectId);
-      const refund = fake.refund(order.checkoutSessionId!, { amount: 1200 });
-      const refundApply = await prepare(order, 'claimed');
-      expect((await refundApply.apply()).changed).toBe(true);
-      const revoked = await atomic(order, refundApply.workflowId, refundApply.snapshot);
-      expect(revoked.entitlements[0]).toMatchObject({
-        entitlement_id: entitlement.entitlement_id,
-        revoke_reason: 'refund',
-      });
-      expect(revoked.entitlements[0]!.revoked_at).not.toBeNull();
-      fake.failRefund(refund);
-      const reversal = await prepare(order, 'claimed');
-      expect((await reversal.apply()).changed).toBe(true);
-      const restored = await atomic(order, reversal.workflowId, reversal.snapshot);
-      expect(restored.entitlements[0]).toMatchObject({
-        entitlement_id: entitlement.entitlement_id,
-        revoked_at: null,
-        revoke_reason: null,
-        revision: entitlement.revision + 2,
-      });
-      expect(restored.transactions.map((t) => t.kind).sort()).toEqual(['charge', 'refund', 'refund_reversal']);
-      expect(restored.entitlements[0]!.transaction_id).toBe(restored.row.transaction_id);
-      for (const action of ['granted', 'revoked', 'restored'])
-        expect(restored.events.filter((e) => e.type === `com.rezics.commerce.entitlement.${action}.v1`)).toHaveLength(
-          1,
-        );
-      const replay = await reversal.apply();
-      expect(replay).toMatchObject({ changed: true, replayed: true });
-      expect(await state(order)).toEqual(restored);
-      expect((await request(first.alice, `/v1/orders/${order.id}`)).status).toBe(200);
-      const view = await request(first.alice, `/v1/entitlements/${entitlement.entitlement_id}`);
-      expect(view.status).toBe(200);
-      expect(await view.json()).toMatchObject({ entitlement: { active: true, targetSubjectId, orderId: order.id } });
-    } finally {
-      await commands.reviseOffer(seller, offerId, { unitAmountMinor: 1200 }, key());
-    }
+test('active buyer: paid grants, full refund revokes and provider refund failure restores the same entitlement exactly once', async () => {
+  const c = await checkout();
+  await commands.reviseOffer(c.seller, c.offer.id, { unitAmountMinor: 9900 }, key());
+  await commands.delistOffer(c.seller, c.offer.id, key());
+  fake.pay(c.session);
+  const paid = await refresh(c.order);
+  expect(paid.applied.changed).toBe(true);
+  expect(paid.snapshot).toMatchObject({ amountSubtotalMinor: 1200, currency: 'usd', clientReferenceId: c.order.id });
+  const granted = await atomic(c.order, paid.claim.workflowId, paid.snapshot, 'granted');
+  expect(granted.row).toMatchObject({ settlement: 'paid', unit_amount_minor: '1200', target_subject_id: target });
+  expect(granted.entitlements).toHaveLength(1);
+  const id = granted.entitlements[0]!.entitlement_id;
+  const orderRead = await request(c.buyer, 'GET', `/v1/orders/${c.order.id}`);
+  expect(orderRead.status).toBe(200);
+  expect((await orderRead.json()).order).toMatchObject({
+    title: c.order.title,
+    targetSubjectId: target,
+    entitlementId: id,
+    settlement: 'paid',
   });
+  const refund = fake.refund(c.session, { amount: 1200 });
+  const revoked = await refresh(c.order);
+  const revokedState = await atomic(c.order, revoked.claim.workflowId, revoked.snapshot, 'revoked');
+  expect(revokedState.entitlements[0]).toMatchObject({ entitlement_id: id, revoke_reason: 'refund' });
+  expect(revokedState.entitlements[0]!.revoked_at).not.toBeNull();
+  fake.failRefund(refund);
+  const reversal = await refresh(c.order);
+  const restored = await atomic(c.order, reversal.claim.workflowId, reversal.snapshot, 'restored');
+  expect(restored.entitlements).toHaveLength(1);
+  expect(restored.entitlements[0]).toMatchObject({ entitlement_id: id, revision: 3, revoked_at: null });
+  expect(restored.transactions.map((t) => t.kind).sort()).toEqual(['charge', 'refund', 'refund_reversal']);
+  const replay = await native.applyClaimedCheckoutSnapshot(reversal.snapshot, reversal.claim);
+  expect(replay).toEqual(reversal.applied);
+  expect(await state(c.order)).toEqual(restored);
+  const entitlementRead = await request(c.buyer, 'GET', `/v1/entitlements/${id}`);
+  expect(entitlementRead.status).toBe(200);
+  expect((await entitlementRead.json()).entitlement).toMatchObject({ id, active: true, targetSubjectId: target });
+  const list = await request(c.buyer, 'GET', '/v1/entitlements');
+  expect(list.status).toBe(200);
+  expect((await list.json()).entitlements.map((e: { id: string }) => e.id)).toEqual([id]);
+  await concealed(c.order, id);
+});
 
-  for (const mode of ['claimed', 'legacy'] as const) {
-    test(`fresh Auth T before late first paid ${mode} apply: financial truth commits without an entitlement or private benefit`, async () => {
-      const buyer = mode === 'claimed' ? first.bob : first.orgOwner;
-      const order = await checkout(buyer);
-      fake.pay(order.checkoutSessionId!);
-      const attempt = await prepare(order, mode, scheduled);
-      const before = await state(order);
-      await terminal(buyer);
-      await fenced(buyer, order);
-      const start = trace.length;
-      expect((await attempt.apply()).changed).toBe(true);
-      const current = await atomic(order, attempt.workflowId, attempt.snapshot);
-      expect(current.events.filter((e) => /entitlement\.(granted|restored)/.test(e.type))).toHaveLength(0);
-      expect(current.entitlements).toHaveLength(0);
-      expect(current.grants).toEqual(before.grants);
-      accountBeforeOrder(trace.slice(start), buyer.accountId);
-      expect(await attempt.apply()).toMatchObject({ changed: true, replayed: true });
-      expect(await state(order)).toEqual(current);
-    });
-  }
-
-  for (const blocker of ['refund', 'dispute'] as const) {
-    test(`fresh Auth T before ${blocker} reversal: named money reconciles once, revoked entitlement and private relations never restore`, async () => {
-      const buyer = blocker === 'refund' ? second.alice : second.bob;
-      const order = await paid(buyer);
-      const id =
-        blocker === 'refund'
-          ? fake.refund(order.checkoutSessionId!, { amount: 1200 })
-          : fake.dispute(order.checkoutSessionId!);
-      const revocation = await prepare(order, 'claimed');
-      expect((await revocation.apply()).changed).toBe(true);
-      const revoked = await state(order);
-      const entitlement = revoked.entitlements[0]!;
-      expect(entitlement.revoked_at).not.toBeNull();
-      await terminal(buyer);
-      if (blocker === 'refund') fake.failRefund(id);
-      else fake.updateDispute(id, 'won');
-      const reversal = await prepare(order, blocker === 'refund' ? 'legacy' : 'claimed');
-      expect((await reversal.apply()).changed).toBe(true);
-      const current = await atomic(order, reversal.workflowId, reversal.snapshot);
-      expect(current.transactions.filter((t) => t.kind === `${blocker}_reversal`)).toHaveLength(1);
-      const later = await begin(order);
-      const beforeReplay = await state(order);
-      expect(await reversal.apply()).toMatchObject({ changed: true, replayed: true });
-      expect(await state(order)).toEqual(beforeReplay);
-      expect(
-        await commands.beginCheckoutRefresh({
-          orderId: order.id,
-          sessionId: order.checkoutSessionId!,
-          workflowId: reversal.workflowId,
-        }),
-      ).toEqual({ kind: 'completed' });
-      expect(await state(order)).toEqual(beforeReplay);
-      await fenced(buyer, order, entitlement.entitlement_id);
-      expect(current.entitlements).toEqual(revoked.entitlements);
-      expect(current.events.filter((e) => e.type === 'com.rezics.commerce.entitlement.restored.v1')).toHaveLength(0);
-      expect(
-        await commands.applyClaimedCheckoutSnapshot(await stripe.readCheckout(order.checkoutSessionId!), later),
-      ).toEqual({ changed: false });
-      expect(await receipt(order, later.workflowId)).toHaveLength(0);
-    });
-  }
-
-  test('real deletion race: account share acquired first commits the grant before T, and Auth deletion waits for that transaction', async () => {
-    const buyer = second.orgOwner;
-    const order = await checkout(buyer);
-    fake.pay(order.checkoutSessionId!);
-    const attempt = await prepare(order, 'claimed', scheduled);
-    const start = trace.length;
-    const pause = arm(order);
-    const applying = attempt.apply();
-    let deleting: ReturnType<typeof terminal> | undefined;
-    try {
-      const pid = await pause.reached;
-      accountBeforeOrder(trace.slice(start), buyer.accountId);
-      deleting = terminal(buyer);
-      await until(
-        async () =>
-          (
-            await reader.query(
-              'SELECT pid,query FROM pg_stat_activity WHERE datname=current_database() AND $1::integer=ANY(pg_blocking_pids(pid))',
-              [pid],
-            )
-          ).rows,
-        (rows) => rows.some((r) => /access\.(account|handle)/i.test(r.query)),
-      );
-      expect(await receipt(order, attempt.workflowId)).toHaveLength(0);
-      pause.release();
-      expect((await applying).changed).toBe(true);
-      const t = await deleting;
-      const committed = await atomic(order, attempt.workflowId, attempt.snapshot);
-      expect(committed.entitlements).toHaveLength(1);
-      const grant = committed.entitlements[0]!;
-      const times = await reader.query(
-        'SELECT granted_at <= $3::timestamptz AS before_t FROM commerce.entitlement WHERE route=$1 AND entitlement_id=$2',
-        [routeOf(order.id), grant.entitlement_id, t.at],
-      );
-      expect(times.rows[0]!.before_t).toBe(true);
-      await fenced(buyer, order, grant.entitlement_id);
-    } finally {
-      pause.release();
-      gate = undefined;
-      await Promise.allSettled([applying, ...(deleting ? [deleting] : [])]);
-    }
-  });
-
-  test('real deletion race reversed: captured claim/provider bytes precede T, account barrier follows T and grants nothing', async () => {
-    const buyer = second.staff;
-    const order = await checkout(buyer);
-    fake.pay(order.checkoutSessionId!);
-    const attempt = await prepare(order, 'claimed', scheduled);
-    const start = trace.length;
-    const pause = arm(order, true);
-    const applying = attempt.apply();
-    try {
-      await pause.reached;
-      // Pause immediately before the real account share (or the unfenced first order lock on base).
-      // No order lock or benefit has been acquired at this boundary in a correct implementation.
-      await terminal(buyer);
-      expect(await receipt(order, attempt.workflowId)).toHaveLength(0);
-      expect((await state(order)).entitlements).toHaveLength(0);
-      pause.release();
-      expect((await applying).changed).toBe(true);
-      const current = await atomic(order, attempt.workflowId, attempt.snapshot);
-      await fenced(buyer, order);
-      accountBeforeOrder(trace.slice(start), buyer.accountId);
-      expect(current.entitlements).toHaveLength(0);
-    } finally {
-      pause.release();
-      gate = undefined;
-      await Promise.allSettled([applying]);
-    }
-  });
-
-  test('terminal buyer does not weaken claim CAS: newer no-op still fences old revoking provider bytes without an apply receipt', async () => {
-    const buyer = first.delegated;
-    const order = await paid(buyer);
-    const refund = fake.refund(order.checkoutSessionId!, { amount: 1200 });
-    expect((await (await prepare(order, 'claimed')).apply()).changed).toBe(true);
-    await terminal(buyer);
-    fake.failRefund(refund);
-    const reversal = await prepare(order, 'claimed');
-    expect((await reversal.apply()).changed).toBe(true);
-    const old = await begin(order);
-    const dispute = fake.dispute(order.checkoutSessionId!, { withdraw: false });
-    const oldBytes = await stripe.readCheckout(order.checkoutSessionId!);
-    fake.updateDispute(dispute, 'won');
-    const newer = await begin(order);
+for (const path of ['claimed', 'legacy'] as const) {
+  test(`fresh Auth deletion T before late first paid ${path} apply keeps financial truth without any buyer benefit`, async () => {
+    const c = await checkout();
+    const t = await deleted(c.buyer);
+    expect(t.accountId).toBe(c.buyer.accountId);
+    await fenced(c.buyer, c.order);
+    await concealed(c.order);
+    fake.pay(c.session);
+    const claim = await begin(c.order);
+    const snapshot = await bytes(c.session);
+    const apply = () =>
+      path === 'claimed'
+        ? native.applyClaimedCheckoutSnapshot(snapshot, claim)
+        : native.applyCheckoutSnapshot(snapshot, claim.workflowId);
+    const applied = await apply();
+    expect(applied.changed).toBe(true);
+    const after = await atomic(c.order, claim.workflowId, snapshot, null);
+    expect(after.row.settlement).toBe('paid');
+    expect(after.entitlements).toEqual([]);
+    expect(after.grants).toEqual([]);
+    expect(after.roles).toEqual([]);
+    expect(await apply()).toEqual(applied);
+    expect(await state(c.order)).toEqual(after);
     expect(
-      await commands.applyClaimedCheckoutSnapshot(await stripe.readCheckout(order.checkoutSessionId!), newer),
-    ).toEqual({ changed: false });
-    const before = await state(order);
-    expect(await commands.applyClaimedCheckoutSnapshot(oldBytes, old)).toEqual({ changed: false, superseded: true });
-    expect(await state(order)).toEqual(before);
-    expect(await receipt(order, old.workflowId)).toHaveLength(0);
-    expect(await receipt(order, newer.workflowId)).toHaveLength(0);
+      await native.beginCheckoutRefresh({ orderId: c.order.id, sessionId: c.session, workflowId: claim.workflowId }),
+    ).toEqual({ kind: 'completed' });
+    expect(await state(c.order)).toEqual(after);
+    await fenced(c.buyer, c.order);
   });
+}
 
-  for (const mode of ['claimed', 'legacy'] as const) {
-    test(`real account-share database timeout in ${mode} apply is unavailable, not terminal suppression: entire financial apply rolls back and retries`, async () => {
-      const order = await checkout(first.alice);
-      fake.pay(order.checkoutSessionId!);
-      const attempt = await prepare(order, mode, scheduled);
-      const before = await state(order);
-      const lock = await pool.connect();
-      const start = trace.length;
-      let result: unknown;
-      let failure: unknown;
-      try {
-        await lock.query('BEGIN');
-        await lock.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
-          routeOf(first.alice.accountId),
-          first.alice.accountId,
-        ]);
-        failShare = true;
-        try {
-          result = await attempt.apply();
-        } catch (error) {
-          failure = error;
-        }
-      } finally {
-        failShare = false;
-        await lock.query('ROLLBACK');
-        lock.release();
-      }
-      expect(trace.slice(start).filter((r) => accountShare(r.sql) && r.code === '57014')).toHaveLength(1);
-      expect(failure).not.toBeInstanceOf(LifecycleDeniedError);
-      expect(failure).toBeInstanceOf(CommandUnavailableError);
-      expect(result).toBeUndefined();
-      expect(await receipt(order, attempt.workflowId)).toHaveLength(0);
-      expect(await state(order)).toEqual(before);
-      expect((await attempt.apply()).changed).toBe(true);
-      await atomic(order, attempt.workflowId, attempt.snapshot);
-    });
+for (const cause of ['refund', 'dispute'] as const) {
+  test(`fresh Auth deletion T fences existing revoked entitlement during provider ${cause} reversal and stable receipt replay after a later claim`, async () => {
+    const c = await checkout();
+    fake.pay(c.session);
+    await refresh(c.order);
+    const providerId = cause === 'refund' ? fake.refund(c.session, { amount: 1200 }) : fake.dispute(c.session);
+    await refresh(c.order);
+    const before = await state(c.order);
+    const entitlement = before.entitlements[0]!;
+    expect(entitlement.revoke_reason).toBe(cause);
+    expect(entitlement.revoked_at).not.toBeNull();
+    await deleted(c.buyer);
+    await fenced(c.buyer, c.order, entitlement.entitlement_id);
+    await concealed(c.order, entitlement.entitlement_id);
+    if (cause === 'refund') fake.failRefund(providerId);
+    else fake.updateDispute(providerId, 'won');
+    const reversal = await refresh(c.order);
+    expect(reversal.applied.changed).toBe(true);
+    const after = await atomic(c.order, reversal.claim.workflowId, reversal.snapshot, null);
+    expect(after.row.settlement).toBe('paid');
+    expect(after.transactions.map((t) => t.kind).sort()).toEqual(['charge', cause, `${cause}_reversal`].sort());
+    expect(after.entitlements).toEqual(before.entitlements);
+    expect(after.grants).toEqual(before.grants);
+    expect(after.roles).toEqual(before.roles);
+    const later = await begin(c.order);
+    const laterBytes = await bytes(c.session);
+    const admitted = await state(c.order);
+    expect(admitted.row.revision).toBe(after.row.revision + 1);
+    expect(await native.applyClaimedCheckoutSnapshot(reversal.snapshot, reversal.claim)).toEqual(reversal.applied);
+    expect(await state(c.order)).toEqual(admitted);
+    expect(await receipt(c.order, reversal.claim.workflowId)).toHaveLength(1);
+    expect(await receipt(c.order, later.workflowId)).toHaveLength(0);
+    expect(await native.applyClaimedCheckoutSnapshot(laterBytes, later)).toEqual({ changed: false });
+    expect(await state(c.order)).toEqual(admitted);
+  });
+}
+
+test('apply holding the real account share barrier first commits its grant before actual Auth deletion T, which waits and then fences HTTP', async () => {
+  const c = await checkout();
+  fake.pay(c.session);
+  const claim = await begin(c.order);
+  const snapshot = await bytes(c.session);
+  const start = trace.length;
+  const parked = arm((sql) => orderLock.test(sql));
+  const applying = native.applyClaimedCheckoutSnapshot(snapshot, claim);
+  let deleting: ReturnType<typeof deleted> | undefined;
+  try {
+    const lock = await parked.entered;
+    const preceding = trace.slice(start, trace.indexOf(lock));
+    expect(preceding.some((r) => r.pid === lock.pid && shares.test(r.sql) && !r.error)).toBe(true);
+    expect(preceding.some((r) => orderLock.test(r.sql))).toBe(false);
+    let done = false;
+    deleting = deleted(c.buyer);
+    void deleting.then(
+      () => {
+        done = true;
+      },
+      () => {
+        done = true;
+      },
+    );
+    const blocked = await blocking(lock.pid, () => done);
+    expect(blocked.length).toBeGreaterThan(0);
+    expect(blocked.every((r) => r.blockers.includes(lock.pid))).toBe(true);
+    expect(await readErasureStatus(reader, c.buyer.accountId)).toBeNull();
+    expect(await receipt(c.order, claim.workflowId)).toHaveLength(0);
+  } finally {
+    parked.release();
+    await applying;
+    if (deleting) await deleting;
   }
+  const after = await atomic(c.order, claim.workflowId, snapshot, 'granted');
+  expect(after.entitlements).toHaveLength(1);
+  expect(await readErasureStatus(reader, c.buyer.accountId)).not.toBeNull();
+  await fenced(c.buyer, c.order, after.entitlements[0]!.entitlement_id);
+});
+
+for (const benefit of ['grant', 'restore'] as const) {
+  test(`actual Auth deletion T wins before the apply account barrier after claim and provider capture; financial apply commits without ${benefit}`, async () => {
+    const c = await checkout();
+    fake.pay(c.session);
+    let before: Awaited<ReturnType<typeof state>> | undefined;
+    if (benefit === 'restore') {
+      await refresh(c.order);
+      const refund = fake.refund(c.session, { amount: 1200 });
+      await refresh(c.order);
+      before = await state(c.order);
+      fake.failRefund(refund);
+    }
+    const claim = await begin(c.order);
+    const snapshot = await bytes(c.session);
+    // Park at the first lock, including service authorization; an order-first implementation is not excused.
+    const parked = arm((sql) => shares.test(sql) || orderLock.test(sql));
+    const applying = native.applyClaimedCheckoutSnapshot(snapshot, claim);
+    let applied: Awaited<typeof applying> | undefined;
+    try {
+      await parked.entered;
+      await deleted(c.buyer);
+      expect(await receipt(c.order, claim.workflowId)).toHaveLength(0);
+    } finally {
+      parked.release();
+      applied = await applying;
+    }
+    expect(applied!.changed).toBe(true);
+    const after = await atomic(c.order, claim.workflowId, snapshot, null);
+    expect(after.row.settlement).toBe('paid');
+    expect(after.entitlements).toEqual(before?.entitlements ?? []);
+    expect(after.grants).toEqual(before?.grants ?? []);
+    expect(after.roles).toEqual(before?.roles ?? []);
+    await fenced(c.buyer, c.order, before?.entitlements[0]?.entitlement_id);
+  });
+}
+
+test('terminal suppression preserves the native claim CAS: a newer no-op still fences older paid provider bytes', async () => {
+  const c = await checkout();
+  const old = await begin(c.order);
+  fake.pay(c.session);
+  const oldPaid = await bytes(c.session);
+  const refund = fake.refund(c.session, { amount: 1200 });
+  const newer = await begin(c.order);
+  const newBytes = await bytes(c.session);
+  await deleted(c.buyer);
+  // First paid+fully refunded observation has accounting, but no benefit; the next physical read is a no-op.
+  expect((await native.applyClaimedCheckoutSnapshot(newBytes, newer)).changed).toBe(true);
+  const noop = await begin(c.order);
+  expect(await native.applyClaimedCheckoutSnapshot(await bytes(c.session), noop)).toEqual({ changed: false });
+  const before = await state(c.order);
+  expect(await native.applyClaimedCheckoutSnapshot(oldPaid, old)).toEqual({ changed: false, superseded: true });
+  expect(await state(c.order)).toEqual(before);
+  expect(await receipt(c.order, old.workflowId)).toHaveLength(0);
+  expect(await receipt(c.order, noop.workflowId)).toHaveLength(0);
+  fake.failRefund(refund);
+  const reversal = await refresh(c.order);
+  const after = await atomic(c.order, reversal.claim.workflowId, reversal.snapshot, null);
+  expect(after.entitlements).toEqual([]);
+});
+
+test('real account-share database timeout is unavailable, not LifecycleDeniedError: the entire financial apply rolls back and the same claim can retry', async () => {
+  const c = await checkout();
+  fake.pay(c.session);
+  const claim = await begin(c.order);
+  const snapshot = await bytes(c.session);
+  const before = await state(c.order);
+  const control = await pool.connect();
+  let failure: unknown;
+  let blocked: Awaited<ReturnType<typeof blocking>> = [];
+  const start = trace.length;
+  try {
+    await control.query('BEGIN');
+    const pid = (await control.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    // A lock only: no positive fixture data or lifecycle truth is written.
+    await control.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
+      routeOf(c.buyer.accountId),
+      c.buyer.accountId,
+    ]);
+    boundedShareFailure = true;
+    let done = false;
+    const applying = native.applyClaimedCheckoutSnapshot(snapshot, claim).then(
+      () => {
+        done = true;
+      },
+      (error: unknown) => {
+        failure = error;
+        done = true;
+      },
+    );
+    blocked = await blocking(pid, () => done);
+    await applying;
+  } finally {
+    boundedShareFailure = false;
+    await control.query('ROLLBACK');
+    control.release();
+  }
+  expect(failure).toBeInstanceOf(CommandUnavailableError);
+  expect(failure).not.toBeInstanceOf(LifecycleDeniedError);
+  expect(blocked.length).toBeGreaterThan(0);
+  expect(trace.slice(start).some((r) => shares.test(r.sql) && r.error === '57014')).toBe(true);
+  expect(await receipt(c.order, claim.workflowId)).toHaveLength(0);
+  expect(await state(c.order)).toEqual(before);
+  const retry = await native.applyClaimedCheckoutSnapshot(snapshot, claim);
+  expect(retry.changed).toBe(true);
+  expect((await atomic(c.order, claim.workflowId, snapshot, 'granted')).entitlements).toHaveLength(1);
 });
