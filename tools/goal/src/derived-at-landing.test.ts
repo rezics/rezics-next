@@ -21,6 +21,7 @@ const openapi = 'contracts/openapi.json';
 test('a dev landing regenerates declared outputs from changed inputs in its landing commit', async () => {
   const h = integrationHarness();
   try {
+    h.settings.affectedTests = [];
     commitFixture(h, {
       [source]: 'initial',
       [declaration]: 'stale declaration',
@@ -60,6 +61,7 @@ writeFileSync(${JSON.stringify(openapi)}, 'contract: ' + source);
 test('unchanged dev outputs add no commit and promotion still regenerates and verifies them', async () => {
   const h = integrationHarness();
   try {
+    h.settings.affectedTests = [];
     commitFixture(h, {
       [source]: 'initial',
       [declaration]: 'stable declaration',
