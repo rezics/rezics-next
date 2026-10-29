@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
+import definitions from '../src/kernel/recorded/definitions-release.json';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -187,6 +188,13 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/v1/definitions/active')
+      return json({ digest: definitions.digest });
+    if (
+      request.method === 'GET' &&
+      url.pathname === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`
+    )
+      return json(definitions);
     if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['personal_library'] });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
