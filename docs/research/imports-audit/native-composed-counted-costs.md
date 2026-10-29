@@ -127,9 +127,21 @@ remote-check: could not remove /srv/rezics-check/runs/mvtnlpge-6c64db7f on b
 ```
 
 The focused wrapper subsequently reached terminal **exit 1**. All three started checks have finished; the
-report-presence acceptance and root typecheck each reached terminal **exit 0**. This is retained as a
-tool blocker under the contract's infrastructure-after-rerun rule, independent of the delivered unit specification.
+report-presence acceptance and root typecheck each reached terminal **exit 0**. The cleanup failure was reported
+as a tool blocker in the earlier attempt, independently of the delivered unit specification.
 The scoped migration, typecheck and passing named unit case do not erase the failing native outcomes or setup error.
+
+### Retry disposition
+
+The retry starts from `ea301be735e6f16ad187eb166fbd5c2c87e846c5` with the four executable files unchanged.
+The supplied landing failure was `error: POST /v1/subjects: request bodies must include application/json`,
+raised during `bun scripts/derived.ts` in a separate landing checkout. This specification does not change that
+route or its OpenAPI generator. The retry reruns the manifest's stated failing command, the report-presence
+acceptance, through `worker-check`; its terminal result is recorded below. The already completed focused native
+check and root typecheck above remain the evidence for the unchanged executable files. No repeated native check,
+new broad gate or product repair is authorized by this specification delivery. A passing artifact acceptance
+establishes delivery of this specification; it does not establish that the landing failure or native failures
+have been repaired. There are still no changes outside the five declared paths and no new source references.
 
 Exact first failure line from the API child (complete backend diagnostics retained):
 
