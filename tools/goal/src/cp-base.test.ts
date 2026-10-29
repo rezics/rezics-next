@@ -8,9 +8,7 @@ function briefFile(h: ReturnType<typeof integrationHarness>, paths: string): str
   const file = join(h.settings.stateDirectory, `brief-${crypto.randomUUID()}.md`);
   writeFileSync(
     file,
-    markdown
-      .replace('goal: fixture', 'goal: control-plane')
-      .replace('paths: [result.txt]', `paths: [${paths}]`),
+    markdown.replace('goal: fixture', 'goal: control-plane').replace('paths: [result.txt]', `paths: [${paths}]`),
   );
   return file;
 }
@@ -44,7 +42,7 @@ test("a control-plane task's worktree starts from main even when dev's tools/goa
   }
 });
 
-test("a control-plane target still starts from main instead of stabilize", () => {
+test('a control-plane target still starts from main instead of stabilize', () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -81,9 +79,7 @@ test('a control-plane task that declares paths outside tools/goal is refused wit
   try {
     const file = briefFile(h, 'tools/goal/src/task.ts, docs/plan.md');
     writeFileSync(file, readFileSync(file, 'utf8').replace('waiting: []', 'waiting: []\ntarget: stabilize'));
-    expect(() => h.tasks.dispatch(file)).toThrow(
-      'split outside paths into a dev task: docs/plan.md',
-    );
+    expect(() => h.tasks.dispatch(file)).toThrow('split outside paths into a dev task: docs/plan.md');
   } finally {
     h.dispose();
   }

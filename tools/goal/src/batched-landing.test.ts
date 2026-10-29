@@ -9,11 +9,7 @@ function setChecks(h: ReturnType<typeof integrationHarness>, checks: Integration
   (h.settings as typeof h.settings & { integrationChecks: IntegrationCheck[] }).integrationChecks = checks;
 }
 
-function markTask(
-  h: ReturnType<typeof integrationHarness>,
-  taskId: string,
-  values: { target?: string },
-): void {
+function markTask(h: ReturnType<typeof integrationHarness>, taskId: string, values: { target?: string }): void {
   h.store.updateTask({ taskId, attempt: 0 }, (task) => {
     if (values.target === 'stabilize') task.brief.target = 'stabilize';
   });
