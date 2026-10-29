@@ -176,7 +176,9 @@ function failureSummary(file: string): string {
       .map((line) => line.trim())
       .filter(Boolean);
     const failures = lines.filter((line) =>
-      /error|fail|not ok|assert|expected|received|actual|panic|exception|deadline_exceeded|overloaded|\b503\b/i.test(line),
+      /error|fail|not ok|assert|expected|received|actual|panic|exception|deadline_exceeded|overloaded|\b503\b/i.test(
+        line,
+      ),
     );
     const summary = [...new Set(failures.length ? failures : lines.slice(-30))].slice(-30).join('\n');
     return summary.slice(-4_000) || '(the check produced no output)';
@@ -195,10 +197,13 @@ function overloadFailure(output: string): OverloadFailure | undefined {
     const codes = ['deadline_exceeded', 'overloaded'].filter(
       (code) => errorLines.length === 1 && new RegExp(`\\b${code}\\b`).test(errorLines[0]!),
     );
-    if (count !== 1 || errorLines.length !== 1 || !/\b503\b/.test(errorLines[0]!) || codes.length !== 1) return undefined;
+    if (count !== 1 || errorLines.length !== 1 || !/\b503\b/.test(errorLines[0]!) || codes.length !== 1)
+      return undefined;
     const names = new Map<string, string>();
     const absoluteNames = new Map<string, string>();
-    for (const match of output.matchAll(/((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g)) {
+    for (const match of output.matchAll(
+      /((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g,
+    )) {
       const path = match[1]!;
       const name = path.split('/').at(-1)!;
       if (!names.has(name) || path.startsWith('/')) names.set(name, path);
@@ -220,7 +225,10 @@ function overloadFailure(output: string): OverloadFailure | undefined {
     }
     if (/^\s*\(fail\)\s+/.test(line)) {
       if (currentFailure) failures.push(currentFailure);
-      currentFailure = { file: currentFile, detail: `${failures.length === 0 ? `${preamble.join('\n')}\n` : ''}${line}` };
+      currentFailure = {
+        file: currentFile,
+        detail: `${failures.length === 0 ? `${preamble.join('\n')}\n` : ''}${line}`,
+      };
     } else if (currentFailure) currentFailure.detail += `\n${line}`;
     else preamble.push(line);
   }
@@ -232,7 +240,8 @@ function overloadFailure(output: string): OverloadFailure | undefined {
     const codes = ['deadline_exceeded', 'overloaded'].filter(
       (code) => errorLines.length === 1 && new RegExp(`\\b${code}\\b`).test(errorLines[0]!),
     );
-    if (errorLines.length !== 1 || !/\b503\b/.test(errorLines[0]!) || codes.length !== 1) return singleFailureFallback();
+    if (errorLines.length !== 1 || !/\b503\b/.test(errorLines[0]!) || codes.length !== 1)
+      return singleFailureFallback();
     reasons.push(`HTTP 503 ${codes[0]}`);
   }
   let files = [
@@ -240,14 +249,18 @@ function overloadFailure(output: string): OverloadFailure | undefined {
       failures
         .map((failure) => {
           if (failure.file) return failure.file;
-          return failure.detail.match(/((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/)?.[1];
+          return failure.detail.match(
+            /((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/,
+          )?.[1];
         })
         .filter((file): file is string => !!file),
     ),
   ];
   if (files.length !== failures.length) {
     const byName = new Map<string, string>();
-    for (const match of output.matchAll(/((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g)) {
+    for (const match of output.matchAll(
+      /((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g,
+    )) {
       const path = match[1]!;
       const name = path.split('/').at(-1)!;
       if (!byName.has(name) || path.startsWith('/')) byName.set(name, path);

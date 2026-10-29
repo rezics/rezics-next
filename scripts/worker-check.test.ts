@@ -952,14 +952,19 @@ test('overload rerun: reruns only failing files once under admission, passes on 
   const root = overloadFixture();
   const healthyRuns = join(root, 'healthy-runs');
   const failedRuns = join(root, 'failed-runs');
-  writeFileSync(join(root, 'healthy.test.ts'), `import { test, expect } from 'bun:test';
+  writeFileSync(
+    join(root, 'healthy.test.ts'),
+    `import { test, expect } from 'bun:test';
 import { existsSync, writeFileSync } from 'node:fs';
 test('healthy file runs only once', () => {
   expect(existsSync(${JSON.stringify(healthyRuns)})).toBe(false);
   writeFileSync(${JSON.stringify(healthyRuns)}, 'ran');
 });
-`);
-  writeFileSync(join(root, 'overloaded.test.ts'), `import { test, expect } from 'bun:test';
+`,
+  );
+  writeFileSync(
+    join(root, 'overloaded.test.ts'),
+    `import { test, expect } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 test('transient response', () => {
   const count = existsSync(${JSON.stringify(failedRuns)}) ? Number(readFileSync(${JSON.stringify(failedRuns)}, 'utf8')) : 0;
@@ -967,12 +972,14 @@ test('transient response', () => {
   if (count === 0) throw new Error('HTTP 503 deadline_exceeded');
   expect(true).toBe(true);
 });
-`);
+`,
+  );
   await withQuietAdmission(async () => {
     const id = startWorkerCheck(['bun', 'test', 'healthy.test.ts', 'overloaded.test.ts'], root);
     const record = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
     const status = await waitWorkerCheck(id, root, 10_000);
-    if (status !== 0) process.stderr.write(`nested overload check log:\n${readFileSync(join(root, record.log), 'utf8')}\n`);
+    if (status !== 0)
+      process.stderr.write(`nested overload check log:\n${readFileSync(join(root, record.log), 'utf8')}\n`);
     expect(status).toBe(0);
     const finished = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
     expect(finished.reruns).toBe(1);
@@ -996,7 +1003,10 @@ process.exit(1);`;
   await withQuietAdmission(async () => {
     const out: string[] = [];
     const write = process.stdout.write;
-    process.stdout.write = ((chunk: string | Uint8Array) => (out.push(String(chunk)), true)) as typeof process.stdout.write;
+    process.stdout.write = ((chunk: string | Uint8Array) => (
+      out.push(String(chunk)),
+      true
+    )) as typeof process.stdout.write;
     try {
       expect(await runWorkerCheck(['bun', '-e', source], root)).toBe(1);
     } finally {
