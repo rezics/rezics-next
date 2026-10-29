@@ -173,8 +173,7 @@ error: expect(received).not.toBe(expected)
 Expected: not "busy"
 ```
 
-The actual production relay returned `busy` during `anonymous`, called at line
-243. The assertions preceding that read reached actual native candidates,
+The actual production relay returned `busy` during `anonymous`, called at line 243. The assertions preceding that read reached actual native candidates,
 receipts, editor acceptance/adoption, ranks, qualifiers, citations and conversion
 metadata. Anonymous field preservation and the later sentinel/effect assertions
 in that case were not reached; they are not claimed as passing.
@@ -200,7 +199,6 @@ native failure does not block specification delivery. The nonempty-file
 acceptance is run after committing this record, with its terminal result in the
 delivery summary. That artifact check proves specification delivery only. It
 does not turn the rich-field case's partial execution into a full native pass.
-
 
 ## Approved readiness exception verification
 
@@ -236,7 +234,6 @@ index was read; it does not require a Wikidata reference implementation here.
 The earlier URL refresh, unresolved author and CC0 decisions remain unchanged.
 No outside-path file, product, helper or definition is changed. The same fixed
 record/candidate neighbourhood and deferred gaps above apply.
-
 
 The focused native check ran once at committed revision
 `6ad0c07c72550d52c84b4cd59d6aeb46084d182e`, with the installed hash above.
