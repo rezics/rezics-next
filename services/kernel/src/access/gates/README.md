@@ -39,32 +39,14 @@ which holds the viewer's authenticated identity evidence. The groups read perfor
 
 ## Cost
 
-### Admitted groups read
+`G` is the fixed mounted group count. `M` is the fixed mounted route count, `K <= 1,000` the Access formula's admitted-key cap, and `E` the exposure-opening index size. Gate checks reuse the Access formula bound: O(log E + (1 + K) log G) with constant rows and statements for a fixed request.
 
-- Touches: One open-groups read for the mounted group set, plus at most G calls to `authorizePlatformGate`, one per closed group with an in-scope operation, at the same T.
-- Bound: G is the mounted closed-group count, a deployment constant. The opening probes cost O(M log E) buffers for M mounted groups; each gate check has the bound of "`gate:<g>` and `gate:any` on the Global Context" below. Rows and statements stay constant as unrelated data grows.
-- Growth check: `services/kernel/test/access/gates/growth-discovery.test.ts`: "admitted groups read stays bounded as unrelated accounts, gate grants, and openings grow".
-
-### Per-request exposure read
-
-- Touches: One `access.exposure_opening` lookup by the temporal primary key.
-- Bound: One row and one statement, O(log E) buffers, with no scan.
-- Growth check: `growth-admission.test.ts` grows unrelated group openings at 1, 8, and 64.
-
-### `gate:<g>` and `gate:any` on the Global Context
-
-- Touches: Only for a closed group and an account, the existing Access formula checks the two exact gate actions on route 0 and the Global Context ID.
-- Bound: O(log E + (1 + K) log G), K <= 1000, with constant rows and statements and no scans.
-- Growth check: `growth-admission.test.ts` grows unrelated accounts and their gate grants at 1, 8, and 64.
-
-### Open and close
-
-- Touches: One point read and at most one write in `access.exposure_opening`, plus the native command receipt and event.
-- Bound: One catalogue row and at most one catalogue write; no scan.
-- Growth check: `services/kernel/test/access/gates/admission.test.ts`: "opening is public from T, close restores denial, and gate:any admits platform staff" runs open, close and their no-op repeats through the native command routes; `services/kernel/test/access/gates/catalogue.test.ts`: "the exposure catalogue enforces valid groups and temporal non-overlap and reads half-open openings at T" covers the catalogue rows they write.
-
-### visibleOperations and served OpenAPI
-
-- Touches: The same open-groups read and at most G gate checks as the admitted groups read. Public operations and operations of open groups are visible; operations of closed groups also require their own action in the viewer's scopes and an allowed gate check. Served OpenAPI projects this single decision.
-- Bound: Linear in the mounted route catalogue, plus the opening probes and at most G checks with the bound of "`gate:<g>` and `gate:any` on the Global Context" above. G is the mounted closed-group count, a deployment constant.
-- Growth check: `growth-discovery.test.ts` grows unrelated accounts, gate grants, organization role grants on the Global Context, and other groups' opening rows at 1, 8, and 64.
+| Operation | Touches | Bound | Growth check |
+| --- | --- | --- | --- |
+| Per-request exposure decision | One `access.exposure_opening` temporal primary-key lookup at request time T. | One row and statement; logarithmic blocks in E; no range scan. | `test/access/gates/growth-admission.test.ts`: “checkGrowth keeps gate admission bounded as unrelated accounts, grants, and other openings grow separately” |
+| Closed-group authorization | For each closed group, checks exact `gate:<group>` and `gate:any` actions for the actor and, when present, authenticated principal on the Global Context; this is the shared Access formula. | Constant rows/statements per check; logarithmic blocks in Global grants and assignments, with K capped at 1,000. | `test/access/gates/growth-admission.test.ts`: “checkGrowth keeps gate admission bounded as unrelated accounts, grants, and other openings grow separately” |
+| Open and close exposure group | One exposure-opening point read and at most one opening-row write, plus the native command receipt/event. No scan; no-op repeats do not change catalogue rows. | Constant rows and statements; logarithmic blocks in E. | Missing: existing admission growth coverage measures reads and unrelated opening growth, not the native open/close command writes. |
+| Admitted groups read | One open-groups read for the mounted groups and at most G closed-group authorizations for in-scope operations. | Constant statements and rows for fixed G; O(M log E + G(1 + K) log G) indexed blocks; G and M are deployment constants. | `test/access/gates/growth-discovery.test.ts`: “admitted groups read stays bounded as unrelated accounts, gate grants, and openings grow” |
+| Operation discovery and served OpenAPI | One open-groups read and at most G gate authorizations while filtering the fixed mounted route catalogue; OpenAPI projects that decision. | Linear in mounted routes M; constant rows/statements for fixed M; logarithmic opening and grant probes. | `test/access/gates/growth-discovery.test.ts`: “discovery stays bounded as unrelated accounts, gate grants, and openings grow” |
+| Gated account-operation workflow approvals | Exact approval/account keys and up to K command events at each approval step; no approval-history scan. | Constant rows/statements for fixed K; logarithmic blocks in account and receipt history. | `test/access/growth-workflow-approvals.test.ts`: “${mode} stays bounded as ${population} grows with K fixed” |
+| Membership joins and leaves | Current member and inverse keys per affected member, processed in fixed durable work steps. | Constant rows/statements per member step; logarithmic blocks in membership history; total work linear in affected members. | `test/access/membership-work-growth.test.ts`: “real durable joins and leaves keep reserve join leave and release command and history work within the same bounds through the shared growth harness at scales 256 1024 and 4096” |
