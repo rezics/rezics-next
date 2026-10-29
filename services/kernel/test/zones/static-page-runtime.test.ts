@@ -152,6 +152,13 @@ test('a published configured static Zone route serves its exact common page and 
   expect(unavailable.body.code).toBe('semantic_not_ready');
   expect(unavailable.body).not.toHaveProperty('document');
   expect(unavailable.body).not.toHaveProperty('next');
+  const dynamic = createBody();
+  dynamic.configuration.scope = [];
+  const dynamicZone = await f.create(dynamic);
+  const dataPage = await read(dynamicZone.id, 'owner');
+  expect(dataPage.status).toBe(503);
+  expect(dataPage.headers.get('retry-after')).toBe('1');
+  expect(dataPage.body).not.toHaveProperty('document');
 }, 180_000);
 
 test('static Zone reads preserve withheld route concealment and fresh authorization with no source permission borrowing', async () => {
@@ -179,7 +186,13 @@ test('static Zone reads preserve withheld route concealment and fresh authorizat
   }
   expect(complete(await read(zone.id, 'owner')).document).toEqual(input.configuration.pages[0]!.document);
   await grant(zone.id);
+  const readChecks = f.access.readChecks.length;
+  const writeChecks = f.access.checks.length;
   expect(complete(await read(zone.id, 'editor')).document).toEqual(input.configuration.pages[0]!.document);
+  expect(f.access.readChecks.slice(readChecks)).toEqual([
+    { persona: 'editor', action: 'zone:read', resource: { route: routeOf(zone.id)!, id: zone.id } },
+  ]);
+  expect(f.access.checks.length).toBe(writeChecks);
   expect((await f.call('editor', 'GET', `${path(zone.id)}/configuration`)).status).toBe(403);
   expect((await f.call('editor', 'GET', `/v1/collections/${source.body.collection.id}`)).status).toBe(404);
   await grant(zone.id, true);
@@ -194,6 +207,10 @@ test('static Zone reads preserve withheld route concealment and fresh authorizat
   }
   revision = await publish(zone.id, revision, 'public');
   expect(complete(await read(zone.id)).zone.visibility).toBe('public');
+  revision = await publish(zone.id, revision, 'private');
+  expect((await read(zone.id, 'anonymous', '', 'unusable')).status).toBe(404);
+  expect((await read(zone.id, 'editor', '', 'unusable')).status).toBe(404);
+  revision = await publish(zone.id, revision, 'public');
   expect((await read(zone.id, 'suspended')).status).toBe(403);
   expect(
     (
