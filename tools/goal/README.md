@@ -264,7 +264,8 @@ requires waiting tasks and `inseparable`.
 
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
 are refused. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
-Every intersected risk area must be declared. Extend the ownership data when adding product modules.
+Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`
+brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks that they be split into a dev task.
 
 Routing records the table version on each attempt. Open experiments weight work toward cheaper models: implementation, interface and bulk text rotate Grok 4.7, Grok 4.7, Luna `max`; claims rotate Luna `max`, Grok 4.7, Sol `high`
 by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
@@ -356,16 +357,22 @@ cached baseline reusable across attempts. A landing is refused only for newly fa
 failure; failures shared by the base are allowed. Errors before any test-file result use diagnostic-line comparison.
 An unverified baseline also allows landing with a log note. The train's existing integration checks are unchanged.
 
-A `control-plane` task whose actual changed files are all under `tools/goal/` rebases onto `main`, formats its changes,
+A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
+split them into a dev task. A control-plane task starts from `main`, the branch it integrates into, even when `dev` has
+different `tools/goal/` content. This rule also applies if a brief or later retarget names `stabilize`. It rebases onto
+current `main`, formats its changes,
 then runs `bun run --cwd tools/goal typecheck` and `bun test tools/goal/src` before `main` advances. The train compare-and-
 swaps `main`, then merges the checked main commit into `stabilize` and merges that resulting stabilize head into the
 integration branch, also using compare-and-swap. A conflict aborts that merge, leaves its target branch unchanged, and
 notifies the task manager and supermanager. When no stabilize branch exists, the checked main commit merges directly
 into the integration branch. A failed control-plane check is recorded as a gate failure and retried with its failure
 evidence; changes outside the task's declared paths still count as scope growth. Control-plane tasks that change a file
-outside `tools/goal/`, as well as tasks from other Goals, continue to integrate into the integration branch as before.
+outside `tools/goal/` are not routed to `main`; historical tasks that declared such paths continue to use their recorded
+target. Tasks from other Goals continue to integrate into the integration branch as before.
 
-New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
+New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
+landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork
+from `main`. If the integration branch does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
@@ -376,8 +383,8 @@ Declared paths never hold a task: tasks that declare the same file run side by s
 rebase. Only `after:` holds a task.
 
 A `stabilize` branch (`stabilizeBranch`, default `stabilize`) is a frozen candidate cut from the integration branch. A
-brief with `target: stabilize` starts and retries from that branch's head, and dispatch is refused while the branch does
-not exist. The train rebases such a task onto the branch, runs the same integration checks, and compare-and-swap advances
+non-control-plane brief with `target: stabilize` starts and retries from that branch's head, and dispatch is refused
+while the branch does not exist. The train rebases such a task onto the branch, runs the same integration checks, and compare-and-swap advances
 the branch. It then merges that new head into the integration branch with `git merge --no-ff` in a train worktree,
 retrying up to five times if the integration branch moves. A conflict aborts only that merge: the stabilize branch and
 the task stay integrated at the stabilize commit, and the task's manager and the supermanager receive an inbox notice

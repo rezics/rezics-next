@@ -9,13 +9,8 @@ function setChecks(h: ReturnType<typeof integrationHarness>, checks: Integration
   (h.settings as typeof h.settings & { integrationChecks: IntegrationCheck[] }).integrationChecks = checks;
 }
 
-function markTask(
-  h: ReturnType<typeof integrationHarness>,
-  taskId: string,
-  values: { goal?: string; target?: string },
-): void {
+function markTask(h: ReturnType<typeof integrationHarness>, taskId: string, values: { target?: string }): void {
   h.store.updateTask({ taskId, attempt: 0 }, (task) => {
-    if (values.goal) task.brief.goal = values.goal;
     if (values.target === 'stabilize') task.brief.target = 'stabilize';
   });
 }
@@ -42,9 +37,8 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     const first = h.dispatch('dev-a.ts');
     const affected = h.dispatch('affected.ts');
     const second = h.dispatch('dev-b.ts');
-    const controlPlane = h.dispatch('cp.ts');
+    const controlPlane = h.dispatch('tools/goal/cp.ts', [], ['true'], 'control-plane');
     const stabilize = h.dispatch('stabilize.ts');
-    markTask(h, controlPlane.id, { goal: 'control-plane' });
     markTask(h, stabilize.id, { target: 'stabilize' });
     await h.start(first);
     await h.start(affected);
@@ -52,7 +46,7 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     await h.start(second);
     await h.start(controlPlane);
     await h.start(stabilize);
-    await h.train();
+    await h.train(async () => ({ passed: true, output: '', timedOut: false }));
 
     expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
     expect(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)?.passed).toBe(true);
@@ -66,7 +60,7 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     const devLogs = h.outcomes
       .filter(({ taskId }) => [first.id, second.id].includes(taskId))
       .map(({ logPath }) => readFileSync(logPath, 'utf8'));
-    expect(controlPlaneLog).toContain('Integration check on');
+    expect(controlPlaneLog).toContain('Control-plane checks on');
     expect(controlPlaneLog).not.toContain('Batch integration check on');
     expect(stabilizeLog).not.toContain('Batch integration check on');
     expect(affectedLog).not.toContain('Batch integration check on');
@@ -84,14 +78,13 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     h.settings.integration.batchSize = 3;
     setChecks(h, [{ paths: ['**'], command: ['true'] }]);
 
-    const controlPlane = h.dispatch('cp-leading.ts');
+    const controlPlane = h.dispatch('tools/goal/cp-leading.ts', [], ['true'], 'control-plane');
     const stabilize = h.dispatch('stabilize-leading.ts');
     const first = h.dispatch('dev-first.ts');
     const affected = h.dispatch('affected-middle.ts');
     const second = h.dispatch('dev-second.ts');
     const third = h.dispatch('dev-third.ts');
     const fourth = h.dispatch('dev-fourth.ts');
-    markTask(h, controlPlane.id, { goal: 'control-plane' });
     markTask(h, stabilize.id, { target: 'stabilize' });
     await h.start(controlPlane);
     await h.start(stabilize);
@@ -102,7 +95,7 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     await h.start(third);
     await h.start(fourth);
 
-    await h.train();
+    await h.train(async () => ({ passed: true, output: '', timedOut: false }));
 
     const dev = [first, second, third, fourth];
     expect(h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ taskId }) => taskId)).toEqual(
@@ -121,7 +114,7 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     expect(logs[3]).not.toContain('Batch integration check on');
     for (const entry of [controlPlane, stabilize]) {
       const log = readFileSync(h.outcomes.find(({ taskId }) => taskId === entry.id)!.logPath, 'utf8');
-      expect(log).toContain('Integration check on');
+      expect(log).toContain(entry.id === controlPlane.id ? 'Control-plane checks on' : 'Integration check on');
       expect(log).not.toContain('Batch integration check on');
     }
   } finally {

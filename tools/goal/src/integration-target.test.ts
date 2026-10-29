@@ -108,22 +108,22 @@ test('a control-plane task whose changes all lie under tools/goal integrates int
   } finally {
     h.dispose();
   }
-});
+}, 60_000);
 
-test('a control-plane task moved onto a newer dev still integrates into main with only its own changes', async () => {
+test('a control-plane task moved onto a newer main still integrates into main with only its own changes', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
     const task = dispatch(h, 'tools/goal/src/hotfix.ts');
     await h.start(task);
-    // Another goal lands on dev, and a retry moves the branch onto it; the recorded base stays the original one.
-    addCommit(h, 'dev', { 'docs/other-goal.md': 'other goal\n' });
-    git(task.worktree, 'rebase', '--quiet', 'dev');
+    // Another control-plane change lands on main, and a retry moves the branch onto it; the recorded base stays the original one.
+    addCommit(h, 'main', { 'tools/goal/src/other-goal.ts': 'other goal\n' });
+    git(task.worktree, 'rebase', '--quiet', 'main');
 
     await train(h);
 
     expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('tools/goal/src/hotfix.ts');
-    expect(git(h.root, 'ls-tree', '--name-only', 'main', 'docs/other-goal.md')).toBe('');
+    expect(git(h.root, 'show', 'main:tools/goal/src/other-goal.ts')).toBe('other goal');
     expect(h.store.task(task.id).state).toBe('merged');
   } finally {
     h.dispose();

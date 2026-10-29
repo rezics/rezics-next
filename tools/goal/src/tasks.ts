@@ -214,6 +214,13 @@ export class WorkerTasks {
   private integrationHead(): string {
     return this.branchHead(this.settings.integrationBranch, true);
   }
+  private taskBaseBranch(brief: { goal?: string; target?: 'stabilize' }): string {
+    return brief.goal === 'control-plane'
+      ? this.settings.mainBranch
+      : brief.target === 'stabilize'
+        ? this.settings.stabilizeBranch
+        : this.settings.integrationBranch;
+  }
   /**
    * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A
    * stabilize dependency of a dev task counts only after stabilize has been merged into dev: released earlier, the
@@ -221,7 +228,7 @@ export class WorkerTasks {
    */
   dependenciesMet(task: Pick<Task, 'brief'>, tasks: readonly Task[] = this.store.tasks()): boolean {
     const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]));
-    const branch = task.brief.target === 'stabilize' ? this.settings.stabilizeBranch : this.settings.integrationBranch;
+    const branch = this.taskBaseBranch(task.brief);
     return task.brief.after.every((id) => {
       const dependency = byId.get(id);
       if (!dependency || !['integrated', 'merged'].includes(dependency.state)) return false;
@@ -235,11 +242,9 @@ export class WorkerTasks {
       );
     });
   }
-  /** A stabilize brief bases on that branch; every other brief bases on the integration branch. */
-  private taskBaseHead(brief: { target?: 'stabilize' }): string {
-    return brief.target === 'stabilize'
-      ? this.branchHead(this.settings.stabilizeBranch, false)
-      : this.integrationHead();
+  /** Control-plane briefs integrate into main; stabilize briefs use stabilize and other briefs use dev. */
+  private taskBaseHead(brief: { goal?: string; target?: 'stabilize' }): string {
+    return this.branchHead(this.taskBaseBranch(brief), brief.goal === 'control-plane' || brief.target !== 'stabilize');
   }
   private commitRetryLeftovers(task: Task, attempt: number): void {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
@@ -294,6 +299,13 @@ export class WorkerTasks {
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
     const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
+    if (brief.goal === 'control-plane') {
+      const outside = brief.paths.filter((path) => !path.startsWith('tools/goal/'));
+      if (outside.length)
+        throw new Error(
+          `control-plane tasks may declare only tools/goal paths; split outside paths into a dev task: ${outside.join(', ')}`,
+        );
+    }
     const taskClass = classifyTask(brief);
     if (taskClass === 'mechanical') throw new Error('run mechanical commands directly without a worker');
     const existingTasks = this.store.tasks().filter((task) => task.id !== excludingTask);
@@ -410,7 +422,7 @@ export class WorkerTasks {
       throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (commits > 0) {
       const common = git(task.worktree, ['merge-base', task.base, integration]);
-      const branchName = task.brief.target === 'stabilize' ? 'stabilize branch' : 'integration branch';
+      const branchName = `${this.taskBaseBranch(task.brief)} branch`;
       if (common !== task.base)
         throw new HeldTaskConflictError(`held task base is not an ancestor of the current ${branchName}`);
       const currentAttempt = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
@@ -704,7 +716,7 @@ export class WorkerTasks {
           (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
         });
         reportFrozenFormatError(frozen.formatterError);
-        setupStep = `rebasing onto current ${task.brief.target === 'stabilize' ? this.settings.stabilizeBranch : this.settings.integrationBranch}`;
+        setupStep = `rebasing onto current ${this.taskBaseBranch(task.brief)}`;
         const integration = this.taskBaseHead(task.brief);
         const tip = git(task.worktree, ['rev-parse', 'HEAD']);
         const rebaseLog = `${next.logPath}.rebase`;
