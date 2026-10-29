@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { runOnCheckHost } from './stack-run.ts';
+import { onCheckHost, ROOT, runOnCheckHost } from './stack-run.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
@@ -171,7 +171,9 @@ let counter = 0;
 
 beforeAll(() => {
   // Keep fixture workspaces outside the remote run root. The acceptance file may itself run on a check host.
-  root = mkdtempSync(join('/tmp', 'stack-run-test-'));
+  const temporaryParent = onCheckHost(process.cwd()) ? ROOT : join(repository, '.temp');
+  mkdirSync(temporaryParent, { recursive: true });
+  root = mkdtempSync(join(temporaryParent, 'stack-run-test-'));
   mkdirSync(join(root, 'bin'));
   for (const [name, source] of [
     ['ssh', fakeSsh],
