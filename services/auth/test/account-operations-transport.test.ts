@@ -363,17 +363,32 @@ test('a signed-in person approves and executes organization creation rename and 
     ).rows,
   ).toEqual([{ handle: renamed }]);
 
-  // Deletion is never gated: the organization gate is still closed here.
-  // Own deletion applies. The person's authority ends with the account, so the
-  // native result disclosure is refused with the one fixed answer.
+  // Own deletion returns the workflow outcome without re-authorizing against the standing it removes.
+  // The person's authority ends for subsequent requests, even while the organization gate remains closed.
   const leaving = await person('leaving');
   const removal = { kind: 'delete', accountId: leaving.accountId };
   const removalApproval = await ok(await approve(leaving, 'delete-self', removal));
-  await refused(
-    await execute(leaving, { operationKey: 'delete-self', operation: removal, reference: removalApproval.reference }),
-    403,
-  );
+  const deleted = await execute(leaving, {
+    operationKey: 'delete-self',
+    operation: removal,
+    reference: removalApproval.reference,
+  });
+  expect(await done(deleted)).toEqual({ accountId: leaving.accountId });
+  expect(deleted.headers.get('cache-control')).toBe('no-store');
+  expect(deleted.headers.get('x-content-type-options')).toBe('nosniff');
   expect(await stateOf(leaving.accountId)).not.toBe('active');
+  const later = await call('/account-operations/approve', { operationKey: 'after-delete', operation: removal }, '', {
+    headers: {
+      origin: issuer,
+      'content-type': 'application/json',
+      authorization: `Bearer ${leaving.bearer}`,
+    },
+  });
+  expect({ status: later.status, body: await later.json(), challenge: later.headers.get('www-authenticate') }).toMatchObject({
+    status: 401,
+    body: { code: 'invalid_credentials' },
+    challenge: 'Bearer error="invalid_token"',
+  });
 }, 120000);
 
 test('a transfer is approved by the source manager accepted by the destination manager and executed', async () => {
