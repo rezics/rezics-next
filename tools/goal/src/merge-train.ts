@@ -1608,17 +1608,14 @@ export class MergeTrain {
           defaults.siblingTests.command,
         );
         if (siblings) affectedChecks.push({ paths: [], command: siblings });
-        const affectedResults = workspace
-          ? await Promise.all(
-              affectedChecks
-                .map((check) =>
-                  runAffectedTest(check.command, trainTree, logPath, {
-                    ...gateEnvironment(process.env, o.stateDirectory),
-                    KERNEL_CHECK_AFFECTED: base,
-                  }),
-                ),
-            )
-          : (request.affectedTests ?? []);
+        const affectedResults = await Promise.all(
+          affectedChecks.map((check) =>
+            runAffectedTest(check.command, trainTree, logPath, {
+              ...gateEnvironment(process.env, o.stateDirectory),
+              KERNEL_CHECK_AFFECTED: base,
+            }),
+          ),
+        );
         for (const checked of affectedResults) {
           if (checked.status === 'unverified') {
             appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);

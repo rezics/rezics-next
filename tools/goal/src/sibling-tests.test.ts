@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 import { integrationHarness } from './test-support.ts';
@@ -11,7 +11,6 @@ test('selects same-directory sibling tests and falls back to workspace tests', (
     mkdirSync(join(h.root, 'tests'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/remote-check.test.ts'), '');
     writeFileSync(join(h.root, 'tests/catalogue.test.ts'), '');
-    writeFileSync(join(h.root, 'services/kernel/kernel.ts'), '');
     expect(
       siblingTestFiles(
         ['scripts/remote-check.ts', 'packages/catalogue.ts', 'services/kernel/kernel.ts', 'readme.md'],
