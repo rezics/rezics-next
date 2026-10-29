@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { git, rebaseOnto } from './merge-train.ts';
+import { rebaseOnto } from './merge-train.ts';
+import { git } from './merge.ts';
 import { integrationHarness, markdown } from './test-support.ts';
 
 const catalog = 'apps/web/messages/en.json';
