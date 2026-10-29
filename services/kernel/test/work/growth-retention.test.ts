@@ -10,7 +10,7 @@ let db: GrowthDatabase;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 const prefix = `retention-growth:${crypto.randomUUID()}:`;
 const dayMs = 24 * 60 * 60 * 1000;
-// Fixed-width keys keep primary-key probes local; this depth preserves the indexed full-batch plan.
+// Fixed-width keys keep primary-key probes local; 49,152 rows per history axis form the realistic baseline.
 const historySize = 49_152;
 
 beforeAll(async () => {
@@ -46,15 +46,22 @@ async function seed(db: GrowthDatabase, kind: 'old' | 'recent', amount: number, 
 
 async function seedShortBatch(
   db: GrowthDatabase,
-  kind: 'short-eligible' | 'short-long-lived' | 'short-recent',
+  kind: 'short-eligible' | 'short-warmup' | 'short-long-lived' | 'short-recent' | 'full-eligible' | 'full-warmup',
   amount: number,
   offset: number,
 ): Promise<void> {
   if (amount === 0) return;
   const now = Date.now();
   const createdAt =
-    kind === 'short-eligible' ? now - 401 * dayMs : kind === 'short-long-lived' ? now - 400 * dayMs : now - dayMs;
-  const completedAt = kind === 'short-eligible' ? now - 400 * dayMs : now - dayMs;
+    kind === 'short-eligible' || kind === 'short-warmup' || kind === 'full-eligible' || kind === 'full-warmup'
+      ? now - 401 * dayMs
+      : kind === 'short-long-lived'
+        ? now - 400 * dayMs
+        : now - dayMs;
+  const completedAt =
+    kind === 'short-eligible' || kind === 'short-warmup' || kind === 'full-eligible' || kind === 'full-warmup'
+      ? now - 400 * dayMs
+      : now - dayMs;
   await db.pool.query(
     `INSERT INTO dbos.workflow_status (
        workflow_uuid, status, name, authenticated_roles, recovery_attempts,
@@ -68,47 +75,37 @@ async function seedShortBatch(
   );
 }
 
-async function warmRetentionBatch(growth: GrowthDatabase, expected: number): Promise<void> {
+async function warmRetentionBatch(growth: GrowthDatabase, kind: 'short-warmup' | 'full-warmup', expected: number): Promise<void> {
   const eligible = await growth.admin.query(
     `SELECT * FROM dbos.workflow_status
       WHERE workflow_uuid LIKE $1 AND completed_at < $2
       ORDER BY created_at LIMIT 1000`,
-    [`${prefix}%`, Date.now() - 30 * dayMs],
+    [`${prefix}${kind}:%`, Date.now() - 30 * dayMs],
   );
   expect(eligible.rows).toHaveLength(expected);
   expect(await runWorkflowRetentionBatch(30, client)).toBe(expected);
-  await growth.admin.query(
-    `INSERT INTO dbos.workflow_status
-     SELECT * FROM jsonb_populate_recordset(NULL::dbos.workflow_status, $1::jsonb)`,
-    [JSON.stringify(eligible.rows)],
-  );
 }
 
 test('a short retention batch stays bounded as retained workflow history grows', async () => {
   const report = await checkGrowth(db, {
     name: 'short workflow retention batch',
     rule: 'series',
-    scales: [64, 512, 4096],
+    scales: [1, 4, 16],
     repetitions: 1,
-    warmup: (growth) => warmRetentionBatch(growth, 10),
+    warmup: (growth) => warmRetentionBatch(growth, 'short-warmup', 10),
     bounds: {
       statements: 'constant',
       rows: 'constant',
       blocks: 'logarithmic',
     },
-    slack: {
-      rows: { absolute: 10, relative: 0 },
-      blocks: { absolute: 24, relative: 0 },
-    },
+    indexProbes: 40,
     async grow(growth, scale, previous) {
-      // Reinsert the same ten eligible rows after the previous measurement deleted them.
-      await seedShortBatch(growth, 'short-eligible', 10, 0);
-      if (previous === 0) {
-        // The old rows are long-lived, not eligible.
-        await seedShortBatch(growth, 'short-long-lived', historySize, 0);
-        await seedShortBatch(growth, 'short-recent', historySize, 0);
-      }
-      await seedShortBatch(growth, 'short-recent', scale - previous, historySize + previous);
+      await seedShortBatch(growth, 'short-eligible', 10, scale * 10);
+      await seedShortBatch(growth, 'short-warmup', 10, scale * 10);
+      const added = historySize * (scale - previous);
+      const offset = historySize * previous;
+      await seedShortBatch(growth, 'short-long-lived', added, offset);
+      await seedShortBatch(growth, 'short-recent', added, offset);
     },
     async operation() {
       expect(await runWorkflowRetentionBatch(30, client)).toBe(10);
@@ -125,30 +122,25 @@ test('a short retention batch stays bounded as retained workflow history grows',
 });
 
 test('one retention batch stays bounded as retained and recent workflow history grow', async () => {
-  // A fixed deep history keeps the planner on the ordered index path while the measured populations grow.
-  await seed(db, 'old', historySize, 0);
-  await seed(db, 'recent', historySize, 0);
-
   const report = await checkGrowth(db, {
     name: 'workflow retention batch',
     rule: 'series',
-    scales: [64, 512, 4096],
+    scales: [1, 4, 16],
     repetitions: 1,
-    warmup: (growth) => warmRetentionBatch(growth, 1000),
+    warmup: (growth) => warmRetentionBatch(growth, 'full-warmup', 1000),
     bounds: {
       statements: 'constant',
       rows: 'constant',
       blocks: 'logarithmic',
     },
-    slack: {
-      rows: { absolute: 10, relative: 0 },
-      blocks: { absolute: 24, relative: 0 },
-    },
+    indexProbes: 4000,
     async grow(growth, scale, previous) {
-      const added = scale - previous;
-      const offset = historySize + previous;
+      const added = historySize * (scale - previous);
+      const offset = historySize * previous;
       await seed(growth, 'old', added, offset);
       await seed(growth, 'recent', added, offset);
+      await seedShortBatch(growth, 'full-eligible', 1000, scale * 1000);
+      await seedShortBatch(growth, 'full-warmup', 1000, scale * 1000);
     },
     async operation() {
       expect(await runWorkflowRetentionBatch(30, client)).toBe(1000);

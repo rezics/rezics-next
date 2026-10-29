@@ -13,7 +13,7 @@ import type { CloudEvent } from '../src/events/log.ts';
 import scanPartitions from '../src/events/scan-partitions.sql';
 import { readWorkerConfig, startWorker } from '../src/worker.ts';
 import type { WorkContext } from '../src/work/registry.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from './support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from './support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -105,6 +105,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
   const growth = await openGrowthDatabase(databaseUrl);
   const start = 4096 - 96 - Math.floor(Math.random() * 64);
   const hot = start;
+  const consumerName = EFFECTS_CONSUMER;
   const consumer = { enqueue: async () => {} } as ReturnType<typeof registerEffects>;
   const relay = effectsRelay(growth.pool, consumer);
   const basePositions = new Map<number, string>();
@@ -116,15 +117,35 @@ test('effects relay discovery stays within its bound as outbox history grows', a
   const historyLast = historyFirst + 39;
   const historyPerPartition = 125;
   const historyInitial = new Map<number, string>();
+  const historyHeads = new Map<number, number>();
+  let savedCheckpoints: { partition_no: number; consumer: string; epoch: number; position: string }[] = [];
 
   try {
+    const saved = await growth.admin.query<{
+      partition_no: number;
+      consumer: string;
+      epoch: number;
+      position: string;
+    }>(
+      'SELECT partition_no, consumer, epoch, position::text FROM core.consumer_checkpoint WHERE consumer = $1',
+      [consumerName],
+    );
+    savedCheckpoints = saved.rows;
+    const hotPosition = await growth.admin.query<{ position: string }>(
+      'SELECT position::text FROM core.partition WHERE partition_no = $1',
+      [hot],
+    );
+    initialPositions.set(hot, hotPosition.rows[0]!.position);
     const history = await growth.admin.query<{ partition_no: number; previous: string }>(
       `UPDATE core.partition SET position = position + $3
        WHERE partition_no BETWEEN $1 AND $2
        RETURNING partition_no, (position - $3)::text AS previous`,
       [historyFirst, historyLast, historyPerPartition],
     );
-    for (const row of history.rows) historyInitial.set(row.partition_no, row.previous);
+    for (const row of history.rows) {
+      historyInitial.set(row.partition_no, row.previous);
+      historyHeads.set(row.partition_no, Number(row.previous) + historyPerPartition);
+    }
     const seeded = await growth.admin.query<{ id: string }>(
       `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
        SELECT partition.partition_no, partition.position - $4::int + step, 0, 1, 1, gen_random_uuid(), $3,
@@ -138,66 +159,48 @@ test('effects relay discovery stays within its bound as outbox history grows', a
     for (const row of seeded.rows) insertedIds.push(row.id);
     await growth.admin.query(
       `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
-       SELECT partition_no, $3, 1, position FROM core.partition WHERE partition_no BETWEEN $1 AND $2
+       SELECT partition_no, $1, 1,
+              CASE WHEN partition_no = $2 THEN position ELSE position + 8192 END
+       FROM core.partition
        ON CONFLICT (consumer, partition_no) DO UPDATE SET epoch = 1, position = EXCLUDED.position`,
-      [historyFirst, historyLast, EFFECTS_CONSUMER],
-    );
-    await growth.admin.query(
-      'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 AND partition_no BETWEEN $2 AND $3',
-      [EFFECTS_CONSUMER, start, start + 63],
+      [consumerName, hot],
     );
     await checkGrowth(growth, {
       name: 'effects relay discovery',
       rule: 'series',
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      indexProbes: 1,
       grow: async (db, scale, previous) => {
         for (let offset = previous; offset < scale; offset++) {
-          const partition = start + offset;
-          const { rows } = await db.admin.query<{ position: string; previous: string }>(
-            'UPDATE core.partition SET position = position + 1 WHERE partition_no = $1 RETURNING position::text, (position - 1)::text AS previous',
-            [partition],
-          );
-          const position = BigInt(rows[0]!.position);
-          initialPositions.set(partition, rows[0]!.previous);
+          const partition = historyFirst + (offset % (historyLast - historyFirst + 1));
+          const position = historyHeads.get(partition)! + 1 + Math.floor(offset / (historyLast - historyFirst + 1));
           const id = Bun.randomUUIDv7();
           insertedIds.push(id);
-          basePositions.set(partition, String(position));
           await db.admin.query(
             `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
              VALUES ($1, $2, 0, 1, 1, $3, $4, $5, $6)`,
-            [partition, position.toString(), id, CREATED, crypto.randomUUID(), { id: crypto.randomUUID() }],
-          );
-          await db.admin.query(
-            `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
-             VALUES ($1, $2, 1, $3)
-             ON CONFLICT (consumer, partition_no) DO UPDATE SET epoch = 1, position = EXCLUDED.position`,
-            [partition, EFFECTS_CONSUMER, position.toString()],
+            [partition, position, id, CREATED, crypto.randomUUID(), { id: crypto.randomUUID() }],
           );
         }
-
-        const hotHead = Number(basePositions.get(hot) ?? '0');
-        const extra = scale - previous;
-        if (extra > 0 && previous > 0) {
-          await db.admin.query('UPDATE core.partition SET position = position + $2 WHERE partition_no = $1', [
-            hot,
-            extra,
-          ]);
-          for (let position = hotHead + 1; position <= hotHead + extra; position++) {
-            const id = Bun.randomUUIDv7();
-            insertedIds.push(id);
-            await db.admin.query(
-              `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
-               VALUES ($1, $2, 0, 1, 1, $3, $4, $5, $6)`,
-              [hot, position, id, CREATED, crypto.randomUUID(), { id: crypto.randomUUID() }],
-            );
+      },
+      prepare: async (db) => {
+        const measured = await capture(db, () =>
+          withGrowthConnection(db, (client) => scanPartitions.run(client, { consumer: consumerName })),
+        );
+        const nodes: Record<string, unknown>[] = [];
+        const visit = (value: unknown): void => {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+          const node = value as Record<string, unknown>;
+          nodes.push(node);
+          if (Array.isArray(node.Plans)) for (const child of node.Plans) visit(child);
+        };
+        for (const plan of measured.capture.plans) {
+          for (const entry of Array.isArray(plan) ? plan : [plan]) {
+            if (entry && typeof entry === 'object' && 'Plan' in entry) visit((entry as { Plan: unknown }).Plan);
           }
-          const newHead = hotHead + extra;
-          basePositions.set(hot, String(newHead));
-          await db.admin.query(
-            'UPDATE core.consumer_checkpoint SET position = $3 WHERE consumer = $1 AND partition_no = $2',
-            [EFFECTS_CONSUMER, hot, String(newHead)],
-          );
         }
+        expect(nodes.some((node) => node['Schema'] === 'core' && node['Relation Name'] === 'outbox' &&
+          node['Index Name'] === 'outbox_pkey' && String(node['Index Cond'] ?? '').includes('position'))).toBe(true);
       },
       operation: async (db) => {
         const { rows } = await db.admin.query<{ position: string }>(
@@ -214,7 +217,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
           [hot, position, id, CREATED, crypto.randomUUID(), { id: crypto.randomUUID() }],
         );
         await withGrowthConnection(db, async (client) => {
-          const discovered = await scanPartitions.run(client, { consumer: EFFECTS_CONSUMER });
+          const discovered = await scanPartitions.run(client, { consumer: consumerName });
           if (discovered.length !== 1 || discovered[0]!.partition_no !== hot)
             throw new Error(`expected only hot partition ${hot}, found ${discovered.map((row) => row.partition_no)}`);
           const result = await relay.run(hot);
@@ -226,11 +229,14 @@ test('effects relay discovery stays within its bound as outbox history grows', a
       repetitions: 1,
     });
   } finally {
-    await growth.admin.query(
-      `DELETE FROM core.consumer_checkpoint
-       WHERE consumer = $1 AND (partition_no BETWEEN $2 AND $3 OR partition_no BETWEEN $4 AND $5)`,
-      [EFFECTS_CONSUMER, start, start + 63, historyFirst, historyLast],
-    );
+    await growth.admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer = $1', [consumerName]);
+    if (savedCheckpoints.length > 0) {
+      await growth.admin.query(
+        `INSERT INTO core.consumer_checkpoint
+         SELECT * FROM jsonb_populate_recordset(NULL::core.consumer_checkpoint, $1::jsonb)`,
+        [JSON.stringify(savedCheckpoints)],
+      );
+    }
     if (insertedIds.length > 0) {
       await growth.admin.query('DELETE FROM core.outbox WHERE id = ANY($1::uuid[])', [insertedIds]);
     }

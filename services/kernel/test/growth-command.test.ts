@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import pg, { type PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandEvent } from '../src/command/command.ts';
 import { newId } from '../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
 import { readPartition } from '../src/partition/partition.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -110,8 +110,8 @@ async function reset(): Promise<void> {
 
 async function grow(growthDb: GrowthDatabase, scale: number, previous: number): Promise<void> {
   await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
-    from: previous * ordinalsPerScale,
-    to: scale * ordinalsPerScale,
+    from: 4096 + previous * ordinalsPerScale,
+    to: 4096 + scale * ordinalsPerScale,
   });
 }
 
@@ -137,20 +137,69 @@ function check(name: string, operation: Parameters<typeof checkGrowth>[1]['opera
   });
 }
 
+function planNodes(plans: readonly unknown[]): Record<string, unknown>[] {
+  const nodes: Record<string, unknown>[] = [];
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const node = value as Record<string, unknown>;
+    nodes.push(node);
+    if (Array.isArray(node.Plans)) for (const child of node.Plans) visit(child);
+  };
+  for (const plan of plans) {
+    for (const entry of Array.isArray(plan) ? plan : [plan]) {
+      if (entry && typeof entry === 'object' && 'Plan' in entry) visit((entry as { Plan: unknown }).Plan);
+    }
+  }
+  return nodes;
+}
+
 test('New command stays within its bound as N grows', async () => {
   await reset();
+  await seed({ pool: db.pool, admin }, population, { from: 0, to: 4096 });
   await createAnchorCommand();
-  await check('New command', async (_growthDb, scale, repetition) =>
-    runCommand(
-      pool,
-      {
-        partition: anchorPartition,
-        basis,
-        receipt: { actorAccountId: actor, kind, key: `${prefix}new-${scale}-${repetition}`, digest },
-      },
-      async () => ({ value: { ok: true }, events: events() }),
-    ),
-  );
+  await checkGrowth(db, {
+    name: 'New command',
+    rule: 'series',
+    scales: [1, 8, 64],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    indexProbes: 4,
+    grow,
+    prepare: async (_growthDb, scale, repetition) => {
+      const measured = await capture(db, () =>
+        runCommand(
+          pool,
+          {
+            partition: anchorPartition,
+            basis,
+            receipt: { actorAccountId: actor, kind, key: `${prefix}plan-${scale}-${repetition}`, digest },
+          },
+          async () => ({ value: { ok: true }, events: events() }),
+        ),
+      );
+      const nodes = planNodes(measured.capture.plans);
+      const receiptRead = nodes.find(
+        (node) => node['Schema'] === 'core' && node['Relation Name'] === 'receipt' && node['Index Name'] === 'receipt_pkey',
+      );
+      expect(receiptRead).toBeDefined();
+      expect(String(receiptRead?.['Index Cond'] ?? '')).toContain('partition_no');
+      expect(String(receiptRead?.['Index Cond'] ?? '')).toContain('idempotency_key');
+      const partitionWrite = nodes.find(
+        (node) => node['Schema'] === 'core' && node['Relation Name'] === 'partition' && node['Index Name'] === 'partition_pkey',
+      );
+      expect(partitionWrite).toBeDefined();
+      expect(Number(partitionWrite?.['Actual Rows'])).toBe(1);
+    },
+    operation: async (_growthDb, scale, repetition) =>
+      runCommand(
+        pool,
+        {
+          partition: anchorPartition,
+          basis,
+          receipt: { actorAccountId: actor, kind, key: `${prefix}new-${scale}-${repetition}`, digest },
+        },
+        async () => ({ value: { ok: true }, events: events() }),
+      ),
+  });
 }, 90_000);
 
 test('Idempotent replay stays within its bound as N grows', async () => {
