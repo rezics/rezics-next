@@ -1,6 +1,7 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
+import type { PoolClient } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import {
   createAuthService,
@@ -205,51 +206,128 @@ test('checkGrowth native idempotent password and credentialless commits have con
 }, 120000);
 
 test('proof erasure uses referencing-key indexes as unrelated receipts grow', async () => {
-  const report = await checkGrowth(db, {
-    name: 'native provisioning proof erasure',
-    bounds,
-    async grow(database, scale) {
-      const count = Number(
-        (await database.admin.query('SELECT count(*) FROM "user" WHERE id LIKE $1', ['decoy-%'])).rows[0].count,
-      );
-      if (count > scale * 1024) {
-        await database.admin.query('DELETE FROM "user" WHERE id LIKE $1 AND substring(id from 7)::int>$2', [
-          'decoy-%',
-          scale * 1024,
-        ]);
-        await database.admin.query(
-          'DELETE FROM auth_registration_stage WHERE registration_id LIKE $1 AND substring(registration_id from 7)::int>$2',
-          ['decoy-%', scale * 1024],
+  const statements = [
+    'BEGIN',
+    'DELETE FROM "user" WHERE id=$1',
+    `INSERT INTO auth_consent_erasure (account_id,due_at)
+             VALUES ($1,clock_timestamp()+interval '5 minutes 10 seconds')
+             ON CONFLICT (account_id) DO NOTHING`,
+    'COMMIT',
+  ];
+  const relations = [
+    'account',
+    'auth_barrier_proof',
+    'auth_client',
+    'auth_consent_erasure',
+    'auth_key_assertion',
+    'auth_provisioning_receipt',
+    'auth_provisioning_receipt',
+    'auth_public_key',
+    'auth_recovery',
+    'auth_session_opening',
+    'oauthAccessToken',
+    'oauthRefreshToken',
+    'passkey',
+    'session',
+    'user',
+  ];
+  type NativePlan = { Plan: { 'Relation Name': string }; 'Query Text': string };
+  const byScale = new Map<number, NativePlan[][]>();
+  const clients = new Set<PoolClient>();
+  let observing: NativePlan[] | undefined;
+  // Read the notices checkGrowth already captures; no extra native capture or SQL.
+  const observe = (notice: { message?: string }) => {
+    const message = notice.message;
+    if (observing && message?.startsWith('duration:') && message.includes('plan:\n'))
+      observing.push(JSON.parse(message.slice(message.indexOf('plan:\n') + 'plan:\n'.length)) as NativePlan);
+  };
+  const observeClient = (client: PoolClient) => {
+    if (clients.has(client)) return;
+    clients.add(client);
+    client.on('notice', observe);
+  };
+  db.pool.on('acquire', observeClient);
+  try {
+    const report = await checkGrowth(db, {
+      name: 'native provisioning proof erasure',
+      bounds,
+      async grow(database, scale) {
+        const count = Number(
+          (await database.admin.query('SELECT count(*) FROM "user" WHERE id LIKE $1', ['decoy-%'])).rows[0].count,
         );
-      } else if (count < scale * 1024) await grow(database, scale, count / 1024);
-      await database.admin.query('VACUUM (ANALYZE)');
-    },
-    async operation(_database, _scale, repetition) {
-      const id = `erase-${repetition}`;
-      pending(id, true);
-      // Setup is outside the measured Auth pool, while actual native erasure is captured.
-      const isolated = await createAuthService({ ...erasureOptions(), database: db.admin });
-      const proof = (await isolated.internal.provisionCredentialless({ authorization: id })).provisioningEvidence!;
-      Object.assign(accounts.get(id)!, { state: 'deleted', fenced: true });
-      await service.internal.eraseAccount(id);
-      expect(await createProvisioningEvidenceVerifier({ database: db.admin }).resolve(proof)).toBeNull();
-    },
-  });
-  for (const { cost } of report.samples) {
-    expect(cost.statements).toBe(1);
-    expect(cost.rows).toBeLessThanOrEqual(5);
+        if (count > scale * 1024) {
+          await database.admin.query('DELETE FROM "user" WHERE id LIKE $1 AND substring(id from 7)::int>$2', [
+            'decoy-%',
+            scale * 1024,
+          ]);
+          await database.admin.query(
+            'DELETE FROM auth_registration_stage WHERE registration_id LIKE $1 AND substring(registration_id from 7)::int>$2',
+            ['decoy-%', scale * 1024],
+          );
+        } else if (count < scale * 1024) await grow(database, scale, count / 1024);
+        await database.admin.query('VACUUM (ANALYZE)');
+      },
+      async operation(_database, scale, repetition) {
+        const id = `erase-${repetition}`;
+        pending(id, true);
+        // Setup is outside the measured Auth pool, while actual native erasure is captured.
+        const isolated = await createAuthService({ ...erasureOptions(), database: db.admin });
+        const proof = (await isolated.internal.provisionCredentialless({ authorization: id })).provisioningEvidence!;
+        Object.assign(accounts.get(id)!, { state: 'deleted', fenced: true });
+        const documents: NativePlan[] = [];
+        observing = documents;
+        try {
+          await service.internal.eraseAccount(id);
+        } finally {
+          observing = undefined;
+        }
+        // Warmups emit no plans. Require exactly every measured repetition below.
+        if (documents.length) {
+          const runs = byScale.get(scale) ?? [];
+          runs.push(documents);
+          byScale.set(scale, runs);
+        }
+        expect(await createProvisioningEvidenceVerifier({ database: db.admin }).resolve(proof)).toBeNull();
+      },
+    });
+    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+    for (const { scale, cost, repetitions } of report.samples) {
+      const runs = byScale.get(scale)!;
+      expect(runs).toHaveLength(repetitions.length);
+      for (const documents of runs) {
+        expect(documents.map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
+        expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'user')!['Query Text']).toBe(statements[1]);
+        expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'auth_consent_erasure')!['Query Text']).toBe(
+          statements[2],
+        );
+      }
+      for (const measured of [cost, ...repetitions]) {
+        expect(measured.statements).toBe(2);
+        expect(measured.controlStatements).toBe(2);
+        expect(measured.plans).toBe(relations.length);
+        expect(measured.rows).toBeLessThanOrEqual(5);
+        expect(measured.relations['public.auth_consent']).toBeUndefined();
+        expect(measured.relations['public.auth_registration_stage']).toBeUndefined();
+      }
+    }
+    pending('index-erasure', true);
+    await service.internal.provisionCredentialless({ authorization: 'index-erasure' });
+    Object.assign(accounts.get('index-erasure')!, { state: 'deleted', fenced: true });
+    const actual = await capture(db, () => service.internal.eraseAccount('index-erasure'));
+    const plan = nodes(actual.capture.plans);
+    expect(
+      plan.some((node) => node['Relation Name'] === 'auth_provisioning_receipt' && node['Node Type'] === 'Seq Scan'),
+    ).toBe(false);
+    for (const index of ['auth_provisioning_receipt_owner_idx', 'auth_provisioning_receipt_credential_idx'])
+      expect(plan.some((node) => node['Index Name'] === index)).toBe(true);
+    expect(actual.capture.statements).toEqual(statements);
+    expect((actual.capture.plans as NativePlan[]).map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
+    expect(costOf(actual.capture).statements).toBe(2);
+    expect(costOf(actual.capture).controlStatements).toBe(2);
+  } finally {
+    db.pool.off('acquire', observeClient);
+    for (const client of clients) client.off('notice', observe);
   }
-  pending('index-erasure', true);
-  await service.internal.provisionCredentialless({ authorization: 'index-erasure' });
-  Object.assign(accounts.get('index-erasure')!, { state: 'deleted', fenced: true });
-  const actual = await capture(db, () => service.internal.eraseAccount('index-erasure'));
-  const plan = nodes(actual.capture.plans);
-  expect(
-    plan.some((node) => node['Relation Name'] === 'auth_provisioning_receipt' && node['Node Type'] === 'Seq Scan'),
-  ).toBe(false);
-  for (const index of ['auth_provisioning_receipt_owner_idx', 'auth_provisioning_receipt_credential_idx'])
-    expect(plan.some((node) => node['Index Name'] === index)).toBe(true);
-  expect(costOf(actual.capture).statements).toBe(1);
 }, 120000);
 
 // A second native service uses the admin pool only for unmeasured erasure setup.
