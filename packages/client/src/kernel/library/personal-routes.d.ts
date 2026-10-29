@@ -3878,6 +3878,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 label: string;
                             } | null;
                             subjectId: string;
+                            incarnationId?: string | null;
                             state: string;
                             revision: number;
                             createdAt: string;
@@ -3942,6 +3943,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 label: string;
                             } | null;
                             subjectId: string;
+                            incarnationId?: string | null;
                             state: string;
                             revision: number;
                             createdAt: string;
@@ -4377,6 +4379,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     label: string;
                                 } | null;
                                 subjectId: string;
+                                incarnationId?: string | null;
                                 state: string;
                                 revision: number;
                                 createdAt: string;
@@ -4495,6 +4498,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     body: {
                         state: string;
                         revision?: number;
+                        incarnationId?: string;
                     };
                     params: {
                         subjectId: string;
@@ -4507,6 +4511,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         200: {
                             libraryEntry: {
                                 subjectId: string;
+                                incarnationId?: string | null;
                                 state: string;
                                 revision: number;
                                 createdAt: string;
@@ -4516,6 +4521,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         201: {
                             libraryEntry: {
                                 subjectId: string;
+                                incarnationId?: string | null;
                                 state: string;
                                 revision: number;
                                 createdAt: string;
@@ -4637,6 +4643,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     };
                     query: {
                         revision?: number;
+                        incarnationId?: string;
                     };
                     headers: {
                         "idempotency-key": string;

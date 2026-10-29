@@ -6,6 +6,7 @@ export type EntryRow = {
     accountId: string;
     subjectId: string;
     requestedSubjectId: string | null;
+    incarnationId: string | null;
     state: string;
     revision: number;
     createdAt: string;
@@ -13,8 +14,9 @@ export type EntryRow = {
     transactionId: string;
 };
 /** Private view of one library entry. State changes only through a revision compare-and-swap. */
-export type Entry = Omit<EntryRow, 'route' | 'state'> & {
+export type Entry = Omit<EntryRow, 'route' | 'state' | 'incarnationId'> & {
     state: EntryState;
+    incarnationId?: string | null;
 };
 export type EntryDraft = {
     accountId: string;
