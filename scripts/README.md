@@ -174,7 +174,8 @@ Admission retries races against other callers. The default probe interval is fiv
    `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` shares downloaded packages across runs.
    Pinned Bun runtimes are cached by version and build under `/srv/rezics-check/pinned-bun/<version>-<build>/package/bin/bun`.
    The host verifies the cached binary's revision on every run and downloads a replacement when it is missing or stale.
-   Removing `/srv/rezics-check/pinned-bun` is always safe; the next run downloads the pinned runtime again.
+   Remove `/srv/rezics-check/pinned-bun` only when no run is active on the host and the host can download the pinned
+   runtime from the npm registry; the next run needs that download to recreate the cache.
    `BUN_RUNTIME_TRANSPILER_CACHE_PATH=<run-directory>/bun-runtime-transpiler-cache` isolates runtime transpilation.
    Chromium uses the shared `/srv/rezics-check/browsers` installation.
 4. Execute inside a transient `rezics-check-<run-id>.scope` in a nested per-run slice under `rezics-check.slice`.

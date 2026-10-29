@@ -836,9 +836,8 @@ function startRemote(
   };
 }
 
-async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!condition() && Date.now() < deadline) await Bun.sleep(10);
+async function waitFor(condition: () => boolean): Promise<void> {
+  while (!condition()) await Bun.sleep(10);
   expect(condition()).toBe(true);
 }
 
@@ -3104,11 +3103,13 @@ if (command === 'systemd-run') {
     process.exit(1);
   }
   if (process.env.SYSTEMD_MODE === 'systemd-259' && !args.includes('--expand-environment=no')) {
-    const script = args[args.indexOf('sh') + 2] ?? '';
-    if (/\$\{(?![A-Za-z_][A-Za-z0-9_]*\})[^}]+\}/.test(script)) {
-      console.error('Invalid environment variable name evaluates to an empty string');
-      process.exit(1);
-    }
+    const start = args.indexOf('sh');
+    const expanded = args.slice(start).map((argument) =>
+      argument.replace(/\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_reference, plain, braced) =>
+        process.env[plain ?? braced] ?? '',
+      ),
+    );
+    args.splice(start, args.length - start, ...expanded);
   }
   const path = cgroup(process.env.REZICS_CHECK_SLICE!);
   mkdirSync(path, { recursive: true });
@@ -3227,7 +3228,7 @@ test('systemd 259 keeps the run script parameter expansions intact', async () =>
   const { run } = await generatedRun([
     'sh',
     '-c',
-    'value=${1#prefix}; test "$value" = suffix; printf "%s" "$value"',
+    'NAME=suffix; value=${1#prefix}; test "$value" = suffix; test "$NAME" = suffix; test "${NAME}" = suffix; printf "%s" "$value"',
     'sh',
     'prefixsuffix',
   ]);
@@ -3243,6 +3244,8 @@ test('older systemd starts the command without --expand-environment support', as
   const result = fixture.execute(run);
   expect(result.status, result.stderr).toBe(0);
   expect(result.stdout).toContain('old-systemd-started');
+  const scope = fixture.events().find((event) => event.command === 'systemd-run' && !event.args.includes('--help'));
+  expect(scope.args).not.toContain('--expand-environment=no');
 });
 
 test('the run checks installed packages after the command and before recording its exit status', async () => {

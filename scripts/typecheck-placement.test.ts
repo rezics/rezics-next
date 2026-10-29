@@ -104,6 +104,7 @@ test('a tsc failure returns its status and diagnostics without running construct
     cwd: repository,
     encoding: 'utf8',
     env: { ...process.env, DATABASE_URL: 'postgres://existing.test/db', PATH: `${bin}:${process.env.PATH}` },
+    timeout: 60_000,
   });
 
   expect(result.status).toBe(23);
@@ -125,6 +126,7 @@ test('construct failure is returned after a successful tsc', () => {
     cwd: repository,
     encoding: 'utf8',
     env: { ...process.env, DATABASE_URL: 'postgres://existing.test/db', PATH: `${bin}:${process.env.PATH}` },
+    timeout: 60_000,
   });
 
   expect(result.status).toBe(19);
@@ -247,7 +249,7 @@ process.exitCode = await runAuthTypecheck(process.env, {
     const result = spawnSync(
       process.execPath,
       placement === 'existing' ? [join(repository, 'services/auth/scripts/typecheck.ts')] : [fixture, placement],
-      { cwd: repository, encoding: 'utf8', env },
+      { cwd: repository, encoding: 'utf8', env, timeout: 60_000 },
     );
 
     expect(result.status).toBe(23);
