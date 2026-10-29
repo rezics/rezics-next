@@ -113,7 +113,7 @@ test('a raw route delivers a non-JSON body as bytes without request-path JSON va
         operationId: 'probe.raw_body',
         'x-body-mode': 'raw',
         security: [{ bearerAuth: [] }, {}],
-      },
+      } as never,
     },
     ({ body }) => {
       received = body as Uint8Array;
