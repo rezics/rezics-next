@@ -23,8 +23,8 @@ client transport activity; they do not measure coordinator batching or server wo
   counted request/command work. It makes no claim about stored/imported server rows.
 - `record-cpu-growth.test.ts` counts converter calls, SQLite prepares, SQLite executions and SQLite commits at its
   existing 16, 64 and 256 record scales. Existing exact marginal ceilings remain: at most 0.1 prepares, exactly 5
-  converter calls, at most 3.1 transactions and at most 165 executions per added record; prepare growth remains
-  constant and per-record work may not drift upward.
+  converter calls, at most 3.1 transactions and at most 165 executions per added record; constant prepare growth is
+  required and per-record work may not drift upward.
 
 ## Restored prepare bound
 
@@ -38,6 +38,27 @@ assertions, temporary-directory cleanup and timeout are preserved. Bounded diagn
 The prior receipt reported four passing tests and 9,015 assertions; it predates this focused correction and does not
 prove the omitted bound. These are machine-independent work counts, not real CPU timings or whole-importer/server
 scaling evidence.
+
+Focused correction evidence, tested revision `4b91afdd21`:
+
+| Records | Converter calls | SQLite prepares | SQLite executions | Transactions | SQLite commits |
+| ------: | --------------: | --------------: | ----------------: | -----------: | -------------: |
+|      16 |              80 |              62 |              2654 |           51 |             51 |
+|      64 |             320 |              62 |             10526 |          195 |            195 |
+|     256 |            1280 |              64 |             42032 |          773 |            773 |
+
+Command: `bun scripts/worker-check.ts -- bun test services/importer/tests/record-cpu-growth.test.ts`.
+Check ID: `3fd89030-47a7-4407-a903-729877a3d7c7`; log:
+`.temp/goal/checks/worker-check-2026-10-29T10-22-51.029Z-75d4abd7.log`; terminal exit status **1**
+(0 pass, 1 fail, 4 assertions). The wrapper selected the cached pinned Bun revision
+`a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b` and the remote runner's temporary filesystem.
+
+The first failure is `expect(countedViolations(check, samples)).toEqual([])`: the violation is
+`{ unit: 'SQLite prepares', scale: 256, value: 64, limit: 'constant', kind: 'bound' }`.
+Prepares grow from 62 to 64, so the restored zero-slack requirement fails. The retained marginal ceiling alone
+would allow this increase (2 / 240 prepares per added record). Later marginal and rate assertions were not reached
+in this run. The assertion remains restored; runtime repair is outside this correction's contract. No broader
+importer, kernel or root check was run.
 
 ## Documentation handoff
 
