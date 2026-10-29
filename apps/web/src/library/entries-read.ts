@@ -150,14 +150,6 @@ function statusOf(result: { status?: number; error?: { status?: number } | null 
   return undefined;
 }
 
-function codeOf(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object' || !('value' in error)) return undefined;
-  const value = (error as { value: unknown }).value;
-  if (!value || typeof value !== 'object' || !('code' in value)) return undefined;
-  const code = (value as { code: unknown }).code;
-  return typeof code === 'string' ? code : undefined;
-}
-
 function writeHeaders(authorization: string, idempotencyKey: string) {
   // The treaty header type names only Idempotency-Key. The bearer is still sent.
   return { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string };
@@ -250,7 +242,7 @@ async function explainConflict(
   subjectId: string,
   result: { status?: number; error?: { status?: number; value?: unknown } | null },
 ): Promise<LibraryMutationResult | undefined> {
-  if (statusOf(result) !== 409 || codeOf(result.error) !== 'conflict') return undefined;
+  if (statusOf(result) !== 409) return undefined;
   const reloaded = await reloadEntry(client, authorization, subjectId);
   if (!reloaded.ok) return reloaded;
   return { ok: false, reason: 'conflict', entry: reloaded.entry };
