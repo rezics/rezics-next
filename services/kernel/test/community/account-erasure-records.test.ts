@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import type { MembershipWorkInput } from '@rezics/auth-contract';
 import type { Account, CommunityDriver, Fixture, Realm } from '../../../../specs/community-driver.ts';
 import { MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS } from '../../src/community/account-erasure-records.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -330,9 +331,7 @@ test.serial(
     const phase = await import('../../src/community/account-erasure-records.ts');
     try {
       // Model retention removing terminal history, without changing either source operation.
-      await pool.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid=ANY($1::text[])', [
-        [retainedOut.creation_idempotency_key, recent.creation_idempotency_key],
-      ]);
+      await client.deleteWorkflows([retainedOut.creation_idempotency_key, recent.creation_idempotency_key], false);
       await pool.query("UPDATE dbos.workflow_status SET status='PENDING' WHERE workflow_uuid=$1", [
         running.creation_idempotency_key,
       ]);
@@ -408,7 +407,7 @@ test.serial(
       });
       const before = await membership();
       // Retention removed the workflow, so this is a fresh execution with its original durable id and seal.
-      await enqueueMembership(work, retainedOut.creation_idempotency_key, replay!.input![0]);
+      await enqueueMembership(work, retainedOut.creation_idempotency_key, replay!.input![0] as MembershipWorkInput);
       await expect(
         work.retrieveWorkflow(retainedOut.creation_idempotency_key).getResult({ pollingIntervalMs: 10 }),
       ).rejects.toThrow('Membership workflow step failed: reserve');
