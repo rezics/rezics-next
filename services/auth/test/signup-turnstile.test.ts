@@ -388,10 +388,9 @@ test('a taken handle refuses promptly after Turnstile without account effects or
     expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [accountId])).rows).toHaveLength(0);
     expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', [accountId])).rows).toHaveLength(0);
     const staged = (
-      await pool.query(
-        'SELECT ciphertext,expired_at,completed_at FROM auth_registration_stage WHERE request_key=$1',
-        [key],
-      )
+      await pool.query('SELECT ciphertext,expired_at,completed_at FROM auth_registration_stage WHERE request_key=$1', [
+        key,
+      ])
     ).rows;
     expect(staged).toHaveLength(1);
     expect(staged[0]).toMatchObject({ ciphertext: null, completed_at: null });
