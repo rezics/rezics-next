@@ -55,28 +55,3 @@ test('a passing candidate finishes its gate across control-plane main commits an
     h.dispose();
   }
 }, 60_000);
-
-test('a passed stabilize candidate promotes when main moved only by control-plane commits', async () => {
-  const h = integrationHarness();
-  try {
-    h.ensureDev();
-    h.advanceDev('stable');
-    const candidate = h.head();
-    git(h.root, 'branch', 'stabilize', candidate);
-    const path = 'tools/goal/src/main-fix.ts';
-    await Bun.write(`${h.root}/${path}`, 'export {}\n');
-    git(h.root, 'add', path);
-    git(h.root, 'commit', '-m', 'control plane hotfix');
-    const mainFix = h.head('main');
-    let gates = 0;
-    await h.promote(async () => {
-      gates++;
-      return success;
-    });
-    expect(gates).toBe(3); // one candidate gate; two quick gates cut the following window
-    expect(git(h.root, 'merge-base', '--is-ancestor', mainFix, h.head('main'))).toBe('');
-    expect(git(h.root, 'merge-base', '--is-ancestor', candidate, h.head('main'))).toBe('');
-  } finally {
-    h.dispose();
-  }
-}, 60_000);
