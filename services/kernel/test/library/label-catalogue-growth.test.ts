@@ -459,7 +459,9 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(
         operation.name.startsWith('list') ? 8 : 1,
       );
-      expect(Number(node['Rows Removed by Filter'] ?? 0) * Number(node['Actual Loops'])).toBe(0);
+      const removed = Number(node['Rows Removed by Filter'] ?? 0) * Number(node['Actual Loops']);
+      if (removed !== 0)
+        throw new Error(`${operation.name} examined unrelated personal labels: ${JSON.stringify(node)}`);
     }
     if (operation.name !== 'create')
       expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
