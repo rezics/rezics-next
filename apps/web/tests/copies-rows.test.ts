@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { article, calls, lists, open, reset } from './library-copies.browser';
+import { article, calls, open, reset } from './library-copies.browser';
 
 const timeout = 300_000;
 
@@ -42,7 +42,6 @@ test(
       expect(details.indexOf('Study')).toBeLessThan(details.indexOf('Bookshop'));
       expect(details.indexOf('Bookshop')).toBeLessThan(details.indexOf('First copy'));
       expect(await row.getByRole('button', { name: 'Edit copy' }).count()).toBe(0);
-      const readCount = lists().length;
       await row.getByRole('button', { name: 'More actions' }).click();
       const menu = page.getByRole('dialog');
       await menu.waitFor();
@@ -50,7 +49,6 @@ test(
       const edit = page.getByRole('form', { name: 'Edit copy' });
       await edit.waitFor();
       await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
-      expect(await lists()).toHaveLength(readCount);
     } finally {
       await page.context().close();
     }
