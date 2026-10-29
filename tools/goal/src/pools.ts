@@ -11,16 +11,17 @@ function keys(value: Record<string, unknown>, allowed: string[], label: string):
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`unknown ${label} field: ${key}`);
 }
 function text(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !value) throw new Error(`${label} must be text`);
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} must be a nonempty string`);
   return value;
 }
 function positive(value: unknown, label: string, zero = false): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || (zero ? value < 0 : value <= 0))
-    throw new Error(`${label} must be ${zero ? 'non-negative' : 'positive'}`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < (zero ? 0 : 1))
+    throw new Error(`invalid ${label}`);
   return value;
 }
 function burnCeiling(value: unknown): number {
-  return positive(value, 'maxBurnPerHour');
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error('invalid maxBurnPerHour');
+  return value;
 }
 
 /** Parse only the pool section so a live reload cannot change other process settings. */
@@ -65,6 +66,7 @@ export class PoolPolicyReloader {
   constructor(private readonly localFile: string, initial: Pool[], private readonly report: (message: string) => void) {
     this.pools = initial;
     this.initial = initial;
+    try { this.mtime = statSync(localFile).mtimeMs; } catch { /* first choice reports a missing file */ }
   }
   read(): Pool[] {
     try {
