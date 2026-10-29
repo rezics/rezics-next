@@ -255,3 +255,44 @@ process.exitCode = await runAuthTypecheck(process.env, {
     expect(result.stderr).toBe('compiler stderr\n');
   }
 });
+
+test('a successful auth typecheck on a check host never starts another compiler locally', async () => {
+  const status = await runAuthTypecheck(
+    {},
+    {
+      place: async () => 0,
+      prepareCompilerDatabase: async () => {
+        throw new Error('must not start a database after remote success');
+      },
+      typecheck: async () => {
+        throw new Error('must not run tsc locally after remote success');
+      },
+    },
+  );
+
+  expect(status).toBe(0);
+});
+
+test('auth removes its compiler database when starting tsc fails', async () => {
+  const events: string[] = [];
+  const failure = new Error('tsc executable unavailable');
+  const result = runAuthTypecheck(
+    {},
+    {
+      place: async () => null,
+      prepareCompilerDatabase: async () => ({
+        url: 'postgres://throwaway.test/auth',
+        remove: async () => {
+          events.push('removed');
+        },
+      }),
+      typecheck: async () => {
+        events.push('tsc');
+        throw failure;
+      },
+    },
+  );
+
+  await expect(result).rejects.toBe(failure);
+  expect(events).toEqual(['tsc', 'removed']);
+});

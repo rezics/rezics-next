@@ -55,6 +55,10 @@ These two overrides do not apply to workers with a nonempty `GOAL_TASK_ID`.
 The root gate has its own placement rule: it uses the explicit hosts file and suppresses remote recursion with
 `KERNEL_CHECK_ON_REMOTE`.
 
+Auth's standalone typecheck reuses its check's compiler database preparation: one throwaway container receives
+both the kernel and Auth migrations, since Auth's imports also reach kernel SQL. It removes that database after
+tsc exits or fails to start. An existing `DATABASE_URL` bypasses placement and database preparation entirely.
+
 ### Hosts file
 
 `KERNEL_CHECK_REMOTE` names local JSON configuration. It must contain a nonempty `hosts` array:
