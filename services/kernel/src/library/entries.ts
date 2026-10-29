@@ -227,7 +227,7 @@ export function createEntryCommands(config: Dependencies) {
         async (tx, command, prepared) => {
           if ('error' in prepared) throw prepared.error;
           const source = prepared.source;
-          if (!source || source.subjectId !== resolved.subjectId) throw new LibraryNotFoundError();
+          if (!source || (!existing && source.subjectId !== resolved.subjectId)) throw new LibraryNotFoundError();
           if (source.kind !== 'supported' || !hasEntryState(source.profile, parsed.state))
             throw new ProblemError('unsupported_library_profile');
           const seq = await allocateOwnerWriteSeq(tx, owner.accountId);
