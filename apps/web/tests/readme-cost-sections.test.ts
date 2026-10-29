@@ -56,7 +56,9 @@ test('Notifications inbox and Moderation decision cost text is preserved under C
     expect(
       bodyOf(index)
         .split('\n')
-        .filter((line) => line.startsWith('- **')),
+        .filter((line) =>
+          ['- **Touches:**', '- **Bound:**', '- **Growth check:**'].some((label) => line.startsWith(label)),
+        ),
     ).toEqual(bullets);
   }
 });
