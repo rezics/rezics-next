@@ -533,6 +533,37 @@ their ordinary admission check when using the explicit decision to control discl
 its explicit branch only when requested and the authenticated scope permits it. Ordinary single and page
 checks leave that branch disabled and read the same grant and denial keys as before.
 
+## Account standing check
+
+`accountStandingCheck(access, { accountId, action, target, context })` is exported from Access for kernel
+modules sending notices after a write. It returns a frozen map of resource id to the ordinary boolean read
+decision. The target is a resource or the same single-route page accepted by `preparePage` (1–100 ids).
+Derived Access adapters resolve the installed root port.
+
+The recipient is its own durable account principal. There is no session, client id, client-scope operand or
+delegation; an account cannot acquire an organization's identity authority through this port. Identity,
+organization and Realm roles, active-account grants, resource roles, domain eligibility, bans and denials use
+`permission.ts` and `permission-check.sql`, with the same installed Realm role reader as session checks.
+Only the session scope and delegation steps are omitted; no placeholder client or parallel formula is used.
+The port point-reads the account itself and denies suspended, fenced, pending, missing and tombstoned accounts,
+as well as organization identities. It does not apply a credential authentication floor.
+
+Each call evaluates at its own current send time, never the post's or effect's earlier T. A grant revoked
+before the call stops delivery. The effect's DBOS step records that outcome, so retry after success does not
+re-evaluate. Inbox listing still rechecks every notice with the recipient's real bearer and scopes before
+showing it; a scoped client therefore sees no extra content.
+
+### Account standing check cost
+
+- Touches: one account-state point read, the evaluator's existing bounded time, inverse and matching
+  membership-role preparation reads, and one run of `permission-check.sql` for the resource or page on its
+  target route. No assignment read runs. Public eligibility retains its owning domain's bounded reads.
+- Bound: constant statements per check, O(log N) blocks for fixed admitted membership and target bounds,
+  with N the grants, accounts and resources. Mention delivery calls it at most ten times per post.
+- Growth check: `test/access/growth-account-standing-check.test.ts` grows grants, accounts and resources at
+  three scales and checks constant statements and logarithmic blocks under the series rule for resources
+  and route pages, including denials and inactive accounts.
+
 ## Read decisions
 
 `prepareReadDecisions(access, { actor, actions: ReadonlySet<string>, context })` resolves the optional

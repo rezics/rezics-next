@@ -1,3 +1,5 @@
+export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
+import { accountStandingCheck, installAccountStandingCheck } from './account-standing.ts';
 export {
   ERASURE_PARTICIPANTS,
   ERASURE_PARTICIPANT_VERSION,
@@ -330,6 +332,7 @@ export function createAccess(config: AccessConfig): Access {
       ).allowed;
     },
   };
+  installAccountStandingCheck(access, (input) => accountStandingCheck(permissions, input));
   installAccessClock(access, clock);
   platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at) => {
     requireAccessDeadline(context.deadline);

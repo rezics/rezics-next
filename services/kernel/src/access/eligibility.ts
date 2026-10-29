@@ -1,3 +1,4 @@
+import type { StandingPrincipal } from './account-standing.ts';
 import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { within } from './authenticate.ts';
@@ -8,7 +9,7 @@ declare const resourceEligibility: unique symbol;
 export type ResourceEligibility = { readonly [resourceEligibility]: true };
 export type ResourceIdentity = Readonly<Pick<Resource, 'route' | 'id'>>;
 export type ResourceEligibilityPrepareContext = Readonly<{
-  actor: Actor;
+  actor: Actor | StandingPrincipal;
   action: string;
   resource: ResourceIdentity;
   pool: AccessContext['pool'];
@@ -16,7 +17,7 @@ export type ResourceEligibilityPrepareContext = Readonly<{
 }>;
 export type ResourceEligibilityVerifyContext<E> = Readonly<{
   client: AccessClient;
-  actor: Actor;
+  actor: Actor | StandingPrincipal;
   action: string;
   resource: ResourceIdentity;
   evidence: E;
@@ -39,7 +40,7 @@ export type ResourceEligibilityOptions<E> = Readonly<{
   verify(context: ResourceEligibilityVerifyContext<E>): Promise<boolean>;
 }>;
 
-type Binding = Readonly<{ actor: Actor; action: string; resource: Resource; deadline: number }>;
+type Binding = Readonly<{ actor: Actor | StandingPrincipal; action: string; resource: Resource; deadline: number }>;
 type Verify = (client: AccessClient, at: string) => Promise<boolean>;
 type Capability = {
   resource: ResourceIdentity;

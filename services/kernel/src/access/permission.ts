@@ -1,7 +1,8 @@
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
-import type { Account } from './account-data.ts';
+import { readAccount, type Account } from './account-data.ts';
+import { installAccountStandingCheck, type StandingPrincipal } from './account-standing.ts';
 import { accessCommandAttempt } from './command-admission.ts';
 import { authoritativeTimeValue, hasLiveCommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import {
@@ -121,11 +122,16 @@ async function readPermissionTime(
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt, observedAt };
 }
-const bind = (actor: Actor, action: string, resource: Resource, page?: ResourcePage): string =>
+type PermissionActor = Actor | StandingPrincipal;
+const isSession = (actor: PermissionActor): actor is AccountActor =>
+  actor.kind === 'account' && actor.clientId !== undefined;
+const bind = (actor: PermissionActor, action: string, resource: Resource, page?: ResourcePage): string =>
   JSON.stringify([
     actor.kind,
     actor.kind === 'account'
-      ? [actor.accountId, actor.clientId, actor.scopes, actor.requestedBy, actor.authnEpoch]
+      ? isSession(actor)
+        ? [actor.accountId, actor.clientId, actor.scopes, actor.requestedBy, actor.authnEpoch]
+        : [actor.accountId]
       : null,
     action,
     resource.route,
@@ -162,7 +168,7 @@ export async function checkPermission(
 
 async function checkPreparedPermission(
   client: AccessClient,
-  actor: Actor,
+  actor: PermissionActor,
   action: string,
   resource: Resource,
   evidence?: unknown,
@@ -170,7 +176,7 @@ async function checkPreparedPermission(
   clock?: () => Date,
   page?: ResourcePage,
   includeExplicit = false,
-): Promise<AccessDecision> {
+): Promise<AccessDecision & { decisions?: Readonly<Record<string, boolean>> }> {
   setGovernanceReach(evidence, []);
   const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
   try {
@@ -248,7 +254,11 @@ async function checkPreparedPermission(
             : [],
         ),
       );
-    return { allowed, explicit: includeExplicit && rows.every((row) => row.explicit === true) };
+    return {
+      allowed,
+      explicit: includeExplicit && rows.every((row) => row.explicit === true),
+      decisions: Object.freeze(Object.fromEntries(rows.map((row) => [row.resourceId!, row.allowed === true]))),
+    };
   } catch (error) {
     throwAccessUnavailable(error, facts?.deadline);
     throwEvidenceFailure(error);
@@ -262,11 +272,12 @@ export function createAccess(config: PermissionConfig): Access {
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
   const catalogue = resolveResourceRoles(actions, config.resourceRoles);
   async function preparePermission(
-    actor: Actor,
+    actor: PermissionActor,
     action: string,
     resource: Resource,
     context: AccessContext,
     page?: ResourcePage,
+    standingAccount?: Account,
   ) {
     const evidence = Object.freeze({});
     const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
@@ -290,12 +301,21 @@ export function createAccess(config: PermissionConfig): Access {
       } else {
         if (
           !uuidPattern.test(actor.accountId) ||
-          !actor.clientId ||
-          actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))
+          (isSession(actor) &&
+            (!actor.clientId || actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))))
         )
           return evidence;
-        account = config.accountEvidence(actor, context);
-        if (!account || !eligible(account, actor)) return evidence;
+        account = isSession(actor) ? config.accountEvidence(actor, context) : standingAccount;
+        if (
+          !account ||
+          account.accountId !== actor.accountId ||
+          account.route !== routeOf(actor.accountId) ||
+          account.kind !== 'actor' ||
+          account.state !== 'active' ||
+          account.fenced !== false ||
+          (isSession(actor) && !eligible(account, actor))
+        )
+          return evidence;
       }
       const verifyFloor = await prepareAnonymousEligibility(
         { actor, action, resource: Object.freeze({ ...resource }), deadline },
@@ -307,7 +327,7 @@ export function createAccess(config: PermissionConfig): Access {
       if (!recorded?.databaseAt) return evidence;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
-      const attempt = accessCommandAttempt(context);
+      const attempt = isSession(actor) ? accessCommandAttempt(context) : undefined;
       const at = attempt ? authoritativeTimeValue(attempt.time) : recorded.at;
       let principalId: string | null = null;
       let assignmentRoute: number | null = null;
@@ -315,7 +335,7 @@ export function createAccess(config: PermissionConfig): Access {
       const members: { accountId: string; automated: boolean }[] = [];
       if (actor.kind === 'account' && account) {
         members.push({ accountId: actor.accountId, automated: account.operatorAccountId !== null });
-        if (actor.requestedBy !== null) {
+        if (isSession(actor) && actor.requestedBy !== null) {
           const request = requestedByPattern.exec(actor.requestedBy);
           if (!request) return evidence;
           const principal = request[1]!;
@@ -486,7 +506,7 @@ export function createAccess(config: PermissionConfig): Access {
         roles,
         anonymous: actor.kind === 'anonymous',
         grantRoles,
-        scope: actor.kind === 'account' && actor.scopes.includes(action),
+        scope: actor.kind === 'account' && (!isSession(actor) || actor.scopes.includes(action)),
         admitsAnonymous: metadata.anonymous,
         capability: resource.eligibility ?? resource.anonymousEligibility,
         verifyFloor,
@@ -771,6 +791,43 @@ export function createAccess(config: PermissionConfig): Access {
       return allowed;
     },
   };
+  installAccountStandingCheck(access, async ({ accountId, action, target, context }) => {
+    const page = 'ids' in target ? resourcePage(target) : undefined;
+    const resource = page ? { route: page.route, id: page.ids[0]! } : (Object.freeze({ ...target }) as Resource);
+    const ids = page?.ids ?? [resource.id];
+    const denied = () => Object.freeze(Object.fromEntries(ids.map((id) => [id, false])));
+    const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
+    try {
+      requireAccessDeadline(deadline);
+      if (!uuidPattern.test(accountId)) return denied();
+      // Copy only the admitted fields. In particular, an effect's command T and
+      // any caller-provided session/delegation fields cannot enter this check.
+      const currentContext = { pool: deadlineClient(context.pool, deadline) as typeof context.pool, deadline };
+      return await within(deadline, async () => {
+        const account = await readAccount(currentContext.pool, routeOf(accountId), accountId);
+        if (!account || account.kind !== 'actor' || account.state !== 'active' || account.fenced) return denied();
+        const principal: StandingPrincipal = Object.freeze({ kind: 'account', accountId });
+        const evidence = await preparePermission(principal, action, resource, currentContext, page, account);
+        return withConnection(currentContext.pool, async (client) => {
+          const decision = await checkPreparedPermission(
+            client,
+            principal,
+            action,
+            resource,
+            evidence,
+            undefined,
+            config.clock,
+            page,
+          );
+          return decision.decisions ?? denied();
+        });
+      });
+    } catch (error) {
+      throwAccessUnavailable(error, deadline);
+      throwEvidenceFailure(error);
+      return denied();
+    }
+  });
   installResourceRoleCatalogue(access, catalogue);
   return access;
 }
