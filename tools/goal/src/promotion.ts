@@ -1258,8 +1258,19 @@ export async function promote(options: PromotionOptions): Promise<void> {
         store.savePromotion(run);
       }
       if (run.phase === 'publish-main') {
-        if (await publishMain(options, run)) return;
-        // Another integration may have landed while this snapshot was gated. Continue under the same lease.
+        const published = await publishMain(options, run);
+        if (published) {
+          const currentMain = head(settings.mainCheckout, settings.mainBranch);
+          const currentCandidate = optionalHead(settings.mainCheckout, settings.stabilizeBranch);
+          // Promotion may have started on an older candidate while integrated tasks advanced dev. Gate those tasks
+          // before releasing the lease; a reconciliation merge with no tasks can wait for the next promotion window.
+          if (
+            currentCandidate === undefined ||
+            !boundaryTasks(options, currentMain, currentCandidate).length
+          )
+            return;
+        }
+        // Another integration landed while this snapshot was gated. Continue under the same lease.
         continue;
       }
       if (!store.promotion()) continue;

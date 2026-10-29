@@ -210,7 +210,7 @@ test('a failing stabilize candidate stays on dev for a fix without reverting tas
     expect(peak).toBeLessThanOrEqual(2);
     expect(h.head()).toBe(dev);
     expect(h.head('main')).toBe(main);
-    expect(existsSync(join(h.root, 'bad'))).toBe(true);
+    expect(git(h.root, 'show', 'dev:bad')).toBe('bad');
     expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
     for (const task of [first, culprit, last]) {
       expect(h.store.task(task.id).state).toBe('integrated');
@@ -233,7 +233,7 @@ test('a failing stabilize candidate leaves its dependent tasks integrated pendin
     await h.promote();
     expect(h.head()).toBe(dev);
     expect(h.head('main')).toBe(main);
-    expect(existsSync(join(h.root, 'independent'))).toBe(true);
+    expect(git(h.root, 'show', 'dev:independent')).toBe('independent');
     for (const dependent of [direct, transitive]) {
       expect(h.store.task(dependent.id).state).toBe('integrated');
       expect(h.store.task(dependent.id).currentAttempt).toBe(1);
