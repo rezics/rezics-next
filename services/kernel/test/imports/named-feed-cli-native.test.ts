@@ -8,8 +8,9 @@ const a = 'books-a';
 const b = 'books-b';
 type Propose = Extract<BatchCommand, { op: 'propose' }>;
 function proposal(exchanges: readonly Exchange[], key: string, property: string) {
-  const found = commands(exchanges).find((c): c is Propose =>
-    c.op === 'propose' && c.source.external_id === key && c.statement.property.id === property);
+  const found = commands(exchanges).find(
+    (c): c is Propose => c.op === 'propose' && c.source.external_id === key && c.statement.property.id === property,
+  );
   if (!found) throw new Error(`Missing actual ${property} proposal`);
   return found;
 }
@@ -48,7 +49,8 @@ test('one operator imports two configured feeds with the same native work keys w
     const oldProposal = proposal(firstB.exchanges, edition.key, relation);
     expect(oldProposal.statement.value).toEqual({ type: 'somevalue' });
     expect(oldProposal.statement.qualifiers).toContainEqual({
-      property: { id: 'wdt:P648' }, value: { type: 'value', content: work.key.split('/').at(-1) },
+      property: { id: 'wdt:P648' },
+      value: { type: 'value', content: work.key.split('/').at(-1) },
     });
     expect(firstB.exchanges.map((e) => e.bytes).join('')).not.toContain(aw.id);
     const oldRows = await f.candidates(be.id, relation);
@@ -73,8 +75,10 @@ test('one operator imports two configured feeds with the same native work keys w
     const resolved = resolvedRows[0]!;
     expect(resolved.statement.value).toEqual({ type: 'value', content: bw.id });
     expect(resolved.id).not.toBe(old.id);
-    const fresh = [...commands(learned.exchanges), ...commands(refreshed.exchanges)].find((c): c is Propose =>
-      c.op === 'propose' && c.source.external_id === edition.key && c.statement.property.id === relation);
+    const fresh = [...commands(learned.exchanges), ...commands(refreshed.exchanges)].find(
+      (c): c is Propose =>
+        c.op === 'propose' && c.source.external_id === edition.key && c.statement.property.id === relation,
+    );
     expect(fresh).toBeDefined();
     expect(fresh!.key).not.toBe(oldProposal.key);
     expect(fresh!.source).toEqual(oldProposal.source);
@@ -104,7 +108,9 @@ test('one operator imports two configured feeds with the same native work keys w
     const settledB = f.snapshot(b, [work.key, edition.key]);
     const receipts = await f.receipts();
     const candidatesB = await f.candidates(bw.id, 'schema:name');
-    completed(await f.invoke(a, [work, control]));
+    const repeatA = await f.invoke(a, [work, control]);
+    completed(repeatA);
+    expect(commands(repeatA.exchanges)).toEqual([]);
     const repeatB = await f.invoke(b, [edition, work]);
     completed(repeatB);
     expect(commands(repeatB.exchanges)).toEqual([]);
@@ -163,17 +169,29 @@ test('one operator imports two configured feeds with the same native work keys w
     const supportedBefore = await f.original(b, `/v1/subjects/${bw.id}?context=${context}`);
     expect(supportedBefore.status).toBe(200);
     expect(selected(supportedBefore.body, 'schema:name')).toContainEqual({
-      type: 'value', content: { language: 'und', text: work.title },
+      type: 'value',
+      content: { language: 'und', text: work.title },
     });
     const fence = await f.editor.http('/v1/sourceFences:takedown', {
-      source: a, externalId: work.key, fieldGroup: 'facts', reason: 'Controlled feed A withdrawal',
+      source: a,
+      externalId: work.key,
+      fieldGroup: 'facts',
+      reason: 'Controlled feed A withdrawal',
     });
     expect(fence.status, JSON.stringify(fence.body)).toBe(200);
     expect(fence.body.securityRevision).toMatch(/^[1-9][0-9]*$/);
-    for (const [alias, fenced] of [[a, true], [b, false]] as const) {
-      const checked = await f.original(alias, `/v1/sourceFences:check?${new URLSearchParams({
-        source: alias, externalId: work.key, fieldGroup: 'facts',
-      })}`);
+    for (const [alias, fenced] of [
+      [a, true],
+      [b, false],
+    ] as const) {
+      const checked = await f.original(
+        alias,
+        `/v1/sourceFences:check?${new URLSearchParams({
+          source: alias,
+          externalId: work.key,
+          fieldGroup: 'facts',
+        })}`,
+      );
       expect(checked.status).toBe(200);
       expect(checked.body).toEqual({ fenced, securityRevision: fenced ? fence.body.securityRevision : null });
     }
@@ -200,21 +218,39 @@ test('one operator imports two configured feeds with the same native work keys w
       expect(command.source.field_group).toBe('facts');
       expect(command).not.toHaveProperty('rights');
       const parts = command.statement.references.flatMap((r) => r.parts);
-      expect(parts).toContainEqual({ property: { id: 'schema:url' }, value: {
-        type: 'value', content: `https://openlibrary.org${command.source.external_id}`,
-      } });
-      expect(parts).toContainEqual({ property: { id: 'schema:version' }, value: {
-        type: 'value', content: command.source.record_revision,
-      } });
+      expect(parts).toContainEqual({
+        property: { id: 'schema:url' },
+        value: {
+          type: 'value',
+          content: `https://openlibrary.org${command.source.external_id}`,
+        },
+      });
+      expect(parts).toContainEqual({
+        property: { id: 'schema:version' },
+        value: {
+          type: 'value',
+          content: command.source.record_revision,
+        },
+      });
     }
     const finalReceipts = await f.receipts();
     expect(finalReceipts.length).toBeGreaterThan(receipts.length);
     expect(f.authPaths.filter((p) => p === '/signin/key').length).toBeGreaterThan(0);
-    console.log('named feed native evidence', JSON.stringify({
-      claims: { aw, ac, be, bw, bc }, initialA, settledB, finalB,
-      bootstraps: { a: aBootstrap, b: bBootstrap }, receipts: finalReceipts,
-      exchanges: f.exchanges.map(({ request: _request, ...e }) => e),
-      publicResponses: f.publicResponses,
-    }));
-  } finally { await f.close(); }
+    console.log(
+      'named feed native evidence',
+      JSON.stringify({
+        claims: { aw, ac, be, bw, bc },
+        initialA,
+        settledB,
+        finalB,
+        bootstraps: { a: aBootstrap, b: bBootstrap },
+        receipts: finalReceipts,
+        exchanges: f.exchanges.map(({ request: _request, ...e }) => e),
+        publicResponses: f.publicResponses,
+        bibliographies: f.bibliographies,
+      }),
+    );
+  } finally {
+    await f.close();
+  }
 }, 600_000);

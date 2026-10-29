@@ -171,3 +171,51 @@ test('default own-reference refresh survives reopen without rewriting bootstrap 
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('a vanished named Open Library record retracts its own candidates without resolving a missing projection', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'own-reference-vanished-'));
+  const native = nativeReceipts();
+  const importer = new Importer({ path: join(directory, 'state.sqlite'), transport: native.transport });
+  const a = createSourceRegistration('openlibrary', { source: 'books-a' });
+  const b = createSourceRegistration('openlibrary', { source: 'books-b' });
+  const second: SourceRecord = {
+    ...work,
+    key: '/works/OL3W',
+    payload: { ...(work.payload as object), key: '/works/OL3W', title: 'Independent retained work' },
+  };
+  try {
+    expect((await importer.runRecords(a, input(work, second))).status).toBe('committed');
+    expect((await importer.runRecords(b, input(work, second))).status).toBe('committed');
+    const beforeB = importer.session.store.source(b.source);
+    const rowB = importer.session.store.key(b.source, work.key);
+    const ownA = importer.session.bindings.claim({ source: a.source, external_id: work.key });
+    const ownB = importer.session.bindings.claim({ source: b.source, external_id: work.key });
+    expect(ownA?.state).toBe('bound');
+    expect(ownB?.state).toBe('bound');
+    expect(ownA).not.toEqual(ownB);
+    const start = native.requests.length;
+    const vanished = await importer.runRecords(a, input(second), { disappearanceThreshold: 1 });
+    expect(vanished.status).toBe('committed');
+    expect(vanished.counts.vanished).toBe(1);
+    const retractions = native.requests.slice(start).flatMap((r) => r.commands);
+    expect(retractions.length).toBeGreaterThan(0);
+    for (const command of retractions) {
+      expect(command.op).toBe('retract');
+      expect(command.source.source).toBe(a.source);
+      expect(command.source.external_id).toBe(work.key);
+      if (command.op === 'retract' && ownA?.state === 'bound') expect(command.subject).toBe(ownA.subject);
+    }
+    expect(importer.session.store.source(b.source)).toEqual(beforeB);
+    expect(importer.session.store.key(b.source, work.key)).toEqual(rowB);
+    expect(importer.session.bindings.claim({ source: b.source, external_id: work.key })).toEqual(ownB);
+    expect(
+      importer.session.bindings.candidates({ source: a.source, external_id: work.key }, 'facts', { limit: 100 }),
+    ).toEqual([]);
+    expect(
+      importer.session.bindings.candidates({ source: b.source, external_id: work.key }, 'facts', { limit: 100 }).length,
+    ).toBeGreaterThan(0);
+  } finally {
+    await importer.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

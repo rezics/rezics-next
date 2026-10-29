@@ -166,6 +166,37 @@ The exact native command is:
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
 ```
 
+### Independent named feeds
+
+Two configured aliases for Open Library share a provider and its bibliographic CC0-1.0
+permission, but share no native claims, dependency evidence, request journals, baseline or
+run ownership. Alias spelling supplies neither licensing evidence nor another provider.
+An edition under `books-b` remains unresolved when only `books-a` knows its work key;
+after B learns its own actual work claim, an unchanged import can propose the resolved
+relation without rewriting the bootstrap bytes, key or receipt. Existing unresolved
+history and independent editor selections remain intact.
+
+Disappearance has no normalized source projection. It bypasses own-reference resolution
+and reconciles only the vanished record's exact-source candidates. Refresh and tuple-fence
+checks still use the selected alias. A live `ImportSession` ownership handle makes another
+CLI invocation for that alias busy before source acquisition or public writes, while a
+different alias can proceed in the same SQLite file. Releasing the handle permits normal
+reopen with the original identities; ownership and timeout rules are unchanged.
+
+[`named-feed-cli-native.test.ts`](../kernel/test/imports/named-feed-cli-native.test.ts)
+exercises this connected journey through the production CLI, staged/approved/applied account
+key, native Auth/Access/kernel and worker. Its two controlled native TSV feeds share one
+tmpfs SQLite file. It records exact serialized requests, actual claims and receipts, baseline
+fingerprints/counts and public responses using the original CLI bearer. Editor selection
+and governance fences use public commands. The adjacent own-reference regression covers
+disappearance without a source projection. These cases add no source-record catch-up,
+provenance backfill, global resolution or PostgreSQL growth claim.
+
+Cost: inspect supplied feed bytes, exact alias/native-key journal rows and at most the
+existing 64 own-reference keys, plus existing bounded public writes and tuple-fence reads.
+Current alias point/keyset reads and source ownership retain their existing caps; no
+other-source, catalogue or history enumeration is added.
+
 ### Changed-dependency cost obligation
 
 For one supplied record, let F be its admitted native reference-key count, bounded by the

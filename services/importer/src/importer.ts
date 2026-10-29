@@ -539,9 +539,12 @@ export class Importer {
     let omissions = await this.fences(owner, signal);
     const recordState = store.key(row.source, row.recordKey, run);
     const acknowledged = recordState.acknowledged;
-    const ownReferences = this.options.identifierLookup
-      ? null
-      : resolveOwnReferences(staged.projection, row.source, this.session.bindings);
+    // Disappearance has no source projection or references to resolve. Its exact
+    // owner still supplies the candidates to retract through ordinary reconciliation.
+    const ownReferences =
+      row.state !== 'present' || this.options.identifierLookup
+        ? null
+        : resolveOwnReferences(staged.projection, row.source, this.session.bindings);
     if (ownReferences) {
       const prior = store.referenceSignature(row.source, row.recordKey);
       // A resolved entry belongs to this run's immutable command plan. If another
