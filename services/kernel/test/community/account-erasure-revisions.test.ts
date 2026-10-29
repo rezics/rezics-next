@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver } from '../../../../specs/community-driver.ts';
 import { eraseAccountRevisionsPage } from '../../src/community/account-erasure-revisions.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { deletePersona, drainEffects } from '../support/account-deletion.ts';
+import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver, worker } from './community-driver.ts';
 
@@ -148,7 +148,8 @@ test("account erasure keeps each Realm's and Space's current revision with its a
       ])
     ).rows;
     expect(locatorBefore).toHaveLength(7);
-    await deletePersona(system.accountDeletion, { accountId: fixture.owner.id, bearer: fixture.owner.bearer });
+    const deletion = accountDeletionRuntime(system);
+    await deletePersona({ pool, auth: deletion.auth }, { accountId: fixture.owner.id, bearer: fixture.owner.bearer });
     await drainEffects(pool, partitionOf(routeOf(fixture.owner.id)!));
     expect(await eraseAll(pool, fixture.owner.id)).toBe(7);
     const archivedAfter = (
@@ -222,7 +223,8 @@ test("an account revision erasure page stays within its bound as other editors' 
       SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
       [routeOf(fixture.owner.id), fixture.owner.id, route, realm.realmId, revisions],
     );
-    await deletePersona(system.accountDeletion, { accountId: fixture.owner.id, bearer: fixture.owner.bearer });
+    const deletion = accountDeletionRuntime(system);
+    await deletePersona({ pool, auth: deletion.auth }, { accountId: fixture.owner.id, bearer: fixture.owner.bearer });
     await drainEffects(system.database.pool, partitionOf(routeOf(fixture.owner.id)!));
     await driver.settle();
     await worker.stop();
