@@ -1,5 +1,6 @@
 import { taskCommits } from './workspace.ts';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
@@ -130,6 +131,14 @@ function acquireIdleTrainLeases(stateDirectory: string): DirectoryLease[] | unde
   }
 }
 
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
   private readonly retryIntentsInProgress = new Set<string>();
@@ -330,6 +339,21 @@ export class WorkerJob implements GateOutcomeSink {
           document.result && typeof document.result === 'object'
             ? (document.result as Record<string, unknown>)
             : document;
+        // worker-check writes its result record when the check starts ({status: running, runnerPid}); only an exit
+        // status or a dead runner ends it. Treating the start record as a result woke every attempt at once.
+        const exit = value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit;
+        const pending = ['queued', 'starting', 'running', 'in_progress'].includes(
+          String(value.status ?? '').toLowerCase(),
+        );
+        if (exit === undefined && pending) {
+          const runner = Number(value.runnerPid ?? value.runner_pid);
+          const local = !value.runnerHost || value.runnerHost === hostname();
+          if (!Number.isSafeInteger(runner) || runner <= 0 || !local || processAlive(runner)) return null;
+          details.push(
+            `check ${id}: run vanished (runner ${runner} exited without a result); exit status unavailable; log path ${String(value.log ?? value.logPath ?? 'unavailable')}`,
+          );
+          continue;
+        }
         const status =
           value.exitStatus ??
           value.exit_status ??
