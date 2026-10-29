@@ -819,8 +819,8 @@ Bearer scope claims are bounded once at authenticator creation to 129 characters
 - Bound: `Q`: one formula statement (plus time when not supplied and optional domain verifier); O(1+J) bounded probe rows, O(1) result. Integrated P+Q: constant rows/statements in G, logarithmic blocks at fixed J; at most linear in admitted J through cap1000 per identity. Role expansion adds R-dependent probes, not H/O enumeration. Permission and operator evidence use the shared real-time TTL helper; elapsed evidence returns 503 without effects. No added reads.
 - Growth check: `test/access/growth-evaluator.test.ts`: independent G and K checks, production pool, K through cap1000. `test/access/access-deadlines.test.ts`.
 
-The Global grant B-tree companion contains the full temporal primary key in lexicographic order. Each probe binds
-route, resource, subject kind/id/role and action, seeks the greatest `valid <= [T,infinity)`, then checks
+The Global grant B-tree companion orders subject kind/id/role, action and validity; its partial predicate fixes
+route/resource, which are included for covering reads. Each probe binds the full key, seeks the greatest `valid <= [T,infinity)`, then checks
 `valid @> T` after `LIMIT 1`. All stored finite starts are inclusive and intervals never overlap, so this
 predecessor is the only range that could contain T, including unbounded endpoints. Gaps and exclusive ends
 still deny. Neither other subjects/resources nor the key's expired/future intervals are enumerated. The same
