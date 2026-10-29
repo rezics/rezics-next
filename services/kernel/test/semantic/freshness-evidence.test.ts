@@ -264,9 +264,9 @@ for (const kind of ['links', 'relations'] as const) {
       const wait = observer.records.findIndex(({ statement }) => statement === readCheckpoint.sql);
       const visibility = observer.records.findIndex(({ statement }) => statement === readVisibility.sql);
       expect(visibility).toBeGreaterThan(wait);
-      const snapshot = observer.records.slice(0, visibility).findLastIndex(
-        ({ statement }) => statement === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-      );
+      const snapshot = observer.records
+        .slice(0, visibility)
+        .findLastIndex(({ statement }) => statement === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       expect(snapshot).toBeGreaterThan(wait);
       expect(
         observer.records.slice(0, wait).filter(({ statement }) => statement === readPermissionTime.sql),
