@@ -32,12 +32,6 @@ import { trustedAccessPorts } from '../support/trusted-access.ts';
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const action = 'subject:write';
 const extra = 'subject:publish';
-const actions = new Map([
-  [action, { anonymous: false }],
-  [extra, { anonymous: false }],
-  ['account:delegate', { anonymous: false }],
-]);
-
 /** Test-owned SQL module. Only create() writes positive operation evidence, in an
  * authorized native command with an immutable source and an exact core receipt.
  * Both Access and the private Auth listener use instrumented pools for growth.
