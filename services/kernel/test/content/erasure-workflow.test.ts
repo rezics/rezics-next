@@ -673,7 +673,6 @@ test('every measured revision erasure is a HOT update while another backend hold
   const db = await openGrowthDatabase();
   const rollback = new Error('Rollback measured cleanup');
   let snapshot: import('pg').PoolClient | undefined;
-  const openedScales = new Set<number>();
   const values = new Map<number, Awaited<ReturnType<typeof scope>>>();
   const hotUpdates: { scale: number; updated: number; hot: number }[] = [];
   const check = {
@@ -748,16 +747,19 @@ test('every measured revision erasure is a HOT update while another backend hold
         }
       },
       async warmup(target, scale, repetition) {
-        if (!openedScales.has(scale)) {
-          snapshot = await target.admin.connect();
-          await snapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-          await snapshot.query('SELECT count(*) FROM content.revision');
-          openedScales.add(scale);
-        }
         await eraseRun(target, scale, repetition, false);
       },
+      async prepare(target) {
+        snapshot = await target.admin.connect();
+        await snapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await snapshot.query('SELECT count(*) FROM content.revision');
+      },
       async operation(target, scale, repetition) {
-        await eraseRun(target, scale, repetition, true);
+        try {
+          await eraseRun(target, scale, repetition, true);
+        } finally {
+          await closeSnapshot();
+        }
       },
     });
     expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.blocks > 0)).toBe(true);
