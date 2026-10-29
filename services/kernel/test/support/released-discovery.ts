@@ -102,6 +102,7 @@ export interface ReleasedDiscoveryFixture {
   readonly setup: {
     openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
     spaceCreation(persona: DiscoveryAccountName): Promise<void>;
+    realmCreation(persona: DiscoveryAccountName): Promise<void>;
   };
   scoped(persona: 'alice' | 'bob', scopes: readonly string[]): Promise<DiscoveryScopedTransport>;
   /** Trusted test SQL on the owned kernel database, within the existing native read-only transaction. */
@@ -341,6 +342,11 @@ export async function createReleasedDiscoveryFixture(
           if (!Object.hasOwn(personas, persona)) throw new Error('Space setup requires a named discovery account');
           await driver.fixtures.grantAccount(personas[persona], ['space:create']);
         },
+        async realmCreation(persona) {
+          requireOpen();
+          if (!Object.hasOwn(personas, persona)) throw new Error('Realm setup requires a named discovery account');
+          await driver.fixtures.grantAccount(personas[persona], ['realm:create']);
+        },
       },
       async scoped(persona, scopes) {
         requireOpen();
@@ -533,7 +539,9 @@ export async function createReleasedDiscoveryFixture(
           let done = false;
           for (let step = 0; step < 200; step++) {
             const result = await projection.run(partition);
-            if (result.status !== 'busy' && result.envelopes === 0) {
+            if (result.status === 'stopped')
+              throw new Error(`Native link projection stopped in partition ${partition}: ${result.reason}`);
+            if (result.status === 'read' && result.envelopes === 0) {
               done = true;
               break;
             }

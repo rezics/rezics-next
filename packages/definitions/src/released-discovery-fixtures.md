@@ -46,6 +46,7 @@ The result is the closed `ReleasedDiscoveryFixture` interface:
 | `request(persona, method, path, body?, headers?)`        | Original native HTTP status, headers and parsed body. Uses existing Auth/Access; no response normalization.                                                          |
 | `setup.openFeatures(groups)`                             | Explicit native governor opening of only `personal_library` and/or `reading_progress`; no additional default opening.                                                |
 | `setup.spaceCreation(persona)`                           | Grants only Global `space:create` to one existing named discovery account through the internal native governor.                                                      |
+| `setup.realmCreation(persona)`                           | Separately grants only Global `realm:create` to one existing named discovery account through the same native governor.                                               |
 | `scoped(persona, scopes)`                                | Fresh same-account native Auth issuance for Alice or Bob; returns an account ID and scoped request transport.                                                        |
 | `inspect<Row>(sql, values?)`                             | Trusted test-only typed PostgreSQL query result from the owned kernel database in the existing read-only transaction.                                                |
 | `createSubject(type, name, statements?)`                 | Native `POST /v1/subjects`; returns only the actual `subject.id`, initial revision and accepting release.                                                            |
@@ -78,6 +79,7 @@ on `ReleasedDiscoveryFixture` are:
 setup: {
   openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
   spaceCreation(persona: DiscoveryAccountName): Promise<void>;
+  realmCreation(persona: DiscoveryAccountName): Promise<void>;
 };
 scoped(persona: 'alice' | 'bob', scopes: readonly string[]): Promise<DiscoveryScopedTransport>;
 inspect<Row extends QueryResultRow = QueryResultRow>(sql: string, values?: readonly unknown[]): Promise<QueryResult<Row>>;
@@ -99,7 +101,11 @@ native session/response headers. Success requires HTTP 200; failure rejects with
 (status, headers and raw parsed problem). Repeated opening uses native idempotent no-op semantics.
 `personal_library` covers Library plus mounted reaction/rating families that declare it; `reading_progress` covers
 progress. Public Content endpoints need no extra group. Space creation separately uses `fixtures.grantAccount` for
-only `space:create` on Global, retaining the chosen account's actual bearer/scopes. No governor handle, arbitrary
+only `space:create` on Global. Realm creation separately uses the same internal
+`driver.fixtures.grantAccount(personas[persona], ['realm:create'])` with its existing Global default. Both helpers
+require an open fixture and validate an existing named account before mutation, return void and retain that account's
+actual identity, bearer and scopes, including the unscoped account's empty scopes. Neither grants the other's action,
+`space:manage` or `context:read`, changes ownership, opens gates or creates resources. No governor handle, arbitrary
 grant operation, gate grant, commerce group or Content reaction standing workaround is introduced.
 
 Inspection delegates directly to `withReadTransaction` on `driver.fixtures.pool`, retaining its native
@@ -116,6 +122,57 @@ Global `reaction:set` standing remains its owner's prerequisite; this setup neve
 mounted progress writer still stores a null `library_profile_pin`; profile-consumer runtime adoption remains outside
 this setup capability. The existing gated-route error handler normalizes invalid bearers to 401
 `authentication_required`/`Bearer`; this fixture preserves that native response as well.
+
+### Native Context and Realm integration recipe
+
+`test/semantic/released-realm-creation-capabilities.test.ts` adds two native cases for the explicit Realm capability
+and unchanged defaults/scopes. Use the same `createReleasedDiscoveryFixture()` instance throughout:
+
+1. As the existing `editor` persona, `POST /v1/contexts` with exactly
+   `{"labels":{"en":"Discovery Realm classification"}}` and a fresh quoted `Idempotency-Key` from `discoveryKey()`.
+   The editor already has native Global `context:create` and its mounted action scopes. The 201 response's
+   `context.id` is the Realm's `contextId`; the response has `kind: 'community'`, `settings: null`, `defaults: {}`.
+   Alice's `GET /v1/contexts/{context.id}` returns 200 for this actual community Context.
+2. Call `await fixture.setup.spaceCreation('alice')`, then as Alice `POST /v1/spaces` with exactly
+   `{"title":"Alice Realm host","summary":"Native Realm host"}` and a fresh `discoveryKey()`.
+   The 201 response's `space.spaceId` is the Realm's `spaceId`. Alice is the Space creator; native initialization
+   supplies her Space owner authority, including `space:manage`.
+3. Alice initially receives 403 `forbidden` for the Realm request below. Call
+   `await fixture.setup.realmCreation('alice')`, then as the same Alice `POST /v1/realms` with a fresh `discoveryKey()`:
+
+   ```ts
+   {
+     spaceId: aliceSpace.spaceId,
+     title: 'Discovery native Realm',
+     summary: 'Explicit Realm capability control',
+     visibility: 'protected',
+     contextId: context.id,
+   }
+   ```
+
+   This returns 201 with `realm.realmId`, `realm.headRevisionId`, the supplied Space/Context IDs and Alice as
+   creator/author. `Location` is `/v1/realms/{realm.realmId}` and `ETag` is the quoted head revision ID;
+   Alice reads the same Realm with `GET` on that location (200).
+
+Alice keeps her current mounted scopes, including `realm:create`, `realm:read`, `space:manage` and `context:read`.
+Only the original `collections` gate is open; personal Library and progress remain closed. The Realm command
+independently requires Global `realm:create`, native `space:manage` on an existing free host Space, and native
+`context:read` with `publicContextEligibility` on the supplied Context. The latter checks the actual
+`semantic.context` row through `context-public-evidence.sql` and `context-public-exists.sql`; a routed unknown ID
+has no eligible row. An Alice scope variant omitting `context:read` cannot read the existing Context (404) and
+cannot create the Realm (403), even with the Global grant. A variant omitting `space:manage`, Bob's Space, a wrong
+resource used as a Space and an unknown Space also yield 403. An occupied Space denies a second Realm (403).
+Ungranted Bob's own-Space request denies independently; the granted empty-scope account still receives 403.
+These are native denial/no-effect controls, not a new private Context mechanism or a Global Context recipe.
+
+The helper supplies no local facts, ratings, reviews, Realm sources, Liked membership, Everything state or runtime
+population. Those consumer prerequisites remain open. No successful Realm creation implies those outcomes.
+
+Separately, `catchUp` follows the actual `events/log.ts` `BatchResult` union: every `stopped` result throws with
+its native `gap | epoch | unknown_type | invalid_data` reason before success handling. Only `read` with zero
+envelopes completes a partition. `busy` yields 5ms and retries within the unchanged 200-call cap per distinct
+partition. It retains the same link projection and subject set; no new relay API or readiness claim is exported.
+The Realm positive cases do not exercise every stop reason or establish Search/source publication readiness.
 
 The native kernel retains the real write-rate limiter with a fixed test startup budget of 1000 new-account writes
 per 60 seconds, admitting this bounded population without rate-limit noise. No global environment override or
