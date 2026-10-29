@@ -41,7 +41,7 @@ for (const mode of ['request', 'work-step'] as const) {
               epoch: 1,
               position: 0,
               transaction_id: newId(route),
-              response: null,
+              response: {},
             },
           ],
           'dbos.workflow_status': [
