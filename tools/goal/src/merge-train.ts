@@ -410,6 +410,43 @@ export function changedPathsBetween(cwd: string, base: string, head: string): st
   return changed.stdout.split('\0').filter(Boolean);
 }
 
+function pathsChangedByTaskButUnchangedOnDev(
+  cwd: string,
+  dev: string,
+  candidate: string,
+  taskTip: string,
+  taskPaths: readonly string[],
+): string[] {
+  const compare = (left: string, right: string, path: string): boolean => {
+    const result = spawnSync('git', ['diff', '--quiet', left, right, '--', path], { cwd });
+    if (result.status === null || result.status > 1)
+      throw new Error(result.stderr?.toString().trim() || result.error?.message || `Cannot compare ${path}`);
+    return result.status === 1;
+  };
+  return taskPaths.filter((path) => compare(dev, taskTip, path) && !compare(dev, candidate, path));
+}
+
+function refuseNoEffect(result: GateOutcome, paths: readonly string[], logPath: string): void {
+  result.stage = 'merge';
+  result.conflictedFiles = [...paths];
+  const reason = `Change had no effect on dev: ${paths.join(', ')}`;
+  result.firstFailure = firstFailure(reason);
+  appendFileSync(logPath, `${reason}\n`);
+}
+
+function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean {
+  const result = spawnSync('git', ['diff', '--quiet', base, candidate, '--'], { cwd });
+  if (result.status === null || result.status > 1)
+    throw new Error(result.stderr?.toString().trim() || result.error?.message || 'Cannot compare landing trees');
+  return result.status === 0;
+}
+
+class WorkerConflictError extends Error {
+  constructor(readonly path: string) {
+    super(`Worker change conflicts with dev in ${path}`);
+  }
+}
+
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
   return frozen
     .filter((file) => {
@@ -486,6 +523,8 @@ export function resolveMechanicalConflicts(
         if (merged.status === null || merged.status > 1) return false;
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+        if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
+          throw new WorkerConflictError(file);
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -499,6 +538,18 @@ export function resolveMechanicalConflicts(
       });
       const merged = mergeFlatJsonMessage(stages[0]!, stages[1]!, stages[2]!);
       if (!merged.ok) return false;
+      const ours = parseFlatJsonObject(stages[1]!);
+      const theirs = parseFlatJsonObject(stages[2]!);
+      const base = parseFlatJsonObject(stages[0]!);
+      if (
+        ours &&
+        theirs &&
+        base &&
+        comparableJson(merged.value) === comparableJson(ours) &&
+        comparableJson(theirs) !== comparableJson(ours) &&
+        comparableJson(theirs) !== comparableJson(base)
+      )
+        throw new WorkerConflictError(file);
       text = `${JSON.stringify(merged.value, null, 2)}\n`;
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
@@ -1064,6 +1115,15 @@ export class MergeTrain {
             rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
+            if (error instanceof WorkerConflictError) {
+              refuseNoEffect(result, [error.path], logPath);
+              localOutcomes.set(entry.id, result);
+              try {
+                git(trainTree, 'rebase', '--abort');
+              } catch {}
+              resetTo(trainTree, previous);
+              continue;
+            }
             // Deferral is for a conflict with an earlier member of this batch. First in its batch, the landing
             // conflicts with dev itself and only its worker can resolve that: deferred again every round, a busy
             // queue kept one landing waiting 3 h 41 min with no outcome.
@@ -1172,6 +1232,20 @@ export class MergeTrain {
           }
 
           const candidate = git(trainTree, 'rev-parse', 'HEAD');
+          const taskPaths = changedPathsBetween(o.mainCheckout, originalBase, tip);
+          if (treeDiffIsEmpty(trainTree, previous, candidate)) {
+            refuseNoEffect(result, taskPaths, logPath);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+          const noEffect = pathsChangedByTaskButUnchangedOnDev(trainTree, previous, candidate, tip, taskPaths);
+          if (noEffect.length) {
+            refuseNoEffect(result, noEffect, logPath);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
           const commits = git(trainTree, 'rev-list', '--reverse', `${previous}..${candidate}`)
             .split('\n')
             .filter(Boolean);
@@ -1240,7 +1314,10 @@ export class MergeTrain {
         const devChecks = o.integration?.devLandingChecks !== false;
         if (!devChecks)
           for (const member of prepared)
-            appendFileSync(member.result.logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+            appendFileSync(
+              member.result.logPath,
+              `\nChecks are not run at dev landing; dev is verified after the merge\n`,
+            );
         const acceptanceJobs = (devChecks ? prepared : []).map((member) => ({
           member,
           command: member.entry.request.gate,
@@ -1698,7 +1775,15 @@ export class MergeTrain {
         if (workspace) {
           git(trainTree, 'reset', '--hard', base);
           git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
-        } else rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
+        } else {
+          try {
+            rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
+          } catch (error) {
+            if (!(error instanceof WorkerConflictError)) throw error;
+            refuseNoEffect(result, [error.path], logPath);
+            return finish();
+          }
+        }
         if (!stabilize && integratesIntoDev) regenerateLandingDerivedFiles(trainTree, base, derivedFiles, logPath);
         const frozen = workspace
           ? sharedStore!
@@ -1792,13 +1877,26 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
+        const taskPaths = workspace
+          ? taskChangedPaths(sharedStore!.task(request.taskId), tip)
+          : changedPathsBetween(o.mainCheckout, originalBase, tip);
+        if (treeDiffIsEmpty(trainTree, base, candidate)) {
+          refuseNoEffect(result, taskPaths, logPath);
+          return finish();
+        }
+        const noEffect = pathsChangedByTaskButUnchangedOnDev(trainTree, base, candidate, tip, taskPaths);
+        if (noEffect.length) {
+          refuseNoEffect(result, noEffect, logPath);
+          return finish();
+        }
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
         // With devLandingChecks off, a dev landing is mechanical: dev is verified after the merge, not before it.
         const skipDevChecks =
           o.integration?.devLandingChecks === false && integratesIntoDev && !controlPlane && !stabilize;
-        if (skipDevChecks) appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+        if (skipDevChecks)
+          appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
         const affectedChecks = skipDevChecks
           ? []
           : landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
