@@ -10,7 +10,9 @@ import {
 } from '../../kernel/test/support/growth-counters.ts';
 import { createImportPipelineDriver, pipelineWork } from './pipeline-driver.ts';
 
-const SCALES = [16, 64, 256] as const;
+// The original trace first adds the staged after-key read and full-page finalization update at 256.
+// Every scale crosses the 100-record staging/finalization pages with cold caches.
+const SCALES = [256, 1024, 4096] as const;
 
 type Work = typeof pipelineWork;
 const check: CountedCheck = {
@@ -85,6 +87,8 @@ test('importer processor counted work per record stays within its established ce
     (typeof samples)[number],
     (typeof samples)[number],
   ];
+  expect(second.work.prepares).toBe(first.work.prepares);
+  expect(third.work.prepares).toBe(first.work.prepares);
   for (const field of ['conversions', 'transactions', 'statements', 'commits'] as const) {
     const early = (second.work[field] - first.work[field]) / (second.scale - first.scale);
     const late = (third.work[field] - second.work[field]) / (third.scale - second.scale);
