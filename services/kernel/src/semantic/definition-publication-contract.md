@@ -127,10 +127,42 @@ These are source derivations, not measured graph counters or claims that opaque 
 | Contexts and saved filters           | Defaults point-check property keys. Visit every filter node and embedded subject-id string. `validateFilter`/`admitFilter` parse and visit bounded filter trees; `typeFacets` scans each selected type's bases/facets, `allReleaseFacets` caches their union per release, and qualifier membership scans lists. Repeated selected-type expansion across filters needs reuse by construction; a filter call is not one constant operation. |
 | Serialization/hashes/command binding | Parse once in the job; canonical key sorts; two distinct hash domains; owned transfer and bounded result; JSONB parameter serialization/freeze if retained. Attribute every additional pass to parent/job. The current pg binding of a graph is not proof of no parent per-node traversal.                                                                                                                                                |
 
-REQUIRED Definitions/Filter deterministic operation counters for these own loops at 64/512/3,993 changed
-properties, including list membership and saved-filter/Library shapes. Neither helper `valueNodes` nor
-returned SQL rows is this counter. New runtime must replace repeated growing membership scans with Set/Map;
-this specification changes none of those product loops.
+The disposable copied-source observation below counts the actual `index.ts` loop bodies, including native
+list membership comparisons, at 64/512/3,993 changed properties. REQUIRED Definitions/Filter instrumentation
+for the remaining Library/filter child loops and independently varied saved-filter shapes; the observed
+series keeps those shapes fixed. Neither helper `valueNodes` nor returned SQL rows is an operation counter.
+New runtime must replace repeated growing membership scans with Set/Map; this specification changes none
+of those product loops.
+
+### Deterministic own-loop observation
+
+A managed disposable probe copied only `index.ts` under `.temp/definition-publication/`, resolved its original
+imports and added counters at actual loop bodies. It counted actual `Array.prototype.includes` element reads
+through a Proxy in the copy, without changing the membership algorithm or validator verdict. Both the unchanged
+validator and the instrumented copy returned `[]` at all three sizes; the checker was not modified. These are
+observed own-loop operations, not debits charged to TypeBox/JCS/SHA or a new runtime meter.
+
+| Added properties | Definition entries | Property entries / IRI visits each | Datatype-member visits | Pattern nodes | Pattern members | Membership comparisons | Sum of counted operations |
+| ---------------: | -----------------: | ---------------------------------: | ---------------------: | ------------: | --------------: | ---------------------: | ------------------------: |
+|               64 |                194 |                                167 |                    668 |           280 |             779 |                  5,281 |                     8,935 |
+|              512 |                642 |                                615 |                  2,460 |           728 |           2,571 |                  5,281 |                    14,311 |
+|            3,993 |              4,123 |                              4,096 |                 16,384 |         4,209 |          16,495 |                  5,281 |                    56,083 |
+
+Each row also counts 12 profiles, 920 sorted-list members, 27 types, 43 bases, 202 facets, 27 target-type
+entries, 43 target bases, 73 targets, 26 relation filters and 26 saved filters. The sum is exactly
+`8,167 + 12*addedProperties` for this fixture family. This does not prove growth for independently enlarged
+qualifier/facet lists, filter trees or Library shapes, and does not count opaque compiled validation, key-sort
+comparisons or all child-library internals. Their construction obligations above remain REQUIRED.
+
+The successful managed probe is `34c3c039-8127-41e2-82e5-4d9b446ec160`, log
+`.temp/goal/checks/worker-check-2026-10-29T11-03-38.061Z-f8e62a59.log`. Source SHA-256 is
+`0717ecf05f578ac5b6247689c79223bd846bedeb17ba5f860fcc55ecd517e21a`; instrumented copy SHA-256 is
+`0251886cb8366a32a5a147ca1c182d44359af39a0ce786cbf6a13ae4e1775bd9`.
+Host `ah-ipv6`, Bun 1.4.4 revision `a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b`, 64 visible processors,
+load averages 67.46/53.22/43.19: loaded-host deterministic evidence only, no margin or heap claim.
+The first remote attempt could not synchronize the ignored temporary script; the first local attempt could
+not resolve its copied package import. Neither executed the probe. The successful local managed attempt
+resolved dependencies from the original Definitions package, without editing dependencies or product source.
 
 ## Successful current-policy counter observations
 
@@ -309,7 +341,8 @@ must remain; do not swap another pool into its kernel to make measurement conven
   unrelated history. These construction obligations are not a delivered full operation counter.
 - Growth check: full current bundle plus 64/512/3,993 changed properties (4,096 total at the boundary), retaining
   actual safe proofs/byte measurements. Independently seed prior publications 1/8/64 with changed input fixed.
-  REQUIRED own-loop counters and native SQL capture on original Kernel, shared Auth and all library pools.
+  The own-loop observations above cover the copied index loops; remaining Library/filter counters and native
+  SQL capture on original Kernel, shared Auth and all library pools are REQUIRED.
 
 ### Warm same body
 
