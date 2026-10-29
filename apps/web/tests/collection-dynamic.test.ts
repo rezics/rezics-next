@@ -184,7 +184,7 @@ test('preparing rereads the same cursor no more than three times and unavailable
   expect(paths.filter((path) => path.includes('/members'))).toEqual(
     Array(4).fill(`/v1/collections/${id}/members?view=FULL&limit=100&cursor=next-cursor`),
   );
-  expect(paths.filter((path) => path === `/v1/collections/${id}`)).toHaveLength(1);
+  expect(paths.filter((path) => path.startsWith(`/v1/collections/${id}?`))).toHaveLength(1);
 });
 
 test('an empty Everything and Liked page have their own empty messages', () => {
