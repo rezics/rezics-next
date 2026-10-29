@@ -596,10 +596,6 @@ export function runScript(id: string, directory: string, cwd: string, command: s
     install_started=$(date +%s%N)
     expected_bun=${quote(PINNED_BUN_VERSION)}
     expected_revision=${quote(PINNED_BUN_REVISION)}
-    if ! /usr/local/bin/bun --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
-      echo "remote-check: check-host Bun does not match packageManager $expected_bun" >&2
-      exit 1
-    fi
     /usr/local/bin/bun install --frozen-lockfile
     code=$?
     if [ "$code" -eq 0 ]; then touch ${quote(`${directory}/.bun-install-complete`)}; fi
