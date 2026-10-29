@@ -452,8 +452,9 @@ Bootstrap must establish complete membership/cardinality/mapping and readiness f
 redirects through indexed bounded work, capture/drain concurrent creation and structural admissions, and reject
 uncovered writers at cutover. A missing aggregate, absent mapping or default epoch zero is not ready. Moved/missing
 owners use native partition availability and routing; the job remains pending until actual ownership resolves.
-The bootstrap producer and its concrete cursor/export remain MISSING implementation work; this specification does
-not invent a legacy ordering or claim that a fixture SQL insert has completed bootstrap.
+`stepIdentityEpochBootstrap(pool, partition)` implements retained subject/member/dirty keysets, native export,
+receiving custody and exact-head source ACK. `stepIdentityEpochBootstrapWork(pool)` is the actual default-worker
+scheduler over all 4096 topology slots. Fixture inserts are source data; only those native receipts establish closure.
 
 The home fence has a required ordering proof. Install the pending gate at each affected destination before mapping
 or participant effects there. Installation serializes against old-epoch apply in that home: an apply committed first
@@ -661,8 +662,9 @@ Accounts owns the additive event-free fenced owner operational transaction plus 
 primitive and its native specification. Existing `noEffect` forbids domain writes and CANNOT implement this
 primitive. Semantic declares neither a guessed callable export nor an operational callback/permission receipt.
 That owner producer is **MISSING**; source intent/operational rows remain Access-owned. Commerce alone consumes its
-ACTUAL delivered exports for Members GET derived preparation. This specification adds no Core, Accounts, Library,
-Search, schema or SQL implementation. Directory/first-apply production cannot be counted as `noData` while missing.
+ACTUAL delivered exports for Members GET derived preparation. The Semantic STORE/bootstrap implementation does
+not provide the Core, Accounts, Library or Search producers described here. Directory/first-apply production cannot
+be counted as `noData` while missing.
 
 ## Independently landable producer boundaries
 
