@@ -11,6 +11,7 @@ import { createRegistrationProofBindings } from '../../src/access/registration-p
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { readRealm } from '../../src/community/realm.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import type { Access } from '../../src/request/access.ts';
@@ -267,12 +268,26 @@ afterAll(async () => {
   await db?.close();
 });
 
+// Settle the native consumer before preparing short-lived subject read proofs.
+async function catchUpLinks(subjectId: string): Promise<void> {
+  const projection = linkProjection(pool);
+  const partition = partitionOf(routeOf(subjectId)!);
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partition);
+    if (result.status === 'stopped') throw new Error(`Semantic link projection stopped: ${result.reason}`);
+    if (result.status === 'read' && result.envelopes === 0) return;
+    if (result.status === 'busy') await Bun.sleep(5);
+  }
+  throw new Error('Semantic link projection did not catch up');
+}
+
 async function put(
   scheme: string,
   head = probe.headRevisionId,
   bearer: string | undefined = owner.bearer,
   key = crypto.randomUUID(),
 ) {
+  await catchUpLinks(scheme);
   return call('PUT', `/v1/realms/${probe.realmId}/boardScheme`, {
     ...(bearer === undefined ? {} : { bearer }),
     key,
@@ -536,6 +551,10 @@ test.serial(
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         async grow(_, scale, previous) {
           await seed({ pool, admin }, population, { from: previous, to: scale });
+          await catchUpLinks(schemeId);
+        },
+        async prepare() {
+          await catchUpLinks(schemeId);
         },
         async operation() {
           const changed = await board.setBoardScheme(
