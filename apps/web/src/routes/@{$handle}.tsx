@@ -50,7 +50,7 @@ function AgentRoute() {
       messages={subjectPageMessages()}
       reader={reader ?? defaultReader}
       relations={data.relations}
-      operator={data.operator}
+      {...(data.operator ? { operator: data.operator } : {})}
       link={SubjectLink}
       tabs={data.tabs}
       tabLabels={viewTabLabels()}

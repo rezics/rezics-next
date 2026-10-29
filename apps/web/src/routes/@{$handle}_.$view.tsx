@@ -83,7 +83,7 @@ function AgentViewRoute() {
       messages={subjectPageMessages()}
       reader={reader ?? defaultReader}
       relations={data.relations}
-      operator={data.operator}
+      {...(data.operator ? { operator: data.operator } : {})}
       link={SubjectLink}
       view={view}
       tabs={data.tabs}
