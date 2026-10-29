@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { sameProcess } from './process.ts';
-import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED } from './records.ts';
+import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED, readLogTail } from './records.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
@@ -202,7 +202,7 @@ function recentCommands(attempt: Attempt): string[] {
     return [value.trim()];
   };
   try {
-    return readFileSync(attempt.logPath, 'utf8')
+    return readLogTail(attempt.logPath)
       .split(/\r?\n/)
       .flatMap((line) => {
         try {
@@ -273,22 +273,26 @@ function longAttemptIncidents(
     if (!Number.isFinite(elapsed)) continue;
     const commands = recentCommands(attempt);
     const waitsForCheck = commands.some((command) => /(?:^|[\s/])worker-check\.ts\b/.test(command));
-    const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commitCount(task)} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
-    if (elapsed >= Math.max(1, limitFor(task)))
-      found.push({
-        key: `long-attempt:${task.id}:${attempt.attempt}`,
-        managerId: task.brief.manager,
-        kind: 'stalled',
-        summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
-      });
+    const longRunning = elapsed >= Math.max(1, limitFor(task));
     const processCommands = commands.filter(inspectsProcesses);
-    if (!waitsForCheck && processCommands.length >= 2)
-      found.push({
-        key: `attempt-polling:${task.id}:${attempt.attempt}`,
-        managerId: task.brief.manager,
-        kind: 'stalled',
-        summary: `Polling: ${common}; recent commands repeatedly inspect processes (${processCommands.join(' | ')}) instead of waiting through scripts/worker-check.ts`,
-      });
+    const polling = !waitsForCheck && processCommands.length >= 2;
+    if (longRunning || polling) {
+      const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commitCount(task)} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
+      if (longRunning)
+        found.push({
+          key: `long-attempt:${task.id}:${attempt.attempt}`,
+          managerId: task.brief.manager,
+          kind: 'stalled',
+          summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
+        });
+      if (polling)
+        found.push({
+          key: `attempt-polling:${task.id}:${attempt.attempt}`,
+          managerId: task.brief.manager,
+          kind: 'stalled',
+          summary: `Polling: ${common}; recent commands repeatedly inspect processes (${processCommands.join(' | ')}) instead of waiting through scripts/worker-check.ts`,
+        });
+    }
   }
   return found;
 }

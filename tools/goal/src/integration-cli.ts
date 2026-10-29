@@ -142,22 +142,61 @@ async function stopRecordedAppServers(path: string): Promise<void> {
 
 export function hostRequest(socketPath: string, request: HostRequest): Promise<any> {
   return new Promise((resolve, reject) => {
-    const socket = createConnection(socketPath);
-    socket.setTimeout(60_000, () => socket.destroy(new Error('Manager host request timed out')));
-    socket.on('connect', () => socket.write(`${JSON.stringify(request)}\n`));
-    socket.on('error', reject);
-    createInterface({ input: socket }).once('line', (line) => {
-      socket.end();
-      try {
-        const response = JSON.parse(line);
-        if (response.error) reject(new Error(response.error));
-        else resolve(response.result);
-      } catch (error) {
-        reject(error);
-      }
-    });
-    socket.on('end', () => reject(new Error('Manager host closed without a response')));
+    const deadline = Date.now() + 60_000;
+    const connect = () => {
+      const socket = createConnection(socketPath);
+      let connected = false;
+      const retry = (error: NodeJS.ErrnoException) => {
+        if (connected || !['ENOENT', 'ECONNREFUSED'].includes(error.code ?? '') || Date.now() >= deadline) {
+          reject(connected ? error : new Error('Manager host request timed out'));
+          return;
+        }
+        setTimeout(connect, 25);
+      };
+      socket.setTimeout(Math.max(1, deadline - Date.now()), () =>
+        socket.destroy(new Error('Manager host request timed out')),
+      );
+      socket.once('connect', () => {
+        connected = true;
+        socket.write(`${JSON.stringify(request)}\n`);
+      });
+      socket.once('error', (error) => retry(error as NodeJS.ErrnoException));
+      createInterface({ input: socket }).once('line', (line) => {
+        socket.end();
+        try {
+          const response = JSON.parse(line);
+          if (response.error) reject(new Error(response.error));
+          else resolve(response.result);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      socket.on('end', () => {
+        if (connected) reject(new Error('Manager host closed without a response'));
+      });
+    };
+    connect();
   });
+}
+
+const HOST_RESTART_INTERVAL_MS = 10 * 60_000;
+const hostRestartPath = (stateDirectory: string) => join(stateDirectory, 'manager-host-restart.json');
+export function managerHostRestartAllowed(stateDirectory: string, now = Date.now()): boolean {
+  const path = hostRestartPath(stateDirectory);
+  try {
+    const previous = JSON.parse(readFileSync(path, 'utf8')) as { at?: unknown };
+    if (typeof previous.at === 'number' && now - previous.at < HOST_RESTART_INTERVAL_MS) return false;
+  } catch {
+    // The first restart has no saved timestamp.
+  }
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify({ at: now }), { mode: 0o600 });
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+  return true;
 }
 
 async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
@@ -234,10 +273,6 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         stopWhenIdle();
       };
       socket.once('close', completeRequest);
-      if (restart) {
-        socket.end(`${JSON.stringify({ error: 'Manager host is restarting' })}\n`, completeRequest);
-        return;
-      }
       try {
         const request = JSON.parse(line) as HostRequest;
         let result: unknown;
@@ -287,6 +322,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     if (server.listening) server.close();
   };
   const requestRestart = () => {
+    if (!managerHostRestartAllowed(runtime.stateDirectory)) return;
     restart = true;
     stopRequested = true;
     closeServer();

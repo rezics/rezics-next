@@ -1,9 +1,37 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readFileSync, readSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { Attempt, AttemptFailure, AttemptRecord, StepClass, Task, Tokens } from './types.ts';
 
 export const CLASSIFIER_VERSION = '1';
 export const emptyTokens = (): Tokens => ({ input: 0, cached: 0, output: 0 });
+export const ATTEMPT_LOG_TAIL_BYTES = 256 * 1024;
+
+/** Read a bounded suffix, discarding its first partial line so consumers only parse complete events. */
+export function readLogTail(path: string, maxBytes = ATTEMPT_LOG_TAIL_BYTES): string {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, 'r');
+    const size = fstatSync(fd).size;
+    const length = Math.min(size, maxBytes);
+    const buffer = Buffer.alloc(length);
+    let read = 0;
+    while (read < length) {
+      const count = readSync(fd, buffer, read, length - read, size - length + read);
+      if (!count) break;
+      read += count;
+    }
+    let text = buffer.subarray(0, read).toString('utf8');
+    if (size > length) {
+      const newline = text.indexOf('\n');
+      text = newline < 0 ? '' : text.slice(newline + 1);
+    }
+    return text;
+  } catch {
+    return '';
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
 export const emptySteps = (): Record<StepClass, number> => ({
   decision: 0,
   read: 0,
@@ -406,13 +434,18 @@ function rolloutFor(configDirectory: string, session: string): string | null {
   }
   return null;
 }
-export function readMeasurement(attempt: Attempt, options: MeasurementOptions = {}): LogMeasurement {
+export function readMeasurement(
+  attempt: Attempt,
+  options: MeasurementOptions & { maxLogBytes?: number } = {},
+): LogMeasurement {
   let text = '';
-  try {
-    text = readFileSync(attempt.logPath, 'utf8');
-  } catch {
-    /* A failed spawn has no stream. */
-  }
+  if (options.maxLogBytes !== undefined) text = readLogTail(attempt.logPath, options.maxLogBytes);
+  else
+    try {
+      text = readFileSync(attempt.logPath, 'utf8');
+    } catch {
+      /* A failed spawn has no stream. */
+    }
   const interval = { startedAt: attempt.startedAt, ...(attempt.endedAt ? { endedAt: attempt.endedAt } : {}) };
   const measurement = measureLog(text, { ...interval, ...(options.baseline ? { baseline: options.baseline } : {}) });
   const completed = text.split('\n').some((line) => {

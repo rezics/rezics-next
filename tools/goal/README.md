@@ -58,7 +58,10 @@ the lane lease and recheck the control-plane version while they wait. Every proc
 queue to current code before it can take another request. Pumps used by short commands still return quietly when
 another process holds the lane lease.
 Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
-A stale manager host restarts after finishing its active request and recovers persisted sessions.
+A stale manager host restarts after finishing its active request and recovers persisted sessions. Restarts are limited to
+one per ten minutes. Requests retry transient socket absence during handoff, and long recovery sweeps yield between
+small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
+of an attempt log, beginning at a complete line boundary; the recent commands and final failure events remain visible.
 
 ## Shared module workspaces (opt in)
 
