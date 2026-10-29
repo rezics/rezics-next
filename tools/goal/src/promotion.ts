@@ -12,6 +12,7 @@ import type { FirstFailure } from './contracts.ts';
 import type { PromotionGateResult, PromotionRun, Task } from './types.ts';
 import type { WorkerJob } from './job.ts';
 import type { Settings } from './types.ts';
+import { parseCapabilityManifest, validateGoalCapabilitiesText, validateScenarioReport } from './capabilities.ts';
 
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 export type PromotionOptions = {
@@ -177,8 +178,46 @@ export function promotionCommand(command: readonly string[]): string[] | null {
   if (command[0] !== 'bun' || command[1] !== 'test') return [...command];
   return command.filter((argument) => !(argument.includes('/') && WORKSPACE.test(argument)));
 }
-function commandsFor(rootGate: readonly string[], tasks: readonly Task[]): string[][] {
+function commandsFor(
+  rootGate: readonly string[],
+  tasks: readonly Task[],
+  checkout: string,
+  commit: string,
+): string[][] {
+  capabilityScenarioSets.clear();
   const commands = new Map<string, string[]>([[JSON.stringify(rootGate), [...rootGate]]]);
+  const capabilityCommands = new Map<string, string[]>();
+  let scope = '';
+  try {
+    scope = git(checkout, 'show', `${commit}:docs/scope.md`);
+  } catch {
+    /* isolated control-plane fixtures omit product scope */
+  }
+  for (const goal of new Set(tasks.map((task) => task.brief.goal))) {
+    let source: string | null = null;
+    try {
+      source = git(checkout, 'show', `${commit}:docs/goals/${goal}.capabilities.md`);
+    } catch {
+      /* missing manifest */
+    }
+    const errors = validateGoalCapabilitiesText(goal, scope, source);
+    if (errors.length) throw new Error(`Incomplete ${goal} capability manifest: ${errors.join('; ')}`);
+    if (source === null) continue;
+    const manifest = parseCapabilityManifest(source, goal);
+    for (const capability of manifest.capabilities) {
+      const command = capabilityCommands.get(JSON.stringify(capability.command)) ?? [];
+      command.push(...capability.scenarios);
+      capabilityCommands.set(JSON.stringify(capability.command), command);
+    }
+  }
+  for (const [serialized, scenarios] of capabilityCommands) {
+    const command = JSON.parse(serialized) as string[];
+    if (command[0] !== 'bun' || command[1] !== 'test')
+      throw new Error(`Capability acceptance command must be a native bun test command: ${command.join(' ')}`);
+    const registered = [...command, '--reporter=junit', '--reporter-outfile=.temp/goal-capability-results.xml'];
+    commands.set(JSON.stringify(registered), registered);
+    capabilityScenarioSets.set(JSON.stringify(registered), scenarios);
+  }
   for (const task of tasks) {
     const command = promotionCommand(task.brief.acceptance.command);
     // A specification is red by design whatever class its risk areas route it to; its verifier proves the
@@ -189,6 +228,7 @@ function commandsFor(rootGate: readonly string[], tasks: readonly Task[]): strin
   }
   return [...commands.values()];
 }
+const capabilityScenarioSets = new Map<string, string[]>();
 function resultKey(result: PromotionGateResult): string {
   return `${result.commit}\n${JSON.stringify(result.command)}`;
 }
@@ -239,6 +279,7 @@ async function gateAt(
   }
   git(main, 'worktree', 'add', '--detach', tree, commit);
   try {
+    mkdirSync(join(tree, '.temp'), { recursive: true });
     results.length = 0;
     // A fresh worktree has no node_modules; only the root gate installs by itself, and a narrowed or acceptance
     // command would fail on every commit without this.
@@ -279,6 +320,16 @@ async function gateAt(
       try {
         const outcome = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(command, tree, logFor(index));
         let failure = outcome.passed ? undefined : firstFailure(outcome.output);
+        const scenarios = capabilityScenarioSets.get(JSON.stringify(command));
+        if (outcome.passed && scenarios) {
+          try {
+            const report = readFileSync(join(tree, '.temp/goal-capability-results.xml'), 'utf8');
+            const scenarioErrors = validateScenarioReport(report, scenarios);
+            if (scenarioErrors.length) failure = firstFailure(scenarioErrors.join('\n'));
+          } catch (error) {
+            failure = firstFailure(`Capability JUnit report unavailable: ${String(error)}`);
+          }
+        }
         if (git(tree, 'rev-parse', 'HEAD') !== commit || git(tree, 'status', '--porcelain'))
           failure = firstFailure(`${failure?.assertion ?? ''}\nGate changed the checked commit or worktree`);
         result = {
@@ -1006,7 +1057,14 @@ export async function promote(options: PromotionOptions): Promise<void> {
           }
         }
         const tasks = run.taskIds.map((id) => store.task(id));
-        let checked = await gateAt(options, run, run.devHead, commandsFor(run.rootGate, tasks), 'head', 'headResults');
+        let checked = await gateAt(
+          options,
+          run,
+          run.devHead,
+          commandsFor(run.rootGate, tasks, options.settings.mainCheckout, run.devHead),
+          'head',
+          'headResults',
+        );
         if (stabilization) checked = await rerunStabilizeInfrastructure(options, run, checked);
         const failed = checked.find((item) => !item.passed);
         if (stabilization && failed) {
@@ -1098,7 +1156,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
           options,
           run,
           promoteHead,
-          commandsFor(run.rootGate, remaining),
+          commandsFor(run.rootGate, remaining, options.settings.mainCheckout, run.devHead),
           'remainder',
           'headResults',
         );

@@ -249,6 +249,25 @@ function changedWorkingFiles(cwd: string): string[] {
 }
 
 /** Refresh promotion outputs on a dev landing when its source changes require them. */
+/**
+ * Derived generators need the workspace's dependencies (the pinned bun, dbmate for migrations), but a train worktree is
+ * created with nothing installed: every landing that regenerated derived files failed with ENOENT on
+ * node_modules/.bin/bun or services/kernel/node_modules/.bin/dbmate (2026-10-29). Install once before the first command.
+ */
+function ensureDerivedDependencies(cwd: string, logPath: string, commands: Iterable<readonly string[]>): void {
+  // A lockfile regeneration is itself the install.
+  if ([...commands].every((command) => command[0] === 'bun' && command[1] === 'install')) return;
+  // Only a repository with a lockfile installs; fixtures and trees with dependencies already present do not.
+  if (!existsSync(join(cwd, 'bun.lock')) || existsSync(join(cwd, 'node_modules', '.bin'))) return;
+  const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd, encoding: 'utf8' });
+  appendFileSync(
+    logPath,
+    `$ bun install --frozen-lockfile (cwd: ${cwd})\n${result.stdout ?? ''}${result.stderr ?? ''}`,
+  );
+  if (result.status !== 0)
+    throw new Error(`Failed to install dependencies for derived files: ${result.stderr || 'bun install failed'}`);
+}
+
 function regenerateLandingDerivedFiles(
   cwd: string,
   base: string,
@@ -266,6 +285,7 @@ function regenerateLandingDerivedFiles(
 
   const commands = new Map<string, string[]>();
   for (const file of triggered) commands.set(JSON.stringify(file.command), file.command);
+  ensureDerivedDependencies(cwd, logPath, commands.values());
   for (const command of commands.values()) {
     const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
     const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
@@ -580,6 +600,7 @@ function rebaseWithDerivedFiles(
         for (const file of derivedForPath(path, files)) {
           integrationCommands.set(JSON.stringify(file.command), file.command);
         }
+      if (integrationCommands.size) ensureDerivedDependencies(cwd, logPath, integrationCommands.values());
       for (const command of integrationCommands.values()) {
         const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
         const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
@@ -2517,6 +2538,11 @@ export class MergeTrain {
     for (const path of conflicts) {
       git(tree, 'checkout', '--ours', '--', path);
       for (const file of derivedForPath(path, files)) commands.set(JSON.stringify(file.command), file.command);
+    }
+    try {
+      ensureDerivedDependencies(tree, logPath, commands.values());
+    } catch {
+      return false;
     }
     for (const command of commands.values()) {
       const result = spawnSync(command[0]!, command.slice(1), { cwd: tree, encoding: 'utf8' });
