@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
+import { startDevServer } from './support/dev-server.ts';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -67,66 +66,26 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const spawnedAt = Date.now();
-    let readyAt = 0;
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-      console.info('[measure search-seo output]', chunk.toString());
-      if (!readyAt && /ready in/.test(output)) {
-        readyAt = Date.now();
-        console.info('[measure search-seo] spawn to ready', readyAt - spawnedAt);
-      }
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-        PUBLIC_ORIGIN: 'https://rezics.test',
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) {
-          console.info('[measure search-seo] ready to first /en', Date.now() - readyAt);
-          return origin;
-        }
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+  started ??= startDevServer({
+    warmUpPaths: [],
+    env: {
+      ...process.env,
+      KERNEL_ORIGIN: fake.url.origin,
+      AUTH_ISSUER: `${fake.url.origin}/auth`,
+      WEBSITE_CLIENT_ID: clientId,
+      WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+      API_RESOURCE: resource,
+      WEBSITE_SCOPES: scopes.join(' '),
+      PUBLIC_ORIGIN: 'https://rezics.test',
+    },
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
@@ -145,10 +104,7 @@ async function open(path: string): Promise<Page> {
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 
 const searches = (since: number) => kernelCalls.slice(since).filter((call) => call.path === '/v1/subjects:search');

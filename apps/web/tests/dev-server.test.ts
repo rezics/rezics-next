@@ -209,7 +209,7 @@ test('hydration and search SEO use the shared starter and preserve their startup
   }
 });
 
-function testModuleImports(source: string): string[] {
+function testModuleImports(source: string, loader: 'ts' | 'tsx' = 'ts'): string[] {
   // Keep type-only imports visible to the scanner as well as runtime imports.
   const imports = source
     .replace(/\bimport\s+type(?=\s|\{)/g, 'import')
@@ -218,7 +218,7 @@ function testModuleImports(source: string): string[] {
       /(\b(?:import|export)\s*\{)([^}]*)(\}\s*from)/g,
       (_, before: string, names: string, after: string) => before + names.replace(/\btype\s+/g, '') + after,
     );
-  return new Bun.Transpiler({ loader: 'tsx' })
+  return new Bun.Transpiler({ loader })
     .scanImports(imports)
     .map(({ path }) => path)
     .filter((path) => /\.test(?:\.ts)?$/.test(path));
@@ -242,7 +242,8 @@ test('no web or UI test imports another test module, statically or with import()
   for (const directory of ['apps/web/tests', 'packages/ui/tests']) {
     for (const file of new Bun.Glob('**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}').scanSync({ cwd: join(root, directory) })) {
       const source = await Bun.file(join(root, directory, file)).text();
-      for (const specifier of testModuleImports(source)) violations.push(`${directory}/${file}: ${specifier}`);
+      for (const specifier of testModuleImports(source, /\.[jt]sx$/.test(file) ? 'tsx' : 'ts'))
+        violations.push(`${directory}/${file}: ${specifier}`);
     }
   }
   expect(violations).toEqual([]);
