@@ -38,8 +38,8 @@ A subject page is a set of views, each with its own URL under the subject's addr
 | Characters | `/characters` | At least one appearance exists                                                  |
 | Credits    | `/credits`    | At least one credit exists (staff and cast)                                     |
 | Relations  | `/relations`  | At least one relation exists in either direction                                |
-| Reviews    | `/reviews`    | The type can be rated or reviewed (shown with an invitation when empty)         |
-| Discussion | `/discussion` | Always for public subjects (shown with an invitation when empty)                |
+| Reviews    | `/reviews`    | An open read exists (shown with an invitation when empty)                       |
+| Discussion | `/discussion` | An open read exists (shown with an invitation when empty)                       |
 | Lists      | `/lists`      | At least one public collection contains the subject                             |
 | Details    | `/details`    | Always: every fact with qualifiers, sources, identifiers and history            |
 
@@ -48,8 +48,9 @@ they voiced or played) when any exist. A character shows Appearances (works, wit
 A Realm-routed page adds nothing to this list; it changes the population of scores, reviews and discussion (see
 [Realm context](#realm-context)).
 
-Views appear in the order above. Each tab shows its count when the count is known. A view with no data is left out,
-except Reviews and Discussion, whose empty state invites the first contribution. A list view whose items all fit in
+Views appear in the order above. Each tab shows its count when the count is known. A view whose feature is not open is
+left out, with no panel or notice; its URL redirects to the overview. A view with no data is left out, except Reviews
+and Discussion, whose open reads invite the first contribution when empty. A list view whose items all fit in
 its overview preview, with nothing to filter, has no tab: the overview section shows all of it without a "See all"
 link, and the view's URL still renders. With typical catalogue data (a median work has about five characters, two
 credits and one relation) most subjects show Overview, Reviews, Discussion, Lists and Details, and no tab repeats

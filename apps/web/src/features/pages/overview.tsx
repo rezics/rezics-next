@@ -723,7 +723,7 @@ export function Summary(props: Record<string, unknown>) {
   );
 }
 
-function Unavailable({
+function FeatureEmpty({
   slot,
   id,
   title,
@@ -736,12 +736,14 @@ function Unavailable({
   text: string;
   view: string;
 }) {
-  const value = useContext(OverviewContext);
-  if (!value) return null;
+  const state = useOverview(id);
+  if (!state?.section) return null;
+  const { value, section } = state;
   const href = viewHref(value, view);
   const key = typeof id === 'string' ? id : slot;
+  if (!section.ok) return <Failed slot={slot} id={key} title={title} locale={value.locale} />;
   return (
-    <section data-slot={slot} data-state="unavailable" aria-labelledby={`${key}-title`} className={sectionClass}>
+    <section data-slot={slot} data-state="empty" aria-labelledby={`${key}-title`} className={sectionClass}>
       <h2 id={`${key}-title`} className={headingClass}>
         {title}
       </h2>
@@ -761,6 +763,7 @@ function Unavailable({
 }
 
 export function RatingSummary(props: Record<string, unknown>) {
+
   const value = useContext(OverviewContext);
   if (!value?.subject) return null;
   return (
@@ -768,6 +771,7 @@ export function RatingSummary(props: Record<string, unknown>) {
       id={typeof props.id === 'string' ? props.id : 'ratings'}
       subject={value.subject}
       locale={value.locale}
+
     />
   );
 }
@@ -775,11 +779,11 @@ export function RatingSummary(props: Record<string, unknown>) {
 export function ThreadList(props: Record<string, unknown>) {
   const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
   return (
-    <Unavailable
+    <FeatureEmpty
       slot="thread-list"
       id={props.id}
       title={m.subject_discussion({}, { locale })}
-      text={m.subject_threads_unavailable({}, { locale })}
+      text={m.subject_threads_empty({}, { locale })}
       view="discussion"
     />
   );
@@ -788,11 +792,11 @@ export function ThreadList(props: Record<string, unknown>) {
 export function ReviewList(props: Record<string, unknown>) {
   const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
   return (
-    <Unavailable
+    <FeatureEmpty
       slot="review-list"
       id={props.id}
       title={m.subject_reviews({}, { locale })}
-      text={m.subject_reviews_unavailable({}, { locale })}
+      text={m.subject_reviews_empty({}, { locale })}
       view="reviews"
     />
   );

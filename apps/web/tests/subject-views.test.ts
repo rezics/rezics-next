@@ -293,8 +293,8 @@ const renderOverview = (page: SubjectPageData, invitation?: string) =>
 test('the host renders a tab bar of the views that have data in the documented order, with counts, scrolling on phones without wrapping', () => {
   const page = workPage();
   const tabs = subjectTabs(page);
-  // Views whose previews do not fit stay tabbed; Reviews, Discussion and Details are always there.
-  expect(tabs.map(({ view }) => view)).toEqual(['overview', 'reviews', 'discussion', 'lists', 'details']);
+  // Views whose previews do not fit stay tabbed; closed Reviews and Discussion reads are omitted.
+  expect(tabs.map(({ view }) => view)).toEqual(['overview', 'lists', 'details']);
   expect(tabs.map(({ view }) => VIEWS.indexOf(view))).toEqual(
     tabs.map(({ view }) => VIEWS.indexOf(view)).sort((a, b) => a - b),
   );
@@ -311,15 +311,17 @@ test('the host renders a tab bar of the views that have data in the documented o
   const hrefs = [...bar.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
   expect(hrefs).toEqual([
     path(kokoro, 'The Little Prince'),
-    ...['reviews', 'discussion', 'lists', 'details'].map((view) => path(kokoro, 'The Little Prince', view)),
+    ...['lists', 'details'].map((view) => path(kokoro, 'The Little Prince', view)),
   ]);
-  expect(bar.match(/role="tab"/g)).toHaveLength(5);
+  expect(bar.match(/role="tab"/g)).toHaveLength(3);
   expect(bar).toMatch(
     /aria-selected="true"[^>]*href="[^"]*\/subjects\/[^"/]+\/[^"/]+"|href="[^"]*\/subjects\/[^"/]+\/[^"/]+"[^>]*aria-selected="true"/,
   );
   expect(text(bar)).not.toContain('Editions 3');
   expect(text(bar)).toContain('Lists 9');
   expect(text(bar)).toContain('Details');
+  expect(text(bar)).not.toContain('Reviews');
+  expect(text(bar)).not.toContain('Discussion');
   // The bar scrolls sideways on a narrow screen and never wraps; it stays in view under the top bar.
   expect(bar).toContain('overflow-x-auto');
   expect(bar).toContain('flex-nowrap');
@@ -334,7 +336,7 @@ test('the host renders a tab bar of the views that have data in the documented o
 
   // Empty views, previews that fit in the overview, and views the templates do not define are left out.
   const bare = subjectTabs(workPage({ editions: 0, relations: 0, lists: 0 }));
-  expect(bare.map(({ view }) => view)).toEqual(['overview', 'reviews', 'discussion', 'details']);
+  expect(bare.map(({ view }) => view)).toEqual(['overview', 'details']);
   const person = subjectTabs({
     ...workPage(),
     views: ['overview', 'works', 'discussion', 'details'],
@@ -408,7 +410,7 @@ test('a subject with only a title renders a complete page with the placeholder c
   const page = await loaded(mushishi);
   expect(page.subject).toBe(mushishi);
   const tabs = subjectTabs(page);
-  expect(tabs.map(({ view }) => view)).toEqual(['overview', 'reviews', 'discussion', 'details']);
+  expect(tabs.map(({ view }) => view)).toEqual(['overview', 'details']);
   const html = renderToString(
     createElement(SubjectPage, {
       page,
@@ -426,8 +428,8 @@ test('a subject with only a title renders a complete page with the placeholder c
   expect(html).not.toContain('<img');
   expect(text(html)).toContain('Add what you know.');
   expect(html).toContain('data-slot="invitation"');
-  expect(text(section(html, 'thread-list'))).toContain('Discussion');
-  expect(html).toContain(`href="${path(mushishi, 'Mushishi', 'discussion')}"`);
+  expect(section(html, 'thread-list')).toBe('');
+  expect(html).not.toContain(`href="${path(mushishi, 'Mushishi', 'discussion')}"`);
   expect(html).toContain(`href="${path(mushishi, 'Mushishi', 'details')}"`);
   // Nothing raw: no identifier or property CURIE is shown.
   expect(text(html.replace(/<(?:a|link)\b[^>]*>/g, '<a>'))).not.toMatch(/schema:|wdt:|rezics:|0192f3a0/);

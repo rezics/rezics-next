@@ -399,7 +399,7 @@ function withRelation(data: SubjectPageData) {
   related.count = { value: 1, exact: true };
 }
 
-test("the subject story renders the platform template's overview in order: header, About (summary, key facts, tags), editions, relations, ratings, reviews, discussion, lists, sources", () => {
+test('the subject story renders open overview sections in order and omits closed ratings, reviews and discussion', () => {
   const html = render(loaded(withRelation));
   const slots = [
     'subject-header',
@@ -408,15 +408,14 @@ test("the subject story renders the platform template's overview in order: heade
     'subject-tags',
     'subject-list',
     'relation-groups',
-    'rating-summary',
-    'review-list',
-    'thread-list',
     'collection-list',
     'subject-sources',
   ];
   const at = slots.map((slot) => html.indexOf(`data-slot="${slot}"`));
   expect(at.every((index) => index >= 0)).toBe(true);
   expect(at).toEqual([...at].sort((a, b) => a - b));
+  for (const slot of ['rating-summary', 'review-list', 'thread-list'])
+    expect(html).not.toContain(`data-slot="${slot}"`);
   // The old template's catch-all row is gone: the summary is the About section, not a "Summary" fact.
   expect(html).not.toMatch(/<dt[^>]*>Abstract<\/dt>/);
   expect(count(html, 'data-slot="subject-summary"')).toBe(1);

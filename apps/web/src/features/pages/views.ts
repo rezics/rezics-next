@@ -45,7 +45,12 @@ export function previewedView(node: Node): View | undefined {
     case 'AccountPosts':
       return 'posts';
     case 'AccountThreads':
-      return node.props.threadKind === 'review' ? 'reviews' : undefined;
+      return node.props.threadKind === 'review' ? 'reviews' : 'discussion';
+    case 'RatingSummary':
+    case 'ReviewList':
+      return 'reviews';
+    case 'ThreadList':
+      return 'discussion';
     case 'AccountCollections':
       return 'collections';
     case 'SubjectList':
@@ -73,7 +78,8 @@ function accountProfile(page: {
 }
 
 /** Views that are always offered when a template defines them. */
-const ALWAYS: ReadonlySet<View> = new Set(['overview', 'reviews', 'discussion', 'details']);
+const ALWAYS: ReadonlySet<View> = new Set(['overview', 'details']);
+const OPEN_READ_VIEWS: ReadonlySet<View> = new Set(['reviews', 'discussion']);
 
 function* walk(nodes: readonly unknown[]): Generator<Node> {
   for (const node of nodes) {
@@ -159,8 +165,8 @@ function previewCount(
 }
 
 /**
- * The tabs a subject page offers: the views its templates define, in the documented order, minus those without data.
- * Overview, Reviews, Discussion and Details are offered whenever a template defines them. A list view is omitted
+ * The tabs a subject page offers in the documented order. Overview and Details are offered whenever a template
+ * defines them. Reviews and Discussion require an open read, including when that read is empty. A list view is omitted
  * when every preview that feeds it was read and every item in those lists fits in the overview.
  */
 export function subjectTabs(page: {
@@ -192,6 +198,7 @@ export function subjectTabs(page: {
       hasCount: boolean;
     }
   >();
+  const openReads = new Set<View>();
   for (const node of walk(document.content)) {
     const view = previewedView(node);
     if (!view || !defined.has(view)) continue;
@@ -207,6 +214,7 @@ export function subjectTabs(page: {
     sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
     const planned = key === undefined ? undefined : plan.reads[key];
+    if (planned) openReads.add(view);
     const counted = previewCount(node, planned, key === undefined ? undefined : page.reads[key]);
     if (counted) {
       sum.counted += 1;
@@ -225,6 +233,11 @@ export function subjectTabs(page: {
   }
   return VIEWS.flatMap((view): ViewTab[] => {
     if (!defined.has(view) || !viewIsPublic(profile, view)) return [];
+    if (OPEN_READ_VIEWS.has(view)) {
+      if (!openReads.has(view)) return [];
+      const sum = sums.get(view);
+      return [{ view, ...(sum && sum.items > 0 ? { count: { value: sum.value, exact: sum.exact } } : {}) }];
+    }
     if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
     if (!sum || sum.items === 0) return [];

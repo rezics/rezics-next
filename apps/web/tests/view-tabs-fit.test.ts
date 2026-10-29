@@ -202,10 +202,10 @@ test('a subject view stays tabbed with its count and See all link when its previ
   }
 });
 
-test('Overview, Reviews, Discussion and Details remain tabbed, and loading a view without a tab still renders it', async () => {
+test('Overview and Details remain tabbed without open Reviews or Discussion reads, and a data view still renders directly', async () => {
   const overview = page({ editions: { returned: 1, count: 1, exact: true } });
   const tabs = subjectTabs(overview);
-  expect(tabs.map(({ view }) => view)).toEqual(['overview', 'reviews', 'discussion', 'details']);
+  expect(tabs.map(({ view }) => view)).toEqual(['overview', 'details']);
 
   const viewDocument = {
     root: { props: {} },

@@ -76,6 +76,13 @@ const readView = createServerFn({ method: 'GET', strict: false })
     }
     const frame = subjectFrame(loaded.overview, data.locale);
     if (!frame) throw notFound();
+    const tabs = subjectTabs(loaded.overview);
+    if ((data.view === 'reviews' || data.view === 'discussion') && !tabs.some((tab) => tab.view === data.view)) {
+      throw redirect({
+        href: keepSearch(subjectUrlForView(canonical.value), data.search),
+        statusCode: 302,
+      });
+    }
     const type = subjectPageType(loaded.overview);
     return {
       view: data.view,
@@ -83,7 +90,7 @@ const readView = createServerFn({ method: 'GET', strict: false })
       reader,
       type: type ? await typeFrame(type, data.locale) : {},
       frame,
-      tabs: subjectTabs(loaded.overview),
+      tabs,
       title: frame.title.text,
       paths: subjectViewPaths(canonical.value.paths, data.view),
     };

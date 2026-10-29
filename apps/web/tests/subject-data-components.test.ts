@@ -206,22 +206,16 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
   expect(html.match(/data-slot="subject-sources"/g)).toHaveLength(1);
 });
 
-test('RatingSummary renders its empty rating state while ThreadList and ReviewList invite the first contribution', () => {
+test('RatingSummary keeps real reads while closed Reviews and Discussion sections render nothing', () => {
   const plan = planReads(platformRegistry, document, { subject: subjectId });
   expect(Object.values(plan.nodes)).toHaveLength(7);
   const html = render(pageOf());
   const ratings = section(html, 'rating-summary');
   expect(text(ratings)).toContain('No ratings yet');
   expect(ratings).toContain(`href="/en/subjects/${subjectId}/reviews"`);
-  for (const [slot, view] of [
-    ['review-list', 'reviews'],
-    ['thread-list', 'discussion'],
-  ] as const) {
-    const block = section(html, slot);
-    expect(block).toContain('data-state="unavailable"');
-    expect(text(block)).toMatch(/not open yet/);
-    expect(block).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/${view}"`);
-  }
+  expect(section(html, 'review-list')).toBe('');
+  expect(section(html, 'thread-list')).toBe('');
+});
 });
 
 test('a data component never renders an id, a media id or a property CURIE', () => {
