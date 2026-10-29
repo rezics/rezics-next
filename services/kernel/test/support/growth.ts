@@ -221,6 +221,7 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
     throw error;
   };
   let committedCount: number | undefined;
+  let committedStatements: readonly string[] = [];
   for (const { attempts, scale, occurrenceRepetitions } of samples) {
     if (!attempts) throw new TypeError(`${check.name}: missing attempt ledger at scale ${scale}`);
     for (const [repetition, run] of attempts.repetitions.entries()) {
@@ -231,15 +232,18 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
         );
       for (const [index, attempt] of run.ledger.entries()) {
         if (attempt.outcome !== 'committed') continue;
-        committedCount ??= attempt.statements;
+        const statements = attempt.occurrences.map(
+          (occurrence) =>
+            occurrenceRepetitions[repetition]?.statements.find(({ index }) => index === occurrence)?.statement ??
+            `occurrence ${occurrence} (SQL unavailable)`,
+        );
+        if (committedCount === undefined) {
+          committedCount = attempt.statements;
+          committedStatements = statements;
+        }
         if (attempt.statements !== committedCount) {
-          const statements = attempt.occurrences.map(
-            (occurrence) =>
-              occurrenceRepetitions[repetition]?.statements.find(({ index }) => index === occurrence)?.statement ??
-              `occurrence ${occurrence}`,
-          );
           fail(
-            `committed attempt ${index} on backend ${attempt.backend} at scale ${scale}, repetition ${repetition}: statement counts differ; expected ${committedCount}, got ${attempt.statements}; statements: ${statements.join('; ')}`,
+            `committed attempt ${index} on backend ${attempt.backend} at scale ${scale}, repetition ${repetition}: statement counts differ; expected ${committedCount}, got ${attempt.statements}; statements: ${statements.join('; ')}; reference committed statements: ${committedStatements.join('; ')}`,
           );
         }
       }

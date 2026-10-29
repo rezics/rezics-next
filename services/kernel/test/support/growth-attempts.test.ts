@@ -348,3 +348,29 @@ test('attempt ledger: one expensive execution cannot be hidden by cheaper repeti
     );
   }
 });
+
+test('attempt ledger: a statement mismatch reports actual and reference SQL separately', () => {
+  const samples = [1, 4, 16].map((scale) => {
+    const sample = reportSample(scale, [
+      [attempt('committed', 1, [0])],
+      [attempt('committed', scale === 4 ? 2 : 1, [0, 1])],
+    ]);
+    const first = sample.occurrenceRepetitions[0]!;
+    return {
+      ...sample,
+      occurrenceRepetitions: [
+        first,
+        {
+          ...first,
+          statements: [
+            { ...first.statements[0]!, statement: 'SELECT actual_first' },
+            { ...first.statements[0]!, index: 1, statement: 'SELECT actual_second' },
+          ],
+        },
+      ],
+    };
+  });
+  expect(() => validateAttemptSamples(attemptCheck, samples)).toThrow(
+    /scale 4, repetition 1.*statements: SELECT actual_first; SELECT actual_second; reference committed statements: SELECT 1/,
+  );
+});
