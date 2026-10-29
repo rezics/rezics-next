@@ -203,3 +203,17 @@ executed, and no new assertion count, native command or receipt is claimed. The 
 remains `751500e9c56f1b840f5f149d56b511537638867388976bcb245f55bedd72d171`.
 Only this report changed; the witness-only contract's prohibition on helper/product edits is preserved.
 Current acceptance validation remains blocked by the required check submission tool.
+
+### Current submission protocol retry
+
+Starting revision: `7bacbb97182a7297b41479456191aff317ebd18d`. The current contract explicitly
+requires `bun scripts/worker-check.ts -- <command...>`. Earlier `--run --` failures above
+belong to previous attempts; the current default submission branch accepts the required syntax.
+The existing composed test, old recovery cases/report, recovery factory, distinct-input case and
+current MediaBoundary source API were inspected again. Preserve the frozen test and its SHA-256
+`751500e9c56f1b840f5f149d56b511537638867388976bcb245f55bedd72d171`; it already covers
+the composed journey. No product, helper, old test or outside-path edit is needed.
+
+Decision: submit the delivery command first to retry the manifest failure, then exactly one
+focused native-file check and the affected kernel typecheck. No whole-workspace gate is required.
+Results from this submission will be recorded separately from historical execution evidence.
