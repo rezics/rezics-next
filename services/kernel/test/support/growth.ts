@@ -565,10 +565,19 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
               Math.max(...totals.map(({ blocks }) => blocks)) - Math.min(...totals.map(({ blocks }) => blocks))
                 ? 'rows'
                 : 'blocks';
-            const highest = totals.reduce((best, value, index) => (value[field] > totals[best]![field] ? index : best), 0);
-            const lowest = totals.reduce((best, value, index) => (value[field] < totals[best]![field] ? index : best), 0);
+            const highest = totals.reduce(
+              (best, value, index) => (value[field] > totals[best]![field] ? index : best),
+              0,
+            );
+            const lowest = totals.reduce(
+              (best, value, index) => (value[field] < totals[best]![field] ? index : best),
+              0,
+            );
             const value = (index: number, statement: string, key: 'rows' | 'blocks') =>
-              occurrences[index]!.filter((item) => item.statement === statement).reduce((sum, item) => sum + item[key], 0);
+              occurrences[index]!.filter((item) => item.statement === statement).reduce(
+                (sum, item) => sum + item[key],
+                0,
+              );
             const statements = [...new Set(occurrences.flatMap((items) => items.map(({ statement }) => statement)))];
             const differing = statements.filter((statement) =>
               (['rows', 'blocks'] as const).some(

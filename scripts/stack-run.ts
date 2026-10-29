@@ -213,7 +213,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
         ...(priority === undefined ? {} : { priority }),
         ...(interval === undefined ? {} : { pollMs: interval }),
-        ...((run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined)
+        ...(run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined
           ? {}
           : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
         answered: () => {
