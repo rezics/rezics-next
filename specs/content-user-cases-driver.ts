@@ -118,7 +118,7 @@ export interface Page<T> {
 export interface Figure {
   questionId: string;
   populationId: string;
-  /** Stored integer vote units 0..20; display values 0..10, one unit = 0.5. */
+  /** Stored vote scale 0..20; each stored unit represents 0.5 points on the display scale 0..10. */
   units: { minimum: number; maximum: number; displayStep: number };
   count: number;
   state: 'ready' | 'insufficient_data' | 'updating';

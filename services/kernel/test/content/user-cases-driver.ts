@@ -1,4 +1,6 @@
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { normalizeDocument, parseDocument, serializeDocument, withDocumentIds } from '@rezics/document';
+import type { DocumentSnapshot } from '@rezics/document';
 import data from '../../../../specs/fixtures/content-user-cases.json';
 import type {
   ApiResult,
@@ -38,6 +40,27 @@ function route(id: string): number {
   const value = routeOf(id);
   if (value === null) throw new Error(`Fixture identity is not routed: ${id}`);
   return value;
+}
+
+/** Add stable, fixture-only block identities and pass the same canonical snapshot shape as native clients. */
+function requestDocument(value: unknown): DocumentSnapshot {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('Content fixture body must be a document snapshot');
+  }
+  const snapshot = value as DocumentSnapshot;
+  let nextId = 0;
+  const normalized = normalizeDocument({
+    ...snapshot,
+    doc: withDocumentIds(snapshot.doc, () => {
+      nextId += 1;
+      return `00000000-0000-4000-8000-${String(nextId).padStart(12, '0')}`;
+    }),
+  });
+  return parseDocument(JSON.parse(serializeDocument(normalized)));
+}
+
+function contentInput<T extends { body: unknown }>(input: T): Omit<T, 'body'> & { body: DocumentSnapshot } {
+  return { ...input, body: requestDocument(input.body) };
 }
 
 /** Only DTO field names change; missing consumer fields stay missing. */
@@ -305,7 +328,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
         return result(await send('GET', `/v1/subjects/${subjectId}/ratings/${questionId}/vote`, actor), (json) => json);
       },
       async createThread(input, options) {
-        const response = await send('POST', '/v1/threads', options.actor, input, options.key);
+        const response = await send('POST', '/v1/threads', options.actor, contentInput(input), options.key);
         const value = await contentResult<Thread>(response, 'thread');
         if (value.value)
           await seedGovernanceAuthority(pool, route(value.value.firstPost.id), value.value.firstPost.id, moderator.id, [
@@ -315,13 +338,13 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
       },
       async createPost({ threadId, ...input }, options) {
         return contentResult<Post>(
-          await send('POST', `/v1/threads/${threadId}/posts`, options.actor, input, options.key),
+          await send('POST', `/v1/threads/${threadId}/posts`, options.actor, contentInput(input), options.key),
           'post',
         );
       },
       async revise(post, input, options) {
         return contentResult<Post>(
-          await send('POST', `/v1/posts/${post.id}/revisions`, options.actor, input, options.key, {
+          await send('POST', `/v1/posts/${post.id}/revisions`, options.actor, contentInput(input), options.key, {
             'if-match': JSON.stringify(post.revisionId),
           }),
           'post',

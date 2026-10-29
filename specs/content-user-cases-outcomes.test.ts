@@ -60,6 +60,10 @@ function ok<T>(result: ApiResult<T>, status = 200): T {
   expect(result.value).not.toBeNull();
   return result.value!;
 }
+function present(result: ApiResult<unknown>, status = 200): void {
+  expect(result.response.status).toBe(status);
+  expect(result.value).not.toBeNull();
+}
 function written<T>(result: ApiResult<T>, status = 200): T {
   return ok(result, status);
 }
@@ -224,7 +228,7 @@ function context(figure: Figure, count: number) {
     questionId: fixture.standardQuestionId,
     populationId: fixture.globalPopulationId,
     count,
-    units: { minimum: 0, maximum: 20, displayStep: 0.5 },
+    units: { minimum: 0, maximum: 20, displayStep: 1 },
   });
 }
 async function matchingFigures(subjectId: string, count: number) {
@@ -292,7 +296,7 @@ describe('subject-rating-context', () => {
       await driver.subjectFigure(fixture.subjectId, null),
       await driver.searchCard(fixture.subjectId, null),
     ]) {
-      ok(result);
+      present(result);
       const wire = await result.response.clone().text();
       expect(wire).not.toContain(fixture.reader.id);
       expect(wire).not.toContain('voteCitation');
