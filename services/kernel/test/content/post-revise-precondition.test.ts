@@ -313,10 +313,13 @@ describe('post revise precondition through the mounted kernel', () => {
         await seed(database, population, { from: previous, to: scale });
       },
       async operation(_database, _scale, repetition) {
-        const postId = targets[repetition]!.firstPost.id;
+        const original = targets[repetition]!.firstPost;
+        const postId = original.id;
         const read = await call('GET', `/v1/posts/${postId}`);
         expect(read.response.status).toBe(200);
-        expect(read.response.headers.get('etag')).toBe(JSON.stringify(read.body.post.revisionId));
+        expect(read.body.post.revisionId).toBe(original.revisionId);
+        expect(read.body.post.revisedAt).toBeNull();
+        expect(read.response.headers.get('etag')).toBe(JSON.stringify(original.revisionId));
         const revised = await call(
           'POST',
           `/v1/posts/${postId}/revisions`,
@@ -325,6 +328,8 @@ describe('post revise precondition through the mounted kernel', () => {
           { 'if-match': read.response.headers.get('etag')! },
         );
         expect(revised.response.status).toBe(200);
+        expect(revised.body.post.revisionId).not.toBe(original.revisionId);
+        expect(revised.body.post.revisedAt).toEqual(expect.any(String));
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
