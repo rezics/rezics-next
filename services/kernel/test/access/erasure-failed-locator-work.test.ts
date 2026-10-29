@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
-import { DBOS, type StartWorkflowParams } from '@dbos-inc/dbos-sdk';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import {
   acknowledgeErasure,
   advanceErasureCompletion,
@@ -295,7 +295,7 @@ test('all batch rows commit before enqueue; an enqueue failure leaves the checkp
   const second = await source({ partition });
   const originalStart = DBOS.startWorkflow.bind(DBOS) as (
     fn: (...args: unknown[]) => Promise<unknown>,
-    options?: StartWorkflowParams,
+    options?: Parameters<typeof DBOS.startWorkflow>[1],
   ) => (...args: unknown[]) => Promise<unknown>;
   let starts = 0;
   const failure = spyOn(DBOS, 'startWorkflow').mockImplementation(((...args: Parameters<typeof originalStart>) => {
