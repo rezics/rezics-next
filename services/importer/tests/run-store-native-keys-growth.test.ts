@@ -155,7 +155,7 @@ test('native slash key stage/get and page/ack stay indexed across same-source hi
     }
     expect(samples.size).toBe(4 * keys.length + 3);
     for (const [operation, group] of samples) {
-      expect(group.map(({ scale }) => scale)).toEqual(scales);
+      expect(group.map(({ scale }) => scale)).toEqual([...scales]);
       expect(countedViolations(operationCheck, group)).toEqual([]);
       console.info('slash-key counts', JSON.stringify({ operation, samples: group }));
     }

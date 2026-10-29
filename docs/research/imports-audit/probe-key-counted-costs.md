@@ -66,6 +66,18 @@ plans. Stage/ack control traces remain exactly `BEGIN IMMEDIATE`, `COMMIT`. Exac
 acknowledged metadata and the separate identifier, JSON byte-cap, unsafe getter, metadata and stale-capability
 controls remain intact. There is no timeout, cap, tolerance or operation-width increase.
 
+Observed counts at every scale (each fixed-key operation is repeated separately for all three keys):
+
+| Operation                  | `sqlite statements` | `sqlite returned rows` |
+| -------------------------- | ------------------: | ---------------------: |
+| Stage each fixed key       |                   7 |                      2 |
+| Get each fixed key         |                   5 |                      5 |
+| First staged page          |                   2 |                      4 |
+| Cursor staged page         |                   2 |                      3 |
+| Acknowledge each fixed key |                   7 |                      2 |
+| Get each acknowledged key  |                   5 |                      5 |
+| Acknowledged cursor page   |                   1 |                      2 |
+
 ## Validation and limits
 
 Validation results and the exact tested revision are recorded after the committed focused run and root typecheck.
