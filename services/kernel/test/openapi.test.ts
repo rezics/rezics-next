@@ -100,7 +100,7 @@ test('request bodies are JSON only and hidden routes are left out', () => {
 
 test('global body parser restores JSON schemas and preserves raw request content types', () => {
   const build = (withGlobalParser: boolean) => {
-    const app = createApp({ pool })
+    const app = (withGlobalParser ? createApp({ pool }).onParse('global', async () => ({})) : createApp({ pool }))
       .post(
         '/v1/global-body',
         { body: t.Object({ name: t.String() }), detail: { operationId: 'global.body' } },
@@ -123,7 +123,7 @@ test('global body parser restores JSON schemas and preserves raw request content
         },
         () => ({ ok: true }),
       );
-    return withGlobalParser ? app.onParse('global', async () => ({})) : app;
+    return app;
   };
 
   const withoutHook = build(false);
