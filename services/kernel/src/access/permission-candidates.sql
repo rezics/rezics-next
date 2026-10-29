@@ -1,4 +1,4 @@
--- The B-tree companion to the temporal grant key seeks the last range starting
+-- On Global, the B-tree companion seeks the last exact-key range starting
 -- at or before T. Non-overlap makes it the only possible grant at T; check
 -- containment after LIMIT so neither expired nor future history is enumerated.
 -- Scalar role-grant/denial counts cannot become hashed ACL-wide EXISTS plans.
@@ -20,13 +20,20 @@ WITH input AS NOT MATERIALIZED (
   FROM input i CROSS JOIN LATERAL (VALUES (i.actor_id), (i.principal_id)) a(id) WHERE id IS NOT NULL
 ), authority AS MATERIALIZED (SELECT :at::timestamptz AS at), probes AS MATERIALIZED (
   SELECT k.*,
-    ((SELECT count(*) FROM (
-      SELECT g.valid FROM access.resource_grant g
-      WHERE g.route = i.route AND g.resource_id = target.resource_id AND g.action = i.action
-        AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
-        AND g.valid <= tstzrange((SELECT at FROM authority), NULL, '[)')
-      ORDER BY g.valid DESC LIMIT 1
-    ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0 OR (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
+    ((CASE WHEN i.route = 0 AND target.resource_id = '00000000-0000-8000-8000-000000000000'::uuid
+      THEN (SELECT count(*) FROM (
+        SELECT g.valid FROM access.resource_grant g
+        WHERE g.route = 0 AND g.resource_id = '00000000-0000-8000-8000-000000000000'::uuid
+          AND g.action = i.action AND g.subject_kind = k.subject_kind
+          AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
+          AND g.valid <= tstzrange((SELECT at FROM authority), NULL, '[)')
+        ORDER BY g.valid DESC LIMIT 1
+      ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0
+      ELSE (SELECT count(*) FROM access.resource_grant g
+        WHERE g.route = i.route AND g.resource_id = target.resource_id AND g.action = i.action
+          AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
+          AND g.valid @> (SELECT at FROM authority)) > 0
+    END) OR (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
       WHERE (SELECT count(*) FROM access.resource_role_grant g
         WHERE g.route = i.route AND g.resource_id = target.resource_id AND g.grant_role = role.grant_role
           AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role

@@ -925,17 +925,19 @@ Bearer scope claims are bounded once at authenticator creation to 129 characters
 - Touches: `permission-check.sql` re-probes the exact direct, active-accounts and admitted group role keys at evaluator T using grant/role-grant GiST primary keys and `resource_denial_permission`. Scope and optional principal grants intersect; denials and expired/missing group proofs fail closed. One result per requested id (one id for a single check), no writes or inverse/role rereads. The verified domain floor supplies public eligibility; anonymous input has no subject keys and does not scan denials.
 - Bound: `Q`: one formula statement (plus time when not supplied and optional domain verifier); O(1+J) bounded probe rows, O(1) result. Integrated P+Q: constant rows/statements in G; blocks are the sum of independently indexed grant, role-grant and denial probes, with discrete index-depth transitions at fixed J; at most linear in admitted J through cap1000 per identity. Role expansion adds R-dependent probes, not H/O enumeration. Permission and operator evidence use the shared real-time TTL helper; elapsed evidence returns 503 without effects. No added reads.
 - Touches: `permission-check.sql` re-probes the exact direct, active-accounts and admitted group role keys at evaluator T using `resource_grant_pkey_lookup`, the role-grant GiST primary key and `resource_denial_permission`. Scope and optional principal grants intersect; denials and expired/missing group proofs fail closed. One result per requested id (one id for a single check), no writes or inverse/role rereads. The verified domain floor supplies public eligibility; anonymous input has no subject keys and does not scan denials.
+- Touches: `permission-check.sql` re-probes the exact direct, active-accounts and admitted group role keys at evaluator T using the grant/role-grant GiST primary keys and `resource_denial_permission`; Global grant reads use `resource_grant_pkey_lookup`. Scope and optional principal grants intersect; denials and expired/missing group proofs fail closed. One result per requested id (one id for a single check), no writes or inverse/role rereads. The verified domain floor supplies public eligibility; anonymous input has no subject keys and does not scan denials.
 - Bound: `Q`: one formula statement (plus time when not supplied and optional domain verifier); O(1+J) bounded probe rows, O(1) result. Integrated P+Q: constant rows/statements in G, logarithmic blocks at fixed J; at most linear in admitted J through cap1000 per identity. Role expansion adds R-dependent probes, not H/O enumeration. Permission and operator evidence use the shared real-time TTL helper; elapsed evidence returns 503 without effects. No added reads.
 - Growth check: `test/access/growth-evaluator.test.ts`: independent G and K checks, production pool, K through cap1000. `test/access/access-deadlines.test.ts`.
 
-The grant B-tree companion contains the full temporal primary key in lexicographic order. Each probe binds
+The Global grant B-tree companion contains the full temporal primary key in lexicographic order. Each probe binds
 route, resource, subject kind/id/role and action, seeks the greatest `valid <= [T,infinity)`, then checks
 `valid @> T` after `LIMIT 1`. All stored finite starts are inclusive and intervals never overlap, so this
 predecessor is the only range that could contain T, including unbounded endpoints. Gaps and exclusive ends
 still deny. Neither other subjects/resources nor the key's expired/future intervals are enumerated. The same
 probe is used in `permission-candidates.sql` and `governance-reach-candidates.sql`; the temporal primary key
 continues to enforce integrity. `test/access/grant-key-lookup.test.ts` checks all three plans and temporal
-boundaries against unrelated and exact-key history at 1/8/64.
+boundaries against unrelated and exact-key history at 1/8/64. The partial index and explicit Global branch
+leave other resources on their existing temporal probes.
 
 ### Generic / parent creation authorization
 
