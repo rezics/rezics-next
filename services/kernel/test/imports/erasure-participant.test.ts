@@ -50,7 +50,17 @@ afterAll(async () => {
 test('real account deletion delivers the registered imports effect and persists a truthful immutable none acknowledgement', async () => {
   expect(KERNEL_WORK_MODULES.filter((module) => module === importsWorkModule)).toHaveLength(1);
   expect(KERNEL_WORK_MODULES.map((module) => module.name)).toEqual([
-    'accounts', 'account_erasure', 'rating', 'commerce', 'library', 'community', 'semantic', 'search', 'imports', 'content', 'retention',
+    'accounts',
+    'account_erasure',
+    'rating',
+    'commerce',
+    'library',
+    'community',
+    'semantic',
+    'search',
+    'imports',
+    'content',
+    'retention',
   ]);
 
   const deletion = await deletePersona({ version: 1, pool, auth }, person);
