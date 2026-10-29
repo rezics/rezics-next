@@ -76,7 +76,6 @@ export function ShelfTypeChips({
 }
 
 type Labels = {
-  search: string;
   sort: string;
   direction: string;
   ascending: string;
@@ -99,8 +98,6 @@ type Labels = {
 };
 type Props = {
   labels: Labels;
-  search: string;
-  onSearch: (search: string) => void;
   sorts: Option[];
   sort: string;
   direction: 'asc' | 'desc';

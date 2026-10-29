@@ -6,7 +6,6 @@ import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
 import { ShelfTabs, ShelfToolbar, ShelfTypeChips } from './shelf-toolbar.tsx';
 
 const labels = {
-  search: 'Search library',
   sort: 'Sort',
   direction: 'Direction',
   ascending: 'Ascending',
@@ -42,7 +41,6 @@ const tabs = [
 function Page({ initial = 'all' }: { initial?: string }) {
   const [tab, setTab] = useState(initial);
   const [type, setType] = useState('all');
-  const [search, setSearch] = useState('');
   const [sort, setSort] = useState('recent');
   const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
   const [layout, setLayout] = useState<'grid' | 'list' | 'table'>('grid');
@@ -77,8 +75,6 @@ function Page({ initial = 'all' }: { initial?: string }) {
       />
       <ShelfToolbar
         labels={labels}
-        search={search}
-        onSearch={setSearch}
         sorts={[
           { value: 'recent', label: 'Recent activity' },
           { value: 'title', label: 'Title' },

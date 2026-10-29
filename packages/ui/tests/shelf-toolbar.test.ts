@@ -5,7 +5,6 @@ import { ShelfTabs, ShelfTypeChips, ShelfToolbar } from '@rezics/ui/shelf-toolba
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 
 const labels = {
-  search: 'Search',
   sort: 'Sort',
   direction: 'Direction',
   ascending: 'Ascending',
@@ -52,8 +51,6 @@ test('toolbar renders responsive controls and active filter chips', () => {
   const html = renderToStaticMarkup(
     createElement(ShelfToolbar, {
       labels,
-      search: '',
-      onSearch() {},
       sorts: [{ value: 'title', label: 'Title' }],
       sort: 'title',
       direction: 'asc',
@@ -70,8 +67,9 @@ test('toolbar renders responsive controls and active filter chips', () => {
       count: 10,
     }),
   );
-  for (const value of ['Search', 'View', 'Select', 'Grid', 'List', 'Table', 'Books', 'Clear filters', '10 items'])
+  for (const value of ['View', 'Select', 'Grid', 'List', 'Table', 'Books', 'Clear filters', '10 items'])
     expect(html).toContain(value);
+  expect(html).not.toContain('Search');
   expect(html).toContain('md:');
   expect(html).toContain('sm:');
 });
