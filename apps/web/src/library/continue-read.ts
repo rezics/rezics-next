@@ -67,6 +67,7 @@ export function continueProgress(session: (ProgressLabelInput & { id: string }) 
         total: session.total,
         completedUnitCount: session.completedUnitCount,
         locator: session.locator,
+        position: session.position,
       }
     : null;
 }
@@ -164,9 +165,10 @@ export async function loadContinue(
           label: libraryLabel(subject.label, item.subjectId),
           ...(language ? { language } : {}),
           summary: summaryOf(subject),
-          progress: progress && release
-            ? { ...progress, ...progressSessionProfile(release, subject.type, progress.mode, progress.unit, locale) }
-            : progress,
+          progress:
+            progress && release
+              ? { ...progress, ...progressSessionProfile(release, subject.type, progress.mode, progress.unit, locale) }
+              : progress,
           ...(label ? { stateLabel: label } : {}),
         },
       ];
@@ -200,9 +202,13 @@ export async function loadLegacyContinue(
             label: libraryLabel(subject.label, entry.subjectId),
             ...(language ? { language } : {}),
             summary: summaryOf(subject),
-            progress: progress && release
-              ? { ...progress, ...progressSessionProfile(release, subject.type, progress.mode, progress.unit, locale) }
-              : progress,
+            progress:
+              progress && release
+                ? {
+                    ...progress,
+                    ...progressSessionProfile(release, subject.type, progress.mode, progress.unit, locale),
+                  }
+                : progress,
             ...(stateLabel ? { stateLabel } : {}),
           })),
         ];
@@ -214,7 +220,9 @@ export async function loadLegacyContinue(
 }
 
 async function progressProfiles(request: Request) {
-  const release = await import('../subject/definitions').then(({ readRelease }) => readRelease()).catch(() => undefined);
+  const release = await import('../subject/definitions')
+    .then(({ readRelease }) => readRelease())
+    .catch(() => undefined);
   const locale = (await import('../kernel/client')).requestLocale(request) ?? 'en';
   const { progressSessionProfile } = await import('./progress-profile');
   return { release, locale, progressSessionProfile };
