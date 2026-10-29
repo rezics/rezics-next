@@ -149,7 +149,7 @@ export async function runWorkerCheck(
   };
   if (remoteEligible) {
     let remoteOutput = '';
-    const remote = spawn(resolveRepositoryBun(['bun'], root)[0]!, [join(root, 'scripts/remote-check.ts'), root, '--', ...command], {
+    const remote = spawn(resolveRepositoryBun(['bun'], root)[0]!, [join(root, 'scripts/remote-check.ts'), root, '--', ...argv], {
       cwd: root,
       env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
       stdio: ['inherit', 'pipe', 'pipe'],
