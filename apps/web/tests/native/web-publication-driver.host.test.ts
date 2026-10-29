@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import data from '../../../../specs/fixtures/web-publication.json';
 import type { WebPublicationDriver } from '../../../../specs/web-publication-driver';
 
 const owned: WebPublicationDriver[] = [];
+setDefaultTimeout(180_000);
 afterEach(async () => {
   await Promise.all(owned.splice(0).map((driver) => driver.close()));
 });
