@@ -25,6 +25,10 @@ if (configuredInspectorPort !== undefined) {
 }
 
 export default defineConfig({
+  server: {
+    // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
+    allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : undefined,
+  },
   html: { cspNonce: viteNonceMarker },
   // Fonts must stay on the site origin; the page policy does not allow data: fonts.
   build: { assetsInlineLimit: 0 },

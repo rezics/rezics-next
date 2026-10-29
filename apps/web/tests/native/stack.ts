@@ -59,6 +59,7 @@ async function startWeb(
     KERNEL_ORIGIN: kernelOrigin,
     PUBLIC_ORIGIN: publicOrigin,
     WEB_TEST_STATE_DIR: stateDirectory,
+    WEB_DEV_ALLOW_ANY_HOST: '1',
     WRANGLER_SEND_METRICS: 'false',
   };
   const child = spawn(
