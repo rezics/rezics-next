@@ -68,4 +68,5 @@ WITH input AS NOT MATERIALIZED (
 SELECT EXISTS (SELECT 1 FROM version) AS advanced,
        EXISTS (SELECT 1 FROM changed) AS "projectionChanged",
        (SELECT "publicCollectionCount" FROM aggregate) AS "publicCollectionCount",
-       (SELECT revision FROM aggregate) AS revision;
+       (SELECT revision FROM aggregate) AS revision
+LIMIT 1;

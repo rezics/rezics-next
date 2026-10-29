@@ -556,7 +556,7 @@ test('native Auth suspension rejects the old Collection bearer and sign-in witho
       auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
       writeRate: createWriteRateLimiter({ secret: 'collection-native-auth-regression-secret' }),
     });
-    const actions = [...actionCatalogue(kernel).keys()];
+    const actions = [...actionCatalogue(kernel).keys()].filter((action) => action !== 'media:complete');
     await registerTestClient(service, { clientId: 'collections-native', firstParty: true, scopes: actions });
     const root = await auth.person(`root_${randomUUID().replaceAll('-', '')}`);
     const curator = await auth.person(`curator_${randomUUID().replaceAll('-', '')}`);

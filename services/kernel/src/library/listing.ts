@@ -65,9 +65,9 @@ export async function applySubjectListing({ pool, clock, client }: Dependencies,
           deadline,
         },
         async (tx, command) => {
-          const rows = await replace(tx, authoritativeTimeValue(command.time), command.transactionId);
-          const value = rows[0];
-          if (!value?.advanced) throw new Unchanged();
+          const value = await replace(tx, authoritativeTimeValue(command.time), command.transactionId);
+          if (!value) throw new Error('Listing replacement returned no row');
+          if (!value.advanced) throw new Unchanged();
           // Roll back: noEffect cannot conceal persisted ordering/coordination writes.
           if (!value.projectionChanged) throw new StampOnly();
           return {
@@ -97,8 +97,9 @@ export async function applySubjectListing({ pool, clock, client }: Dependencies,
           deadline,
         },
         async (tx) => {
-          const rows = await replace(tx, authoritativeTimeValue(commandTime(tx)!), randomUUID());
-          if (rows[0]?.projectionChanged) throw new ProjectionChanged();
+          const value = await replace(tx, authoritativeTimeValue(commandTime(tx)!), randomUUID());
+          if (!value) throw new Error('Listing replacement returned no row');
+          if (value.projectionChanged) throw new ProjectionChanged();
         },
       );
       return unchanged;

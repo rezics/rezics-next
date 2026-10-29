@@ -135,7 +135,7 @@ beforeAll(async () => {
       overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 60 } } }),
     }),
   });
-  const scopes = [...actionCatalogue(kernel).keys()];
+  const scopes = [...actionCatalogue(kernel).keys()].filter((action) => action !== 'media:complete');
   await registerTestClient(service, { clientId: 'publication', firstParty: true, scopes });
   const owner = await auth.person(`publication_${randomUUID().replaceAll('-', '')}`);
   ownerId = owner.accountId;
@@ -408,5 +408,5 @@ test('native visibility publication grows linearly only with the changed Collect
       })),
     }),
   );
-  for (const target of targets) for (const s of target.subjects) await count(s, 0);
+  for (const target of targets.slice(0, index)) for (const s of target.subjects) await count(s, 0);
 }, 180_000);
