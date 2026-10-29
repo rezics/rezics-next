@@ -1,16 +1,19 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { runWebTestLanes } from '../apps/web/scripts/check.ts';
 import {
   classifyLoadInducedFailures,
   classifyLoadInducedOutput,
   capture,
+  captureDefaults,
   classifyGrowthFailures,
   fileBounds,
   laneConcurrency,
   orderFiles,
   readLatest,
+  retainStoppedTimings,
   rerunLoadFailures,
   runLaneSuite,
   scheduleFiles,
@@ -35,6 +38,7 @@ async function withDirectory(use: (directory: string) => Promise<void>): Promise
 const timing = (wall: number): FileTiming => ({ wall, create: 0, drop: 0, outsideTests: 0, result: 'pass', tests: [] });
 
 test('test commands emit dots and file bounds follow recorded test, hook and wall times', () => {
+  expect(captureDefaults).toEqual({ killGraceMs: 10_000, progressInterval: 60 });
   expect(testCommand('test/a.test.ts', 'a.xml')).toContain('--dots');
   expect(fileBounds()).toEqual({ silence: 1800, wall: 7200 });
   expect(fileBounds({ ...timing(100), outsideTests: 250, tests: [{ name: 'slow', time: 400 }] })).toEqual({
@@ -51,6 +55,7 @@ test('a silent captured process fails with its bound, recorded times and output 
     wall: 1,
     record: timing(7),
     progressInterval: 60,
+    killGraceMs: 50,
   });
   expect(result.status).toBe(124);
   expect(result.stopped).toContain('test/hung.test.ts printed nothing for 0.15 s');
@@ -64,10 +69,66 @@ test('a process that keeps printing is stopped at its wall bound', async () => {
     silence: 1,
     wall: 0.15,
     progressInterval: 60,
+    killGraceMs: 50,
   });
   expect(result.status).toBe(124);
   expect(result.stopped).toContain('test/endless.test.ts did not finish within 0.15 s');
   expect(result.stopped).toContain('no record');
+});
+
+test('capture prints split UTF-8 intact and preserves each child stream', async () => {
+  const stdout = process.stdout.write.bind(process.stdout);
+  const stderr = process.stderr.write.bind(process.stderr);
+  let printedOut = '';
+  let printedErr = '';
+  process.stdout.write = ((chunk: string | Uint8Array) => { printedOut += String(chunk); return true; }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => { printedErr += String(chunk); return true; }) as typeof process.stderr.write;
+  try {
+    const script = "process.stdout.write(Buffer.from([0xe2])); setTimeout(() => { process.stderr.write('err1\\n'); process.stdout.write(Buffer.from([0x82,0xac])); process.stderr.write('err2\\n'); }, 20)";
+    const result = await capture('bun', ['-e', script], process.env, root);
+    expect(result.status).toBe(0);
+    expect(printedOut).toBe('€');
+    expect(printedErr).toBe('err1\nerr2\n');
+  } finally {
+    process.stdout.write = stdout;
+    process.stderr.write = stderr;
+  }
+});
+
+test('a running file emits a heartbeat with elapsed time, bounds and silence', async () => {
+  const stderr = process.stderr.write.bind(process.stderr);
+  let printed = '';
+  process.stderr.write = ((chunk: string | Uint8Array) => { printed += String(chunk); return true; }) as typeof process.stderr.write;
+  try {
+    await capture(
+      'bun',
+      ['-e', "console.log('started'); setInterval(() => console.log('tick'), 20); setTimeout(() => process.exit(0), 180)"],
+      process.env,
+      root,
+      { file: 'test/heartbeat.test.ts', silence: 1, wall: 2, progressInterval: 0.05, killGraceMs: 50 },
+    );
+  } finally {
+    process.stderr.write = stderr;
+  }
+  const heartbeats = printed.match(/test file test\/heartbeat\.test\.ts: elapsed \d+ s; silence bound 1 s; wall bound 2 s; since output \d+ s/g);
+  expect(heartbeats?.length).toBeGreaterThanOrEqual(2);
+});
+
+test('the process group is killed after the leader exits and capture completes', async () => {
+  const started = Date.now();
+  const script = "const { spawn } = require('node:child_process'); const child = spawn('/bin/sh', ['-c', \"trap '' TERM; while :; do sleep 1; done\"], { stdio: 'inherit' }); console.log(child.pid); process.exit(0)";
+  const result = await capture('bun', ['-e', script], process.env, root, {
+    file: 'test/orphan.test.ts', silence: 0.15, wall: 2, progressInterval: 60, killGraceMs: 100,
+  });
+  expect(result.status).toBe(124);
+  expect(Date.now() - started).toBeLessThan(1_000);
+  const childPid = Number(result.output.trim());
+  expect(Number.isInteger(childPid)).toBe(true);
+  let processState: string | undefined;
+  try {
+    processState = readFileSync(`/proc/${childPid}/stat`, 'utf8').split(' ')[2];
+  } catch {}
+  expect([undefined, 'Z']).toContain(processState);
 });
 
 test('the load and growth classifiers accept Bun dot reporter failure output', () => {
@@ -82,6 +143,28 @@ test('the load and growth classifiers accept Bun dot reporter failure output', (
       undefined,
     ),
   ).toEqual([{ title: 'bounded query', message: 'examined rows exceeded the bound' }]);
+});
+
+test('a file stopped at a bound is never classified for load or growth rerun', () => {
+  for (const tail of [
+    '(fail) a [1ms]\nthis test timed out after 100ms',
+    '(fail) a [1ms]\nAccess unavailable: overloaded',
+  ]) {
+    const outcome = {
+      file: 'test/stopped.test.ts', database: 'fixture',
+      error: new Error(`test file test/stopped.test.ts printed nothing for 600 s; Last output lines:\n${tail}`),
+    };
+    expect(classifyLoadInducedFailures(outcome, undefined)).toBeNull();
+    expect(classifyGrowthFailures(outcome, undefined)).toBeNull();
+  }
+});
+
+test('a file stopped at a bound keeps its previously recorded timings', () => {
+  const previous = timing(45);
+  const fresh = { ...timing(600), tests: [{ name: 'partial', time: 600 }] };
+  expect(retainStoppedTimings({ 'test/stopped.test.ts': fresh }, { 'test/stopped.test.ts': previous }, new Set(['test/stopped.test.ts']))[
+    'test/stopped.test.ts'
+  ]).toEqual(previous);
 });
 
 function laneEnvironment(directory: string, concurrency: number): NodeJS.ProcessEnv {
@@ -128,6 +211,33 @@ test('each check names its clones, timings and variables after its service', () 
     'a',
     'b',
   ]);
+});
+
+test('timings in a checkout without git metadata require an explicit directory', () => {
+  const outside = mkdtempSync(join(tmpdir(), 'test-lanes-outside-'));
+  try {
+    const module = join(outside, 'services', 'kernel');
+    mkdirSync(module, { recursive: true });
+    expect(() => timingsDirectory('fixture', module, {})).toThrow(/Could not find the git common directory/);
+    expect(timingsDirectory('fixture', module, { FIXTURE_CHECK_TIMINGS: join(outside, 'timings') })).toBe(
+      resolve(outside, 'timings'),
+    );
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('a service timing directory set by the remote command applies to a scoped environment', () => {
+  const previous = process.env.AUTH_CHECK_TIMINGS;
+  process.env.AUTH_CHECK_TIMINGS = '/remote/auth/timings';
+  try {
+    expect(timingsDirectory('auth', '/remote/checkout/services/auth', { KERNEL_CHECK_TIMINGS: '/kernel/timings' })).toBe(
+      '/remote/auth/timings',
+    );
+  } finally {
+    if (previous === undefined) delete process.env.AUTH_CHECK_TIMINGS;
+    else process.env.AUTH_CHECK_TIMINGS = previous;
+  }
 });
 
 type FixtureFailure = { title: string; message: string; type?: string; duration?: string };
@@ -486,7 +596,7 @@ test('${name} sees its own clone', () => {
       process.stdout.write = originalWrite;
     }
     expect(result).toEqual({ failed: [], concurrency: 1 });
-    // The file with no recorded time first, then the slow file, then the fast one.
+    // Recorded files run longest first, followed by files with no timing.
     expect(events).toEqual([
       'create fixture_test_1',
       'drop fixture_test_1',
@@ -496,11 +606,8 @@ test('${name} sees its own clone', () => {
       'drop fixture_test_3',
     ]);
     expect(printed.match(/database=postgres:\/\/host\/lane_\d+/g)).toHaveLength(3);
-    expect(['unknown', 'slow', 'fast'].map((name) => printed.includes(`${name} database=`))).toEqual([
-      true,
-      true,
-      true,
-    ]);
+    expect(printed.indexOf('slow database=')).toBeLessThan(printed.indexOf('fast database='));
+    expect(printed.indexOf('fast database=')).toBeLessThan(printed.indexOf('unknown database='));
     const latest = readLatest(timings);
     expect(Object.keys(latest).sort()).toEqual(['test/fast.test.ts', 'test/slow.test.ts', 'test/unknown.test.ts']);
     expect(latest['test/unknown.test.ts']!.result).toBe('pass');

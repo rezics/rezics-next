@@ -46,7 +46,11 @@ Remote worker checks preserve any existing local `GROWTH_PROFILE` lines and appe
 ### Test lanes
 
 Kernel, Auth and web test lanes run each test file in a separate `bun test` process and print its output when it
-finishes. The runner uses Bun's dot reporter so output arrives as tests complete. It prints a heartbeat every 60
+finishes. The runner uses Bun's dot reporter so stdout and stderr arrive on their original streams as tests complete.
+Files with recorded times run longest first. Timings use the shared main-checkout directory; set
+`<SERVICE>_CHECK_TIMINGS` to choose another directory. Remote check commands explicitly set the kernel and Auth
+timing directories under their disposable rsynced checkout because it has no `.git`; other callers without git
+metadata must set their service's variable if they need timings. It prints a heartbeat every 60
 seconds with the file name, elapsed time, silence and wall bounds, and time since output. The silence bound is the
 larger of 10 minutes and three times the longest recorded test or hook time; files without a timing record get 30
 minutes. The wall bound is the larger of 30 minutes and three times the recorded wall time; files without a record

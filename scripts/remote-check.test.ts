@@ -1386,6 +1386,10 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   expect(script).toContain('systemd-run --scope');
   expect(script).toMatch(/--slice=rezics-check-[a-z0-9_]+\.slice/);
   expect(script).toContain('KERNEL_CHECK_ON_REMOTE=1');
+  expect(script).toContain('KERNEL_CHECK_TIMINGS=');
+  expect(script).toContain('/.temp/kernel-check/timings');
+  expect(script).toContain('AUTH_CHECK_TIMINGS=');
+  expect(script).toContain('/.temp/auth-check/timings');
   expect(script).toContain('"$bun" install --frozen-lockfile');
   expect(script).toContain(`bun scripts/check.ts ${kernelFiles.join(' ')}`);
   expect(script).toContain('services/kernel');

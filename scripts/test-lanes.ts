@@ -168,7 +168,12 @@ export function classifyGrowthFailures(
   outcome: FileOutcome<string>,
   report: string | undefined,
 ): GrowthFailure[] | null {
-  if (!outcome.error || outcome.error.message.includes('Database cleanup failed:')) return null;
+  if (
+    !outcome.error ||
+    outcome.error.message.startsWith('test file ') ||
+    outcome.error.message.includes('Database cleanup failed:')
+  )
+    return null;
   if (report) {
     const failures = junitFailures(report);
     if (failures !== null) {
@@ -357,7 +362,12 @@ export function classifyLoadInducedFailures(
   outcome: FileOutcome<string>,
   report: string | undefined,
 ): LoadFailure[] | null {
-  if (!outcome.error || outcome.error.message.includes('Database cleanup failed:')) return null;
+  if (
+    !outcome.error ||
+    outcome.error.message.startsWith('test file ') ||
+    outcome.error.message.includes('Database cleanup failed:')
+  )
+    return null;
   if (report) {
     const failures = junitLoadFailures(report);
     if (failures !== null) {
@@ -459,15 +469,16 @@ export function timingsDirectory(
   moduleDirectory: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const override = env[variable(service, 'TIMINGS')];
+  const override = env[variable(service, 'TIMINGS')] ?? process.env[variable(service, 'TIMINGS')];
   if (override) return resolve(override);
   const result = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
     cwd: moduleDirectory,
     encoding: 'utf8',
   });
-  if (result.status !== 0 || !result.stdout.trim())
-    return resolve(import.meta.dir, '..', `.temp/${service}-check/timings`);
-  return resolve(dirname(result.stdout.trim()), `.temp/${service}-check/timings`);
+  if (result.status === 0 && result.stdout.trim()) {
+    return resolve(dirname(result.stdout.trim()), `.temp/${service}-check/timings`);
+  }
+  throw new Error(`Could not find the git common directory for ${moduleDirectory}`);
 }
 
 /** The last recorded timings by test file; empty when none are readable. */
@@ -523,6 +534,17 @@ export function writeTimings(
   } catch (error) {
     warn(`Check timings were not written to ${directory}: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/** Keep the last successful measurements when a file is forcibly stopped at its bound. */
+export function retainStoppedTimings(
+  timings: Record<string, FileTiming>,
+  latest: Record<string, FileTiming>,
+  stopped: Set<string>,
+): Record<string, FileTiming> {
+  const retained = { ...timings };
+  for (const file of stopped) if (latest[file]) retained[file] = latest[file]!;
+  return retained;
 }
 
 /** Lanes of one check: six, or `<SERVICE>_CHECK_CONCURRENCY` when it names a positive integer. */
@@ -595,12 +617,21 @@ export async function scheduleFiles<T>(
 }
 
 // Asynchronous, so the pool's lanes overlap; a synchronous spawn blocks the event loop and runs them one at a time.
+export const captureDefaults = Object.freeze({ killGraceMs: 10_000, progressInterval: 60 });
+
 export async function capture(
   program: string,
   args: string[],
   env: NodeJS.ProcessEnv,
   cwd: string,
-  bounds?: { file: string; silence: number; wall: number; record?: FileTiming; progressInterval?: number },
+  bounds?: {
+    file: string;
+    silence: number;
+    wall: number;
+    record?: FileTiming;
+    progressInterval?: number;
+    killGraceMs?: number;
+  },
 ): Promise<{ status: number; output: string; stopped?: string }> {
   const child = Bun.spawn([program, ...args], {
     cwd,
@@ -615,20 +646,34 @@ export async function capture(
   let stopped: string | undefined;
   const started = Date.now();
   const tail: string[] = [];
-  const add = (chunk: Uint8Array) => {
-    const text = new TextDecoder().decode(chunk);
+  const readersByStream: ReadableStreamDefaultReader<Uint8Array>[] = [];
+  const add = (text: string) => {
     output += text;
     lastOutput = Date.now();
     tail.push(...text.split(/\r?\n/));
     if (tail.length > 40) tail.splice(0, tail.length - 40);
   };
-  const readers = [child.stdout, child.stderr].map(async (stream) => {
+  const readers = [child.stdout, child.stderr].map(async (stream, index) => {
+    const destination = index === 0 ? process.stdout : process.stderr;
     const reader = stream.getReader();
+    readersByStream[index] = reader;
+    const decoder = new TextDecoder();
     try {
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
-        add(value);
+        if (done) {
+          const finalText = decoder.decode();
+          if (finalText) {
+            add(finalText);
+            destination.write(finalText);
+          }
+          break;
+        }
+        const text = decoder.decode(value, { stream: true });
+        if (text) {
+          add(text);
+          destination.write(text);
+        }
       }
     } finally {
       reader.releaseLock();
@@ -638,21 +683,40 @@ export async function capture(
     try {
       process.kill(-child.pid, 'SIGTERM');
     } catch {}
-    const grace = setTimeout(() => {
+    const killDeadline = Date.now() + (bounds?.killGraceMs ?? captureDefaults.killGraceMs);
+    while (Date.now() < killDeadline) {
       try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch {}
-    }, 10_000);
+        process.kill(-child.pid, 0);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') break;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch {}
     await child.exited;
-    clearTimeout(grace);
+    await Promise.race([
+      Promise.all(readers),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
+    ]);
+    for (const reader of readersByStream) {
+      try {
+        await reader.cancel();
+      } catch {}
+    }
   };
   if (!bounds) {
     const status = await child.exited;
     await Promise.all(readers);
     return { status, output };
   }
-  const interval = bounds.progressInterval ?? 60;
+  const interval = bounds.progressInterval ?? captureDefaults.progressInterval;
   let heartbeat = Date.now() + interval * 1000;
+  let childStatus: number | undefined;
+  let readersDone = false;
+  const readersComplete = Promise.all(readers).then(() => { readersDone = true; });
+  void child.exited.then((status) => { childStatus = status; });
   while (true) {
     const now = Date.now();
     const elapsed = (now - started) / 1000;
@@ -674,17 +738,15 @@ export async function capture(
       1,
       Math.min(250, heartbeat - now, bounds.silence * 1000 - (now - lastOutput), bounds.wall * 1000 - (now - started)),
     );
-    const exited = await Promise.race([
-      child.exited.then((status) => ({ status })),
+    if (childStatus !== undefined && readersDone) return { status: childStatus, output };
+    await Promise.race([
+      ...(childStatus === undefined ? [child.exited.then((status) => { childStatus = status; })] : []),
+      readersComplete,
       new Promise<{ status?: never }>((resolve) => setTimeout(() => resolve({}), waitMs)),
     ]);
-    if (exited.status !== undefined) {
-      await Promise.all(readers);
-      return { status: exited.status, output };
-    }
   }
   await stop();
-  await Promise.all(readers);
+  // stop() bounds readers after killing the complete process group.
   const record = bounds.record
     ? JSON.stringify({ wall: bounds.record.wall, outsideTests: bounds.record.outsideTests, tests: bounds.record.tests })
     : 'no record';
@@ -794,8 +856,6 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
       {
         ...runner,
         onComplete: (outcome) => {
-          if (outcome.output)
-            process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
           if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
           const timing = recorder.timings()[outcome.file];
           if (outcome.error?.message.startsWith('test file ')) {
@@ -829,8 +889,7 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
       },
     );
     if (timingsPath) {
-      const timings = { ...recorder.timings() };
-      for (const file of stoppedAtBound) if (latest[file]) timings[file] = latest[file]!;
+      const timings = retainStoppedTimings(recorder.timings(), latest, stoppedAtBound);
       writeTimings(timingsPath, timings, { partial: suite.partial });
     }
     return { failed: failed.map((outcome) => outcome.file), concurrency };
