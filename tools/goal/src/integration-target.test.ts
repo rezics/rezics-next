@@ -92,7 +92,7 @@ test('a control-plane task whose changes all lie under tools/goal integrates int
         ['bun', 'install', '--frozen-lockfile'],
         ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
         ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
-        ['bun', 'test', 'tools/goal/src'],
+        ['bun', 'test', '--timeout', '30000', 'tools/goal/src'],
       ]),
     );
     // A train worktree starts with nothing installed, so the installs come before the checks that need them.
@@ -295,7 +295,7 @@ test('a control-plane test file that fails in the suite under load and passes al
 
     await train(h, async (command) => {
       runs.push([...command]);
-      if (JSON.stringify(command) === JSON.stringify(['bun', 'test', 'tools/goal/src']))
+      if (JSON.stringify(command) === JSON.stringify(['bun', 'test', '--timeout', '30000', 'tools/goal/src']))
         return {
           passed: false,
           output: 'tools/goal/src/flaky.test.ts:\n(fail) a timing test [5000.00ms]\n 1 fail',
@@ -304,7 +304,7 @@ test('a control-plane test file that fails in the suite under load and passes al
       return { passed: true, output: '', timedOut: false };
     });
 
-    expect(runs).toContainEqual(['bun', 'test', 'tools/goal/src/flaky.test.ts']);
+    expect(runs).toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src/flaky.test.ts']);
     expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('tools/goal/src/hotfix.ts');
     expect(h.store.task(task.id).state).toBe('merged');
   } finally {
