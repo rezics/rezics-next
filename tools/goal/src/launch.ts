@@ -7,6 +7,7 @@ import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { processIdentity, sameProcess, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
+import { recordFlow } from './flow.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
 
 export type LaunchOptions = {
@@ -422,6 +423,13 @@ export async function launch(
   codex?: Settings['codex'],
 ): Promise<RunningWorker> {
   store.assertCurrent(attempt);
+  recordFlow(store.db, {
+    taskId: attempt.taskId,
+    attempt: attempt.attempt,
+    stage: 'start',
+    action: 'requested',
+    at: new Date().toISOString(),
+  });
   mkdirSync(dirname(attempt.logPath), { recursive: true });
   const exitPath = workerExitPath(attempt.logPath),
     pidPath = `${attempt.logPath}.pid`;

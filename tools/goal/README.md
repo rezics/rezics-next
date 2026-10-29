@@ -218,6 +218,28 @@ Each member's acceptance command runs concurrently against the final batch candi
 times out, or changes its worktree, the train retries the members individually so the failure is attributed to its task.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
+### Delivery flow telemetry
+
+`report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports
+stage totals and p50/p90 durations, Goal totals and percentiles, working-time efficiency from dispatch through
+integration, attempts per integrated task, and the length and oldest age of the start, check, landing, verification
+and promotion queues. Missing lifecycle events stay unknown; reports do not backfill old tasks. Check-slot request,
+acquisition and release events are distinct, so slot waiting is excluded from worker working time. The stage with the
+most waiting is named as the bottleneck.
+
+The manager host evaluates absolute flow targets each hour and sends one `environment` event to the configured
+supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
+30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,
+`oldestQueueMs`, `landingP90Ms` and `attemptsPerIntegrated`; the defaults are `0.4`, `3600000`, `1800000` and `1.5`.
+Alarm summaries name the stage, measurement and up to three oldest waiting task IDs. A threshold can alert again after
+one hour.
+
+Once per UTC day the manager host dispatches the research brief at
+[`templates/daily-step-audit.md`](templates/daily-step-audit.md), unless a daily audit task is already open. It
+reviews failure prevention, recorded catch counts, time and allowance cost for each step from dispatch through
+promotion, includes the prior day's flow report, and recommends one measured structural change. Unknown telemetry is
+reported as unknown rather than inferred.
+
 ### Host-capacity admission
 
 Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count running

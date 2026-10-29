@@ -40,6 +40,8 @@ export type IntegrationRuntime = {
   /** One promotion step; returns at once when a promotion holds the lease or nothing changed. */
   promote?(): Promise<void>;
   verify?(): Promise<void>;
+  evaluateFlow?(): void;
+  dispatchDailyStepAudit?(): void;
   db: Database;
   mainCheckout: string;
   stateDirectory: string;
@@ -376,7 +378,24 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         console.error(error);
       }
     };
+    let lastFlowReview = 0;
+    const reviewFlow = () => {
+      if (Date.now() - lastFlowReview >= 3_600_000) {
+        lastFlowReview = Date.now();
+        try {
+          runtime.evaluateFlow?.();
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      try {
+        runtime.dispatchDailyStepAudit?.();
+      } catch (error) {
+        console.error(error);
+      }
+    };
     remind();
+    reviewFlow();
     // The train promotes only when its queue empties; with a steady backlog that never happens, so the host starts
     // a promotion step in its own process every minute. Promotion runs git and generators synchronously, so it must
     // never run inside the host, whose socket serves managers. The promotion lease keeps one run at a time.
@@ -415,6 +434,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     };
     recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, 60_000, () => {
       remind();
+      reviewFlow();
       promote();
       verify();
       reap();
