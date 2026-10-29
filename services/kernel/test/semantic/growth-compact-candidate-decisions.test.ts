@@ -16,7 +16,8 @@ import {
 } from '../support/growth.ts';
 
 let db: GrowthDatabase;
-const scales = [64, 512, 4096] as const;
+const historyScales = [64, 512, 4096] as const;
+const unrelatedScales = [512, 4096, 32768] as const;
 const headRelease = {
   ...bundledRelease,
   catalogue: { ...bundledRelease.catalogue, version: 'compact-decision-history' },
@@ -46,6 +47,7 @@ afterAll(async () => {
 for (const property of ['schema:inLanguage', 'schema:author'] as const) {
   for (const axis of ['history', 'unrelated'] as const) {
     test(`full compact ${property} decision lookup stays bounded with ${axis} growth`, async () => {
+      const scales = axis === 'history' ? historyScales : unrelatedScales;
       const route = 8672;
       const subject = newId(route);
       const target = newId(route);
@@ -157,6 +159,23 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
       });
       expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
       expect(report.samples.every(({ cost }) => cost.statements === 1)).toBe(true);
+      const compactStatement = (sample: (typeof report.samples)[number]) => {
+        const attributed = sample.statementRepetitions[0]!.find(({ statement }) =>
+          statement.includes('FROM semantic.fact f') && statement.includes('recorded_transaction_id'),
+        );
+        if (!attributed?.node) {
+          throw new Error(
+            `${property} compact statement has no retained native occurrence plan at scale ${sample.scale}: ${JSON.stringify(sample.occurrenceRepetitions[0]!.statements)}`,
+          );
+        }
+        return { statement: attributed.statement, node: attributed.node.split(' ')[0]! };
+      };
+      const smallestPlan = compactStatement(report.samples[0]!);
+      const largestPlan = compactStatement(report.samples.at(-1)!);
+      expect(
+        largestPlan.node,
+        `${property} compact statement plan changed from ${smallestPlan.node} at ${scales[0]} (${smallestPlan.statement}) to ${largestPlan.node} at ${scales.at(-1)} (${largestPlan.statement})`,
+      ).toBe(smallestPlan.node);
       console.info(`COMPACT_DECISION_GROWTH ${JSON.stringify(report)}`);
       const measured = await capture(db, () => operation(scales.at(-1)!));
       const plans = JSON.stringify(measured.capture.plans);
