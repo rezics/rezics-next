@@ -86,14 +86,14 @@ The tracked bundle has 24 types, 103 properties and 140,822 canonical UTF-8 byte
 Order: instrumented bundle first, same bundle again, unmodified original validator, then increasing distinct
 patterns. There was no cross-call proof cache. Times below are single observations in milliseconds.
 
-| Input | Validation | Digest | Distinct proofs/checkpoints | Proof time | Parent timer delay |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Bundle, first instrumented call | 1,217.3 | 7.5 | 15 / 14,474 | 1,186.5 | 1,225.1 |
-| Bundle, repeated instrumented call | 789.1 | 22.3 | 15 / 14,474 | 766.2 | 811.4 |
-| Bundle, unmodified original | 777.7 | 3.4 | not instrumented | not instrumented | 783.9 |
-| 64 distinct properties | 89.4 | 1.4 | 64 / 1,088 | 85.2 | 90.8 |
-| 512 distinct properties | 415.8 | 9.6 | 512 / 8,704 | 383.4 | 425.4 |
-| 4,096 distinct properties | 1,997.4 | 68.0 | 4,096 / 69,632 | 1,743.4 | 2,075.1 |
+| Input                              | Validation | Digest | Distinct proofs/checkpoints |       Proof time | Parent timer delay |
+| ---------------------------------- | ---------: | -----: | --------------------------: | ---------------: | -----------------: |
+| Bundle, first instrumented call    |    1,217.3 |    7.5 |                 15 / 14,474 |          1,186.5 |            1,225.1 |
+| Bundle, repeated instrumented call |      789.1 |   22.3 |                 15 / 14,474 |            766.2 |              811.4 |
+| Bundle, unmodified original        |      777.7 |    3.4 |            not instrumented | not instrumented |              783.9 |
+| 64 distinct properties             |       89.4 |    1.4 |                  64 / 1,088 |             85.2 |               90.8 |
+| 512 distinct properties            |      415.8 |    9.6 |                 512 / 8,704 |            383.4 |              425.4 |
+| 4,096 distinct properties          |    1,997.4 |   68.0 |              4,096 / 69,632 |          1,743.4 |            2,075.1 |
 
 Fixtures use actual `valueSchema('string', {pattern})`, one type referencing at most 64 properties, and
 `^codeNNNN-[A-Z]{1,8}$` distinct patterns: no violations, exactly 17 checkpoints/proof. The largest is
@@ -226,10 +226,10 @@ was used as evidence. The worker returned no violations and digest
 The same native probe was also run with the pinned executable; `pinned-worker.jsonl` and empty
 `pinned-worker.stderr` retain the separate observations. Both returned the same digest/no violations.
 
-| Runtime | Ready/import | Parent post | Validation/digest | Total | Parent timer after entered |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| PATH Bun 1.4.3 | 138.0 / 119.6 | 20.8 | 2,339.7 / 159.9 | 2,667.2 | 1.2 |
-| Pinned canary 1.4.4 | 204.1 / 183.5 | 37.0 | 3,223.1 / 91.7 | 3,572.6 | 1.7 |
+| Runtime             |  Ready/import | Parent post | Validation/digest |   Total | Parent timer after entered |
+| ------------------- | ------------: | ----------: | ----------------: | ------: | -------------------------: |
+| PATH Bun 1.4.3      | 138.0 / 119.6 |        20.8 |   2,339.7 / 159.9 | 2,667.2 |                        1.2 |
+| Pinned canary 1.4.4 | 204.1 / 183.5 |        37.0 |    3,223.1 / 91.7 | 3,572.6 |                        1.7 |
 
 Fixture creation and parent canonical-size calculation preceded construction and are excluded from total.
 Each worker's first validation was cold; its second job reused the initialized module/checker, without a
@@ -344,12 +344,12 @@ Arbitrary cross-call proof caching remains unapproved. Start with
 Reference clones were read only, never installed/built/run. Provenance entries were added to main
 `.reference/INDEX.md`; paths below are relative to that `.reference/`, inspected on 2026-10-29.
 
-| Source | Provenance and inspected authority |
-| --- | --- |
-| recheck 4.5.0, MIT (`LICENSE`) | `definition-validation-cpu-deep/recheck`, `b40bd4d39217e54c94d2de5ed6ec521540fcffd6`; [browser API](https://github.com/makenowjust-labs/recheck/blob/b40bd4d39217e54c94d2de5ed6ec521540fcffd6/packages/recheck/src/browser.ts), `modules/recheck-common/shared/src/main/scala/codes/quine/labs/recheck/common/Context.scala`, `modules/recheck-core/shared/src/main/scala/codes/quine/labs/recheck/ReDoS.scala`. Installed browser SHA-256 `fd332e833abd002c9fc9e0b9d7a5282bbb33b0b5e81b06e7ff67c32bedca2fce`. |
-| TypeBox 1.4.3, MIT (`license`) | `definition-validation-cpu-deep/typebox`, `ed9d84abeaec53af8da0bdc45c107e0eb5189de8`; [validator](https://github.com/sinclairzx81/typebox/blob/ed9d84abeaec53af8da0bdc45c107e0eb5189de8/src/compile/validator.ts), `src/compile/compile.ts`, schema build code. |
-| canonicalize 5.1.0, Apache-2.0 (`LICENSE`) | `definition-validation-cpu-deep/canonicalize`, `31fb117afde3ef305b2e1d99bde539bf6300bc62`; [serializer](https://github.com/erdtman/canonicalize/blob/31fb117afde3ef305b2e1d99bde539bf6300bc62/lib/canonicalize.js), primitive and iterative container handling. |
-| Bun, MIT plus dependency licences (`LICENSE.md`); inspected WebCore files carry BSD-2-Clause headers | Reused `search-worker-outcome-harness/bun`, `c643ea8c2a9da88cae7e3508d2dd95c8f5857926`; [worker wrapper](https://github.com/oven-sh/bun/blob/c643ea8c2a9da88cae7e3508d2dd95c8f5857926/src/js/node/worker_threads.ts), `src/jsc/bindings/webcore/Worker.cpp`, `WorkerMessagingProxy.cpp`, `docs/runtime/workers.mdx`; [official Workers documentation](https://bun.sh/docs/runtime/workers). |
+| Source                                                                                               | Provenance and inspected authority                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| recheck 4.5.0, MIT (`LICENSE`)                                                                       | `definition-validation-cpu-deep/recheck`, `b40bd4d39217e54c94d2de5ed6ec521540fcffd6`; [browser API](https://github.com/makenowjust-labs/recheck/blob/b40bd4d39217e54c94d2de5ed6ec521540fcffd6/packages/recheck/src/browser.ts), `modules/recheck-common/shared/src/main/scala/codes/quine/labs/recheck/common/Context.scala`, `modules/recheck-core/shared/src/main/scala/codes/quine/labs/recheck/ReDoS.scala`. Installed browser SHA-256 `fd332e833abd002c9fc9e0b9d7a5282bbb33b0b5e81b06e7ff67c32bedca2fce`. |
+| TypeBox 1.4.3, MIT (`license`)                                                                       | `definition-validation-cpu-deep/typebox`, `ed9d84abeaec53af8da0bdc45c107e0eb5189de8`; [validator](https://github.com/sinclairzx81/typebox/blob/ed9d84abeaec53af8da0bdc45c107e0eb5189de8/src/compile/validator.ts), `src/compile/compile.ts`, schema build code.                                                                                                                                                                                                                                                |
+| canonicalize 5.1.0, Apache-2.0 (`LICENSE`)                                                           | `definition-validation-cpu-deep/canonicalize`, `31fb117afde3ef305b2e1d99bde539bf6300bc62`; [serializer](https://github.com/erdtman/canonicalize/blob/31fb117afde3ef305b2e1d99bde539bf6300bc62/lib/canonicalize.js), primitive and iterative container handling.                                                                                                                                                                                                                                                |
+| Bun, MIT plus dependency licences (`LICENSE.md`); inspected WebCore files carry BSD-2-Clause headers | Reused `search-worker-outcome-harness/bun`, `c643ea8c2a9da88cae7e3508d2dd95c8f5857926`; [worker wrapper](https://github.com/oven-sh/bun/blob/c643ea8c2a9da88cae7e3508d2dd95c8f5857926/src/js/node/worker_threads.ts), `src/jsc/bindings/webcore/Worker.cpp`, `WorkerMessagingProxy.cpp`, `docs/runtime/workers.mdx`; [official Workers documentation](https://bun.sh/docs/runtime/workers).                                                                                                                    |
 
 [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html), an Informational RFC, supplies JCS input constraints,
 number/string serialization and UTF-16 key ordering (§§3.1–3.2.3). Shared source patterns are reuse of compiled
