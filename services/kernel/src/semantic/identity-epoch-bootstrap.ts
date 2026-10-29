@@ -41,7 +41,7 @@ import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-epoch-store.ts';
-import { IDENTITY_EPOCH_BOOTSTRAP, IDENTITY_EPOCH_PROGRESS } from './events.ts';
+import { IDENTITY_EPOCH_BOOTSTRAP, IDENTITY_EPOCH_PROGRESS, IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED } from './events.ts';
 import type { IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
 import subjects from './identity-epoch-bootstrap-subjects.sql';
 import members from './identity-epoch-bootstrap-members.sql';
@@ -397,7 +397,7 @@ export async function stepIdentityEpochBootstrapWork(pool: Pool): Promise<Identi
   // pending group can pause its own work without pinning every unrelated source behind it.
   await runCommand(pool, { partition: 0 }, async (tx) => {
     await tx.query(advanceCursor.sql, [(partition + 1) % 4096]);
-    return { value: null, events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '0' } }] };
+    return { value: null, events: [{ type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition } }] };
   });
   const progress = await stepIdentityEpochBootstrap(pool, partition);
   const evidence = await withConnection(pool, async (tx) => {

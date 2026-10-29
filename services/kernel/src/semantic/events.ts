@@ -41,9 +41,14 @@ export const LINKS_PROJECTED = 'com.rezics.semantic.links.projected.v1' as const
 export const IDENTITY_EPOCH_ADMITTED = 'com.rezics.semantic.identity-epoch.admitted.v1' as const;
 export const IDENTITY_EPOCH_PROGRESS = 'com.rezics.semantic.identity-epoch.progress.v1' as const;
 export const IDENTITY_EPOCH_BOOTSTRAP = 'com.rezics.semantic.identity-epoch.bootstrap.v1' as const;
+export const IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED = 'com.rezics.semantic.identity-epoch.bootstrap-scheduled.v1' as const;
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
+  [IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED]: Type.Object(
+    { partition: Type.Integer({ minimum: 0, maximum: 4095 }) },
+    { additionalProperties: false },
+  ),
   [IDENTITY_EPOCH_ADMITTED]: Type.Object(
     {
       jobId: UUID,
