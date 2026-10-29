@@ -8,7 +8,7 @@ const typeByKey: Record<string, string> = {
   book: 'schema:Book',
   recipe: 'schema:Recipe',
   game: 'schema:VideoGame',
-  release: 'schema:CreativeWork',
+  release: 'schema:VideoGame',
   person: 'schema:Person',
   organization: 'schema:Organization',
   automated: 'schema:SoftwareApplication',
