@@ -130,7 +130,8 @@ test('checkGrowth keeps Global authorization bounded as unrelated resources, gra
   };
   collectNodes(observed.capture.plans);
   const grantScans = nodes.filter(
-    (node) => node['Relation Name'] === 'resource_grant' &&
+    (node) =>
+      node['Relation Name'] === 'resource_grant' &&
       ['Seq Scan', 'Index Scan', 'Index Only Scan', 'Bitmap Heap Scan'].includes(String(node['Node Type'])),
   );
   expect(grantScans.length).toBeGreaterThan(0);
