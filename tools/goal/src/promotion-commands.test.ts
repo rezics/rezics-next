@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { coveredByRootGate, promotionCommand, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
+import { commandsFor, coveredByRootGate, promotionCommand, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 
 test('acceptance commands inside workspace and control-plane trees are covered by the root gate', () => {
   expect(coveredByRootGate(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/a.test.ts'])).toBe(true);
@@ -55,4 +55,16 @@ test('a bare bun test that mixes workspace and outside files runs only the outsi
 test('a promotion gate may run as long as a full root gate takes', () => {
   // The full kernel check alone measured 44 minutes on 2026-10-26.
   expect(PROMOTION_GATE_TIMEOUT_MS).toBeGreaterThanOrEqual(2 * 60 * 60_000);
+});
+
+test('promotion gates on the root gate and promoted acceptance, never on capability completion', () => {
+  // Every product capability manifest failed the table parser and frozen-red capability suites failed the gate,
+  // so no promotion ran a single command from 09:25 to 18:30 UTC on 2026-10-29.
+  const tasks = [
+    { brief: { goal: 'web', kind: 'implementation', acceptance: { command: ['bun', 'test', 'specs/web.test.ts'] } } },
+  ] as unknown as Parameters<typeof commandsFor>[1];
+  expect(commandsFor(['bun', 'scripts/gate.ts'], tasks, '/nonexistent', 'HEAD')).toEqual([
+    ['bun', 'scripts/gate.ts'],
+    ['bun', 'test', 'specs/web.test.ts'],
+  ]);
 });

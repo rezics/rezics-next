@@ -16,15 +16,17 @@ type ReadMeminfo = () => string;
 function failure(result: SpawnSyncReturns<Buffer>): string | null {
   if (result.error) return result.error.message;
   if (result.status !== 0) {
-    const detail = (result.stderr?.toString() || result.stdout?.toString()).trim().replace(/\s+/g, ' ');
+    const detail = (result.stderr?.toString() || result.stdout?.toString() || '').trim().replace(/\s+/g, ' ');
     return `exited with status ${result.status ?? result.signal ?? 'unknown'}${detail ? `: ${detail}` : ''}`;
   }
   return null;
 }
 
+// A check-wake resume launches the same attempt again; systemd refuses a unit name that is still loaded, so each
+// launch gets its own name.
 function workerUnit(taskId: string, attempt: number): string {
   const safeTask = taskId.replace(/[^A-Za-z0-9:_.-]/g, '-').replace(/^-+|-+$/g, '') || 'task';
-  return `rezics-worker-${safeTask}-${attempt}.scope`;
+  return `rezics-worker-${safeTask}-${attempt}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.scope`;
 }
 
 /** One launch policy instance caches the runtime slice configuration attempt for this process. */

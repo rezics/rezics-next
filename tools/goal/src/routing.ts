@@ -49,8 +49,8 @@ export function classifyTask(brief: Brief): TaskClass {
   if (brief.kind === 'specification') return brief.kind;
   if (brief.criticalPath && brief.waiting.length && brief.inseparable) return 'critical-path';
   if (brief.kind === 'interface' || brief.kind === 'bulk-text') return brief.kind;
-  if (!brief.acceptance.failing || brief.estimate.lines > 400 || brief.estimate.files > 8)
-    throw new Error('implementation needs failing acceptance tests and an estimate within 400 lines and 8 files; return it to its manager');
+  if (!brief.acceptance.failing || brief.estimate.lines > 1500 || brief.estimate.files > 24)
+    throw new Error('implementation needs failing acceptance tests and an estimate within 1500 lines and 24 files; return it to its manager');
   return 'implementation';
 }
 export function routeTask(brief: Brief, sequence: number, table: RoutingTable): { taskClass: TaskClass; profile: Profile; tableVersion: string; experiment: string | null } {
