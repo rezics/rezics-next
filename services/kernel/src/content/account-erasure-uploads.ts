@@ -1,7 +1,9 @@
 import type { Pool } from 'pg';
 import { createAccess } from '../access/index.ts';
 import { withConnection } from '../database/pool.ts';
-import { runCommand, noEffect, type Effect } from '../command/command.ts';
+import { runCommand, noEffect } from '../command/command.ts';
+import type { Effect } from '../events/effects.ts';
+import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readDocument } from './document-read.ts';
@@ -106,7 +108,7 @@ export function createAccountUploadIndexEffect(pool: Pool): Effect {
   return {
     name: 'content_account_upload_index',
     types,
-    async run(event) {
+    async run(event: CloudEvent) {
       const data = event.data as Record<string, unknown>;
       const id = (data.mediaId ?? data.id) as string;
       const accountId = (data.actorId ?? data.authorId) as string;
