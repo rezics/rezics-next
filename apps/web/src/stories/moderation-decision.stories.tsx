@@ -53,39 +53,28 @@ function story(state: 'open' | 'pending' | 'expired') {
   return <DecisionPageView page={page(state)} now={now} />;
 }
 
-const viewports = ['phone390', 'desktop1280'] as const;
-const locales = ['en', 'zh-Hans'] as const;
-function variants(state: 'open' | 'pending' | 'expired') {
-  return Object.fromEntries(
-    locales.flatMap((locale) =>
-      viewports.map((viewport) => [
-        `${state}_${locale.replace('-', '')}_${viewport}`,
-        {
-          name: `${state} appeal · ${locale} · ${viewport}`,
-          globals: { locale },
-          parameters: { viewport: { defaultViewport: viewport } },
-          render: () => story(state),
-        } satisfies Story,
-      ]),
-    ),
-  ) as Record<string, Story>;
+function makeStory(
+  state: 'open' | 'pending' | 'expired',
+  locale: 'en' | 'zh-Hans',
+  viewport: 'phone390' | 'desktop1280',
+) {
+  return {
+    name: `${state} appeal · ${locale} · ${viewport}`,
+    globals: { locale },
+    parameters: { viewport: { defaultViewport: viewport } },
+    render: () => story(state),
+  } satisfies Story;
 }
 
-export const {
-  open_en_phone390: OpenEnglishPhone,
-  open_en_desktop1280: OpenEnglishDesktop,
-  open_zhHans_phone390: OpenChinesePhone,
-  open_zhHans_desktop1280: OpenChineseDesktop,
-} = variants('open');
-export const {
-  pending_en_phone390: PendingEnglishPhone,
-  pending_en_desktop1280: PendingEnglishDesktop,
-  pending_zhHans_phone390: PendingChinesePhone,
-  pending_zhHans_desktop1280: PendingChineseDesktop,
-} = variants('pending');
-export const {
-  expired_en_phone390: ExpiredEnglishPhone,
-  expired_en_desktop1280: ExpiredEnglishDesktop,
-  expired_zhHans_phone390: ExpiredChinesePhone,
-  expired_zhHans_desktop1280: ExpiredChineseDesktop,
-} = variants('expired');
+export const OpenEnglishPhone: Story = makeStory('open', 'en', 'phone390');
+export const OpenEnglishDesktop: Story = makeStory('open', 'en', 'desktop1280');
+export const OpenChinesePhone: Story = makeStory('open', 'zh-Hans', 'phone390');
+export const OpenChineseDesktop: Story = makeStory('open', 'zh-Hans', 'desktop1280');
+export const PendingEnglishPhone: Story = makeStory('pending', 'en', 'phone390');
+export const PendingEnglishDesktop: Story = makeStory('pending', 'en', 'desktop1280');
+export const PendingChinesePhone: Story = makeStory('pending', 'zh-Hans', 'phone390');
+export const PendingChineseDesktop: Story = makeStory('pending', 'zh-Hans', 'desktop1280');
+export const ExpiredEnglishPhone: Story = makeStory('expired', 'en', 'phone390');
+export const ExpiredEnglishDesktop: Story = makeStory('expired', 'en', 'desktop1280');
+export const ExpiredChinesePhone: Story = makeStory('expired', 'zh-Hans', 'phone390');
+export const ExpiredChineseDesktop: Story = makeStory('expired', 'zh-Hans', 'desktop1280');
