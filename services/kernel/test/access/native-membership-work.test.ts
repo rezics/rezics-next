@@ -330,12 +330,14 @@ test('invalid configuration registers no operations and a later valid registrati
     operations.add(name);
     return fn;
   };
-  const step = spyOn(DBOS, 'registerStep').mockImplementation(
-    ((fn: (...args: any[]) => any, options: { name: string }) => register(fn, options.name)) as never,
-  );
-  const workflow = spyOn(DBOS, 'registerWorkflow').mockImplementation(
-    ((fn: (...args: any[]) => any, options: { name: string }) => register(fn, options.name)) as never,
-  );
+  const step = spyOn(DBOS, 'registerStep').mockImplementation(((
+    fn: (...args: any[]) => any,
+    options: { name: string },
+  ) => register(fn, options.name)) as never);
+  const workflow = spyOn(DBOS, 'registerWorkflow').mockImplementation(((
+    fn: (...args: any[]) => any,
+    options: { name: string },
+  ) => register(fn, options.name)) as never);
   try {
     const invalid = [
       ['KERNEL_WORKFLOW_REFERENCE_KEYS', 'invalid'],
