@@ -384,7 +384,10 @@ the task stay integrated at the stabilize commit, and the task's manager and the
 naming the task, the commit and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is
 not integrated, merged or cancelled when its recorded base is an ancestor of the stabilize head. A running attempt is
 left in place; only later integration uses the branch. Briefs without `target` integrate into the integration branch as
-before.
+before. Before compare-and-swap advancing `dev`, the train runs each newly included stabilize task's acceptance command
+against the merged `dev` candidate, using the configured check-host environment. A failed command leaves `dev` unchanged
+and the task integrated on stabilize; the task manager and supermanager receive one notice naming the command, first
+failure and merged candidate. Passing commands allow `dev` to advance as usual.
 
 The train promotes the `dev` head to `main` under a separate lease after the root gate and every task acceptance command
 pass. If a gate fails, the promoter compares its first failure with `main`, then checks task prefixes concurrently up to
