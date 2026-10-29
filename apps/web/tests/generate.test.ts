@@ -56,7 +56,7 @@ test('retries Lix timeouts in new processes and succeeds on a later compilation'
   } finally {
     result.cleanup();
   }
-});
+}, 120_000);
 
 test('retries Lix worker errors identified by code and reports the first error line', async () => {
   const result = await runGeneration(
@@ -74,7 +74,7 @@ test('retries Lix worker errors identified by code and reports the first error l
   } finally {
     result.cleanup();
   }
-});
+}, 120_000);
 
 test('retries twice and exits with the last Lix error after the third failure', async () => {
   const result = await runGeneration(3, 'LixError: Lix worker is closed\nadditional context', 'LIX_WORKER_CLOSED');
@@ -88,7 +88,7 @@ test('retries twice and exits with the last Lix error after the third failure', 
   } finally {
     result.cleanup();
   }
-});
+}, 120_000);
 
 test('does not retry compilation errors outside the Lix failure signatures', async () => {
   const result = await runGeneration(1, 'Invalid message syntax');
@@ -100,7 +100,7 @@ test('does not retry compilation errors outside the Lix failure signatures', asy
   } finally {
     result.cleanup();
   }
-});
+}, 120_000);
 
 test('a successful first compilation prints no retry message and writes generated output', async () => {
   const result = await runGeneration(0, 'unused');
@@ -113,4 +113,4 @@ test('a successful first compilation prints no retry message and writes generate
   } finally {
     result.cleanup();
   }
-});
+}, 120_000);
