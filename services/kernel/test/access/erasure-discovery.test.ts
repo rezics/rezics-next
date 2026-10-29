@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { discoverErasurePage, ERASURE_DISCOVERY_ROLES } from '../../src/access/erasure-progress.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-command.ts';
-import { createPool } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, costOf, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
@@ -359,17 +358,16 @@ test('a lost response replays the committed keys, and the next page neither repe
   const id = await obligation();
   await history(id, 1, 201);
   const first = await discover(id, 'organization_member', 'member_account_id');
-  const restarted = createPool(db.url);
-  try {
+  const restarted = db.openPool({ max: 1 });
+  {
     const input = { accountId: id, store: 'organization_member', role: 'member_account_id', page: 0 };
     const replay = await capture(db, () => discoverErasurePage(restarted, input));
     expect(replay.value).toEqual(first);
+    expect(replay.capture.statements.some((sql) => sql.includes('FROM access.erasure'))).toBe(true);
     expect(replay.capture.statements.some((sql) => sql.includes('FROM access.organization_member'))).toBe(false);
     const next = await discoverErasurePage(restarted, { ...input, page: 1 });
     const last = await discoverErasurePage(restarted, { ...input, page: 2 });
     expect(new Set([...first.keys, ...next.keys, ...last.keys].map((key) => JSON.stringify(key))).size).toBe(201);
-  } finally {
-    await restarted.end();
   }
   const failId = await obligation();
   await history(failId, 1, 101);
