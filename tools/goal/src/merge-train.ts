@@ -33,7 +33,7 @@ import {
   type GateRunner,
 } from './merge.ts';
 
-import type { AffectedTestResult } from './types.ts';
+import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 
@@ -1598,7 +1598,7 @@ export class MergeTrain {
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
-        const affectedChecks = workspace
+        const affectedChecks: AffectedTestCheck[] = workspace
           ? (o.affectedTests ?? defaults.affectedTests).filter((check) =>
               result.changedFiles.some((path) => matchesPath(path, check.paths)),
             )
