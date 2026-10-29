@@ -35,7 +35,12 @@ export type Pool = {
   };
 };
 export type AffectedTestCheck = { paths: string[]; command: string[] };
-export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
+export type DerivedFile = {
+  path: string;
+  stage: 'integration' | 'promotion';
+  command: string[];
+  inputs?: string[];
+};
 export type AffectedTestResult = {
   command: string[];
   status: 'passed' | 'failed' | 'unverified';
