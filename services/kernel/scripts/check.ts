@@ -331,6 +331,22 @@ export function writeReyloProject(directory: string, analysisUrl: string): strin
   return file;
 }
 
+/** Bind both full and selected compiler spawns to the check's explicit Reylo project. */
+export function invokeTypecheck<T>(
+  program: string,
+  files: string[] | null,
+  baseEnvironment: NodeJS.ProcessEnv,
+  reyloConfig: string,
+  invoke: (program: string, args: string[], environment: NodeJS.ProcessEnv) => T,
+): T {
+  const args =
+    files === null
+      ? ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json']
+      : ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'];
+  const environment = { ...baseEnvironment, REYLO_CONFIG: baseEnvironment.REYLO_CONFIG ?? reyloConfig };
+  return invoke(program, args, environment);
+}
+
 /** The environment of every process one test file starts: its own database copy, the shared search node and Reylo's analysis database. */
 export function fileEnvironment(
   base: NodeJS.ProcessEnv,
@@ -816,7 +832,7 @@ async function main(): Promise<void> {
     async () => {
       if (plan.files === null) {
         let phaseStarted = performance.now();
-        run(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+        invokeTypecheck(tsc, null, env, reyloConfig, run);
         compilerSeconds += seconds(phaseStarted);
         phaseStarted = performance.now();
         run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], env);
@@ -824,11 +840,7 @@ async function main(): Promise<void> {
         qualitySeconds += seconds(phaseStarted);
       } else {
         const compilerStarted = performance.now();
-        const typecheck = await capture(
-          tsc,
-          ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
-          env,
-        );
+        const typecheck = await invokeTypecheck(tsc, plan.files, env, reyloConfig, capture);
         compilerSeconds += seconds(compilerStarted);
         const diagnostics = ownDiagnostics(
           typecheck.output,
