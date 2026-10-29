@@ -44,7 +44,9 @@ export function resolveTypecheckCommand(command: string[], root: string, executa
     packageManager?: string;
   };
   const expected = manifest.packageManager?.startsWith('bun@') ? manifest.packageManager.slice(4) : '';
-  const revision = spawnSync(join(root, 'node_modules/.bin/bun'), ['--revision'], { encoding: 'utf8' });
+  const revision = spawnSync(join(root, 'node_modules/.bin/bun'), ['--eval', 'console.log(Bun.revision)'], {
+    encoding: 'utf8',
+  });
   if (revision.error || revision.status !== 0) throw revision.error ?? new Error('Could not read pinned Bun revision');
   const pinned = Bun.revision === revision.stdout.trim() ? executable : join(root, 'node_modules/.bin/bun');
   if (!expected) throw new Error('package.json packageManager must pin Bun');

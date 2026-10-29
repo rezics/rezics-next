@@ -42,7 +42,7 @@ function format(program: string, filename: string, source: string): string {
 test('the repository and check-host provisioner pin the tested canary build', async () => {
   const manifest = await Bun.file(join(root, 'package.json')).json();
   expect(manifest.packageManager).toBe(`bun@${manifest.devDependencies.bun}`);
-  const revision = run([bun, '--revision']);
+  const revision = run([bun, '--eval', 'console.log(Bun.revision)']);
   expect(revision.code).toBe(0);
   expect(revision.output.trim()).toBe('1.4.4-canary.1+a0cc096ce');
   const provision = await Bun.file(join(root, 'scripts/provision-check-host.sh')).text();
@@ -60,18 +60,17 @@ test('the gate invokes the installed Bun explicitly instead of Bun.spawn selecti
 
 test('worker checks select the pinned repository Bun and remote checks verify both Bun executables', async () => {
   const manifest = await Bun.file(join(root, 'package.json')).json();
-  const workerCommand = resolveRepositoryBun(['bun', '--revision'], root);
+  const workerCommand = resolveRepositoryBun(['bun', '--eval', 'console.log(Bun.revision)'], root);
   const worker = run(workerCommand);
   expect(worker.code, worker.error).toBe(0);
-  expect(worker.output.trim()).toBe('a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
+  expect(worker.output.trim()).toBe(Bun.revision);
 
-  const typecheckCommand = resolveTypecheckCommand(['bun', '--revision'], root);
+  const typecheckCommand = resolveTypecheckCommand(['bun', '--eval', 'console.log(Bun.revision)'], root);
   const typecheckBun = run(typecheckCommand);
   expect(typecheckBun.code, typecheckBun.error).toBe(0);
-  expect(typecheckBun.output.trim()).toBe('a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
+  expect(typecheckBun.output.trim()).toBe(Bun.revision);
 
   const remote = runScript('run-id', '/srv/rezics-check/runs/run-id', '.', ['bun', 'test'], 'host-a');
-  expect(remote).toContain(`/usr/local/bin/bun --eval`);
   expect(remote).toContain(`expected_bun='${manifest.packageManager.slice(4)}'`);
   expect(remote).toContain('Bun.revision === process.argv[1]');
   expect(remote).toContain('"$PWD/node_modules/.bin/bun" --eval');

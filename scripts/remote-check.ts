@@ -73,7 +73,11 @@ const repositoryPackage = JSON.parse(readFileSync(join(import.meta.dir, '../pack
 const PINNED_BUN_VERSION = repositoryPackage.packageManager?.startsWith('bun@')
   ? repositoryPackage.packageManager.slice(4)
   : '';
-const pinnedBun = Bun.spawnSync([join(import.meta.dir, '../node_modules/.bin/bun'), '--revision']);
+const pinnedBun = Bun.spawnSync([
+  join(import.meta.dir, '../node_modules/.bin/bun'),
+  '--eval',
+  'console.log(Bun.revision)',
+]);
 if (pinnedBun.exitCode !== 0) throw new Error('Could not read pinned Bun revision');
 const PINNED_BUN_REVISION = pinnedBun.stdout.toString().trim();
 const SLICE = 'rezics-check.slice';
