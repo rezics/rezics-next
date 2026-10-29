@@ -160,7 +160,12 @@ export async function eraseAccountCommunityRecordsPage(
         return affected ? { value: kept, events: [changed(accountId)] } : noEffect(kept);
       },
     );
-    if (result.value && (!reasonsKeptUntil || Date.parse(result.value) > Date.parse(reasonsKeptUntil)))
+    // A ban against this account is deleted by its target key, including a self-issued ban.
+    if (
+      result.value &&
+      row.key !== accountId &&
+      (!reasonsKeptUntil || Date.parse(result.value) > Date.parse(reasonsKeptUntil))
+    )
       reasonsKeptUntil = iso(result.value);
     if (row.kind !== 'ban_actor') await remove(pool, accountId, key.route, row);
   }
