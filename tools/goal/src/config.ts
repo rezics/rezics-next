@@ -31,7 +31,7 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
   if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
   return value.map((item, index) => {
     const file = object(item, `derivedFiles[${index}]`);
-    keys(file, ['path', 'stage', 'command'], `derivedFiles[${index}]`);
+    keys(file, ['path', 'stage', 'command', 'inputs'], `derivedFiles[${index}]`);
     const path = text(file.path, `derivedFiles[${index}].path`);
     validatePath(path);
     if (file.stage !== 'integration' && file.stage !== 'promotion')
@@ -42,7 +42,16 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
       file.command.some((part) => typeof part !== 'string' || !part)
     )
       throw new Error(`derivedFiles[${index}].command must be a command array`);
-    return { path, stage: file.stage, command: [...file.command] };
+    if (
+      file.inputs !== undefined &&
+      (!Array.isArray(file.inputs) || file.inputs.some((input) => typeof input !== 'string' || !input))
+    )
+      throw new Error(`derivedFiles[${index}].inputs must be a path array`);
+    const inputs = (file.inputs as string[] | undefined)?.map((input) => {
+      validatePath(input);
+      return input;
+    });
+    return { path, stage: file.stage, command: [...file.command], ...(inputs ? { inputs } : {}) };
   });
 }
 export function readIntegrationChecks(

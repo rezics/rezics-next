@@ -1,9 +1,30 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadSettings } from './config.ts';
+import { loadSettings, readDerivedFiles } from './config.ts';
 import { git } from './tasks.ts';
 import { harness } from './test-support.ts';
+
+test('derived file input globs load with the declared generator', () => {
+  expect(
+    readDerivedFiles([
+      {
+        path: 'packages/client/src/kernel/**',
+        stage: 'promotion',
+        command: ['bun', 'run', '--cwd', 'services/kernel', 'derived'],
+        inputs: ['services/kernel/**'],
+      },
+    ]),
+  ).toEqual([
+    {
+      path: 'packages/client/src/kernel/**',
+      stage: 'promotion',
+      command: ['bun', 'run', '--cwd', 'services/kernel', 'derived'],
+      inputs: ['services/kernel/**'],
+    },
+  ]);
+  expect(() => readDerivedFiles([{ path: 'out.txt', stage: 'promotion', command: ['true'], inputs: ['../secret'] }])).toThrow();
+});
 
 test('settings anchor to the main checkout from a linked worktree; local settings and environment override defaults', () => {
   const h = harness();
