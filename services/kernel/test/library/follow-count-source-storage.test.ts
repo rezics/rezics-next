@@ -7,6 +7,7 @@ import { createFollowCommands } from '../../src/library/follows.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { authenticateAccount } from '../support/admitted-access.ts';
 import {
   assertGrowth,
   measure,
@@ -117,9 +118,18 @@ test('actual native follow writers atomically retain per-original source replace
   // Provision a real Space through its ordinary authorized command; membership uses
   // the official trusted owner writer that Community calls, not a fake membership model.
   const spaceOwner = await fixture.identity([...owner.scopes, 'space:create', 'space:read']);
+  const steward = await authenticateAccount(
+    fixture.access,
+    { pool: db.pool, deadline: deadlineFor(30_000) },
+    {
+      accountId: fixture.steward.actor.accountId,
+      clientId: fixture.steward.actor.clientId,
+      scopes: [...fixture.steward.actor.scopes, 'space:create'],
+    },
+  );
   const grants = createGrantCommands({ pool: db.pool, access: fixture.access, managementAction: 'access:grant' });
   await grants.create(
-    { pool: db.pool, actor: fixture.steward.actor, deadline: deadlineFor(30_000) },
+    { pool: db.pool, actor: steward, deadline: deadlineFor(30_000) },
     {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'account', id: spaceOwner.actor.accountId },
