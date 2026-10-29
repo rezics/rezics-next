@@ -415,7 +415,12 @@ test.serial(
       expect(steps?.map((step) => step.name)).toEqual(['accounts.membership.reserve']);
       expect(await membership()).toEqual(before);
     } finally {
-      await work.close();
+      try {
+        // The shared driver's settle rejects failed workflows; this failure is the asserted replay outcome.
+        await work.deleteWorkflows([retainedOut.creation_idempotency_key], false);
+      } finally {
+        await work.close();
+      }
     }
   },
   120000,
