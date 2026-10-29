@@ -7,6 +7,7 @@ import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubjectReference } from '../semantic/references.ts';
+import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 const MAX_SUBJECT_IDS = 100;
@@ -20,6 +21,12 @@ export type SubjectAnchorDependencies = {
 
 export type ResolvedSubject = { subjectId: string; requestedSubjectId: string | null };
 
+export class SubjectIdentityUnavailableError extends Error {
+  constructor(public readonly reason: 'bootstrap' | 'missing-owner' | 'moved-owner') {
+    super(`Current subject identity is unavailable: ${reason}`);
+  }
+}
+
 /** Resolve a subject on its own anchor using the semantic subject:read policy. */
 export async function resolveSubject(
   deps: SubjectAnchorDependencies,
@@ -27,7 +34,7 @@ export async function resolveSubject(
   subjectId: string,
   at?: AuthoritativeTime,
 ): Promise<ResolvedSubject | null> {
-  async function readAnchor(id: string) {
+  async function authorizeAnchor(id: string) {
     const route = routeOf(id);
     if (route === null) return null;
     const resource = { route, id, eligibility: subjectReadEligibility({ route, id }) };
@@ -35,23 +42,32 @@ export async function resolveSubject(
       pool: deps.pool,
       deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
     });
-    return readSubjectReference(deps.pool, id, (client) => check(client, at));
+    return (client: Parameters<typeof check>[0]) => check(client, at);
   }
+  const mapping = await identityEpochStore.readMapping(deps.pool, subjectId);
+  if (mapping.state === 'absent') return null;
+  if (mapping.state === 'pending') return null;
+  if (mapping.state === 'unavailable') throw new SubjectIdentityUnavailableError(mapping.reason);
 
-  const visited = new Set<string>();
-  let current = subjectId;
-  while (!visited.has(current)) {
-    visited.add(current);
-    try {
-      const result = await readAnchor(current);
-      return result ? { subjectId: current, requestedSubjectId: current === subjectId ? null : subjectId } : null;
-    } catch (error) {
-      if (!(error instanceof SubjectRedirectError)) throw error;
-      if (error.from !== current) return null;
-      current = error.to;
-    }
+  const originalAuthorization = await authorizeAnchor(subjectId);
+  if (!originalAuthorization) return null;
+  const terminalAuthorization = await authorizeAnchor(mapping.terminal);
+  if (!terminalAuthorization) return null;
+
+  try {
+    const original = await readSubjectReference(deps.pool, subjectId, originalAuthorization);
+    if (!original || mapping.terminal !== subjectId) return null;
+  } catch (error) {
+    if (!(error instanceof SubjectRedirectError)) throw error;
+    if (error.from !== subjectId || error.to !== mapping.terminal) return null;
   }
-  return null;
+  const terminal = await readSubjectReference(deps.pool, mapping.terminal, terminalAuthorization);
+  return terminal
+    ? {
+        subjectId: mapping.terminal,
+        requestedSubjectId: mapping.terminal === subjectId ? null : subjectId,
+      }
+    : null;
 }
 
 /** Keep stored IDs that resolve, preserving page identity and bounds. */

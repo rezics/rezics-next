@@ -62,6 +62,7 @@ import {
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import readOutboundLinkCount from './read-outbound-link-count.sql';
 import { waitForSubjectLinks } from './link-freshness.ts';
+import { identityEpochStore } from './identity-epoch-store.ts';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -225,6 +226,7 @@ export async function writeSubject(
     transaction_id: transactionId,
     source: options.source ?? accountSource(tx, statementSubjects),
   });
+  await identityEpochStore.initializeSubject(tx, subjectId);
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
   ];
