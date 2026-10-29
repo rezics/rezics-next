@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import pg from 'pg';
 import { LifecycleDeniedError } from '../../src/access/lifecycle.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { resetGrowthTables } from './growth-reset.ts';
@@ -8,7 +9,7 @@ let f: Awaited<ReturnType<typeof ownerCostFixture>>;
 let growth: GrowthDatabase;
 beforeAll(async () => {
   growth = await openGrowthDatabase();
-  f = await ownerCostFixture({ pool: growth.openPool(), reader: growth.openPool() });
+  f = await ownerCostFixture({ pool: growth.openPool(), reader: growth.openPool(), growth });
 });
 afterAll(async () => {
   if (f) await f.close();
@@ -59,11 +60,20 @@ test('the owner guard and its lifecycle commands stay within constant rows and l
   const report = await checkGrowth(growth, {
     name: 'the owner guard and its lifecycle commands stay within constant rows and logarithmic blocks as members grow',
     scales: [64, 512, 4096],
-    repetitions: 1,
+    repetitions: 3,
     warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(_database, scale) {
-      await f.seed(scale);
+      await f.seed(scale, undefined, async () => {
+        const holder = new pg.Client({ connectionString: growth.url, application_name: 'owner-growth-snapshot' });
+        await holder.connect();
+        await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await holder.query('SELECT count(*) FROM access.organization_member');
+        return async () => {
+          await holder.query('COMMIT');
+          await holder.end();
+        };
+      });
     },
     async warmup(_database, scale) {
       await exercise(f.owners[2]!, f.owners[3]!);

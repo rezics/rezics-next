@@ -362,12 +362,13 @@ is skipped for that bound.
 
 Plans are collected only inside a capture: an instrumented connection runs auto_explain just for the statements of a
 measured run, and seeding is never explained. Each report sample carries `seeding`, the statements and rows written by
-`grow` (every pool, `admin` included) with the time of `grow` and of the vacuum after it; when `GROWTH_PROFILE` names a
-file, `checkGrowth` appends one JSON line per check with the test file, check name, scales and each scale's `seeding`.
+`grow` (every pool, `admin` included), the time of `grow`, the ANALYZE settle after it (`vacuumMs`), and total settling
+time for that scale (`settleMs`); when `GROWTH_PROFILE` names a file, `checkGrowth` appends one JSON line per check
+with the test file, check name, scales and each scale's `seeding`.
 The line also carries every repetition, relation sizes and a shadow whole-series verdict that does not yet decide the check.
 Each report sample also carries `repetitions`, the cost of every measured run in order, and `relationSizes`, the
 `reltuples` and `relpages` of every relation the measured plans read at that scale.
-`seed` skips its own vacuum inside `grow`, since `checkGrowth` vacuums right after.
+`seed` skips settling inside `grow`, since `checkGrowth` settles right after.
 
 Declare the check's growth model: the relations, partitions and keys that grow with N in production (subjects,
 content, history, receipts, outbox, write basis and the Access rows its authorization reads). Seed each of them at
@@ -380,11 +381,18 @@ growth check measures executed work (`docs/research/growth-check-plan-stability.
 
 Every scale is measured warm. Keep the default `warmups`. When the operation uses up the state it measures, pass
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
-backend's first. `checkGrowth` refuses fewer than one warm-up per scale. It runs `VACUUM (ANALYZE)` on the test database
-after each scale's `grow`, so planner statistics never depend on autovacuum; seed in `grow`, not `operation`, since the
-vacuum runs after `grow`; before each measured repetition it also vacuums `dbos.workflow_status`, because DBOS's
-idempotent enqueue updates an existing status row and pruning that tuple chain keeps buffer cost from depending on
-maintenance timing. Do not analyze or vacuum the checked database by hand in `grow`.
+backend's first. `checkGrowth` refuses fewer than one warm-up per scale. After each scale's `grow`, it settles the whole database
+with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. Each settle waits until
+no other connection in that database holds a transaction ID or snapshot older than the starting horizon, then runs
+`VACUUM (INDEX_CLEANUP ON)` on target relations and verifies every nonempty relation page is all-visible. If pages remain
+not all-visible, it waits and vacuums once more. The default horizon wait is 30 seconds. On timeout or failed visibility
+verification, it throws `GrowthSettleInfrastructureError` with holding backend details; this is a test infrastructure
+failure, not a growth-bound failure. Settle also disables autovacuum on every table, including tables created since the
+database opened. Before each measured repetition, the harness captures each warm-up or preceding run's ModifyTable
+targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE in every
+database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db, scale,
+repetition)` hook runs outside capture after settling and before every measured repetition, never before warm-ups. A
+fixture that measures outside `checkGrowth` calls the exported `settle` API instead of issuing a bare VACUUM.
 
 When a bound fails, `GrowthBoundError` keeps its scale and relation summary and adds the statements with the largest
 first-to-last-scale growth for each failing metric. Each statement line shows its normalized first line, its value at
@@ -394,16 +402,9 @@ parameters are normalized together while leading SQL comments remain, so comment
 The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
 blocks and count across measured repetitions.
 
-Use the optional `prepare(db, scale, repetition)` hook for periodic setup that would otherwise occur in only some
-measured runs, such as refreshing a schema or checkpointing. It runs outside capture before every measured repetition,
-after the harness's `dbos.workflow_status` preparation, and never before warm-ups. A periodic step needs its own growth
-check; `prepare` keeps its work out of this operation's measurements, not out of coverage.
-
-Each measured repetition starts from equivalent state. When the operation writes, give every warm-up and
-repetition its own fresh keys, subjects or probes, as production spreads its writes, so that no repetition updates
-rows an earlier one wrote. The harness does not rewrite or compact relations between repetitions: that would hide
-the version chains, index growth and visibility effects a write check should reveal. A check that measures repeated
-writes to the same rows declares that history in its growth model.
+Each measured repetition starts from a settled state. Warm-ups and repetitions may write rows, including through
+triggers; the harness settles every relation written by the previous run before measuring the next one. Checks should
+use fresh keys where production does, and declare any intentional repeated writes in their growth model.
 
 A module README cites a growth check by its test file and test title and says what grows and what stays fixed. It
 does not restate the scales, which the test owns and may change. Test titles do not name scales either, so a

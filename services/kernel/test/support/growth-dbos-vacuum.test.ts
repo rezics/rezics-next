@@ -3,7 +3,7 @@ import { checkGrowth, openGrowthDatabase } from './growth.ts';
 
 const scales = [1, 4, 16] as const;
 const bounds = { rows: 'constant', blocks: 'constant', statements: 'constant' } as const;
-const vacuum = 'VACUUM (ANALYZE) "dbos".workflow_status';
+const vacuum = 'VACUUM (INDEX_CLEANUP ON) "dbos"."workflow_status"';
 
 test('checkGrowth measures a database that has no dbos schema', async () => {
   const db = await openGrowthDatabase();
@@ -32,7 +32,7 @@ test('checkGrowth measures a database that has no dbos schema', async () => {
   }
 });
 
-test('checkGrowth vacuums dbos.workflow_status before each repetition once the schema exists', async () => {
+test('checkGrowth settles dbos.workflow_status before measured repetitions once the schema exists', async () => {
   const db = await openGrowthDatabase();
   const queries = spyOn(db.admin, 'query');
   const vacuumCounts: number[] = [];
@@ -58,7 +58,7 @@ test('checkGrowth vacuums dbos.workflow_status before each repetition once the s
         await db.pool.query('SELECT 42 AS answer');
       },
     });
-    // Each scale runs one warm-up, which is never preceded by a vacuum, then two measured repetitions.
+    // Warmups are captured, and maintenance runs immediately before every measured repetition after a write.
     expect(vacuumCounts).toEqual([0, 0, 0, 0, 1, 2, 2, 3, 4]);
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);

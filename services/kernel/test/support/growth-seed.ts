@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import pg from 'pg';
 import type { Pool } from 'pg';
-import { vacuumFollows } from './growth-capture.ts';
+import { settleAdmin, vacuumFollows } from './growth-capture.ts';
 
 export type SeedTarget = { readonly pool: Pool; readonly admin: pg.Pool };
 export type Row = Readonly<Record<string, unknown>>;
@@ -157,5 +157,5 @@ export async function seed(target: SeedTarget, population: Population, range: Se
     await writeRange(target, population, range);
   }
   if (population.finish) await population.finish(target.admin, range);
-  if (!vacuumFollows(target.admin)) await target.admin.query('VACUUM (ANALYZE)');
+  if (!vacuumFollows(target.admin)) await settleAdmin(target.admin, { analyze: true });
 }

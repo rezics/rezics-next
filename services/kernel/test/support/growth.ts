@@ -14,7 +14,7 @@ import {
   type RelationSize,
   type Slack,
 } from './growth-bound.ts';
-import { capture, trackGrow, type GrowthDatabase } from './growth-capture.ts';
+import { capture, captureMeasuredRun, settle, settleAdmin, trackGrow, type GrowthDatabase } from './growth-capture.ts';
 import {
   catalogStatementBound,
   costOf,
@@ -46,7 +46,14 @@ export * from './growth-counters.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-bound.ts';
-export { openGrowthDatabase, capture, type GrowthDatabase } from './growth-capture.ts';
+export {
+  openGrowthDatabase,
+  capture,
+  settle,
+  settleAdmin,
+  GrowthSettleInfrastructureError,
+  type GrowthDatabase,
+} from './growth-capture.ts';
 export * from './growth-seed.ts';
 export * from './growth-uncertainty.ts';
 
@@ -77,7 +84,7 @@ export type GrowthCheck = {
   readonly warmups?: number;
   /**
    * Grows the data from the previous scale (0 before the first) to this one, normally with seed(). After each call,
-   * checkGrowth runs database-wide `VACUUM (ANALYZE)` before the scale's first unmeasured run.
+   * checkGrowth settles the database with ANALYZE before the scale's first unmeasured run.
    */
   grow(db: GrowthDatabase, scale: number, previous: number): Promise<void>;
   /**
@@ -91,12 +98,13 @@ export type GrowthCheck = {
   prepare?(db: GrowthDatabase, scale: number, repetition: number): Promise<void>;
 };
 
-/** What growing the data to a scale cost: the statements and written rows of `grow`, and the time of `grow` and of the vacuum after it. */
+/** What growing the data to a scale cost, including the time spent settling the database. */
 export type SeedingCost = {
   readonly statements: number;
   readonly rowsWritten: number;
   readonly growMs: number;
   readonly vacuumMs: number;
+  readonly settleMs: number;
 };
 
 export type ReportSample = {
@@ -351,13 +359,19 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const growStart = performance.now();
     const grown = await trackGrow(db, () => check.grow(db, scale, previous));
     const vacuumStart = performance.now();
-    await db.admin.query('VACUUM (ANALYZE)');
-    const vacuumMs = performance.now() - vacuumStart;
-    const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs };
+    const vacuumMs = await settle(db, { analyze: true });
+    let settleMs = vacuumMs;
+    const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs, settleMs };
     const availableRelationSizes = await readRelationSizes(db);
+    let pendingWrites = new Map<GrowthDatabase, Set<string>>();
     for (let warmup = 0; warmup < warmups; warmup++) {
-      if (check.warmup) await check.warmup(db, scale, repetition);
-      else await check.operation(db, scale, repetition);
+      const warmed = await captureMeasuredRun(async () => {
+        await capture(db, async () => {
+          if (check.warmup) await check.warmup(db, scale, repetition);
+          else await check.operation(db, scale, repetition);
+        });
+      });
+      pendingWrites = warmed.writes;
       repetition++;
     }
 
@@ -366,15 +380,27 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const occurrenceRepetitions: StatementOccurrences[] = [];
     const countedRuns: Record<string, number>[] = [];
     for (let run = 0; run < repetitions; run++) {
-      // DBOS return-existing enqueues update workflow_status; vacuum its tuple chain before every measured repetition.
-      const workflowStatus = await db.admin.query<{ exists: boolean }>(
-        `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
-      );
-      if (workflowStatus.rows[0]!.exists) await db.admin.query('VACUUM (ANALYZE) "dbos".workflow_status');
+      for (const target of pendingWrites.keys()) {
+        const workflowStatus = await target.admin.query<{ exists: boolean }>(
+          `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
+        );
+        if (workflowStatus.rows[0]!.exists) {
+          const relations = pendingWrites.get(target)!;
+          relations.add('dbos.workflow_status');
+        }
+      }
+      for (const [target, relations] of pendingWrites) {
+        if (relations.size > 0) settleMs += await settle(target, { relations: [...relations] });
+      }
+      (seeding as { settleMs: number }).settleMs = settleMs;
       if (check.prepare) await check.prepare(db, scale, repetition);
-      const measured = await capture(db, () => check.operation(db, scale, repetition), {
-        ...(check.includeBackends === undefined ? {} : { includeBackends: check.includeBackends }),
-      });
+      const captured = await captureMeasuredRun(() =>
+        capture(db, () => check.operation(db, scale, repetition), {
+          ...(check.includeBackends === undefined ? {} : { includeBackends: check.includeBackends }),
+        }),
+      );
+      pendingWrites = captured.writes;
+      const measured = captured.value;
       const cost = costOf(measured.capture);
       if (check.counted) {
         const values = check.counted.read(measured.value, scale);

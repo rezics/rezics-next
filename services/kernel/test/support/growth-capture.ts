@@ -59,7 +59,10 @@ type CaptureState = {
 };
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
+const databasesByAdmin = new WeakMap<pg.Pool, GrowthDatabase>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
+type RunCapture = Map<GrowthDatabase, Set<string>>;
+const measuredRun = new AsyncLocalStorage<RunCapture>();
 const clientAttribution = new WeakMap<PoolClient, Attribution>();
 const clientStatement = new WeakMap<PoolClient, StatementRecord | undefined>();
 // pg can submit the next queued query before the previous query's promise settles.
@@ -527,6 +530,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
     },
   };
   states.set(database, state);
+  databasesByAdmin.set(admin, database);
   instrumentPool(pool, state);
 
   try {
@@ -539,6 +543,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
       cause: error,
     });
   }
+  await disableAutovacuum(database);
 
   return database;
 }
@@ -589,6 +594,12 @@ export async function capture<T>(
     if (operationFailed) throw operationError;
     if (state.setupError) throw state.setupError;
     if (active.error) throw active.error;
+    const run = measuredRun.getStore();
+    if (run) {
+      const relations = run.get(database) ?? new Set<string>();
+      for (const document of [...active.plans, ...active.backgroundPlans]) collectModifyTargets(document, relations);
+      run.set(database, relations);
+    }
     const foreground = active.statementRecords.filter(({ background }) => !background);
     const background = active.statementRecords.filter(({ background }) => background);
     return {
@@ -624,9 +635,163 @@ export async function capture<T>(
   }
 }
 
+function collectModifyTargets(document: unknown, output: Set<string>): void {
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) return value.forEach(visit);
+    if (typeof value !== 'object' || value === null) return;
+    const record = value as Record<string, unknown>;
+    if (record['Node Type'] === 'ModifyTable' && typeof record['Relation Name'] === 'string') {
+      const schema = typeof record['Schema'] === 'string' ? record['Schema'] : 'public';
+      output.add(`${schema}.${record['Relation Name']}`);
+    }
+    for (const child of Object.values(record)) visit(child);
+  };
+  visit(document);
+}
+
+export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{ value: T; writes: RunCapture }> {
+  const writes: RunCapture = new Map();
+  return measuredRun.run(writes, async () => ({ value: await operation(), writes }));
+}
+
+export class GrowthSettleInfrastructureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GrowthSettleInfrastructureError';
+  }
+}
+
+function quoteIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function qualifiedIdentifier(value: string): string {
+  const split = value.indexOf('.');
+  if (split < 1) throw new TypeError(`Expected schema-qualified relation: ${value}`);
+  return `${quoteIdentifier(value.slice(0, split))}.${quoteIdentifier(value.slice(split + 1))}`;
+}
+
+async function tableNames(
+  database: GrowthDatabase,
+): Promise<{ schema: string; name: string; options: string[] | null }[]> {
+  const result = await database.admin.query<{ schema: string; name: string; options: string[] | null }>(
+    `SELECT n.nspname AS schema, c.relname AS name,c.reloptions AS options
+       FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema')
+      ORDER BY n.nspname,c.relname`,
+  );
+  return result.rows;
+}
+
+async function disableAutovacuum(database: GrowthDatabase): Promise<void> {
+  for (const { schema, name, options } of await tableNames(database)) {
+    if (options?.includes('autovacuum_enabled=false') && options.includes('toast.autovacuum_enabled=false')) continue;
+    await database.admin.query(
+      `ALTER TABLE ${qualifiedIdentifier(`${schema}.${name}`)} SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)`,
+    );
+  }
+}
+
+export async function settle(
+  database: GrowthDatabase,
+  options: {
+    readonly relations?: readonly string[];
+    readonly analyze?: boolean;
+    readonly timeoutMs?: number;
+    readonly pollMs?: number;
+  } = {},
+): Promise<number> {
+  const started = performance.now();
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const pollMs = options.pollMs ?? 100;
+  await disableAutovacuum(database);
+  const names = options.relations ?? (await tableNames(database)).map(({ schema, name }) => `${schema}.${name}`);
+  const deadline = Date.now() + timeoutMs;
+  let holders: Array<{
+    pid: number;
+    backend_type: string;
+    application_name: string;
+    state: string;
+    xact_start: Date | null;
+    query: string;
+  }> = [];
+  while (true) {
+    const result = await database.admin.query<{
+      pid: number;
+      backend_type: string;
+      application_name: string;
+      state: string;
+      xact_start: Date | null;
+      query: string;
+    }>(
+      `WITH horizon AS (SELECT pg_snapshot_xmax(pg_current_snapshot())::text::bigint AS xid)
+       SELECT a.pid,a.backend_type,a.application_name,a.state,a.xact_start,split_part(a.query,E'\\n',1) AS query
+         FROM pg_stat_activity a CROSS JOIN horizon h
+        WHERE a.datname=current_database() AND a.pid<>pg_backend_pid()
+          AND ((a.backend_xid IS NOT NULL AND a.backend_xid::text::bigint < h.xid)
+            OR (a.backend_xmin IS NOT NULL AND a.backend_xmin::text::bigint < h.xid))
+        ORDER BY a.pid`,
+    );
+    holders = result.rows;
+    if (holders.length === 0) break;
+    if (Date.now() >= deadline)
+      throw new GrowthSettleInfrastructureError(
+        `Could not reach a clean transaction horizon; holding backends: ${JSON.stringify(holders)}`,
+      );
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  const vacuum = async (
+    relations: readonly string[],
+    vacuumOptions: { readonly disablePageSkipping?: boolean; readonly freeze?: boolean } = {},
+  ) => {
+    for (const relation of relations) {
+      await database.admin.query(
+        `VACUUM (${vacuumOptions.freeze ? 'FREEZE, ' : ''}INDEX_CLEANUP ON${vacuumOptions.disablePageSkipping ? ', DISABLE_PAGE_SKIPPING' : ''}${options.analyze ? ', ANALYZE' : ''}) ${qualifiedIdentifier(relation)}`,
+      );
+    }
+  };
+  await vacuum(names);
+  const verify = async () => {
+    if (names.length === 0) return [];
+    const result = await database.admin.query<{ relation: string; pages: number; visible: number }>(
+      `SELECT n.nspname || '.' || c.relname AS relation,c.relpages AS pages,c.relallvisible AS visible
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE c.relkind IN ('r','m') AND c.relpages > 0 AND (n.nspname || '.' || c.relname)=ANY($1::text[])
+          AND c.relallvisible < c.relpages`,
+      [names],
+    );
+    return result.rows;
+  };
+  let dirty = await verify();
+  if (dirty.length > 0) {
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    await vacuum(
+      dirty.map(({ relation }) => relation),
+      { disablePageSkipping: true, freeze: true },
+    );
+    dirty = await verify();
+  }
+  if (dirty.length > 0) {
+    const waiting = await database.admin.query(
+      `SELECT pid,backend_type,application_name,state,xact_start,backend_xid::text,backend_xmin::text,split_part(query,E'\\n',1) AS query
+         FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() ORDER BY pid`,
+    );
+    throw new GrowthSettleInfrastructureError(
+      `VACUUM did not make every page all-visible; relations: ${JSON.stringify(dirty)}; backends: ${JSON.stringify(waiting.rows)}`,
+    );
+  }
+  return performance.now() - started;
+}
+
+export function settleAdmin(admin: pg.Pool, options: Parameters<typeof settle>[1] = {}): Promise<number> {
+  const database = databasesByAdmin.get(admin);
+  if (!database) throw new Error('Growth admin pool was not opened by openGrowthDatabase');
+  return settle(database, options);
+}
+
 /**
  * Runs `grow` for checkGrowth: counts the statements and written rows of every pool the database hands out, and lets
- * `seed` see that its caller vacuums afterwards.
+ * `seed` see that its caller settles afterwards.
  */
 export async function trackGrow<T>(
   database: GrowthDatabase,
@@ -646,7 +811,7 @@ export async function trackGrow<T>(
   }
 }
 
-/** Whether `admin` belongs to a database whose checkGrowth is inside `grow`, and vacuums when `grow` returns. */
+/** Whether `admin` belongs to a database whose checkGrowth is inside `grow`, and settles when `grow` returns. */
 export function vacuumFollows(admin: pg.Pool): boolean {
   return growing.getStore() === admin;
 }

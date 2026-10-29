@@ -1,20 +1,20 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import pg from 'pg';
-import { placement, seed, type Population, type SeedTarget } from './growth-seed.ts';
+import { openGrowthDatabase, type GrowthDatabase } from './growth.ts';
+import { placement, seed, type Population } from './growth-seed.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = new pg.Pool({ connectionString: databaseUrl, max: 4 });
-const target: SeedTarget = { pool, admin: pool };
+let database: GrowthDatabase;
+let pool: GrowthDatabase['pool'];
 const schemas = ['growth_seed_test', 'growth_seed_cumulative_a', 'growth_seed_cumulative_b', 'growth_seed_write'];
 
 beforeAll(async () => {
+  database = await openGrowthDatabase();
+  pool = database.pool;
   for (const schema of schemas) {
-    await pool.query(`CREATE SCHEMA ${schema}`);
-    await pool.query(`CREATE TABLE ${schema}.parent (
+    await database.admin.query(`CREATE SCHEMA ${schema}`);
+    await database.admin.query(`CREATE TABLE ${schema}.parent (
       route integer NOT NULL, id integer NOT NULL, payload jsonb NOT NULL DEFAULT '{}', PRIMARY KEY (route, id)
     )`);
-    await pool.query(`CREATE TABLE ${schema}.child (
+    await database.admin.query(`CREATE TABLE ${schema}.child (
       route integer NOT NULL, id integer NOT NULL, parent_id integer NOT NULL, PRIMARY KEY (route, id),
       FOREIGN KEY (route, parent_id) REFERENCES ${schema}.parent (route, id)
     )`);
@@ -22,8 +22,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const schema of schemas) await pool.query(`DROP SCHEMA ${schema} CASCADE`);
-  await pool.end();
+  for (const schema of schemas) await database.admin.query(`DROP SCHEMA ${schema} CASCADE`);
+  await database.close();
 });
 
 function rows(schema: string, name = schema): Population {
@@ -47,7 +47,7 @@ test('places the declared share of ordinals in the hot partition and spreads the
 
 test('inserts the rows of each ordinal range once, in table order, and refreshes planner statistics', async () => {
   const population = rows('growth_seed_test');
-  await seed(target, population, { from: 0, to: 20 });
+  await seed({ pool, admin: database.admin }, population, { from: 0, to: 20 });
   const parents = await pool.query<{ count: string }>('SELECT count(*)::text AS count FROM growth_seed_test.parent');
   const children = await pool.query<{ count: string }>('SELECT count(*)::text AS count FROM growth_seed_test.child');
   expect(parents.rows[0]!.count).toBe('20');
@@ -59,9 +59,9 @@ test('inserts the rows of each ordinal range once, in table order, and refreshes
 });
 
 test('grows cumulatively: seeding 0..8n after 0..n equals seeding 0..8n at once', async () => {
-  await seed(target, rows('growth_seed_cumulative_a', 'cumulative'), { from: 0, to: 10 });
-  await seed(target, rows('growth_seed_cumulative_a', 'cumulative'), { from: 10, to: 80 });
-  await seed(target, rows('growth_seed_cumulative_b', 'cumulative'), { from: 0, to: 80 });
+  await seed({ pool, admin: database.admin }, rows('growth_seed_cumulative_a', 'cumulative'), { from: 0, to: 10 });
+  await seed({ pool, admin: database.admin }, rows('growth_seed_cumulative_a', 'cumulative'), { from: 10, to: 80 });
+  await seed({ pool, admin: database.admin }, rows('growth_seed_cumulative_b', 'cumulative'), { from: 0, to: 80 });
   const counts = async (schema: string) =>
     pool.query<{ partition: number; count: string }>(
       `SELECT route / 16 AS partition, count(*)::int AS count FROM ${schema}.parent GROUP BY 1 ORDER BY 1`,
@@ -79,7 +79,7 @@ test('seeds through a production write path when the population supplies write',
       await writePool.query('INSERT INTO growth_seed_write.parent (route, id) VALUES ($1, $2)', [route, ordinal]);
     },
   };
-  await seed(target, population, { from: 0, to: 12 });
+  await seed({ pool, admin: database.admin }, population, { from: 0, to: 12 });
   expect(calls).toBe(12);
   expect((await pool.query('SELECT count(*)::int AS count FROM growth_seed_write.parent')).rows[0]!.count).toBe(12);
 });
@@ -90,8 +90,8 @@ test('rejects rows whose columns differ within a table or name an invalid table'
     hotPartition: 1,
     rows: ({ ordinal, route }) => ({ 'growth_seed_test.parent': [ordinal === 0 ? { route, id: ordinal } : { route }] }),
   };
-  await expect(seed(target, mismatched, { from: 0, to: 2 })).rejects.toThrow();
+  await expect(seed({ pool, admin: database.admin }, mismatched, { from: 0, to: 2 })).rejects.toThrow();
   const invalid: Population = { name: 'invalid', hotPartition: 1, rows: () => ({ 'bad-name.parent': [{ id: 1 }] }) };
-  await expect(seed(target, invalid, { from: 0, to: 1 })).rejects.toThrow();
+  await expect(seed({ pool, admin: database.admin }, invalid, { from: 0, to: 1 })).rejects.toThrow();
   expect((await pool.query('SELECT count(*)::int AS count FROM growth_seed_test.parent')).rows[0]!.count).toBe(20);
 });
