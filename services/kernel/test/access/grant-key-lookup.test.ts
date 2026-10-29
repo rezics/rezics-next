@@ -89,18 +89,21 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
         if (scans.some((node) => node['Index Name'] !== 'resource_grant_pkey_lookup')) {
           console.error(
             'grant lookup indexes',
-            (
-              await database.admin.query(`
+            JSON.stringify(
+              (
+                await database.admin.query(`
             SELECT i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid) AS definition
             FROM pg_index i WHERE i.indrelid = 'access.resource_grant'::regclass
           `)
-            ).rows,
+              ).rows,
+            ),
           );
           console.error(
             'literal grant lookup',
-            (
-              await database.admin.query(
-                `
+            JSON.stringify(
+              (
+                await database.admin.query(
+                  `
             EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
             SELECT valid FROM access.resource_grant
             WHERE route=0 AND resource_id=$1 AND subject_kind='identity'
@@ -108,9 +111,10 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
               AND valid <= tstzrange('2030-01-01T12:00:00Z',NULL,'[)')
             ORDER BY valid DESC LIMIT 1
           `,
-                [resource, actor],
-              )
-            ).rows,
+                  [resource, actor],
+                )
+              ).rows,
+            ),
           );
         }
         for (const node of scans) {
