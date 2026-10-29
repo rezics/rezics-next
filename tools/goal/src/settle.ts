@@ -99,7 +99,11 @@ export async function settle(
         } catch {
           /* The CLI may have failed before creating its stderr stream. */
         }
-        const detail = (stderr || measurement.result || `Worker CLI exited with code ${code ?? 'unknown'} before starting a session`)
+        const detail = (
+          stderr ||
+          measurement.result ||
+          `Worker CLI exited with code ${code ?? 'unknown'} before starting a session`
+        )
           .replace(/[\r\n]+/g, ' ')
           .slice(0, 4000);
         const errorLine = detail.split(/\r?\n/, 1)[0]!.slice(0, 1000);

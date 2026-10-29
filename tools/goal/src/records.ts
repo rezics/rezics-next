@@ -34,11 +34,7 @@ export function readLogTail(path: string, maxBytes = ATTEMPT_LOG_TAIL_BYTES): st
   }
 }
 /** Read output appended after a particular run began, optionally keeping only its bounded suffix. */
-export function readLogFromOffset(
-  path: string,
-  offset: number,
-  maxBytes = Number.POSITIVE_INFINITY,
-): string {
+export function readLogFromOffset(path: string, offset: number, maxBytes = Number.POSITIVE_INFINITY): string {
   let fd: number | undefined;
   try {
     fd = openSync(path, 'r');

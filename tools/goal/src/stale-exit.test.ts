@@ -90,11 +90,7 @@ async function waitingAttempt(h: ReturnType<typeof harness>) {
   h.store.updateTask(attempt, (current) => {
     current.state = 'running';
   });
-  await settle(
-    h.tasks,
-    { attempt, exited: Promise.resolve({ code: 0, signal: null }) },
-    { enqueue() {} },
-  );
+  await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue() {} });
   const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
   mkdirSync(resultDirectory, { recursive: true });
   writeFileSync(
@@ -121,7 +117,9 @@ test('a resumed launch failure is settled from its appended output, not the prio
     await settle(h.tasks, resumed, { enqueue() {} });
 
     const settled = h.store.attempt(ref);
-    const failure = h.store.events(ref.taskId, ref.attempt).find((event) => event.kind === 'waiting-resume-launch-failed');
+    const failure = h.store
+      .events(ref.taskId, ref.attempt)
+      .find((event) => event.kind === 'waiting-resume-launch-failed');
     expect(settled.state).toBe('waiting');
     expect(settled.result).toContain(launchError);
     expect(settled.result).not.toContain('checks running');
@@ -140,7 +138,9 @@ test('repeated waiting resume launch failures stop after two retries and alert t
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     await job.recoverOrphans();
 
-    const failures = h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed');
+    const failures = h.store
+      .events(ref.taskId, ref.attempt)
+      .filter((event) => event.kind === 'waiting-resume-launch-failed');
     const reports = h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'manager-event');
     expect(failures).toHaveLength(3);
     expect(h.store.attempt(ref).state).toBe('exited');
@@ -168,9 +168,9 @@ test('a resumed run with a new exit object settles from that object', async () =
     expect(h.store.attempt(ref).state).toBe('exited');
     expect(h.store.attempt(ref).result).toContain('RESULT: success');
     expect(h.store.attempt(ref).failureKind).toBeNull();
-    expect(h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed')).toEqual(
-      [],
-    );
+    expect(
+      h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed'),
+    ).toEqual([]);
   } finally {
     h.dispose();
   }
