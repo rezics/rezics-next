@@ -13,7 +13,14 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { readRealm } from '../../src/community/realm.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  checkGrowth,
+  measure,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import type { Access } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
@@ -406,6 +413,117 @@ test.serial("a suspended account cannot set a Realm's board scheme and writes no
   expect(read.response.status).toBe(200);
   expect(read.value).toEqual({ realm: probe });
 });
+
+test.serial(
+  "setting a board scheme checks the scheme's type, read authority and identity without reading its subject page or link projection",
+  async () => {
+    const space = await createSpace('Projection-independent board scheme');
+    const created = await createRealm(space.spaceId, 'protected');
+    expect(created.response.status).toBe(201);
+    const realm = created.value.realm as Realm;
+    const set = (scheme: string) =>
+      call('PUT', `/v1/realms/${realm.realmId}/boardScheme`, {
+        bearer: owner.bearer,
+        key: crypto.randomUUID(),
+        headers: { 'if-match': JSON.stringify(realm.headRevisionId) },
+        body: { schemeId: scheme },
+      });
+    async function scheme(label: string) {
+      const created = await call('POST', '/v1/subjects', {
+        bearer: owner.bearer,
+        key: crypto.randomUUID(),
+        body: { type: 'skos:ConceptScheme', labels: { en: label } },
+      });
+      expect(created.response.status).toBe(201);
+      return (created.value.subject as { id: string }).id;
+    }
+
+    const selected = await scheme('Independent of link projection');
+    const hidden = await scheme('Unreadable scheme');
+    const pair = [await scheme('Merge source'), await scheme('Merge target')].sort();
+    await grant(owner.accountId, ['moderation:hide', 'subject:merge']);
+    const concealed = await call('POST', `/v1/subjects/${hidden}:hide`, {
+      bearer: owner.bearer,
+      key: crypto.randomUUID(),
+      body: { reason: 'Unreadable board scheme fixture' },
+    });
+    expect(concealed.response.status).toBe(200);
+    const merged = await call('POST', '/v1/subjects:merge', {
+      bearer: owner.bearer,
+      key: crypto.randomUUID(),
+      body: { subjects: pair },
+    });
+    expect(merged.response.status).toBe(200);
+
+    // Dev responses, including the existing internal error for an authorized redirect.
+    // Request ids vary; every other response field is retained exactly.
+    for (const refusal of [
+      { name: 'missing', id: newId(28), status: 404, code: 'not_found', title: 'Not Found' },
+      { name: 'unreadable', id: hidden, status: 404, code: 'not_found', title: 'Not Found' },
+      { name: 'wrong type', id: wrongTypeId, status: 404, code: 'not_found', title: 'Not Found' },
+      { name: 'redirected', id: pair[1]!, status: 500, code: 'internal_error', title: 'Internal Server Error' },
+    ]) {
+      const before = await snapshot();
+      const denied = await set(refusal.id);
+      console.info('board scheme dev response', refusal.name, denied.response.status, denied.value);
+      expect(denied.response.status).toBe(refusal.status);
+      expect(denied.value).toEqual({
+        type: `https://rezics.com/problems/${refusal.code}`,
+        title: refusal.title,
+        status: refusal.status,
+        code: refusal.code,
+        retryable: false,
+        effect_status: 'not_applied',
+        request_id: expect.any(String),
+      });
+      expect(await snapshot()).toEqual(before);
+    }
+
+    const partition = partitionOf(routeOf(selected)!);
+    // No link consumer runs in this kernel. Keep its checkpoint behind the real head.
+    await admin.query('DELETE FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2', [
+      partition,
+      'semantic_links',
+    ]);
+    expect(
+      Number(
+        (await admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [partition])).rows[0].position,
+      ),
+    ).toBeGreaterThan(0);
+    const { value: changed, cost } = await measure(db, () => set(selected));
+    const slotRelations = new Set([
+      'semantic.fact',
+      'semantic.candidate',
+      'semantic.acceptance',
+      'semantic.acceptance_current',
+      'semantic.adoption',
+      'semantic.hidden_candidate',
+      'semantic.retraction',
+      'semantic.statement_disclosure',
+    ]);
+    expect(cost.relations!['semantic.subject']?.nodes).toBeGreaterThan(0);
+    expect(
+      Object.keys(cost.relations!).filter(
+        (name) =>
+          name === 'core.consumer_checkpoint' ||
+          name === 'semantic.merge_member' ||
+          slotRelations.has(name) ||
+          (name.startsWith('semantic.') && /link|slot/.test(name)),
+      ),
+    ).toEqual([]);
+    expect(changed.response.status).toBe(200);
+    expect((changed.value.realm as Realm).boardSchemeId).toBe(selected);
+    expect(
+      (
+        await admin.query('SELECT 1 FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2', [
+          partition,
+          'semantic_links',
+        ])
+      ).rows,
+    ).toEqual([]);
+  },
+  30_000,
+);
 
 test.serial(
   'setting and reading a fixed scheme stays bounded at 256, 1024 and 4096 Realms and subjects',

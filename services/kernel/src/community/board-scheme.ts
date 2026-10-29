@@ -16,7 +16,10 @@ import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
-import { readSubject } from '../semantic/subject.ts';
+import { readItemIdentityVersion } from '../semantic/item-identity.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
+import { withReadTransaction } from '../semantic/read.ts';
+import { readItemTypes } from '../semantic/subject.ts';
 import { RealmConflictError, RealmInputError, type Realm, type RealmDependencies, type RealmContext } from './realm.ts';
 import read from './board-scheme-read.sql';
 import append from './board-scheme-revision.sql';
@@ -56,8 +59,8 @@ export async function setBoardScheme(
   const subject = { ...scheme, eligibility: subjectReadEligibility(scheme) };
   const checked = new WeakMap<AuthoritativeTime, number>();
   const current = new WeakMap<AuthoritativeTime, Realm>();
-  // Semantic owns its subject/statement read. Prepare it before the Realm anchor
-  // checks out a connection, retaining the exact command T and admission evidence.
+  // Validate the scheme independently of its page and link projections before the
+  // Realm anchor checks out a connection, retaining the command T and admission evidence.
   const access = deriveAccess(deps.access, {
     async prepare(principal, action, resource, preparation) {
       const attempt = accessCommandAttempt(preparation);
@@ -70,19 +73,21 @@ export async function setBoardScheme(
         permissionEvidenceDeadline(evidence) ?? -Infinity,
       );
       if (Date.now() >= deadline) throw new GrantDeniedError();
-      const result = await within(deadline, () =>
-        readSubject(deps.pool, body.schemeId, (client) =>
-          deps.access.authorize(
-            deadlineClient(client, deadline),
-            principal,
-            'subject:read',
-            subject,
-            evidence,
-            attempt.time,
-          ),
-        ),
+      const valid = await within(deadline, () =>
+        withReadTransaction(deps.pool, async (client) => {
+          const bounded = deadlineClient(client, deadline);
+          const types = await readItemTypes(bounded, [body.schemeId]);
+          if (
+            types.get(body.schemeId) !== 'skos:ConceptScheme' ||
+            !(await deps.access.authorize(bounded, principal, 'subject:read', subject, evidence, attempt.time))
+          )
+            return false;
+          const identity = await readItemIdentityVersion(bounded, body.schemeId);
+          if (identity?.redirect) throw new SubjectRedirectError(body.schemeId, identity.redirect);
+          return identity !== null;
+        }),
       );
-      if (result?.subject.type !== 'skos:ConceptScheme' || Date.now() >= deadline) throw new GrantDeniedError();
+      if (!valid || Date.now() >= deadline) throw new GrantDeniedError();
       checked.set(attempt.time, deadline);
       return primary;
     },
