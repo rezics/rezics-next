@@ -52,6 +52,8 @@ export type ReportView = Readonly<{
   reason: string;
   evidence: string | null;
   createdAt: string;
+  outcome: 'actioned' | 'dismissed' | null;
+  resolvedAt: string | null;
   transactionId: string;
   reporterId: string | null;
 }>;
@@ -80,6 +82,8 @@ type ReportRow = {
   reporter_account_id: string | null;
   recorded_transaction_id: string;
   created_at: string;
+  outcome: 'actioned' | 'dismissed' | null;
+  resolved_at: string | null;
 };
 type TargetFacts = {
   fingerprint: string;
@@ -409,6 +413,8 @@ function view(row: ReportRow): ReportView {
     evidence: row.evidence,
     reporterId: row.reporter_account_id,
     createdAt: row.created_at,
+    outcome: row.outcome,
+    resolvedAt: row.resolved_at,
     transactionId: row.recorded_transaction_id,
   };
 }

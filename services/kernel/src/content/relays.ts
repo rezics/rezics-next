@@ -11,6 +11,7 @@ import { bindAuthorErasureWorkflow } from './erasure-workflow-identity.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
 import { createModerationDecisionEffect } from './moderation-decisions.ts';
+import { createReportOutcomeEffect } from './report-outcomes.ts';
 import { createReportEffect } from './report-effect.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
@@ -189,6 +190,7 @@ export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
   return [
     createBoardEffect(pool),
     createReportEffect(pool),
+    createReportOutcomeEffect(pool),
     createModerationDecisionEffect(pool),
     enqueueEffect(pool, client, 'content_media_image', [MEDIA_WORK_EVENTS.image], 'image'),
     enqueueEffect(pool, client, 'content_media_purge', [...MEDIA_WORK_EVENTS.purge], 'purge'),

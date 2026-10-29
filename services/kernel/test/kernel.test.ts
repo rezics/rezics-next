@@ -150,6 +150,7 @@ const typed = [
   'DELETE /v1/documents/:id',
   'POST /v1/reports',
   'GET /v1/reports/:id',
+  'POST /v1/reports/:id/$dismiss',
   'POST /v1/threads',
   'GET /v1/threads/:id',
   'POST /v1/threads/:id/posts',

@@ -27,6 +27,8 @@ export type ReportView = Readonly<{
     reason: string;
     evidence: string | null;
     createdAt: string;
+    outcome: 'actioned' | 'dismissed' | null;
+    resolvedAt: string | null;
     transactionId: string;
     reporterId: string | null;
 }>;

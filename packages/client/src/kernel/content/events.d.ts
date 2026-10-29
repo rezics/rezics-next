@@ -76,6 +76,9 @@ export declare const CONTENT_EVENTS: {
         threadId: Type.TString;
         authorId: Type.TString;
     }>;
+    readonly 'com.rezics.content.report.resolved.v1': Type.TObject<{
+        reportId: Type.TString;
+    }>;
     readonly 'com.rezics.content.report.created.v1': Type.TObject<{
         reportId: Type.TString;
         targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;

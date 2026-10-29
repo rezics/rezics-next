@@ -1,6 +1,7 @@
 import { withHeaders } from '@elysia/openapi';
 import { status, t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../http/request.ts';
@@ -9,6 +10,7 @@ import type { documentRoutes } from './document-routes.ts';
 import { ContentForbiddenError, ContentNotFoundError as CommandNotFoundError } from './commands.ts';
 import type { AnchoredPosition } from './model.ts';
 import { ContentNotFoundError as ReadNotFoundError } from './reads.ts';
+import { dismissReport, ReportResolvedError } from './report-outcomes.ts';
 import { parseReportBody, reportRequestContext, requireReportInspection } from './report-admission.ts';
 import {
   createReport,
@@ -70,6 +72,7 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
     if (error instanceof ReportProofRequiredError) throw new ProblemError('forbidden');
     if (error instanceof ReportProofUnavailableError)
       throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
+    if (error instanceof ReportResolvedError) throw new ProblemError('conflict');
     if (error instanceof ReportUnavailableError) throw new ProblemError('not_found');
     if (error instanceof GrantDeniedError) throw new ProblemError(inspection ? 'not_found' : 'forbidden');
     if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError)
@@ -88,6 +91,46 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
 export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencies: ReportRouteDependencies) {
   const oversized = new WeakSet<Request>();
   const created = app
+    .post(
+      customMethod('/v1/reports/:id', 'dismiss'),
+      {
+        params,
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
+        response: {
+          200: withHeaders(
+            t.Object({ reportId: t.String(), outcome: t.Literal('dismissed') }, { additionalProperties: false }),
+            privateHeaders,
+          ),
+          ...writeFailures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          operationId: 'report.dismiss',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        existingId(id);
+        return reportOperation(
+          () =>
+            admission.run('normal', job, async () => {
+              const result = await dismissReport(
+                dependencies,
+                actor,
+                id,
+                reportRequestContext(actor, request, job.deadline, undefined),
+              );
+              session.record(result);
+              return result.value;
+            }),
+          true,
+        );
+      },
+    )
     .post(
       '/v1/reports',
       {

@@ -301,7 +301,12 @@ CREATE FUNCTION content.guard_report() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  RAISE EXCEPTION 'Report records are immutable' USING ERRCODE = '23514';
+  IF TG_OP = 'UPDATE' AND OLD.outcome IS NULL AND NEW.outcome IS NOT NULL
+     AND (to_jsonb(NEW) - ARRAY['outcome', 'resolved_at', 'resolved_by', 'decision_id'])
+       = (to_jsonb(OLD) - ARRAY['outcome', 'resolved_at', 'resolved_by', 'decision_id']) THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'Report records and their resolved outcomes are immutable' USING ERRCODE = '23514';
 END;
 $$;
 
@@ -798,7 +803,7 @@ CREATE TABLE content.moderation_decision (
     CONSTRAINT moderation_decision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_decision_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT moderation_decision_statement_check CHECK (((char_length(statement) >= 1) AND (char_length(statement) <= 1024))),
-    CONSTRAINT moderation_decision_target_kind_check CHECK ((target_kind = ANY (ARRAY['thread'::text, 'post'::text])))
+    CONSTRAINT moderation_decision_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
 );
 
 
@@ -1014,15 +1019,48 @@ CREATE TABLE content.report (
     created_at timestamp with time zone NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     recorded_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    outcome text,
+    resolved_at timestamp with time zone,
+    resolved_by uuid,
+    decision_id uuid,
     CONSTRAINT report_check CHECK ((route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT report_check1 CHECK (((octet_length(reason) + COALESCE(octet_length(evidence), 0)) <= 2097152)),
     CONSTRAINT report_check2 CHECK (((revision_id IS NULL) OR (target_kind <> 'board'::text))),
     CONSTRAINT report_evidence_check CHECK ((char_length(evidence) <= 4096)),
+    CONSTRAINT report_outcome_shape CHECK ((((outcome IS NULL) AND (resolved_at IS NULL) AND (resolved_by IS NULL) AND (decision_id IS NULL)) OR ((outcome IS NOT NULL) AND (outcome = ANY (ARRAY['actioned'::text, 'dismissed'::text])) AND (resolved_at IS NOT NULL) AND (resolved_by IS NOT NULL) AND (((outcome = 'actioned'::text) AND (decision_id IS NOT NULL)) OR ((outcome = 'dismissed'::text) AND (decision_id IS NULL)))))),
     CONSTRAINT report_reason_check CHECK ((reason = ANY (ARRAY['off_topic'::text, 'inappropriate'::text, 'spam'::text, 'illegal'::text, 'other'::text]))),
     CONSTRAINT report_reporter_account_id_check CHECK (((reporter_account_id IS NULL) OR (reporter_account_id <> '00000000-0000-0000-0000-000000000000'::uuid))),
     CONSTRAINT report_required_evidence CHECK (((reason <> ALL (ARRAY['illegal'::text, 'other'::text])) OR ((evidence IS NOT NULL) AND (char_length(evidence) > 0)))),
     CONSTRAINT report_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT report_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
+);
+
+
+--
+-- Name: report_outcome_delivery; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_outcome_delivery (
+    route integer NOT NULL,
+    recipient_id uuid NOT NULL,
+    report_id uuid NOT NULL,
+    CONSTRAINT report_outcome_delivery_check CHECK ((route = ((get_byte(uuid_send(recipient_id), 10) * 256) + get_byte(uuid_send(recipient_id), 11)))),
+    CONSTRAINT report_outcome_delivery_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: report_outcome_work; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_outcome_work (
+    route integer NOT NULL,
+    decision_id uuid NOT NULL,
+    after_at timestamp with time zone NOT NULL,
+    after_id uuid NOT NULL,
+    done boolean NOT NULL,
+    CONSTRAINT report_outcome_work_check CHECK ((route = ((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)))),
+    CONSTRAINT report_outcome_work_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -1374,6 +1412,22 @@ ALTER TABLE ONLY content.reaction
 
 ALTER TABLE ONLY content.reaction_total
     ADD CONSTRAINT reaction_total_pkey PRIMARY KEY (route, target_id, kind);
+
+
+--
+-- Name: report_outcome_delivery report_outcome_delivery_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_outcome_delivery
+    ADD CONSTRAINT report_outcome_delivery_pkey PRIMARY KEY (route, recipient_id, report_id);
+
+
+--
+-- Name: report_outcome_work report_outcome_work_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_outcome_work
+    ADD CONSTRAINT report_outcome_work_pkey PRIMARY KEY (route, decision_id);
 
 
 --

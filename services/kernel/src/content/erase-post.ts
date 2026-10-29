@@ -233,18 +233,16 @@ async function prepareAuthorizedPoint(
       const securityRevision = changed.security_revision;
       const value = { targetId: point.id, securityRevision };
       if (point.action === 'moderation:takedown') {
-        if (point.kind === 'thread' || point.kind === 'post') {
-          await insertDecision.run(tx, {
-            route,
-            decision_id: newId(route),
-            target_kind: point.kind,
-            target_id: point.id,
-            statement: point.reason,
-            decider_account_id: identity.principal.id,
-            security_revision: securityRevision,
-            decided_at: authoritativeTimeValue(commandTime(tx)!),
-          });
-        }
+        await insertDecision.run(tx, {
+          route,
+          decision_id: newId(route),
+          target_kind: point.kind,
+          target_id: point.id,
+          statement: point.reason,
+          decider_account_id: identity.principal.id,
+          security_revision: securityRevision,
+          decided_at: authoritativeTimeValue(commandTime(tx)!),
+        });
         return {
           value,
           events: [

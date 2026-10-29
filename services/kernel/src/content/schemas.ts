@@ -107,6 +107,8 @@ export const ReportResponseSchema = t.Object(
           reason: reportReason,
           evidence: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
           reporterId: nullableId,
+          outcome: t.Union([t.Literal('actioned'), t.Literal('dismissed'), t.Null()]),
+          resolvedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
           createdAt: t.String({ format: 'date-time' }),
           transactionId: t.String({ format: 'uuid' }),
         },
