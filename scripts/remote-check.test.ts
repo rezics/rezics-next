@@ -3917,7 +3917,7 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
     );
     const multiGrant = grants.findIndex((event, index) => index > landingGrant && String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'));
     expect(landingGrant).toBeGreaterThanOrEqual(0);
-    expect(ordinaryGrant, JSON.stringify({ ordinary: grants.filter((event) => String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999')).map(({ actualAdmissionLimit, landingMarkerIds, slotClass }) => ({ actualAdmissionLimit, landingMarkerIds, slotClass })), order: grants.map((event) => ({ priority: String(event.script).match(/# REMOTE_CHECK_PRIORITY (\w+)/)?.[1], estimate: String(event.script).match(/# REMOTE_CHECK_ESTIMATE_MS (\w+)/)?.[1] })) })).toBeGreaterThan(landingGrant);
+    expect(ordinaryGrant, JSON.stringify({ ordinary: grants.filter((event) => String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999')).map(({ actualAdmissionLimit, landingMarkerIds, slotClass }) => ({ actualAdmissionLimit, landingMarkerIds, slotClass })), order: grants.map((event) => ({ priority: String(event.script).match(/# REMOTE_CHECK_PRIORITY (\w+)/)?.[1], estimate: String(event.script).match(/# REMOTE_CHECK_ESTIMATE_MS (\w+)/)?.[1] })), timeline: events().map(({ kind, id, requested, actualAdmissionLimit, landingMarkerIds, arrivalOrder, sequence }) => ({ kind, id, requested, actualAdmissionLimit, landingMarkerIds, arrivalOrder, sequence })) })).toBeGreaterThan(landingGrant);
     expect(multiGrant).toBeGreaterThan(landingGrant);
     await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo ordinary')), 10_000);
     await Promise.all([ordinary.child.exited, multi.child.exited]);
@@ -3996,7 +3996,7 @@ test('landing priority: a waiting gate starts first and landing runs on one host
       .map((event) => String(event.id))
       .filter((id, index, ids) => ids.indexOf(id) === index);
     expect(gateGrant).toBeGreaterThanOrEqual(0);
-    expect(landingGrantIds).toEqual(arrivalIds);
+    expect(landingGrantIds, JSON.stringify(events().map(({ kind, id, sequence, arrivalOrder, requested }) => ({ kind, id, sequence, arrivalOrder, requested })))).toEqual(arrivalIds);
     expect(grants.findIndex((event) => String(event.script).includes(landingGrantIds[0]!))).toBeGreaterThan(gateGrant);
     expect(grants.findIndex((event) => String(event.script).includes(landingGrantIds[1]!))).toBeGreaterThan(
       grants.findIndex((event) => String(event.script).includes(landingGrantIds[0]!)),
