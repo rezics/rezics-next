@@ -119,7 +119,7 @@ test('scalar and batched inverse reads preserve both complete kind ranges and ac
       ),
     ).rejects.toMatchObject({ code: '23514', constraint: 'membership_inverse_kind_check' });
     await client.query('ANALYZE access.account; ANALYZE access.membership_inverse');
-    const parameters = { route: routeOf(actor)!, account_id: actor, members };
+    const parameters = { route: routeOf(actor)!, account_id: actor, members: JSON.stringify(members) };
     const { rows } = await client.query(
       `EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT JSON) ${inverse.sql}`,
       inverse.params.map((name) => parameters[name as keyof typeof parameters]),
@@ -128,6 +128,9 @@ test('scalar and batched inverse reads preserve both complete kind ranges and ac
     expect(cost.relations['access.membership_inverse']).toMatchObject({ sequentialScans: 0 });
     // EXPLAIN rounds per-loop row averages; exact cardinality is checked above.
     expect(cost.relations['access.membership_inverse']!.rows).toBeGreaterThan(0);
+    expect(cost.relations['access.membership_inverse']!.rows).toBeLessThanOrEqual(
+      expected.filter((row) => row.id !== null).length + members.length * 2,
+    );
   } finally {
     await client.end();
   }

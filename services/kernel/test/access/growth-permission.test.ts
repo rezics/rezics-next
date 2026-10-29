@@ -521,6 +521,40 @@ test('Assignment permission check stays within its bound as assignments and gran
   expectIndex(assignmentPlan.capture.plans, 'resource_grant_pkey');
 }, 300_000);
 
+test('the final delegated formula retains a full-key assignment probe', async () => {
+  const measured = await capture(db!, async () => {
+    const evidence = await prepare(db!.admin, target, assignmentActor);
+    const client = await db!.pool.connect();
+    try {
+      expect(await permissions.authorize(client, assignmentActor, action, target, evidence)).toBe(true);
+    } finally {
+      client.release();
+    }
+  });
+  const nodes: Record<string, unknown>[] = [];
+  function visit(value: unknown): void {
+    if (Array.isArray(value)) {
+      for (const child of value) visit(child);
+    } else if (typeof value === 'object' && value !== null) {
+      const node = value as Record<string, unknown>;
+      if (node['Relation Name'] === 'principal_assignment')
+        nodes.push(
+          Object.fromEntries(
+            ['Node Type', 'Index Name', 'Index Cond', 'Filter', 'Actual Rows', 'Actual Loops'].map((key) => [
+              key,
+              node[key],
+            ]),
+          ),
+        );
+      if (node.Plan) visit(node.Plan);
+      if (node.Plans) visit(node.Plans);
+    }
+  }
+  for (const plan of measured.capture.plans) visit(plan);
+  console.info('Final permission assignment plan:', JSON.stringify(nodes));
+  expectIndex(measured.capture.plans, 'principal_assignment_pkey');
+});
+
 test('Parent creation authorization stays within its bound as G grows', async () => {
   await resetSeededRows();
   const operation: GrowthCheck['operation'] = async (growthDb, scale, repetition) => {

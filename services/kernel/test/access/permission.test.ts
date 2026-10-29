@@ -167,17 +167,24 @@ test('scalar, explicit and batched decisions admit 1000 inverse entries per oper
      SELECT $1,id,'organization','active',$3 FROM unnest($2::uuid[]) id`,
     [0x4567, groups, transactionId],
   );
+  async function resetInverse() {
+    // Fixture reset uses the same TRUNCATE as beforeEach. Production DELETE
+    // remains guarded by the authoritative terminal-compensation proof.
+    await pool.query('TRUNCATE access.membership_inverse');
+    for (const subject of [actorId, principalId])
+      await pool.query(
+        `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+         SELECT $1,$2,'organization',id,id,$4 FROM unnest($3::uuid[]) id`,
+        [routeOf(subject), subject, groups.slice(0, 1000), transactionId],
+      );
+  }
   for (const subject of [actorId, principalId]) {
     await removeGrant(subject);
     // Only the last admitted group supplies authority. The other 999 rows are
     // admission evidence, with real negative organization membership proofs.
     await membership('owner', subject, groups[999]!);
-    await pool.query(
-      `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
-       SELECT $1,$2,'organization',id,id,$4 FROM unnest($3::uuid[]) id ON CONFLICT DO NOTHING`,
-      [routeOf(subject), subject, groups.slice(0, 1000), transactionId],
-    );
   }
+  await resetInverse();
   await grant(groups[999]!, action, resource, 'owner');
   const ordinary = identity({ requestedBy: null });
   const delegated = identity();
@@ -211,11 +218,7 @@ test('scalar, explicit and batched decisions admit 1000 inverse entries per oper
       [routeOf(subject), subject, groups[1000], transactionId],
     );
     await decisions(actor, false);
-    await pool.query('DELETE FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND group_id=$3', [
-      routeOf(subject),
-      subject,
-      groups[1000],
-    ]);
+    await resetInverse();
     await pool.query('UPDATE access.account SET membership_inverse_complete=false WHERE route=$1 AND account_id=$2', [
       routeOf(subject),
       subject,
