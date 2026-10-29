@@ -1339,9 +1339,7 @@ export class WorkerJob implements GateOutcomeSink {
           a.failureLogPath = outcome.logPath;
           a.approaches.push({
             approach: `Attempt ${a.attempt}: ${a.profile.model}/${a.profile.effort}`,
-            result: failure
-              ? `${failure.assertion}: ${failure.excerpt}`
-              : 'Failed at rebase',
+            result: failure ? `${failure.assertion}: ${failure.excerpt}` : 'Failed at rebase',
           });
         });
         const evidencePath = evidenceBundle(task, store.attempt(outcome));

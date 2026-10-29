@@ -161,9 +161,7 @@ export class WorkerStore implements AttemptFence {
   /** Current landing requests whose queue entry is missing; synthetic or legacy landing rows without a request are ignored. */
   orphanedLandingCandidates(): Task[] {
     this.refreshSnapshot();
-    const queueExists = this.db
-      .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='landing_queue'")
-      .get();
+    const queueExists = this.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='landing_queue'").get();
     if (!queueExists) return [];
     return this.db
       .query(`
@@ -479,7 +477,9 @@ export class WorkerStore implements AttemptFence {
           return false;
         if (
           this.db
-            .query("SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='orphaned-landing-recovered' LIMIT 1")
+            .query(
+              "SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='orphaned-landing-recovered' LIMIT 1",
+            )
             .get(ref.taskId, ref.attempt)
         )
           return false;
