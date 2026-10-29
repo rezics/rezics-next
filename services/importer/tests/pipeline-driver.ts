@@ -25,7 +25,7 @@ const fixture = JSON.parse(
 );
 const nativeRegistration = createSourceRegistration('bangumi');
 /** Machine-independent work counters for the record-cpu-growth specification. */
-export const pipelineWork = { conversions: 0, prepares: 0, statements: 0, transactions: 0 };
+export const pipelineWork = { conversions: 0, prepares: 0, statements: 0, transactions: 0, commits: 0 };
 const registration: typeof nativeRegistration = {
   ...nativeRegistration,
   convert(input, context) {
@@ -37,6 +37,7 @@ function countWork(database: Database): Database {
   const prepare = database.prepare.bind(database);
   const count = (sql: string) => {
     if (/^\s*BEGIN\b/i.test(sql)) pipelineWork.transactions++;
+    if (/^\s*(?:COMMIT|END)\b/i.test(sql)) pipelineWork.commits++;
   };
   database.prepare = ((sql: string, ...rest: unknown[]) => {
     pipelineWork.prepares++;

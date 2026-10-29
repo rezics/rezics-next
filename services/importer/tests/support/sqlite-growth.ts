@@ -12,7 +12,8 @@ export type SqliteEvidence = {
 };
 type Sample<T> = {
   value: T;
-  /** SQLite buffer counters are unavailable; blocks:0 does not claim zero IO. */
+  counts: { 'sqlite statements': number; 'sqlite returned rows': number };
+  /** @deprecated Compatibility for unmigrated tests only. blocks:0 is not an IO measurement. */
   cost: { rows: number; blocks: 0; statements: number };
   statements: SqliteEvidence[];
 };
@@ -173,6 +174,7 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
     evidence.push(event);
     active.statements.push(event);
     active.cost.statements++;
+    active.counts['sqlite statements']++;
     return event;
   }
 
@@ -189,6 +191,7 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
     if (event && sample) {
       event.rows = method === 'get' ? (result == null ? 0 : 1) : Array.isArray(result) ? result.length : 0;
       sample.cost.rows += event.rows;
+      sample.counts['sqlite returned rows'] += event.rows;
       if (result && typeof result === 'object' && 'changes' in result) {
         event.changes = (result as { changes: number | bigint }).changes;
       }
@@ -235,6 +238,7 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
               if (event && sample && !result.done) {
                 event.rows++;
                 sample.cost.rows++;
+                sample.counts['sqlite returned rows']++;
               }
               return result;
             },
@@ -340,7 +344,12 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
       } finally {
         triggers.finalize();
       }
-      const sample: Sample<T> = { value: undefined as T, cost: { rows: 0, blocks: 0, statements: 0 }, statements: [] };
+      const sample: Sample<T> = {
+        value: undefined as T,
+        counts: { 'sqlite statements': 0, 'sqlite returned rows': 0 },
+        cost: { rows: 0, blocks: 0, statements: 0 },
+        statements: [],
+      };
       active = sample;
       try {
         sample.value = operation();

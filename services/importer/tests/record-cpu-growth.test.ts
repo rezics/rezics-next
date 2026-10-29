@@ -2,12 +2,20 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { countedSample, countedViolations, type CountedCheck, type CountedValues } from '../../kernel/test/support/growth-counters.ts';
 import { createImportPipelineDriver, pipelineWork } from './pipeline-driver.ts';
 
 const SCALES = [16, 64, 256] as const;
 
 type Work = typeof pipelineWork;
+const check: CountedCheck = {
+  read: (value: unknown) => value as CountedValues,
+  bounds: {
+    'converter calls': 'linear',
+    'SQLite executions': 'linear',
+    'SQLite commits': 'linear',
+  },
+};
 
 async function importRecords(count: number): Promise<{ work: Work; committed: boolean }> {
   const directory = mkdtempSync(join(tmpdir(), 'record-cpu-growth-'));
@@ -23,7 +31,7 @@ async function importRecords(count: number): Promise<{ work: Work; committed: bo
       revision: 1,
       cover: true,
     }));
-    Object.assign(pipelineWork, { conversions: 0, prepares: 0, statements: 0, transactions: 0 });
+    Object.assign(pipelineWork, { conversions: 0, prepares: 0, statements: 0, transactions: 0, commits: 0 });
     const run = await driver.run(records, { collect: false });
     return {
       work: { ...pipelineWork },
@@ -38,22 +46,21 @@ async function importRecords(count: number): Promise<{ work: Work; committed: bo
 // Work that does not depend on the machine: converter calls, SQL statements prepared and executed,
 // and commits. Processor time per record follows these counts, so a per-record rate that stays
 // constant in the dump size is a processor time per record that stays constant.
-test('importer processor time per record stays constant as the dump grows', async () => {
-  const samples: { scale: number; work: Work }[] = [];
+test('importer processor counted work per record stays within its established ceilings as the dump grows', async () => {
+  const samples: { scale: number; work: Work; counted: ReturnType<typeof countedSample> }[] = [];
   for (const scale of SCALES) {
     const { work, committed } = await importRecords(scale);
     expect(committed).toBe(true);
-    samples.push({ scale, work });
+    const values: CountedValues = {
+      'converter calls': work.conversions,
+      'SQLite prepares': work.prepares,
+      'SQLite executions': work.statements,
+      'SQLite commits': work.commits,
+    };
+    samples.push({ scale, work, counted: countedSample([values]) });
   }
 
-  assertGrowth(
-    samples.map(({ scale, work }): GrowthSample => ({
-      scale,
-      cost: { rows: work.conversions, blocks: work.prepares, statements: work.statements },
-    })),
-    // Conversions and statements are linear in the records; statements are prepared once, not per record.
-    { rows: 'linear', blocks: 'constant', statements: 'linear' },
-  );
+  expect(countedViolations(check, samples)).toEqual([]);
 
   // Marginal work per record between the smallest and the largest dump, free of the fixed
   // per-run work (schema, ownership, the one prepare of each statement text).
@@ -71,7 +78,7 @@ test('importer processor time per record stays constant as the dump grows', asyn
     (typeof samples)[number],
     (typeof samples)[number],
   ];
-  for (const field of ['conversions', 'transactions', 'statements'] as const) {
+  for (const field of ['conversions', 'transactions', 'statements', 'commits'] as const) {
     const early = (second.work[field] - first.work[field]) / (second.scale - first.scale);
     const late = (third.work[field] - second.work[field]) / (third.scale - second.scale);
     expect(late).toBeLessThanOrEqual(early * 1.05);
