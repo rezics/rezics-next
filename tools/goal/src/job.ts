@@ -1,5 +1,5 @@
 import { taskCommits } from './workspace.ts';
-import { statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
@@ -38,7 +38,7 @@ import {
   type RetryOptions,
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
-import type { Attempt } from './types.ts';
+import type { Attempt, Task } from './types.ts';
 import type { RunningWorker } from './launch.ts';
 import { capacityWaiters, checkWaitMs } from './launch.ts';
 import { removeFinishedWorktree } from './worktree-lifetime.ts';
@@ -54,6 +54,84 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
   }
   if (!files.size) for (const file of outcome.changedFiles) files.add(file);
   return [...files];
+}
+
+function loggedCommands(logPath: string): string[] {
+  try {
+    return readFileSync(logPath, 'utf8')
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        try {
+          const event = JSON.parse(line) as Record<string, any>;
+          const payload = event.payload ?? event;
+          const item = event.item ?? payload;
+          if (item.type === 'command_execution' && typeof item.command === 'string') return [item.command];
+          if (event.type === 'assistant')
+            return (event.message?.content ?? [])
+              .filter(
+                (part: Record<string, any>) => part.type === 'tool_use' && typeof part.input?.command === 'string',
+              )
+              .map((part: Record<string, any>) => part.input.command as string);
+          if (payload.type === 'function_call') {
+            const input = payload.arguments ?? payload.input;
+            const args = typeof input === 'string' ? JSON.parse(input) : input;
+            const command = args?.cmd ?? args?.command;
+            return typeof command === 'string' ? [command] : [];
+          }
+        } catch {
+          return [];
+        }
+        return [];
+      });
+  } catch {
+    return [];
+  }
+}
+
+function checkStarted(task: Task, attempt: Attempt): boolean {
+  const start = Date.parse(attempt.startedAt);
+  const end = Date.parse(attempt.endedAt ?? new Date().toISOString());
+  try {
+    const waited = readFileSync(attempt.logPath.replace(/\.jsonl$/, '.check-wait'), 'utf8');
+    if (waited.split(/\r?\n/).some((value) => Number(value) > 0)) return true;
+  } catch {
+    // No recorded check-slot wait.
+  }
+  try {
+    const directory = join(task.worktree, '.temp/goal/checks');
+    return readdirSync(directory).some((name) => {
+      const path = join(directory, name);
+      const stat = statSync(path, { throwIfNoEntry: false });
+      if (!stat?.isFile()) return false;
+      if (stat.mtimeMs >= start && stat.mtimeMs <= end) return true;
+      // Some check runners write a durable run record with its start time, even when the file is copied later.
+      try {
+        const record = JSON.parse(readFileSync(path, 'utf8')) as { startedAt?: string; started_at?: string };
+        const at = Date.parse(record.startedAt ?? record.started_at ?? '');
+        return Number.isFinite(at) && at >= start && at <= end;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+function reranFailingCommand(task: Task, attempt: Attempt, previous: Attempt): boolean {
+  const commands = loggedCommands(attempt.logPath).join('\n');
+  const expected = previous.failureCommand?.join(' ') || task.brief.acceptance.command.join(' ');
+  return Boolean(expected && commands.includes(expected));
+}
+
+function isStaleToolBlocker(task: Task, attempt: Attempt, previous: Attempt): boolean {
+  // A stale manifest restatement is a worker-authored blocker. Inferred launch, silence and CLI failures have no
+  // blocker field; treating repeated transport text in their result as a restatement would add an unintended retry.
+  if (!attempt.blocker || !previous.blocker) return false;
+  const errorLine = attempt.blocker.split(/\r?\n/, 1)[0]?.trim();
+  const previousError = previous.blocker.split(/\r?\n/, 1)[0]?.trim();
+  if (!errorLine || errorLine !== previousError || checkStarted(task, attempt)) return false;
+  return !reranFailingCommand(task, attempt, previous);
 }
 
 /** How long a capacity refusal waits before the attempt continues. */
@@ -785,6 +863,18 @@ export class WorkerJob implements GateOutcomeSink {
           queueRetry(this.exitRetryOptions(attempt, attempt.evidencePath));
         return;
       }
+      const previous = ref.attempt > 1 ? store.attempt({ taskId: ref.taskId, attempt: ref.attempt - 1 }) : null;
+      const previousWasStaleRetry =
+        ref.attempt > 1 &&
+        store.events(task.id, ref.attempt - 1).some((event) => event.kind === 'stale-tool-blocker-retry');
+      if (kind === 'tool' && previous && !previousWasStaleRetry && isStaleToolBlocker(task, attempt, previous)) {
+        store.event(ref, 'stale-tool-blocker-retry', {
+          error: (attempt.blocker ?? attempt.result).split(/\r?\n/, 1)[0],
+          previousAttempt: previous.attempt,
+        });
+        queueRetry(this.exitRetryOptions(attempt, evidenceBundle(task, attempt)));
+        return;
+      }
       let usageLimitRefusal = false;
       let usageLimitExhausted = false;
       if (kind === 'pool-exhausted') {
@@ -873,11 +963,15 @@ export class WorkerJob implements GateOutcomeSink {
         store.event(ref, 'manager-event', event);
         this.inbox.deliver(event);
       } else {
-        const previous = ref.attempt > 1 ? store.attempt({ taskId: ref.taskId, attempt: ref.attempt - 1 }) : null;
         // A provider capacity refusal is not the task's failure: continue after a pause, however often it repeats.
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
         capacity = kind === 'tool' && (MODEL_AT_CAPACITY.test(detail) || CHECK_HOST_TRANSPORT.test(detail));
-        if (kind === 'tool' && previous?.failureKind === 'tool' && !capacity) {
+        if (
+          kind === 'tool' &&
+          previous?.failureKind === 'tool' &&
+          !capacity &&
+          !reranFailingCommand(task, attempt, previous)
+        ) {
           const firstLine = (
             attempt.result.startsWith('stalled: no output for ')
               ? attempt.result
