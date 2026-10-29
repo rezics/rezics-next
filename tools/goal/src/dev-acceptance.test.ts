@@ -77,7 +77,10 @@ test("a passing dev landing advances dev and a batch runs every entry's acceptan
     expect(h.store.task(first.id).state).toBe('integrated');
     expect(h.store.task(second.id).state).toBe('integrated');
     expect(checked.map(({ command }) => command)).toEqual(['accept-first', 'accept-second']);
-    expect(checked.map(({ files }) => files)).toEqual([['first'], ['first', 'second']]);
+    expect(checked.map(({ files }) => files)).toEqual([
+      ['first', 'second'],
+      ['first', 'second'],
+    ]);
   } finally {
     h.dispose();
   }
