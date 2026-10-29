@@ -205,12 +205,12 @@ empty or whitespace-only Latin values. Exact-empty acceptance is therefore a
 synthetic schema-edge requirement, not an observed source-record replay.
 The report supplies evidence; this README owns the adopted source contract.
 
-The current converter at `vndb@6` still rejects `''` during title validation.
-The [COPY reader](../../services/importer/src/vndb-tables.ts) preserves the
-empty cell, so its output does not yet compose with that converter for this
-case. A separate revisioned converter repair and composition acceptance are
-required. This document adopts the contract only; it does not establish
-product or native acceptance for exact-empty Latin.
+The converter at `vndb@7` now accepts this exact-empty source edge and preserves
+it in the normalized projection and data digest. Pure tests verify the name
+omission, null distinction, digest stability, and strict invalid controls. The
+frozen native COPY acceptance verifies staged empty-cell composition and public
+bulk effects. This narrow result does not establish every discovery,
+statistics, or publication capability.
 
 ### Provider facts required for catalogue use
 

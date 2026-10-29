@@ -10,7 +10,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'vndb@6';
+export const converter_revision = 'vndb@7';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,
@@ -193,7 +193,7 @@ function project(input: ConversionInput): NormalizedRecord {
       lang,
       official: official as boolean,
       title,
-      latin: latin === null ? null : titleText(latin, `${p}/latin`),
+      latin: latin === null ? null : latin === '' ? '' : titleText(latin, `${p}/latin`),
     };
   });
   if (!titles.length) fail('No source title for bootstrap', '/vn_titles');
@@ -289,7 +289,7 @@ export function convertVndb(
     const titles: { language: string; text: string; official: boolean }[] = [];
     for (const title of normalizedRecord.vn_titles) {
       titles.push({ language: title.lang, text: title.title, official: title.official });
-      if (title.latin !== null) {
+      if (title.latin !== null && title.latin !== '') {
         const language = latinLanguageTag(title.lang);
         if (language === null) throw new ConversionError('Invalid title language', '/vn_titles');
         titles.push({ language, text: title.latin, official: false });
