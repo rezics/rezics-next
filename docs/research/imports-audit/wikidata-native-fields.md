@@ -77,7 +77,7 @@ word-count/form/platform bindings and bootstrap-term fencing remain separate wor
 This artifact accepts specification delivery only; a native failure is recorded as
 such rather than rewritten into a product success claim.
 
-## Verification
+## Previous verification
 
 The native command was:
 
@@ -140,3 +140,15 @@ Only the two declared files changed; no outside-path files or existing/frozen te
 were edited. No full kernel, web or root gate, extra test suite, live provider fetch,
 legacy port or growth check was run. The artifact's nonempty-file acceptance proves
 specification delivery only; it cannot substitute for missing native execution.
+
+## Current verification
+
+The assigned native file already exists on this attempt's base, `b086419c29`.
+Both named cases above are retained byte for byte; no duplicate acceptance test
+is needed. Its SHA-256 remains
+`654536a4c123d563ff739ac63925e6b71fd638d738e161d429d1fbc6054fbd00`.
+The earlier infrastructure result does not establish an assertion failure.
+This attempt reruns only that focused native file, the root typecheck restricted
+to that file's affected workspace, and the nonempty artifact acceptance.
+Results will be recorded below after the committed checks finish. Only this
+report is changed; no outside-path file, helper, definition or existing test is edited.
