@@ -254,7 +254,9 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       );
       expect(Number(count.rows[0]!.count)).toBe(expectedPerCategory);
     }
-    const total = await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label');
+    const total = await database.admin.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM library.personal_label',
+    );
     counts[String(scale)] = {
       perOrdinal: 3,
       ordinals: scale,
@@ -298,9 +300,15 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   const operations: Operation[] = [
     {
       name: 'create',
-      async prepare() { return {}; },
-      async run() { return labels.createLabel(actor, { name: `Growth create ${entryKey()}` }, entryKey()); },
-      assert(value) { expect(value.value.label.revision).toBe(1); },
+      async prepare() {
+        return {};
+      },
+      async run() {
+        return labels.createLabel(actor, { name: `Growth create ${entryKey()}` }, entryKey());
+      },
+      assert(value) {
+        expect(value.value.label.revision).toBe(1);
+      },
     },
     {
       name: 'rename',
@@ -308,8 +316,12 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
         const name = `Growth rename ${entryKey()}`;
         return { id: (await labels.createLabel(actor, { name }, entryKey())).value.label.id };
       },
-      async run(state) { return labels.renameLabel(actor, state.id!, { name: `Renamed ${entryKey()}`, revision: 1 }, entryKey()); },
-      assert(value) { expect(value.value.label.revision).toBe(2); },
+      async run(state) {
+        return labels.renameLabel(actor, state.id!, { name: `Renamed ${entryKey()}`, revision: 1 }, entryKey());
+      },
+      assert(value) {
+        expect(value.value.label.revision).toBe(2);
+      },
     },
     {
       name: 'noop',
@@ -317,54 +329,107 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
         const name = `Growth noop ${entryKey()}`;
         return { id: (await labels.createLabel(actor, { name }, entryKey())).value.label.id, name };
       },
-      async run(state) { return labels.renameLabel(actor, state.id!, { name: state.name!, revision: 1 }, entryKey()); },
-      assert(value) { expect(value.value.label.revision).toBe(1); },
+      async run(state) {
+        return labels.renameLabel(actor, state.id!, { name: state.name!, revision: 1 }, entryKey());
+      },
+      assert(value) {
+        expect(value.value.label.revision).toBe(1);
+      },
     },
     {
       name: 'read',
-      async prepare() { return { id: (await labels.createLabel(actor, { name: `Growth read ${entryKey()}` }, entryKey())).value.label.id }; },
-      async run(state) { return labels.readLabel(actor, state.id!); },
-      assert(value) { expect(value.id).toBeTruthy(); },
+      async prepare() {
+        return {
+          id: (await labels.createLabel(actor, { name: `Growth read ${entryKey()}` }, entryKey())).value.label.id,
+        };
+      },
+      async run(state) {
+        return labels.readLabel(actor, state.id!);
+      },
+      assert(value) {
+        expect(value.id).toBeTruthy();
+      },
     },
     {
       name: 'delete',
-      async prepare() { return { id: (await labels.createLabel(actor, { name: `Growth delete ${entryKey()}` }, entryKey())).value.label.id }; },
-      async run(state) { return labels.deleteLabel(actor, state.id!, 1, entryKey()); },
-      assert(value) { expect(value.value).toEqual({ deleted: true, revision: 2 }); },
+      async prepare() {
+        return {
+          id: (await labels.createLabel(actor, { name: `Growth delete ${entryKey()}` }, entryKey())).value.label.id,
+        };
+      },
+      async run(state) {
+        return labels.deleteLabel(actor, state.id!, 1, entryKey());
+      },
+      assert(value) {
+        expect(value.value).toEqual({ deleted: true, revision: 2 });
+      },
     },
     {
       name: 'restore',
       async prepare() {
-        const id = (await labels.createLabel(actor, { name: `Growth restore ${entryKey()}` }, entryKey())).value.label.id;
+        const id = (await labels.createLabel(actor, { name: `Growth restore ${entryKey()}` }, entryKey())).value.label
+          .id;
         await labels.deleteLabel(actor, id, 1, entryKey());
         return { id };
       },
-      async run(state) { return labels.restoreLabel(actor, state.id!, 2, entryKey()); },
-      assert(value) { expect(value.value.label.revision).toBe(3); },
+      async run(state) {
+        return labels.restoreLabel(actor, state.id!, 2, entryKey());
+      },
+      assert(value) {
+        expect(value.value.label.revision).toBe(3);
+      },
     },
     {
       name: 'list-first',
-      async prepare() { return {}; },
-      async run() { return labels.listLabels(actor, { limit: 8 }); },
-      assert(value) { expect(value.labels.length).toBeLessThanOrEqual(8); expect(value.next).toBeTruthy(); },
+      async prepare() {
+        return {};
+      },
+      async run() {
+        return labels.listLabels(actor, { limit: 8 });
+      },
+      assert(value) {
+        expect(value.labels.length).toBeLessThanOrEqual(8);
+        expect(value.next).toBeTruthy();
+      },
     },
     {
       name: 'list-deep',
-      async prepare() { return { cursor: await token(await middleDeletedId(actor)) }; },
-      async run(state) { return labels.listLabels(actor, { limit: 8, ...(state.cursor === undefined ? {} : { cursor: state.cursor }) }); },
-      assert(value) { expect(value.labels.length).toBeLessThanOrEqual(8); expect(value.next).toBeTruthy(); },
+      async prepare() {
+        return { cursor: await token(await middleDeletedId(actor)) };
+      },
+      async run(state) {
+        return labels.listLabels(actor, { limit: 8, ...(state.cursor === undefined ? {} : { cursor: state.cursor }) });
+      },
+      assert(value) {
+        expect(value.labels.length).toBeLessThanOrEqual(8);
+        expect(value.next).toBeTruthy();
+      },
     },
     {
       name: 'list-empty',
-      async prepare() { return {}; },
-      async run() { return labels.listLabels(other, { limit: 8 }); },
-      assert(value) { expect(value.labels).toEqual([]); expect(value.next).toBeTruthy(); },
+      async prepare() {
+        return {};
+      },
+      async run() {
+        return labels.listLabels(other, { limit: 8 });
+      },
+      assert(value) {
+        expect(value.labels).toEqual([]);
+        expect(value.next).toBeTruthy();
+      },
     },
     {
       name: 'list-empty-deep',
-      async prepare() { return { cursor: await token(await middleDeletedId(other), other) }; },
-      async run(state) { return labels.listLabels(other, { limit: 8, ...(state.cursor === undefined ? {} : { cursor: state.cursor }) }); },
-      assert(value) { expect(value.labels).toEqual([]); expect(value.next).toBeTruthy(); },
+      async prepare() {
+        return { cursor: await token(await middleDeletedId(other), other) };
+      },
+      async run(state) {
+        return labels.listLabels(other, { limit: 8, ...(state.cursor === undefined ? {} : { cursor: state.cursor }) });
+      },
+      assert(value) {
+        expect(value.labels).toEqual([]);
+        expect(value.next).toBeTruthy();
+      },
     },
   ];
 
@@ -384,7 +449,9 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       repetitions: 5,
       includeBackends: true,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      async grow(database, scale) { await grow(database, scale); },
+      async grow(database, scale) {
+        await grow(database, scale);
+      },
       async warmup(_database, _scale, _repetition) {
         const result = await operation.run(await operation.prepare());
         operation.assert(result);
@@ -418,7 +485,9 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       const catalogue = catalogStatementBound(result.capture);
       expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
       const plans = result.capture.plans.flatMap((plan) => nodes(plan));
-      const labelNodes = plans.filter((node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label');
+      const labelNodes = plans.filter(
+        (node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label',
+      );
       expect(labelNodes.length).toBeGreaterThan(0);
       for (const node of labelNodes) {
         expect(node['Node Type']).not.toBe('Seq Scan');
@@ -429,7 +498,8 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
         );
         expect(Number(node['Rows Removed by Filter'] ?? 0) * Number(node['Actual Loops'])).toBe(0);
       }
-      if (operation.name !== 'create') expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
+      if (operation.name !== 'create')
+        expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
       if (operation.name.startsWith('list')) {
         const sql = result.capture.statements.find((statement) => /WITH source AS MATERIALIZED/i.test(statement));
         expect(sql).toBeDefined();
@@ -439,7 +509,9 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
         expect(labelNodes.some((node) => Number(node['Actual Rows']) === 8)).toBe(true);
       }
       if (operation.name === 'noop') {
-        expect(result.capture.statements.some((statement) => /UPDATE library\.personal_label/i.test(statement))).toBe(false);
+        expect(result.capture.statements.some((statement) => /UPDATE library\.personal_label/i.test(statement))).toBe(
+          false,
+        );
         expect(result.capture.statements.some((statement) => /INSERT INTO core\.outbox/i.test(statement))).toBe(false);
       }
       evidence.push({ scale, operation: operation.name, capture: result.capture });
@@ -447,7 +519,10 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   }
   mkdirSync('.temp/label-catalogue', { recursive: true });
   writeFileSync('.temp/label-catalogue/native-growth.json', JSON.stringify(evidence));
-  appendFileSync(profilePath, `${JSON.stringify({ check: 'personal-label-catalogue-population', multiplicity: 32, rowsPerOrdinal: 3, counts })}\n`);
+  appendFileSync(
+    profilePath,
+    `${JSON.stringify({ check: 'personal-label-catalogue-population', multiplicity: 32, rowsPerOrdinal: 3, counts })}\n`,
+  );
   if (priorProfile === undefined) delete process.env.GROWTH_PROFILE;
   else process.env.GROWTH_PROFILE = priorProfile;
   await reader.end();
