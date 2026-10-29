@@ -11,6 +11,7 @@ import { createReportOutcomeEffect } from '../../src/content/report-outcomes.ts'
 import { createModerationDecisionEffect } from '../../src/content/moderation-decisions.ts';
 import { setupContent } from '../../src/content/setup.ts';
 import { projectBatch } from '../../src/events/log.ts';
+import type { Resource } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
@@ -43,7 +44,7 @@ async function call(method: string, path: string, person: Persona, body?: unknow
   return value;
 }
 
-async function grant(person: Persona, actions: string[], resource = PLATFORM_RESOURCE) {
+async function grant(person: Persona, actions: string[], resource: Resource = PLATFORM_RESOURCE) {
   await call(
     'POST',
     '/v1/grants',
