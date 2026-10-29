@@ -51,7 +51,7 @@ function zoneSchema<S extends TSchema>(schema: S) {
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
+  403: problemSchema('forbidden'),
   404: problemSchema('not_found'),
   409: problemSchema('conflict', 'stale_cursor'),
   412: problemSchema('precondition_failed'),
@@ -180,6 +180,7 @@ export function zoneRoutes(
         body: zoneSchema(ZonePageRequestSchema),
         response: {
           ...failures,
+          403: t.Union([failures[403], problemSchema('platform_closed')]),
           200: zoneSchema(ZonePageResponseSchema),
           202: zoneSchema(ZonePageReadProgressSchema),
           503: withHeaders(failures[503], { 'retry-after': t.String() }),
