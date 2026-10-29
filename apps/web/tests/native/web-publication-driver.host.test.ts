@@ -14,6 +14,27 @@ beforeAll(async () => {
 afterAll(async () => driver?.close());
 
 describe('native web publication driver host', () => {
+  test('fixture subjects retain their native released types independently of page Schema.org classes', async () => {
+    const expectedTypes = {
+      book: 'schema:Book',
+      recipe: 'schema:Recipe',
+      game: 'schema:VideoGame',
+      release: 'wd:Q20631656',
+      person: 'schema:Person',
+      organization: 'schema:Organization',
+      automated: 'schema:SoftwareApplication',
+    };
+    const kernelOrigin = new URL(fixture.personalRead).origin;
+    for (const [key, type] of Object.entries(expectedTypes)) {
+      const id = new URL(fixture.subjects[key]!).pathname.split('/')[3]!;
+      const response = await fetch(`${kernelOrigin}/v1/subjects/${encodeURIComponent(id)}`, { redirect: 'manual' });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { subject: { id: string; type: string } };
+      expect(body.subject.id).toBe(id);
+      expect(body.subject.type).toBe(type);
+    }
+  });
+
   test('provision writes fixture facts through kernel APIs under the released definitions', async () => {
     expect(fixture.releaseDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(Object.keys(fixture.subjects)).toEqual(expect.arrayContaining(Object.keys(data.subjects)));
