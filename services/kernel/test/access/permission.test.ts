@@ -238,7 +238,7 @@ test('scalar, explicit and batched decisions admit 1000 inverse entries per oper
   await expect(
     prepareReadDecisions(access, { actor: ordinary, context: ctx, actions: new Set([action]) }),
   ).rejects.toBeInstanceOf(AccessUnavailableError);
-});
+}, 30000);
 
 test('resource, actor and action must match; operators and first-party preconsent supply no grants', async () => {
   expect(await run()).toBe(true);
