@@ -121,7 +121,20 @@ bun scripts/worker-check.ts -- env TYPECHECK_CHANGED=services/kernel/test/import
 The initial version passed (exit 0, one of thirteen workspaces, kernel) after one
 automatic infrastructure rerun. Its successful log is
 `.temp/goal/checks/worker-check-2026-10-29T11-41-02.789Z-ea2bce06.log`.
-Final-revision affected-scope typecheck: pending shared slot.
+The final test revision also passed (exit 0, one of thirteen workspaces, kernel).
+Its log is `.temp/goal/checks/worker-check-2026-10-29T11-45-22.149Z-6f3d0456.log`.
+The check waited for its shared slot, then completed; the remote cleanup warning
+did not change the wrapper's terminal exit status.
+
+The artifact acceptance command is:
+
+```sh
+bun scripts/worker-check.ts -- test -s docs/research/imports-audit/wikidata-native-fields.md
+```
+
+It is run after committing this final verification record. Its terminal result is
+reported with the delivery; this nonempty-file check does not execute either native
+case.
 
 Only the two declared files changed; no outside-path files or existing/frozen tests
 were edited. No full kernel, web or root gate, extra test suite, live provider fetch,
