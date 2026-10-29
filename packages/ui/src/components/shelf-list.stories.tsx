@@ -39,7 +39,7 @@ export const MenusOpenPhone: Story = {
   parameters: { viewport: { defaultViewport: 'phone' } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reading' }));
-    await expect(await screen.findByRole('radio', { name: 'Completed' })).toBeVisible();
+    await expect(await screen.findByRole('menuitemradio', { name: 'Completed' })).toBeVisible();
   },
 };
 function Example() {
