@@ -1,11 +1,26 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedSample,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import { RUN_TABLES, RunStore, type SourceProjection } from '../src/run-store';
 import { createSqliteProbe } from './support/sqlite-growth';
 
+const fixedCounts: CountedCheck<CountedValues> = {
+  read: (counts) => counts,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
+
 test('sealed source projections use bounded indexed pages at three scales', () => {
-  const samples: GrowthSample[] = [];
+  const samples: { scale: number; counted: CountedSample }[] = [];
   for (const scale of [32, 128, 512]) {
     const database = new Database(':memory:');
     const probe = createSqliteProbe(database, { growingTables: RUN_TABLES });
@@ -35,10 +50,10 @@ test('sealed source projections use bounded indexed pages at three scales', () =
         expect(page.map((entry) => entry.row.recordKey)).toEqual(['Q000002', 'Q000003', 'Q000004']);
         expect(store.pageAcknowledged('wikidata', { limit: 3 })).toEqual([]);
       });
-      expect(result.cost.statements).toBeGreaterThan(0);
-      expect(result.cost.rows).toBeGreaterThanOrEqual(3);
+      expect(result.counts['sqlite statements']).toBeGreaterThan(0);
+      expect(result.counts['sqlite returned rows']).toBeGreaterThanOrEqual(3);
       probe.verifyPlans();
-      samples.push({ scale, cost: result.cost });
+      samples.push({ scale, counted: countedSample([result.counts]) });
       expect(() => store.pageStaged(run, { limit: 101 })).toThrow();
       expect(() => store.pageAcknowledged('wikidata', { limit: 0 })).toThrow();
       expect(store.activeRun('bangumi')).toBeNull();
@@ -47,5 +62,5 @@ test('sealed source projections use bounded indexed pages at three scales', () =
       store.close();
     }
   }
-  assertGrowth(samples, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+  expect(countedViolations(fixedCounts, samples)).toEqual([]);
 });

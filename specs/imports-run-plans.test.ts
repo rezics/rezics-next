@@ -9,14 +9,29 @@ import {
   type BatchCommand,
   type BatchWriteResult,
 } from '@rezics/definitions/bulk';
-import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
-import { runStoreCost, type Run, type Staged, type Pending } from './imports-run-store-driver.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedSample,
+  type CountedValues,
+} from '../services/kernel/test/support/growth-counters.ts';
+import { runStoreCounts, type Run, type Staged, type Pending } from './imports-run-store-driver.ts';
 import {
   MISSING_RUN_PLANS_DRIVER,
   PLAN_CAPS,
   type CreateImportRunPlansDriver,
   type RunPlansDriver,
 } from './imports-run-plans-driver.ts';
+
+const fixedCounts: CountedCheck<CountedValues> = {
+  read: (counts) => counts,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
 
 const SOURCE = 'wikidata';
 // Existing catalogue fixture identities, never allocated by this component.
@@ -600,28 +615,28 @@ async function measured<T>(h: Harness, operation: () => Promise<T>, m: number, p
   const capture = await h.d.measure(operation);
   expect(capture.networkRequests).toBe(0);
   expect(capture.kernelPartitions).toEqual([]);
-  const cost = runStoreCost(capture.evidence, pageCap);
-  expect(cost.rows).toBeLessThanOrEqual(64 * (m + pageCap));
-  expect(cost.statements).toBeLessThanOrEqual(32 * (m + pageCap));
-  return { value: capture.value, cost };
+  const counts = runStoreCounts(capture.evidence, pageCap);
+  expect(counts['sqlite returned rows']).toBeLessThanOrEqual(64 * (m + pageCap));
+  expect(counts['sqlite statements']).toBeLessThanOrEqual(32 * (m + pageCap));
+  return { value: capture.value, counts };
 }
 
 test(
   'same-source 32 128 512 unrelated keys and history cannot grow fixed 128-command prepare page ack or finalize costs',
   async () =>
     withStore(async (h) => {
-      const samples = new Map<string, GrowthSample[]>();
+      const samples = new Map<string, { scale: number; counted: CountedSample }[]>();
       const capture = async <T>(name: string, scale: number, operation: () => Promise<T>, m = 128, cap = 8) => {
         const sample = await measured(h, operation, m, cap);
         const group = samples.get(name) ?? [];
-        group.push({ scale, cost: sample.cost });
+        group.push({ scale, counted: countedSample([sample.counts]) });
         samples.set(name, group);
         return sample.value;
       };
       for (const n of [32, 128, 512]) {
         const unrelated = await grow(h, n);
         const fixed = record('Qfixed', n * 10 + 1);
-        const run = await h.ready([...unrelated, fixed]); // streaming source setup outside cost
+        const run = await h.ready([...unrelated, fixed]); // streaming source setup outside counts
         await h.d.analyze();
         expect(await capture('prepare', n, () => h.d.prepare(run, 'Qfixed', { commands: plan(fixed) }))).toBe(
           'changed',
@@ -635,8 +650,7 @@ test(
         await capture('finalize page', n, () => h.d.finalize(run, 2), 0, 2);
         await h.finish(run);
       }
-      for (const group of samples.values())
-        assertGrowth(group, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+      for (const group of samples.values()) expect(countedViolations(fixedCounts, group)).toEqual([]);
     }),
   120_000,
 );
@@ -645,33 +659,40 @@ test(
   'M 1 8 64 private commands grow actual touched work linearly with shared SQLite indexed-plan proof',
   async () =>
     withStore(async (h) => {
-      const samples = new Map<string, GrowthSample[]>();
+      const samples = new Map<string, { scale: number; counted: CountedSample }[]>();
       for (const m of [1, 8, 64]) {
         const r = record('Qpayload', m, m);
         const run = await h.ready([r]);
         await h.d.analyze();
         const prepare = await measured(h, () => h.d.prepare(run, r.row.recordKey, { commands: proposals(r) }), m);
-        expect(prepare.cost.statements).toBeGreaterThanOrEqual(m);
+        expect(prepare.counts['sqlite statements']).toBeGreaterThanOrEqual(m);
         const page = await measured(h, () => h.d.pagePending(run, { limit: 2 }), 0, 2);
         expect(page.value.flatMap(portable)).toEqual(proposals(r));
         const ack = await measured(h, () => h.ack(run, page.value), m);
-        for (const [name, cost] of [
-          ['prepare', prepare.cost],
-          ['page', page.cost],
-          ['ack', ack.cost],
+        for (const [name, counts] of [
+          ['prepare', prepare.counts],
+          ['page', page.counts],
+          ['ack', ack.counts],
         ] as const) {
           const group = samples.get(name) ?? [];
-          group.push({ scale: m, cost });
+          group.push({ scale: m, counted: countedSample([counts]) });
           samples.set(name, group);
         }
         await h.finish(run);
       }
       for (const [name, group] of samples)
-        assertGrowth(group, {
-          rows: name === 'page' ? 'constant' : 'linear',
-          blocks: 'constant',
-          statements: name === 'page' ? 'constant' : 'linear',
-        });
+        expect(
+          countedViolations(
+            {
+              ...fixedCounts,
+              bounds: {
+                'sqlite returned rows': name === 'page' ? 'constant' : 'linear',
+                'sqlite statements': name === 'page' ? 'constant' : 'linear',
+              },
+            },
+            group,
+          ),
+        ).toEqual([]);
     }),
   120_000,
 );

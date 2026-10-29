@@ -127,8 +127,8 @@ export type CreateImportRunStoreDriver = (options: { directory: string }) => Pro
  * Wrap ALL actual Database prepare/query/run/exec and executed Statement
  * get/all/iterate/run, including transaction controls and lazy iterator rows.
  * Count executions once, not preparations. Capture even on operation rejection.
- * No VM/fullscan/index-step/FFI counters. rows = actual rows delivered to caller;
- * blocks:0 means unavailable SQLite buffer evidence, not zero physical IO.
+ * No VM/fullscan/index-step/FFI counters. rows = actual rows delivered to caller.
+ * Summaries count SQLite statements and returned rows; buffer IO is not observed.
  * EXPLAIN every distinct SQL AND actual binding after ANALYZE at EVERY scale,
  * outside measurement. No fabricated counters, empty capture, or static flags.
  * Schema is raw sqlite_schema plus PRAGMA index_list/index_info/table_info
@@ -160,11 +160,10 @@ export interface Evidence {
   executions: Execution[];
 }
 
+export type RunStoreCounts = { 'sqlite returned rows': number; 'sqlite statements': number };
+
 /** Indexed-plan proof shared by the executable scenarios; never a product flag. */
-export function runStoreCost(
-  evidence: Evidence,
-  pageCap: number = CAPS.page,
-): { rows: number; blocks: 0; statements: number } {
+export function runStoreCounts(evidence: Evidence, pageCap: number = CAPS.page): RunStoreCounts {
   function requireProof(condition: unknown, message: string): asserts condition {
     if (!condition) throw new Error(`Run-store SQLite evidence: ${message}`);
   }
@@ -285,5 +284,5 @@ export function runStoreCost(
       }
     }
   }
-  return { rows, blocks: 0, statements: evidence.executions.length };
+  return { 'sqlite returned rows': rows, 'sqlite statements': evidence.executions.length };
 }

@@ -3,17 +3,32 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
-import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedSample,
+  type CountedValues,
+} from '../services/kernel/test/support/growth-counters.ts';
 import {
   CAPS,
   MISSING_RUN_STORE_DRIVER,
-  runStoreCost,
+  runStoreCounts,
   type CreateImportRunStoreDriver,
   type Run,
   type RunStoreDriver,
   type Staged,
   type Pending,
 } from './imports-run-store-driver.ts';
+
+const fixedCounts: CountedCheck<CountedValues> = {
+  read: (counts) => counts,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
 
 const SOURCE = 'wikidata';
 const PRIVATE = 'PRIVATE_SOURCE_BODY_DO_NOT_PERSIST';
@@ -556,8 +571,8 @@ test(
   'three-scale actual SQLite evidence bounds counters classify ack and vanished pages independent of same-source history',
   async () =>
     withStore(async (h) => {
-      const samples = new Map<string, GrowthSample[]>();
-      const finalizationTotals: GrowthSample[] = [];
+      const samples = new Map<string, { scale: number; counted: CountedSample }[]>();
+      const finalizationTotals: { scale: number; counted: CountedSample }[] = [];
       const measure = async <T>(
         name: string,
         scale: number,
@@ -566,11 +581,11 @@ test(
         maxStatements: number,
       ) => {
         const result = await h.d.measure(operation);
-        const cost = runStoreCost(result.evidence, 8);
-        expect(cost.rows).toBeLessThanOrEqual(maxRows);
-        expect(cost.statements).toBeLessThanOrEqual(maxStatements);
+        const counts = runStoreCounts(result.evidence, 8);
+        expect(counts['sqlite returned rows']).toBeLessThanOrEqual(maxRows);
+        expect(counts['sqlite statements']).toBeLessThanOrEqual(maxStatements);
         if (!samples.has(name)) samples.set(name, []);
-        samples.get(name)!.push({ scale, cost });
+        samples.get(name)!.push({ scale, counted: countedSample([counts]) });
         return result.value;
       };
       for (const scale of [32, 128, 512]) {
@@ -625,31 +640,35 @@ test(
             omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: '1' }],
           });
         let status = 'more';
-        const total = { rows: 0, blocks: 0 as const, statements: 0 };
+        const total = { 'sqlite returned rows': 0, 'sqlite statements': 0 };
         for (let pages = 0; status !== 'complete'; pages++) {
           expect(pages).toBeLessThan(scale + 20);
           const measured = await h.d.measure(() => h.d.finalize(run, 8));
-          const cost = runStoreCost(measured.evidence, 8);
-          expect(cost.rows).toBeLessThanOrEqual(128);
-          expect(cost.statements).toBeLessThanOrEqual(256);
-          total.rows += cost.rows;
-          total.statements += cost.statements;
+          const counts = runStoreCounts(measured.evidence, 8);
+          expect(counts['sqlite returned rows']).toBeLessThanOrEqual(128);
+          expect(counts['sqlite statements']).toBeLessThanOrEqual(256);
+          total['sqlite returned rows'] += counts['sqlite returned rows'];
+          total['sqlite statements'] += counts['sqlite statements'];
           status = measured.value;
           expect(['more', 'complete']).toContain(status);
           if (pages === 0) {
             if (!samples.has('bounded finalization page')) samples.set('bounded finalization page', []);
-            samples.get('bounded finalization page')!.push({ scale, cost });
+            samples.get('bounded finalization page')!.push({ scale, counted: countedSample([counts]) });
             if (status === 'more') {
               run = await h.reopen(run);
               await h.d.analyze();
             }
           }
         }
-        finalizationTotals.push({ scale, cost: total });
+        finalizationTotals.push({ scale, counted: countedSample([total]) });
       }
-      for (const group of samples.values())
-        assertGrowth(group, { rows: 'constant', blocks: 'constant', statements: 'constant' });
-      assertGrowth(finalizationTotals, { rows: 'linear', blocks: 'constant', statements: 'linear' });
+      for (const group of samples.values()) expect(countedViolations(fixedCounts, group)).toEqual([]);
+      expect(
+        countedViolations(
+          { ...fixedCounts, bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'linear' } },
+          finalizationTotals,
+        ),
+      ).toEqual([]);
     }),
   120_000,
 );
@@ -658,7 +677,7 @@ test(
   'one-pass supplied staging grows linearly separately from persistent-history indexed operations',
   async () =>
     withStore(async (h) => {
-      const samples: GrowthSample[] = [];
+      const samples: { scale: number; counted: CountedSample }[] = [];
       for (const scale of [32, 128, 512]) {
         const { supplied } = await grow(h, scale);
         const run = await h.begin(SOURCE, 1);
@@ -672,14 +691,19 @@ test(
           }
         });
         expect(visits).toBe(scale + 1);
-        const cost = runStoreCost(result.evidence);
-        expect(cost.rows).toBeLessThanOrEqual(16 * visits);
-        expect(cost.statements).toBeGreaterThanOrEqual(visits);
-        expect(cost.statements).toBeLessThanOrEqual(32 * visits);
-        samples.push({ scale, cost });
+        const counts = runStoreCounts(result.evidence);
+        expect(counts['sqlite returned rows']).toBeLessThanOrEqual(16 * visits);
+        expect(counts['sqlite statements']).toBeGreaterThanOrEqual(visits);
+        expect(counts['sqlite statements']).toBeLessThanOrEqual(32 * visits);
+        samples.push({ scale, counted: countedSample([counts]) });
         expect(await h.d.abandon(run)).toBe('abandoned');
       }
-      assertGrowth(samples, { rows: 'linear', blocks: 'constant', statements: 'linear' });
+      expect(
+        countedViolations(
+          { ...fixedCounts, bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'linear' } },
+          samples,
+        ),
+      ).toEqual([]);
     }),
   120_000,
 );
