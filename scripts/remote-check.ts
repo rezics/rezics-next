@@ -607,7 +607,7 @@ export function runScript(id: string, directory: string, cwd: string, command: s
       aarch64) build=aarch64 ;;
       *) echo "remote-check: unsupported check-host architecture $(uname -m)" >&2; exit 1 ;;
     esac
-    if [ -n "${REMOTE_CHECK_PINNED_BUN_PATH:-}" ]; then
+    if [ -n "\${REMOTE_CHECK_PINNED_BUN_PATH:-}" ]; then
       bun="$REMOTE_CHECK_PINNED_BUN_PATH"
     else
       mkdir -p .temp/pinned-bun
