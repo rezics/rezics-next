@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
-import { PageStory, pagePaths, newThreadReady, replyReady } from './page';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { PageStory, pagePaths, newThreadReady } from './page';
 import { m } from '../paraglide/messages.js';
 
 const meta = { title: 'Pages/Post Editor', parameters: { layout: 'fullscreen' } } satisfies Meta;
@@ -16,13 +16,13 @@ const emptyReplyPlay: NonNullable<Story['play']> = async ({ canvasElement }) => 
 };
 const textReplyPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
   const view = within(canvasElement);
-  const editor = await view.findByRole('textbox', { name: 'Reply' });
+  const editor = await view.findByRole('textbox', { name: m.thread_reply_label() });
   await userEvent.click(editor);
   await userEvent.keyboard('A thoughtful reply with a few lines.');
 };
 const imageReplyPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
   const view = within(canvasElement);
-  const editor = await view.findByRole('textbox', { name: m.thread_reply_body_label() });
+  const editor = await view.findByRole('textbox', { name: m.thread_reply_label() });
   await userEvent.click(editor);
   await userEvent.click(await view.findByRole('button', { name: m.editor_image() }));
   const dialog = await view.findByRole('dialog', { name: m.editor_image() });
@@ -44,7 +44,10 @@ const imageReplyPlay: NonNullable<Story['play']> = async ({ canvasElement }) => 
 };
 const refusalPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
   const view = within(canvasElement);
-  await replyReady({ canvasElement });
+  const editor = await view.findByRole('textbox', { name: m.thread_reply_label() });
+  await userEvent.click(editor);
+  await userEvent.keyboard('A reply that the story will refuse to send.');
+  await waitFor(async () => expect(await view.findByRole('button', { name: m.thread_write_send() })).toBeEnabled());
   await userEvent.click(await view.findByRole('button', { name: m.thread_write_send() }));
   await view.findByRole('alert');
 };

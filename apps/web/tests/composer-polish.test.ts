@@ -12,7 +12,7 @@ test('reply composer starts compact and grows to a bounded scrolling editor', as
   expect(source).toContain('min-height: 1lh');
   expect(source).toContain('min-height: calc(1lh + 1.5rem)');
   expect(source).toContain('max-height: 100dvh');
-  expect(source).toMatch(/overflow-y-auto/);
+  expect(source).toMatch(/overflow-y:\s*auto/);
 });
 
 test('send is unavailable without content and uses contrasting colors in either state', async () => {
@@ -26,14 +26,20 @@ test('send is unavailable without content and uses contrasting colors in either 
 test('new thread body begins around eight lines, grows, and exposes supported formatting actions', async () => {
   const composer = await read('../src/threads/composer.tsx');
   const editor = await read('../../../packages/ui/src/components/rich-text-editor.tsx');
+  const toolbar = await read('../../../packages/ui/src/components/editor-touch-bar.tsx');
+  const selection = await read('../../../packages/ui/src/components/editor-selection-menu.tsx');
+  const blocks = await read('../../../packages/ui/src/components/editor-slash-menu.tsx');
   const css = await read('../src/styles.css');
   expect(composer).toContain('thread-opening-editor');
   expect(css).toContain('min-height: 8lh');
   expect(css).toContain('min-height: calc(8lh + 1.5rem)');
   expect(composer).toContain("toolbar: 'always'");
-  expect(editor).toContain('labels.toolbar');
-  expect(editor).toContain('labels.formatting');
-  expect(editor).toContain('labels.insertBlock');
+  expect(toolbar).toContain('labels.toolbar');
+  expect(selection).toContain('labels.formatting');
+  expect(blocks).toContain('labels.insertBlock');
+  expect(editor).toContain('EditorTouchBar');
+  expect(editor).toContain('SelectionMenu');
+  expect(editor).toContain('SlashMenu');
 });
 
 test('composer defers kernel writes until send and retains existing refusal and upload handling', async () => {
