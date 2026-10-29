@@ -45,7 +45,18 @@ selection is used because the pinned version
 bypasses graph limits in explicit `automaton` mode; a synchronous diagnostic guard
 refuses limit failures and fuzz fallback before seeding or matching. Recall attack
 execution is disabled. Invalid, unsupported, over-budget, and inconclusive patterns
-fail validation. Proof results are cached only within each release/compiler call.
+fail validation.
+
+Validation still walks every schema pattern unconditionally. Existing
+release/compiler call-local maps deduplicate identical sources within that call.
+A finite module-owned proof may be reused only after the same current checker and
+policy have actually proved that exact source and flags. Its identity includes the
+checker and policy versions. Unknown, failed, over-budget, or changed-policy entries
+carry no safety. This permits reuse of finite exact generated patterns without
+trusting a datatype, fixed-template label, or canonical shape; it does not permit
+an arbitrary cross-call cache for untrusted patterns, a checker replacement, or a
+time-dependent verdict. The compiled release schema already runs once at module
+initialization; per-publication schema compilation is not the correction.
 
 Releases allow at most 1,024 types, 4,096 properties, 64 properties and 16 facets per
 type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per
@@ -72,7 +83,14 @@ A release is validated once per digest per process. Later requests read the subj
 type and the properties on its facts from that cached release. The limits bound
 publishing and the cold read. A cold read is linear in the release's canonical bytes
 and happens once per digest per process. It does not bound request cost after that.
-Inputs are parsed JSON, without cycles. Validation does not mutate them.
+Inputs are parsed JSON, without cycles. Validation does not mutate them. Publication
+must establish a bounded, privately owned JSON body before either the whole-release
+canonical digest or the distinct request-envelope digest is computed. Those digest
+domains remain separate. The same owned body must survive asynchronous preparation,
+hashing, and writing; parsed HTTP input and direct callers both need that ownership
+boundary. A caller-owned or shallow-frozen object, or a schema-valid shape, does not
+prove immutable binding. See the Semantic module's publication phases for the native
+boundary and remaining acceptance.
 
 `valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
 `releaseDigest(release)` returns `sha256:` followed by the SHA-256 digest of its

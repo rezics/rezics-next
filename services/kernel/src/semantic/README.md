@@ -384,6 +384,78 @@ consumer cycle or fake ACK. No formatter or earlier setup red is native performa
 Old identity-basis/home-sweep/sealed-repair scaffolding supplies neither readiness nor a revived certificate ABI.
 Unrelated core/graph/history/command/lifecycle and existing concurrent CPU-validation adoption remain unchanged.
 
+## Definition publication preparation
+
+The production request deadline remains 2,000 ms. The current release schema is
+compiled once at module initialization, and validation already deduplicates pattern
+proofs within a call. Recompiling the schema per publication is not the correction.
+Synchronous CPU preparation before command entry consumes that deadline and can
+stall unrelated requests even though no command gate or transaction is held. The
+paired [current-policy report](../../../../docs/research/definition-validation-cpu-current.md)
+and [independent deep report](../../../../docs/research/definition-validation-cpu-deep.md)
+are evidence, not competing implementation authorities. Their historical timing
+incident used the older timeout-based checker; their refused P1114 probes are not
+publication authority. The current bounded IRI proof, unconditional pattern walks,
+and whole-current-catalogue regression remain in force.
+
+### Owned input and digest domains
+
+Before either digest is computed, publication must perform bounded owned JSON
+traversal, then compute the whole canonical release digest and the request-envelope
+digest in their distinct domains. Neither digest substitutes for the other. Preserve
+collection, byte, and error precedence. Keep the actual immutable body bound to the
+bytes through asynchronous preparation, hashing, and writing. This applies to
+parsed HTTP input and direct callers: caller ownership, a caller freeze, and
+schema-valid shape do not prove immutable binding. Do not publish a sanitized or
+mutated graph after hashing different bytes.
+
+### Validation and published-body reuse
+
+The Definitions policy in [its package contract](../../../../packages/definitions/README.md)
+still applies to every schema and pattern. Exact finite module-owned fixed-pattern
+proofs are reusable only after actual proof by that same current checker and policy,
+keyed by exact source, flags, and checker/policy identity. Unknown, failed, over-budget,
+and changed-policy entries provide no safety. There is no fixed-template trust clause,
+checker replacement, time-dependent verdict, or arbitrary untrusted global proof
+cache.
+
+An actually validated immutable published body may be reused only for the same
+database/pool and canonical digest. The existing
+`readRelease(pool, digest, { composed: false })` is the current authority: it checks
+that the published row still exists even on a process-cache hit. A composed release,
+cross-pool entry, or cache-only digest equality is not published proof. Before any
+runtime adoption, a native specification must close finite entry and byte limits,
+eviction and lifetime, and cold validation. This uses the existing validated-body
+read authority; it does not add a second publication-body cache or cache-only
+authority.
+
+### Preparation, command, and native boundary
+
+Heavy preparation happens before fresh native command authorization and outside a
+held Global gate, Source gate, or command transaction. Every attempt, including
+receipt replay, rechecks current Auth and Access at native authoritative T before
+receipt disclosure. Preserve replay 201, a new key for an existing digest 200,
+authorized idempotency conflict 422, current denial, and one effect. Prepared data
+is never permission. A contention retry prepares native authority afresh under the
+original request deadline and evidence TTL; it does not renew the deadline or reuse
+authorization from before preparation.
+
+The indivisible cold checker must leave the request event loop so unrelated requests
+can progress. A Bun thread running the same bounded checker is a candidate, not a
+delivered or frozen Core port. Before implementation, shared owners must specify and
+prove admission and finite active-plus-retired slots and bytes, startup, reuse,
+reclaim, cancellation, shutdown, saturation, and late-result disposal. Worker
+termination, `unref`, or `Promise.race` alone does not prove physical cleanup. Do not
+add a durable queue, DBOS launch, service, execution engine, hidden CPU queue, or
+unapproved numerical cap. Keep the production deadline at 2,000 ms: thread progress
+does not prove every maximum-size cold release can publish within it, or that physical
+thread and heap cleanup are bounded. Parent clone and hash costs count too.
+
+Native acceptance is still required for current-bundle and hostile-pattern behavior;
+owned mutation and digest binding; cross-pool cache rejection and eviction; current
+replay denial; unrelated-request progress; deadline and late work with no commit; and
+active-plus-retired resource bounds. These are not delivered tests or runtime claims.
+
 ## Cost
 
 These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
@@ -403,7 +475,11 @@ A sourced batch has at most 100 commands. T is the number of distinct source tup
 Counts below exclude the separately listed authorization cost unless a subsection includes it. A page read uses BEGIN, SET timeout, partition SELECT, one page SELECT, COMMIT (five statements); link and relation pages add one `SET LOCAL enable_seqscan = off` before their indexed projection range. Inverse link pages also probe pending merge work for at most `4 × limit + 1` scanned holder ids, then reread the page after that work finishes. A subject read checks the current partition's projection checkpoint before its snapshot, then adds one `SET LOCAL enable_seqscan = off` when its type has relation properties, one statement per descriptive slot view, one 13-row outbound range and one counter probe per relation property, 12 relation slot views per property, and one batched read per related partition. The checkpoint wait includes a pending merge-member probe.
 For commands, K denotes seven framework statements per successful fresh attempt: BEGIN, two SETs, time SELECT, another SET, fence SQL, COMMIT; add one receipt SELECT when configured and the body statements below.
 The fence statement updates one `core.partition` row through `partition_pkey`, inserts one `core.outbox` row per event through `outbox_pkey`, and optionally one `core.receipt` and one `editorial.write_basis` row through `receipt_pkey`, `write_basis_pkey` and `write_basis_partition_no_position_key`; their partition foreign keys probe `partition_pkey`.
-Counts are per attempt. runCommand and the operational executor retry contention until the original deadline with jittered backoff up to 100 ms and no attempt-count cap; fence waits and extra constant-size partition polls remain charged. The default deadline and executor behavior do not change.
+Counts are per attempt. `runCommand` and the operational executor retry contention
+with fresh per-attempt authorization until the original deadline, using jittered
+backoff of up to 100 ms with no attempt-count cap. Fence waits and extra constant-size
+partition polls remain charged. The default deadline and executor behavior do not
+change.
 
 ### Subject identity reference
 
