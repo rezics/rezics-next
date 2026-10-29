@@ -163,3 +163,15 @@ so these results do not establish server-side batch-write scaling or close nativ
 
 Native API and growth suites remain separate evidence. This change measures no product timeout, admission, retry or
 source-semantic behavior.
+
+## Cause-capture launch revalidation
+
+On 2026-10-30, the recovered checkout again contains the exact controller-formatted restored CPU file:
+old and current SHA256 `f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f080e1c751`.
+The constant zero-slack bound and raw diagnostic are present; no prerequisite was copied or restored.
+The existing opt-in driver instrumentation is unchanged. Inspection reconfirms both full literal-text caches,
+the staged and acknowledged first/after SQLs, and the four reviewed importer page limits of 100.
+
+The mandated cause-capture launch is being revalidated without changing the runner, dependency configuration,
+frozen assertions, scales or runtime. Until a trace actually runs, the two-text cause remains unconfirmed and
+both the scale amendment and added exact-equality assertion remain conditional. No new native result is claimed.
