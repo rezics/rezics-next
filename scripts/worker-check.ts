@@ -176,12 +176,113 @@ function failureSummary(file: string): string {
       .map((line) => line.trim())
       .filter(Boolean);
     const failures = lines.filter((line) =>
-      /error|fail|not ok|assert|expected|received|actual|panic|exception/i.test(line),
+      /error|fail|not ok|assert|expected|received|actual|panic|exception|deadline_exceeded|overloaded|\b503\b/i.test(line),
     );
     const summary = [...new Set(failures.length ? failures : lines.slice(-30))].slice(-30).join('\n');
     return summary.slice(-4_000) || '(the check produced no output)';
   } finally {
     closeSync(fd);
+  }
+}
+
+type OverloadFailure = { files: string[]; reasons: string[] };
+
+/** Classify complete Bun per-test failures; ambiguous output is never retried. */
+function overloadFailure(output: string): OverloadFailure | undefined {
+  const singleFailureFallback = (): OverloadFailure | undefined => {
+    const count = output.match(/^\s*\(fail\)\s+/gm)?.length ?? 0;
+    const errorLines = output.split(/\r?\n/).filter((line) => /^\s*(?:error|Error):/.test(line));
+    const codes = ['deadline_exceeded', 'overloaded'].filter(
+      (code) => errorLines.length === 1 && new RegExp(`\\b${code}\\b`).test(errorLines[0]!),
+    );
+    if (count !== 1 || errorLines.length !== 1 || !/\b503\b/.test(errorLines[0]!) || codes.length !== 1) return undefined;
+    const names = new Map<string, string>();
+    const absoluteNames = new Map<string, string>();
+    for (const match of output.matchAll(/((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g)) {
+      const path = match[1]!;
+      const name = path.split('/').at(-1)!;
+      if (!names.has(name) || path.startsWith('/')) names.set(name, path);
+      if (path.startsWith('/')) absoluteNames.set(name, path);
+    }
+    const candidates = absoluteNames.size ? absoluteNames : names;
+    return { files: candidates.size === 1 ? [...candidates.values()] : [], reasons: [`HTTP 503 ${codes[0]}`] };
+  };
+  const lines = output.replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/);
+  const failures: Array<{ file?: string; detail: string }> = [];
+  const preamble: string[] = [];
+  let currentFile: string | undefined;
+  let currentFailure: { file?: string; detail: string } | undefined;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/\.(?:test|spec)\.[cm]?[jt]sx?:$/.test(trimmed)) {
+      currentFile = trimmed.slice(0, -1).replace(/^(?:\.\.\/|\.\/)/, '');
+      continue;
+    }
+    if (/^\s*\(fail\)\s+/.test(line)) {
+      if (currentFailure) failures.push(currentFailure);
+      currentFailure = { file: currentFile, detail: `${failures.length === 0 ? `${preamble.join('\n')}\n` : ''}${line}` };
+    } else if (currentFailure) currentFailure.detail += `\n${line}`;
+    else preamble.push(line);
+  }
+  if (currentFailure) failures.push(currentFailure);
+  if (failures.length === 0) return singleFailureFallback();
+  const reasons: string[] = [];
+  for (const failure of failures) {
+    const errorLines = failure.detail.split(/\r?\n/).filter((line) => /^\s*(?:error|Error):/.test(line));
+    const codes = ['deadline_exceeded', 'overloaded'].filter(
+      (code) => errorLines.length === 1 && new RegExp(`\\b${code}\\b`).test(errorLines[0]!),
+    );
+    if (errorLines.length !== 1 || !/\b503\b/.test(errorLines[0]!) || codes.length !== 1) return singleFailureFallback();
+    reasons.push(`HTTP 503 ${codes[0]}`);
+  }
+  let files = [
+    ...new Set(
+      failures
+        .map((failure) => {
+          if (failure.file) return failure.file;
+          return failure.detail.match(/((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/)?.[1];
+        })
+        .filter((file): file is string => !!file),
+    ),
+  ];
+  if (files.length !== failures.length) {
+    const byName = new Map<string, string>();
+    for (const match of output.matchAll(/((?:\/?[\w.@-]+\/)*[\w.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g)) {
+      const path = match[1]!;
+      const name = path.split('/').at(-1)!;
+      if (!byName.has(name) || path.startsWith('/')) byName.set(name, path);
+    }
+    if (byName.size === failures.length) files = [...byName.values()];
+  }
+  return { files: files.length === failures.length ? files : [], reasons: [...new Set(reasons)] };
+}
+
+function overloadRerunCommand(argv: readonly string[], files: string[], cwd: string): string[] | undefined {
+  const isBun = argv[0] === 'bun' || argv[0] === process.execPath || argv[0]!.endsWith('/bun');
+  const isTest = isBun && argv[1] === 'test';
+  const isCheckRunner = isBun && argv[1] === 'run';
+  if (!files.length || (!isTest && !isCheckRunner)) return undefined;
+  let testRoot = resolve(cwd);
+  for (let index = 1; index < argv.length; index += 1) {
+    if (argv[index] === '--cwd' && argv[index + 1]) testRoot = resolve(cwd, argv[index + 1]!);
+    else if (argv[index]!.startsWith('--cwd=')) testRoot = resolve(cwd, argv[index]!.slice(6));
+  }
+  const isTestPath = (arg: string): boolean => /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(arg);
+  const command = [...argv];
+  const first = command.findIndex(isTestPath);
+  const last = command.findLastIndex(isTestPath);
+  if (first >= 0) command.splice(first, last - first + 1, ...files);
+  else if (isTest) command.push(...files);
+  else command.push(...files.map((file) => resolve(testRoot, file)));
+  return command;
+}
+
+function checkLogContents(file: string): string {
+  try {
+    const output = readFileSync(file, 'utf8');
+    return output.length <= 4_000_000 ? output : '';
+  } catch {
+    return '';
   }
 }
 
@@ -193,6 +294,8 @@ export async function runWorkerCheck(
   leaseWaitRepeatMs = 60_000,
   logicalCheckId?: string,
   rerunNumber = 0,
+  recordedCheckId?: string,
+  allowOverloadRerun = true,
 ): Promise<number> {
   if (argv.length === 0) throw new Error('A check command is required');
   const localOnly = argv[0] === '--local';
@@ -525,6 +628,81 @@ export async function runWorkerCheck(
     }
   }
   rmSync(peakFile, { force: true });
+  if (code !== 0 && signalNumber === undefined && allowOverloadRerun) {
+    const output = checkLogContents(file);
+    const overload =
+      overloadFailure(output) ??
+      (() => {
+        const firstFailure = output.indexOf('(fail)');
+        const onlyOneFailure = firstFailure >= 0 && output.indexOf('(fail)', firstFailure + 6) < 0;
+        const errorLines = output.split(/\r?\n/).filter((line) => /^\s*(?:error|Error):/.test(line));
+        const reason =
+          errorLines.length === 1
+            ? ['deadline_exceeded', 'overloaded'].find((code) =>
+                new RegExp(`\\b503\\b.*\\b${code}\\b|\\b${code}\\b.*\\b503\\b`).test(errorLines[0]!),
+              )
+            : undefined;
+        if (!onlyOneFailure || !reason) return undefined;
+        const fileHeader = output
+          .slice(0, firstFailure)
+          .match(/^\s*([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/gm)
+          ?.at(-1)
+          ?.trim()
+          .replace(/:$/, '');
+        return { files: fileHeader ? [fileHeader] : [], reasons: [`HTTP 503 ${reason}`] };
+      })();
+    if (overload) {
+      const rerunCommand = overloadRerunCommand(command, overload.files, root);
+      const filesLabel = rerunCommand
+        ? overload.files.join(', ')
+        : overload.files.length
+          ? `whole command (could not select attributed files: ${overload.files.join(', ')})`
+          : 'whole command (test files could not be attributed)';
+      const reason = overload.reasons.join(', ');
+      const line = `worker-check: overload rerun files ${filesLabel}; reason: ${reason}; host: ${hostname()}\n`;
+      const append = openSync(file, 'a');
+      try {
+        writeSync(append, line);
+      } finally {
+        closeSync(append);
+      }
+      if (recordedCheckId) {
+        const record = readRecord(root, recordedCheckId);
+        record.reruns = (record.reruns ?? 0) + 1;
+        writeRecord(record);
+      }
+      process.stderr.write(line);
+      const rerunStatus = await runWorkerCheck(
+        rerunCommand ?? command,
+        root,
+        false,
+        file,
+        leaseWaitRepeatMs,
+        logicalCheckId,
+        rerunNumber + 1,
+        recordedCheckId,
+        false,
+      );
+      if (rerunStatus !== 0) {
+        const second = overloadFailure(checkLogContents(file));
+        if (second) {
+          const secondLine = `worker-check: overload rerun failed; second failure reason: ${second.reasons.join(', ')}; host: ${hostname()}\n`;
+          const secondAppend = openSync(file, 'a');
+          try {
+            writeSync(secondAppend, secondLine);
+          } finally {
+            closeSync(secondAppend);
+          }
+        }
+      }
+      if (reportOutput) {
+        process.stdout.write(`check: exit status ${rerunStatus}\n`);
+        if (rerunStatus !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
+        process.stdout.write(`check: log ${relativeLogPath}\n`);
+      }
+      return rerunStatus;
+    }
+  }
   if (reportOutput) {
     process.stdout.write(`check: exit status ${signalNumber === undefined ? code : 128 + signalNumber}\n`);
     if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
@@ -775,9 +953,9 @@ async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number
     // A superseded runner must never overwrite its detached replacement's result.
     const current = readRecord(root, id);
     if (current.log !== record.log || current.status !== 'running') return;
-    record.status = 'finished';
-    record.exitCode = exitCode;
-    writeRecord(record);
+    current.status = 'finished';
+    current.exitCode = exitCode;
+    writeRecord(current);
   };
   try {
     const exitCode = await runWorkerCheck(
@@ -788,6 +966,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number
       60_000,
       id,
       record.reruns ?? 0,
+      id,
     );
     finish(exitCode);
     return exitCode;

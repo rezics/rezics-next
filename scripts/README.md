@@ -216,6 +216,9 @@ Worker processes also put the worktree's `scripts/check-host` wrapper first on `
 containers in `rezics-check.slice` and labels them `rezics.worker.attempt=<task>/<attempt>`; settlement removes only
 containers with that attempt label. Remote runs do not receive worker identity and retain their run label and cleanup.
 
+A worker check reruns once under the same admission when every reported test failure is HTTP 503 `deadline_exceeded` or
+`overloaded`, retrying only attributed failing files or the whole command when attribution is unavailable.
+
 Stderr reports `remote-check: slot wait`, `rsync`, `bun install` and `command`, each with seconds and host name.
 Set `REMOTE_CHECK_PRIORITY=landing` for a landing check to wait ahead of multi-slot and ordinary runs, while gates keep first priority.
 `.temp/goal/task-priority` is the control plane's per-worktree priority file (`critical` or `normal`), read at every worker check; the per-run record makes any other use visible.

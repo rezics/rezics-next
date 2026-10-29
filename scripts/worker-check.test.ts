@@ -942,6 +942,102 @@ test('a remote transport failure is logged and rerun once locally, but a failed 
   }
 });
 
+function overloadFixture(): string {
+  const root = mkdtempSync('/tmp/worker-check-overload-');
+  dirs.push(root);
+  return root;
+}
+
+test('overload rerun: reruns only failing files once under admission, passes on success, and records the rerun', async () => {
+  const root = overloadFixture();
+  const healthyRuns = join(root, 'healthy-runs');
+  const failedRuns = join(root, 'failed-runs');
+  writeFileSync(join(root, 'healthy.test.ts'), `import { test, expect } from 'bun:test';
+import { existsSync, writeFileSync } from 'node:fs';
+test('healthy file runs only once', () => {
+  expect(existsSync(${JSON.stringify(healthyRuns)})).toBe(false);
+  writeFileSync(${JSON.stringify(healthyRuns)}, 'ran');
+});
+`);
+  writeFileSync(join(root, 'overloaded.test.ts'), `import { test, expect } from 'bun:test';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+test('transient response', () => {
+  const count = existsSync(${JSON.stringify(failedRuns)}) ? Number(readFileSync(${JSON.stringify(failedRuns)}, 'utf8')) : 0;
+  writeFileSync(${JSON.stringify(failedRuns)}, String(count + 1));
+  if (count === 0) throw new Error('HTTP 503 deadline_exceeded');
+  expect(true).toBe(true);
+});
+`);
+  await withQuietAdmission(async () => {
+    const id = startWorkerCheck(['bun', 'test', 'healthy.test.ts', 'overloaded.test.ts'], root);
+    const record = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
+    const status = await waitWorkerCheck(id, root, 10_000);
+    if (status !== 0) process.stderr.write(`nested overload check log:\n${readFileSync(join(root, record.log), 'utf8')}\n`);
+    expect(status).toBe(0);
+    const finished = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
+    expect(finished.reruns).toBe(1);
+    expect(readFileSync(healthyRuns, 'utf8')).toBe('ran');
+    expect(readFileSync(failedRuns, 'utf8')).toBe('2');
+    const log = readFileSync(join(root, record.log), 'utf8');
+    expect(log).toContain('overload rerun files overloaded.test.ts');
+    expect(log).toContain('reason: HTTP 503 deadline_exceeded');
+    expect(log).toContain(`host: ${hostname()}`);
+  });
+});
+
+test('overload rerun: a second 503 failure fails and reports both runs reasons', async () => {
+  const root = overloadFixture();
+  const attempts = join(root, 'attempts');
+  const source = `const fs = require('node:fs');
+const count = fs.existsSync(${JSON.stringify(attempts)}) ? Number(fs.readFileSync(${JSON.stringify(attempts)}, 'utf8')) : 0;
+fs.writeFileSync(${JSON.stringify(attempts)}, String(count + 1));
+console.error('(fail) request [1ms]\\n  Error: HTTP 503 ' + (count === 0 ? 'deadline_exceeded' : 'overloaded'));
+process.exit(1);`;
+  await withQuietAdmission(async () => {
+    const out: string[] = [];
+    const write = process.stdout.write;
+    process.stdout.write = ((chunk: string | Uint8Array) => (out.push(String(chunk)), true)) as typeof process.stdout.write;
+    try {
+      expect(await runWorkerCheck(['bun', '-e', source], root)).toBe(1);
+    } finally {
+      process.stdout.write = write;
+    }
+    expect(readFileSync(attempts, 'utf8')).toBe('2');
+    expect(out.join('')).toContain('HTTP 503 deadline_exceeded');
+    expect(out.join('')).toContain('HTTP 503 overloaded');
+  });
+});
+
+test('overload rerun: any other failure prevents rerunning the command', async () => {
+  const root = overloadFixture();
+  const attempts = join(root, 'attempts');
+  const source = `const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(attempts)}, 'ran');
+console.error('(fail) overloaded request [1ms]\\n  Error: HTTP 503 overloaded\\n(fail) product defect [1ms]\\n  Error: HTTP 500 internal_error');
+process.exit(1);`;
+  await withQuietAdmission(async () => {
+    expect(await runWorkerCheck(['bun', '-e', source], root)).toBe(1);
+    expect(readFileSync(attempts, 'utf8')).toBe('ran');
+  });
+});
+
+test('overload rerun: unattributed failures rerun the whole command once', async () => {
+  const root = overloadFixture();
+  const attempts = join(root, 'attempts');
+  const source = `const fs = require('node:fs');
+const count = fs.existsSync(${JSON.stringify(attempts)}) ? Number(fs.readFileSync(${JSON.stringify(attempts)}, 'utf8')) : 0;
+fs.writeFileSync(${JSON.stringify(attempts)}, String(count + 1));
+if (count === 0) { console.error('(fail) request [1ms]\\n  Error: HTTP 503 overloaded'); process.exit(1); }
+console.log('pass');`;
+  await withQuietAdmission(async () => {
+    expect(await runWorkerCheck(['bun', '-e', source], root)).toBe(0);
+    expect(readFileSync(attempts, 'utf8')).toBe('2');
+    const directory = join(root, '.temp/goal/checks');
+    const log = readFileSync(join(directory, readdirSync(directory)[0]!), 'utf8');
+    expect(log).toContain('overload rerun files whole command (test files could not be attributed)');
+  });
+});
+
 function recoveryFixture(): string {
   const parent = join(import.meta.dir, '../.temp/worker-check-recovery-tests');
   mkdirSync(parent, { recursive: true });
