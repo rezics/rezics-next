@@ -886,14 +886,7 @@ function mergeMainIntoCandidate(
   try {
     const merged = spawnSync(
       'git',
-      [
-        'merge',
-        '--no-ff',
-        '--no-edit',
-        '-m',
-        `Merge ${settings.mainBranch} into ${settings.stabilizeBranch}`,
-        main,
-      ],
+      ['merge', '--no-ff', '--no-edit', '-m', `Merge ${settings.mainBranch} into ${settings.stabilizeBranch}`, main],
       { cwd: tree, encoding: 'utf8' },
     );
     if (merged.status !== 0) return undefined;
@@ -1017,7 +1010,10 @@ async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Pr
   const checkout = settings.mainCheckout;
   const prepared = await regenerateDerivedHead(options, dev, settings.integrationBranch);
   if (prepared.retry || optionalHead(checkout, settings.stabilizeBranch) !== undefined) return false;
-  if (!(await stabilizeQuickGate(options, prepared.head)) || optionalHead(checkout, settings.stabilizeBranch) !== undefined)
+  if (
+    !(await stabilizeQuickGate(options, prepared.head)) ||
+    optionalHead(checkout, settings.stabilizeBranch) !== undefined
+  )
     return false;
   if (head(checkout, settings.integrationBranch) !== prepared.head) return false;
   try {
@@ -1278,11 +1274,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
           const currentCandidate = optionalHead(settings.mainCheckout, settings.stabilizeBranch);
           // Promotion may have started on an older candidate while integrated tasks advanced dev. Gate those tasks
           // before releasing the lease; a reconciliation merge with no tasks can wait for the next promotion window.
-          if (
-            currentCandidate === undefined ||
-            !boundaryTasks(options, currentMain, currentCandidate).length
-          )
-            return;
+          if (currentCandidate === undefined || !boundaryTasks(options, currentMain, currentCandidate).length) return;
         }
         // Another integration landed while this snapshot was gated. Continue under the same lease.
         continue;

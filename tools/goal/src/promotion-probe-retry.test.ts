@@ -31,7 +31,9 @@ test('a failing stabilize candidate does not run or retry a prefix probe', async
       expect(h.store.task(task.id).state).toBe('integrated');
       expect(h.store.task(task.id).currentAttempt).toBe(1);
     }
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a failing stabilize candidate is recorded once without confirmation', async () => {
@@ -40,7 +42,8 @@ test('a failing stabilize candidate is recorded once without confirmation', asyn
     const first = await h.seed('alpha');
     const culprit = await h.seed('bad');
     const dev = h.head();
-    let probeRuns = 0, confirmationRuns = 0;
+    let probeRuns = 0,
+      confirmationRuns = 0;
 
     await h.promote(async (command, cwd, logPath) => {
       const commit = git(cwd, 'rev-parse', 'HEAD');
@@ -64,5 +67,7 @@ test('a failing stabilize candidate is recorded once without confirmation', asyn
       expect(h.store.task(task.id).state).toBe('integrated');
       expect(h.store.task(task.id).currentAttempt).toBe(1);
     }
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });

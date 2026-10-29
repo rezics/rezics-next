@@ -269,8 +269,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         runGate: (command, cwd, logPath) => {
           // Most harness callbacks model the full promotion gate. Keep the newly added quick preflight independent;
           // tests for that preflight use promote() directly so their failure is observable.
-          if (JSON.stringify(command) === JSON.stringify(['bun', 'scripts/typecheck.ts']) ||
-              JSON.stringify(command) === JSON.stringify(['bun', 'run', '--cwd', 'packages/definitions', 'release']))
+          if (
+            JSON.stringify(command) === JSON.stringify(['bun', 'scripts/typecheck.ts']) ||
+            JSON.stringify(command) === JSON.stringify(['bun', 'run', '--cwd', 'packages/definitions', 'release'])
+          )
             return Promise.resolve({ passed: true, output: '', timedOut: false });
           return fallback(command, cwd, logPath);
         },

@@ -189,7 +189,8 @@ test('a failing stabilize candidate stays on dev for a fix without reverting tas
     const first = await h.seed('alpha');
     const culprit = await h.seed('bad');
     const last = await h.seed('omega');
-    const dev = h.head(), main = h.head('main');
+    const dev = h.head(),
+      main = h.head('main');
     h.settings.gate = failsWith('bad');
     h.settings.promotionParallelism = 2;
     let active = 0,
@@ -229,7 +230,8 @@ test('a failing stabilize candidate leaves its dependent tasks integrated pendin
     const direct = await h.seed('direct', [culprit.id]);
     const transitive = await h.seed('transitive', [direct.id]);
     const independent = await h.seed('independent');
-    const dev = h.head(), main = h.head('main');
+    const dev = h.head(),
+      main = h.head('main');
     await h.promote();
     expect(h.head()).toBe(dev);
     expect(h.head('main')).toBe(main);
