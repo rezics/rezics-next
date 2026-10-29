@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { createKernelClient } from '@rezics/client';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
-import fixtures from '../src/kernel/fixtures.json';
+import { createRecordedKernelFetch } from '../src/kernel/fake.ts';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { loadSubjectPage } from '../src/features/pages/subject.tsx';
 
@@ -43,10 +42,7 @@ test('overview sections share the shell heading and spacing classes', async () =
 });
 
 test('cover credit is rendered only in Sources and the cover viewer', async () => {
-  const [overview, subject] = await Promise.all([
-    source('overview.tsx'),
-    readFile(new URL('../features/pages/subject.tsx', import.meta.url), 'utf8'),
-  ]);
+  const [overview, subject] = await Promise.all([source('overview.tsx'), source('subject.tsx')]);
   const creditOccurrences = [overview, subject].join('\n').match(/rightsHolder/g) ?? [];
   expect(creditOccurrences).toHaveLength(1);
   expect(overview).toMatch(/data-slot="subject-sources"[\s\S]*?rightsHolder/);
@@ -54,7 +50,7 @@ test('cover credit is rendered only in Sources and the cover viewer', async () =
 
 test('the subject page keeps its base kernel request count', async () => {
   const requests: string[] = [];
-  const fetchFake = createFakeKernelFetch(fixtures as never);
+  const fetchFake = createRecordedKernelFetch({ 'subject-page': recordedPage });
   const client = createKernelClient('https://kernel.invalid', {
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
