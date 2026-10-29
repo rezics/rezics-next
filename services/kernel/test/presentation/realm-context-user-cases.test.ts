@@ -29,12 +29,14 @@ type Observation = {
   headers: Headers;
   status: number;
   responseHeaders: Headers;
+  body?: unknown;
 };
 type Capture = {
   requests: Observation[];
   decisions: { action: string; id: string; actor: Actor }[];
   deadlines: number[];
   pause?: { realm: string; observed: () => void; release: Promise<void>; used: boolean };
+  selectedPause?: { subject: string; context: string; observed: () => void; release: Promise<void>; used: boolean };
 };
 const capture = new AsyncLocalStorage<Capture>();
 const SESSION = 'rezics-session-token';
@@ -286,7 +288,27 @@ beforeAll(async () => {
       const path = new URL(request.url).pathname + new URL(request.url).search;
       const headers = new Headers(request.headers);
       const response = await handle(request);
-      seen.requests.push({ path, headers, status: response.status, responseHeaders: new Headers(response.headers) });
+      const selected = seen.selectedPause;
+      const url = new URL(request.url);
+      const selectedRead =
+        selected &&
+        url.searchParams.get('context') === selected.context &&
+        (url.pathname === `/v1/subjects/${selected.subject}` ||
+          url.pathname === `/v1/subjects/${selected.subject}/links`);
+      seen.requests.push({
+        path,
+        headers,
+        status: response.status,
+        responseHeaders: new Headers(response.headers),
+        ...(selectedRead ? { body: await response.clone().json() } : {}),
+      });
+      // Record real responses first. The subject probe must return so planning can
+      // start links; only hold the completed links response on its way back.
+      if (selectedRead && url.pathname.endsWith('/links') && !selected.used) {
+        selected.used = true;
+        selected.observed();
+        await selected.release;
+      }
       return response;
     });
     return app;
@@ -726,3 +748,222 @@ test('native suspended pre-suspension bearer is invalid on Realm page reads with
   }
   expect(stable(response.body)).toEqual(stable(native.body));
 }, 180_000);
+
+test('protected ban after the first actual Realm read conceals publication not_found without Global fallback', async () => {
+  const target = await makeRealm();
+  await publish(target);
+  const unknown = await send(reader, 'GET', `/v1/realms/${Bun.randomUUIDv7()}`);
+  status(unknown, 404);
+  expect(unknown.body.code).toBe('not_found');
+  let announce!: () => void;
+  let resume!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    announce = resolve;
+  });
+  const release = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const seen = observed();
+  seen.pause = { realm: target.realmId, observed: announce, release, used: false };
+  const pending = capture.run(seen, () => page(reader, { subject: book, realm: target.realmId }));
+  try {
+    const first = await Promise.race([
+      barrier.then(() => ({ kind: 'observed' as const })),
+      pending.then((response) => ({ kind: 'finished' as const, response })),
+    ]);
+    if (first.kind === 'finished') {
+      status(first.response, 404);
+      expect(first.response.body.code).toBe('not_found');
+      expect(seen.pause.used).toBe(true);
+    }
+    expect(seen.pause.used).toBe(true);
+    const ban = await send(
+      publisher,
+      'PUT',
+      `/v1/realms/${target.realmId}/bans/${reader.accountId}`,
+      { reason: 'Private early ban reason' },
+      key(),
+    );
+    status(ban, 200);
+    expect(record(ban.body.ban).workflowId).toBeNull();
+    const current = await send(reader, 'GET', `/v1/realms/${target.realmId}`);
+    status(current, 404);
+    expect(current.body.code).toBe('not_found');
+    const unchanged = await send(publisher, 'GET', `/v1/realms/${target.realmId}`);
+    status(unchanged, 200);
+    expect(record(unchanged.body.realm).contextId).toBe(target.contextId);
+    expect(record(unchanged.body.realm).headRevisionId).toBe(target.headRevisionId);
+    // This native publication read exercises the throwing protected-ban check,
+    // independently of readRealm's null concealment. Keep the read grant intact.
+    const publication = await send(reader, 'GET', `/v1/realms/${target.realmId}/publications/${book}`);
+    status(publication, 404);
+    expect(publication.body.code).toBe('not_found');
+    resume();
+    const response = await pending;
+    status(response, 404);
+    expect(response.body.code).toBe('not_found');
+    expect(stable(response.body)).toEqual(stable(unknown.body));
+    expect(response.body).not.toHaveProperty('context');
+    expect(response.body).not.toHaveProperty('reads');
+    for (const secret of [target.realmId, target.title, contextA, localA, 'Private early ban reason'])
+      expect(JSON.stringify(response.body)).not.toContain(secret);
+  } finally {
+    resume();
+    await pending.catch(() => {});
+  }
+}, 180_000);
+
+async function lateAuthority(verdict: 'withdraw' | 'reject' | 'ban') {
+  const target = await makeRealm();
+  const head = await publish(target);
+  const before = await send(publisher, 'GET', `/v1/realms/${target.realmId}`);
+  status(before, 200);
+  const nativeSubject = await selectedSubject(book, contextA);
+  const nativeLinks = await send(
+    reader,
+    'GET',
+    `/v1/subjects/${book}/links?context=${contextA}&property=schema%3AexampleOfWork&limit=6`,
+  );
+  status(nativeLinks, 200);
+  const globalSubject = await selectedSubject(book, GLOBAL_CONTEXT);
+  const globalLinks = await send(
+    reader,
+    'GET',
+    `/v1/subjects/${book}/links?context=${GLOBAL_CONTEXT}&property=schema%3AexampleOfWork&limit=6`,
+  );
+  status(globalLinks, 200);
+  expect(JSON.stringify(globalLinks.body.links)).toContain(edition);
+  let announce!: () => void;
+  let resume!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    announce = resolve;
+  });
+  const release = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const seen = observed();
+  seen.selectedPause = { subject: book, context: contextA, observed: announce, release, used: false };
+  const pending = capture.run(seen, () => page(reader, { subject: book, realm: target.realmId }));
+  const assertGlobal = (response: HttpResponse) => {
+    status(response, 200);
+    metadata(response, GLOBAL_CONTEXT, { kind: 'global' });
+    const result = embedded(response);
+    expect(result.subject.subject).toEqual(globalSubject.body.subject);
+    expect(result.links).toEqual(globalLinks.body);
+    for (const secret of [target.realmId, target.title, contextA, localA, 'Private late ban reason'])
+      expect(JSON.stringify(response.body)).not.toContain(secret);
+  };
+  try {
+    const first = await Promise.race([
+      barrier.then(() => ({ kind: 'observed' as const })),
+      pending.then((response) => ({ kind: 'finished' as const, response })),
+    ]);
+    if (first.kind === 'finished') {
+      // Even an otherwise valid page is no proof of the required during-read seam.
+      status(first.response, 200);
+      metadata(first.response, contextA, { kind: 'realm', id: target.realmId, title: target.title });
+      expect(seen.selectedPause.used).toBe(true);
+    }
+    expect(seen.selectedPause.used).toBe(true);
+    const selected = seen.requests.filter(({ path }) => {
+      const url = new URL(path, 'http://kernel.test');
+      return (
+        url.searchParams.get('context') === contextA &&
+        (url.pathname === `/v1/subjects/${book}` || url.pathname === `/v1/subjects/${book}/links`)
+      );
+    });
+    expect(selected).toHaveLength(2);
+    const subject = selected.find(
+      ({ path }) => new URL(path, 'http://kernel.test').pathname === `/v1/subjects/${book}`,
+    )!;
+    const links = selected.find(({ path }) => new URL(path, 'http://kernel.test').pathname.endsWith('/links'))!;
+    for (const actual of [subject, links]) {
+      expect(actual.status).toBe(200);
+      expect(actual.headers.get('authorization')).toBe(`Bearer ${reader.bearer}`);
+      expect(actual.responseHeaders.get(SESSION)).toBeString();
+      expect(
+        components({ status: actual.status, body: record(actual.body), headers: actual.responseHeaders }, reader)
+          .length,
+      ).toBeGreaterThan(0);
+    }
+    expect(record(subject.body).subject).toEqual(nativeSubject.body.subject);
+    expect(record(links.body)).toEqual(nativeLinks.body);
+    expect(JSON.stringify(subject.body)).toContain(localA);
+    expect(JSON.stringify(links.body)).not.toContain(edition);
+    for (const { actor } of seen.decisions) {
+      expect(actor.kind).toBe('account');
+      if (actor.kind === 'account') expect(actor.accountId).toBe(reader.accountId);
+    }
+    // Outside capture: same native driver and retained independent read grant.
+    if (verdict === 'ban') {
+      const ban = await send(
+        publisher,
+        'PUT',
+        `/v1/realms/${target.realmId}/bans/${reader.accountId}`,
+        { reason: 'Private late ban reason' },
+        key(),
+      );
+      status(ban, 200);
+      expect(record(ban.body.ban).workflowId).toBeNull();
+    } else {
+      status(
+        await write(`/v1/realms/${target.realmId}/publications/${book}:${verdict}`, undefined, {
+          'if-match': JSON.stringify(head),
+        }),
+        200,
+      );
+      status(await send(reader, 'GET', `/v1/realms/${target.realmId}/publications/${book}`), 404);
+    }
+    const after = await send(publisher, 'GET', `/v1/realms/${target.realmId}`);
+    status(after, 200);
+    expect(record(after.body.realm).contextId).toBe(record(before.body.realm).contextId);
+    expect(record(after.body.realm).headRevisionId).toBe(record(before.body.realm).headRevisionId);
+    resume();
+    const response = await pending;
+    if (verdict === 'ban') {
+      const current = await send(reader, 'GET', `/v1/realms/${target.realmId}`);
+      status(current, 404);
+      expect(current.body.code).toBe('not_found');
+      status(response, 404);
+      expect(response.body.code).toBe('not_found');
+      expect(stable(response.body)).toEqual(stable(current.body));
+      expect(response.body).not.toHaveProperty('context');
+      expect(response.body).not.toHaveProperty('reads');
+      for (const secret of [target.realmId, target.title, contextA, localA, 'Private late ban reason'])
+        expect(JSON.stringify(response.body)).not.toContain(secret);
+    } else {
+      if (response.status === 200) assertGlobal(response);
+      else {
+        status(response, 503);
+        expect([
+          'presentation_not_ready',
+          'semantic_not_ready',
+          'deadline_exceeded',
+          'overloaded',
+          'partition_unavailable',
+          'transaction_retry_exhausted',
+        ]).toContain(response.body.code as string);
+        expect(response.headers.get('retry-after')).toBe('1');
+        for (const field of ['context', 'reads', 'subject', 'document', 'result'])
+          expect(response.body).not.toHaveProperty(field);
+        for (const secret of [target.realmId, target.title, contextA, localA])
+          expect(JSON.stringify(response.body)).not.toContain(secret);
+      }
+      assertGlobal(await page(reader, { subject: book, realm: target.realmId }));
+    }
+  } finally {
+    resume();
+    await pending.catch(() => {});
+  }
+}
+
+test.each(['withdraw', 'reject'] as const)(
+  'publication %s after selected subject and links cannot survive an unchanged Realm head guard',
+  (verdict) => lateAuthority(verdict),
+  180_000,
+);
+test(
+  'protected ban after selected subject and links conceals despite an unchanged Realm head and independent grant',
+  () => lateAuthority('ban'),
+  180_000,
+);

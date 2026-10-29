@@ -32,12 +32,12 @@ The driver's send helper does not expose PATCH; that one update uses the same co
 directly. The multi-scenario fixture uses the existing native write limiter's documented new-account write-budget
 override, following Community's native HTTP setup. Access, request deadlines and read/retry allowances are unchanged.
 
-## Frozen titles and formatted file hash
+## Acceptance titles and formatted file hash
 
 SHA-256 of the formatted test file:
 
 ```text
-d904b026900fa1c54a8b73e6aa42186881f1bfec24f239b6ebd0040537061678  realm-context-user-cases.test.ts
+c408aa576fede18fa7dea6fec842f2c834891cd779df711ad23975be9df2b95d  realm-context-user-cases.test.ts
 ```
 
 - Realm subject page selects only the current authorized published Context with unchanged caller and public candidate audience
@@ -53,6 +53,10 @@ d904b026900fa1c54a8b73e6aa42186881f1bfec24f239b6ebd0040537061678  realm-context-
 - Realm selector validates the existing single target family and rejects raw Context and unknown fields
 - agent Realm selectors retain canonical Global redirects and old Global reads retain their response shape
 - native suspended pre-suspension bearer is invalid on Realm page reads with the standard Bearer challenge
+- protected ban after the first actual Realm read conceals publication not_found without Global fallback
+- publication withdraw after selected subject and links cannot survive an unchanged Realm head guard
+- publication reject after selected subject and links cannot survive an unchanged Realm head guard
+- protected ban after selected subject and links conceals despite an unchanged Realm head and independent grant
 
 ## Decisions and required owner bindings
 
@@ -63,7 +67,11 @@ d904b026900fa1c54a8b73e6aa42186881f1bfec24f239b6ebd0040537061678  realm-context-
   Context deletion is NOT YET FROZEN as a native lifecycle binding: the composed `semantic/http/contexts.ts`
   exposes create/read only. The existing native Context lifecycle acceptance also requires DELETE; this suite
   retains that genuine expected-200 operation, which currently returns 404 before its later page assertions.
-  No fake deletion, missing-port guard, skip or production implementation substitutes for that owner surface.
+  The eventual runtime acceptance depends on actual lifecycle code: a native deletion command and HTTP DELETE
+  dispatch in `semantic/context.ts` and `semantic/http/contexts.ts`, with read and public-eligibility SQL honoring
+  current deletion. Those bindings are absent from this checkout; the separate lifecycle producer must deliver
+  actual code before full lifecycle acceptance. No fake deletion, missing-port guard, skip or production
+  implementation substitutes for that owner surface.
   Current Context lifecycle authority remains independent of Realm grants and publication pointers: after actual
   deletion, a readable Realm, current publication and readable Global subject must not authorize the selected page.
 - Agents retain canonical Global behavior even when a Realm selector is supplied. Account and route targets reject
@@ -72,16 +80,48 @@ d904b026900fa1c54a8b73e6aa42186881f1bfec24f239b6ebd0040537061678  realm-context-
   Native authorization observations retain the caller; session evidence comes only from genuine native tokens.
 - Read work retains the existing 16 distinct reads, 128 slots and deadline. This specification does not claim a
   growth measurement or invent another retry allowance.
-- Semantic's sticky `withPublicStatementReader` export is required but absent on this base: NOT YET FROZEN as an
-  aggregate producer binding. Existing `withStatementReader`/`readStatementAs` are caller-private hydration scopes,
-  not a replacement. The native expected-200 audience assertions remain runnable reds without a fake export.
+- `semantic/statement-disclosure.ts` actually exports sticky `withPublicStatementReader`; nested
+  `withStatementReader` and `readStatementAs` preserve that public audience. `presentation/reads.ts` applies it
+  around `readPage` workers for both subject probes and planned reads. This delivered boundary retains caller
+  authority; it supplies neither Realm wire nor Context grants. No second audience helper is needed.
 - Realm figures, reviews, discussion and lists each remain NOT YET FROZEN until their actual owners export explicit
   question/Context/population and authority bindings. Global figures and Content's independent Global previews
   are not relabeled or duplicated. No Source safety, identity acknowledgment, defaults or main deployment is claimed.
 
+## During-read authority schedules
+
+The original thirteen assertions and A-to-B schedule remain unchanged. Four additional cases share their one
+native fixture, Access delegation and observations. The early ban pauses the first delegated actual `realm:read`,
+then commits a native ban on that same independently granted reader before initial publication completion. Native
+readability and publication controls require current 404. `readRealm` catches its internal denial into null;
+`readPublication` delegates `realmReadEligibility`, whose protected ban throws `ProblemError(not_found)` through
+snapshot rollback/rethrow. A thrown `not_found` from either reader conceals the whole page, never Global fallback.
+Other native failures keep their typing. Genuine null publication alone can attempt independent Global authority.
+
+The three late schedules record actual selected subject and links responses and hold links completion before it
+returns to the aggregate. The subject probe is never blocked waiting for links. Both responses must already be
+successful native Context A results with the same bearer and genuine session components. Withdrawal and rejection
+use the adopted publication's actual head in If-Match; the ban keeps the independent read grant. Writes run outside
+page capture. Governor Realm reads before and after prove unchanged Context and head. A head-only final guard is
+therefore insufficient. Late publication changes permit only exact independently authorized current Global subject,
+links and metadata, or a typed 503 without result and standard Retry-After, followed by healthy current Global 200.
+Late bans require standard whole-page 404 and native banned-reader 404, never fallback or 503. Existing hidden Global
+concealment remains unchanged. Cleanup always releases barriers and drains pending requests without replacing an
+original setup error with a cleanup rejection. Missing wire remains immediately red.
+
+All native points and final currentness work remain inside the existing 16 distinct reads, 128 slots, concurrency
+and deadline. These schedules add no product requests, permission, clock or retry allowance. This specification
+provides no runtime growth pass: full runtime observation must include final authority work at existing geometric
+scales and current owner populations, with inclusive costs.
+
+The duplicate `board-scheme.ts` reader still exists on this checkout; its cleanup remains pending for the runtime
+owner. Only `realm.ts` owns native page readability. Realm figures, reviews, discussion and lists still lack their
+explicit owner population bindings.
+
 ## Source receipt
 
-Read the complete subject-page owner contract and the native presentation `http/pages.ts` and `reads.ts` target,
+Read both complete local review reports through their exact read-only main-checkout paths because the worktree
+copies were absent. Read the complete subject-page owner contract and the native presentation `http/pages.ts` and `reads.ts` target,
 probe, deduplication, request and session paths; composition's `registry.ts` and `reads.ts`; the unchanged
 `aggregate-authority-user-cases.test.ts`; and the existing native presentation page cases and Semantic outcome driver.
 Authority references are Community's `realm.ts`, `publication.ts`, `routes.ts` and `ban.ts`, with native Realm,
@@ -91,10 +131,11 @@ and statement disclosure. Existing `specs/semantic-outcomes.test.ts` Context ass
 `specs/content-user-cases-outcomes.test.ts` Realm/Global rating assertions retain authority. No external reference
 project was named for this surface or used.
 
-## Actual check evidence
+## Previous thirteen-case check evidence
 
-The final formatted test hash above was checked with both required commands, each through the foreground worker
-wrapper after the last test edit. No existing acceptance or frozen file was changed. No file outside the declared
+The previous thirteen-case test hash `d904b026900fa1c54a8b73e6aa42186881f1bfec24f239b6ebd0040537061678` was checked
+with both required commands. The full previous output below is retained as provenance; it is not a check of the
+additive seventeen-case file above. No existing assertion or frozen aggregate-authority file was changed. No file outside the declared
 paths was changed. Earlier authoring runs exposed and corrected test typing, edition type and proposal-reference
 setup errors before these final results.
 
