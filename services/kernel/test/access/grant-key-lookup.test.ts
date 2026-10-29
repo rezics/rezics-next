@@ -81,7 +81,7 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
         );
         expect(scans.length).toBeGreaterThan(0);
         for (const node of scans) {
-          expect(node['Node Type']).toBe('Index Only Scan');
+          expect(node['Node Type'], JSON.stringify({ scale, plans: observed.capture.plans })).toBe('Index Only Scan');
           expect(node['Index Name']).toBe('resource_grant_pkey_lookup');
           const condition = String(node['Index Cond']);
           for (const key of ['route', 'resource_id', 'subject_kind', 'subject_id', 'subject_role', 'action'])
