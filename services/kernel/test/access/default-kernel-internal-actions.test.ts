@@ -119,7 +119,8 @@ beforeAll(async () => {
     actions: mounted,
   });
   const actions = accessActionCatalogue(mounted);
-  scopes = [...actions.keys()];
+  // Generic clients cannot register the website's exclusive completion scope.
+  scopes = [...actions.keys()].filter((scope) => scope !== 'media:complete');
   bindings = createNativeAccountBindings({
     pool: db.pool,
     access,
@@ -200,7 +201,7 @@ async function catalogueOrganization() {
     digest: createHash('sha256').update(key()).digest(),
     item: { type: 'schema:Organization', labels: { en: 'Catalogue organization' } },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorization: accessCommandAuthorization(
+    authorization: await accessCommandAuthorization(
       access,
       actor,
       'subject:create',
@@ -309,9 +310,10 @@ test('internal actions are additive, keep identical route metadata and reject co
     expect(mounted.size).toBe(1);
     expect(actions.size).toBe(names.length);
     expect(() => createAccess({ actions: mounted })).not.toThrow();
+    const { replay, ...withoutReplay } = metadata;
     for (const conflict of [
       { ...metadata, anonymous: true },
-      { ...metadata, replay: metadata.replay === undefined ? ('self-account-read' as const) : undefined },
+      replay === undefined ? { ...metadata, replay: 'self-account-read' as const } : withoutReplay,
       { ...metadata, 'x-resource-types': ['account'] },
     ]) {
       const declared = actionCatalogue(mountedAction(action, conflict));
