@@ -69,7 +69,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       entries.push({ key: `${view}-withheld`, type: 'schema:Book', label: `${view} withheld`, descriptions: undefined });
     }
     const batches = Array.from({ length: Math.ceil(entries.length / 100) }, (_, index) => entries.slice(index * 100, index * 100 + 100));
-    for (const batch of batches) {
+    await Promise.all(batches.map(async (batch) => {
       const commands = batch.map(({ key, type, label, descriptions }) => ({
         op: 'create',
         key,
@@ -106,7 +106,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
           throw new Error(`Could not create fixture subject ${item.key}: API status ${item.status}`);
         created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
       }
-    }
+    }));
 
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
