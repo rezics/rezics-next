@@ -145,7 +145,8 @@ through supported DBOS APIs only after native obligations are settled or transfe
 account scope and locators are enqueued with `enqueueIntent` on the producing transaction's connection in the same
 kernel database. Every direct workflow-start or client-enqueue producer must use this path. No relay transaction,
 second database handoff or second seal is part of the contract. These shared-history storage, locator, erasure and
-producer-coverage guarantees remain open gaps until implemented; no runtime guarantee is implied here.
+producer-coverage guarantees, including bounded workflow arguments and results and workflow-history budgets, remain
+open gaps until implemented; no runtime guarantee is implied here.
 
 ### Bounded job steps
 
