@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { withPlatformClosedRecognition } from '../src/kernel/platform-closed.ts';
 import { DynamicCollectionPage } from '../src/library/dynamic-collection-page.tsx';
@@ -23,15 +24,13 @@ test('dynamic Collections use localized built-in titles, owner renames, and a ne
 });
 
 test('a dynamic page renders cover tiles without count, time, or membership controls', () => {
-  const html = renderToStaticMarkup(
-    <DynamicCollectionPage
-      page={{
+  const html = renderToStaticMarkup(createElement(DynamicCollectionPage, {
+      page: {
         id: 'everything', title: 'Everything', builtinKind: 'everything', description: null,
         curator: null, members: [{ subject: { id: 'book-1', type: 'book', types: ['book'], label: 'A book', cover: null } }],
         next: null, preparing: false, unavailable: false,
-      }}
-    />,
-  );
+      },
+    }));
   expect(html).toContain('Everything');
   expect(html).toContain('A book');
   expect(html).not.toContain('Updated');
