@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLASSIFIER_VERSION, classifyStep, measureLog } from './records.ts';
+import { attemptSession, CLASSIFIER_VERSION, classifyStep, measureLog } from './records.ts';
+import type { Attempt } from './types.ts';
 import { harness } from './test-support.ts';
 import { importAttempt } from './import-attempt.ts';
 
@@ -177,4 +179,22 @@ test('a recovered CLI transport error is not an attempt failure after a complete
     .map((value) => JSON.stringify(value))
     .join('\n');
   expect(measureLog(log).failureKind).toBeNull();
+});
+
+test('a superseded attempt whose session is not yet recorded names it from the head of its run log', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'attempt-session-'));
+  try {
+    const logPath = join(directory, '2.jsonl');
+    writeFileSync(logPath, '{"type":"thread.started","thread_id":"thread-from-log"}\n{"type":"turn.started"}\n');
+    const attempt = {
+      session: null,
+      logPath,
+      profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'max' },
+    } as unknown as Attempt;
+    expect(attemptSession(attempt)).toBe('thread-from-log');
+    expect(attemptSession({ ...attempt, session: 'recorded' })).toBe('recorded');
+    expect(attemptSession({ ...attempt, logPath: join(directory, 'missing.jsonl') })).toBeNull();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

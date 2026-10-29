@@ -276,6 +276,37 @@ export function makeRecord(
   };
 }
 export type MeasurementOptions = { baseline?: Tokens; configDirectory?: string | undefined };
+/**
+ * The agent session an attempt ran in. A superseded attempt's session is recorded only when it is finalized, after its
+ * retry has chosen how to start, so the head of its run log names it instead; without this every retry of a superseded
+ * attempt started a fresh session and lost its context (437 of 437 retries on 2026-10-29).
+ */
+export function attemptSession(attempt: Attempt): string | null {
+  if (attempt.session) return attempt.session;
+  const adapter = attempt.profile && agentAdapter(attempt.profile.cli);
+  if (!adapter) return null;
+  let head = '';
+  try {
+    const fd = openSync(attempt.logPath, 'r');
+    try {
+      const buffer = Buffer.alloc(65536);
+      head = buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, 0)).toString('utf8');
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+  for (const line of head.split('\n')) {
+    try {
+      const session = adapter.sessionId(JSON.parse(line));
+      if (session) return session;
+    } catch {
+      /* A partial last line or non-JSON output. */
+    }
+  }
+  return null;
+}
 export function readMeasurement(
   attempt: Attempt,
   options: MeasurementOptions & { maxLogBytes?: number } = {},
