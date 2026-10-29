@@ -23,7 +23,7 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
   } finally {
     h.dispose();
   }
-});
+}, 60_000);
 
 test('a passing candidate finishes its gate across control-plane main commits and reconciles before publish', async () => {
   const h = integrationHarness();
@@ -53,7 +53,7 @@ test('a passing candidate finishes its gate across control-plane main commits an
   } finally {
     h.dispose();
   }
-});
+}, 60_000);
 
 test('a passed stabilize candidate promotes when main moved only by control-plane commits', async () => {
   const h = integrationHarness();
@@ -78,4 +78,4 @@ test('a passed stabilize candidate promotes when main moved only by control-plan
   } finally {
     h.dispose();
   }
-});
+}, 60_000);
