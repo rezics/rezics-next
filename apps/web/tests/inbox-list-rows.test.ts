@@ -73,7 +73,9 @@ test('the inbox list has no accessibility violations', async () => {
   browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
-  await page.setContent(`<main><h1>Inbox</h1>${markup([linked, plain, unavailable])}</main>`);
+  await page.setContent(
+    `<html lang="en"><head><title>Inbox</title></head><body><main><h1>Inbox</h1>${markup([linked, plain, unavailable])}</main></body></html>`,
+  );
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
