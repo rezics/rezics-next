@@ -109,3 +109,84 @@ test('an assertion failure on stabilize blocks immediately without infrastructur
     h.dispose();
   }
 });
+
+test('a passing infrastructure rerun of one workspace does not hide another workspace failure', async () => {
+  const h = integrationHarness();
+  try {
+    await h.seed('candidate');
+    const candidate = h.head();
+    git(h.root, 'branch', 'stabilize', candidate);
+    const commands: string[][] = [];
+    await h.promote(async (command, _cwd, logPath) => {
+      commands.push([...command]);
+      if (commands.length === 1) {
+        appendFileSync(logPath, 'spawnSync docker run ETIMEDOUT\nFailed workspaces: packages/ui services/kernel\n');
+        return { passed: false, output: 'spawnSync docker run ETIMEDOUT', timedOut: true };
+      }
+      if (command.includes('services/kernel'))
+        return { passed: false, output: 'AssertionError: kernel fixture failed', timedOut: false };
+      return success;
+    });
+
+    const run = h.store.promotion()!;
+    expect(commands.slice(1, 3)).toEqual([
+      ['bun', 'run', '--cwd', 'packages/ui', 'check'],
+      ['bun', 'run', '--cwd', 'services/kernel', 'check'],
+    ]);
+    expect(run.phase).toBe('stabilize-blocked');
+    expect(h.head('main')).not.toBe(candidate);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('after a passing infrastructure rerun the commands the first failure kept from running still run', async () => {
+  const h = integrationHarness();
+  try {
+    await h.seed('candidate', [], ['bun', 'test', 'fixture-acceptance.test.ts']);
+    const candidate = h.head();
+    git(h.root, 'branch', 'stabilize', candidate);
+    const commands: string[][] = [];
+    await h.promote(async (command, _cwd, logPath) => {
+      commands.push([...command]);
+      if (commands.length === 1) {
+        appendFileSync(logPath, 'spawnSync docker run ETIMEDOUT\nFailed workspaces: services/kernel\n');
+        return { passed: false, output: 'spawnSync docker run ETIMEDOUT', timedOut: true };
+      }
+      if (command.includes('fixture-acceptance.test.ts'))
+        return { passed: false, output: 'AssertionError: acceptance fixture failed', timedOut: false };
+      return success;
+    });
+
+    expect(commands.some((command) => command.includes('fixture-acceptance.test.ts'))).toBe(true);
+    expect(h.store.promotion()!.phase).toBe('stabilize-blocked');
+    expect(h.head('main')).not.toBe(candidate);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a test that exceeds its own timeout is a test failure, not an infrastructure failure', async () => {
+  const h = integrationHarness();
+  try {
+    await h.seed('candidate');
+    const candidate = h.head();
+    git(h.root, 'branch', 'stabilize', candidate);
+    let calls = 0;
+    await h.promote(async (_command, _cwd, logPath) => {
+      calls++;
+      appendFileSync(logPath, '(fail) fixture waits [5001.00ms]\n  ^ this test timed out after 5000ms.\n');
+      return {
+        passed: false,
+        output: '(fail) fixture waits [5001.00ms]\n  ^ this test timed out after 5000ms.',
+        timedOut: false,
+      };
+    });
+
+    expect(calls).toBe(1);
+    expect(h.store.promotion()!.phase).toBe('stabilize-blocked');
+    expect(h.head('main')).not.toBe(candidate);
+  } finally {
+    h.dispose();
+  }
+});
