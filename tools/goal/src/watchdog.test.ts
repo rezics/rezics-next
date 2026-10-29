@@ -488,7 +488,14 @@ test('a long attempt whose last command spans lines is reported once, on one lin
       `${JSON.stringify({ type: 'item.completed', item: { id: 'c1', type: 'command_execution', command: "zsh -lc 'set -e\nbun test'" } })}\n`,
     );
     const tasks = store(
-      [{ id: 'long', state: 'running' as const, currentAttempt: 1, brief: { goal: 'web', manager: 'web' } as Task['brief'] }],
+      [
+        {
+          id: 'long',
+          state: 'running' as const,
+          currentAttempt: 1,
+          brief: { goal: 'web', manager: 'web' } as Task['brief'],
+        },
+      ],
       [{ taskId: 'long', attempt: 1, state: 'running', startedAt: minutesAgo(200), logPath: log } as Partial<Attempt>],
     );
     const delivered: string[] = [];
@@ -497,8 +504,26 @@ test('a long attempt whose last command spans lines is reported once, on one lin
       delivered.push(summary);
     };
     const branches = { stabilize: 'stabilize', integration: 'dev' };
-    watch(tasks, root, branches, root, deliver, now, async () => [], () => 60_000);
-    watch(tasks, root, branches, root, deliver, now + 60_000, async () => [], () => 60_000);
+    watch(
+      tasks,
+      root,
+      branches,
+      root,
+      deliver,
+      now,
+      async () => [],
+      () => 60_000,
+    );
+    watch(
+      tasks,
+      root,
+      branches,
+      root,
+      deliver,
+      now + 60_000,
+      async () => [],
+      () => 60_000,
+    );
     const longAttempts = delivered.filter((summary) => summary.startsWith('Long attempt:'));
     expect(longAttempts).toHaveLength(1);
     expect(longAttempts[0]).toContain("zsh -lc 'set -e bun test'");
@@ -516,11 +541,35 @@ test('a waiting attempt older than its class limit is reported as a long attempt
     git('branch', 'dev');
     git('branch', 'stabilize');
     const tasks = store(
-      [{ id: 'waiting', state: 'running' as const, currentAttempt: 1, brief: { goal: 'web', manager: 'web' } as Task['brief'] }],
-      [{ taskId: 'waiting', attempt: 1, state: 'waiting', startedAt: minutesAgo(200), logPath: join(root, 'attempt.jsonl') } as Partial<Attempt>],
+      [
+        {
+          id: 'waiting',
+          state: 'running' as const,
+          currentAttempt: 1,
+          brief: { goal: 'web', manager: 'web' } as Task['brief'],
+        },
+      ],
+      [
+        {
+          taskId: 'waiting',
+          attempt: 1,
+          state: 'waiting',
+          startedAt: minutesAgo(200),
+          logPath: join(root, 'attempt.jsonl'),
+        } as Partial<Attempt>,
+      ],
     );
     const delivered: string[] = [];
-    watch(tasks, root, { stabilize: 'stabilize', integration: 'dev' }, root, (summary) => delivered.push(summary), now, async () => [], () => 60_000);
+    watch(
+      tasks,
+      root,
+      { stabilize: 'stabilize', integration: 'dev' },
+      root,
+      (summary) => delivered.push(summary),
+      now,
+      async () => [],
+      () => 60_000,
+    );
     expect(delivered.filter((summary) => summary.startsWith('Long attempt:'))).toHaveLength(1);
   } finally {
     rmSync(root, { recursive: true, force: true });

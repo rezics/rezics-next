@@ -333,7 +333,9 @@ export class WorkerJob implements GateOutcomeSink {
             );
             continue;
           } catch {
-            details.push(`check ${id}: check host left an unreadable run record; exit status unavailable; log path ${runPath}`);
+            details.push(
+              `check ${id}: check host left an unreadable run record; exit status unavailable; log path ${runPath}`,
+            );
             continue;
           }
         }
@@ -344,9 +346,10 @@ export class WorkerJob implements GateOutcomeSink {
       }
       try {
         const document = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, unknown>;
-        const value = document.result && typeof document.result === 'object'
-          ? (document.result as Record<string, unknown>)
-          : document;
+        const value =
+          document.result && typeof document.result === 'object'
+            ? (document.result as Record<string, unknown>)
+            : document;
         const status =
           value.exitStatus ??
           value.exit_status ??
@@ -366,10 +369,16 @@ export class WorkerJob implements GateOutcomeSink {
           (Number(status) === 0 ? 'passed' : 'check failed without a summary');
         const log = value.logPath ?? value.log_path ?? value.log ?? join(directory, `worker-check-${id}.log`);
         details.push(
-          `check ${id}: exit status ${String(status)}; ${String(summary).replace(/[\r\n]+/g, ' ').slice(0, 400)}; log path ${String(log).replace(/[\r\n]+/g, ' ').slice(0, 1000)}`,
+          `check ${id}: exit status ${String(status)}; ${String(summary)
+            .replace(/[\r\n]+/g, ' ')
+            .slice(0, 400)}; log path ${String(log)
+            .replace(/[\r\n]+/g, ' ')
+            .slice(0, 1000)}`,
         );
       } catch (error) {
-        details.push(`check ${id}: check host failed to write a readable result (${String(error)}); log path ${resultPath}`);
+        details.push(
+          `check ${id}: check host failed to write a readable result (${String(error)}); log path ${resultPath}`,
+        );
       }
     }
     return details.some((line) => line.startsWith('check ') && line.includes('run vanished'))
@@ -386,7 +395,15 @@ export class WorkerJob implements GateOutcomeSink {
       `The checks you started have finished or could not be found. ${message}`,
       'Continue the same task and session. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
-    const worker = await launch(this.tasks.store, task, attempt, pool, prompt, this.tasks.settings.codex, attempt.session ?? undefined);
+    const worker = await launch(
+      this.tasks.store,
+      task,
+      attempt,
+      pool,
+      prompt,
+      this.tasks.settings.codex,
+      attempt.session ?? undefined,
+    );
     await this.follow(worker);
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
@@ -854,7 +871,9 @@ export class WorkerJob implements GateOutcomeSink {
           lease.release();
           followed = true;
           follows.push(
-            this.resumeWaiting(attempt, store.task(ref.taskId), message).catch((error) => this.endAsEnvironment(ref, error)),
+            this.resumeWaiting(attempt, store.task(ref.taskId), message).catch((error) =>
+              this.endAsEnvironment(ref, error),
+            ),
           );
           continue;
         }

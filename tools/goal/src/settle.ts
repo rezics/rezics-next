@@ -78,7 +78,8 @@ export async function settle(
           attempt.process = null;
           attempt.driver = null;
           attempt.exitCode = code;
-          attempt.session = readMeasurement(current, { configDirectory: pool?.configDirectory }).session ?? attempt.session;
+          attempt.session =
+            readMeasurement(current, { configDirectory: pool?.configDirectory }).session ?? attempt.session;
         });
         return;
       }

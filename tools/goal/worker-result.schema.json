@@ -2,21 +2,38 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["status", "summary", "blocker", "approaches"],
-  "allOf": [{ "if": { "properties": { "status": { "const": "waiting" } } }, "then": { "required": ["checks"], "properties": { "checks": { "minItems": 1, "uniqueItems": true } } } }],
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "waiting" } } },
+      "then": { "required": ["checks"], "properties": { "checks": { "minItems": 1, "uniqueItems": true } } }
+    }
+  ],
   "properties": {
     "status": { "type": "string", "enum": ["success", "blocked", "waiting"] },
     "summary": { "type": "string" },
     "blocker": {
       "anyOf": [
         { "type": "null" },
-        { "type": "object", "additionalProperties": false, "required": ["kind", "detail"], "properties": {
-          "kind": { "type": "string", "enum": ["spec-conflict", "scope-growth", "tool"] },
-          "detail": { "type": "string" }
-        } }
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "detail"],
+          "properties": {
+            "kind": { "type": "string", "enum": ["spec-conflict", "scope-growth", "tool"] },
+            "detail": { "type": "string" }
+          }
+        }
       ]
     },
     "checks": { "type": "array", "items": { "type": "string" } },
-    "approaches": { "type": "array", "items": { "type": "object", "additionalProperties": false,
-      "required": ["approach", "result"], "properties": { "approach": { "type": "string" }, "result": { "type": "string" } } } }
+    "approaches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["approach", "result"],
+        "properties": { "approach": { "type": "string" }, "result": { "type": "string" } }
+      }
+    }
   }
 }

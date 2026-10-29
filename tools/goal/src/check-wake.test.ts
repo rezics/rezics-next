@@ -79,7 +79,9 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>) {
           text: JSON.stringify({ status: 'waiting', summary: 'checks running', checks: ['check-a', 'check-b'] }),
         },
       },
-    ].map((event) => JSON.stringify(event)).join('\n') + '\n',
+    ]
+      .map((event) => JSON.stringify(event))
+      .join('\n') + '\n',
   );
   h.store.updateAttempt(attempt, (current) => {
     current.state = 'running';
@@ -88,7 +90,11 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>) {
     current.state = 'running';
   });
   const landings: unknown[] = [];
-  await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue: (request) => landings.push(request) });
+  await settle(
+    h.tasks,
+    { attempt, exited: Promise.resolve({ code: 0, signal: null }) },
+    { enqueue: (request) => landings.push(request) },
+  );
   expect(landings).toHaveLength(0);
   return { task, ref: { taskId: task.id, attempt: 1 } };
 }
@@ -125,7 +131,9 @@ test('waiting workers release their cap slot and resume the same session with ev
     expect(args).toContain('wake-session');
     const prompt = args.at(-1)!;
     expect(prompt).toContain('check-a: exit status 0; passed; log path .temp/goal/checks/check-a.log');
-    expect(prompt).toContain('check-b: exit status 9; assertion failed: expected 2; log path .temp/goal/checks/check-b.log');
+    expect(prompt).toContain(
+      'check-b: exit status 9; assertion failed: expected 2; log path .temp/goal/checks/check-b.log',
+    );
     await recovery;
     expect(readFileSync(join(task.worktree, 'result.txt'), 'utf8')).toBe('resumed');
   } finally {
@@ -140,7 +148,10 @@ test('a vanished check wakes a waiting attempt with the recovery fact', async ()
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
     mkdirSync(resultDirectory, { recursive: true });
-    writeFileSync(join(resultDirectory, 'check-a.json'), JSON.stringify({ exitStatus: 0, summary: 'passed', logPath: 'a.log' }));
+    writeFileSync(
+      join(resultDirectory, 'check-a.json'),
+      JSON.stringify({ exitStatus: 0, summary: 'passed', logPath: 'a.log' }),
+    );
     const recovery = job.recoverOrphans();
     await waitFor(join(task.worktree, '.temp/goal/resume-started'));
     const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
