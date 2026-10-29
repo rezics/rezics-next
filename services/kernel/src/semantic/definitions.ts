@@ -123,12 +123,12 @@ export async function publishRelease(pool: Pool, options: WriteOptions & { relea
   // A historical exemption is established by one indexed point on this same
   // pool, never a caller flag. JSON admission precedes digest work. Authorization
   // and receipt/key conflict ordering remain inside runCommand at fresh T.
+  const admission = releaseAdmission(options.release);
+  if (admission.length) throw new DefinitionInputError(admission);
   const caps = publicationLimits(options.release);
   let publishedDigest: string | undefined;
   let submitted = options.release;
   if (caps.length) {
-    const admission = releaseAdmission(options.release);
-    if (admission.length) throw new DefinitionInputError(admission);
     // The database await must retain owned data, not a mutable caller graph.
     submitted = structuredClone(options.release);
     publishedDigest = releaseDigest(submitted as Release);
