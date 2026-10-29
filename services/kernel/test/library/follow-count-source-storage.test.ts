@@ -415,6 +415,28 @@ test('native source hook rows and statements stay constant with logarithmic bloc
             relationSizes: sample.relationSizes,
           }),
         );
+    } else if (error instanceof Error && error.name === 'GrowthEvidenceError') {
+      const repetitions = runs.map(({ scale, repetition, target, plans }) => {
+        const cost = costOf({
+          statements: plans.map(() => 'captured auto_explain statement'),
+          plans,
+        });
+        return {
+          scale,
+          repetition,
+          phase: repetition % 6 === 0 ? 'warmup' : 'measured',
+          target,
+          cost,
+        };
+      });
+      await Bun.write(
+        new URL('growth.json', evidence),
+        JSON.stringify({ populations, seriesVerdict: error.message, repetitions }, null, 2),
+      );
+      console.info(
+        'Native follow source insufficient-evidence verdict:',
+        JSON.stringify({ populations, seriesVerdict: error.message, repetitions }),
+      );
     }
     throw error;
   } finally {
