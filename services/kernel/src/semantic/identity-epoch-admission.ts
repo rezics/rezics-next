@@ -61,7 +61,17 @@ export type IdentityAdmissionProgress = Readonly<{
   state: 'preparing' | 'pending' | 'cancelling' | 'cancelled' | 'published';
   work: NativeStepWork;
 }>;
-const work = (): NativeStepWork => ({ rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 });
+type Work = { -readonly [K in keyof NativeStepWork]: NativeStepWork[K] };
+const work = (): Work => ({ rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 });
+async function measuredQuery(tx: CommandTransaction, sql: string, values: unknown[], measured?: Work) {
+  const result = await tx.query(sql, values);
+  if (measured) {
+    measured.statements++;
+    measured.points += result.rowCount ?? 0;
+    measured.bytes += Buffer.byteLength(json(result.rows));
+  }
+  return result;
+}
 const unavailable = () =>
   new IdentityEpochStoreError(
     'identity_epoch_unavailable',
@@ -207,14 +217,18 @@ export async function prepareIdentityEpochAdmission(
   return admitted.value;
 }
 
-async function load(pool: Pool, ref: IdentityJobRef) {
+async function load(pool: Pool, ref: IdentityJobRef, measured?: Work) {
   return withReadTransaction(pool, async (tx) => {
     const home = identityJobPartition(ref);
-    const saved = (await tx.query(job.sql, [home, ref.jobId, ref.epoch.toString()])).rows[0];
+    const saved = (await measuredQuery(tx, job.sql, [home, ref.jobId, ref.epoch.toString()], measured)).rows[0];
     const owner = await readPartition(tx, home);
+    if (measured) {
+      measured.statements++;
+      measured.points += owner ? 1 : 0;
+    }
     if (!saved || !owner || owner.writeState !== 'active') throw unavailable();
-    const planned = (await tx.query(plans.sql, [home, ref.jobId])).rows;
-    const bases = (await tx.query(sources.sql, [home, ref.jobId])).rows;
+    const planned = (await measuredQuery(tx, plans.sql, [home, ref.jobId], measured)).rows;
+    const bases = (await measuredQuery(tx, sources.sql, [home, ref.jobId], measured)).rows;
     return { saved, planned, bases };
   });
 }
@@ -226,9 +240,16 @@ function translate(error: unknown): never {
     throw new IdentityEpochStoreError(error.message, error.message);
   throw error;
 }
-async function receivingReceipt(pool: Pool, ref: IdentityJobRef, home: number, stage: 'acquired' | 'closed') {
+async function receivingReceipt(
+  pool: Pool,
+  ref: IdentityJobRef,
+  home: number,
+  stage: 'acquired' | 'closed',
+  measured?: Work,
+) {
   return withReadTransaction(pool, async (tx) => {
-    const saved = (await tx.query(receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage])).rows[0];
+    const saved = (await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured))
+      .rows[0];
     if (!saved) return null;
     if (
       saved.write_state !== 'active' ||
@@ -243,15 +264,18 @@ async function receivingReceipt(pool: Pool, ref: IdentityJobRef, home: number, s
 async function deliverHome(pool: Pool, ref: IdentityJobRef, scope: string, home: number, stage: 'acquired' | 'closed') {
   try {
     await runCommand(pool, { partition: home }, async (tx) => {
-      await tx.query(selectControl.sql, [home]);
+      await measuredQuery(tx, selectControl.sql, [home], measured);
       // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
-      if (stage === 'acquired') await tx.query(acquire.sql, [home, ref.jobId, ref.epoch.toString(), scope]);
-      const duplicate = (await tx.query(receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage])).rows[0];
+      if (stage === 'acquired')
+        await measuredQuery(tx, acquire.sql, [home, ref.jobId, ref.epoch.toString(), scope], measured);
+      const duplicate = (await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured))
+        .rows[0];
       if (duplicate) return noEffect(null);
-      if (stage === 'closed') await tx.query(close.sql, [home, ref.jobId, ref.epoch.toString(), scope]);
+      if (stage === 'closed')
+        await measuredQuery(tx, close.sql, [home, ref.jobId, ref.epoch.toString(), scope], measured);
       recordIdentityEpochNativeCommit(tx, 'admission');
       registerCommandCallback(tx, async (transactionId) => {
-        const recorded = await tx.query(record.sql, [home, transactionId, ref.jobId, stage]);
+        const recorded = await measuredQuery(tx, record.sql, [home, transactionId, ref.jobId, stage], measured);
         if (recorded.rowCount !== 1) throw stale();
       });
       return { value: null, events: [wake(ref), ...(stage === 'closed' ? [identityHomeAvailable(home)] : [])] };
@@ -284,23 +308,25 @@ export async function cancelIdentityEpochAdmission(pool: Pool, ref: IdentityJobR
 
 /** One planned home per call. Uncertain delivery is reconciled from its immutable real native receipt. */
 export async function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef): Promise<IdentityAdmissionProgress> {
-  const { saved, planned, bases } = await load(pool, ref);
-  if (!['preparing', 'cancelling'].includes(saved.state)) return { job: ref, state: saved.state, work: work() };
+  const measured = work();
+  const query = (tx: CommandTransaction, sql: string, values: unknown[]) => measuredQuery(tx, sql, values, measured);
+  const { saved, planned, bases } = await load(pool, ref, measured);
+  if (!['preparing', 'cancelling'].includes(saved.state)) return { job: ref, state: saved.state, work: measured };
   const closing = saved.state === 'cancelling';
   const stage = closing ? 'closed' : 'acquired';
   const next = planned.find((p) => (closing ? !p.closed_transaction_id : !p.acquired_transaction_id));
   if (next) {
-    let received = await receivingReceipt(pool, ref, next.resource_home, stage);
+    let received = await receivingReceipt(pool, ref, next.resource_home, stage, measured);
     if (!received) {
-      await deliverHome(pool, ref, saved.scope_digest, next.resource_home, stage);
-      received = await receivingReceipt(pool, ref, next.resource_home, stage);
+      await deliverHome(pool, ref, saved.scope_digest, next.resource_home, stage, measured);
+      received = await receivingReceipt(pool, ref, next.resource_home, stage, measured);
     }
     if (!received || received.scope_digest !== saved.scope_digest) throw stale();
     await runCommand(pool, { partition: identityJobPartition(ref) }, async (tx) => {
-      const current = (await tx.query(lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
+      const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
         .rows[0];
       if (!current || current.scope_digest !== received.scope_digest) throw stale();
-      const recorded = await tx.query((closing ? custodyClose : custodyAcquire).sql, [
+      const recorded = await query(tx, (closing ? custodyClose : custodyAcquire).sql, [
         ref.jobId,
         next.resource_home,
         received.transaction_id,
@@ -310,26 +336,26 @@ export async function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef
       if (recorded.rowCount !== 1) throw stale();
       return { value: null, events: [wake(ref)] };
     });
-    return { job: ref, state: saved.state, work: { ...work(), rows: 1 } };
+    return { job: ref, state: saved.state, work: { ...measured, rows: 1 } };
   }
   const finalized = await runCommand<IdentityAdmissionProgress['state']>(
     pool,
     { partition: identityJobPartition(ref) },
     async (tx) => {
-      const current = (await tx.query(lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
+      const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
         .rows[0];
       if (!current) throw unavailable();
       if (current.state !== saved.state) return noEffect(current.state);
-      if (!closing && (await tx.query(validBases.sql, [ref.jobId])).rows.length !== bases.length) {
-        await tx.query(cancel.sql, [ref.jobId, ref.epoch.toString()]);
+      if (!closing && (await query(tx, validBases.sql, [ref.jobId])).rows.length !== bases.length) {
+        await query(tx, cancel.sql, [ref.jobId, ref.epoch.toString()]);
         return { value: 'cancelling', events: [wake(ref)] };
       }
-      const changed = await tx.query((closing ? finishClose : promote).sql, [ref.jobId, ref.epoch.toString()]);
+      const changed = await query(tx, (closing ? finishClose : promote).sql, [ref.jobId, ref.epoch.toString()]);
       if (changed.rowCount !== 1) throw stale();
       return { value: closing ? 'cancelled' : 'pending', events: [wake(ref)] };
     },
   );
-  return { job: ref, state: finalized.value, work: { ...work(), rows: 1 } };
+  return { job: ref, state: finalized.value, work: { ...measured, rows: 1 } };
 }
 
 export function identityHomeAvailable(partition: number, after = '00000000-0000-0000-0000-000000000000') {
