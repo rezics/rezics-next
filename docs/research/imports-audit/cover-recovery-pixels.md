@@ -158,6 +158,8 @@ bun scripts/worker-check.ts --run -- test -s docs/research/imports-audit/cover-r
 ```
 
 It again exited 1 with `Invalid check id: --` and created no check ID. The checked-in runner still routes
-`--run` to an existing record, rather than command submission. Two further prescribed launches will verify
-the focused native test and affected kernel typecheck submission before concluding this retry. No frozen
-assertion, helper, product or runner change is made.
+`--run` to an existing record, rather than command submission. At revision `b0a4c05705`, two further prescribed
+launches (the focused native test and affected kernel typecheck, as listed above) each exited 1 with the same
+exact error. This exhausts the initial attempt and two retries. No check IDs were created and no test,
+typecheck or artifact command executed. No frozen assertion, helper, product or runner change is made.
+The current attempt is blocked by check submission tooling; historical passing evidence is unchanged.
