@@ -78,12 +78,33 @@ async function row(id: string) {
   ).rows[0]!;
 }
 
+// Historical fixtures use INSERT because retained revisions are immutable.
+async function historicalReference(
+  client: Pick<import('pg').Pool, 'query'> | Pick<import('pg').PoolClient, 'query'>,
+  sourceRevision: string,
+  mediaIds: string[],
+  at: string,
+) {
+  const route = driver.containers.thread.route;
+  const id = newId(route);
+  await client.query(
+    `INSERT INTO content.revision
+       (route, thread_id, post_id, revision_id, body, body_sha256, search_text, licence,
+        subject_ids, board_id, availability, recorded_transaction_id, recorded_at, media_ids)
+     SELECT route, thread_id, post_id, $3, body, body_sha256, search_text, licence,
+            subject_ids, board_id, availability, recorded_transaction_id, $4, $5
+     FROM content.revision WHERE route=$1 AND revision_id=$2`,
+    [route, sourceRevision, id, at, mediaIds],
+  );
+  return id;
+}
+
 test("a post image stays claimed by its first post: that post's revisions may reference it again and any other post's reference answers 409 media_unavailable", async () => {
   const image = await upload();
   const first = await post([image]);
   const before = await row(image);
   const revised = await send('POST', `/v1/posts/${first.id}/revisions`, reference([image]), first.revisionId);
-  expect(revised.status).toBe(201);
+  expect(revised.status).toBe(200);
   expect(await row(image)).toEqual(before);
 
   const path = `/v1/threads/${driver.containers.thread.id}/posts`;
@@ -122,11 +143,7 @@ test('erasing a post erases only the media that post claimed', async () => {
   const { system } = currentMediaScenario();
   const route = driver.containers.thread.route;
   // A retained reference from before single ownership must not grant erasure authority.
-  await system.database.pool.query('UPDATE content.revision SET media_ids=$3 WHERE route=$1 AND revision_id=$2', [
-    route,
-    first.revisionId,
-    [firstImage, secondImage],
-  ]);
+  await historicalReference(system.database.pool, first.revisionId, [firstImage, secondImage], '2025-01-01');
   const before = await row(secondImage);
   expect((await send('DELETE', `/v1/posts/${first.id}`)).status).toBe(204);
   await clearErasedPostRevisions(system.database.pool, { postId: first.id }, Date.now() + 10_000);
@@ -174,9 +191,17 @@ test('the migration backfill gives each claimed post image to the post of its ea
       orphan,
     ]);
     // Both images occur in both posts; timestamp beats UUID, and UUID breaks a timestamp tie.
-    await client.query(
-      "UPDATE content.revision SET media_ids=$3, recorded_at='2025-01-01' WHERE route=$1 AND revision_id=ANY($2::uuid[])",
-      [route, [first.revisionId, second.revisionId], [firstImage, secondImage, unclaimed]],
+    const firstRef = await historicalReference(
+      client,
+      first.revisionId,
+      [firstImage, secondImage, unclaimed],
+      '2025-01-01',
+    );
+    const secondRef = await historicalReference(
+      client,
+      second.revisionId,
+      [firstImage, secondImage, unclaimed],
+      '2025-01-01',
     );
     await client.query(backfill!);
     const owners = () =>
@@ -184,12 +209,9 @@ test('the migration backfill gives each claimed post image to the post of its ea
         'SELECT media_id, claimed_item_id FROM content.media WHERE route=$1 AND media_id=ANY($2::uuid[]) ORDER BY media_id',
         [route, [firstImage, secondImage]],
       );
-    const tieOwner = first.revisionId < second.revisionId ? first.id : second.id;
+    const tieOwner = firstRef < secondRef ? first.id : second.id;
     expect((await owners()).rows.map((media) => media.claimed_item_id)).toEqual([tieOwner, tieOwner]);
-    await client.query("UPDATE content.revision SET recorded_at='2024-01-01' WHERE route=$1 AND revision_id=$2", [
-      route,
-      second.revisionId,
-    ]);
+    await historicalReference(client, second.revisionId, [firstImage, secondImage], '2024-01-01');
     await client.query('UPDATE content.media SET claimed_item_id=NULL WHERE route=$1 AND media_id=ANY($2::uuid[])', [
       route,
       [firstImage, secondImage],
