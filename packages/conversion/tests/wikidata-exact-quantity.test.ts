@@ -99,9 +99,7 @@ test('unknown qualifier bodies are rejected without being read', () => {
 });
 
 test('unknown qualifier rejection survives normalized-record serialization and reconversion', () => {
-  const first = convert(
-    entity({ P459: [{ snaktype: 'somevalue', property: 'P459', datatype: 'wikibase-item' }] }),
-  );
+  const first = convert(entity({ P459: [{ snaktype: 'somevalue', property: 'P459', datatype: 'wikibase-item' }] }));
   const roundTripped = JSON.parse(JSON.stringify(first.normalizedRecord)) as ReturnType<typeof entity>;
   const second = convert(roundTripped);
 
