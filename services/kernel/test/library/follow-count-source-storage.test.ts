@@ -91,15 +91,16 @@ test('actual native follow writers atomically retain per-original source replace
   live(negative, 0);
   expect(source(negative, first)).toMatchObject({ revision: '2', source_following: false, desired_eligible: false });
   expect(source(negative, first).pending_since).toBe(source(initial, first).pending_since);
-  // Entry-implied follow must preserve the explicit negative and its pending age/revision.
-  await fixture.commands.putEntry(owner, first, { state: 'playing' }, entryKey());
+  // The existing native writer implies follows for in_progress. Profile-specific
+  // state binding remains a separate runtime slice. Entry-implied follow must preserve the explicit negative and its pending age/revision.
+  await fixture.commands.putEntry(owner, first, { state: 'in_progress' }, entryKey());
   expect(await inspect()).toEqual(negative);
   const entryKeyValue = entryKey();
-  await fixture.commands.putEntry(owner, second, { state: 'playing' }, entryKeyValue);
+  await fixture.commands.putEntry(owner, second, { state: 'in_progress' }, entryKeyValue);
   const implied = await inspect();
   live(implied, 1);
   expect(source(implied, second)).toMatchObject({ revision: '1', source_following: true, desired_eligible: true });
-  await fixture.commands.putEntry(owner, second, { state: 'playing' }, entryKeyValue);
+  await fixture.commands.putEntry(owner, second, { state: 'in_progress' }, entryKeyValue);
   expect(await inspect()).toEqual(implied);
   // Changing library reason to explicit is a genuine replacement, with zero outgoing delta.
   await follows.follow(owner, second, entryKey());
@@ -306,6 +307,19 @@ test('native source hook rows and statements stay constant with logarithmic bloc
     }
     previous = scale;
   }
+  console.info(
+    'Native follow source growth:',
+    JSON.stringify(
+      samples.map(({ scale, cost }) => ({
+        scale,
+        rows: cost.rows,
+        statements: cost.statements,
+        blocks: cost.blocks,
+        source: cost.relations['library.follow_count_source'],
+        owner: cost.relations['library.follow_count_owner'],
+      })),
+    ),
+  );
   assertGrowth(samples, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
   await mkdir(new URL('../../../../.temp/follow-count-source/', import.meta.url), { recursive: true });
   await Bun.write(
