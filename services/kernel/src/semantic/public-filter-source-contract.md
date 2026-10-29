@@ -227,30 +227,44 @@ producer and Search's guarded ACK advancement are missing here; no fictitious de
 
 ### Efficient native observation feasibility and missing primitive
 
-The required physical path is indexed behind/changed access, not 8192 examined head rows. Start and final reads
-SHARE at most 2 statements and `64 + 2 * (unacknowledged homes + changed homes)` examined rows per PAGE, counting
-removed rows and all owners. Even a native aggregate/hash/JSON over all heads examines all underlying rows and
-fails the caught-up bound. Head/ACK comparison via an unindexed join is not an efficient behind index. PostgreSQL
-cannot use a cross-table partial-index predicate to index `head > consumer_ack`; implementation needs a native
-transactionally maintained behind relation/index for the actual consumer identity, or an equivalently proven
-access path. ACK advancement and new reductions must update that relation without a lost-dirty race.
+No complete finite-progress layout has been established by the source-only reports. They disprove specific
+shortcuts, not every native design; neither ran a native probe or captured rows, blocks, bytes, or served share.
+See the [current](../../../../docs/research/public-filter-native-cut-current.md) and
+[deep](../../../../docs/research/public-filter-native-cut-deep.md) reports for evidence and counterexamples.
 
-There is NO current native behind index, retained commit-visible change cut, privacy log/counter or atomic
-registration/ACK composition in this base. `core.partition.position` and `command/fence.sql` serialize only a
-home; they provide no total commit ordering across homes. A sequence allocated before COMMIT is not such ordering:
-an earlier allocated reduction can commit after the start read. A clean/dirty bit alone loses reduce-then-ACK
-changes. Ordinary relay arrival time, `AuthoritativeTime` or a transaction UUID cannot fill this hole. An opaque
-`PrivacyReductionStart` deliberately specifies required evidence, NOT a claim that storing a token solves it.
+Before a real public-filter producer is admitted, its owners need a concrete, commit-visible indexed NARROWED
+behind/change path, atomic registration and maintenance, and complete durable custody of old writers and retained
+copies. It must join the actual native Source identity and read definition, current owner availability and epoch,
+and a bounded lifecycle. The existing narrowed observation protocol remains canonical: the same PIT or prepared
+observation checks both its original covered cut and retained start. A reduction committed during execution stays
+detectable after repair and ACK; a new execution on an already unsafe older observation must also be rejected.
+There is no extra coverage sweep.
 
-Before native implementation can return `observed`, the owner must supply the exact same-transaction reduction
-registration and commit-visible indexed changed-since-start primitive, its owner-availability coverage and native
-SQL/captures proving the two-statement shared ceiling. It must preserve changes through ACK until all live start
-cuts no longer need them, bound retained-cut lifecycle, and fail closed on crash/pruning/lost cuts. Cross-owner
-availability itself is charged; pooled per-owner queries cannot secretly exceed two statements. Existing
-per-home fences alone do not prove feasibility. This specification does not choose a new coordination service,
-Search ACK storage or a fake commit-order field. No actual plan/capture exists to report a numeric pass or to
-justify raising a budget. The missing primitive is an explicit implementation dependency for Semantic/Search
-and Performance review, not an exemption from logical coverage or accounting.
+Native top-level snapshot visibility can catch a lower-allocated XID that commits late, but an XIP split copies,
+sorts, enumerates and probes active XIDs even when no home changed. Packing or retaining the token does not make
+that work free. An xmin scan can read many already-committed unchanged heads. Last-key-only tracking can lose an
+earlier relevant change; key/history scans and per-definition summaries must prove their K/L read work or
+registration fanout and atomic completion. A transactional global stamp is a separate cross-home placement and
+serialization choice, not adopted here. The shared coverage limit remains two statements and
+`64 + 2 * (behind homes + changed homes)` examined rows per page, with all 4,096 homes logically covered and
+actual metadata, probes, removed rows, control bytes and maintenance charged. If the selected final split reads or
+probes active XIDs, its independent fixed-data-scale growth check holds 1, 8 and 64 allocated native XIDs across
+the inclusive measured read. Growth fails the adopted bound, which has no active-XID term; this adds no allowance
+and no concurrency axis to layouts independent of active XIDs.
+
+Physical write-block verification can drain admitted shard writes while blocked, but it cannot identify a delayed
+old request or prevent it after unblock. External versions, refresh, checkpoint CAS and finite delete retention do
+not establish physical absence after an old write resumes. Keep physical no-resurrection and retained-copy
+custody mandatory; no permanent soft tombstone or independent fence is selected. Foreign repair must advance the
+dependent source's own anchored version and establish repaired-winner visibility; a same-version conflict alone
+does not prove repair. Cold internal key enumeration may reuse subject-PK seeks without label/history hydration,
+but finite activation still needs a retained creation/change bridge, log-gap and movement recovery, and reverse
+dependencies for currently ineligible inputs. All-role erasure locators and actual minimized-source completion
+remain owner prerequisites. Semantic/editorial/Zone, shared-history and Content delivery ownership remain intact.
+
+No new service/store, ABI, coordination layer, global serializer, numerical allowance, public enumeration/Source
+API, matcher, or private fact copy is selected. Native plans and actual maintenance captures must prove the
+existing ceilings before feasibility or growth is claimed.
 
 ## Native acceptance and cost
 

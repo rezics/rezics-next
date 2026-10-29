@@ -79,6 +79,26 @@ checks with reduction arrival rate rising with population, actual repair/ACK lat
 not fall between scales. This privacy rollout allowance does not permit a global identity marker or universal
 identity page gate. Permanent preparation or absent native data cannot satisfy that gate.
 
+Native feasibility remains unproved. The inspected PostgreSQL and OpenSearch primitives reject specific shortcuts,
+not every possible native layout; neither report ran a native probe or captured rows, blocks, bytes, or served share.
+Top-level snapshot visibility can find a lower-allocated XID that commits late, but an XIP split copies, sorts,
+enumerates and probes active XIDs even when no home changed; packing or retaining that snapshot does not remove
+its work. An xmin scan can read many committed unchanged heads. Last-key-only change tracking loses an earlier
+relevant reduction, while key/history scans and per-definition summaries must prove their K/L read cost or
+registration fanout and atomic completion. A transactional global stamp would be a separate cross-home placement
+and serialization choice, not an adopted design. See the [current](research/public-filter-native-cut-current.md)
+and [deep](research/public-filter-native-cut-deep.md) native feasibility reports for the counterexamples and
+evidence still required.
+
+An execution checks both its original covered cut and its retained start using the same canonical PIT or prepared
+observation. A reduction remains detectable after repair and ACK before final observation; a new execution on an
+already unsafe older observation also remains unsafe. Native write-block verification can drain admitted shard
+writes while blocked, but cannot identify a delayed old request or prevent it after unblock. External versioning,
+refresh, checkpoint CAS and finite delete retention do not prove physical absence after an old write resumes.
+Physical no-resurrection and retained-copy custody remain mandatory; no permanent soft tombstone or independent
+fence is selected. Foreign repair must advance the dependent source's own anchored version and establish the
+repaired winner's visibility; a same-version 409 alone is not repair proof.
+
 Omit unsafe engine totals and facet counts over unchecked populations. Approximate or `as_of` labels give no privacy
 exemption. Do not substitute zero or returned-row length for an unavailable safe aggregate. No new common list DTO
 is selected: owners preserve their envelopes and provide concrete execution through reviewed native contracts.
@@ -353,6 +373,17 @@ Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct re
    `64 + 2 × (homes with an unacknowledged reduction + homes whose head changed since the start)` examined rows.
    Reading all 4,096 heads at each observation (8,192 rows per page) is not admitted. Complete coverage must use
    an access path proportional to homes that are behind or changed.
+
+   Decision17 capture is inclusive of query plus `readStatus`; report the privacy-coverage subset and whole-page
+   totals. Role SQL starts exactly with `/* semantic.privacy-start */` or `/* semantic.privacy-final */`;
+   separate keyed own-row SQL starts with `/* semantic.own-rows */`. Missing role attribution fails measurement,
+   not zero. If own-row work is merged into final, its full coverage work counts. Keep the existing one-read
+   12-statement and composed `8 + 4R` limits, with own-row work inside whole-page cost.
+
+   If a selected final split reads or probes active XIDs, independently hold 1, 8 and 64 native transactions
+   with allocated `pg_current_xact_id()` across the inclusive measured read at fixed data scale. Judge examined
+   rows, blocks and statements by series. The adopted bound has no active-XID term, so growth on this axis fails
+   the bound; this is not a new allowance or a concurrency requirement for layouts independent of active XIDs.
 
 4. **Preparation.** Each durable step has these ceilings:
 
