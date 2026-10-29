@@ -44,6 +44,12 @@ function hasIdempotencyKey(header: string | null): boolean {
 
 function mayRetry(request: Request, body: Uint8Array | null): boolean {
   if (request.method === 'GET' || request.method === 'HEAD') return true;
+  if (request.method === 'PUT')
+    return (
+      /^\/v1\/subjects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/source-statistics\/vndb$/.test(
+        new URL(request.url).pathname,
+      ) && hasIdempotencyKey(request.headers.get('idempotency-key'))
+    );
   if (request.method !== 'POST') return false;
   if (hasIdempotencyKey(request.headers.get('idempotency-key'))) return true;
   if (new URL(request.url).pathname !== '/v1/subjects:batchWrite' || body === null) return false;

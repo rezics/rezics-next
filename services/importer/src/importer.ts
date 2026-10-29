@@ -565,6 +565,7 @@ export class Importer {
     let subject: string | null = null;
     let deferredCover = false;
     let skipCover = false;
+    let statisticWritten = false;
     if (row.state === 'present') {
       conversion = this.convert(registration, staged);
       observedConversion = conversion;
@@ -628,6 +629,7 @@ export class Importer {
         ),
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
+      statisticWritten = true;
     }
     const retainedCandidates = new Set<Candidate>();
     const retainedProposals = new Set<BatchCommand>();
@@ -696,7 +698,17 @@ export class Importer {
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'converter-ignored' });
       else if (row.state === 'vanished' && !candidates.length)
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'no-owned-candidates' });
-      else throw new Error('Conversion has no justified final plan');
+      else if (
+        statisticWritten &&
+        !skipCover &&
+        candidates.length > 0 &&
+        retainedCandidates.size === candidates.length &&
+        conversion?.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))
+      ) {
+        // A confirmed statistic-only refresh changes the input projection without
+        // replacing any acknowledged semantic candidate or its immutable journal.
+        store.acknowledgeStatisticRefresh(run, row.recordKey);
+      } else throw new Error('Conversion has no justified final plan');
       this.acknowledged(row.recordKey);
       return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
     }

@@ -715,10 +715,20 @@ export class RunStore<Projection = BatchStatement[]> {
    * This is neither a receipt nor fence evidence; every refresh must still check all tuple fences.
    */
   acknowledgeNoEffects(run: Run, key: string, input: { reason: 'converter-ignored' | 'no-owned-candidates' }): void {
-    validateRun(run);
-    keyId(key);
     exact(input, ['reason']);
     if (input.reason !== 'converter-ignored' && input.reason !== 'no-owned-candidates') fail();
+    this.acknowledgeEmpty(run, key, false);
+  }
+  /** Trusted coordinator proof: a confirmed VNDB statistic write and exhaustive
+   * bounded comparison retained every current semantic candidate and proposal.
+   * This acknowledges only the staged input projection, never a server receipt.
+   */
+  acknowledgeStatisticRefresh(run: Run, key: string): void {
+    this.acknowledgeEmpty(run, key, true);
+  }
+  private acknowledgeEmpty(run: Run, key: string, statisticRefresh: boolean): void {
+    validateRun(run);
+    keyId(key);
     this.transaction(() => {
       const live = this.get<{ id: string }>(
         `SELECT g.id FROM run_sources AS s
@@ -734,6 +744,16 @@ export class RunStore<Projection = BatchStatement[]> {
       // Original keys/bytes are immutable even after commands are acknowledged or fenced.
       if (!entry?.kind || entry.bytes !== null || entry.keys_json !== '[]' || entry.remaining || entry.pending)
         throw new Error('No-effect acknowledgement requires a classified empty command plan');
+      if (statisticRefresh) {
+        if (
+          this.projectionMode !== 'source-record' ||
+          JSON.parse(entry.projection_json).sourceKind !== 'vndb' ||
+          JSON.parse(entry.row_json).state !== 'present' ||
+          entry.cover_pending ||
+          !this.get('SELECT record_key FROM run_acknowledged WHERE source=? AND record_key=?', run.source, key)
+        )
+          throw new Error('Statistic refresh requires an existing present VNDB record without deferred work');
+      }
       this.resolve(run, entry);
     });
   }

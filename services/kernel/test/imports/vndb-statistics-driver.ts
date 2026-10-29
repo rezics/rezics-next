@@ -322,7 +322,18 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
           return { outcome: result.status, exchanges, sourceRecords };
         if (exchanges.some((exchange) => exchange.status === 403))
           return { outcome: 'denied', exchanges, sourceRecords };
-        throw new Error(`Native VNDB import failed: ${JSON.stringify({ result, exchanges })}`);
+        throw new Error(
+          `Native VNDB import failed: ${JSON.stringify({
+            result,
+            exchanges: exchanges.map(({ method, path, status, responseLost, receipt }) => ({
+              method,
+              path,
+              status,
+              responseLost,
+              receipt,
+            })),
+          })}`,
+        );
       },
       observe() {
         const source = importer!.session.store.source(registration.source);
