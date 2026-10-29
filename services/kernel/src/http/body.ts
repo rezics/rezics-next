@@ -82,6 +82,10 @@ export async function readBoundedBody(request: Request, limit: number): Promise<
 }
 
 export async function parseBoundedBody(request: Request, limit: number, mode: BodyMode): Promise<unknown> {
+  if (request.body === null) {
+    await readBoundedBody(request, limit);
+    return undefined;
+  }
   const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
   if (mode === 'json' && mediaType !== 'application/json' && !mediaType?.endsWith('+json'))
     throw new ProblemError('invalid_request');

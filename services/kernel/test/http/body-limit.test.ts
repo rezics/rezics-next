@@ -90,6 +90,12 @@ test('a declared Content-Length over the route limit is refused before any body 
   expect(source.reads()).toBe(0);
 });
 
+test('a bodyless request does not require a JSON content type', async () => {
+  const request = new Request('http://localhost/probe', { method: 'POST' });
+  expect(await parseBoundedBody(request, DEFAULT_BODY_LIMIT, 'json')).toBeUndefined();
+  expect(bodyWireBytes(request)).toBe(0);
+});
+
 test('a route reads its owned bytes and wire count, and the captured bytes remain stable', async () => {
   const input = new Uint8Array([123, 125]);
   const { request } = streamed([input]);
