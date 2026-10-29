@@ -446,20 +446,25 @@ test('a final native source read held beyond the original HTTP deadline returns 
   });
   const observer = observeSql(pool);
   const barrier = observer.hold({ statement: readVisibility.sql }, 'after');
-  const response = call(`${subject.id}/links?property=${encodeURIComponent(property)}`, 'reader', subject.component, expiringKernel);
+  const response = call(
+    `${subject.id}/links?property=${encodeURIComponent(property)}`,
+    'reader',
+    subject.component,
+    expiringKernel,
+  );
   try {
-    await Promise.race([
-      barrier.entered,
-      response.then(() => {
-        throw new Error('Read completed before final source barrier');
-      }),
-    ]);
-    if (originalDeadline === undefined) throw new Error('Native authorization did not expose its request deadline');
-    while (Date.now() <= originalDeadline) await Bun.sleep(Math.min(20, originalDeadline - Date.now() + 1));
-  } finally {
-    barrier.release();
-  }
-  try {
+    try {
+      await Promise.race([
+        barrier.entered,
+        response.then(() => {
+          throw new Error('Read completed before final source barrier');
+        }),
+      ]);
+      if (originalDeadline === undefined) throw new Error('Native authorization did not expose its request deadline');
+      while (Date.now() <= originalDeadline) await Bun.sleep(Math.min(20, originalDeadline - Date.now() + 1));
+    } finally {
+      barrier.release();
+    }
     const result = await response;
     expect(result.status, JSON.stringify(result.body)).toBe(503);
     expect(result.body).toMatchObject({
@@ -471,6 +476,8 @@ test('a final native source read held beyond the original HTTP deadline returns 
     expect(result.body).not.toHaveProperty('links');
     expect(result.body).not.toHaveProperty('redirect');
   } finally {
+    barrier.release();
+    await response.catch(() => {});
     await observer.close();
   }
 }, 60_000);
