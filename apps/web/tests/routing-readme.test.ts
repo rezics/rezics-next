@@ -99,7 +99,7 @@ describe('routing reference', () => {
   rule('caching', [
     /\*\*Caching\*\*/,
     /anonymous.*public routes/i,
-    /Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600/,
+    /Cache-Control: public, max-age=0, s-maxage=60(?![\w,=-])/,
     /weak.*ETag/,
     /never.*Set-Cookie/i,
     /server functions.*session.*private, no-store/i,
