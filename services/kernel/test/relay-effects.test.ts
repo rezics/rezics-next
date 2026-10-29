@@ -111,11 +111,11 @@ test('effects relay discovery stays within its bound as outbox history grows', a
   const basePositions = new Map<number, string>();
   const initialPositions = new Map<number, string>();
   const insertedIds: string[] = [];
-  // Settled history outside the measured partitions, so the outbox is large enough at every scale for the planner
-  // to probe outbox_pkey; discovery does not see it as pending because the consumer's checkpoints sit at its heads.
+  // Settled history outside the measured partitions keeps the full production checkpoint join from making a broad
+  // outbox scan cheaper than the next-envelope probe; checkpoints sit beyond these rows, so none are pending.
   const historyFirst = 1000;
   const historyLast = historyFirst + 39;
-  const historyPerPartition = 125;
+  const historyPerPartition = 12_500;
   const historyInitial = new Map<number, string>();
   const historyHeads = new Map<number, number>();
   let hotHead: string | undefined;
