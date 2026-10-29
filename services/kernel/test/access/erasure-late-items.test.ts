@@ -110,7 +110,10 @@ beforeAll(async () => {
   await work.launch();
 }, 60000);
 afterAll(async () => {
-  for (const hold of holds.values()) hold.purge.release();
+  for (const hold of holds.values()) {
+    hold.purge.release();
+    await client?.cancelWorkflow(`erasure:${hold.accountId}`);
+  }
   await work?.shutdown();
   await client?.close();
   (ERASURE_LOCATOR_EFFECTS as Set<string>).delete(locatorEffect);
@@ -237,7 +240,7 @@ test('the undelivered frontier and a held locator effect block durable completio
           data: {
             accountId,
             receiptId: newId(0x7351),
-            minimumAuthnEpoch: 2,
+            minimumAuthnEpoch: '2',
             kind: 'tombstone',
             priorOperatorAccountId: null,
           },
