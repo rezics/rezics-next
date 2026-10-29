@@ -1,13 +1,7 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["status", "summary", "blocker", "approaches"],
-  "allOf": [
-    {
-      "if": { "properties": { "status": { "const": "waiting" } } },
-      "then": { "required": ["checks"], "properties": { "checks": { "minItems": 1, "uniqueItems": true } } }
-    }
-  ],
+  "required": ["status", "summary", "blocker", "checks", "approaches"],
   "properties": {
     "status": { "type": "string", "enum": ["success", "blocked", "waiting"] },
     "summary": { "type": "string" },
@@ -25,7 +19,7 @@
         }
       ]
     },
-    "checks": { "type": "array", "items": { "type": "string" } },
+    "checks": { "type": ["array", "null"], "items": { "type": "string" } },
     "approaches": {
       "type": "array",
       "items": {
