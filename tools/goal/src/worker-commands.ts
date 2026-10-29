@@ -64,7 +64,7 @@ export async function runWorkerCommand(
           : task;
       const tasksValue = arg ? show(store.task(arg)) : store.tasks().map(show);
       print(JSON.stringify(arg ? tasksValue : {
-        devVerification: devVerificationState(settings.mainCheckout, settings.stateDirectory),
+        devVerification: devVerificationState(settings.mainCheckout, settings.stateDirectory, settings.integrationBranch, store.tasks()),
         tasks: tasksValue,
       }, null, 2));
     } else if (command === 'attempts') {

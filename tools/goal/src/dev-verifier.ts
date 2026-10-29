@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -28,8 +28,9 @@ function matches(file: string, paths: readonly string[]): boolean {
 }
 function taskCommits(task: Task, cwd: string): string[] {
   if (task.integratedCommits?.length) return task.integratedCommits;
-  if (!task.integratedCommit) return [];
-  return git(cwd, 'rev-list', '--reverse', `${task.integratedBase ?? task.base}..${task.integratedCommit}`)
+  const commit = task.integratedCommit ?? task.mergedCommit;
+  if (!commit) return [];
+  return git(cwd, 'rev-list', '--reverse', `${task.integratedBase ?? task.base}..${commit}`)
     .split('\n').filter(Boolean);
 }
 function filesInCommits(cwd: string, commitList: readonly string[]): string[] {
@@ -41,8 +42,10 @@ function filesInCommits(cwd: string, commitList: readonly string[]): string[] {
 }
 function taskLandings(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Task[] {
   const landed = new Set(commits(settings.mainCheckout, base, target));
-  return store.tasks().filter((task) => task.state === 'integrated' && task.integratedCommit &&
-    landed.has(task.integratedCommit) && task.brief.kind !== undefined && !skippedKinds.has(task.brief.kind));
+  return store.tasks().filter((task) => ['integrated', 'merged'].includes(task.state) &&
+    (task.integratedCommit ?? task.mergedCommit) &&
+    [...(task.integratedCommits ?? []), task.integratedCommit ?? task.mergedCommit!].some((commit) => landed.has(commit)) &&
+    task.brief.kind !== undefined && !skippedKinds.has(task.brief.kind));
 }
 function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Check[] {
   const checkout = settings.mainCheckout;
@@ -60,6 +63,16 @@ function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
 }
 function infraFailure(output: string, timedOut: boolean): boolean {
   return timedOut || /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(output);
+}
+function installDependencies(tree: string, stateDirectory: string): boolean {
+  if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
+  const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
+    appendFileSync(installLog, `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n${result.stdout ?? ''}${result.stderr ?? ''}`);
+    if (result.status === 0) return true;
+  }
+  return false;
 }
 
 export type DevVerifierOptions = {
@@ -89,6 +102,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
     mkdirSync(settings.worktreeRoot, { recursive: true }); mkdirSync(settings.stateDirectory, { recursive: true });
     git(checkout, 'worktree', 'add', '--detach', tree, dev);
     try {
+      if (!installDependencies(tree, settings.stateDirectory)) return;
       const runCheck = async (check: Check, commit: string, label: string) => {
         const log = join(settings.stateDirectory, `dev-verify-${label}-${randomUUID()}.log`);
         const result = await run(check.command, tree, log);
@@ -111,7 +125,12 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
       if (infraFailure(failed.output, failed.timedOut)) return;
       const tasks = taskLandings(settings, store, verified, dev);
       const landingCommits = tasks.map((task) => ({ task, commits: taskCommits(task, checkout) }))
-        .filter((item) => item.commits.length);
+        .filter((item) => item.commits.length)
+        .sort((a, b) => {
+          const order = commits(checkout, verified, dev);
+          return order.indexOf(a.task.integratedCommit ?? a.task.mergedCommit!) -
+            order.indexOf(b.task.integratedCommit ?? b.task.mergedCommit!);
+        });
       const suspect = failed.check.taskId
         ? landingCommits.filter(({ task }) => task.id === failed!.check.taskId)
         : failed.check.closure.includes('**')
@@ -121,7 +140,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
             );
       if (!suspect.length) return;
       // Prefix bisection is restricted to landings whose declared workspace can affect the failed command.
-      const boundaries = suspect.map(({ task, commits: taskHeads }) => ({ task, commit: taskHeads.at(-1)! }));
+      const boundaries = suspect.map(({ task }) => ({ task, commit: task.integratedCommit ?? task.mergedCommit! }));
       let low = 0, high = boundaries.length - 1;
       const cache = new Map<number, boolean>();
       const probe = async (index: number) => {
@@ -130,6 +149,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
         const probeTree = join(settings.worktreeRoot, `dev-verify-probe-${randomUUID()}`);
         git(checkout, 'worktree', 'add', '--detach', probeTree, prefix);
         try {
+          if (!installDependencies(probeTree, settings.stateDirectory)) throw new Error('Could not install verifier dependencies for a culprit probe');
           const log = join(settings.stateDirectory, `dev-verify-probe-${randomUUID()}.log`);
           const outcome = await run(failed!.check.command, probeTree, log);
           cache.set(index, outcome.passed);
@@ -166,10 +186,18 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
   } finally { lock.release(); }
 }
 
-export function devVerificationState(cwd: string, stateDirectory?: string): { head: string | null; behind: number | null; state: string } {
+export function devVerificationState(
+  cwd: string,
+  stateDirectory?: string,
+  integrationBranch = 'dev',
+  tasks?: readonly Task[],
+): { head: string | null; behind: number | null; state: string } {
   try {
-    const verified = head(cwd, verifiedBranch), dev = head(cwd, 'dev');
-    const behind = commits(cwd, verified, dev).length;
+    const verified = head(cwd, verifiedBranch), dev = head(cwd, integrationBranch);
+    const landed = new Set(commits(cwd, verified, dev));
+    const behind = tasks
+      ? tasks.filter((task) => (task.integratedCommit ?? task.mergedCommit) && landed.has(task.integratedCommit ?? task.mergedCommit!)).length
+      : landed.size;
     const running = stateDirectory !== undefined && existsSync(join(stateDirectory, 'dev-verifier.lease'));
     return { head: verified, behind, state: running ? 'running' : behind ? 'pending' : 'current' };
   } catch { return { head: null, behind: null, state: 'uninitialized' }; }
