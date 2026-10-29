@@ -52,9 +52,9 @@ async function subjectReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const canvas = within(context.canvasElement);
   await canvas.findByRole('heading', { level: 1, name: 'The Little Prince' });
-  const cover = context.canvasElement.querySelector('[data-slot="subject-frame"] [data-slot="cover"]');
-  if (!cover) throw new Error('The recorded subject header cover frame did not render.');
-  await expect(cover).toHaveAttribute('data-state', 'placeholder');
+  const covers = context.canvasElement.querySelectorAll('[data-slot="subject-header"] [data-slot="cover"]');
+  if (covers.length === 0) throw new Error('The recorded subject header cover did not render.');
+  for (const cover of covers) await expect(cover).toHaveAttribute('data-state', 'placeholder');
 }
 
 export const SignedIn: Story = {
