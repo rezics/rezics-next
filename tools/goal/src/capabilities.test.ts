@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { completionChecker } from './completion.ts';
+import { repository } from './test-support.ts';
 import {
   parseCapabilityManifest,
   validateCapabilityManifest,
@@ -75,5 +79,40 @@ describe('capability completion contract', () => {
     expect(validateCapabilityManifest(emptyReason, scope)).toContain(
       'Notifications curated needs scenario names or a reason',
     );
+  });
+
+  test('manager completion refuses a manifest scenario that did not pass on main', async () => {
+    const repo = repository();
+    try {
+      mkdirSync(join(repo.main, 'docs/goals'), { recursive: true });
+      const scope = '| System | Owner | First public scope |\n| --- | --- | --- |\n| Catalogue | semantic | In |';
+      repo.commit('docs/scope.md', scope);
+      repo.commit('docs/goals/semantic.capabilities.md', fixture());
+      let capabilityRuns = 0;
+      const check = completionChecker({
+        mainCheckout: repo.main,
+        stateDirectory: join(repo.path, 'state'),
+        worktreeRoot: join(repo.path, 'trees'),
+        condition: () => ({ taskIds: ['alpha'], gate: ['true'] }),
+        mergedTasks: async () => new Set(['alpha']),
+        runGate: async (command, cwd) => {
+          if (command.includes('--reporter=junit')) {
+            capabilityRuns++;
+            mkdirSync(join(cwd, '.temp'), { recursive: true });
+            writeFileSync(
+              join(cwd, '.temp/goal-capability-results.xml'),
+              '<testsuite><testcase name="different scenario"/></testsuite>',
+            );
+          }
+          return { passed: true, timedOut: false, output: '' };
+        },
+      });
+      const result = await check('semantic');
+      expect(result.passed).toBe(false);
+      expect(result.summary).toContain('Scenario did not execute exactly: catalogue reads released data');
+      expect(capabilityRuns).toBe(1);
+    } finally {
+      repo.close();
+    }
   });
 });
