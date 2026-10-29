@@ -96,7 +96,7 @@ test('released mapping observes pending once and coherently revalidates epoch', 
   );
   expect(job).toBeDefined();
   // Pending commits after source read and before the first actual home gate/control observation.
-  expect(observed).toEqual({ state: 'pending', original, job });
+  expect(observed).toEqual({ state: 'pending', original, job: job! });
   expect(await store.readMapping(f.pool, unrelated)).toMatchObject({ state: 'mapped', original: unrelated, terminal: unrelated });
   const fresh = (await f.create('Search absent during pending', 0x8d10)).subject.id;
   expect(await store.readMapping(f.pool, fresh)).toMatchObject({ state: 'mapped', original: fresh, terminal: fresh });
@@ -112,7 +112,7 @@ test('released mapping observes pending once and coherently revalidates epoch', 
     if (progress.state === 'complete') break;
   }
   // Local work complete still supplies no fixed participant publication authority.
-  expect(await store.readMapping(f.pool, original)).toEqual({ state: 'pending', original, job });
+  expect(await store.readMapping(f.pool, original)).toEqual({ state: 'pending', original, job: job! });
   expect((await store.readJob(f.pool, job!))?.participants).toEqual({ 'search-canonical-index': null, 'library-private-follow-counts': null });
 });
 
@@ -299,7 +299,7 @@ test('publication between released mapping reads and a newer pending job never r
       },
     );
     expect(newer?.epoch).toBeGreaterThan(first.epoch);
-    expect(afterNewer).toEqual({ state: 'pending', original, job: newer });
+    expect(afterNewer).toEqual({ state: 'pending', original, job: newer! });
   });
 });
 
@@ -493,7 +493,7 @@ test('current generation reads stay independent of completed history while deep 
       // Current reads use the flat current basis. Receipt replay uses minimized retained custody instead of
       // resurrecting first/deep generations or advancing a saved empty reclamation frontier over a later job.
       for (const index of new Set([0, Math.floor((history.length - 1) / 2), history.length - 1])) {
-        expect((await receipts[index]!.execute()).value).toEqual(history[index]);
+        expect((await receipts[index]!.execute()).value).toEqual(history[index]!);
         expect((await store.findJob(f.pool, receipts[index]!.receipt))?.state).toBe('published');
       }
       await resume(f.pool, job);
