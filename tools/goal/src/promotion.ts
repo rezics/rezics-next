@@ -31,6 +31,11 @@ const STABILIZE_QUICK_GATE = [
   ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
 ] as const;
 const ref = (branch: string) => `refs/heads/${branch}`;
+function sourceDevBranch(settings: Settings): string {
+  return optionalHead(settings.mainCheckout, 'dev-verified') === undefined
+    ? settings.integrationBranch
+    : 'dev-verified';
+}
 function isAncestor(cwd: string, older: string, newer: string): boolean {
   try {
     git(cwd, 'merge-base', '--is-ancestor', older, newer);
@@ -59,7 +64,7 @@ function workingFiles(cwd: string): string[] {
 async function regenerateDerivedHead(
   options: PromotionOptions,
   expected: string,
-  branch = 'dev-verified',
+  branch = sourceDevBranch(options.settings),
 ): Promise<{ head: string; retry: boolean }> {
   const settings = options.settings,
     checkout = settings.mainCheckout;
@@ -736,7 +741,7 @@ async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Pro
       confirmation,
       logs: [initialLog, confirmationLog],
     };
-    const currentDev = head(options.settings.mainCheckout, 'dev-verified');
+    const currentDev = head(options.settings.mainCheckout, sourceDevBranch(options.settings));
     const currentMain = head(options.settings.mainCheckout, options.settings.mainBranch);
     const next = createRun(
       options,
@@ -835,7 +840,7 @@ function publishPrefix(
 function mergeMainIntoDev(
   options: PromotionOptions,
   target: string,
-  branch = 'dev-verified',
+  branch = sourceDevBranch(options.settings),
 ): string | undefined {
   const settings = options.settings,
     checkout = settings.mainCheckout;
@@ -1014,7 +1019,7 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
       );
       if (!result.passed || git(tree, 'rev-parse', 'HEAD') !== dev || git(tree, 'status', '--porcelain')) return false;
     }
-    return head(checkout, 'dev-verified') === dev;
+    return head(checkout, sourceDevBranch(settings)) === dev;
   } finally {
     git(checkout, 'worktree', 'remove', '--force', tree);
   }
@@ -1023,14 +1028,15 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
 async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Promise<boolean> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
-  const prepared = await regenerateDerivedHead(options, dev, 'dev-verified');
+  const sourceBranch = sourceDevBranch(settings);
+  const prepared = await regenerateDerivedHead(options, dev, sourceBranch);
   if (prepared.retry || optionalHead(checkout, settings.stabilizeBranch) !== undefined) return false;
   if (
     !(await stabilizeQuickGate(options, prepared.head)) ||
     optionalHead(checkout, settings.stabilizeBranch) !== undefined
   )
     return false;
-  if (head(checkout, 'dev-verified') !== prepared.head) return false;
+  if (head(checkout, sourceBranch) !== prepared.head) return false;
   try {
     git(
       checkout,
@@ -1065,7 +1071,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
       const main = head(settings.mainCheckout, settings.mainBranch);
       let dev: string;
       try {
-        dev = head(settings.mainCheckout, 'dev-verified');
+        dev = head(settings.mainCheckout, sourceDevBranch(settings));
       } catch {
         return;
       }
@@ -1077,7 +1083,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
       if (stabilize === main && dev !== stabilize) {
         if (!(await stabilizeQuickGate(options, dev))) return;
         if (
-          head(settings.mainCheckout, 'dev-verified') !== dev ||
+          head(settings.mainCheckout, sourceDevBranch(settings)) !== dev ||
           optionalHead(settings.mainCheckout, settings.stabilizeBranch) !== stabilize
         )
           continue;
@@ -1089,7 +1095,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
         continue;
       }
       const stabilization = stabilize !== undefined;
-      const candidateBranch = stabilization ? settings.stabilizeBranch : 'dev-verified';
+      const candidateBranch = stabilization ? settings.stabilizeBranch : sourceDevBranch(settings);
       let candidate = stabilize ?? dev;
       let derivedPrepared = false;
       if (run?.phase === 'blocked' && run.blockedOn) {
@@ -1181,7 +1187,8 @@ export async function promote(options: PromotionOptions): Promise<void> {
         return;
       }
       if (run.phase === 'revert-planned') {
-        const currentDev = head(settings.mainCheckout, 'dev-verified');
+        const devBranch = sourceDevBranch(settings);
+        const currentDev = head(settings.mainCheckout, devBranch);
         if (run.revertCommit && isAncestor(settings.mainCheckout, run.revertCommit, currentDev)) {
           run.phase = 'revert-published';
           store.savePromotion(run);
@@ -1211,11 +1218,11 @@ export async function promote(options: PromotionOptions): Promise<void> {
             }
             store.savePromotion(run);
           }
-          if (head(settings.mainCheckout, 'dev-verified') === run.revertBase)
+          if (head(settings.mainCheckout, devBranch) === run.revertBase)
             git(
               settings.mainCheckout,
               'update-ref',
-              ref('dev-verified'),
+              ref(devBranch),
               run.revertCommit,
               run.revertBase!,
             );
@@ -1239,7 +1246,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
         store.savePromotion(run);
       }
       if (run.phase === 'gate-remainder') {
-        const currentDev = head(settings.mainCheckout, 'dev-verified');
+        const currentDev = head(settings.mainCheckout, sourceDevBranch(settings));
         const prepared = await regenerateDerivedHead(options, currentDev);
         if (prepared.retry) continue;
         const promoteHead = prepared.head;

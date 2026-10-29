@@ -184,7 +184,11 @@ export class WorkerTasks {
     }
   }
   private taskBaseBranch(brief: { goal?: string; target?: 'stabilize' }): string {
-    return brief.target === 'stabilize' ? this.settings.stabilizeBranch : this.existingVerifiedBranch();
+    return brief.goal === 'control-plane'
+      ? this.settings.mainBranch
+      : brief.target === 'stabilize'
+        ? this.settings.stabilizeBranch
+        : this.existingVerifiedBranch();
   }
   private existingVerifiedBranch(): string {
     try { this.branchHead('dev-verified', false); return 'dev-verified'; }
