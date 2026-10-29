@@ -280,7 +280,7 @@ for (const [index, phase] of (['record', 'resolve'] as const).entries()) {
 
 for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entries()) {
   test(`completion with ${phase} frontier stays bounded as outbox history, erasures, late items and unrelated DBOS workflows grow`, async () => {
-    const route = 0x4590 + index;
+    const route = 0x4590 + index * 16;
     const accountId = newId(route);
     const partition = partitionOf(route);
     const workflowId = `erasure-growth-held:${accountId}`;

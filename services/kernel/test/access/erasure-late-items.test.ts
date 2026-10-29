@@ -7,9 +7,8 @@ import {
   ERASURE_PARTICIPANTS,
   erasureWorkModule,
   readErasureStatus,
-  recordLateErasureItem,
-  resolveLateErasureItem,
 } from '../../src/access/erasure.ts';
+import { recordLateErasureItem, resolveLateErasureItem } from '../../src/access/index.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle.ts';
 import { runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { effectWorkflowId, relayEffects } from '../../src/events/effects.ts';
@@ -68,6 +67,7 @@ beforeAll(async () => {
   (ERASURE_LOCATOR_EFFECTS as Set<string>).add(locatorEffect);
   await db.admin.query('CREATE TABLE public.erasure_test_copy(id uuid PRIMARY KEY, payload text)');
   client = await createWorkClient(db.url);
+  const runtimePool = db.openPool({ max: 10 });
   work = await composeWork(
     [
       erasureWorkModule,
@@ -105,7 +105,7 @@ beforeAll(async () => {
         },
       },
     ],
-    { pool: db.pool, client, databaseUrl: db.url },
+    { pool: runtimePool, client, databaseUrl: db.url },
   );
   await work.launch();
 }, 60000);

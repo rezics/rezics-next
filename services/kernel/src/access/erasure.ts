@@ -147,7 +147,8 @@ export async function acknowledgeErasure(
         throw new LifecycleDeniedError();
       const value = { accountId, participant, outcome };
       if (!row.inserted) return noEffect(value);
-      const pending = await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE });
+      const pending =
+        record.workflowUntil !== null ? await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE }) : null;
       if (pending && !pending.pending)
         await complete.run(tx, {
           ...key,
@@ -320,8 +321,12 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
         changed = true;
       }
       const delivered = await deliverFrontier.run(tx, key);
-      changed ||= Array.isArray(delivered) ? delivered.length > 0 : delivered !== null;
-      const pending = await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE });
+      const newlyDelivered = Array.isArray(delivered) ? delivered.length > 0 : delivered !== null;
+      changed ||= newlyDelivered;
+      const pending =
+        record.workflowUntil !== null || newlyDelivered
+          ? await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE })
+          : null;
       let done = false;
       if (pending && !pending.pending) {
         const completed = await complete.run(tx, {
