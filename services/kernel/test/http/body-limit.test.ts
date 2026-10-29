@@ -109,6 +109,8 @@ test('raw mode returns bytes without decoding or parsing JSON', async () => {
 
 test('a raw route delivers a non-JSON body as bytes without request-path JSON validation', async () => {
   let received: Uint8Array | undefined;
+  let receivedWireBytes: number | undefined;
+  let receivedOwnedBytes: Uint8Array | undefined;
   const app = createApp({ pool: {} as Pool }).post(
     '/raw-body-probe',
     {
@@ -121,8 +123,10 @@ test('a raw route delivers a non-JSON body as bytes without request-path JSON va
         security: [{ bearerAuth: [] }, {}],
       } as never,
     },
-    ({ body }) => {
+    ({ body, request }) => {
       received = body as Uint8Array;
+      receivedWireBytes = bodyWireBytes(request);
+      receivedOwnedBytes = bodyBytes(request);
       return { size: received.byteLength };
     },
   );
@@ -135,6 +139,8 @@ test('a raw route delivers a non-JSON body as bytes without request-path JSON va
   );
   expect(response.status).toBe(200);
   expect(received).toBeInstanceOf(Uint8Array);
+  expect(receivedWireBytes).toBe(8);
+  expect(receivedOwnedBytes).toBe(received);
   expect(new TextDecoder().decode(received)).toBe('not json');
 });
 
