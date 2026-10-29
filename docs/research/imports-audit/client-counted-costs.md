@@ -60,6 +60,16 @@ would allow this increase (2 / 240 prepares per added record). Later marginal an
 in this run. The assertion remains restored; runtime repair is outside this correction's contract. No broader
 importer, kernel or root check was run.
 
+The native/local outcome remains **RED**: the constant-prepare requirement is unachieved. This is a
+specification artifact delivery preserving the restored assertion and the recorded failure, not a runtime repair
+or passing native acceptance. The totals do not establish the cause: additional cold literal SQL branches at page
+thresholds could produce a bounded jump; these samples alone prove neither per-record nor indefinite prepare
+growth. Actual-cause investigation remains separate.
+
+The frozen, controller-formatted test is preserved at Git blob `51646d618c1482af9fc53e8f671f28f17b0ba062`.
+This documentation continuation uses only `test -s docs/research/imports-audit/client-counted-costs.md` for artifact
+acceptance; the completed focused check is not rerun, and no typecheck or broader gate is required.
+
 ## Documentation handoff
 
 The importer README Cost row and the former title “Kernel call stays within its bound as R grows” need an owner-side
