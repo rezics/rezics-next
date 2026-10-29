@@ -33,7 +33,7 @@ export async function readStaticZonePage(
   const active = await activeProfile(dependencies.pool);
   requireAccessDeadline(input.deadline);
   if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-  const plan = planReads(platformRegistry, selected.document, {});
+  const plan = planReads(platformRegistry, selected.document, { subject: null });
   if (Object.keys(plan.reads).length > 0)
     throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
   const page = await readPage({
