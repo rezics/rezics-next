@@ -20,6 +20,7 @@ if (process.env[workerEnvironment] === '1') {
     const result = Bun.spawnSync([process.execPath, import.meta.filename], {
       cwd: process.cwd(),
       env: { ...process.env, [workerEnvironment]: '1' },
+      timeout: 120_000,
       stdout: 'pipe',
       stderr: 'pipe',
     });
