@@ -529,8 +529,8 @@ CREATE TABLE content.account_upload (
     account_id uuid NOT NULL,
     phase text NOT NULL,
     id uuid NOT NULL,
-    CONSTRAINT account_upload_phase_check CHECK ((phase = ANY (ARRAY['media'::text, 'fields'::text]))),
-    CONSTRAINT account_upload_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11))))
+    CONSTRAINT account_upload_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_upload_phase_check CHECK ((phase = ANY (ARRAY['media'::text, 'fields'::text])))
 );
 
 
