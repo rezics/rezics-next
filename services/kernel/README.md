@@ -462,6 +462,16 @@ time and tests move. Durable work gets `Date.now() + budgetMs` from the same `de
 Auth service boundary still travels explicitly through the Auth contract. This costs one async context scope per
 request and one O(1) store read per `deadlineFor` call, with no database statements.
 
+A `503 deadline_exceeded` writes one JSON line to stderr beside `internal_error` diagnostics, with
+`event: "deadline_exceeded"`, `request_id`, `method`, the route template, `elapsed_ms`, `phases_ms`,
+`dominant_phase`, and `contention_retries`. Monotonic phase durations partition the request's elapsed time:
+`before_command` includes parsing, validation, digest, authentication and request admission; `time_mint`
+includes its connection checkout; `access_prepare`, `gate_wait`, `transaction_pool_wait`, `transaction_body`
+(including authorization, receipt/fence writes and rollback), `commit`, `writable_wait`, `contention_pause`,
+`command_overhead`, and `request_completion` cover the remaining time across all attempts. Contention pauses
+are summed and retries counted. No request body is logged. Success adds no log, database statement or row;
+recording costs constant space and O(phases + retries) clock reads, with retries bounded by the deadline.
+
 When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client
 declarations with `bun run client` while the development database is up. Tests fail while either generated contract is
 stale.

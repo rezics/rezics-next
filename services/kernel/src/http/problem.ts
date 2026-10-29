@@ -1,3 +1,4 @@
+import { commandTimingSnapshot } from '../command/timing.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
@@ -266,7 +267,24 @@ export function logInternalError(options: {
   );
 }
 
-export function problemResponse(error: unknown, context: { method: string; id: string; action?: string }): Response {
+export function logDeadlineExceeded(context: { method: string; id: string; route?: string | undefined }): void {
+  const timing = commandTimingSnapshot(true);
+  if (timing)
+    console.error(
+      JSON.stringify({
+        event: 'deadline_exceeded',
+        request_id: context.id,
+        method: context.method,
+        route: context.route,
+        ...timing,
+      }),
+    );
+}
+
+export function problemResponse(
+  error: unknown,
+  context: { method: string; id: string; action?: string; route?: string | undefined },
+): Response {
   let code: ProblemCode = 'internal_error';
   let detail: string | undefined;
   let errors: readonly FieldError[] | undefined;
@@ -332,6 +350,7 @@ export function problemResponse(error: unknown, context: { method: string; id: s
     ...(error instanceof ProblemError ? extensionMembers(error.extensions ?? {}) : {}),
   };
 
+  if (code === 'deadline_exceeded') logDeadlineExceeded(context);
   headers.set('content-type', 'application/problem+json');
   return new Response(JSON.stringify(body), { status: definition.status, headers });
 }

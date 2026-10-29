@@ -36,6 +36,7 @@ import {
 import healthCheck from './health.sql';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
+import { withCommandTiming } from '../command/timing.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 
 export const REQUEST_DEADLINE_MS = DEFAULT_REQUEST_DEADLINE_MS;
@@ -143,6 +144,7 @@ export function createApp({
       const problem = problemResponse(bodyError ?? error, {
         method: request.method,
         id: idFor(request),
+        route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
         ...(action ? { action } : {}),
       });
       // internal_error is the only 500 problem; log the cause the response hides, never request content.
@@ -306,22 +308,24 @@ export function createApp({
       catalogue.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined),
     );
     return (request) => {
-      return withRequestDeadline(Date.now() + requestDeadlineMs, () => {
-        const url = new URL(request.url);
-        const path = url.pathname;
-        // Also refuse encoded dollar signs so router aliases cannot expose internal routes.
-        if (/\/(?:\$|%24)/i.test(path))
-          return problemResponse(new ProblemError('not_found'), { method: request.method, id: idFor(request) });
+      return withCommandTiming(() =>
+        withRequestDeadline(Date.now() + requestDeadlineMs, () => {
+          const url = new URL(request.url);
+          const path = url.pathname;
+          // Also refuse encoded dollar signs so router aliases cannot expose internal routes.
+          if (/\/(?:\$|%24)/i.test(path))
+            return problemResponse(new ProblemError('not_found'), { method: request.method, id: idFor(request) });
 
-        const colon = path.lastIndexOf(':');
-        if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
-          url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
-          const rewritten = new Request(url, request);
-          originalRequests.set(rewritten, request);
-          return handle(rewritten);
-        }
-        return handle(request);
-      });
+          const colon = path.lastIndexOf(':');
+          if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
+            url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
+            const rewritten = new Request(url, request);
+            originalRequests.set(rewritten, request);
+            return handle(rewritten);
+          }
+          return handle(request);
+        }),
+      );
     };
   });
   return app;

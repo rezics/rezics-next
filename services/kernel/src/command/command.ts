@@ -12,6 +12,7 @@ import readTime from './time.sql';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
+import { commandPhase, countContentionRetry, measureCommandPhase } from './timing.ts';
 import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
 
@@ -466,6 +467,19 @@ export async function runCommand<T>(
   input: LegacyCommandOptions | PrincipalCommandOptions,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>> {
+  commandPhase('command_overhead');
+  try {
+    return await executeCommand(pool, input, body);
+  } finally {
+    commandPhase('request_completion');
+  }
+}
+
+async function executeCommand<T>(
+  pool: Pool,
+  input: LegacyCommandOptions | PrincipalCommandOptions,
+  body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
+): Promise<CommandOutcome<T>> {
   const options = normalizeOptions(input);
   const { partition } = options;
   if (options.receipt) assertReceipt(options.receipt);
@@ -483,15 +497,17 @@ export async function runCommand<T>(
       let attempt: CommandAttempt | undefined;
       if (authorization?.prepare) {
         // The clock read finishes before parent/org evidence and child checkout.
-        time = await withConnection(pool, (client) =>
-          boundedRead(client, deadline, () => mintTime(client, options.clock)),
+        time = await measureCommandPhase('time_mint', () =>
+          withConnection(pool, (client) => boundedRead(client, deadline, () => mintTime(client, options.clock))),
         );
         attempt = Object.freeze({ partition, basis, time });
-        evidence = await authorization.prepare(attempt);
+        evidence = await measureCommandPhase('access_prepare', () => authorization.prepare!(attempt!));
       }
-      const gate = await enterCommandGate(pool, partition, deadline);
+      const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
+      commandPhase('transaction_pool_wait');
       const result = await withConnection(pool, async (client) => {
+        commandPhase('transaction_body');
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const tx: CommandTransaction = { query: client.query.bind(client) };
         const callbackState: CallbackState = { active: true, callbacks: [] };
@@ -499,7 +515,7 @@ export async function runCommand<T>(
         try {
           await client.query("SET LOCAL lock_timeout = '200ms'");
           await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
-          time ??= await mintTime(client, options.clock);
+          time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock));
           attempt ??= Object.freeze({ partition, basis, time });
           attempts.set(tx, attempt);
           const mode = authorization ? await authorization.authorize(tx, attempt, evidence) : 'execute';
@@ -526,7 +542,7 @@ export async function runCommand<T>(
             if (row) {
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
               receiptOwners.delete(tx);
-              await client.query('COMMIT');
+              await measureCommandPhase('commit', () => client.query('COMMIT'));
               sealEventTypes();
               return {
                 value: row.response as T,
@@ -620,7 +636,7 @@ export async function runCommand<T>(
             throw new CommandUnavailableError('deadline', partition);
           }
           receiptOwners.delete(tx);
-          await client.query('COMMIT');
+          await measureCommandPhase('commit', () => client.query('COMMIT'));
           sealEventTypes();
           return {
             value,
@@ -655,11 +671,14 @@ export async function runCommand<T>(
           commands.delete(tx);
           if (time) times.delete(time);
         }
-      }).finally(gate.release);
+      }).finally(() => {
+        gate.release();
+        commandPhase('command_overhead');
+      });
       if (result) return result;
       // Do not keep a failed attempt's T/capability alive during operational waits.
       if (time) times.delete(time);
-      await waitForWritable(pool, partition, deadline);
+      await measureCommandPhase('writable_wait', () => waitForWritable(pool, partition, deadline));
     } catch (error) {
       if (time) times.delete(time);
       if (error instanceof IdempotencyConflictError) throw error;
@@ -674,7 +693,10 @@ export async function runCommand<T>(
           throw new CommandUnavailableError('contention', partition);
         }
         const maximum = Math.min(100, 5 * 2 ** contentionAttempts++);
-        await pause(Math.min(Math.random() * maximum, Math.max(0, deadline - Date.now())));
+        countContentionRetry();
+        await measureCommandPhase('contention_pause', () =>
+          pause(Math.min(Math.random() * maximum, Math.max(0, deadline - Date.now()))),
+        );
         if (Date.now() >= deadline) {
           if (error instanceof AccessUnavailableError) throw error;
           throw new CommandUnavailableError('contention', partition);

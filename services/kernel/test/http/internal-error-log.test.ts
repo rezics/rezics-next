@@ -21,6 +21,9 @@ const app = createApp({ pool })
   .get('/forbidden', { detail: detail('probe.forbidden') }, () => {
     throw new ProblemError('forbidden');
   })
+  .get('/deadline', { detail: detail('probe.deadline') }, () => {
+    throw new ProblemError('deadline_exceeded');
+  })
   .get('/plain', { detail: detail('probe.plain') }, () => {
     throw new Error('plain failure');
   });
@@ -75,10 +78,29 @@ test('a thrown error without a code logs no code member', async () => {
   expect('code' in line).toBe(false);
 });
 
-test('errors mapped to any other problem write no such line', async () => {
+test('client errors write no internal error or deadline line', async () => {
   for (const path of ['/forbidden', '/missing']) {
     const { response, lines } = await call('GET', path);
     expect(response.status).toBeLessThan(500);
     expect(lines).toEqual([]);
   }
+});
+
+test('a deadline problem writes exactly one attributed line instead of an internal error line', async () => {
+  const { response, text, lines } = await call('GET', '/deadline');
+  expect(response.status).toBe(503);
+  expect(JSON.parse(text).code).toBe('deadline_exceeded');
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toHaveLength(1);
+  const line = JSON.parse(lines[0]![0] as string);
+  expect(line).toEqual({
+    event: 'deadline_exceeded',
+    request_id: JSON.parse(text).request_id,
+    method: 'GET',
+    route: '/deadline',
+    elapsed_ms: expect.any(Number),
+    phases_ms: expect.any(Object),
+    contention_retries: 0,
+    dominant_phase: 'before_command',
+  });
 });
