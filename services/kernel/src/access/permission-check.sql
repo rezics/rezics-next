@@ -40,15 +40,17 @@ WITH input AS NOT MATERIALIZED (
          clock_timestamp() AS observed_at
 ), assignment AS MATERIALIZED (
   SELECT i.assignment_request_id IS NULL OR EXISTS (
-    SELECT 1 FROM access.principal_assignment p
+    SELECT 1 FROM (
     -- Keep the exact anchor in primary-key order even when other consumers add
-    -- differently ordered discovery indexes over the same columns.
-    WHERE ROW(p.route, p.principal_id, p.request_id)
+    -- differently ordered discovery indexes over the same columns. Check the
+    -- assignee and interval after this unique-key seek.
+      SELECT p.assigned_actor_id, p.valid FROM access.principal_assignment p
+      WHERE ROW(p.route, p.principal_id, p.request_id)
             >= ROW(i.assignment_route, i.principal_id, i.assignment_request_id)
-      AND ROW(p.route, p.principal_id, p.request_id)
+        AND ROW(p.route, p.principal_id, p.request_id)
             <= ROW(i.assignment_route, i.principal_id, i.assignment_request_id)
-      AND p.assigned_actor_id = i.actor_id
-      AND p.valid @> t.at
+      OFFSET 0
+    ) p WHERE p.assigned_actor_id = i.actor_id AND p.valid @> t.at
   ) AS valid
   FROM input i CROSS JOIN authority t
 ), probes AS MATERIALIZED (

@@ -531,6 +531,22 @@ test('the final delegated formula retains a full-key assignment probe', async ()
       client.release();
     }
   });
+  const assignments: Record<string, unknown>[] = [];
+  function visit(value: unknown): void {
+    if (Array.isArray(value)) {
+      for (const child of value) visit(child);
+    } else if (typeof value === 'object' && value !== null) {
+      const node = value as Record<string, unknown>;
+      if (node['Relation Name'] === 'principal_assignment') assignments.push(node);
+      if (node.Plan) visit(node.Plan);
+      if (node.Plans) visit(node.Plans);
+    }
+  }
+  for (const plan of measured.capture.plans) visit(plan);
+  expect(assignments).toContainEqual(
+    expect.objectContaining({ 'Index Name': 'principal_assignment_pkey', 'Actual Rows': 1, 'Actual Loops': 1 }),
+  );
+  expect(measured.capture.statements).toHaveLength(1);
   expectIndex(measured.capture.plans, 'principal_assignment_pkey');
 });
 
