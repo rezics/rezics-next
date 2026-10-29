@@ -8,7 +8,11 @@ import {
   type CurrentConsentReader,
 } from '../access/auth-consent.ts';
 import type { KernelClock } from '../clock.ts';
+import type { Pool } from 'pg';
+import type { AccessRealmRoleReader } from '../request/access.ts';
+import { createRealmMembership } from '../community/membership.ts';
 import { contentEffects } from './relays.ts';
+import { createReplyNoticeEffect } from './reply-notices.ts';
 import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaImportFetchConfig } from './media-import.ts';
@@ -20,15 +24,24 @@ import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts'
  * disable owner roles containing actions in addition to post:erase. This private
  * worker Access instance restores native initiators, never HTTP credentials.
  * Reads outside a command bind this kernel clock. */
-export function createContentWorkAccess(clock: KernelClock) {
-  return createAccess({
+export function createContentWorkAccess(clock: KernelClock, pool?: Pool) {
+  let membership: ReturnType<typeof createRealmMembership> | undefined;
+  const roles = () => (membership ??= createRealmMembership({ pool: pool!, access, clock })).roleReader;
+  const realmRoleReader: AccessRealmRoleReader = Object.assign(
+    ((client, input) => roles()(client, input)) as AccessRealmRoleReader,
+    { batch: ((client, input) => roles().batch!(client, input)) as NonNullable<AccessRealmRoleReader['batch']> },
+  );
+  const publicReads = new Set(['subject:read', 'board:read', 'thread:read', 'post:read', 'realm:read']);
+  const access = createAccess({
     actions: new Map(
       Object.values(resourceRoles.roles)
         .flat()
-        .map((action) => [action, { anonymous: action === 'subject:read' }]),
+        .map((action) => [action, { anonymous: publicReads.has(action) }]),
     ),
     clock,
+    ...(pool ? { realmRoleReader } : {}),
   });
+  return access;
 }
 
 /** A configured dependency is absent. The call touches no storage, network or operation state. */
@@ -109,14 +122,18 @@ export const registerContent: WorkModule = {
     for (const group of dependencies.absentGroups) {
       console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
     }
+    const access = createContentWorkAccess(context.clock, context.pool);
     await createContentWork({
       storage: dependencies.storage,
-      access: createContentWorkAccess(context.clock),
+      access,
       readConsent: dependencies.readConsent,
       routeKey: readMembershipRouteKey(context.env),
       fetchConfig: dependencies.fetchConfig,
       ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
     }).register(context);
-    context.addEffects(contentEffects(context.pool, context.client));
+    context.addEffects([
+      ...contentEffects(context.pool, context.client),
+      createReplyNoticeEffect(context.pool, access),
+    ]);
   },
 };

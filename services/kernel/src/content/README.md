@@ -569,6 +569,20 @@ Derivations use the implemented adapters and SQL in `db/content/migrations/` and
 
 Limits: board candidates <= 200, collection <= 100, public pages <= 100 results with at most 200 hydrated candidates. Post/revision candidate helpers cap s at 200 and fetch s + 1 identities. Reply validation checks at most 32 parent posts; edit at most 33. Rank refresh locks <= 500 candidates. Sitemap pages cap L at 1000. Media input is <= 20 MiB / 40 million decoded pixels, with at most twelve variants. Reaction slot growth scales are [64, 512, 4096]. The `subject-reactions-http` “subject reaction read” capture covers `reaction-projection.readReactionCounts`.
 
+### Author item index
+
+- Touches: guarded upsert or delete per event; erasure reads the post and thread anchor and writes one command event.
+- Bound: constant rows and statements; logarithmic blocks in index history.
+- Growth check: `test/content/author-item-index.test.ts`.
+
+### Reply notices
+
+- Touches: per post, at most two parent or thread primary-key reads and, per recipient, one `notificationAllowed`,
+  one complete post read check (including board, Realm and bounded ancestors), and one notice row.
+- Bound: constant rows and statements per post at fixed reply depth; logarithmic blocks in thread history.
+- Growth check: `test/content/growth-reply-notices.test.ts`, posts per thread at scales [64, 256, 1024], with
+  constant rows per post.
+
 ### Appeals
 
 - **Touches:** Appeal reads one decision and inserts one appeal row. Resolve updates one appeal row and checks target authorization, plus `liftTakedown`'s bound and one notice. Pending lists follow the report list bound: at most L + 1 queue candidates and L independently authorized source reads, with L <= 100. Board candidates are projected from committed events on the board route; a resolution permanently removes the candidate from its pending index.

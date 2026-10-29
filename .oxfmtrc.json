@@ -3,6 +3,8 @@
   "singleQuote": true,
   "sortPackageJson": false,
   "ignorePatterns": [
+    "services/kernel/test/content/reply-notices.test.ts",
+    "services/kernel/test/content/growth-reply-notices.test.ts",
     "services/kernel/test/semantic/subject-reference-contract.test.ts",
     "services/kernel/test/library/shelf-active.test.ts",
     "services/kernel/test/library/shelf-heads.test.ts",

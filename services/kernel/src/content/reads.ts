@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool } from 'pg';
+import { accountStandingCheck } from '../access/index.ts';
+import { realmReadEligibility } from '../community/realm.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { CommandUnavailableError } from '../command/command.ts';
@@ -133,9 +135,9 @@ function route(id: string): number {
 /** All pool preparation happens outside this boundary. A failed rollback evicts
  * the connection rather than returning an open transaction to the pool. */
 async function snapshot<T>(
-  dependencies: ContentReadDependencies,
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
   id: string,
-  context: ReadContext,
+  context: Pick<ReadContext, 'deadline'>,
   work: (client: AccessClient) => Promise<T>,
 ): Promise<Anchored<T>> {
   return within(context.deadline, () =>
@@ -220,26 +222,16 @@ const fingerprint = (value: Chain | null) =>
   value &&
   JSON.stringify([signature(value.thread), ...value.posts.map(signature), value.revision && signature(value.revision)]);
 
-function admissible(row: Row, context: ReadContext, tombstone: boolean): boolean {
-  if (row.visibility === 'draft' && (context.actor.kind !== 'account' || row.author_id !== context.actor.accountId))
-    return false;
+function admissible(row: Row, actor: Actor, tombstone: boolean): boolean {
+  if (row.visibility === 'draft' && (actor.kind !== 'account' || row.author_id !== actor.accountId)) return false;
   if (row.visibility === 'taken_down' || row.availability === 'erased') return tombstone;
   return ['published', 'protected', 'draft'].includes(row.visibility);
 }
 
 type ErasedReadProof = { explicit: boolean };
 
-/** The shared formula alone supplies floor, grant, scope, account and denial
- * operands. Domain restrictions can disable both branches by throwing. */
-async function prepare(
-  dependencies: ContentReadDependencies,
-  row: Row,
-  context: ReadContext,
-  evidence: object,
-  tombstone = false,
-  placeholder = false,
-  erasedProof?: ErasedReadProof,
-): Promise<AccessCheck> {
+/** Shared post-read resources: every domain operand uses the evaluator's principal. */
+function readResource(row: Row, evidence: object, tombstone = false, placeholder = false): Resource {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
   const resourceWithEligibility = {
@@ -252,7 +244,7 @@ async function prepare(
       },
       async verify({ client, actor, at }) {
         const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
-        if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
+        if (!current || signature(current) !== signature(row) || !admissible(current, actor, tombstone))
           throw new ContentNotFoundError();
         if (
           current.kind === 'board' &&
@@ -274,13 +266,28 @@ async function prepare(
           }
         }
         // Erased public slots still require the requested scope from account tokens.
-        if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action)) return false;
+        if (placeholder && actor.kind === 'account' && !actor.scopes.includes(action)) return false;
         return (
           current.visibility === 'published' && ((!tombstone && current.availability === 'available') || placeholder)
         );
       },
     }),
   };
+  return resourceWithEligibility;
+}
+
+/** The shared formula alone supplies floor, grant, scope, account and denial operands. */
+async function prepare(
+  dependencies: ContentReadDependencies,
+  row: Row,
+  context: ReadContext,
+  evidence: object,
+  tombstone = false,
+  placeholder = false,
+  erasedProof?: ErasedReadProof,
+): Promise<AccessCheck> {
+  const action = `${row.kind}:read`;
+  const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder);
   const accessContext = { pool: dependencies.pool, deadline: context.deadline };
   if (erasedProof) {
     const check = await accessExplicitCheck(
@@ -309,7 +316,13 @@ async function observeBoard(
   const check = row ? await prepare(dependencies, row, context, observed) : null;
   const checked = async (client: AccessClient): Promise<Row | null> => {
     const current = await point(client, 'board', boardId);
-    if (!row || !current || signature(row) !== signature(current) || !admissible(current, context, false) || !check)
+    if (
+      !row ||
+      !current ||
+      signature(row) !== signature(current) ||
+      !admissible(current, context.actor, false) ||
+      !check
+    )
       return null;
     try {
       return (await check(client)) ? current : null;
@@ -414,7 +427,7 @@ async function disclose(
     }
     for (let index = 0; index < rows.length; index++) {
       if (
-        !admissible(rows[index]!, context, erased || rows[index]!.availability === 'erased') ||
+        !admissible(rows[index]!, context.actor, erased || rows[index]!.availability === 'erased') ||
         !(await checks[index]!(client))
       )
         return null;
@@ -710,6 +723,56 @@ export async function readSubjectThread(
     placeId,
   })) as Anchored<ThreadView | null>;
 }
+/** Send-time disclosure uses the ordinary read resources and current account standing,
+ * without constructing a bearer principal. Release every observation before Access checks. */
+export async function postReadableByAccount(
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
+  accountId: string,
+  threadId: string,
+  postId: string,
+  context: Pick<ReadContext, 'deadline'>,
+): Promise<boolean> {
+  try {
+    const observed = await snapshot(dependencies, threadId, context, (client) => chain(client, threadId, postId));
+    const initial = observed.value;
+    if (!initial?.thread.board_id || initial.thread.visibility === 'draft') return false;
+    const boardId = initial.thread.board_id;
+    const board = await snapshot(dependencies, boardId, context, (client) => point(client, 'board', boardId));
+    if (!board.value) return false;
+    const evidence = { observed, board };
+    const check = async (row: Row) => {
+      const decisions = await accountStandingCheck(dependencies.access, {
+        accountId,
+        action: `${row.kind}:read`,
+        target: readResource(row, evidence),
+        context: { pool: dependencies.pool, deadline: context.deadline },
+      });
+      return decisions[row.id] === true;
+    };
+    if (!(await check(board.value)) || !(await check(initial.thread))) return false;
+    // HTTP composes this Realm operand around thread/post reads. The standing port
+    // consumes the same Realm resource directly, without a route actor or adapter.
+    if (board.value.realm_id) {
+      const identity = { route: route(board.value.realm_id), id: board.value.realm_id };
+      const decisions = await accountStandingCheck(dependencies.access, {
+        accountId,
+        action: 'realm:read',
+        target: { ...identity, eligibility: realmReadEligibility(identity) },
+        context: { pool: dependencies.pool, deadline: context.deadline },
+      });
+      if (decisions[identity.id] !== true) return false;
+    }
+    for (const row of initial.posts) if (!(await check(row))) return false;
+    const current = await snapshot(dependencies, threadId, context, (client) => chain(client, threadId, postId));
+    if (fingerprint(initial) !== fingerprint(current.value)) return false;
+    const finalBoard = await snapshot(dependencies, boardId, context, (client) => point(client, 'board', boardId));
+    return !!finalBoard.value && signature(finalBoard.value) === signature(board.value) && (await check(board.value));
+  } catch (error) {
+    if (error instanceof ContentNotFoundError) return false;
+    throw error;
+  }
+}
+
 export async function readPost(
   dependencies: ContentReadDependencies,
   threadId: ThreadId,
