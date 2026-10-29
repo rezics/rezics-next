@@ -62,10 +62,12 @@ unqualified native proposal.
 ## Frozen native scenarios
 
 File: services/kernel/test/imports/exact-quantity-qualifiers.test.ts.
-SHA-256: `2fa488a92eac954c63e32e63fc88695b9342385edea105181afb2a897c87b751`.
+SHA-256: `09577d0303b18adbbd99b7f0786f1eb8bbe3499c4c6f0931013bb35cf601276c`.
 The three case bodies are unchanged; the only amendment is the authorized
 `established()` helper that locates unresolved Wikidata authors by each actual
-P50 `schema:sameAs` IRI.
+P50 `schema:sameAs` IRI and types its candidate statements from the existing
+`BatchCommand` union. The type correction was needed after the first helper
+amendment exposed missing `BatchStatement` declarations in native typecheck.
 
 1. `exact P6570 with mapped but unadmitted P1545 withholds the entire native measurement`
    uses the existing fixture's P1545 string position on a controlled +1450/unit1
@@ -198,10 +200,10 @@ failure; converter repair and positive whole-holder evidence remain separate.
 The converter repair is committed as revision `wikidata-4`; its current source
 hash is recorded above. The focused controls cover unqualified admitted exact
 input, mapped but unadmitted qualifiers, unmapped and unresolved item
-qualifiers, unknown qualifier bodies that must not be read, and established
-nonmeasurement statement output. The frozen native file remains byte-for-byte
-unchanged at SHA-256
-`55e7cdfdd0c160b5064e94809aeb998406d367977f57c35987c1a5b035e5ad3c`.
+qualifiers, unknown qualifier bodies that must not be read, a serialized
+normalized-record fixed point, and established nonmeasurement statement
+output. The frozen native case bodies remain unchanged; the final helper-adjusted
+file hash is recorded above.
 
 The prior focused native acceptance invocation was check
 `1ece269b-28c1-45e0-9ac0-4bf73a810793`, exit **1**, log
@@ -232,8 +234,30 @@ it with a subject binding, requiring the unknown-qualifier diagnosis and whole
 measurement withholding to persist. The normalized projection retains one
 actual unknown qualifier key with an empty value list, never its body; mapped
 unsupported qualifiers retain their bounded normalized snaks and are rejected
-again at emission. A native acceptance rerun is required after these final
-converter and authorized helper changes.
+again at emission.
+
+Final focused native acceptance: check
+`5936c648-22a7-4930-9fcf-c671639056c1`, exit **0**, log
+`.temp/goal/checks/worker-check-2026-10-29T21-14-07.995Z-5824b1bb.log`.
+All three named frozen cases passed: **3 pass, 0 fail, 229 assertions**. The
+third case captured the first run's actual returned bootstrap create command,
+its returned ACK, and the receipt identity returned for that command key. It
+read the complete `core.receipt` row using the returned native primary-key
+tuple, then asserted equality of the ACK and full receipt row after changed
+source refresh, importer restart and replay of the exact serialized bootstrap
+request. The runner log does not print the generated key or receipt payload;
+the passing assertions are the returned receipt evidence, with no seeded or
+fabricated receipt. The case also confirmed source bytes, binding, candidate
+set and effects stayed stable through reopen/replay while name, date and URL
+refreshed. This verifies these scenario receipt assertions, not historical data
+migration behavior.
+
+The focused conversion check `23979435-6938-4923-afec-38018be1cff6` passed the
+six pure tests. Root typecheck `dac8891e-77f6-4ce9-bce3-3a027e611726` passed,
+covering importer, conversion and kernel workspaces. Local formatting and the
+conversion TypeScript proof also passed. An earlier native run failed before
+scenarios on the original property-only author lookup; the only native run
+after the helper type correction is the passing run above.
 
 ## Limits and decisions
 
@@ -241,9 +265,9 @@ The actual bundle is consumed unchanged; no source/native revision, runtime
 importer path, rights policy or definition was changed. The converter behavior
 uses its existing revision and the new focused pure tests exercise the shipped
 definitions without a synthetic release or guessed binding. The frozen native
-case bodies remain unchanged; the only authorized amendment is the `established()`
-helper, and the current complete-file hash is recorded above. All changed files
-are declared paths.
+case bodies remain unchanged; the only authorized amendment is the
+`established()` helper, and the current complete-file hash is recorded above.
+All changed files are declared paths.
 Current qualifiers[] promises no positive qualified measurement case. Original
 unqualified P6570 is not generated/genuine whole-holder evidence. Rejecting loss
 proves neither positive provider support, measurement coverage, complete indexing

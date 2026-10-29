@@ -283,9 +283,10 @@ measurement is withheld with a diagnostic. Detection uses the admitted fixed
 value schema, not the source property name. Rejection remains stable when the
 importer serializes `normalizedRecord` and converts it again after binding.
 Focused pure controls live in
-`tests/wikidata-exact-quantity.test.ts`; the frozen native scenario names, hash,
-latest attempt outcome and bootstrap receipt evidence boundary are recorded in
-the linked audit report.
+`tests/wikidata-exact-quantity.test.ts`. The three frozen native cases passed
+through the ordinary importer and public batch write path (check
+`5936c648-22a7-4930-9fcf-c671639056c1`). Their names, final test hash and
+bootstrap receipt assertions are recorded in the linked audit report.
 
 The current bundle admits schema:wordCount with exact P6570 mapping, integer
 amount, unit 1, minimum 0 and qualifiers[]. Its mapping alone is unsafe provider
