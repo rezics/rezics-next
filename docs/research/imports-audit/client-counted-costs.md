@@ -327,3 +327,59 @@ addition is reproduced above. All original scales, assertions, concurrency, fixt
 timeout remain intact. No final branch-complete constant-work proof is claimed. Artifact nonemptiness
 establishes only delivery of this evidence. No outside-path file changed, no external reference-project source
 was required, and no server, native API, PostgreSQL, broader workspace, integration or promotion check ran.
+
+## Branch-complete ordinary processor implementation
+
+The original RED remains preserved above: its formatted CPU-file hash is
+`f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f080e1c751`, with the raw 16/64/256 samples,
+all 65 traced events at 256, the exact two-text set difference, and the absent acknowledged after-key SELECT.
+The installed frozen CPU case now has SHA256
+`163f5143179f6da244093b15fb033f160ef58553206c8893dccbb148728b1e66`; it preserves every prior assertion and
+uses the authorized cold 256/1024/4096 branch-complete scales with independent exact prepare equalities.
+
+Final command: `bun scripts/worker-check.ts -- env IMPORTER_PREPARE_TRACE=1 bun test services/importer/tests/record-cpu-growth.test.ts`.
+Check ID: `e91a1c85-b847-4404-ad97-0e2b3c967ca1`; log:
+`.temp/goal/checks/worker-check-2026-10-29T21-43-11.738Z-488ed33a.log`.
+Terminal exit status **0**: 1 pass, 0 fail, 14 assertions. Every sample committed the source with the exact expected
+new-record count. The fixture retains record concurrency 16, zero-latency transport, available media, temporary
+SQLite cleanup and the original 120,000 ms timeout.
+
+| Records | Converter calls | Counted SQLite prepares | SQLite executions | Transactions | SQLite commits | Prepare events | Distinct literal texts |
+| ------: | --------------: | ----------------------: | ----------------: | -----------: | -------------: | -------------: | --------------------: |
+|     256 |            1280 |                      64 |             41520 |          773 |            773 |             65 |                    64 |
+|    1024 |            5120 |                      64 |            166008 |         3085 |           3085 |             65 |                    64 |
+|    4096 |           20480 |                      64 |            663942 |        12331 |          12331 |             65 |                    64 |
+
+Each trace has event ordinals 1–65; all three cold literal sets are identical with 64 distinct texts. Against the
+original 16/64 set of 62 texts, the only additions are the already measured page branches:
+
+```json
+[
+  "SELECT row_json,projection_json FROM run_entries\n          WHERE source=? AND run_id=? AND record_key>? ORDER BY record_key LIMIT ?",
+  "UPDATE run_generations SET status=?,cursor=? WHERE source=? AND id=?"
+]
+```
+
+The acknowledged after-key SELECT remains absent. The final set removes no original literal and the runtime repair
+adds no SQL text.
+
+The real execution overrun came from a redundant caller read: `Importer.dispatch()` called `RunStore.prepare()` to
+merge fresh fences and persist their durable omission proof, then immediately called `RunStore.key()` only to fetch
+that proof. On a fresh source, this repeated four indexed SQL executions per dispatched record: source row,
+acknowledgement, run capability and run entry. `RunStore.prepareWithOmissions()` now returns the strongest saved
+omission union from the same immediate transaction that validates the run lease and applies current fences. The
+dispatch path still filters the immutable original envelope using that durable union. The regression verifies
+monotonic security revisions, unchanged prepared bytes/keys and stale-lease rejection; source claims, current tuple
+fence reads, atomic acknowledgement, ownership, recovery and retry behavior are unchanged.
+
+The exact 256-to-4096 marginal rates are: prepares 0/3840 = 0; conversions 19,200/3,840 = 5; executions
+622,422/3,840 = 162.0890625 (ceiling 165); transactions and commits 11,558/3,840 = 3.0098958 (transaction ceiling
+3.1). Both intermediate step rates also satisfy the unchanged 5-conversion, 165-execution and 3.1-transaction
+ceilings, and conversions, transactions, executions and commits do not drift upward beyond the existing 1.05 rate
+rule. The counted prepare bound remains constant with zero slack, the marginal prepare ceiling remains 0.1, and all
+original commit/rate checks remain active.
+
+The old/new formatted CPU-file hashes are
+`f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f080e1c751` /
+`163f5143179f6da244093b15fb033f160ef58553206c8893dccbb148728b1e66`. The original 16/64/256 RED diagnostic was
+not rerun; this passing evidence is the separate branch-complete run.
