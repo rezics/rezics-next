@@ -256,10 +256,6 @@ export function clientAuthority(
     async clientReductionPage(input) {
       bounded(input.limit);
       return transaction(input.clientId, async (connection) => {
-        // Keep small native tables on the ordinal index too; a seq scan here
-        // makes each page read unrelated consent rows at early deployment scales.
-        await connection.query('SET LOCAL enable_seqscan = off');
-        await connection.query('SET LOCAL enable_sort = off');
         const row = await progress(connection, input.clientId, input.operationId);
         const after = input.after === '' ? '0' : input.after;
         if (!/^(0|[1-9][0-9]*)$/.test(after) || row.completed) deny();
@@ -386,8 +382,6 @@ export function clientAuthority(
     async backfillClientIssuance(input) {
       bounded(input.limit);
       return transaction(input.clientId, async (connection) => {
-        await connection.query('SET LOCAL enable_seqscan = off');
-        await connection.query('SET LOCAL enable_sort = off');
         const coverage = (
           await connection.query<{
             after_ordinal: string;
