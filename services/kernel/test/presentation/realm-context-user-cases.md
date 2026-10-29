@@ -599,3 +599,105 @@ error: script "generate:routes" exited with code 1
 error: script "typecheck" exited with code 1
 check: log .temp/goal/checks/worker-check-2026-10-29T11-18-39.515Z-9b4e36cd.log
 ```
+
+### Native acceptance infrastructure failure
+
+Command: `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/presentation/realm-context-user-cases.test.ts`.
+Final exit status: 1. The original run stopped growing its log for ten minutes; the wrapper performed its single
+automatic rerun. That rerun failed during dependency installation with
+`ENOENT: No such file or directory: failed to link package: check-error@2.1.3 (open)`.
+This is a tool blocker after the automatic rerun. No additional native run was started. These runs did not supply
+a seventeen-case native result; the earlier thirteen-case missing-wire and lifecycle reds remain previous evidence
+only. No passing currentness, growth, full-review freeze or runtime delivery is inferred.
+
+Full original run output:
+
+```text
+remote-check: slot wait 208.216 s on b
+
+Number of files: 5,306 (reg: 4,977, dir: 328, link: 1)
+Number of created files: 38 (reg: 36, dir: 2)
+Number of deleted files: 0
+Number of regular files transferred: 153
+Total file size: 57,483,512 bytes
+Total transferred file size: 2,541,157 bytes
+Literal data: 748,532 bytes
+Matched data: 1,792,625 bytes
+File list size: 196,584
+File list generation time: 1.226 seconds
+File list transfer time: 0.000 seconds
+Total bytes sent: 474,711
+Total bytes received: 37,767
+
+sent 474,711 bytes  received 37,767 bytes  1,425.53 bytes/sec
+total size is 57,483,512  speedup is 112.17
+remote-check: rsync 358.808 s on b
+remote-check: running on b
+bun install v1.4.4-canary.1 (a0cc096ce)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+
++ @types/bun@1.4.4
++ bun@1.4.4-canary.20261027.1
++ oxfmt@0.74.0
++ oxlint@1.89.0
++ typescript@7.1.0-beta
+
+896 packages installed [3.77s]
+remote-check: bun install 3.876 s on b
+$ bun scripts/check.ts test/presentation/realm-context-user-cases.test.ts
+stack-run: kernel check local, already on a check host
+```
+
+Full automatic rerun output:
+
+```text
+remote-check: skipped b: load 103.56 exceeds limit 22.5
+remote-check: skipped c: load 63.46 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (a 0/1 free); skipped b: load 103.56 exceeds limit 22.5; c: load 63.46 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (a 0/1 free); skipped b: load 92.35 exceeds limit 22.5; c: load 41.84 exceeds limit 36
+remote-check: every check slot is busy; waiting for a free one (a 0/1 free); skipped b: load 37.7 exceeds limit 22.5; c: load 88.69 exceeds limit 36
+remote-check: slot wait 173.193 s on b
+
+Number of files: 5,306 (reg: 4,977, dir: 328, link: 1)
+Number of created files: 12 (reg: 12)
+Number of deleted files: 0
+Number of regular files transferred: 65
+Total file size: 57,491,343 bytes
+Total transferred file size: 1,620,462 bytes
+Literal data: 370,945 bytes
+Matched data: 1,249,517 bytes
+File list size: 196,584
+File list generation time: 0.432 seconds
+File list transfer time: 0.000 seconds
+Total bytes sent: 363,200
+Total bytes received: 30,205
+
+sent 363,200 bytes  received 30,205 bytes  15,427.65 bytes/sec
+total size is 57,491,343  speedup is 146.14
+remote-check: rsync 35.768 s on b
+remote-check: running on b
+bun install v1.4.4-canary.1 (a0cc096ce)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+ENOENT: No such file or directory: failed to link package: check-error@2.1.3 (open)
+
++ @types/bun@1.4.4
++ bun@1.4.4-canary.20261027.1
++ oxfmt@0.74.0
++ oxlint@1.89.0
++ typescript@7.1.0-beta
+
+895 packages installed [3.34s]
+Failed to install 1 package
+remote-check: bun install 3.383 s on b
+remote-check: run used 1.014 CPU seconds over 3.386 s (0.30 cores), peak memory 63 MiB on b
+worker-check: bun run --cwd services/kernel check test peak 0.1 GiB (weight 5)
+check: exit status 1
+check: failure summary
+Total bytes received: 30,205
+sent 363,200 bytes  received 30,205 bytes  15,427.65 bytes/sec
+ENOENT: No such file or directory: failed to link package: check-error@2.1.3 (open)
+Failed to install 1 package
+check: log .temp/goal/checks/worker-check-2026-10-29T11-40-01.828Z-8008a984.log
+```
