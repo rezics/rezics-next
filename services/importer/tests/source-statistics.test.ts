@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { Importer } from '../src/importer.ts';
+import type { Run } from '../src/run-store.ts';
 import type { ImportTransport } from '../src/import-contract.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { createImportTransport } from './transport-driver.ts';
@@ -189,6 +190,7 @@ async function statisticRefreshFixture() {
   const path = join(directory, 'journal.sqlite');
   const sequence = { value: 0 };
   const batches: BatchWriteRequest[] = [];
+  const statisticRuns: Run[] = [];
   const writes: { body: string; key: string | null }[] = [];
   let failure: 'denied' | 'lost' | null = null;
   const transport = createImportTransport({
@@ -208,6 +210,7 @@ async function statisticRefreshFixture() {
       if (request.method !== 'PUT' || url.pathname !== `/v1/subjects/${subjectId}/source-statistics/vndb`)
         throw new Error('Unexpected local protocol request');
       const body = await request.text();
+      statisticRuns.push(importer.session.store.activeRun('vndb')!);
       writes.push({ body, key: request.headers.get('idempotency-key') });
       if (failure === 'denied') return Response.json({ code: 'forbidden' }, { status: 403 });
       if (failure === 'lost') throw new TypeError('Local statistic acknowledgement unavailable');
@@ -229,6 +232,7 @@ async function statisticRefreshFixture() {
   return {
     batches,
     writes,
+    statisticRuns,
     get importer() {
       return importer;
     },
@@ -285,6 +289,7 @@ test('same-revision statistic refresh commits its projection, retains semantic j
     expect(JSON.parse(f.writes[1]!.body).mean).toBe(8.1);
     expect(f.writes[1]!.key).not.toBe(f.writes[0]!.key);
     const refreshed = f.importer.session.store.source('vndb');
+    expect(() => f.importer.session.store.acknowledgeStatisticRefresh(f.statisticRuns[1]!, 'v123')).toThrow();
     expect(refreshed.count).toBe(1);
     expect(refreshed.generation).not.toBe(baseline.generation);
     expect(f.importer.session.store.key('vndb', 'v123').baseline?.recordRevision).toBe(originalRow?.recordRevision);
@@ -315,7 +320,10 @@ for (const failure of ['denied', 'lost'] as const) {
       expect((await f.run(810)).status).toBe('bulk-failed');
       expect(f.importer.session.store.source('vndb')).toEqual(baseline);
       expect(f.importer.session.store.key('vndb', 'v123').acknowledged).toEqual(row);
-      expect(f.importer.session.store.activeRun('vndb')).not.toBeNull();
+      const uncertainRun = f.importer.session.store.activeRun('vndb')!;
+      expect(uncertainRun).not.toBeNull();
+      // An unclassified uncertain refresh cannot use the trusted completion path.
+      expect(() => f.importer.session.store.acknowledgeStatisticRefresh(uncertainRun, 'v123')).toThrow();
       expect(f.semanticState()).toEqual(semantic);
       const uncertain = f.writes.slice(1);
       expect(uncertain).toHaveLength(failure === 'denied' ? 1 : 3);
@@ -325,6 +333,7 @@ for (const failure of ['denied', 'lost'] as const) {
       f.fail(null);
       expect((await f.run(810)).status).toBe('committed');
       expect(f.writes.at(-1)).toEqual(uncertain[0]!);
+      expect(() => f.importer.session.store.acknowledgeStatisticRefresh(uncertainRun, 'v123')).toThrow();
       expect(f.semanticState()).toEqual(semantic);
       const refreshed = f.importer.session.store.source('vndb');
       expect(refreshed.generation).not.toBe(baseline.generation);

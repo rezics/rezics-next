@@ -182,7 +182,7 @@ test('unrelated PUT routes and absent or malformed statistic keys never retry', 
       origin,
       token: async () => 'actor',
       sleep: async () => {},
-      fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      fetch: (async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
         calls++;
         throw new TypeError('Uncertain write');
       }) as typeof fetch,

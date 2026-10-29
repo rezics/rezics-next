@@ -542,3 +542,42 @@ test('invalid bounds fail at construction and token failures never hit upstream'
   await expect(client(post())).rejects.toBe(failure);
   expect(calls).toBe(0);
 });
+
+test('keyed VNDB statistic PUT keeps existing physical attempt, wait and supplied-byte ceilings', async () => {
+  const body = '{ "sourceRecordId": "v123", "mean": 8.1, "count": 20 }';
+  const waits: number[] = [];
+  let attempts = 0,
+    bytes = 0,
+    tokens = 0;
+  const client = createImportFetch({
+    origin,
+    now: () => 0,
+    token: async () => {
+      tokens++;
+      return 'actor';
+    },
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+    fetch: (async (input, init): Promise<Response> => {
+      const request = new Request(input, init);
+      attempts++;
+      const supplied = await request.arrayBuffer();
+      bytes += supplied.byteLength;
+      expect(new TextDecoder().decode(supplied)).toBe(body);
+      expect(request.headers.get('idempotency-key')).toBe('"statistic-stable"');
+      throw new TypeError('Acknowledgement unavailable');
+    }) as typeof fetch,
+  });
+  await expect(
+    client(origin + '/v1/subjects/00000000-0000-4000-8000-000000000101/source-statistics/vndb', {
+      method: 'PUT',
+      headers: { 'idempotency-key': '"statistic-stable"' },
+      body,
+    }),
+  ).rejects.toThrow('Acknowledgement unavailable');
+  expect(attempts).toBe(3);
+  expect(waits).toEqual([1000, 2000]);
+  expect(bytes).toBe(3 * new TextEncoder().encode(body).byteLength);
+  expect(tokens).toBe(1);
+});
