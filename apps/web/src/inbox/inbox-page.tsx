@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { personalRead, readQueryKey } from '../kernel/query';
 import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
@@ -20,15 +20,18 @@ export function InboxRows({
 }) {
   return (
     <>
-      <ol aria-label={m.inbox_heading()} className="mt-6 divide-y divide-border rounded-2xl border border-border/70">
+      <ol aria-label={m.inbox_heading()} className="mt-6 space-y-1">
         {page.items.map((item) => (
-          <li key={item.id} className="px-4 py-4 sm:px-5">
+          <ListRow key={item.id} className="flex flex-col items-start gap-1 py-4 sm:flex-row sm:items-baseline">
             {item.unavailable ? (
               <p className="text-sm text-muted-foreground">{m.inbox_unavailable_item()}</p>
             ) : item.href ? (
-              <Link to={item.href as never} className="block rounded-lg text-sm leading-6 hover:underline">
-                {item.text}
-              </Link>
+              <>
+                <ListRowLink href={item.href}>{item.text}</ListRowLink>
+                <p aria-hidden="true" className="text-sm leading-6">
+                  {item.text}
+                </p>
+              </>
             ) : (
               <p className="text-sm leading-6">{item.text}</p>
             )}
@@ -37,7 +40,7 @@ export function InboxRows({
                 new Date(item.createdAt),
               )}
             </time>
-          </li>
+          </ListRow>
         ))}
       </ol>
       {page.next && onLoadMore ? (

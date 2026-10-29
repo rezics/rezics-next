@@ -14,8 +14,19 @@ const { InboxRows } = await import('../src/inbox/inbox-page');
 type Item = import('../src/inbox/inbox-read').ResolvedInboxPage['items'][number];
 
 const timestamp = '2026-10-29T10:00:00.000Z';
-const linked: Item = { id: 'linked', text: 'A reply from Momo', href: '/threads/one', createdAt: timestamp };
-const plain: Item = { id: 'plain', text: 'A notice without a destination', createdAt: timestamp };
+const linked: Item = {
+  id: 'linked',
+  text: 'A reply from Momo',
+  href: '/threads/one',
+  unavailable: false,
+  createdAt: timestamp,
+};
+const plain: Item = {
+  id: 'plain',
+  text: 'A notice without a destination',
+  unavailable: false,
+  createdAt: timestamp,
+};
 const unavailable: Item = {
   id: 'unavailable',
   text: 'A private item is unavailable',
@@ -24,9 +35,7 @@ const unavailable: Item = {
 };
 
 function markup(items: Item[]) {
-  return renderToStaticMarkup(
-    createElement(InboxRows, { page: { items, next: null } }),
-  );
+  return renderToStaticMarkup(createElement(InboxRows, { page: { items, next: null } }));
 }
 
 test('the inbox renders every notification as a bare ListRow with its overlay as the only row state', () => {
