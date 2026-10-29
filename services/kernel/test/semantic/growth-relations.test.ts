@@ -292,6 +292,29 @@ test('A subject read examines the same rows whatever the number of relations it 
 });
 
 test('a genuinely waiting link freshness probe has constant work per poll across relation growth', async () => {
+  anchor = newId(BASE_ROUTE);
+  anchorRoute = routeOf(anchor)!;
+  await createSubject(db.pool, {
+    actor,
+    target: { route: anchorRoute, id: anchor },
+    idempotencyKey: randomUUID(),
+    digest,
+    item: { type: 'schema:Book', labels: { en: 'Waiting relation growth anchor' } },
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: async () => true,
+  });
+  people = Array.from({ length: 4_096 }, () => newId(anchorRoute));
+  peopleLabels = people.map((id, index) => rowsFor(id, { labels: { en: `Author ${String(index).padStart(4, '0')}` } }));
+  relationFacts = people.map((id) =>
+    rowsFor(
+      anchor,
+      { labels: { en: 'Waiting relation growth anchor' }, statements: { 'schema:author': [statement(id)] } },
+      bundledRelease,
+    ).find((fact) => fact.kind === 'statement')!,
+  );
+  population = createPopulation();
+  growthHead = await actualHead(db);
+
   const waitBudget = FRESHNESS_WAIT_MS;
   const holdBehind = async (database: GrowthDatabase) => {
     const head = await actualHead(database);
