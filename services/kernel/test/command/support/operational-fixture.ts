@@ -52,7 +52,10 @@ export async function operationalFixture(partition: number) {
      VALUES($1,$2,$3,$4,'(,)',$5)`,
     [resource.route, resource.id, actor.accountId, action, Bun.randomUUIDv7()],
   );
-  async function request(identity = actor, deadline = Date.now() + 5000): Promise<OperationalOptions> {
+  async function request(
+    identity = actor,
+    deadline = Date.now() + 5000,
+  ): Promise<Extract<OperationalOptions, { mode: 'request' }>> {
     return {
       ...principalCommandIdentity(identity),
       mode: 'request',
