@@ -13,6 +13,8 @@ if (checkHostsFile !== undefined) handoff[Symbol.for('rezics.check-hosts-file')]
 // Tests never inherit the store, identity or session of the control plane that launched them: a worker's
 // environment names the live database, and a test that spawns the CLI would otherwise act on live tasks.
 for (const key of Object.keys(process.env)) if (key.startsWith('GOAL_')) delete process.env[key];
+// Train fixtures must opt into affected checks explicitly; package defaults may name live workspace commands.
+process.env.GOAL_TEST_ENVIRONMENT = '1';
 delete process.env.CODEX_THREAD_ID;
 // Tests never inherit the host's check routing; a test that wants the remote path sets these variables itself.
 delete process.env.KERNEL_CHECK_REMOTE;

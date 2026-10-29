@@ -27,6 +27,7 @@ import {
   gateRunner,
   gateEnvironment,
   git,
+  processGroupRunner,
   nonGeneratedFiles,
   outsideScope,
   type GateResult,
@@ -49,6 +50,17 @@ export type IntegrationCheck = { paths: string[]; command: string[] };
 import { resolveImportConflicts } from './import-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 const defaultJsonMessageConflicts = defaults.jsonMessageConflicts as string[];
+
+/** Keep control-plane train fixtures hermetic even if package defaults name real workspace checks. */
+export function landingAffectedChecks(
+  changed: readonly string[],
+  workspace: boolean,
+  explicit: readonly AffectedTestCheck[] | undefined,
+): AffectedTestCheck[] {
+  const testDefaults = process.env.GOAL_TEST_ENVIRONMENT === '1';
+  const checks = workspace ? [...(explicit ?? (testDefaults ? [] : defaults.affectedTests))] : [];
+  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths)));
+}
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
 
@@ -106,18 +118,7 @@ export async function runAffectedTest(
   let environmentUnverified = false;
   for (let retry = 0; retry < 2; retry++) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const result = await new Promise<{ passed: boolean; output: string }>((done) => {
-      let captured = '';
-      const child = spawn(command[0]!, command.slice(1), { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-      const collect = (chunk: Buffer) => {
-        captured += chunk.toString();
-        appendFileSync(logPath, chunk);
-      };
-      child.stdout.on('data', collect);
-      child.stderr.on('data', collect);
-      child.once('error', (error) => done({ passed: false, output: String(error) }));
-      child.once('close', (code) => done({ passed: code === 0, output: captured }));
-    });
+    const result = await processGroupRunner(undefined, undefined, env)(command, cwd, logPath);
     output = result.output;
     passed = result.passed;
     environmentUnverified = checkEnvironmentFailed(output);
@@ -1788,15 +1789,12 @@ export class MergeTrain {
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
-        const affectedChecks: AffectedTestCheck[] = workspace
-          ? (o.affectedTests ?? defaults.affectedTests).filter((check) =>
-              result.changedFiles.some((path) => matchesPath(path, check.paths)),
-            )
-          : [];
+        const testDefaults = process.env.GOAL_TEST_ENVIRONMENT === '1';
+        const affectedChecks = landingAffectedChecks(result.changedFiles, workspace, o.affectedTests);
         const priorAffectedResults: AffectedTestResult[] = workspace ? [] : [...(request.affectedTests ?? [])];
         const siblings = siblingTestCommand(
           siblingTestFiles(result.changedFiles, trainTree),
-          defaults.siblingTests.command,
+          testDefaults ? undefined : defaults.siblingTests.command,
         );
         if (siblings) affectedChecks.push({ paths: [], command: siblings });
         const landingAffectedResults = await Promise.all(

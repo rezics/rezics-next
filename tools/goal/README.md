@@ -30,6 +30,11 @@ or `tests/<name>.test.ts` at the workspace root when no same-directory test exis
 the train reruns the failing test files on the landing base; a failure already present there is recorded as pre-existing.
 Kernel changes continue to use the kernel affected-test command, which selects its own affected tests.
 
+Every landing command runs in its own process group, including acceptance, integration, affected, sibling and derived
+regeneration commands. The train kills the whole group when a command exits, times out, or the train stops, so a command
+cannot leave background children running. Control-plane tests set affected checks explicitly; when omitted, train
+fixtures use no affected or sibling checks and never inherit the repository's live check defaults.
+
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. Rebase conflicts regenerate declared
 files from either stage, including on dev landings and retries. Promotion-stage files may declare `inputs`; a dev
 landing that changes one of those inputs runs the declared generator against the rebased candidate and includes changed
