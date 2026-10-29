@@ -38,12 +38,7 @@ const matchingQuery = 'The';
 const typedQuery = 'Prince';
 const emptyQuery = 'zzzznotasubject';
 // Two subjects per vertical list of the home. They exist only in the search index and its in-process source.
-const subjectSeeds = storySubjects.map(({ id, type, labels }) => ({
-  id,
-  type,
-  en: labels.en ?? Object.values(labels)[0]!,
-  ja: labels.ja ?? Object.values(labels)[0]!,
-}));
+const subjectSeeds = storySubjects.map(({ id, type, labels }) => ({ id, type, labels }));
 let container = '';
 let searchContainer = '';
 let kernel: ReturnType<typeof spawn> | undefined;
@@ -1576,7 +1571,7 @@ async function main(): Promise<void> {
   });
   // The recorded subject is indexed and answered from the real source, with its descriptions and statements. The home
   // subjects exist only here, with labels alone.
-  const homeIndexed = subjectSeeds.map(({ id, type, en, ja }) => indexedSubject(id, type, { en, ja }));
+  const homeIndexed = subjectSeeds.map(({ id, type, labels }) => indexedSubject(id, type, labels));
   const source = {
     async read(partition: number, ids: readonly string[]) {
       const real = await realSource.read(partition, ids);
