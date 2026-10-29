@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver, Fixture, Realm } from '../../../../specs/community-driver.ts';
+import { MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS } from '../../src/community/account-erasure-records.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { enqueueMembership } from '../../src/access/membership-work.ts';
 import { restartWorker } from './community-driver.ts';
@@ -322,7 +323,7 @@ test.serial(
     const erased = await deletePersona({ pool, auth: state.deletion.auth }, state.persona);
     await drain(driver, [...places, account.id]);
     await worker.stop();
-    const grace = 60 * 60 * 1000;
+    const grace = MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS;
     let now = new Date(retainedOut.requested_at).getTime() + grace + 1;
     expect(new Date(recent.requested_at).getTime()).toBeGreaterThan(now - grace);
     const deps = { pool, clock: () => new Date(now) };

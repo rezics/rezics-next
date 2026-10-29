@@ -1,9 +1,10 @@
 import type { Pool } from 'pg';
 import { readErasureStatus } from '../access/erasure.ts';
-import { noEffect, runCommand } from '../command/command.ts';
+import { authoritativeTimeValue, mintReadTime, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { TERMINAL_WORKFLOW_STATUSES } from '../work/retention.ts';
 import { COMMUNITY_PLATFORM_BASIS } from './party-locator.ts';
 import page from './account-erasure-records-page.sql';
 import purgePage from './account-erasure-records-purge-page.sql';
@@ -19,7 +20,8 @@ import readWorkflow from './account-erasure-records-workflow.sql';
 const kinds = ['ban_actor', 'ban_target', 'membership_operation', 'verdict'] as const;
 type Kind = (typeof kinds)[number];
 export type CommunityRecordsCursor = { kind: Kind; dueAt: string; ownerRoute: number; ownerId: string; key: string };
-type Dependencies = { pool: Pool };
+type Dependencies = { pool: Pool; clock?: () => Date };
+export const MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS = 60 * 60 * 1000;
 type Locator = { kind: string; due_at: string; owner_route: number; owner_id: string; key: string };
 const FIRST = {
   after_kind: '',
@@ -90,10 +92,10 @@ async function remove(pool: Pool, accountId: string, route: number, row: Locator
     return result.rowCount ? { value: null, events: [changed(accountId)] } : noEffect(null);
   });
 }
-/** Terminal workflows no longer need the initiator. Missing/nonterminal work keeps its source and locator.
- * These runtime point reads finish before the owner-partition command starts.
+/** Read workflow disposition by its committed primary key, releasing the connection before the owner command.
+ * Missing history is safe only after the enqueue grace; a known active workflow always stays pending.
  */
-async function terminal(pool: Pool, row: Locator): Promise<boolean> {
+async function erasableOperation(pool: Pool, row: Locator, at: number): Promise<boolean> {
   return withConnection(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(row.owner_route));
     if (!partition || partition.writeState === 'moved') throw new Error('Community owner partition is unavailable');
@@ -102,10 +104,8 @@ async function terminal(pool: Pool, row: Locator): Promise<boolean> {
     // All membership producers commit the exact workflow ID as their command key.
     // It also survives minimization of another party on the same operation.
     const workflow = await readWorkflow.run(client, { id: operation.creation_idempotency_key });
-    return (
-      typeof workflow?.status === 'string' &&
-      ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(workflow.status)
-    );
+    if (!workflow) return Date.parse(operation.requested_at) < at - MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS;
+    return (TERMINAL_WORKFLOW_STATUSES as readonly string[]).includes(workflow.status);
   });
 }
 
@@ -115,17 +115,24 @@ async function terminal(pool: Pool, row: Locator): Promise<boolean> {
  * (complaint handling, expiring 183 days after each ban began).
  */
 export async function eraseAccountCommunityRecordsPage(
-  { pool }: Dependencies,
+  { pool, clock }: Dependencies,
   accountId: string,
   input: { erasedAt: string; after?: CommunityRecordsCursor | null },
 ) {
   instant(input.erasedAt);
   const key = await obligation(pool, accountId, input.erasedAt);
-  const rows = await readKeys(pool, key.route, (client) => page.run(client, { ...key, ...cursor(input.after) }));
+  const { rows, at } = await readKeys(pool, key.route, async (client) => {
+    // Retry eligibility advances with the page's authoritative time; the erasure fence stays fixed at T.
+    const time = await mintReadTime(client, clock);
+    return {
+      at: Date.parse(authoritativeTimeValue(time)),
+      rows: await page.run(client, { ...key, ...cursor(input.after) }),
+    };
+  });
   let pending = 0;
   let reasonsKeptUntil: string | null = null;
   for (const row of rows) {
-    if (row.kind === 'membership_operation' && !(await terminal(pool, row))) {
+    if (row.kind === 'membership_operation' && !(await erasableOperation(pool, row, at))) {
       pending++;
       continue;
     }

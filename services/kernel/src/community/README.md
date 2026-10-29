@@ -108,8 +108,55 @@ ban resumes enqueueing with the same durable key.
 denials in the record's transaction. Both mutations use `Idempotency-Key`. Unban never
 restores membership. `GET /v1/realms/{realmId}/bans` requires `realm:ban` and returns
 current records ordered by account ID, with an opaque cursor bound to the Realm,
-viewer, limit and partition epoch. Denials stay on the Realm; content writes must check
+viewer, limit and partition epoch. A record's `actor` is null once the moderator's account is erased. Denials stay on the Realm; content writes must check
 Realm participation directly, and public reads remain open.
+
+## Account erasure
+
+The account-partition `party_locator` projects the committing ban, membership-operation and curator-verdict
+events. The migration backfills existing records. Each locator names the source's exact owner-partition key;
+source rows remain authoritative. Erasure runs as the platform under the committed community erasure obligation,
+without restoring an initiator or holding a connection or transaction across partitions.
+
+`eraseAccountCommunityRecordsPage` reads at most 50 locator keys and applies these dispositions:
+
+- Delete bans against the erased account: its identity can never return or be reused. Access owns its denials.
+- Set the actor of bans issued by the account to null, preserving the ban. Empty reasons immediately when the ban
+  began at least 183 days before the account's erasure T. More recent reasons are the single retention exception:
+  store `community.realm_ban`, field `reason`, purpose complaint handling under Regulation (EU) 2022/2065,
+  Article 20, expiry each ban's start plus 183 days. `reasonsKeptUntil` reports the latest expiry on a page;
+  the participant folds it across pages.
+- For terminal membership workflows, null every operation field naming the account and erase client, scopes,
+  requested-by and authentication/delegation details. Read the workflow's current DBOS status using its committed
+  creation id, and use `TERMINAL_WORKFLOW_STATUSES` from `work/retention.ts`. Known non-terminal workflows remain
+  pending, with their operation and locator unchanged.
+- A membership operation with no workflow history is pending until it is strictly older than the one-hour
+  `MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS`. Evaluate this grace at each page's authoritative processing time,
+  so a later page can finish pending work while the account's erasure T remains fixed.
+- Set curator verdict actors to null, preserving their verdicts.
+
+The creating request commits the membership operation and enqueues its workflow before answering. Its request
+is bounded by `DEFAULT_REQUEST_DEADLINE_MS`, far below one hour. Workflow retention deletes only terminal
+workflows, at least seven days after completion. A row without history past the grace therefore either finished
+long ago or was never enqueued. A later enqueue can only come from an idempotent retry of the creating command
+or a ban resuming removal with its durable key. `loadOperation` refuses operations whose account or actor fields
+are null, so authorization fails closed before any reservation.
+
+Handled locator rows are deleted except `ban_actor`, which stays until the reason expiry purge handles it.
+`purgeAccountBanReasonsPage` seeks at most 50 `ban_actor` keys due at or before `asOf`, ordered by `due_at`.
+It empties each reason at that ban's own expiry, leaves the ban in place, removes the locator and reports the
+earliest remaining expiry as `nextDueAt`.
+
+### Erase account community records and expire ban reasons
+
+- Touches: one account-partition primary-key range of at most 50 locator keys; one source point update or delete
+  per key, plus one primary-key operation read and one primary-key DBOS status read per membership operation.
+  Locator deletion and the earliest remaining ban expiry are account-partition commands or indexed seeks.
+- Bound: rows and statements are linear in the page, at most 50 keys; blocks are O(k log B). Total work is linear
+  in the account's own records and independent of other Realms' bans, operations and verdicts.
+- Growth check: `test/community/account-erasure-records.test.ts`, “an account community record erasure page stays
+  within its bound as other Realms' bans, operations and verdicts grow”, with a constant page at 256, 1024 and
+  4096 unrelated Realms.
 
 ## Sitemap feeds
 
