@@ -894,7 +894,11 @@ async function waitForSlotToken(holder: ReturnType<typeof Bun.spawn>, count: num
 
 test('generated slot scripts use only slot locks in their reserved descriptor range', () => {
   for (const slots of [1, 3, 5]) {
-    for (const [shortRun, gate] of [[false, false], [true, false], [false, true]] as const) {
+    for (const [shortRun, gate] of [
+      [false, false],
+      [true, false],
+      [false, true],
+    ] as const) {
       const script = slotScriptFor('/tmp/descriptor-check', slots, shortRun, gate);
       const firstSlotFd = 10;
       const lastSlotFd = firstSlotFd + slots - 1;
@@ -944,7 +948,9 @@ test('ordinary and express slot locks stay held until the slot holder input clos
         expect(await holder.exited).toBe(0);
         expect(spawnSync('flock', ['-n', selectedLock, '-c', 'true']).status).toBe(0);
       } finally {
-        try { await holder.stdin.end(); } catch {}
+        try {
+          await holder.stdin.end();
+        } catch {}
         for (const blocker of blockers) blocker.kill();
       }
     }
@@ -974,7 +980,9 @@ test('ordinary and express slot locks stay held until the slot holder input clos
       expect(await holder.exited).toBe(0);
       expect(spawnSync('flock', ['-n', expressLock, '-c', 'true']).status).toBe(0);
     } finally {
-      try { await holder.stdin.end(); } catch {}
+      try {
+        await holder.stdin.end();
+      } catch {}
       for (const blocker of blockers) blocker.kill();
     }
   }
