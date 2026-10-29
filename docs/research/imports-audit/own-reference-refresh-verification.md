@@ -58,10 +58,17 @@ native permission and adoption boundary.
 
 Root typecheck was attempted after the local regression. The first attempt stalled in `packages/ui`, then its
 wrapper retry failed during SSH/transfer (`Session open refused by peer`, followed by an incomplete archive). A
-subsequent attempt found and prompted correction of proposal-union typing in the new test, but its final verification
-also stalled without log growth and its SSH retry ended with `Session open refused by peer` and an unexpected EOF.
-The final root typecheck therefore has no passing result. Its failure is infrastructure evidence, not a claim that
-the corrected tree typechecks.
+subsequent attempt found and prompted correction of proposal-union typing in the new test, but verification then
+stalled without log growth and its SSH retry ended with `Session open refused by peer` and an unexpected EOF. A
+final attempt after the typing correction again failed to make progress; the wrapper reported
+`Invalid environment variable name evaluates to an empty string: cache_file#"$cache_root"/, file#"$run_root"/,
+first#@, relative#*/, relative%%/*, rest%%/*` and its retry ended with `Session open refused by peer` and an
+unexpected EOF. The root typecheck has no passing result; infrastructure evidence is not a claim that the corrected
+tree typechecks.
+
+The existing import-session and deferred-cover suites were also submitted after the importer planner change. Their
+worker check and its retry both stopped making log progress and failed with the same worker-check infrastructure
+error; no suite result was produced. The new own-reference recovery regression did pass separately.
 
 ## Sources read
 
