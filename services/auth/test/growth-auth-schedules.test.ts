@@ -72,6 +72,7 @@ async function runGrowth() {
     }),
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
+  let seedHistory: () => Promise<number>;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -82,6 +83,8 @@ async function runGrowth() {
     stagingKey: randomBytes(32),
     registerWorkflows: () => {
       maintenance = registerAuthMaintenance(auth);
+      const count = DBOS.registerStep(async () => 1, { name: 'growth.history.count' });
+      seedHistory = DBOS.registerWorkflow(async () => count(), { name: 'growth.history' });
     },
   });
   try {
@@ -90,6 +93,7 @@ async function runGrowth() {
     await db.admin.query(`INSERT INTO auth_client VALUES ('growth-web',true,ARRAY['read']);
       INSERT INTO "user" (id,name,"emailVerified") SELECT 'fixed-'||i,'',false FROM generate_series(1,16) i`);
     const reports = [];
+    let seededHistory = 0;
     for (const dimension of ['unrelated', 'sessions', 'verifications', 'keys']) {
       const report = await checkGrowth(db, {
         name: `one durable Auth tick against ${dimension}`,
@@ -99,6 +103,25 @@ async function runGrowth() {
         // One native queue/schedule wake can overlap capture (at most six reads).
         slack: { statements: { absolute: 6, relative: 0 } },
         async grow(_, scale, previous) {
+          // Give both SDK tables production-shaped history before the first
+          // planner sample, then grow unrelated history in every dimension.
+          // Native runs persist status, step and workflow outputs together.
+          const historyCount = (seededHistory === 0 ? 2048 : 0) + (scale - previous) * 32;
+          for (let offset = 0; offset < historyCount; offset += 32) {
+            await Promise.all(
+              Array.from({ length: Math.min(32, historyCount - offset) }, async () => {
+                const handle = await DBOS.startWorkflow(seedHistory!)();
+                expect(await handle.getResult()).toBe(1);
+              }),
+            );
+          }
+          seededHistory += historyCount;
+          for (const table of ['workflow_status', 'workflow_output']) {
+            expect(
+              Number((await db.admin.query(`SELECT count(*) FROM ${AUTH_SYSTEM_SCHEMA}.${table}`)).rows[0].count),
+            ).toBeGreaterThanOrEqual(seededHistory);
+            await db.admin.query(`VACUUM ANALYZE ${AUTH_SYSTEM_SCHEMA}.${table}`);
+          }
           const from = previous * 2048 + 1;
           const to = scale * 2048;
           if (dimension === 'sessions' || dimension === 'unrelated') {
@@ -160,6 +183,15 @@ async function runGrowth() {
         },
       });
       expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
+      for (const sample of report.samples) {
+        for (const cost of sample.repetitions) {
+          for (const table of ['workflow_status', 'workflow_output']) {
+            const relation = cost.relations[`${AUTH_SYSTEM_SCHEMA}.${table}`];
+            expect(relation?.nodes).toBeGreaterThan(0);
+            expect(relation?.sequentialScans).toBe(0);
+          }
+        }
+      }
       expect(report.samples.every((sample) => sample.cost.statements > 3 && sample.cost.statements < 100)).toBe(true);
       expect(report.samples.every((sample) => (sample.cost.relations?.['public.session']?.rows ?? 0) >= 1000)).toBe(
         true,
