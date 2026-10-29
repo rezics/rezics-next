@@ -331,7 +331,7 @@ function screenshotCommand(argv: readonly string[], relativeOut: string | undefi
   return command;
 }
 
-async function captureScreenshots(options: Options): Promise<void> {
+async function captureScreenshots(options: Options): Promise<number> {
   await mkdir(join(root, '.temp'), { recursive: true });
   await mkdir(options.out, { recursive: true });
   const buildDir = await mkdtemp(join(root, '.temp/storybook-build-'));
@@ -369,7 +369,7 @@ async function captureScreenshots(options: Options): Promise<void> {
       options.locales.flatMap((locale) => options.themes.map((theme) => ({ id, locale, theme }))),
     );
     const { files, failures } = await capture(browser, origin, jobs, options.out, options.width);
-    process.exitCode = reportCaptureResults(files, failures, (text) => process.stdout.write(text));
+    return reportCaptureResults(files, failures, (text) => process.stdout.write(text));
   } finally {
     await stop();
   }
@@ -392,15 +392,18 @@ export async function runScreenshots(argv: readonly string[] = process.argv.slic
       ...(returned === undefined ? { keepsFiles: true } : { returns: [returned] }),
     },
     async () => {
-      await captureScreenshots(options);
-      return 0;
+      return captureScreenshots(options);
     },
   );
 }
 
 if (import.meta.main) {
-  runScreenshots().catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  });
+  runScreenshots()
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((error: unknown) => {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.exitCode = 1;
+    });
 }
