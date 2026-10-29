@@ -7,8 +7,12 @@ import { openCoverRecovery, isCover, type CoverRecovery } from './cover-native-r
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 function mediaOf(command: BatchCommand) {
-  if (command.op !== 'propose' || command.statement.value.type !== 'value' ||
-      typeof command.statement.value.content !== 'string') throw new Error('Missing native cover reference');
+  if (
+    command.op !== 'propose' ||
+    command.statement.value.type !== 'value' ||
+    typeof command.statement.value.content !== 'string'
+  )
+    throw new Error('Missing native cover reference');
   return command.statement.value.content;
 }
 function boundCover(f: CoverRecovery) {
@@ -20,9 +24,9 @@ function boundCover(f: CoverRecovery) {
   return { bound, command, media: mediaOf(command) };
 }
 function localAck(f: CoverRecovery, key: string) {
-  return f.importer.session.store.database.query(
-    'SELECT acknowledgement FROM binding_journal WHERE source=? AND external_id=? AND key=?',
-  ).get(f.owner.source, f.owner.external_id, key) as { acknowledgement: string };
+  return f.importer.session.store.database
+    .query('SELECT acknowledgement FROM binding_journal WHERE source=? AND external_id=? AND key=?')
+    .get(f.owner.source, f.owner.external_id, key) as { acknowledgement: string };
 }
 async function pixels(bytes: Uint8Array, channel: number) {
   const { data, info } = await sharp(bytes).removeAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -36,13 +40,22 @@ async function pixels(bytes: Uint8Array, channel: number) {
 }
 async function nativeImage(f: CoverRecovery, media: string, version: number, bytes: Uint8Array) {
   const observed = await f.runtime.mediaBoundary.observe(media);
-  expect(observed.row).toMatchObject({ id: media, containerId: f.subject(), purpose: 'cover',
-    state: 'available', sourceUrl: f.urls[version], sha256: digest(bytes) });
+  expect(observed.row).toMatchObject({
+    id: media,
+    containerId: f.subject(),
+    purpose: 'cover',
+    state: 'available',
+    sourceUrl: f.urls[version],
+    sha256: digest(bytes),
+  });
   expect(observed.transitions).toEqual(['reserved', 'uploaded', 'available']);
   expect(observed.original).toEqual(bytes);
   await pixels(observed.original!, version);
-  expect(observed.row.credit).toMatchObject({ rightsHolder: '(c) rights holder',
-    via: { name: 'Bangumi', url: `https://bgm.tv/subject/${f.owner.external_id}` }, license: 'LicenseRef-unknown' });
+  expect(observed.row.credit).toMatchObject({
+    rightsHolder: '(c) rights holder',
+    via: { name: 'Bangumi', url: `https://bgm.tv/subject/${f.owner.external_id}` },
+    license: 'LicenseRef-unknown',
+  });
   expect(observed.row.provenance).toMatchObject({ ...f.owner, field_group: 'cover' });
   const references = JSON.stringify(observed.row.provenance.references);
   expect(references).toContain(f.urls[version]!);
@@ -61,10 +74,10 @@ async function published(f: CoverRecovery, media: string, version: number, bytes
   const response = await f.runtime.request(`/v1/subjects/${f.subject()}`);
   expect(response.status).toBe(200);
   expect(response.headers.has('location')).toBe(false);
-  const subject = await response.json() as SubjectBody;
+  const subject = (await response.json()) as SubjectBody;
   const page = await f.runtime.request('/v1/pages:read', { target: { subject: f.subject() } });
   expect(page.status).toBe(200);
-  const body = await page.json() as { subject: string; reads: Record<string, { status: number; body: SubjectBody }> };
+  const body = (await page.json()) as { subject: string; reads: Record<string, { status: number; body: SubjectBody }> };
   expect(body.subject).toBe(f.subject());
   const read = Object.values(body.reads).find((entry) => entry.body?.subject?.id === f.subject());
   expect(read?.status).toBe(200);
@@ -80,10 +93,12 @@ async function published(f: CoverRecovery, media: string, version: number, bytes
     expect(references).toContain(`https://bgm.tv/subject/${f.owner.external_id}`);
     expect(surface.summary.cover!.variants.length).toBeGreaterThan(0);
     for (const variant of surface.summary.cover!.variants) {
-      const authorized = await f.runtime.request(`/v1/media/${media}:authorizeDownload?variant=${variant.format}-${variant.width}`);
+      const authorized = await f.runtime.request(
+        `/v1/media/${media}:authorizeDownload?variant=${variant.format}-${variant.width}`,
+      );
       expect(authorized.status).toBe(200);
       expect(authorized.headers.has('location')).toBe(false);
-      const decision = await authorized.json() as { allowed: boolean; key: string };
+      const decision = (await authorized.json()) as { allowed: boolean; key: string };
       expect(decision.allowed).toBe(true);
       const actual = native.variants.find((entry) => entry.format === variant.format && entry.width === variant.width)!;
       expect(actual).toBeDefined();
@@ -127,7 +142,11 @@ test('actual interrupted cover replacement recovers exact acknowledged media and
     // Factory defaults already exist. Override their exact allowed URLs before any import.
     const sources: Uint8Array[] = [];
     for (const [version, background] of ['#ff0000', '#00ff00', '#0000ff'].entries()) {
-      const bytes = new Uint8Array(await sharp({ create: { width: 24, height: 16, channels: 3, background } }).png().toBuffer());
+      const bytes = new Uint8Array(
+        await sharp({ create: { width: 24, height: 16, channels: 3, background } })
+          .png()
+          .toBuffer(),
+      );
       sources.push(bytes);
       expect((await f.runtime.mediaBoundary.source(f.urls[version]!, undefined, bytes)).bytes).toEqual(bytes);
     }
@@ -166,10 +185,13 @@ test('actual interrupted cover replacement recovers exact acknowledged media and
     expect(await f.runtime.receipt(ack.command.key)).toBe(ack.receipt);
     expect(await f.runtime.mediaBoundary.observe(green.media)).toEqual(before);
     expect(f.acknowledgements.filter((entry) => entry.command.key === ack.command.key)).toEqual([ack]);
-    const retractions = (candidate: string) => f.acknowledgements.filter((entry) => entry.command.op === 'retract' && entry.command.candidate === candidate);
+    const retractions = (candidate: string) =>
+      f.acknowledgements.filter((entry) => entry.command.op === 'retract' && entry.command.candidate === candidate);
     expect(retractions(green.bound.candidate)).toEqual([]);
     expect(retractions(red.bound.candidate)).toHaveLength(1);
-    expect((await f.listing('schema:image')).candidates.filter((entry) => entry.retracted === null).map((entry) => entry.id)).toEqual([green.bound.candidate]);
+    expect(
+      (await f.listing('schema:image')).candidates.filter((entry) => entry.retracted === null).map((entry) => entry.id),
+    ).toEqual([green.bound.candidate]);
     expect(f.pending).toHaveLength(2);
     await f.select('schema:image', green.bound.candidate);
     const greenHashes = await published(f, green.media, 1, sources[1]!);
@@ -199,8 +221,16 @@ test('actual interrupted cover replacement recovers exact acknowledged media and
     }
     expect(capture.liveInternetRequests).toEqual([]);
     expect(capture.peakBufferedSourceBytes).toBeLessThanOrEqual(20 * 1024 * 1024);
-    console.log('cover-recovery-pixels native evidence', JSON.stringify({ interrupted: ack, binding: green.bound,
-      media: [red.media, green.media, blue.media], originals: sources.map(digest), derivatives: [redHashes, greenHashes, blueHashes] }));
+    console.log(
+      'cover-recovery-pixels native evidence',
+      JSON.stringify({
+        interrupted: ack,
+        binding: green.bound,
+        media: [red.media, green.media, blue.media],
+        originals: sources.map(digest),
+        derivatives: [redHashes, greenHashes, blueHashes],
+      }),
+    );
   } finally {
     await f.close();
   }
