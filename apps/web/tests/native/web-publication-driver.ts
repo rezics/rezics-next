@@ -61,8 +61,8 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
     data.definitions.wordCount,
     'wdt:P7937',
     'schema:keywords',
-    data.definitions.diet,
-    data.definitions.cookTime.split(',')[0]!,
+    'schema:suitableForDiet',
+    'schema:cookTime',
     'schema:recipeIngredient',
     'schema:recipeInstructions',
   ]) {
@@ -71,6 +71,7 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
 }
 
 export async function createWebPublicationDriver(): Promise<WebPublicationDriver> {
+  const factoryStarted = performance.now();
   const stack = await startNativeWebStack();
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
@@ -84,7 +85,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       const measurements = feedMeasurements.get(new URL(path, stack.kernelOrigin).pathname);
       measurements?.times.push(performance.now() - started);
       if (response.ok) return response;
-      const problem = await response.clone().json().catch(() => null) as
+      const problem = (await response.clone().json().catch(() => null)) as
         | { retryable?: unknown; request_id?: unknown }
         | null;
       if (problem?.retryable !== true || attempt === 3) return response;
@@ -96,7 +97,14 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       await Bun.sleep(1000 * 2 ** attempt);
     }
   };
-  const request: WebPublicationDriver['request'] = (url, persona, headers) => stack.request(url, persona, headers);
+  const request: WebPublicationDriver['request'] = async (url, persona, headers) => {
+    const before = stack.kernelRequests().length;
+    const response = await stack.request(url, persona, headers);
+    console.info(
+      `web-publication-driver-document: path=${new URL(url, publicOrigin).pathname} kernel-requests=${stack.kernelRequests().length - before}`,
+    );
+    return response;
+  };
   const provision = async (data: typeof import('../../../../specs/fixtures/web-publication.json')) => {
     const started = performance.now();
     assertReleasedDefinitions(data);
@@ -257,7 +265,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       sitemap,
     };
     console.info(
-      `web-publication-driver-growth: setup=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created.size}`,
+      `web-publication-driver-growth: setup=${Math.round(performance.now() - factoryStarted)}ms provision=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created.size}`,
     );
     return fixture;
   };
@@ -295,7 +303,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         feedMeasurements.delete(route);
         const times = measurements.times.sort((a, b) => a - b);
         const middle = Math.floor(times.length / 2);
-        const median = times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
+        const median =
+          times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
         console.info(
           `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
         );
@@ -303,7 +312,9 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     }
     // Exhausted discovery feeds do not establish asynchronous consumer progress.
     // Do not replace the missing native completion read with a timed sleep.
-    throw new Error('settle requires a native HTTP read reporting durable projections and the search index drained; the kernel exposes none');
+    throw new Error(
+      'settle requires a native HTTP read reporting durable projections and the search index drained; the kernel exposes none',
+    );
   };
 
   return {

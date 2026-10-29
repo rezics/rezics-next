@@ -32,7 +32,7 @@ describe('native web publication driver host', () => {
       const body = (await response.json()) as { subject: { id: string; type: string } };
       expect(body.subject.id).toBe(id);
       expect(body.subject.type).toBe(type);
-      expect(bundledRelease.types[type as keyof typeof bundledRelease.types].schemaOrgType).toBe(
+      expect(bundledRelease.types[type]?.schemaOrgType).toBe(
         `https://schema.org/${data.subjects[key as keyof typeof data.subjects].schemaOrgType}`,
       );
     }
@@ -64,7 +64,8 @@ describe('native web publication driver host', () => {
       for (const subject of page.subjectPages) published.add(subject.id);
       cursor = page.next;
     } while (cursor !== null);
-    for (const url of Object.values(fixture.subjects)) expect(published.has(new URL(url).pathname.split('/')[3]!)).toBe(true);
+    for (const url of Object.values(fixture.subjects))
+      expect(published.has(new URL(url).pathname.split('/')[3]!)).toBe(true);
     const search = await fetch(`${kernelOrigin}/v1/subjects:search`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
