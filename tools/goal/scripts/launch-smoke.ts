@@ -532,7 +532,7 @@ estimate:
 criticalPath: false
 waiting: []
 ---
-Use at most 2000 generated tokens for this task. Run exactly this command once: \`bun ${JSON.stringify(workerCheckScript)} -- bun -e 'process.stdout.write("launch smoke check passed\\n")'\`.
+Use at most 2000 generated tokens for this task. Run exactly this command once: \`bun ${JSON.stringify(workerCheckScript)} --local -- bun -e 'process.stdout.write("launch smoke check passed\\n")'\`.
 Do not pass \`--wait\`, poll, or start another check. Return exactly the required result fields. For the wait, use \`{"status":"waiting","summary":"check started","blocker":null,"checks":["<id>"],"approaches":[]}\`, replacing <id> with the id printed by worker-check. When resumed with exit status 0, return \`{"status":"success","summary":"check passed","blocker":null,"checks":[],"approaches":[]}\`. Do not edit files.
 `;
     const brief = parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile));
