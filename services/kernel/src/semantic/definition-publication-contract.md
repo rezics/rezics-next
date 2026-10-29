@@ -224,7 +224,8 @@ late-result check alone is not physical thread/heap reclamation evidence.
 
 Bun ignores Worker resourceLimits; no runtime heap cap is claimed. Proposed transport is one transferred
 owned wire buffer, never a structured clone of a parsed graph. Result is verdict, digests and at most 64 errors.
-Parent O(wire bytes) copying is charged; per-node JS parsing/traversal belongs in the job. Parse once.
+Charge actual ingress assembly, parent byte scans and allocations; transfer adds zero full-body copy.
+Per-node JS parsing/traversal belongs in the job. Parse once.
 
 The current adopted ingress declaration is `RELEASE_LIMITS.bytes + 65,536 = 4,259,840` wire bytes, independently
 of the unchanged 4,194,304 canonical-release-byte cap. Send compact JSON: key ordering does not affect compact
