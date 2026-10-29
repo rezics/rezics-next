@@ -157,6 +157,7 @@ test('activity ascending growth retains logarithmic indexed work and declares it
             expect(plans).toHaveLength(cases.length);
             let rangeProbes = 0,
               hydrationProbes = 0;
+            const queryProbes = [];
             for (let i = 0; i < cases.length; i++) {
               const c = cases[i]!,
                 plan = plans[i];
@@ -172,6 +173,16 @@ test('activity ascending growth retains logarithmic indexed work and declares it
                 .reduce((sum, scan) => sum + Number(scan['Actual Loops']), 0);
               expect(hydrations).toBe(c.expected.length + Number(c.more));
               hydrationProbes += hydrations;
+              queryProbes.push({
+                state: c.query.state,
+                typeId: c.query.typeId,
+                after: c.after,
+                index: c.index,
+                rangeProbes: ranges.reduce((sum, scan) => sum + Number(scan['Actual Loops']), 0),
+                hydrationProbes: hydrations,
+                rows: cost.rows,
+                blocks: cost.blocks,
+              });
               for (const scan of scans) {
                 if (scan['Index Name'] === 'entry_pkey') {
                   expect(scan['Index Cond']).toMatch(/route = .*account_id = .*subject_id =/);
@@ -213,6 +224,7 @@ test('activity ascending growth retains logarithmic indexed work and declares it
                 indexProbes,
                 rangeProbes,
                 hydrationProbes,
+                queryProbes,
               }),
             );
           },
@@ -230,9 +242,10 @@ test('activity ascending growth retains logarithmic indexed work and declares it
             rule: report.rule,
             indexProbes,
             shadow: report.shadow,
-            samples: report.samples.map(({ scale, cost: { rows, blocks, statements }, repetitions }) => ({
+            samples: report.samples.map(({ scale, cost: { rows, blocks, statements }, repetitions, relationSizes }) => ({
               scale,
               population: populations.get(scale),
+              relationSizes,
               rows,
               blocks,
               statements,
