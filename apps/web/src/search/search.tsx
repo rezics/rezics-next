@@ -4,6 +4,7 @@ import type { KernelClient } from '@rezics/client';
 import { Cover, sharedRatio } from '@rezics/ui/cover';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@rezics/ui/shadcn/drawer';
 import {
   Combobox,
   ComboboxContent,
@@ -71,7 +72,12 @@ type SearchPageData = {
   groups: {
     property: string;
     labels: Record<string, string>;
-    values: { value: string; count: number; labels: Record<string, string> }[];
+    values: {
+      value: string;
+      count: number;
+      labels: Record<string, string>;
+      parentTypeLabels?: Record<string, string>;
+    }[];
   }[];
   selectedFacets: Record<string, string[]>;
   selectedFacetLabels: Record<string, Record<string, string>>;
@@ -88,6 +94,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function allowedType(release: Release, type: unknown): type is string {
   return typeof type === 'string' && Object.hasOwn(release.types, type) && isRecord(release.types[type]);
+}
+
+function parentTypeLabels(release: Release, type: string): Record<string, string> | undefined {
+  if (!allowedType(release, type)) return;
+  const bases = release.types[type]?.bases;
+  if (!Array.isArray(bases)) return;
+  for (const base of bases) {
+    if (allowedType(release, base)) return release.types[base]?.labels ?? {};
+  }
 }
 
 /** Properties whose values a result row can show: items, years, quantities and codes with a declared pattern. */
@@ -270,7 +285,10 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ? facetPropertiesForType.map((property) => ({
             property,
             labels: release!.properties[property]?.labels ?? {},
-            values: valuesByProperty.get(property) ?? [],
+            values: (valuesByProperty.get(property) ?? []).map((entry) => {
+              const parentLabels = parentTypeLabels(release!, entry.value);
+              return { ...entry, ...(parentLabels ? { parentTypeLabels: parentLabels } : {}) };
+            }),
           }))
         : [];
     const hitTypes: Record<string, Record<string, string>> = {};
@@ -338,6 +356,7 @@ const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start 
 export function SearchPage({ query, cursor, data }: { query: string; cursor?: string; data?: SearchPageData }) {
   const [formQuery, setFormQuery] = useState(query);
   const [hydrated, setHydrated] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const locale = getLocale();
   const type = data?.type;
   const result = data?.result;
@@ -351,13 +370,131 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
   const typeLabel = type
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
     : undefined;
-  const hasFilterPanel = Boolean(data?.facetsAvailable && (data.typeChoices.length > 0 || type));
+  const hasFilterPanel = Boolean(
+    query && result?.subjects.length && data?.facetsAvailable && (data.typeChoices.length || type),
+  );
   const results = renderResults(query, cursor, result, locale, type, selectedFacets, data);
+
+  const filterContents = (surface: 'desktop' | 'mobile') => (
+    <div className="space-y-5 pt-3 lg:pt-0">
+      <input type="hidden" name="q" value={query} />
+      {type && <input type="hidden" name="type" value={type} />}
+      {type ? (
+        <section className="space-y-3">
+          <h2 className="font-medium">
+            {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
+          </h2>
+          <a className={linkClass} href={searchHref(locale, query, undefined, {})}>
+            {m.search_clear_type()}
+          </a>
+          {Object.entries(selectedFacets).length > 0 && (
+            <>
+              <Separator />
+              <ul className="space-y-2">
+                {Object.entries(selectedFacets).map(([property, values]) => {
+                  const label = localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale);
+                  return (
+                    <li key={property} className="flex items-baseline justify-between gap-2 text-sm">
+                      <span lang={label.lang}>{label.text || property}</span>
+                      <a
+                        className={linkClass}
+                        href={searchHref(
+                          locale,
+                          query,
+                          type,
+                          Object.fromEntries(Object.entries(selectedFacets).filter(([key]) => key !== property)),
+                        )}
+                      >
+                        {m.search_clear_facet()}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {data?.groups.map((group) => {
+            const propertyLabel = localizedLabel(group.labels, locale);
+            const selected = selectedFacets[group.property] ?? [];
+            const unique = [...new Map(group.values.map((entry) => [entry.value, entry])).values()];
+            const labelCounts = new Map<string, number>();
+            for (const entry of unique) {
+              const label = localizedLabel(entry.labels, locale).text || entry.value;
+              labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+            }
+            if (unique.length === 0) return null;
+            return (
+              <div key={group.property} className="space-y-3">
+                <Separator />
+                <FieldSet className="gap-2">
+                  <FieldLegend variant="label" className="mb-0" lang={propertyLabel.lang}>
+                    {propertyLabel.text || group.property}
+                  </FieldLegend>
+                  <ul className="space-y-2">
+                    {unique.map((entry) => {
+                      const valueLabel = localizedLabel(entry.labels, locale);
+                      const text = valueLabel.text || entry.value;
+                      const parentLabel = localizedLabel(entry.parentTypeLabels ?? {}, locale);
+                      const disambiguator = parentLabel.text ? parentLabel : typeLabel;
+                      const id = `facet-${surface}-${encodeURIComponent(group.property)}-${encodeURIComponent(entry.value)}`;
+                      return (
+                        <li key={entry.value}>
+                          <Label className="items-start gap-2 text-sm font-normal" htmlFor={id} lang={valueLabel.lang}>
+                            <input
+                              id={id}
+                              form={`${surface}-filter-form`}
+                              type="checkbox"
+                              name={`f.${group.property}`}
+                              value={entry.value}
+                              defaultChecked={selected.includes(entry.value)}
+                              className="mt-0.5 size-4 shrink-0 accent-primary"
+                              onChange={(event) => {
+                                if (hydrated) event.currentTarget.form?.requestSubmit();
+                              }}
+                            />
+                            <span>
+                              {text}
+                              {labelCounts.get(text)! > 1 && (
+                                <span lang={disambiguator?.lang}> ({disambiguator?.text || type})</span>
+                              )}
+                            </span>
+                          </Label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </FieldSet>
+              </div>
+            );
+          })}
+        </section>
+      ) : (
+        <section className="space-y-3">
+          <h2 className="font-medium">{m.search_types()}</h2>
+          <ul className="space-y-2">
+            {data?.typeChoices.map((choice) => {
+              const label = localizedLabel(choice.labels, locale);
+              return (
+                <li key={choice.id}>
+                  <a className={linkClass} href={searchHref(locale, query, choice.id, {})} lang={label.lang}>
+                    {label.text || choice.id}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+      <Button type="submit" variant="outline" hidden={hydrated}>
+        {m.search_apply()}
+      </Button>
+    </div>
+  );
 
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading()}</PageHeading>
-      <form method="get" action={`/${locale}/search`} className="space-y-5">
+      <form id="search-form" method="get" action={`/${locale}/search`} className="space-y-5">
         <div className="flex gap-2">
           <Label className="sr-only" htmlFor="search-query">
             {m.search_label()}
@@ -374,137 +511,42 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
           </Button>
         </div>
         {type && <input type="hidden" name="type" value={type} />}
-        {hasFilterPanel ? (
-          <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-            <Collapsible defaultOpen className="rounded-xl border border-border/60 p-4 lg:col-start-1 lg:row-start-1">
-              <CollapsibleTrigger
-                className={`${buttonVariants({ variant: 'ghost' })} w-full justify-between font-medium lg:hidden`}
-              >
+      </form>
+      {hasFilterPanel ? (
+        <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+          <form
+            id="desktop-filter-form"
+            method="get"
+            action={`/${locale}/search`}
+            className="hidden lg:block lg:col-start-1 lg:row-start-1"
+          >
+            <Collapsible defaultOpen className="rounded-xl border border-border/60 p-4">
+              <CollapsibleTrigger className="hidden">
                 {m.search_filters()} ({number.format(activeFilterCount)})
               </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="space-y-5 pt-3 lg:pt-0">
-                  {type ? (
-                    <section className="space-y-3">
-                      <h2 className="font-medium">
-                        {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
-                      </h2>
-                      <a className={linkClass} href={searchHref(locale, query, undefined, {})}>
-                        {m.search_clear_type()}
-                      </a>
-                      {Object.entries(selectedFacets).length > 0 && (
-                        <>
-                          <Separator />
-                          <ul className="space-y-2">
-                            {Object.entries(selectedFacets).map(([property, values]) => {
-                              const label = localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale);
-                              return (
-                                <li key={property} className="flex items-baseline justify-between gap-2 text-sm">
-                                  <span lang={label.lang}>{label.text || property}</span>
-                                  <a
-                                    className={linkClass}
-                                    href={searchHref(
-                                      locale,
-                                      query,
-                                      type,
-                                      Object.fromEntries(
-                                        Object.entries(selectedFacets).filter(
-                                          ([selectedProperty]) => selectedProperty !== property,
-                                        ),
-                                      ),
-                                    )}
-                                  >
-                                    {m.search_clear_facet()} ({number.format(values.length)})
-                                  </a>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </>
-                      )}
-                      {data?.groups.map((group) => {
-                        const propertyLabel = localizedLabel(group.labels, locale);
-                        const selected = selectedFacets[group.property] ?? [];
-                        return (
-                          <div key={group.property} className="space-y-3">
-                            <Separator />
-                            <FieldSet className="gap-2">
-                              <FieldLegend variant="label" className="mb-0" lang={propertyLabel.lang}>
-                                {propertyLabel.text || group.property}
-                              </FieldLegend>
-                              <ul className="space-y-2">
-                                {group.values.map((entry) => {
-                                  const valueLabel = localizedLabel(entry.labels, locale);
-                                  const id = `facet-${encodeURIComponent(group.property)}-${encodeURIComponent(entry.value)}`;
-                                  return (
-                                    <li key={entry.value}>
-                                      <Label
-                                        className="items-start gap-2 text-sm font-normal"
-                                        htmlFor={id}
-                                        lang={valueLabel.lang}
-                                      >
-                                        <input
-                                          id={id}
-                                          type="checkbox"
-                                          name={`f.${group.property}`}
-                                          value={entry.value}
-                                          defaultChecked={selected.includes(entry.value)}
-                                          className="mt-0.5 size-4 shrink-0 accent-primary"
-                                          onChange={(event) => {
-                                            if (hydrated) event.currentTarget.form?.requestSubmit();
-                                          }}
-                                        />
-                                        <span>
-                                          {valueLabel.text || entry.value} ({number.format(entry.count)})
-                                        </span>
-                                      </Label>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </FieldSet>
-                          </div>
-                        );
-                      })}
-                    </section>
-                  ) : (
-                    <section className="space-y-3">
-                      <h2 className="font-medium">{m.search_types()}</h2>
-                      <ul className="space-y-2">
-                        {data?.typeChoices.map((choice) => {
-                          const label = localizedLabel(choice.labels, locale);
-                          return (
-                            <li key={choice.id} className="flex items-baseline gap-2">
-                              <a
-                                className={linkClass}
-                                href={searchHref(locale, query, choice.id, {})}
-                                lang={label.lang}
-                              >
-                                {label.text || choice.id}
-                              </a>
-                              {choice.count !== undefined && (
-                                <span className="text-sm text-muted-foreground tabular-nums">
-                                  ({number.format(choice.count)})
-                                </span>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </section>
-                  )}
-                  <Button type="submit" variant="outline" hidden={hydrated}>
-                    {m.search_apply()}
-                  </Button>
-                </div>
-              </CollapsibleContent>
+              <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
             </Collapsible>
-            <div className="space-y-4 lg:col-start-2 lg:row-start-1">{results}</div>
-          </div>
-        ) : (
-          results
-        )}
-      </form>
+          </form>
+          <Drawer open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <DrawerTrigger className={`${buttonVariants({ variant: 'outline' })} w-full justify-between lg:hidden`}>
+              {m.search_filters()} ({number.format(activeFilterCount)})
+            </DrawerTrigger>
+            <DrawerContent className="lg:hidden">
+              <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
+                <DrawerHeader>
+                  <DrawerTitle>
+                    {m.search_filters()} ({number.format(activeFilterCount)})
+                  </DrawerTitle>
+                </DrawerHeader>
+                <div className="min-h-0 overflow-y-auto p-4">{filterContents('mobile')}</div>
+              </form>
+            </DrawerContent>
+          </Drawer>
+          <div className="order-first min-w-0 space-y-4 lg:order-none lg:col-start-2 lg:row-start-1">{results}</div>
+        </div>
+      ) : (
+        results
+      )}
     </section>
   );
 }

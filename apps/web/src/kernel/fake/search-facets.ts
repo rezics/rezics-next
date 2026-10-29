@@ -1,7 +1,59 @@
+<<<<<<< HEAD
 import type { KernelClient } from '@rezics/client';
 import type { Fixtures, KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
+import emptySearch from '../recorded/search-empty.json';
+import typedSearch from '../recorded/search-typed.json';
 import { chosenLabels, isRecord, languageList } from './languages.ts';
+
+export const searchFacetStoryPaths = {
+  results: '/search?q=Prince&type=schema%3ABook',
+  active: '/search?q=Prince&type=schema%3ABook&f.schema%3Agenre=wd%3AQ24925',
+  noResults: `/search?q=${encodeURIComponent(emptySearch.query)}`,
+  emptyQuery: '/search',
+};
+
+const storyValues: Record<string, { value: string; count: number; labels: Record<string, string> }[]> = {
+  'schema:author': [
+    {
+      value: '00000000-0000-4000-8000-000000000101',
+      count: 1,
+      labels: { en: 'Antoine de Saint-Exupéry', 'zh-Hans': '安托万·德·圣埃克苏佩里' },
+    },
+  ],
+  'schema:genre': [{ value: 'wd:Q24925', count: 1, labels: { en: 'Fantasy', 'zh-Hans': '奇幻' } }],
+  'schema:datePublished': [],
+};
+
+async function storySearch(request: Request): Promise<KernelRecording | undefined> {
+  let body: { text?: unknown };
+  try {
+    body = (await request.json()) as { text?: unknown };
+  } catch {
+    return;
+  }
+  if (body.text === typedSearch.query) return typedSearch as KernelRecording;
+  if (body.text === emptySearch.query) return emptySearch as KernelRecording;
+}
+
+async function storyFacets(request: Request): Promise<KernelRecording | undefined> {
+  let body: { facets?: { property: string }[] };
+  try {
+    body = (await request.json()) as { facets?: { property: string }[] };
+  } catch {
+    return;
+  }
+  return {
+    status: 200,
+    facets: (body.facets ?? []).map(({ property }) => ({
+      property,
+      relation: 'exact',
+      values: storyValues[property] ?? [],
+    })),
+    total: { value: 1, relation: 'exact' },
+    as_of: '2026-10-26T18:21:56.818Z',
+  };
+}
 
 type FacetsResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$facets']['post']>>['data']>;
 
@@ -115,10 +167,13 @@ async function requestBody(request: Request): Promise<Record<string, unknown> | 
 }
 
 export const routes: FakeRoute[] = [
+  { method: 'POST', path: '/v1/subjects:search', story: ({ request }) => storySearch(request) },
   {
     method: 'POST',
     path: '/v1/subjects:facets',
     story: async ({ request, recordings }) => {
+      const story = await storyFacets(request.clone());
+      if (story) return story;
       const body = await requestBody(request);
       if (!body) return undefined;
       const languages = languageList(body.languages);
@@ -135,4 +190,64 @@ export const routes: FakeRoute[] = [
       return { ...fixtureResponse(fixtures, recordings, body), status: 200 };
     },
   },
+=======
+import type { KernelRecording } from '../fake';
+import type { FakeRoute } from '../fake-modules';
+import emptySearch from '../recorded/search-empty.json';
+import typedSearch from '../recorded/search-typed.json';
+
+export const searchFacetStoryPaths = {
+  results: '/search?q=Prince&type=schema%3ABook',
+  active: '/search?q=Prince&type=schema%3ABook&f.schema%3Agenre=wd%3AQ24925',
+  noResults: `/search?q=${encodeURIComponent(emptySearch.query)}`,
+  emptyQuery: '/search',
+};
+
+const values: Record<string, { value: string; count: number; labels: Record<string, string> }[]> = {
+  'schema:author': [
+    {
+      value: '00000000-0000-4000-8000-000000000101',
+      count: 1,
+      labels: { en: 'Antoine de Saint-Exupéry', 'zh-Hans': '安托万·德·圣埃克苏佩里' },
+    },
+  ],
+  'schema:genre': [{ value: 'wd:Q24925', count: 1, labels: { en: 'Fantasy', 'zh-Hans': '奇幻' } }],
+  'schema:datePublished': [],
+};
+
+/** Responses for Search stories, kept separate from recorded kernel responses. */
+async function storySearch(request: Request): Promise<KernelRecording | undefined> {
+  let body: { text?: unknown };
+  try {
+    body = (await request.json()) as { text?: unknown };
+  } catch {
+    return;
+  }
+  if (body.text === typedSearch.query) return typedSearch as KernelRecording;
+  if (body.text === emptySearch.query) return emptySearch as KernelRecording;
+}
+
+async function storyFacets(request: Request): Promise<KernelRecording | undefined> {
+  let body: { facets?: { property: string }[] };
+  try {
+    body = (await request.json()) as { facets?: { property: string }[] };
+  } catch {
+    return;
+  }
+  return {
+    status: 200,
+    facets: (body.facets ?? []).map(({ property }) => ({
+      property,
+      relation: 'exact',
+      values: values[property] ?? [],
+    })),
+    total: { value: 1, relation: 'exact' },
+    as_of: '2026-10-26T18:21:56.818Z',
+  };
+}
+
+export const routes: FakeRoute[] = [
+  { method: 'POST', path: '/v1/subjects:search', story: ({ request }) => storySearch(request) },
+  { method: 'POST', path: '/v1/subjects:facets', story: ({ request }) => storyFacets(request) },
+>>>>>>> 8b829d05d7 (Squash worker branch changes)
 ];

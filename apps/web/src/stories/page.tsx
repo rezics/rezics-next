@@ -8,6 +8,7 @@ import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { deletedOrganizationThreadId } from '../kernel/fake';
+import { searchFacetStoryPaths } from '../kernel/fake/search-facets';
 import { threadHref } from '../threads/thread-href';
 import boardRecording from '../kernel/recorded/board.json';
 import boardThreadsRecording from '../kernel/recorded/board-threads.json';
@@ -65,6 +66,10 @@ export const pagePaths = {
   search: `/search?q=${encodeURIComponent(searchRecording.query)}`,
   'search-typed': `/search?q=${encodeURIComponent(searchTypedRecording.query)}&type=${encodeURIComponent(searchTypedRecording.filterType)}`,
   'search-empty': `/search?q=${encodeURIComponent(searchEmptyRecording.query)}`,
+  'search-facets': searchFacetStoryPaths.results,
+  'search-facet-active': searchFacetStoryPaths.active,
+  'search-no-results': searchFacetStoryPaths.noResults,
+  'search-empty-query': searchFacetStoryPaths.emptyQuery,
   'library-entries': '/library',
   'library-collections': '/library/collections',
   'library-copies': '/library/copies',
