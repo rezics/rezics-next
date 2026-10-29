@@ -5,6 +5,7 @@ import type { Dump, Run } from '../../../../specs/imports-api-driver.ts';
 import { openApiRuntime, type ApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import type { Statement } from '../../src/semantic/item.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 const work = {
@@ -24,7 +25,7 @@ const edition = {
   authors: [{ key: '/authors/OL1A' }],
 };
 const relation = 'schema:exampleOfWork';
-type Candidate = { id: string; statement: BatchStatement; revision: number; retracted: number | null };
+type Candidate = { id: string; statement: Statement; revision: number; retracted: number | null };
 type Propose = Extract<BatchCommand, { op: 'propose' }>;
 const owner = (key: string) => ({ source: 'openlibrary', external_id: key });
 function dump(records: readonly (typeof work | typeof edition)[]): Dump {
@@ -66,7 +67,7 @@ function claim(runtime: ApiRuntime, run: Run, key: string) {
   expect(binding).toEqual({ state: 'bound', subject: result.value.id });
   return { id: result.value.id, response: result, binding };
 }
-function unresolved(statement: BatchStatement, key: string, wire: 'proposal' | 'native' = 'proposal') {
+function unresolved(statement: BatchStatement | Statement, key: string, wire: 'proposal' | 'native' = 'proposal') {
   expect(statement.value).toEqual({ type: 'somevalue' });
   expect(statement.qualifiers).toContainEqual({
     property: wire === 'native' ? { id: 'wdt:P648', data_type: 'external-id' } : { id: 'wdt:P648' },
