@@ -217,3 +217,12 @@ the composed journey. No product, helper, old test or outside-path edit is neede
 Decision: submit the delivery command first to retry the manifest failure, then exactly one
 focused native-file check and the affected kernel typecheck. No whole-workspace gate is required.
 Results from this submission will be recorded separately from historical execution evidence.
+
+At committed revision `192e368d00`, all three submissions returned check IDs successfully:
+
+- Delivery: `285cea80-8323-4d51-8802-f245992e1398`.
+- Focused native file: `52ae48d7-4316-48a6-b865-32dce3962944`.
+- Affected kernel typecheck: `8a7ea23f-eb64-43b1-8d02-e8475d07a963`.
+
+These are queued/running submissions, not passing results. The manifest's submission failure
+did not recur with the current required syntax. Assertions remain frozen and unchanged.
