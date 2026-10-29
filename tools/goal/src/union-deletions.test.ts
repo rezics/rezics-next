@@ -14,7 +14,11 @@ function conflictStages(root: string, file: string, base: string, dev: string, t
     return git(root, 'hash-object', '-w', path);
   });
   const input = blobs.map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`).join('\n');
-  const staged = spawnSync('git', ['update-index', '--index-info'], { cwd: root, encoding: 'utf8', input: `${input}\n` });
+  const staged = spawnSync('git', ['update-index', '--index-info'], {
+    cwd: root,
+    encoding: 'utf8',
+    input: `${input}\n`,
+  });
   expect(staged.status).toBe(0);
 }
 
@@ -23,7 +27,13 @@ test('a Markdown union that retains a line deleted by the task is returned to th
   try {
     const file = '.temp/deleted-union.md';
     mkdirSync(join(h.root, '.temp'), { recursive: true });
-    conflictStages(h.root, file, 'before\nold permission\nafter\n', 'before\nold permission\ndev note\nafter\n', 'before\nnew permission\nafter\n');
+    conflictStages(
+      h.root,
+      file,
+      'before\nold permission\nafter\n',
+      'before\nold permission\ndev note\nafter\n',
+      'before\nnew permission\nafter\n',
+    );
 
     expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toThrow(
       `Worker change conflicts with dev in ${file}: task-deleted lines remain: "old permission"`,
@@ -38,7 +48,13 @@ test('a union of independent Markdown insertions still integrates', () => {
   try {
     const file = '.temp/independent-union.md';
     mkdirSync(join(h.root, '.temp'), { recursive: true });
-    conflictStages(h.root, file, 'before\nafter\n', 'before\ndev insertion\nafter\n', 'before\ntask insertion\nafter\n');
+    conflictStages(
+      h.root,
+      file,
+      'before\nafter\n',
+      'before\ndev insertion\nafter\n',
+      'before\ntask insertion\nafter\n',
+    );
 
     expect(resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toEqual([file]);
     expect(readFileSync(join(h.root, file), 'utf8')).toContain('task insertion');
@@ -109,7 +125,9 @@ test('a JSON-message union rejects deleted lines retained elsewhere in the resul
     expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toThrow(
       `Worker change conflicts with dev in ${file}: task-deleted lines remain:`,
     );
-    expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toThrow(JSON.stringify('    "text": "old"'));
+    expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toThrow(
+      JSON.stringify('    "text": "old"'),
+    );
     expect(readFileSync(join(h.root, file), 'utf8')).toBe('unmerged content\n');
   } finally {
     h.dispose();
@@ -152,7 +170,13 @@ test('a retained deletion is named even when the union otherwise equals dev', ()
   try {
     const file = '.temp/deleted-only.md';
     // Rebase index order: base, dev, task.
-    conflictStages(h.root, file, 'before\nold permission\nafter\n', 'before\nafter\n', 'before\nold permission\ndev note\nafter\n');
+    conflictStages(
+      h.root,
+      file,
+      'before\nold permission\nafter\n',
+      'before\nafter\n',
+      'before\nold permission\ndev note\nafter\n',
+    );
 
     expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union', 3)).toThrow(
       `Worker change conflicts with dev in ${file}: task-deleted lines remain: "old permission"`,
