@@ -6,7 +6,7 @@ import { convertVndb, converter_revision } from '../src/vndb.ts';
 const subjectId = '00000000-0000-4000-8000-000000000001';
 
 function input(latin: unknown = null, title = '港の物語') {
-  const latinField = arguments.length > 0 && latin === undefined ? {} : { latin };
+  const latinField = arguments.length > 0 && arguments[0] === undefined ? {} : { latin };
   return {
     external_id: 'v124',
     record_revision: '19',
@@ -56,13 +56,16 @@ test('optional Latin preserves null, exact empty and nonempty values without inv
   expect(empty.digest).toBe(convertVndb(input(''), {}, { converterRevision: 'vndb@999-test' }).digest);
   expect(empty.record_revision).toBe('19');
   expect(empty.converter_revision).toBe(converter_revision);
-  expect(convertVndb(input('Minato no Monogatari'), { subjectId }).proposals)
+  const nonempty = convertVndb(input('Minato no Monogatari'), { subjectId });
+  expect(nonempty.normalizedRecord.vn_titles[0]?.latin).toBe('Minato no Monogatari');
+  expect(nonempty.digest).not.toBe(empty.digest);
+  expect(nonempty.proposals)
     .toEqual(expect.arrayContaining([
       expect.objectContaining({
         op: 'propose',
         statement: expect.objectContaining({
           property: { id: 'schema:name' },
-          value: { type: 'value', content: { language: 'ja-Latn', text: 'Minato no Monogatari', official: false } },
+          value: { type: 'value', content: { language: 'ja-Latn', text: 'Minato no Monogatari' } },
         }),
       }),
     ]));
