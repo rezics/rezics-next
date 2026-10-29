@@ -50,8 +50,7 @@ describe('native web publication driver host', () => {
     await expect(driver.provision(unsupported)).rejects.toThrow('schema:MissingPublicationType');
   });
 
-  test('settle drains durable publication, search and sitemap feed continuations to completion', async () => {
-    await driver.settle();
+  test('the subject sitemap export lists every fixture subject', async () => {
     const kernelOrigin = new URL(fixture.personalRead).origin;
     const published = new Set<string>();
     let cursor: string | null = null;
@@ -66,6 +65,26 @@ describe('native web publication driver host', () => {
     } while (cursor !== null);
     for (const url of Object.values(fixture.subjects))
       expect(published.has(new URL(url).pathname.split('/')[3]!)).toBe(true);
+  });
+
+  test("settle waits until the fixture's built feeds and search show it", async () => {
+    await driver.settle();
+    const kernelOrigin = new URL(fixture.personalRead).origin;
+    for (const kind of ['collection', 'realm', 'space', 'board', 'thread'] as const) {
+      const published = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        const query = new URLSearchParams({ limit: '100' });
+        if (cursor !== null) query.set('cursor', cursor);
+        const response = await fetch(`${kernelOrigin}/v1/sitemap/${kind}s?${query}`, { redirect: 'manual' });
+        expect(response.status).toBe(200);
+        const page = (await response.json()) as { items: { id: string }[]; next: string | null };
+        page.items.forEach(({ id }) => published.add(id));
+        cursor = page.next;
+      } while (cursor !== null);
+      for (const { url } of fixture.sitemap[kind].eligible)
+        expect(published.has(new URL(url).pathname.split('/')[3]!)).toBe(true);
+    }
     const search = await fetch(`${kernelOrigin}/v1/subjects:search`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -89,6 +108,8 @@ describe('native web publication driver host', () => {
     await driver.configurePublicOrigin(data.alternatePublicOrigin);
     const afterRestart = await driver.request(fixture.subjects.book, 'anonymous', { host: 'untrusted.invalid' });
     expect(afterRestart).toBeInstanceOf(Response);
+    if (afterRestart.status === 403)
+      throw new Error(`Foreign Host returned 403: ${await afterRestart.text()}`);
     expect(afterRestart.status).toBe(200);
   });
 
