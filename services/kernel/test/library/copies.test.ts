@@ -6,6 +6,7 @@ import { Value } from 'typebox/value';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
+import { ProblemError } from '../../src/http/problem.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from '../../src/library/copies.ts';
 import type { Copy } from '../../src/library/entry-model.ts';
@@ -251,7 +252,6 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
   const rejected: unknown[] = [
     null,
     { status: 'owned' },
-    { ...valid, status: 'borrowed' },
     { ...valid, status: 'Owned' },
     { ...valid, location: 'x'.repeat(201) },
     { ...valid, source: 's'.repeat(201) },
@@ -267,6 +267,11 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
   for (const input of rejected) {
     await expect(commands.createCopy(owner, input, key())).rejects.toBeInstanceOf(CopyInvalidError);
   }
+  const beforeUnsupported = await native.inspect(owner.accountId);
+  const unsupported = await refusal(() => commands.createCopy(owner, { ...valid, status: 'borrowed' }, key()));
+  expect(unsupported).toBeInstanceOf(ProblemError);
+  expect(unsupported).toMatchObject({ code: 'unsupported_library_profile' });
+  expect(await native.inspect(owner.accountId)).toEqual(beforeUnsupported);
   await expect(
     commands.createCopy(owner, { subjectId: newId(route), kind: 'physical', status: 'owned' }, key()),
   ).rejects.toBeInstanceOf(LibraryNotFoundError);
