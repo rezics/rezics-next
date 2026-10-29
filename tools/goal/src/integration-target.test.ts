@@ -123,7 +123,7 @@ test('a control-plane task moved onto a newer main still integrates into main wi
     await train(h);
 
     expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('tools/goal/src/hotfix.ts');
-    expect(git(h.root, 'show', 'main:tools/goal/src/other-goal.ts')).toBe('other goal\n');
+    expect(git(h.root, 'show', 'main:tools/goal/src/other-goal.ts')).toBe('other goal');
     expect(h.store.task(task.id).state).toBe('merged');
   } finally {
     h.dispose();
