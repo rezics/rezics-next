@@ -133,8 +133,16 @@ test('registered imports erasure effect preserves the exact native acknowledgeme
   expect(before?.participants.imports?.outcome).toBe('pending');
   expect(before?.completedAt).toBeNull();
 
-  const eventRows = await pool.query<{ type: string; subject: string; data: { accountId: string } }>(
-    `SELECT e.type,e.subject,e.data FROM core.outbox e
+  const eventRows = await pool.query<{
+    id: string;
+    type: string;
+    subject: string;
+    data: { accountId: string };
+    epoch: number;
+    position: string;
+    event_seq: number;
+  }>(
+    `SELECT e.id,e.type,e.subject,e.data,e.epoch,e.position::text,e.event_seq FROM core.outbox e
      WHERE e.partition_no=$1 AND e.type='com.rezics.access.account-tombstoned.v1'
        AND e.subject=$2 ORDER BY e.position DESC LIMIT 1`,
     [partition, person.accountId],
@@ -158,7 +166,13 @@ test('registered imports erasure effect preserves the exact native acknowledgeme
   observeOwners(delivered);
   expect(first.envelope.partition).toBe(partition);
   expect(first.workflowId).toBe(`fx:${first.envelope.epoch}:${partition}:${first.envelope.position}:${first.eventSeq}:imports_erasure`);
-  expect(first.envelope.events[first.eventSeq]).toMatchObject(eventRows.rows[0]!);
+  const committed = eventRows.rows[0]!;
+  expect(first.envelope.epoch).toBe(committed.epoch);
+  expect(first.envelope.position).toBe(committed.position);
+  expect(first.eventSeq).toBe(committed.event_seq);
+  expect(first.envelope.events[first.eventSeq]).toMatchObject({
+    id: committed.id, type: committed.type, subject: committed.subject, data: committed.data,
+  });
 
   const acknowledgement = await pool.query<{
     acknowledgement: Record<string, unknown>;

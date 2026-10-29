@@ -99,29 +99,29 @@ bullets and the eleven-participant point-ACK bound with its existing named nativ
 
 ## Verification and preserved bytes
 
-The acceptance and child amendments were committed as `97f4ef88ee` before both prescribed check submissions:
+At current admission the integrated acceptance and isolated child already supply registered enqueue redelivery,
+DBOS identity/terminal/step observations, full ACK/xmin comparison and truthful other-owner observations.
+Those proofs are reused. The native outbox observation is additionally tied to the delivered event's actual ID,
+epoch, position and event sequence directly from the committed row; no event fields are reconstructed for replay.
+Storage schemas and VNDB grouping were rechecked against the inventories; no new account-owned importer payload
+or portable-table producer was found. The README adoption and its exact bounds remain unchanged.
 
-- `bun scripts/worker-check.ts --run -- bun run --cwd services/kernel check test/imports/erasure-participant.test.ts`
-- `bun scripts/worker-check.ts --run -- bun run --cwd services/kernel typecheck`
+Earlier submissions used the internal `--run` interface and failed before allocating checks with
+`Invalid check id: --`. That historical submission error does not establish a native product failure.
+The current authorized public submission commands are:
 
-Both submissions exited 1 immediately with the exact line `Invalid check id: --`. No check ID was allocated,
-no slot was queued, and neither native acceptance nor typecheck reached execution. Current worker-check parses
-`--run` as an internal runner requiring an existing UUID; its public command submission syntax is different
-(`scripts/worker-check.ts:180,774,783`). Changing the prescribed invocation or shared runner is outside this
-attempt's verification authorization. This is a tool-interface blocker, not an observed native product failure.
-There is no live check to poll or wait for. No passing native replay, cleanup, integration or promotion is claimed. Only the four declared files change. No outside-path edits or external reference project
-were needed. The complete patch is the committed diff; no live predecessor process is controlled by this attempt.
+- `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/erasure-participant.test.ts`
+- `bun scripts/worker-check.ts -- bun run --cwd services/kernel typecheck`
 
-The following admission and final SHA-256 values identify the actual files. All runtime/default-registration,
-native support and frozen files remain byte-identical. Only the permitted acceptance and fixture child differ.
+The meaningful acceptance amendments are committed before submission. Native acceptance and typecheck evidence
+remain pending their terminal results; no cleanup, integration or promotion is inferred from this artifact.
+Only declared files change, with no production API, frozen assertion or unrelated default edits. No reference
+project is named for this surface or needed. The full committed diff is the reviewable patch. The predecessor's
+live worker is neither restarted nor edited.
 
-On retry, both exact prescribed submissions above were run again from the committed revision `6700b4cd01`.
-Each still exited 1 with `Invalid check id: --`, before allocating a check ID or executing its command.
-Inspection of the current runner confirms that its `--run` branch still passes the next argument directly to
-the existing-check runner, whose UUID validator rejects `--`. No slot or live check exists. The retry leaves
-the acceptance and child unchanged, and re-reading every file in the hash inventory below confirmed all
-recorded final hashes. The missing submission interface continues to prevent native acceptance and typecheck
-evidence; no runtime assertion has been reached.
+The following SHA-256 inventory preserves the original admission values and current final bytes. Production
+runtime/default registration, native support and frozen files remain unchanged. Only the permitted acceptance
+and isolated child differ from original admission.
 
 | Path | Admission SHA-256 | Final SHA-256 |
 | --- | --- | --- |
@@ -131,7 +131,7 @@ evidence; no runtime assertion has been reached.
 | `services/kernel/src/work/client.ts` | `62acfad2c4c811f55b34e49aa76b72e6e0a5c4d7fd2b9129392b8c876b55d04d` | `62acfad2c4c811f55b34e49aa76b72e6e0a5c4d7fd2b9129392b8c876b55d04d` |
 | `services/kernel/src/work/modules.ts` | `97f1507626e687162128144141cb5c85e9c99ac0f64899da9100bcb899d2accb` | `97f1507626e687162128144141cb5c85e9c99ac0f64899da9100bcb899d2accb` |
 | `services/kernel/src/imports/erasure.ts` | `48de6c92146a0068f226fa6ab49e62730794c7527193b15df0a7ae832d569ad6` | `48de6c92146a0068f226fa6ab49e62730794c7527193b15df0a7ae832d569ad6` |
-| `services/kernel/test/imports/erasure-participant.test.ts` | `1c020cbd57c6032406a5a88f5818a995b388a79a2461d445b2a34e571242f32e` | `a61591ddd881f4df7ecbf3829f7dc440b243f6c790b0915109355dfd2d206504` |
+| `services/kernel/test/imports/erasure-participant.test.ts` | `1c020cbd57c6032406a5a88f5818a995b388a79a2461d445b2a34e571242f32e` | `a01a7d3d9b52cee91346542b98f3a110fa27e5e123505f523af2679ff290f119` |
 | `services/kernel/test/imports/erasure-participant-worker.ts` | `69c5136fb701fb7a6592109c950e063afe60daa83a29ae899d325c28dbc190f0` | `33596b42bc46b593ea9b5d2ecd3bee732a725d204861234ed9329f6c74d6e9b0` |
 | `services/kernel/test/support/account-deletion.ts` | `130834b8dfb8a1a55b0dafae4cde8e1b1b732155451c27c80ddac0e4db6c3dad` | `130834b8dfb8a1a55b0dafae4cde8e1b1b732155451c27c80ddac0e4db6c3dad` |
 | `services/kernel/test/access/native-account-bindings-fixture.ts` | `43d4649bb7509cc8a415f6b862348e7e329893a3eb0317abfd46a2d512490c76` | `43d4649bb7509cc8a415f6b862348e7e329893a3eb0317abfd46a2d512490c76` |
@@ -141,15 +141,3 @@ evidence; no runtime assertion has been reached.
 | `specs/terminal-erasure-outcomes.test.ts` | `1d398bd9119e0e31c632daaffb427d44c3ae8f77f8454ee4d6c0a0025b35d0e7` | `1d398bd9119e0e31c632daaffb427d44c3ae8f77f8454ee4d6c0a0025b35d0e7` |
 | `specs/imports-vndb-tables-driver.ts` | `8bbb39e5f2482bd703f1fa1abb97a6426218902b46b4e3ba9e93a42cf852e11f` | `8bbb39e5f2482bd703f1fa1abb97a6426218902b46b4e3ba9e93a42cf852e11f` |
 | `specs/imports-vndb-tables.test.ts` | `97d91eecee9860906c474eb9955253cffe6a04523cb72e5d6c07c48dfd3e98a6` | `97d91eecee9860906c474eb9955253cffe6a04523cb72e5d6c07c48dfd3e98a6` |
-
-A subsequent admission rechecked the current runner and all sixteen final hashes above. The exact prescribed
-focused acceptance submission was attempted twice and the typecheck submission once; all exited 1 with
-`Invalid check id: --` before allocating a check ID. The runner still treats `--run` as execution of an
-existing UUID. The final typecheck retry also exited 1 with the same exact error before allocating a check ID. No native assertion, SDK workflow
-or typecheck was reached, and no check is live. The acceptance, fixture child and preserved files were not
-changed in this admission. The submission interface remains the concrete blocker.
-
-The current retry uses the now-prescribed public submission form,
-`bun scripts/worker-check.ts -- <command...>`, rather than the earlier internal `--run` form.
-All sixteen recorded final hashes were confirmed again before submission. The existing acceptance and child
-are reused unchanged; native replay and typecheck results remain unproven until these submissions terminate.
