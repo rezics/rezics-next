@@ -70,9 +70,9 @@ Required internal boundary clarification, with public DTOs unchanged:
 type RoutedJob = { controlPartition: number; jobId: string; epoch: bigint };
 type GroupBasis = { controlPartition: number; incarnation: string;
   generation: string; version: bigint; ownerEpoch: number };
-type ReaderObservation = { revision: bigint; pendingCount: number; ready: boolean };
-// Pool orchestration prepares/custodies claims; a live one-home command only finalizes them.
-// Query-only batched observation accepts existing page clients and routed native bases.
+type ReaderObservation = { revision: bigint; pendingCount: bigint; ready: boolean };
+// Extend native job states with PREPARING/CANCELLING; retryable reasons include preparing/drift/capacity.
+// Released preparation uses native locators; batched observation uses page clients. Durable bigint JSON is decimal strings.
 ```
 
 Replace the store-wide fixed home with routed job/receipt and group operations. Make released preparation explicit in
@@ -339,15 +339,15 @@ DBOS workflows is not proof of all-role erasure. No namespace escape or new part
 
 | Schedule | Native outcome/proof obligation |
 | --- | --- |
-| A+B versus B+C | Same current B claim serializes. Loser remains the same retryable intent, cancels every planned home, and cannot publish partial effects or mark review denied. |
-| A+B versus C+D | Separate claims/slots; both map and run participants concurrently. A short reader-marker update may queue, but neither job waits for the other's complete workflow. |
+| A+B versus B+C | J claims A; K claims B; J's B acquire conflicts. J durably cancels A and every planned home; K claims C and admits. Retry J with the same intent/receipt after K, never publish partial effects or deny review. |
+| A+B versus C+D | J claims A/B; K claims C/D; both OPEN/admit/map/run participants concurrently. K may CLOSE while J is still mapping; neither waits for the other's whole workflow. Short metadata updates may queue. |
 | Crash after first claim / delayed acquire | Job already owns cleanup; cancellation tombstones all planned homes. Delayed claim loses locked attempt check; no orphan or lease expiry. |
 | Crash at admission response / DBOS journal | Native receipt resolves PREPARING, admitted or published exactly; lost response cannot create a second job or false `not_applied`. |
 | Crash at OPEN/CLOSE / home publication | Idempotent marker receipt, native count and exact job state reconcile; incomplete local handoff remains pending. No premature clean epoch. |
-| Group or partition ownership changes | Version/incarnation/owner fence invalidates old plan; old source route is pending/unavailable. Transfer retained responsibility before new readiness, not trust old captures. |
-| Lower job epoch commits later | Its CLOSE increments the actual committed reader revision after the earlier CLOSE. A max allocated epoch/UUID/time would miss this publication and is forbidden. |
+| Group or partition ownership changes | Capture h/v; move fences h and changes owner/version; old claim/effect CAS fails. Old source route remains pending/unavailable until retained responsibility transfers and new basis is ready; old captures grant nothing. |
+| Lower job epoch commits later | J gets job epoch 10, K gets 11; K CLOSE commits revision r+1 first; J CLOSE later commits r+2. Max allocated job epoch stays 11 and misses J; native committed marker ordering does not. |
 | Crash during reclaim/export/ACK | Saved native frontier/receipt resumes; partial payload still charged, h+1 not lost, no slot freed before receiving custody. |
-| Account terminal during verification/reversal | Current terminal lock prevents new personal effects; same receipt retains pending cleanup, with actual shared/Library minimizer custody before clear. |
+| Account terminal during verification/reversal | Verification publishes; reversal commits its own intent/pending receipt; account terminal fence wins before a later effect. Mechanical cleanup resumes that reversal, stale verification cannot clear it, and shared/Library minimizer custody precedes clear. |
 
 Recommend the routed multi-home preparation protocol, local P slots and immutable group bases, with the short ordered
 reader marker if retaining the global cursor scalar. First close the reservation/outcome and routing/type decisions above;
