@@ -6,11 +6,12 @@ import type { SourceFenceTuple } from '../content/source-fences.ts';
 import type { Partition } from '../partition/partition.ts';
 import type { Access, AccessContext } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
-import type { TextNode } from '../search/text.ts';
-import type { FilterDocument, FilterStatement } from '@rezics/filter';
+import type { FilterStatement } from '@rezics/filter';
 import type { SearchPlan } from '../search/query.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import type { Statement } from './item.ts';
+import type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
+export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
 
 /** Specification only. No runtime export, default composition or authorization certificate. */
 export type PublicFilterCost = Readonly<{
@@ -131,29 +132,6 @@ export type PublicFilterDependencyKey =
   | Readonly<{ kind: 'field'; field: 'labels' | 'aliases' | 'descriptions' | 'name_sort' | 'id' }>
   | Readonly<{ kind: 'function'; input: 'public_collection_count' | 'public_rating' }>;
 
-/** Trusted Search admission output. Saved nodes are expanded by @rezics/filter admission,
- * not another parser here. Keys close over EVERY branch of these actual ASTs and sort inputs.
- */
-export type PublicFilterQueryRequirements = Readonly<{
-  filter: FilterDocument | null;
-  text: TextNode | null;
-  order: SearchPlan['sort'];
-  filterAndOrderKeys: readonly PublicFilterDependencyKey[];
-}>;
-
-/** Search-owned retained locator, validated against the actual query execution and ACK storage.
- * A string supplied by an HTTP caller, or a live ACK substituted for a PIT, is not evidence.
- */
-export type PublicFilterQueriedObservation = Readonly<{
-  consumer: PublicFilterConsumer;
-  snapshot:
-    | Readonly<{ kind: 'live'; observation: string }>
-    | Readonly<{ kind: 'pit'; observation: string; pit: string }>
-    | Readonly<{ kind: 'prepared'; observation: string; build: string; generation: bigint }>;
-}>;
-
-export type PublicFilterReturnedSubject = Readonly<{ subject: string; terminal: string }>;
-
 /** Shared caller deadline; fresh native T is minted inside each read, never accepted from JSON. */
 export type PublicFilterReadContext = Pick<AccessContext, 'deadline'>;
 
@@ -226,16 +204,16 @@ export type PrivacyReductionObservationRequest =
   | Readonly<{ kind: 'home'; partition: PublicFilterHome; context: PublicFilterReadContext }>
   | (Readonly<{
       kind: 'population';
-      requirements: PublicFilterQueryRequirements;
-      /** Empty before execution; final revalidation includes ALL returned original/terminal pairs. */
-      returnedSubjects: readonly PublicFilterReturnedSubject[];
+      /** Canonical native registration + immutable PIT/prepared observation, never latest ACK. */
+      queried: PublicFilterQueriedObservation;
       context: PublicFilterReadContext;
-      /** null records the start; otherwise revalidate that exact native cut. */
-      start: PrivacyReductionStart | null;
     }> &
       (
-        | Readonly<{ consumer: null; queried: null }>
-        | Readonly<{ consumer: PublicFilterConsumer; queried: PublicFilterQueriedObservation }>
+        | Readonly<{ start: null; execution?: never }>
+        /** Resolve FULL admitted keys and original/terminal own rows from this persisted execution.
+         * Independently validate Source identity, definition, observation and cut; diagnostic status is not proof.
+         */
+        | Readonly<{ start: PrivacyReductionStart; execution: string }>
       ));
 export type PrivacyReductionObservation =
   | Readonly<{
@@ -295,8 +273,8 @@ export type PublicFilterAcknowledgementNeeds = Readonly<{
   queried: PublicFilterQueriedObservation;
   started: PrivacyReductionStart;
   revalidated: PrivacyReductionObservation;
-  requirements: PublicFilterQueryRequirements;
-  returnedSubjects: readonly PublicFilterReturnedSubject[];
+  /** Native execution resolves definition/FULL keys/own rows; not caller-supplied admission truth. */
+  execution: string;
   /** Contiguous local AND foreign refresh-visible prefixes, read from actual consumer storage. */
   refreshVisible: readonly PrivacyReductionHead[];
 }>;

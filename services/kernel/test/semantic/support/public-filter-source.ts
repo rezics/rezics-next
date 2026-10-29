@@ -4,7 +4,6 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { systemClock } from '../../../src/clock.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../../src/command/command.ts';
-import type { PublicFilterQueryRequirements } from '../../../src/semantic/public-filter-source-contract.ts';
 import { randomUUID } from 'node:crypto';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
@@ -26,16 +25,6 @@ import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../
 import { createRealAccess } from '../real-access.ts';
 
 export const readContext = () => ({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) });
-export const diagnosticRequirements: PublicFilterQueryRequirements = {
-  filter: null,
-  text: null,
-  order: 'id',
-  filterAndOrderKeys: [
-    { kind: 'field', field: 'id' },
-    { kind: 'order', order: 'id' },
-  ],
-};
-
 /** Existing concrete-only cases must fail if a producer unexpectedly drops scalar coverage. */
 export function indexed(record: PublicFilterProjectionRecord) {
   expect(record.indexed, `Unexpected unresolved native statement ${record.candidate}`).not.toBeNull();
@@ -261,4 +250,157 @@ export async function complete(
     // Preserve the lossless native bigint across a process-style retained frontier reload.
     frontier = { ...frontier!, generation: BigInt(frontier!.generation) };
   }
+}
+
+/** Use the Search-owned native fixture; no consumer/ACK or source registration is manufactured here. */
+export async function consumerFixture(f: Fixture, source: PublicFilterSource) {
+  const { createPublicFilterConsumerFixture } = await import('../../search/support/public-filter-consumer.ts');
+  const { createOpenSearch } = await import('../../../src/search/opensearch.ts');
+  const url = process.env.OPENSEARCH_URL;
+  if (!url) throw new Error('OPENSEARCH_URL must name the configured native engine');
+  return createPublicFilterConsumerFixture({
+    pool: f.db.pool,
+    source,
+    clock: f.config.clock,
+    context: readContext(),
+    search: createOpenSearch(url),
+    meaning: f.meaning,
+  });
+}
+
+export async function settleConsumer(
+  consumer: import('../../search/support/public-filter-consumer.ts').PublicFilterConsumerFixture,
+  job: import('../../../src/search/public-filter-consumer-contract.ts').PublicFilterConsumerJob,
+) {
+  for (let step = 0; step < 10000; step++) {
+    const result = await consumer.operations.repairStep(job, readContext());
+    expect(['progress', 'settled']).toContain(result.status);
+    if (result.status === 'settled') return;
+  }
+  throw new Error('Finite native repair did not settle');
+}
+
+export async function capturedConsumer(
+  f: Fixture,
+  consumer: import('../../search/support/public-filter-consumer.ts').PublicFilterConsumerFixture,
+  plan: import('../../../src/search/public-filter-consumer-contract.ts').PublicFilterConsumerCaptureInput,
+  snapshot: 'pit' | 'prepared' = 'pit',
+) {
+  for (let step = 0; step < 10000; step++) {
+    const result = await consumer.operations.capture({ plan, snapshot }, readContext());
+    expect(['captured', 'preparing']).toContain(result.status);
+    if (result.status === 'preparing') await settleConsumer(consumer, result.repair);
+    if (result.status === 'captured') {
+      expect(result.queried.consumer.physicalTarget).toBe(consumer.physicalTarget);
+      expect(result.queried.consumer.incarnation).toBe(await consumer.incarnation());
+      expect(result.queried.consumer.meaningDigest).toBe(f.meaning.digest);
+      expect(result.queried.consumer.readDefinition).toBeString();
+      expect(result.queried.consumer.readDefinition!.length).toBeGreaterThan(0);
+      expect(result.queried.snapshot.kind).toBe(snapshot);
+      return result;
+    }
+  }
+  throw new Error('Finite native capture did not finish');
+}
+
+/** Two independent assertions on ONE inclusive native query+status capture. No harness API is added. */
+export async function assertPageCapture(
+  label: string,
+  whole: import('../../support/growth.ts').Capture,
+  query: Extract<
+    import('../../../src/search/public-filter-consumer-contract.ts').PublicFilterConsumerQuery,
+    { status: 'queried' }
+  >,
+  final: Extract<
+    import('../../../src/search/public-filter-consumer-contract.ts').PublicFilterConsumerStatus,
+    { status: 'observed' }
+  >,
+  size: number,
+) {
+  const { isControlStatement } = await import('../../support/growth.ts');
+  const role = (text: string) => /^\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//.exec(text)?.[1];
+  const coverageRole = (text: string) => ['privacy-start', 'privacy-final'].includes(role(text) ?? '');
+  // Keep raw native evidence before assertions, including failures of attribution or numerical bounds.
+  const evidence = new URL(`../../../../../.temp/goal/semantic/${label}.json`, import.meta.url);
+  await Bun.write(
+    evidence,
+    JSON.stringify({ whole, query, final }, (_, value) => (typeof value === 'bigint' ? value.toString() : value)),
+  );
+  expect(whole.statementBackends).toHaveLength(whole.statements.length);
+  expect(whole.planBackends).toHaveLength(whole.plans.length);
+  expect(whole.requestBytes).toHaveLength(whole.statements.length);
+  expect(whole.responseBytes).toHaveLength(whole.statements.length);
+  expect(whole.statementErrors).toEqual(whole.statements.map(() => null));
+  const plans = whole.plans.flatMap((document, i) => {
+    const entries: unknown[] = Array.isArray(document) ? document : [document];
+    return entries.map((entry) => {
+      if (
+        typeof entry !== 'object' ||
+        entry === null ||
+        !('Query Text' in entry) ||
+        typeof entry['Query Text'] !== 'string'
+      )
+        throw new Error('Native plan is missing SQL Query Text for semantic role attribution');
+      return { document: entry, text: entry['Query Text'], backend: whole.planBackends![i] };
+    });
+  });
+  const key = (text: string, backend: number | undefined) => JSON.stringify([backend, text]);
+  expect(plans.map(({ text, backend }) => key(text, backend)).sort()).toEqual(
+    whole.statements
+      .flatMap((text, i) => (isControlStatement(text) ? [] : [key(text, whole.statementBackends![i])]))
+      .sort(),
+  );
+  const indices = whole.statements.flatMap((text, i) => (coverageRole(text) ? [i] : []));
+  const coveragePlans = plans.filter(({ text }) => coverageRole(text));
+  const coverage: import('../../support/growth.ts').Capture = {
+    statements: indices.map((i) => whole.statements[i]!),
+    plans: coveragePlans.map(({ document }) => document),
+    statementBackends: indices.map((i) => whole.statementBackends![i]),
+    planBackends: coveragePlans.map(({ backend }) => backend),
+    requestBytes: indices.map((i) => whole.requestBytes![i]!),
+    responseBytes: indices.map((i) => whole.responseBytes![i]!),
+    statementErrors: indices.map((i) => whole.statementErrors![i]!),
+  };
+  await Bun.write(
+    evidence,
+    JSON.stringify({ whole, coverage, query, final }, (_, value) =>
+      typeof value === 'bigint' ? value.toString() : value,
+    ),
+  );
+  // Missing/untagged coverage never counts as a free zero. Every actual role has exactly ONE prefix.
+  expect(coverage.statements.map(role).sort()).toEqual(['privacy-final', 'privacy-start']);
+  for (const text of whole.statements.filter((text) => role(text) !== undefined)) {
+    const rest = text.replace(/^\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//, '');
+    expect(/\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//.test(rest)).toBe(false);
+  }
+  const privacy = costOf(coverage);
+  expect(privacy.plans).toBe(coverage.statements.length);
+  expect(privacy.statements).toBeLessThanOrEqual(2);
+  const behind = new Set(final.pending.map((head) => head.partition));
+  const changed = new Set(final.changed.map((head) => head.partition));
+  expect(privacy.rows).toBeLessThanOrEqual(64 + 2 * (behind.size + changed.size));
+  const work = costOf(whole);
+  const costs = [query.cost, final.cost];
+  for (const cost of costs)
+    for (const count of Object.values(cost)) expect(Number.isSafeInteger(count) && count >= 0).toBe(true);
+  const candidates = costs.reduce((sum, cost) => sum + cost.candidates, 0);
+  expect(candidates).toBeLessThanOrEqual(Math.min(600, 6 * size + 3));
+  expect(costs.reduce((sum, cost) => sum + cost.accessPoints + cost.dependencyPoints, 0)).toBeLessThanOrEqual(
+    16 + 8 * candidates,
+  );
+  expect(costs.reduce((sum, cost) => sum + cost.engineSearches, 0)).toBeLessThanOrEqual(6);
+  expect(costs.reduce((sum, cost) => sum + cost.outputSlots, 0)).toBeLessThanOrEqual(size);
+  expect(work.rows).toBeLessThanOrEqual(64 + 16 * candidates);
+  expect(work.blocks).toBeLessThanOrEqual(6 * (64 + 16 * candidates));
+  expect(work.requestBytes).toBeDefined();
+  expect(work.responseBytes).toBeDefined();
+  expect(work.requestBytes!).toBeLessThanOrEqual(64 * 1024 + 1024 * candidates);
+  expect(work.responseBytes!).toBeLessThanOrEqual(16 * 1024 + 4096 * candidates);
+  const backends = new Set(whole.statementBackends);
+  expect(backends.has(undefined)).toBe(false);
+  expect(backends.size).toBeLessThanOrEqual(1);
+  for (const backend of backends)
+    expect(
+      whole.statements.filter((text, i) => whole.statementBackends![i] === backend && !isControlStatement(text)).length,
+    ).toBeLessThanOrEqual(12);
 }

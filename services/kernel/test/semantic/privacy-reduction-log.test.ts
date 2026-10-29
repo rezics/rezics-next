@@ -5,7 +5,6 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { capture, costOf } from '../support/growth.ts';
 import {
   complete,
-  diagnosticRequirements,
   readContext,
   capturedStep,
   fixture,
@@ -13,11 +12,16 @@ import {
   home,
   nativeProducer,
   statement,
+  consumerFixture,
+  capturedConsumer,
+  settleConsumer,
+  assertPageCapture,
+  type Fixture,
 } from './support/public-filter-source.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import type { PrivacyReductionLogEntry } from '../../src/semantic/public-filter-source-contract.ts';
+import type { PublicFilterSource, PrivacyReductionLogEntry } from '../../src/semantic/public-filter-source-contract.ts';
 
 const name =
   'perhome privacy reductions commit monotonic log positions atomically and public query acknowledgement waits actual local and dependent foreign refresh';
@@ -178,91 +182,50 @@ test(name, async () => {
   }
 });
 
-test('native efficient privacy observation covers all 4096 genuine homes and excluded-subject history', async () => {
+async function genuineHomeHistory(f: Fixture, source: PublicFilterSource) {
+  const keys = new Map<number, string>();
+  while (keys.size < 4096) {
+    const key = randomUUID();
+    keys.set(partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, key).route), key);
+  }
+  const subjects = new Map<number, string>();
+  for (const [partition, key] of keys) {
+    const id = await f.create('schema:Book', {}, key);
+    subjects.set(partition, id);
+    expect(home(id)).toBe(partition);
+    await f.post(`/v1/subjects/${id}:hide`, { reason: 'Real home privacy history' });
+    expect((await head(source, partition)).position > 0n).toBe(true);
+  }
+  return subjects;
+}
+
+test('native home history covers all 4096 genuine homes independently of consumer execution', async () => {
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   try {
     const source = publicFilterSource(f.config);
-    const keys = new Map<number, string>();
-    while (keys.size < 4096) {
-      const key = randomUUID();
-      keys.set(partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, key).route), key);
-    }
-    const subjects = new Map<number, string>();
-    for (const [partition, key] of keys) {
-      const id = await f.create('schema:Book', {}, key);
-      subjects.set(partition, id);
-      expect(home(id)).toBe(partition);
-      await f.post(`/v1/subjects/${id}:hide`, { reason: 'Real home privacy history' });
-    }
-    // No registered consumer means no ACK at all, not a fabricated caught-up consumer.
-    const context = readContext();
-    const before = await capture(
-      f.db,
-      () =>
-        source.readPrivacyReductionHeads({
-          kind: 'population',
-          context,
-          queried: null,
-          requirements: diagnosticRequirements,
-          returnedSubjects: [],
-          consumer: null,
-          start: null,
-        }),
-      { includeBackends: true },
-    );
-    expect(before.value.status).toBe('observed');
-    if (before.value.status !== 'observed') throw new Error('No native coverage evidence from unavailable observation');
-    expect(before.value.coverage).toBe('all_native_homes');
-    expect(new Set(before.value.unacknowledged.map((entry) => entry.partition)).size).toBe(4096);
-    expect(before.value.unacknowledged.every((entry) => entry.position > 0n)).toBe(true);
-    expect(before.value.changed).toEqual([]);
-    // These subjects are excluded by native moderation; their reductions still belong to coverage.
+    const subjects = await genuineHomeHistory(f, source);
+    expect(subjects.size).toBe(4096);
+    const before = await head(source, 0);
     const subject = subjects.get(0)!;
     await f.post(`/v1/subjects/${subject}:restore`, { reason: 'Prepare changed-home schedule' });
-    await f.post(`/v1/subjects/${subject}:hide`, { reason: 'Reduction after native start cut' });
-    const after = await capture(
-      f.db,
-      () =>
-        source.readPrivacyReductionHeads({
-          kind: 'population',
-          context,
-          queried: null,
-          requirements: diagnosticRequirements,
-          returnedSubjects: [],
-          consumer: null,
-          start: before.value.status === 'observed' ? before.value.start : null,
-        }),
-      { includeBackends: true },
+    await f.post(`/v1/subjects/${subject}:hide`, { reason: 'Reduction after native head' });
+    const after = await head(source, 0);
+    expect(after.position > before.position).toBe(true);
+    const page = await capturedStep(f.db, () =>
+      source.readPrivacyReductionPage({
+        partition: 0,
+        epoch: after.epoch,
+        after: before.position,
+        through: after.position,
+        inputLimit: 1,
+        context: readContext(),
+      }),
     );
-    expect(after.value.status).toBe('observed');
-    if (after.value.status !== 'observed') throw new Error('No native revalidation evidence');
-    expect(after.value.coverage).toBe('all_native_homes');
-    expect(after.value.changed.map((entry) => entry.partition)).toEqual([0]);
-    expect(after.value.unacknowledged).toHaveLength(4096);
-    const changed = after.value.changed[0]!;
-    expect(changed.position > before.value.unacknowledged.find((entry) => entry.partition === 0)!.position).toBe(true);
-    const captures = [before, after];
-    // The allowance is shared by BOTH observations of this page, including removed rows/physical work.
-    const physical = captures.map((measured) => costOf(measured.capture));
-    const behindHomes = new Set(
-      captures.flatMap((measured) =>
-        measured.value.status === 'observed' ? measured.value.unacknowledged.map((entry) => entry.partition) : [],
-      ),
-    );
-    const changedHomes = new Set(after.value.changed.map((entry) => entry.partition));
-    expect(physical.reduce((sum, cost) => sum + cost.statements, 0)).toBeLessThanOrEqual(2);
-    expect(physical.reduce((sum, cost) => sum + cost.rows, 0)).toBeLessThanOrEqual(
-      64 + 2 * (behindHomes.size + changedHomes.size),
-    );
-    for (const measured of captures) {
-      expect(measured.capture.statementBackends).toBeDefined();
-      expect(costOf(measured.capture).requestBytes).toBeDefined();
-      expect(costOf(measured.capture).responseBytes).toBeDefined();
-      // Points and bytes remain captured/charged; no superseded vector-specific 16-point/16-KiB assertion.
-      for (const unit of Object.values(measured.value.cost)) expect(Number.isSafeInteger(unit) && unit >= 0).toBe(true);
-    }
-    // Caught-up and reduce-then-ACK schedules require the missing real Search consumer; see integration matrix.
+    expect(page.status).toBe('complete');
+    if (page.status !== 'complete') throw new Error('Missing native changed-home history');
+    expect(page.entries).toHaveLength(1);
+    expect(page.entries[0]!.head).toEqual(after);
   } finally {
     await f.close();
   }
@@ -287,6 +250,19 @@ test('native consent and Collection reductions invalidate their actual home imme
     ).candidate as string;
     const orgFixture = { ...f, meaning: { ...f.meaning, type: 'schema:Organization' } };
     expect((await complete(orgFixture, source, pen)).records).toEqual([]);
+    const { readStatementAs } = await import('../../src/semantic/statement-disclosure.ts');
+    const context = readContext();
+    const actor = await f.config.access.authenticate(f.real.bearer('editor'), {
+      pool: f.db.pool,
+      deadline: context.deadline,
+    });
+    const publisher = await readStatementAs(f.db.pool, f.config.access, actor, context.deadline, () =>
+      complete(orgFixture, source, pen),
+    );
+    expect(
+      publisher.records,
+      'Source stays public under the publisher private reader with the SAME bearer/Access',
+    ).toEqual([]);
     await f.post(`/v1/statements/${candidate}/disclose`, {});
     const disclosed = await complete(orgFixture, source, pen);
     expect(
@@ -318,9 +294,144 @@ test('native consent and Collection reductions invalidate their actual home imme
   }
 });
 
-test('native narrowed observations cover irrelevant keys excluded subjects and own-row reductions within the caught-up page budget', async () => {
+const idPlan = {
+  filterDocument: undefined,
+  text: undefined,
+  sort: 'id' as const,
+  size: 20,
+};
+
+type Consumer = Awaited<ReturnType<typeof consumerFixture>>;
+
+/** Controller work runs OUTSIDE the inclusive capture's async scope; it is genuine concurrent native work. */
+async function observedPage(
+  f: Fixture,
+  consumer: Consumer,
+  observation: Awaited<ReturnType<typeof capturedConsumer>>,
+  during: (
+    query: Extract<Awaited<ReturnType<Consumer['operations']['query']>>, { status: 'queried' }>,
+    context: ReturnType<typeof readContext>,
+  ) => Promise<void>,
+) {
+  type Query = Extract<Awaited<ReturnType<Consumer['operations']['query']>>, { status: 'queried' }>;
+  const started = Promise.withResolvers<Query>();
+  const finished = Promise.withResolvers<void>();
+  const context = readContext();
+  const timer = setTimeout(() => {
+    const error = new Error('Native Source query/final fixture barrier timed out');
+    started.reject(error);
+    finished.reject(error);
+  }, 60_000);
+  void started.promise.catch(() => {});
+  void finished.promise.catch(() => {});
+  const measured = capture(
+    f.db,
+    async () => {
+      const query = await consumer.operations.query(observation.queried, context);
+      expect(query.status).toBe('queried');
+      if (query.status !== 'queried') throw new Error(`Native query ${query.status}`);
+      started.resolve(query);
+      await finished.promise;
+      const final = await consumer.operations.readStatus(
+        { queried: query.queried, execution: query.execution },
+        context,
+      );
+      expect(final.status).toBe('observed');
+      if (final.status !== 'observed') throw new Error(`Native final ${final.status}`);
+      return { query, final, context };
+    },
+    { includeBackends: true },
+  );
+  void measured.catch((error: unknown) => started.reject(error));
+  try {
+    await during(await started.promise, context);
+    finished.resolve();
+    return await measured;
+  } finally {
+    finished.resolve();
+    clearTimeout(timer);
+    await Promise.allSettled([measured, started.promise, finished.promise]);
+  }
+}
+
+async function independentFinal(source: PublicFilterSource, page: Awaited<ReturnType<typeof observedPage>>) {
+  const { query, final, context } = page.value;
+  // Source independently resolves persisted identity/cut/definition/execution, never accepts diagnostic verdicts.
+  const own = await source.readPrivacyReductionHeads({
+    kind: 'population',
+    queried: query.queried,
+    start: query.start,
+    execution: query.execution,
+    context,
+  });
+  expect(own.status).toBe('observed');
+  if (own.status !== 'observed') throw new Error(`Native Source final ${own.status}`);
+  expect(own.coverage).toBe('all_native_homes');
+  expect(own.routingComplete).toBe(true);
+  expect(own.unacknowledged).toEqual(final.pending);
+  expect(own.changed).toEqual(final.changed);
+  expect(own.blocking).toEqual(final.blocking);
+  return own;
+}
+
+test('native caught-up 4096-home observation shares two tagged statements and at most 64 coverage rows in the whole page', async () => {
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
+  let consumer: Consumer | undefined;
+  try {
+    const source = publicFilterSource(f.config);
+    consumer = await consumerFixture(f, source);
+    const old = await capturedConsumer(f, consumer, idPlan);
+    const subjects = await genuineHomeHistory(f, source);
+    // The immutable registered observation predates every reduction: no null-consumer clean shortcut.
+    const behind = await source.readPrivacyReductionHeads({
+      kind: 'population',
+      queried: old.queried,
+      start: null,
+      context: readContext(),
+    });
+    expect(behind.status).toBe('observed');
+    if (behind.status !== 'observed') throw new Error('Missing registered all-home behind observation');
+    expect(behind.coverage).toBe('all_native_homes');
+    expect(new Set(behind.unacknowledged.map((entry) => entry.partition)).size).toBe(4096);
+    expect(behind.unacknowledged.every((entry) => entry.position > 0n)).toBe(true);
+    expect(behind.changed).toEqual([]);
+    await settleConsumer(consumer, old.repair);
+    const current = await capturedConsumer(f, consumer, idPlan);
+    const page = await observedPage(f, consumer, current, async (query) => {
+      expect(query.result.hits).toEqual([]);
+    });
+    expect(page.value.final.pending).toEqual([]);
+    expect(page.value.final.changed).toEqual([]);
+    expect(page.value.final.blocking).toEqual([]);
+    await assertPageCapture('caught-up-all-homes', page.capture, page.value.query, page.value.final, 20);
+    await independentFinal(source, page);
+    // Preserve the exact changed-home schedule after caught-up admission; excluded rows still matter.
+    const changed = await observedPage(f, consumer, current, async () => {
+      const subject = subjects.get(0)!;
+      await f.post(`/v1/subjects/${subject}:restore`, { reason: 'Prepare changed-home schedule' });
+      await f.post(`/v1/subjects/${subject}:hide`, { reason: 'Reduction after native start cut' });
+    });
+    expect(changed.value.final.changed.map((entry) => entry.partition)).toEqual([0]);
+    expect(changed.value.final.pending.map((entry) => entry.partition)).toEqual([0]);
+    expect(
+      changed.value.final.changed[0]!.position > behind.unacknowledged.find((entry) => entry.partition === 0)!.position,
+    ).toBe(true);
+    await assertPageCapture('changed-excluded-home', changed.capture, changed.value.query, changed.value.final, 20);
+    await independentFinal(source, changed);
+  } finally {
+    try {
+      await consumer?.close();
+    } finally {
+      await f.close();
+    }
+  }
+}, 600_000);
+
+test('narrowed privacy observations retain every changed reduction even when acknowledged during query', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  let consumer: Consumer | undefined;
   try {
     const source = publicFilterSource(f.config);
     const author = await f.create();
@@ -329,80 +440,197 @@ test('native narrowed observations cover irrelevant keys excluded subjects and o
       'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
     });
     const projected = await complete(f, source, subject);
-    const language = projected.records.find((record) => record.statement.property.id === 'schema:inLanguage')!;
-    expect(language).toBeDefined();
-    const requirements = {
-      filter: { not: { statement: { property: 'schema:author', in: [author] } } },
-      text: null,
-      order: 'id' as const,
-      filterAndOrderKeys: [
-        { kind: 'property' as const, property: 'schema:author' },
-        { kind: 'field' as const, field: 'id' as const },
-        { kind: 'order' as const, order: 'id' as const },
-      ],
-    };
-    await f.post(`/v1/subjects/${subject}/candidates/${language.candidate}:hide`, { reason: 'Unrelated source key' });
-    const context = readContext();
-    const request = {
-      kind: 'population' as const,
-      consumer: null,
-      queried: null,
-      requirements,
-      returnedSubjects: [],
-      context,
-      start: null,
-    };
-    const start = await capture(f.db, () => source.readPrivacyReductionHeads(request), { includeBackends: true });
-    expect(start.value.status).toBe('observed');
-    if (start.value.status !== 'observed') throw new Error('Missing native narrowed start');
-    expect(start.value.routingComplete).toBe(true);
-    expect(start.value.blocking).toEqual([]);
-    expect(start.value.unacknowledged).toEqual([]);
-    const final = await capture(
-      f.db,
-      () =>
-        source.readPrivacyReductionHeads({
-          ...request,
-          start: start.value.status === 'observed' ? start.value.start : null,
-        }),
-      { includeBackends: true },
-    );
-    expect(final.value.status).toBe('observed');
-    if (final.value.status !== 'observed') throw new Error('Missing native narrowed final');
-    expect(final.value.blocking).toEqual([]);
-    expect(final.value.changed).toEqual([]);
-    const work = [start, final].map((measured) => costOf(measured.capture));
-    expect(work.reduce((sum, cost) => sum + cost.statements, 0)).toBeLessThanOrEqual(2);
-    expect(work.reduce((sum, cost) => sum + cost.rows, 0)).toBeLessThanOrEqual(64);
-    // A returned row needs ALL its own keys even when the query did not depend on that property.
-    const own = await source.readPrivacyReductionHeads({
-      ...request,
-      returnedSubjects: [{ subject, terminal: subject }],
-    });
-    expect(own.status).toBe('observed');
-    if (own.status !== 'observed') throw new Error('Missing own-row reduction observation');
-    expect(
-      own.blocking.some(
-        (entry) =>
-          entry.scope === 'returned_subject' && entry.phase === 'pending' && entry.head.partition === home(subject),
-      ),
-    ).toBe(true);
-    // No returned candidates: stale NOT exclusions still require the whole relevant population.
     const authorRecord = projected.records.find((record) => record.statement.property.id === 'schema:author')!;
-    await f.post(`/v1/subjects/${subject}/candidates/${authorRecord.candidate}:hide`, {
-      reason: 'Excluded subject lost relevant evidence',
+    const language = projected.records.find((record) => record.statement.property.id === 'schema:inLanguage')!;
+    consumer = await consumerFixture(f, source);
+    const plan = {
+      ...idPlan,
+      sort: 'name' as const,
+      filterDocument: {
+        and: [{ type: { in: ['schema:Book'] } }, { not: { statement: { property: 'schema:author', in: [author] } } }],
+      },
+    };
+    for (const snapshot of ['pit', 'prepared'] as const) {
+      // Genuine source restoration and new capture, never editing registration/ACK/definition rows.
+      if (snapshot === 'prepared') {
+        await f.post(`/v1/subjects/${subject}/candidates/${authorRecord.candidate}:restore`, {
+          reason: 'Native next observation',
+        });
+        await f.post(`/v1/subjects/${subject}/candidates/${language.candidate}:restore`, {
+          reason: 'Native next observation',
+        });
+      }
+      const initial = await capturedConsumer(f, consumer, plan, snapshot);
+      const irrelevant = await observedPage(f, consumer, initial, async (query) => {
+        expect(query.result.hits).toEqual([]);
+        await f.post(`/v1/subjects/${subject}/candidates/${language.candidate}:hide`, {
+          reason: 'Unrelated excluded key',
+        });
+      });
+      expect(irrelevant.value.final.pending).toEqual([]);
+      expect(irrelevant.value.final.changed).toEqual([]);
+      expect(irrelevant.value.final.blocking).toEqual([]);
+      await assertPageCapture(
+        `irrelevant-${snapshot}`,
+        irrelevant.capture,
+        irrelevant.value.query,
+        irrelevant.value.final,
+        20,
+      );
+      await independentFinal(source, irrelevant);
+      const relevant = await observedPage(f, consumer, initial, async (query) => {
+        expect(query.result.hits).toEqual([]);
+        const before = await head(source, home(subject));
+        await f.post(`/v1/subjects/${subject}/candidates/${authorRecord.candidate}:hide`, {
+          reason: 'Excluded NOT key removed during query',
+        });
+        expect((await head(source, home(subject))).position > before.position).toBe(true);
+        await settleConsumer(consumer!, initial.repair);
+        const fresh = await capturedConsumer(f, consumer!, plan, snapshot);
+        const now = await consumer!.operations.query(fresh.queried, readContext());
+        expect(now.status).toBe('queried');
+        if (now.status !== 'queried') throw new Error('Missing repaired native execution');
+        expect(now.result.hits.map((hit) => hit.id)).toEqual([subject]);
+        const ready = await consumer!.operations.readStatus(
+          { queried: now.queried, execution: now.execution },
+          readContext(),
+        );
+        expect(ready.status).toBe('observed');
+        if (ready.status === 'observed') expect(ready.pending).toEqual([]);
+      });
+      expect(relevant.value.final.pending).toEqual([]);
+      expect(relevant.value.final.changed.map((entry) => entry.partition)).toEqual([home(subject)]);
+      expect(relevant.value.final.blocking).toContainEqual({
+        head: relevant.value.final.changed[0]!,
+        scope: 'filter_or_order',
+        phase: 'changed',
+      });
+      expect(relevant.value.final.queried.snapshot.observation).toBe(initial.queried.snapshot.observation);
+      await assertPageCapture(
+        `reduce-ack-${snapshot}`,
+        relevant.capture,
+        relevant.value.query,
+        relevant.value.final,
+        20,
+      );
+      await independentFinal(source, relevant);
+      // Starting AGAIN on that old immutable observation cannot borrow the repaired live ACK.
+      expect((await consumer.operations.query(initial.queried, readContext())).status).not.toBe('queried');
+    }
+  } finally {
+    try {
+      await consumer?.close();
+    } finally {
+      await f.close();
+    }
+  }
+}, 600_000);
+
+test('native returned subject checks all own-row keys beyond the admitted filter and order even after ACK', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  let consumer: Consumer | undefined;
+  try {
+    const source = publicFilterSource(f.config);
+    const author = await f.create();
+    const subject = await f.create('schema:Book', {
+      'schema:author': [statement('schema:author', author)],
+      'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
     });
-    const excluded = await source.readPrivacyReductionHeads({ ...request, start: start.value.start });
-    expect(excluded.status).toBe('observed');
-    if (excluded.status !== 'observed') throw new Error('Missing excluded-subject reduction observation');
+    const language = (await complete(f, source, subject)).records.find(
+      (record) => record.statement.property.id === 'schema:inLanguage',
+    )!;
+    consumer = await consumerFixture(f, source);
+    const initial = await capturedConsumer(f, consumer, {
+      ...idPlan,
+      filterDocument: { statement: { property: 'schema:author', in: [author] } },
+    });
+    const page = await observedPage(f, consumer, initial, async (query, context) => {
+      expect(query.result.hits.map((hit) => hit.id)).toEqual([subject]);
+      await f.post(`/v1/subjects/${subject}/candidates/${language.candidate}:hide`, {
+        reason: 'Own-row unrelated property removed',
+      });
+      const pending = await source.readPrivacyReductionHeads({
+        kind: 'population',
+        queried: query.queried,
+        start: query.start,
+        execution: query.execution,
+        context,
+      });
+      expect(pending.status).toBe('observed');
+      if (pending.status !== 'observed') throw new Error('Missing native pending own-row observation');
+      expect(
+        pending.blocking.some(
+          (entry) =>
+            entry.scope === 'returned_subject' && entry.phase === 'pending' && entry.head.partition === home(subject),
+        ),
+      ).toBe(true);
+      await settleConsumer(consumer!, initial.repair);
+    });
+    expect(page.value.final.pending).toEqual([]);
     expect(
-      excluded.blocking.some(
+      page.value.final.blocking.some(
         (entry) =>
-          entry.scope === 'filter_or_order' && entry.phase === 'changed' && entry.head.partition === home(subject),
+          entry.scope === 'returned_subject' && entry.phase === 'changed' && entry.head.partition === home(subject),
       ),
     ).toBe(true);
-    expect(excluded.changed.some((entry) => entry.partition === home(subject))).toBe(true);
+    expect(page.value.final.changed.some((entry) => entry.partition === home(subject))).toBe(true);
+    await assertPageCapture('own-row-reduction', page.capture, page.value.query, page.value.final, 20);
+    await independentFinal(source, page);
   } finally {
-    await f.close();
+    try {
+      await consumer?.close();
+    } finally {
+      await f.close();
+    }
+  }
+});
+
+test('native Source rejects unknown observation and execution bindings independently of consumer diagnostic status', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  let consumer: Consumer | undefined;
+  try {
+    const source = publicFilterSource(f.config);
+    await f.create('schema:Book');
+    consumer = await consumerFixture(f, source);
+    const initial = await capturedConsumer(f, consumer, idPlan);
+    const query = await consumer.operations.query(initial.queried, readContext());
+    expect(query.status).toBe('queried');
+    if (query.status !== 'queried') throw new Error('Missing retained native query');
+    const wrongExecution = await source.readPrivacyReductionHeads({
+      kind: 'population',
+      queried: query.queried,
+      start: query.start,
+      execution: randomUUID(),
+      context: readContext(),
+    });
+    expect(['unready', 'unavailable']).toContain(wrongExecution.status);
+    const wrongDefinition = await source.readPrivacyReductionHeads({
+      kind: 'population',
+      queried: {
+        ...query.queried,
+        consumer: { ...query.queried.consumer, readDefinition: randomUUID() },
+      },
+      start: query.start,
+      execution: query.execution,
+      context: readContext(),
+    });
+    expect(['unready', 'unavailable']).toContain(wrongDefinition.status);
+    await consumer.operations.closeObservation(query.queried, readContext());
+    const closed = await source.readPrivacyReductionHeads({
+      kind: 'population',
+      queried: query.queried,
+      start: query.start,
+      execution: query.execution,
+      context: readContext(),
+    });
+    expect(['unready', 'unavailable']).toContain(closed.status);
+  } finally {
+    try {
+      await consumer?.close();
+    } finally {
+      await f.close();
+    }
   }
 });

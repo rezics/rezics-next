@@ -1,7 +1,7 @@
 # Complete public filter source and privacy reduction log
 
 This is the future native producer specification, owned by Semantic and submitted to Search for review before
-implementation. The adjacent TypeScript file exports types only. It does not implement or compose a source,
+runtime implementation. The adjacent TypeScript file exports types only. It does not implement or compose a source,
 compiler, preparation runner, acknowledgement writer, database schema or permission service. Native acceptance is
 intentionally red until actual producers exist. Search review and runtime/default/API/three-scale evidence remain
 necessary; a typed fixture is not main/runtime proof.
@@ -26,7 +26,7 @@ The following are actual code, not proposed ports:
 | `semantic/candidates.ts:proposeStatement/decideCandidate/adoptCandidates`                                                          | Native editorial operations allocate real subject revision and immutable candidate identity; inspect exported names in this module when wiring, rather than installing a second selection interpreter.                                      |
 | `semantic/subject-page-candidates.ts:pageSubjectPageCandidates`                                                                    | Native bounded `(route, subject_id)` candidate window; `size+1` sentinel is not consumed. Includes excluded subjects. Its cursor observes partition epoch/position, not public permission.                                                  |
 | `semantic/candidates-read-subject-revision.sql`                                                                                    | Latest actual `semantic.revision.revision` for the original subject, not an event timestamp or transaction UUID order.                                                                                                                      |
-| `semantic/statement-disclosure.ts:statementAudience/withStatementReader/readStatementAs`                                           | AsyncLocal reader can expose private evidence. New public producer must explicitly use the public audience, including inside an editor's request context.                                                                                   |
+| `semantic/statement-disclosure.ts:withPublicStatementReader/statementAudience/withStatementReader/readStatementAs`                 | AsyncLocal reader can expose private evidence. New public producer must explicitly use the public audience, including inside an editor's request context.                                                                                   |
 | `semantic/statement-disclosure.ts:disclosureAccount/keepStatementPrivate/changeStatementDisclosure`                                | Native account-target consent storage and terminal retraction, including `accountAgentsForSubjects`; no account epoch/generation is invented.                                                                                               |
 | `semantic/disclosure.ts:readCandidateDisclosure`, `semantic/moderation.ts:readSubjectVisibility/moderateSubject/moderateStatement` | Current candidate/subject moderation and security revision; these do not establish whole-query negative/order safety.                                                                                                                       |
 | `semantic/fences.ts:sourceTuple/readAnchoredFences/enforceSourceFence/candidateSources/withoutFencedEntries`                       | Actual revision-source provenance and tuple routing; `content/source-fences.ts:readFences` accepts at most 100 tuples and groups one native partition at a time.                                                                            |
@@ -42,11 +42,19 @@ Missing producer module: `services/kernel/src/semantic/public-filter-source.ts` 
 All methods return actual counted work even on changed/unready/unavailable outcomes. Invalid shape or impossible
 route/digest/limit rejects before enumeration. Missing metadata is an explicit unready/unavailable result.
 
-Search's complete-plan compiler/admission, preparation freshness observation, refresh-visible reduction ACK writer, complete
-foreign registration barrier and query start/revalidation integration are missing on this base. This document
-names their evidence needs through `PublicFilterAcknowledgementNeeds`; it does not create a competing consumer
-interface, metadata validator, factory, index format or sink. Existing source/indexer/checkpoint interfaces do not
-satisfy these needs. Search owns the exact executable consumer surface and receives this producer for review.
+Search owns the canonical `PublicFilterQueriedObservation` in
+`search/public-filter-consumer-contract.ts`; Source imports and re-exports that EXACT type. Its only snapshots
+are actual PIT or immutable prepared build/generation. The closed `PublicFilterConsumerOperations` and test-only
+`test/search/support/public-filter-consumer.ts:createPublicFilterConsumerFixture` / `PublicFilterConsumerFixture`
+are committed dependencies, not successful adapters. The production
+`search/public-filter-consumer.ts:createPublicFilterConsumerOperations` remains MISSING. Source never exports
+that test helper from production or clones its engine, registration, Source or ACK implementation.
+
+The actual native registered public Source identity/read-definition resolution is MISSING. A reader-only Source
+object or matching function/config strings cannot establish that binding. Source must independently resolve and
+validate native persisted identity, immutable definition, covered/start cuts and execution; Search `readStatus`
+is diagnostic, never Source admission evidence. No new resolver, registration method or factory covers this gap.
+The existing three Source operation names and `publicFilterSource` factory remain the entire selected boundary.
 
 Actual consumer call sites inspected are `search/service.ts:createSearchService` (its local `admitQuery` calls
 `admitFilter`/`compileFilter` and current hit disclosure) and `search/indexer.ts:createSubjectIndexer`. They do not
@@ -90,7 +98,7 @@ Dependencies include original AND terminal subject keys, selection slot/candidat
 acceptance/retraction/moderation), exact imported tuple, every foreign value and qualifier subject, consent account
 and source subject/candidate, and Collection population dependencies when applicable. These are native identities,
 not permission verdicts. No dependency is optional merely because a value was excluded or failed Access. Public
-reads use real anonymous/public Access, native T and current fences; caller editor rights do not change the view.
+reads use current installed Access, native T and current fences; caller editor rights do not change the view.
 Release an owner before checking another owner. Never hold a transaction/checkout across foreign I/O or a sink call.
 
 Page `repairLocators` are INTERNAL maintainer-only metadata, separate from public `records`. They retain the
@@ -142,13 +150,13 @@ Date/string into T. Applying commands instead use `runCommand`'s fresh attempt T
 reads release their own checkouts before the next owner or sink. `requireAccessDeadline`, existing statement
 timeouts and actual wall time bound execution; domain clock injection does not extend authentication or TTLs.
 
-Public reads use the existing `Actor` anonymous branch and owning-module public-read eligibility capability
-(`access/eligibility.ts:createResourcePublicEligibility`), proving current publication/container state at T through
-installed Access. There is no new public actor token or trusted editor fallback. `statementAudience`'s default
-public audience alone is insufficient inside an editor AsyncLocal scope: explicitly select public disclosure via
-that owning seam; never install a fake account or moderator verdict. That explicit override and complete bounded
-public-read implementation are still missing integration work, not an existing exported Core public-authority
-factory. These actual Core/Access seams define the context without inventing a capability that this base lacks.
+Public projection uses the ONE existing sticky `withPublicStatementReader(fn)` exported by
+`semantic/statement-disclosure.ts`. It stays public through nested `readStatementAs`, `withStatementReader`,
+`statementAudience` and `privateLinks`, including inside a publisher's private scope. Keep the SAME bearer,
+current Auth/Access and resource eligibility; do not mint an anonymous actor, replace request headers, blacklist
+fields or mirror private facts. Normal standalone private hydration remains private. The default public audience
+alone is insufficient inside an editor AsyncLocal scope. Native public resource eligibility still uses the
+existing owning-module Access seams; the public statement audience is not a permission certificate.
 `mintReadTime` itself executes `command/read-time.sql`; its work is charged, never free clock metadata. Public
 projection/Access transactions use that existing seam. Internal privacy-head observations disclose no public
 facts and do not mint another permission T or reuse a projection's allow. Their own native cut is separate from
@@ -202,16 +210,18 @@ unselected candidate, successful replay and genuine noEffect. Whole-query safety
 reverse routing. `affected` preserves bounded cause/provenance; it is not copied facts. Both arrays share the
 append's 1000-key input ceiling. Index subject-wide scope and affected source inputs, never translated labels.
 
-`PublicFilterQueryRequirements` carries the actual admitted `FilterDocument`, actual `TextNode`, actual
-`SearchPlan['sort']` and the server-extracted `filterAndOrderKeys`. These are existing grammar types, not a new
-interpreter. Admission expands saved filters through `@rezics/filter` using the immutable accepted release; a
-remaining `saved` node or an incomplete closure rejects/prepares. Requirements are bound to the retained queried
-observation and validated by trusted Search admission, never accepted as an HTTP caller's assertion of relevance.
+The canonical Search capture retains the actual admitted `FilterDocument`, `TextNode`, accepted release/type,
+Source binding, order, size and typed keyset. Derive its FULL key closure through the SAME `admitFilter`,
+`compileFilter`, `compileText` and sort compilers, not a second interpreter or requirements AST/ABI. Saved
+expansion is retained against the immutable accepted release; remaining saved nodes reject. OwnerLeaf anywhere
+under NOT/OR/expanded saved input rejects before native I/O. Compatibility DSL fields must match the retained
+shared input and cannot override it. Explicit undefined is absent filter/text. Native registration binds this
+immutable definition against caller mutation. Population callers supply no key vector or positive-leaf list.
 Do not use only `matched_queries`, positive leaves, returned candidates or a released-property whitelist.
 
 Closure is the union over the FULL admitted trees, regardless of Boolean truth or engine matches:
 
-- `and` and `or`: union every child; `not`: recurse unchanged. `type`: include `type`; `statement.in` and
+- Include the configured implicit subject type even without an explicit type leaf. `and` and `or`: union every child; `not`: recurse unchanged. `type`: include `type`; `statement.in` and
   `statement.range`: include the containing `property`, including every same-statement qualifier dependency.
   Qualifier changes map to the containing source property, not only their own qualifier property. Saved expansion
   contributes every expanded branch and retains the accepted release/read-definition binding.
@@ -250,22 +260,23 @@ only as an initial launch slice; it does not satisfy the final served-share gate
 `readPrivacyReductionHeads({kind: 'home', partition})` reads one actual current home head for native history and
 producer verification. Its `home` result distinguishes explicit initialized zero from failure. It is not a query
 coverage algorithm. The `population` request always logically covers ALL4096 homes/current physical owners,
-including excluded subjects, tuple/qualifier/consent and Collection dependencies. `consumer` identifies an actual
-Search registration: physical target/incarnation, consumer/projection generation, and nullable meaning/read
-identity where inapplicable. The operation must read actual ACK state; request fields are locators, never ACK
-positions or callback truth. `consumer: null` means NO ACK exists and all nonzero heads are behind. It cannot
-pretend history is caught up. An unknown non-null registration is unready, not an empty successful observation.
+including excluded subjects, tuple/qualifier/consent and Collection dependencies.
 
-The population request carries `requirements`, `returnedSubjects`, `queried` and fixed `context.deadline` on
-BOTH reads, not merely in a later ACK description. `queried` binds the actual physical consumer plus the exact
-live observation, immutable PIT, or prepared build/generation read by execution. Its retained observation locator
-is resolved/validated by Search against native registration and query execution, including accepted meaning and
-read definition. Aliases, caller strings and a latest live-index ACK cannot certify an older PIT/prepared snapshot.
-`queried:null` with `consumer:null` is producer diagnostics ONLY; it cannot admit a public query.
-Before execution the returned set is empty; immediately before disclosure it contains every returned original AND
-terminal. Start evidence binds requirements/queried identity; final rows add own-row checks without dropping the
-population checks. Changing requirements, target, PIT/build/generation, accepted meaning or deadline requires a new
-start/execution. An unrecognized observation, lost binding or absent consumer is unready for public admission.
+The population input is ONLY canonical `queried`, retained `start`, actual `context.deadline`, plus the native
+`execution` locator for final revalidation. Start is `{start: null}` without an execution. Final supplies the
+retained start AND execution returned by actual `operations.query`. Resolve the immutable registered definition,
+FULL filter/order key closure and actual returned original/terminal own rows INTERNALLY from native state.
+No caller `requirements`, `filterAndOrderKeys`, `returnedSubjects`, nullable consumer/queried diagnostic mode,
+live snapshot or `readStatus` verdict is accepted. The Source-owned `PublicFilterQueryRequirements` and
+`PublicFilterReturnedSubject` duplicates are removed. `PublicFilterAcknowledgementNeeds` describes native
+execution evidence only; it is no ACK setter or callable permission.
+
+Validate physical incarnation, consumer/projection generations, accepted meaning, registered Source/read definition,
+immutable PIT/build/generation, covered cut, retained execution/start and deadline independently. Missing, wrong,
+closed, expired or unknown registrations cannot yield clean public-ready `observed`. A latest live-target ACK
+cannot certify old PIT/prepared data. Starting a NEW execution on an already unsafe old observation must fail even
+when every reduction predates that execution's start: compare its retained covered cut as well as its start.
+A copied locator is not authority, and an independent Source final check cannot trust diagnostic Search status.
 
 With `start: null`, `observed.start` identifies a retained native consistent start cut. Revalidation passes that
 same token, returning relevant current `unacknowledged` and `changed` home heads plus `blocking` summaries.
@@ -280,8 +291,7 @@ prevents a complete irrelevance classification. Partial coverage, expired/lost s
 or missing retained change history is unready/unavailable. A token never authorizes disclosure on its own.
 
 Search records this actual start evidence before execution, comparing contiguous ACKs for that exact queried
-observation, then revalidates immediately before disclosure. Relevant pending/changed classification and own-row
-checks are part of the two observation reads. Log paging is asynchronous repair work; it is NOT an uncharged
+observation, then revalidates immediately before disclosure. Relevant pending/changed classification is part of the two coverage reads; separate keyed own-row work remains inside the whole page cost. Log paging is asynchronous repair work; it is NOT an uncharged
 per-query fallback that scans history after enumerating heads. All reads compose into the same page allowance. Changed relevant heads prepare/restart even if
 current ACK covers them: the earlier engine result might still contain the removed evidence. Irrelevant changes
 may proceed only under complete source-key routing plus returned-subject checks. No saved allow, wall-clock or
@@ -358,16 +368,33 @@ The support fixture captures native rows (including removed rows), blocks, state
 
 `privacy-reduction-log.test.ts` requires actual subject/tuple/consent/Collection reductions with ordinary
 indexers absent, monotonic bounded history, same-home concurrency, receipt/revoked replay, nonreduction/noEffect
-and a deferred COMMIT fault rolling domain/head/log back together. Its 4096-home test genuinely creates/hides one
-subject in every home; no consumer means all heads are behind. It measures both start and final observation
-against the shared two-statement/behind+changed ceiling, retaining excluded subjects and an additional reduction
-between reads. Bytes, points, blocks and backend work remain captured/charged. The former vector-specific
-16-point/16-KiB assertions are removed; no replacement control byte/point allocation is invented. Actual captures
-must resolve any remaining allocation with Performance. Missing factory/404/503 is not growth evidence.
+and a deferred COMMIT fault rolling domain/head/log back together. Independent home/history cases create/hide
+one subject in every home without needing consumer execution. The deterministic tuple/subject-home collision
+retains ALL ordered unique entries, scopes only subject assertions by `cause=subject`, and retains tuple impacts,
+receipt replay, same-home concurrency and rollback assertions.
 
-Only this task's unconditional missing-Search throws were removed from executable producer acceptance. No native
-behavior assertion was replaced by skip/todo/mock truth. The exact scenarios and prerequisites remain REQUIRED
-below. Green producer tests would not prove NOT/order/default/API safety.
+Population cases use the actual Search-owned helper/operations and real physical PIT/prepared observations.
+They retain registered all4096-behind coverage and caught-up all4096 history, unrelated-key narrowing, own-row
+reductions, excluded NOT/name-order changes and reduce-then-ACK. A controller waits outside the measured async
+scope while native query/status work shares ONE inclusive capture. No synthetic heads, ACK, returned set, source
+identity or casted ready evidence is used. Missing producers remain actual red assertions, never skips or success.
+Primitive projection/home/append/log tests remain independent of consumer execution.
+
+### Native measurement attribution
+
+Capture WHOLE `operations.query` plus `readStatus` ONCE, including start/execution persistence, engine, original/
+terminal own-row checks, final guard and result bookkeeping. All unclassified statements/plans/bytes remain in
+whole-operation accounting. Independently assert both the existing whole direct/prepared/composed page bounds
+for actual output slots and the privacy-coverage subset, without granting bookkeeping another allowance.
+
+Actual native role SQL starts with EXACTLY ONE leading comment: `/* semantic.privacy-start */`,
+`/* semantic.privacy-final */` or `/* semantic.own-rows */`. Tests select roles from existing `capture.statements`
+and native `capture.plans` Query Text, match occurrences AND backend IDs, and require start plus final; missing
+or untagged coverage FAILS rather than counting as zero. No table-name classifier, fake tagged SQL or new harness
+API is used. Separate own-row work is one keyed statement bounded by page size plus those subjects' pending
+reductions, outside the coverage subset but INSIDE whole-page cost. Own-row work merged with final uses
+`semantic.privacy-final` and counts as COVERAGE in full. If a native plan needs a third coverage statement,
+report raw medians as a failed bound; do not increase the two-statement or row limit.
 
 ### Pending native integration/readiness matrix
 
@@ -436,32 +463,79 @@ Performance reviews native physical captures. The manager obtains co-owner revie
 
 ### Co-owner review boundary and remaining evidence
 
-The exact amended names are `PublicFilterQueryRequirements`, `PublicFilterQueriedObservation`,
-`PublicFilterReturnedSubject`, `PublicFilterReadContext`, nullable `PublicFilterProjectionRecord.indexed`,
-`PrivacyReductionObservationRequest.population.{queried,requirements,returnedSubjects,context}` and
-`PrivacyReductionObservation.observed.blocking`. These replace the insufficient consumer/start-only request and
-caller-boolean ACK description in the SAME specification. They are submitted for Search co-owner review; they do
-not approve executable ABI consumption. No second compiler, consumer fixture ABI, safety store or ACK writer is
-created. Existing implementations covered by native user cases continue independently.
+The canonical import/re-export is `PublicFilterQueriedObservation` from Search. Source retains
+`PublicFilterDependencyKey`, nullable `PublicFilterProjectionRecord.indexed`, `PublicFilterReadContext`,
+`PrivacyReductionObservationRequest.population.{queried,start,execution,context}` and
+`PrivacyReductionObservation.observed.blocking`. It removes duplicate requirements/returned-subject input types
+and the live/null-consumer shortcut. The factory and exactly THREE Source readers are unchanged. These are
+specification boundaries, not runtime producer/feasibility approval. Co-owner review of the exact committed
+names/types and native scenarios is required again before runtime implementation. Existing native user-case
+implementations proceed independently of this specification closure.
 
-Additional native producer acceptance now retains actual somevalue/novalue and quantity qualifiers, public
-foreign-qualifier withholding, a deterministic tuple/subject-home collision with ALL ordered unique log entries,
-and narrowed irrelevant-key/own-row/excluded-NOT cases. The latter includes two captured zero-relevant-pending
-reads sharing <=2 statements and <=64 examined rows. A consumer-null diagnostic with unrelated pending work is
-NOT a genuinely registered caught-up Search consumer.
+### Required integration schedule not yet frozen
 
-Still REQUIRED before implementation approval: co-owner review of these exact types, a real Search registered
-consumer/query pause/refresh-ACK seam, caught-up registered-consumer capture, and a native reduce-then-ACK schedule
-that pauses after capturing engine/PIT/prepared data, commits a relevant reduction, refreshes BOTH local and
-foreign repairs, advances the actual physical ACK, proves final pending empty, and STILL observes the changed
-reduction and prepares/restarts the old query. Repeat with irrelevant keys (serve) and own-row changes (prepare),
-including negative/order excluded subjects. This cannot be replaced with manufactured ACK rows, boolean callbacks
-or an invented test consumer export. The existing Search driver has no such observation/ACK/pause boundary;
-its indexing pause and ordinary checkpoint do not supply it. This is the exact remaining acceptance prerequisite,
-not a claim that the new diagnostic covers the race.
+The actual runtime binding of registered Source identity and immutable read definition is still MISSING; the
+reader-only Source interface cannot implement it by itself. Do not guess an ABI, add an operation/resolver or
+manufacture a consumer to close it. Native population/join tests require both actual producer modules and must
+fail until implemented. The owner must close this native identity/definition binding before executable approval.
+The following full integration schedules remain REQUIRED and NOT YET FROZEN at this Source boundary:
 
-The producer prerequisite remains the commit-visible indexed changed cut, consumer-specific behind relation,
-atomic registration/ACK composition and native retained-cut/availability lifecycle described above. Per-home
-sequences, UUIDs and precommit allocation do not close it. Default integration, public API cases and actual
-served-share at 64/512/4096 with rising reduction rates remain unimplemented/unexecuted. Neither helper success
-nor this specification claims public default queries, the main gate, native feasibility or the remaining matrix.
+- A relevant local, tuple, foreign target/qualifier, consent or Collection reduction during actual PIT/prepared
+  execution, with complete local AND FOREIGN repair/refresh/actual ACK before final; pending is empty but the
+  ORIGINAL immutable execution still prepares/restarts. Repeat irrelevant excluded keys (serve), own-row unrelated
+  keys (prepare), zero-hit NOT/name-order and a new query on an already unsafe old observation. Local/native
+  narrowed races are executable here; Search's complete FOREIGN/native transport schedules remain required.
+- No-trigger imported tuple repair: fence one tuple while Search is paused, withhold it immediately, resume with
+  NO unrelated subject edit, injected anchor event or checkpoint advance; actual physical document removes only
+  fenced support before ACK. Ordinary-trigger keyed repair does not close this red schedule.
+- Delay real old writes before send and after native effect/ambiguous response; physically delete/refresh, allow
+  native `gc_deletes` pruning, then release every old writer. After ACK no old/ambiguous write becomes visible,
+  and deleted engine documents remain physically absent. Real drain and durable all-writer/retained-copy custody
+  are required; checkpoint CAS, finite delete retention, permanent soft tombstones and candidate suppression
+  cannot substitute. `aroundApply` is an actual enrollment/observation seam, not a coverage certificate.
+- Retain original AND terminal own rows across real native redirects, full current subject/candidate/field Access,
+  pending identity epoch, late registration/restoration and moved/missing ownership. Exact affected-subject and
+  dependency locators plus minimized-source completion are still missing for all-role editorial/agent/Zone
+  erasure. `accountAgentId` alone omits other roles and verified terminals. Accounts shared-history receipts/
+  outbox/durable work and Content delivery retain their own custody obligations. Observe the FULL existing owner
+  family: `session.lifecycle`, `holding.kind/status`, `entry.owner_write_seq`, including same-state writes.
+  No private-fact mirror, permission certificate or fabricated completion port fills the Source erasure gap.
+
+### Adopted feasibility evidence and remaining proof
+
+The [current native-cut report](../../../../docs/research/public-filter-native-cut-current.md) and
+[deep native-cut report](../../../../docs/research/public-filter-native-cut-deep.md) were read in full. Both are
+source-inspected evidence and proposed schedules; neither ran native probes, proves a complete bounded layout,
+or proves impossibility of every layout. Their factual missing-invariant conclusions apply to this SAME canonical
+Source/Search boundary. No runtime producer, global counter, new store/engine, resolver/factory/ABI or larger
+numerical allowance is selected by this adoption.
+
+A real producer needs indexed narrowed commit-visible behind/changed access with atomic registration and
+maintenance, complete owner coverage and durable old-writer/retained-copy custody. Per-home sequences, UUIDs,
+wall time and precommit allocation are not a global commit-order cut. Cross-table partial index predicates do not
+exist. Colocated summaries only close lost-dirty with full atomic maintenance, and their definition/consumer fanout
+must itself be bounded. Latest-key state loses earlier relevant reductions; key-leading indexes and history
+classification multiply examined work. A global transactional UPDATE lock is a conditional one-database proposal,
+not selected cross-home command placement or serialization.
+
+Native snapshot membership can distinguish a lower-XID late commit at a fresh final snapshot. Correct membership
+is NOT indexed-cost proof: XIP, packed and server-retained snapshots may copy/sort/probe the active transaction
+set; xmin ranges can scan committed unchanged homes behind one pinned transaction. IF a chosen future layout
+reads/probes that set, its producer growth check independently holds 1, 8 and 64 native transactions with allocated
+`pg_current_xact_id()` open across the measured read at fixed data scale. Judge actual rows/blocks/statements by
+series. There is NO active-XID term in the adopted bound, so growth fails. This specification adds no concurrency
+harness and reruns no unchanged Search case to adopt that evidence.
+
+Refresh of a same-version external-write conflict may preserve the OLD winner: FOREIGN repair needs dependent
+source-own anchored advancement and actual repaired winner/visibility. Native engine write-block verification
+drains admitted writes only while installed, not delayed requests after unblock. Cold internal subject-key
+traversal still needs lossless concurrent creation/change handover, pinned required-log retention and gap/epoch
+recovery; legacy label/history hydration is neither public truth nor cheap key enumeration. Unknown custody or
+registration cannot become none/erased/clean, and permanent preparation fails quiescent finite progress.
+
+Still REQUIRED: exact native Source identity/definition binding, indexed changed/behind/cut and registration
+maintenance, native joins/availability, LOCAL+FOREIGN repair, durable all-writer/retained-copy custody, all-role
+minimized-source completion, direct/prepared/composed full growth matrix and served-share at 64/512/4096 with
+rising reduction rates and actual latency. Default public queries, API surfaces, Source256 compatibility and main
+acceptance remain distinct obligations. No helper/type/protocol pass here claims runtime availability, native
+feasibility, public default queries, the main gate or completion of this remaining matrix.
