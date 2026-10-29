@@ -48,7 +48,9 @@ const activeCommandGroups = new Set<number>();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   const stopGroups = () => {
     for (const pid of activeCommandGroups) {
-      try { process.kill(-pid, 'SIGKILL'); } catch {}
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {}
     }
     process.removeListener(signal, stopGroups);
     process.kill(process.pid, signal);
@@ -78,7 +80,9 @@ export function processGroupRunner(
       let settled = false;
       const killGroup = () => {
         if (child.pid === undefined) return;
-        try { process.kill(-child.pid, 'SIGKILL'); } catch {}
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch {}
       };
       const collect = (chunk: Buffer) => {
         const text = chunk.toString();
@@ -87,10 +91,13 @@ export function processGroupRunner(
       };
       child.stdout.on('data', collect);
       child.stderr.on('data', collect);
-      const timer = timeoutMs === undefined ? undefined : setTimeout(() => {
-        timedOut = true;
-        killGroup();
-      }, timeoutMs);
+      const timer =
+        timeoutMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              timedOut = true;
+              killGroup();
+            }, timeoutMs);
       const cleanup = () => {
         if (timer !== undefined) clearTimeout(timer);
         if (child.pid !== undefined) activeCommandGroups.delete(child.pid);

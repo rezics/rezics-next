@@ -27,7 +27,8 @@ async function expectStopped(pid: number) {
 }
 
 async function until(condition: () => boolean) {
-  for (let attempt = 0; attempt < 100 && !condition(); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  for (let attempt = 0; attempt < 100 && !condition(); attempt++)
+    await new Promise((resolve) => setTimeout(resolve, 10));
   expect(condition()).toBe(true);
 }
 
@@ -89,10 +90,8 @@ test('train fixtures opt out of repository affected and sibling defaults', () =>
   expect(process.env.REZICS_GOAL_TEST_ENVIRONMENT).toBe('1');
   expect(landingAffectedChecks(['services/kernel/src/file.ts'], true, undefined)).toEqual([]);
   expect(
-    landingAffectedChecks(
-      ['services/kernel/src/file.ts'],
-      true,
-      [{ paths: ['services/kernel/**'], command: ['test-command'] }],
-    ),
+    landingAffectedChecks(['services/kernel/src/file.ts'], true, [
+      { paths: ['services/kernel/**'], command: ['test-command'] },
+    ]),
   ).toEqual([{ paths: ['services/kernel/**'], command: ['test-command'] }]);
 });
