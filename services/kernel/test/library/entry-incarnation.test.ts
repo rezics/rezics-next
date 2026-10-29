@@ -14,7 +14,7 @@ test('entry incarnation phase one exposes actual identity accepts optional guard
   expect(created.status).toBe(201);
   const a = (await created.json()).libraryEntry;
   expect(a.incarnationId).toMatch(/^[0-9a-f-]{36}$/);
-  const storedA = (await f.inspect()).entries.find((x) => x.subject_id === subject)!;
+  const storedA = (await f.inspect()).entries.find((x) => x.row.subject_id === subject)!.row;
   expect(storedA.incarnation_id).toBe(a.incarnationId);
   const listed = await f.send('owner', 'GET', '/v1/libraryEntries?limit=100');
   expect(listed.status).toBe(200);
