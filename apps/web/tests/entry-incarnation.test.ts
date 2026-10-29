@@ -223,3 +223,17 @@ test('the story fake accepts omitted guards and refuses stale incarnations witho
     expect(legacy.status).toBe(method === 'PUT' ? 200 : 204);
   }
 });
+
+test('guarded story reads retain the shelf and Continue recordings chosen by base', async () => {
+  const { createRecordedKernelFetch } = await import('../src/kernel/fake');
+  const shelf = { subjectId, state: 'planned', revision: 1 };
+  const continued = { subjectId: key, state: 'in_progress', revision: 3 };
+  const fetch = createRecordedKernelFetch({
+    'library-entries': { status: 200, libraryEntries: [shelf], next: null },
+    'library-continue-entries': { status: 200, libraryEntries: [continued], next: null },
+  });
+  for (const row of [shelf, continued]) {
+    const response = await fetch(`https://kernel.test/v1/libraryEntries?state=${row.state}`);
+    expect(await response.json()).toMatchObject({ libraryEntries: [{ ...row, incarnationId }], next: null });
+  }
+});
