@@ -59,6 +59,10 @@ Implementation is ready for the two declared native files and required root
 typecheck. No pass is claimed before those managed checks return. Child output
 is retained in the native check log, including actual counts and first failure.
 
+An independent authorization/disclosure/rights review found no blocking defect in
+the binding. It confirmed the expected PUT retry-policy mismatch and clarified
+that the baseline port aliases a maintained generation pointer, not a content hash.
+
 Inspection identified that `createImportFetch.mayRetry` admits GET/HEAD and keyed
 POST, and returns false for PUT. The binding leaves this existing retry policy
 unchanged so the native lost-response assertion can expose the actual outcome.

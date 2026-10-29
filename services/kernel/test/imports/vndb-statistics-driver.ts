@@ -323,7 +323,7 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
       },
       observe() {
         const source = importer!.session.store.source(registration.source);
-        // The maintained complete-generation pointer is RunStore's source fingerprint.
+        // The port's fingerprint reports the maintained generation pointer, not a content hash.
         return capture.observe({ fingerprint: source.generation, records: source.count });
       },
       replay: capture.replay,
