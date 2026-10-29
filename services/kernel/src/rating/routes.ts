@@ -274,7 +274,11 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(() =>
-            votes().putVoteOutcome(actor, { questionId: params.questionId, targetId: params.id, units: body.units }, key),
+            votes().putVoteOutcome(
+              actor,
+              { questionId: params.questionId, targetId: params.id, units: body.units },
+              key,
+            ),
           ),
         );
         if (!result.vote) throw new ProblemError('not_found');
