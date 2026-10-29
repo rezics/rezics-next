@@ -276,8 +276,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   const liveNameIndex = index.rows.find((item) =>
     item.indexdef.includes('(route, account_id, normalized_name) WHERE (deleted_at IS NULL)'),
   )?.indexname;
-  expect(primaryKeyIndex).toBeTruthy();
-  expect(liveNameIndex).toBeTruthy();
+  if (!primaryKeyIndex || !liveNameIndex) throw new Error('Missing personal label primary or live-name index');
   const reader = db.openPool({ max: 1, options: '-c default_transaction_read_only=on' });
   async function token(after: string, viewer = actor) {
     const p = await readPartition(reader, partitionOf(routeOf(viewer.accountId)!));
@@ -456,7 +455,8 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     expect(labelNodes.length).toBeGreaterThan(0);
     for (const node of labelNodes) {
       expect(node['Node Type']).not.toBe('Seq Scan');
-      if (node['Index Name'] !== undefined) expect([primaryKeyIndex, liveNameIndex]).toContain(node['Index Name']);
+      if (typeof node['Index Name'] === 'string')
+        expect([primaryKeyIndex, liveNameIndex]).toContain(node['Index Name']);
       expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(
         operation.name.startsWith('list') ? 8 : 1,
       );
