@@ -83,6 +83,7 @@ function problem(response: HttpResponse, status: 401 | 503) {
 function successful(response: HttpResponse) {
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toContain('application/json');
+  expect(response.body).not.toHaveProperty('total');
   expect(response.body.as_of).toEqual(
     expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/),
   );
@@ -119,7 +120,6 @@ function safe(responses: HttpResponse[], removed: Subject, visible: Subject[], a
       return;
     }
     successful(response);
-    expect(response.body).not.toHaveProperty('total');
     const serialized = JSON.stringify(response.body);
     expect(serialized).not.toContain(removed.id);
     expect(serialized).not.toContain(removed.labels.en!);
@@ -217,7 +217,6 @@ for (const mode of ['hidden', 'taken_down'] as const) {
         for (const persona of ['anonymous', 'editor'] as const) {
           const initial = await views(driver, persona, marker);
           initial.forEach(successful);
-          initial.forEach((response) => expect(response.body).not.toHaveProperty('total'));
           const originalSearch = await driver.request(persona, 'POST', '/v1/subjects:search', {
             text: marker,
             filter: bookFilter,
