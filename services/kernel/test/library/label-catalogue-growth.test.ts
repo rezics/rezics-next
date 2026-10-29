@@ -351,7 +351,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     {
       name: 'list-deep',
       async prepare() { return { cursor: await token(await middleDeletedId(actor)) }; },
-      async run(state) { return labels.listLabels(actor, { limit: 8, cursor: state.cursor }); },
+      async run(state) { return labels.listLabels(actor, { limit: 8, ...(state.cursor === undefined ? {} : { cursor: state.cursor }) }); },
       assert(value) { expect(value.labels.length).toBeLessThanOrEqual(8); expect(value.next).toBeTruthy(); },
     },
     {
@@ -363,7 +363,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     {
       name: 'list-empty-deep',
       async prepare() { return { cursor: await token(await middleDeletedId(other), other) }; },
-      async run(state) { return labels.listLabels(other, { limit: 8, cursor: state.cursor }); },
+      async run(state) { return labels.listLabels(other, { limit: 8, ...(state.cursor === undefined ? {} : { cursor: state.cursor }) }); },
       assert(value) { expect(value.labels).toEqual([]); expect(value.next).toBeTruthy(); },
     },
   ];
