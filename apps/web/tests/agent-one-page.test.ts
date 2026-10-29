@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { loadSubjectPage } from '../src/features/pages/subject';
 import { accountOf } from '../src/features/pages/account-read';
 import { accountSchemaType } from '../src/features/pages/account';
+import { subjectAccountRedirect } from '../src/features/pages/subject';
 
 const redirectedClient = (data: unknown) =>
   ({
@@ -51,6 +52,17 @@ test('an unfollowed 308 page response uses the handle in its redirect descriptor
   } as never;
   const result = await loadSubjectPage(client, '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', 'reviews', 'zh-Hans');
   expect(result).toEqual({ kind: 'redirect', id: 'helper', target: 'account' });
+});
+
+test('a redirected subject document keeps its locale, view, and query on the handle URL with status 308', () => {
+  expect(subjectAccountRedirect('zh-Hans', 'helper', 'reviews', '?sort=recent&tag=a%20b')).toEqual({
+    statusCode: 308,
+    href: '/zh-Hans/@helper/reviews?sort=recent&tag=a%20b',
+  });
+  expect(subjectAccountRedirect('en', 'helper', undefined, '?q=two+words')).toEqual({
+    statusCode: 308,
+    href: '/en/@helper?q=two+words',
+  });
 });
 
 test('account profiles preserve automation and the public identity operator id', () => {
