@@ -38,7 +38,7 @@ async function seedVerifiedPages(database: GrowthDatabase, count: number, subjec
   );
   await database.admin.query(
     `INSERT INTO semantic.fact(route, subject_id, slot_id, log_seq, operation, kind, language, body, recorded_transaction_id)
-     SELECT $1, subject_id, subject_id, 1, 'assert', 'label', 'en', to_jsonb('Verified subject ' || subject_id::text), subject_id
+     SELECT $1, subject_id, subject_id, 1, 'assert', 'label', 'en', to_jsonb('Verified subject '::text || subject_id::text), subject_id
      FROM unnest($2::uuid[]) AS seeded(subject_id)`,
     [subjectRoute, subjectIds],
   );
@@ -75,7 +75,7 @@ beforeAll(async () => {
   );
   await db.admin.query(
     `INSERT INTO semantic.fact(route, subject_id, slot_id, log_seq, operation, kind, language, body, recorded_transaction_id)
-     VALUES ($1, $2, $2, 1, 'assert', 'label', 'en', to_jsonb('Target verified subject'), $2)`,
+     VALUES ($1, $2, $2, 1, 'assert', 'label', 'en', to_jsonb('Target verified subject'::text), $2)`,
     [lookupSubjectRoute, targetSubject],
   );
 });
