@@ -1,4 +1,5 @@
 import type { FakeRoute } from '../fake-modules.ts';
+import type { KernelRecording } from '../fake.ts';
 
 const scenarios = {
   everything: { kind: 'everything' },
@@ -17,7 +18,7 @@ export const routes: FakeRoute[] = [
   {
     method: 'GET',
     path: /^\/v1\/collections\/(dynamic-[a-z-]+)(?:\/members)?$/,
-    story: ({ request, match }) => {
+    story: ({ request, match }): KernelRecording | undefined => {
       const id = match?.[1];
       const scenarioName = id ? ids.get(id) : undefined;
       if (!id || !scenarioName) return;
@@ -39,9 +40,10 @@ export const routes: FakeRoute[] = [
                   },
                 },
               ];
-        return { members, next: 'next' in scenario ? scenario.next : null };
+        return { status: 200, members, next: 'next' in scenario ? scenario.next : null };
       }
       return {
+        status: 200,
         collection: {
           id,
           curatorAccountId: 'story-owner',

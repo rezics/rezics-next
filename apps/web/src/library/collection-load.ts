@@ -26,6 +26,15 @@ export type DynamicMembersResult = Pick<
   DynamicCollectionPage,
   'members' | 'next' | 'preparing' | 'retryAfterMs' | 'unavailable'
 >;
+type CuratedMemberPage = {
+  members: {
+    id: string;
+    note: string | null;
+    addedAt: string;
+    subject?: Parameters<typeof subjectOf>[0] | null;
+  }[];
+  next: string | null;
+};
 
 function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -98,7 +107,9 @@ export async function loadDynamicMembers(
   if (status === 202)
     return { members: [], next: null, preparing: true, retryAfterMs: retryAfterMs(result), unavailable: false };
   if (status === 503) return { members: [], next: null, preparing: false, retryAfterMs: 1000, unavailable: true };
-  const page = generatedClientDTO<DynamicMembersPage>(readLibraryResult(result));
+  const page = generatedClientDTO<DynamicMembersPage>(
+    readLibraryResult(result as Parameters<typeof readLibraryResult>[0]),
+  );
   return {
     members: page.members.map((member) => ({ subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]) })),
     next: page.next,
@@ -175,7 +186,7 @@ export async function loadEditableCollectionPage(
         preparing: true,
         retryAfterMs: retryAfterMs(membersResult),
         unavailable: false,
-        cursor: input.cursor,
+        ...(input.cursor ? { cursor: input.cursor } : {}),
       };
     }
     if (!first.stale && status === 503) {
@@ -190,10 +201,12 @@ export async function loadEditableCollectionPage(
         preparing: false,
         retryAfterMs: 1000,
         unavailable: true,
-        cursor: input.cursor,
+        ...(input.cursor ? { cursor: input.cursor } : {}),
       };
     }
-    const page = generatedClientDTO<DynamicMembersPage>(readLibraryResult(membersResult));
+    const page = generatedClientDTO<DynamicMembersPage>(
+      readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]),
+    );
     const dynamicMembers = {
       members: page.members.map((member) => ({
         subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
@@ -210,11 +223,13 @@ export async function loadEditableCollectionPage(
       description: collection.description ?? null,
       curator: accountOf(collection.curator),
       ...dynamicMembers,
-      cursor: input.cursor,
+      ...(input.cursor ? { cursor: input.cursor } : {}),
     };
   }
   const curatedCollection = collection as CuratedCollectionRead;
-  const members = readLibraryResult(membersResult);
+  const members = generatedClientDTO<CuratedMemberPage>(
+    readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]),
+  );
   const owner = viewer !== undefined && viewer === curatedCollection.curatorAccountId;
   const following =
     authorization && viewer !== undefined && !owner && curatedCollection.visibility === 'public'
