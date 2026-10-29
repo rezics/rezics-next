@@ -34,7 +34,7 @@ test('a dev rebase conflict retries the task with conflict evidence and leaves a
     expect(retries).toHaveLength(1);
     expect(retries[0]).toMatchObject({ escalation: 'rebase-conflict', conflictFiles: ['shared.txt'] });
     const failedAttempt = h.store.attempt({ taskId: task.id, attempt: 1 });
-    expect(failedAttempt.failure?.assertion).toContain('CONFLICT');
+    expect(failedAttempt.failure?.assertion).toContain('could not apply');
     const failureEvidence = JSON.parse(readFileSync(join(retries[0]!.evidence!, 'failure.json'), 'utf8')) as {
       assertion: string;
       excerpt: string;
@@ -67,7 +67,7 @@ test('a batch drops an already integrated member and lands the remaining members
     await h.start(remaining);
     const integratedCommit = git(integrated.worktree, 'rev-parse', 'HEAD');
     git(h.root, 'update-ref', 'refs/heads/dev', integratedCommit, h.head('dev'));
-    h.store.updateTask({ taskId: integrated.id, attempt: integrated.currentAttempt }, (task) => {
+    h.store.updateTask({ taskId: integrated.id, attempt: h.store.task(integrated.id).currentAttempt }, (task) => {
       task.state = 'integrated';
       task.integratedCommit = integratedCommit;
     });
@@ -98,7 +98,7 @@ test('a setup failure caused by another integrated batch member retries the unaf
     h.store.commitBatchMerge = (members, merge) => {
       if (!injected) {
         injected = true;
-        h.store.updateTask({ taskId: other.id, attempt: other.currentAttempt }, (task) => {
+        h.store.updateTask({ taskId: other.id, attempt: h.store.task(other.id).currentAttempt }, (task) => {
           task.state = 'integrated';
           task.integratedCommit = members[0]!.commit;
         });
@@ -126,7 +126,9 @@ test('the host sweep retries an orphaned landing only after train work ends and 
     h.ensureDev();
     const task = h.dispatch('orphaned.txt');
     await h.start(task);
-    h.store.db.query('DELETE FROM landing_queue WHERE task=? AND attempt=?').run(task.id, task.currentAttempt);
+    h.store.db
+      .query('DELETE FROM landing_queue WHERE task=? AND attempt=?')
+      .run(task.id, h.store.task(task.id).currentAttempt);
 
     const trainLease = acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease'));
     try {
