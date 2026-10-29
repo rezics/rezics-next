@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
+import { releaseDigest, validateRelease, valueSchema, type Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { admitFilter, parseFilter } from '@rezics/filter';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId } from '../../src/route/route.ts';
-import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT, readRelease } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
@@ -63,7 +64,7 @@ export async function stringQualifierFixture() {
   });
   release.properties['ex:reading'] = {
     ...property('reading', 'string', '^[A-Z][0-9]$'),
-    qualifiers: ['ex:language', 'ex:digest', 'ex:method', 'ex:text'],
+    qualifiers: ['ex:digest', 'ex:language', 'ex:method', 'ex:text'],
   };
   release.properties['ex:language'] = {
     ...structuredClone(release.properties['schema:inLanguage']!),
@@ -73,21 +74,22 @@ export async function stringQualifierFixture() {
   release.properties['ex:digest'] = property('digest', 'string', '^sha256:[0-9a-f]{64}$');
   release.properties['ex:method'] = property('method', 'wikibase-item');
   release.properties['ex:text'] = property('text', 'string');
+  expect(validateRelease(release)).toEqual([]);
   await bootstrapRelease(db.pool, release);
   const routeKey = new Uint8Array(32).fill(83);
   const kernel = createKernel({ pool: db.pool, routeKey, access: real.access, writeRate: real.writeRate });
   let session: string | null = null;
-  async function call(path: string, body: unknown) {
+  async function call(path: string, body: unknown, method = 'POST') {
     const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
-        method: 'POST',
+        method,
         headers: {
           authorization: `Bearer ${real.bearer('editor')}`,
           'content-type': 'application/json',
           'idempotency-key': JSON.stringify(randomUUID()),
           ...(session ? { 'rezics-session-token': session } : {}),
         },
-        body: JSON.stringify(body),
+        ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
       }),
     );
     session = response.headers.get('rezics-session-token') ?? session;
@@ -101,7 +103,7 @@ export async function stringQualifierFixture() {
   async function activate(next: Release) {
     const digest = releaseDigest(next);
     if ((await activeRelease(db.pool))?.digest === digest) return;
-    await post('/v1/definitions/releases', { release: next }, 201);
+    await post('/v1/definitions/releases', { release: next }, (await readRelease(db.pool, digest)) ? 200 : 201);
     await post(`/v1/definitions/releases/${digest}:activate`, {
       expected_head: (await activeRelease(db.pool))?.head ?? null,
     });
@@ -137,12 +139,14 @@ export async function stringQualifierFixture() {
       context: GLOBAL_CONTEXT,
       expected_head: null,
     });
+    const current = await call(`/v1/subjects/${subject}/candidates?property=ex%3Areading`, undefined, 'GET');
+    expect([current.status, current.body.code]).toEqual([200, undefined]);
     await post(`/v1/subjects/${subject}:adopt`, {
       context: GLOBAL_CONTEXT,
       property: 'ex:reading',
       mode: 'replace',
       selection: [{ candidate, rank: 'preferred' }],
-      expected_head: null,
+      expected_head: current.body.adoption?.head ?? null,
     });
     return candidate;
   }
@@ -151,16 +155,29 @@ export async function stringQualifierFixture() {
   return { db, release, source, create, adopt, post, call, activate, read, close: () => db.close() };
 }
 
-test('generic typed string qualifiers preserve same statement native source values losslessly', async () => {
+test('generic typed string qualifier equality admits every declared string under existing scalar constraints and preserves same statement native source values losslessly', async () => {
   const f = await stringQualifierFixture();
   try {
     const methodA = (await f.create([], 'skos:Concept')).id as string;
     const methodB = (await f.create([], 'skos:Concept')).id as string;
+    const query = {
+      statement: {
+        property: 'ex:reading',
+        in: ['A1'],
+        qualifiers: [
+          { property: 'ex:language', in: ['en', 'ja'] },
+          { property: 'ex:digest', in: [digestA, digestB] },
+          { property: 'ex:method', in: [methodA, methodB] },
+          { property: 'ex:text', in: [freeText] },
+        ],
+      },
+    };
+    expect(admitFilter(parseFilter(query), f.release)).toEqual(query);
     const subject = await f.create([reading('en', digestA, methodA), reading('ja', digestB, methodB)]);
     const expected = (language: string, digest: string, method: string) => ({
       property: 'ex:reading',
       value: 'A1',
-      facet: { kind: 'code' },
+      facet: { kind: 'code' as const },
       qualifiers: [
         { property: 'ex:language', value: language },
         { property: 'ex:digest', value: digest },

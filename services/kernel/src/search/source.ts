@@ -35,7 +35,8 @@ export type IndexedStatement = {
   value: string;
   /** Present when the value's datatype can be a facet. */
   facet?: FacetValue;
-  /** Adopted qualifiers whose values are items (target subject ids). */
+  /** Concrete adopted item (target subject id) or string qualifiers, preserved exactly on this statement.
+   * Unknown snaks are omitted; absence here is not complete negative evidence. */
   qualifiers?: { property: string; value: string }[];
 };
 

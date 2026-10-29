@@ -34,7 +34,7 @@ export type FilterRelease = {
       relation?: { group: string };
       qualifiers?: readonly string[];
       units?: readonly string[];
-      value?: { pattern?: string };
+      value?: { pattern?: string; minLength?: number; maxLength?: number };
     }
   >;
   filters?: Record<string, { filter: unknown }>;
@@ -686,13 +686,38 @@ export function admitFilter(
         const qualifierPointer = appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index);
         const qualifierPropertyPointer = appendPointer(qualifierPointer, 'property');
         const qualifierDefinition = propertyDefinition(properties, qualifier.property);
-        if (
-          !includesOwnString(declaredQualifiers, qualifier.property) ||
-          !qualifierDefinition ||
-          dataField(qualifierDefinition, 'datatype') !== 'wikibase-item'
-        )
+        if (!includesOwnString(declaredQualifiers, qualifier.property) || !qualifierDefinition)
           reject(qualifierPropertyPointer, source, 'unsupported', 'unsupported_query');
-        validateUuidValues(qualifier.in, appendPointer(qualifierPointer, 'in'), source);
+        const inPointer = appendPointer(qualifierPointer, 'in');
+        const datatype = dataField(qualifierDefinition, 'datatype');
+        if (datatype === 'wikibase-item') validateUuidValues(qualifier.in, inPointer, source);
+        else if (datatype === 'string') {
+          const schema = dataField(qualifierDefinition, 'value');
+          const declaredPattern = dataField(schema, 'pattern');
+          const pattern = codePattern(qualifierDefinition);
+          if (declaredPattern !== undefined && declaredPattern !== '' && !pattern)
+            reject(inPointer, source, 'unsupported', 'unsupported_query');
+          const minimum = dataField(schema, 'minLength');
+          const maximum = dataField(schema, 'maxLength');
+          for (let valueIndex = 0; valueIndex < qualifier.in.length; valueIndex++) {
+            const value = qualifier.in[valueIndex]!;
+            const valuePointer = appendPointer(inPointer, valueIndex);
+            // Qualifiers retain the grammar's byte limit, not the catalogue code-facet limit.
+            try {
+              stringValue(value, valuePointer, false);
+            } catch (error) {
+              if (error instanceof FilterError) reject(valuePointer, source, error.errors[0]!.code, error.problem);
+              throw error;
+            }
+            const length = [...value].length;
+            if (
+              (typeof minimum === 'number' && length < minimum) ||
+              (typeof maximum === 'number' && length > maximum) ||
+              (pattern && !pattern.test(value))
+            )
+              reject(valuePointer, source, 'invalid_format', 'invalid_request');
+          }
+        } else reject(qualifierPropertyPointer, source, 'unsupported', 'unsupported_query');
       }
     }
   }

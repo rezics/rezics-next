@@ -9,9 +9,21 @@ const release: FilterRelease = {
   properties: {
     'ex:reading': {
       datatype: 'wikibase-item',
-      qualifiers: ['ex:text', 'ex:language', 'ex:digest', 'ex:method', 'ex:bounded', 'ex:mono', 'ex:quantity'],
+      qualifiers: [
+        'ex:text',
+        'ex:language',
+        'ex:digest',
+        'ex:method',
+        'ex:bounded',
+        'ex:mono',
+        'ex:quantity',
+        'ex:fragment',
+        'ex:emptyPattern',
+      ],
     },
     'ex:text': { datatype: 'string' },
+    'ex:fragment': { datatype: 'string', value: { pattern: 'abc' } },
+    'ex:emptyPattern': { datatype: 'string', value: { pattern: '' } },
     'ex:language': { datatype: 'string', value: { pattern: language } },
     'ex:digest': { datatype: 'string', value: { pattern: '^sha256:[0-9a-f]{64}$' } },
     'ex:method': { datatype: 'wikibase-item' },
@@ -112,4 +124,14 @@ test('string qualifiers retain same-statement grammar limits saved pointers and 
       { ...release, types: { 'ex:Sample': { facets: ['ex:text'] } } },
     )[0]?.problem,
   ).toBe('unsupported_query');
+});
+
+test('generic qualifiers use native string schema pattern semantics while catalogue codes retain full matches', () => {
+  expect(validateFilter(leaf('ex:fragment', ['xabcx']), release)).toEqual([]);
+  expect(validateFilter(leaf('ex:emptyPattern', ['x']), release)).toEqual([]);
+  expect(validateFilter(leaf('ex:fragment', ['xyz']), release)[0]?.code).toBe('invalid_format');
+  const facetRelease = { ...release, types: { 'ex:Sample': { facets: ['ex:fragment'] } } };
+  expect(validateFilter({ statement: { property: 'ex:fragment', in: ['xabcx'] } }, facetRelease)[0]?.code).toBe(
+    'invalid_format',
+  );
 });

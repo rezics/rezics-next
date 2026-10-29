@@ -132,7 +132,8 @@ function indexedStatement(row: StatementRow, release: Release): IndexedStatement
         return [];
       const qualifierDefinition = release.properties[raw.property];
       const content = raw.value.content;
-      return qualifierDefinition?.datatype === 'wikibase-item' && typeof content === 'string'
+      return (qualifierDefinition?.datatype === 'wikibase-item' || qualifierDefinition?.datatype === 'string') &&
+        typeof content === 'string'
         ? [{ property: raw.property, value: content }]
         : [];
     });

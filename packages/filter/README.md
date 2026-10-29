@@ -66,8 +66,8 @@ definition declares `value.pattern`: each value must be 1 to 128 code units and 
 
 A declared qualifier admits either `wikibase-item` values (canonical UUIDs, unchanged) or any `string` datatype.
 String qualifiers need no pattern to opt in. Values obey the grammar's nonempty, no-control, 256 UTF-8 byte
-limit, plus the native fixed string schema's `minLength`, `maxLength` and optional full-match `pattern` when
-present. The 128-code-unit catalogue code-facet limit does not apply to qualifiers. Equality preserves exact
+limit, plus the native fixed string schema's `minLength`, `maxLength` and optional `pattern` when
+present, with the native string schema's pattern semantics. The 128-code-unit catalogue code-facet limit does not apply to qualifiers. Equality preserves exact
 bytes: no coercion, trimming, case folding, Unicode normalization, language guessing or label lookup. Canonical
 language and SHA-256 patterns retain their exact spelling. Monolingual text, quantity and range qualifiers remain
 unsupported. The existing qualified-relation admission barrier remains until a complete native plan supports it.
@@ -177,5 +177,7 @@ qualifiers of 64 values; at most 16 alternatives per `or`; depth 4. Admission wa
 saved filter expands at most once per leaf and never recursively, so the expanded document obeys the same limits. The
 admitted facets come from at most 64 returnable types with their bases, or from the union over all types, computed once
 per release object and cached, so a request never iterates the release's types. A code pattern is compiled once per
-property definition, and each value check is linear in at most 128 code units across at most 64 values. No I/O. The growth check is the limit
-tests above: the same refusals at the same pointers whatever the release size.
+property definition. Catalogue code-facet values check at most 128 code units each; string qualifiers check at
+most 256 UTF-8 bytes each, with native length constraints counted in Unicode code points. Both retain at most
+64 values per list. No I/O. The growth check is the limit tests above: the same refusals at the same pointers
+whatever the release size.
