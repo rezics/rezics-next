@@ -133,7 +133,12 @@ describe('deployment sequencing', () => {
     expect(behindStatus).toBe(3);
     expect(outputLines.join('\n')).toContain(`Live commit: ${'b'.repeat(40)}`);
 
-    for (const fetchBuild of [async () => ({}), async () => { throw new Error('unavailable'); }]) {
+    for (const fetchBuild of [
+      async () => ({}),
+      async () => {
+        throw new Error('unavailable');
+      },
+    ]) {
       const unavailableStatus = await runStatus({ localCommit, fetchBuild, print: (line) => outputLines.push(line) });
       expect(unavailableStatus).toBe(2);
     }
@@ -146,11 +151,24 @@ describe('deployment sequencing', () => {
     await runDeployment({
       dryRun: false,
       commit,
-      build: async () => { calls.push('build'); },
-      smoke: async () => { calls.push('smoke'); },
-      wrangler: async () => { calls.push('wrangler'); return ''; },
-      fetchBuild: async () => { calls.push('fetch'); return { commit }; },
-      isTreeClean: async () => { calls.push('clean'); return []; },
+      build: async () => {
+        calls.push('build');
+      },
+      smoke: async () => {
+        calls.push('smoke');
+      },
+      wrangler: async () => {
+        calls.push('wrangler');
+        return '';
+      },
+      fetchBuild: async () => {
+        calls.push('fetch');
+        return { commit };
+      },
+      isTreeClean: async () => {
+        calls.push('clean');
+        return [];
+      },
       print: (line) => outputLines.push(line),
     });
     expect(calls).toEqual(['clean', 'fetch']);
@@ -164,15 +182,22 @@ describe('deployment sequencing', () => {
       dryRun: false,
       force: true,
       commit,
-      build: async () => { calls.push('build'); },
-      smoke: async () => { calls.push('smoke'); },
+      build: async () => {
+        calls.push('build');
+      },
+      smoke: async () => {
+        calls.push('smoke');
+      },
       wrangler: async (args) => {
         calls.push(args[1]!);
         return args[1] === 'upload'
           ? 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev'
           : 'deployed';
       },
-      fetchBuild: async () => { calls.push('fetch'); return { commit }; },
+      fetchBuild: async () => {
+        calls.push('fetch');
+        return { commit };
+      },
       isTreeClean: async () => [],
       print: () => {},
     });
@@ -182,15 +207,22 @@ describe('deployment sequencing', () => {
   test('a real deployment refuses a dirty tree before building and names changed paths', async () => {
     const calls: string[] = [];
     const outputLines: string[] = [];
-    await expect(runDeployment({
-      dryRun: false,
-      commit: 'a'.repeat(40),
-      build: async () => { calls.push('build'); },
-      smoke: async () => {},
-      wrangler: async () => { calls.push('wrangler'); return ''; },
-      isTreeClean: async () => ['apps/web/src/changed.ts', 'packages/ui/src/changed.tsx'],
-      print: (line) => outputLines.push(line),
-    })).rejects.toThrow(/apps\/web\/src\/changed\.ts.*packages\/ui\/src\/changed\.tsx/);
+    await expect(
+      runDeployment({
+        dryRun: false,
+        commit: 'a'.repeat(40),
+        build: async () => {
+          calls.push('build');
+        },
+        smoke: async () => {},
+        wrangler: async () => {
+          calls.push('wrangler');
+          return '';
+        },
+        isTreeClean: async () => ['apps/web/src/changed.ts', 'packages/ui/src/changed.tsx'],
+        print: (line) => outputLines.push(line),
+      }),
+    ).rejects.toThrow(/apps\/web\/src\/changed\.ts.*packages\/ui\/src\/changed\.tsx/);
     expect(calls).toEqual([]);
     expect(outputLines.join('\n')).toContain('apps/web/src/changed.ts');
     expect(outputLines.join('\n')).toContain('packages/ui/src/changed.tsx');
