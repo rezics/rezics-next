@@ -10,6 +10,7 @@ import {
   type Source,
 } from '@rezics/definitions/bulk';
 import { fromPlainText } from '@rezics/document';
+import type { PoolClient } from 'pg';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -20,6 +21,7 @@ import { accountAgentId } from '../../src/semantic/agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   checkGrowth,
+  costOf,
   openGrowthDatabase,
   seed,
   type GrowthDatabase,
@@ -98,6 +100,33 @@ const batchRuns: {
   requestBytes: number;
   responseBytes: number;
 }[] = [];
+
+// Passive native auto_explain evidence from every client in the kernel/Access pool.
+// Keep the complete observed plan for each statement shape, plus every occurrence's
+// work: relation totals alone cannot identify which lookup examined unrelated rows.
+type NativePlan = { 'Query Text': string; Plan: Record<string, unknown> };
+const nativeAgentScans: Record<string, unknown>[] = [];
+let nativeRun: Map<string, { plan: NativePlan; work: { rows: number; blocks: number }[] }> | undefined;
+const observedClients = new WeakSet<PoolClient>();
+function observeNativeClient(client: PoolClient): void {
+  if (observedClients.has(client)) return;
+  observedClients.add(client);
+  client.on('notice', (notice) => {
+    const marker = 'plan:\n';
+    if (!nativeRun || !notice.message?.startsWith('duration:') || !notice.message.includes(marker)) return;
+    const plan = JSON.parse(notice.message.slice(notice.message.indexOf(marker) + marker.length)) as NativePlan;
+    const statement = plan['Query Text'];
+    const entry = nativeRun.get(statement) ?? { plan, work: [] };
+    const { rows, blocks } = costOf({ statements: [], plans: [plan] });
+    entry.work.push({ rows, blocks });
+    nativeRun.set(statement, entry);
+    const visit = (node: Record<string, unknown>) => {
+      if (node['Relation Name'] === 'account_agent_subject') nativeAgentScans.push(node);
+      for (const child of (node.Plans ?? []) as Record<string, unknown>[]) visit(child);
+    };
+    visit(plan.Plan);
+  });
+}
 
 // Sourced bulk write / Active definition lookup / Request authorization Cost rows.
 // These are data statements, as counted by costOf, across ALL pool connections.
@@ -985,6 +1014,7 @@ async function prepareDisclosureSubject(): Promise<{
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  db.pool.on('acquire', observeNativeClient);
   await bootstrapRelease(db.pool, bundledRelease);
   access = await createRealAccess(db.admin, { importer: accountId }, actions);
   await db.admin.query(
@@ -1017,6 +1047,7 @@ test('a sourced bulk write at a fixed batch has constant rows and statements as 
   const populationName = `semantic-sourced-bulk-growth-${randomUUID()}`;
   await checkGrowth(db, {
     name: 'a sourced bulk write at a fixed batch has constant rows and statements as subjects, documents and fences grow',
+    rule: 'series',
     scales,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     includeBackends: true,
@@ -1118,7 +1149,14 @@ async function runSourcedBatch(scale: number, repetition: number): Promise<unkno
       ceiling: sourcedStatementCeiling,
     })}`,
   );
-  const answer = await batch(commands);
+  nativeRun = new Map();
+  let answer: Awaited<ReturnType<typeof batch>>;
+  try {
+    answer = await batch(commands);
+  } finally {
+    console.info(`SOURCED_NATIVE_PLANS ${JSON.stringify({ scale, repetition, statements: [...nativeRun.values()] })}`);
+    nativeRun = undefined;
+  }
   // Preserve native failures (including every rejected command) for owner diagnosis.
   console.info(`SOURCED_BATCH_RESULTS ${JSON.stringify({ scale, repetition, body: answer.body })}`);
   if (answer.status !== 200) throw new Error(`sourced batch returned ${answer.status}: ${JSON.stringify(answer.body)}`);
@@ -1202,4 +1240,14 @@ test("source-fence disclosure on a subject view has constant rows and statements
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.every(({ cost }) => Boolean(cost.relations['content.source_fences']))).toBe(true);
   logSamples(report);
+});
+
+test('the native100 sourced batch probes account agents by route and subject key', () => {
+  expect(nativeAgentScans.length).toBeGreaterThan(0);
+  for (const node of nativeAgentScans) {
+    expect(node['Node Type']).toMatch(/^Index (Only )?Scan$/);
+    expect(node['Index Cond']).toMatch(/route =/);
+    expect(node['Index Cond']).toMatch(/subject_id =/);
+    expect(Number(node['Actual Rows']) + Number(node['Rows Removed by Filter'] ?? 0)).toBeLessThanOrEqual(1);
+  }
 });
