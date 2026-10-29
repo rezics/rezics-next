@@ -364,17 +364,25 @@ test('merge page has constant rows and statements as merged target voters grow',
   await seed(database, growthIndexPopulation, { from: 0, to: 4096 });
   const report = await checkGrowth(database, {
     name: 'rating subject merge page voters',
+    rule: 'series',
     scales: [256, 1024, 4096],
-    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    // Merge page Cost: one voter-page seek, then for each of 100 voters one question seek,
+    // three vote locks, one update lookup and two vote-index insertions (PK and counted target).
+    // The membership/state index population is fixed, as is the single-partition command envelope.
+    indexProbes: 1 + 100 * (1 + 3 + 1 + 2),
     repetitions: 1,
     warmups: 1,
     grow: (db, scale, previous) => seed(db, growthPopulation, { from: previous, to: scale }),
-    operation: async (_db, _scale, repetition) =>
-      processRatingSubjectMergePage(database.pool, {
+    operation: async (_db, _scale, repetition) => {
+      const page = await processRatingSubjectMergePage(database.pool, {
         id: growthTargets[repetition]!,
         survivor: growthId(900000 + repetition),
         after: null,
-      }),
+      });
+      expect(page).toMatchObject({ voters: 100, done: false });
+      return page;
+    },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
 });

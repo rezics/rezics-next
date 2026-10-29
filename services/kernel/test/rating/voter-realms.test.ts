@@ -15,7 +15,14 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 
 const route = 0x3a03;
 const membershipType = 'com.rezics.community.realm.membership.v1';
@@ -316,6 +323,13 @@ const population: Population = {
         joined_at: at,
         state: 'counted',
       },
+      {
+        route,
+        voter_id: key(1_000_000 + ordinal),
+        realm_id: key(3_000_000 + ordinal),
+        joined_at: at,
+        state: 'uncounted',
+      },
     ],
   }),
 };
@@ -327,13 +341,67 @@ test('membership join and promotion cost constant rows and statements as other v
   const warmupVoterId = newId(route),
     warmupLeaving = newId(route),
     warmupWaiting = newId(route);
+  // The first scale already has 4096 other voters in both partial indexes. Grow their genuine
+  // effect receipt/outbox shapes too; these service effects do not write an editorial basis.
+  const historyVoter = newId(route);
+  await effect.run(membership(historyVoter, newId(route), 'member'));
+  const receipt = (await database.admin.query('SELECT * FROM core.receipt WHERE principal_id = $1', [historyVoter]))
+    .rows[0]!;
+  const event = (
+    await database.admin.query('SELECT * FROM core.outbox WHERE partition_no = $1 AND position = $2', [
+      partitionOf(route),
+      receipt.position,
+    ])
+  ).rows[0]!;
+  const neighboursPerScale = 64;
   const result = await checkGrowth(database, {
     name: 'voter Realm membership',
+    rule: 'series',
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     grow: async (db, scale, previous) => {
-      await seed({ pool: db.pool, admin: db.admin }, population, { from: previous, to: scale });
+      const from = previous * neighboursPerScale;
+      const position = Number(
+        (await db.admin.query('SELECT position FROM core.partition WHERE partition_no = $1', [partitionOf(route)]))
+          .rows[0]!.position,
+      );
+      const history: Population = {
+        ...population,
+        rows: (input) => {
+          const voterId = key(1_000_000 + input.ordinal);
+          const transactionId = newId(route);
+          const nextPosition = position + input.ordinal - from + 1;
+          return {
+            ...population.rows(input),
+            'core.receipt': [
+              {
+                ...receipt,
+                principal_id: voterId,
+                idempotency_key: createHash('sha256').update(`membership-history-${input.ordinal}`).digest('hex'),
+                position: nextPosition,
+                transaction_id: transactionId,
+              },
+            ],
+            'core.outbox': [
+              {
+                ...event,
+                id: newId(route),
+                position: nextPosition,
+                subject: voterId,
+                data: { voterId, realmId: key(2_000_000 + input.ordinal) },
+              },
+            ],
+          };
+        },
+        finish: async (admin, range) => {
+          await admin.query('UPDATE core.partition SET position = $2 WHERE partition_no = $1', [
+            partitionOf(route),
+            position + range.to - range.from,
+          ]);
+        },
+      };
+      await seed({ pool: db.pool, admin: db.admin }, history, { from, to: scale * neighboursPerScale });
       for (const [probeVoter, probeLeaving, probeWaiting] of [
         [voterId, leaving, waiting],
         [warmupVoterId, warmupLeaving, warmupWaiting],
@@ -344,8 +412,32 @@ test('membership join and promotion cost constant rows and statements as other v
       }
     },
     warmup: async (_db, _scale, _repetition) => {
-      await effect.run(membership(warmupVoterId, warmupLeaving, null));
-      await effect.run(membership(warmupVoterId, newId(route), 'member'));
+      const measured = await capture(database, async () => {
+        await effect.run(membership(warmupVoterId, warmupLeaving, null));
+        await effect.run(membership(warmupVoterId, newId(route), 'member'));
+      });
+      const nodes: Record<string, unknown>[] = [];
+      const visit = (value: unknown): void => {
+        if (Array.isArray(value)) return value.forEach(visit);
+        if (!value || typeof value !== 'object') return;
+        const node = value as Record<string, unknown>;
+        if (node['Node Type']) nodes.push(node);
+        if (node.Plan) visit(node.Plan);
+        if (node.Plans) visit(node.Plans);
+      };
+      visit(measured.capture.plans);
+      for (const index of ['voter_realm_pkey', 'voter_realm_waiting_idx', 'voter_realm_capped_idx']) {
+        const probes = nodes.filter((node) => node['Index Name'] === index);
+        expect(probes.length).toBeGreaterThan(0);
+        for (const probe of probes) {
+          expect(String(probe['Index Cond'])).toContain('route');
+          expect(String(probe['Index Cond'])).toContain('voter_id');
+        }
+      }
+      expect(nodes.some((node) => node['Index Name'] === 'receipt_pkey')).toBe(true);
+      expect(
+        nodes.filter((node) => node['Relation Name'] === 'voter_realm' && node['Node Type'] === 'Seq Scan'),
+      ).toHaveLength(0);
       expect(await row(warmupVoterId, warmupWaiting)).toMatchObject({ state: 'adding' });
     },
     operation: async () => {
