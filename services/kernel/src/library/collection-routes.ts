@@ -103,7 +103,7 @@ function detail(operationId: string, action: string, anonymous = false) {
 }
 
 /** Validate original JSON without Elysia's removal of undeclared body properties. */
-function strict<S extends TSchema>(schema: S) {
+export function strict<S extends TSchema>(schema: S) {
   const validator = Compile(schema);
   return {
     '~standard': {

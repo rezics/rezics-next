@@ -1,7 +1,5 @@
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import type { Static, TSchema } from 'typebox';
-import { Compile } from 'typebox/compile';
 import type { KernelClock } from '../clock.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -9,7 +7,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { collectionSchema } from './collection-routes.ts';
+import { collectionSchema, strict } from './collection-routes.ts';
 import { createPins } from './pins.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -42,22 +40,6 @@ function detail(operation: string, action: string, write = false) {
     'x-exposure': 'gate:personal_library',
     security: [{ bearerAuth: [] }],
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
-  };
-}
-function strict<S extends TSchema>(schema: S) {
-  const validator = Compile(schema);
-  return {
-    '~standard': {
-      version: 1 as const,
-      vendor: 'typebox',
-      types: undefined as { input: Static<S>; output: Static<S> } | undefined,
-      validate(value: unknown) {
-        return validator.Check(value)
-          ? { value: value as Static<S> }
-          : { issues: [{ message: 'Value does not match the pin schema' }] };
-      },
-      jsonSchema: { input: () => schema, output: () => schema },
-    },
   };
 }
 function queryFields(request: Request, allowed: string[]) {
