@@ -5,7 +5,6 @@ import type { ReactNode } from 'react';
 import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
-import { EllipsisIcon } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Menu } from '@rezics/ui/menu';
@@ -197,6 +196,7 @@ function SessionEditor({
           changes: [...current.changes, change],
         };
       });
+      setEditing(false);
     } catch {
       setAlert(m.library_progress_invalid());
     } finally {
@@ -400,8 +400,8 @@ function SessionEditor({
             <Menu
               title={m.library_collection_actions()}
               trigger={
-                <Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()}>
-                  <EllipsisIcon aria-hidden="true" />
+                <Button variant="ghost" className="min-h-10 px-3" aria-label={m.library_collection_actions()}>
+                  {m.library_collection_actions()}
                 </Button>
               }
               entries={[

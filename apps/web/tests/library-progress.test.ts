@@ -846,6 +846,7 @@ test(
       expect(sessions.get(current)?.completedUnitCount).toBe(100);
 
       const before = calls.length;
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill([...batch, 'ep-101'].join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
       const alert = page.getByRole('alert');
