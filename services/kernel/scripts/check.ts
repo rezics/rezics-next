@@ -943,7 +943,10 @@ async function main(): Promise<void> {
           qualitySeconds,
           testSeconds,
           totalSeconds,
-          otherSeconds: Math.max(0, Math.round((totalSeconds - compilerSeconds - qualitySeconds - testSeconds) * 1000) / 1000),
+          otherSeconds: Math.max(
+            0,
+            Math.round((totalSeconds - compilerSeconds - qualitySeconds - testSeconds) * 1000) / 1000,
+          ),
           analysisEntries: {
             compilerBefore: compilerEntriesBefore,
             compilerAfter: reyloEntryCount(compilerConfig),
