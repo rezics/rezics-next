@@ -456,7 +456,11 @@ export function watch(
   }
   const tasks = store.tasks();
   const longAttempts = longAttemptIncidents(store, tasks, now, limitFor);
-  const found = [...violations(store, now, tasks, stateDirectory), ...failureIncidents(store, tasks, now), ...longAttempts];
+  const found = [
+    ...violations(store, now, tasks, stateDirectory),
+    ...failureIncidents(store, tasks, now),
+    ...longAttempts,
+  ];
   const hostIncidents = probeCheckHosts(state, stateDirectory, now, probe);
   const stabilize = head(checkout, branches.stabilize);
   const dev = head(checkout, branches.integration);
