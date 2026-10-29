@@ -95,7 +95,67 @@ bun scripts/worker-check.ts -- bun run typecheck
 bun scripts/worker-check.ts -- test -s docs/research/imports-audit/native-composed-counted-costs.md
 ```
 
-Results are recorded below after the checks finish. Specification delivery and native outcome proof are separate.
+### Recorded results
+
+Tested executable revision: `2093ab2dfa` (subsequent changes only record evidence in this report).
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| Focused kernel command above | exit 1 | `.temp/goal/checks/worker-check-2026-10-29T14-34-09.976Z-104fb41c.log` |
+| Root `bun run typecheck` through worker-check | exit 0 | `.temp/goal/checks/worker-check-2026-10-29T14-34-24.381Z-05d36756.log` |
+| Report-presence acceptance | executed after committing this completed report; terminal result in worker handoff | `test -s` command above |
+
+The focused command queued for **575.216 s** before acquiring host b; waiting was not treated as a failure.
+The initial API child completed **22 pass / 1 fail / 20374 assertions**, failing its fixed-growth case in setup
+with the exact first error below. Its independent shared native PG harness case passed. Initial growth completed
+**15 pass / 2 fail / 270508 assertions**: vanished-page raw capture had a successful non-control SQL statement
+without a plan (`semantic/slots-read-operation.sql`, expected true, received false); bulk replacement received
+503 `deadline_exceeded`, retryable true, `effect_status:not_applied`, at record `growth-source:10012`.
+The new named native unit-summary acceptance case passed in **5324.38 ms**.
+
+The existing runner automatically reran the growth wrapper once alone: **15 pass / 2 fail / 287107 assertions**.
+Its failures were new-record and vanished-page raw plan coverage (same preserved control-or-error assertion,
+expected true, received false). The new named acceptance case again passed in **4286.74 ms**. The 101-command,
+300-command, cap-byte, parser, converter and revision cases passed. No manual native rerun, base native run,
+source repair or capture workaround was performed. Identical base assertions remain in place, but this attempt
+does not claim an executed base comparison or a complete native outcome pass.
+
+After the automatic isolated rerun, remote cleanup also emitted this exact tool failure:
+
+```text
+remote-check: could not remove /srv/rezics-check/runs/mvtnlpge-6c64db7f on b
+```
+
+The wrapper subsequently reached terminal **exit 1**; both started checks have finished. This is retained as a
+tool blocker under the contract's infrastructure-after-rerun rule, independent of the delivered unit specification.
+The scoped migration, typecheck and passing named unit case do not erase the failing native outcomes or setup error.
+
+Exact first failure line from the API child (complete backend diagnostics retained):
+
+```text
+GrowthSettleInfrastructureError: VACUUM did not make every page all-visible after three rounds; relations: [{"relation":"dbos.operation_outputs","pages":10,"visible":5}]; backends: [{"pid":1618,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"COMMIT"},{"pid":1628,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"COMMIT"},{"pid":1629,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"LISTEN dbos_streams_channel;"},{"pid":1630,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options,"},{"pid":1631,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"UPDATE \"dbos\".queues SET \"polling_interval_sec\" = $1, \"updated_at\" = $2 WHERE name = $3"},{"pid":1632,"backend_type":"client backend","application_name":"","state":"active","xact_start":"2026-10-29T14:50:01.526Z","backend_xid":null,"backend_xmin":"88256","query":"(SELECT version_id, version_name, version_timestamp, created_at, application_name FROM \"dbos\".application_versions WHERE application_name = $1 ORDER BY application_name, version_timestamp DESC LIMIT 1)"},{"pid":1633,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"SET auto_explain.log_min_duration = -1"},{"pid":1634,"backend_type":"client backend","application_name":"","state":"active","xact_start":"2026-10-29T14:50:01.526Z","backend_xid":null,"backend_xmin":"88256","query":"WITH input AS NOT MATERIALIZED ("},{"pid":1635,"backend_type":"client backend","application_name":"","state":"idle in transaction","xact_start":"2026-10-29T14:50:01.525Z","backend_xid":null,"backend_xmin":"88256","query":"WITH input AS NOT MATERIALIZED ("},{"pid":1636,"backend_type":"client backend","application_name":"","state":"idle in transaction","xact_start":"2026-10-29T14:50:01.526Z","backend_xid":null,"backend_xmin":null,"query":"BEGIN ISOLATION LEVEL READ COMMITTED"},{"pid":1637,"backend_type":"client backend","application_name":"","state":"active","xact_start":"2026-10-29T14:50:01.526Z","backend_xid":null,"backend_xmin":null,"query":"SET auto_explain.log_min_duration = -1"},{"pid":1641,"backend_type":"client backend","application_name":"","state":"active","xact_start":"2026-10-29T14:50:01.526Z","backend_xid":null,"backend_xmin":"88256","query":"WITH input AS NOT MATERIALIZED ("},{"pid":1642,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"SET auto_explain.log_min_duration = -1"},{"pid":1643,"backend_type":"client backend","application_name":"","state":"idle","xact_start":null,"backend_xid":null,"backend_xmin":null,"query":"SET auto_explain.log_min_duration = -1"}]; vacuum notices: ["INFO: aggressively vacuuming \"import_identity_7a06f680568e4c4ca40a730ee79fda45.dbos.operation_outputs\"","INFO: finished vacuuming \"import_identity_7a06f680568e4c4ca40a730ee79fda45.dbos.operation_outputs\": index scans: 0\npages: 0 removed, 10 remain, 10 scanned (100.00% of total), 0 eagerly scanned\ntuples: 0 removed, 140 remain, 0 are dead but not yet removable\nremovable cutoff: 88254, which was 1 XIDs old when operation ended\nnew relfrozenxid: 88254, which is 21 XIDs ahead of previous value\nfrozen: 6 pages from table (60.00% of total) had 10 tuples frozen\nvisibility map: 3 pages set all-visible, 3 pages set all-frozen (0 were all-visible)\nindex scan not needed: 0 pages from table (0.00% of total) had 0 dead item identifiers removed\navg read rate: 0.000 MB/s, avg write rate: 0.000 MB/s\nbuffer usage: 68 hits, 0 reads, 0 dirtied\nWAL usage: 9 records, 0 full page images, 855 bytes, 0 full page image bytes, 0 buffers full\nmemory usage: dead item storage 0.02 MB accumulated across 0 resets (limit 64.00 MB each)\nsystem usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s","INFO: aggressively vacuuming \"import_identity_7a06f680568e4c4ca40a730ee79fda45.pg_toast.pg_toast_21724\"","INFO: finished vacuuming \"import_identity_7a06f680568e4c4ca40a730ee79fda45.pg_toast.pg_toast_21724\": index scans: 0\npages: 0 removed, 0 remain, 0 scanned (100.00% of total), 0 eagerly scanned\ntuples: 0 removed, 0 remain, 0 are dead but not yet removable\nremovable cutoff: 88254, which was 1 XIDs old when operation ended\nnew relfrozenxid: 88254, which is 21 XIDs ahead of previous value\nfrozen: 0 pages from table (100.00% of total) had 0 tuples frozen\nvisibility map: 0 pages set all-visible, 0 pages set all-frozen (0 were all-visible)\nindex scan not needed: 0 pages from table (100.00% of total) had 0 dead item identifiers removed\navg read rate: 0.000 MB/s, avg write rate: 0.000 MB/s\nbuffer usage: 13 hits, 0 reads, 0 dirtied\nWAL usage: 1 records, 0 full page images, 307 bytes, 0 full page image bytes, 0 buffers full\nmemory usage: dead item storage 0.02 MB accumulated across 0 resets (limit 64.00 MB each)\nsystem usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s","INFO: analyzing \"dbos.operation_outputs\"","INFO: \"operation_outputs\": scanned 10 of 10 pages, containing 141 live rows and 0 dead rows; 141 rows in sample, 141 estimated total rows","INFO: finished analyzing table \"import_identity_7a06f680568e4c4ca40a730ee79fda45.dbos.operation_outputs\"\navg read rate: 0.000 MB/s, avg write rate: 0.000 MB/s\nbuffer usage: 128 hits, 0 reads, 0 dirtied\nWAL usage: 28 records, 0 full page images, 6700 bytes, 0 full page image bytes, 0 buffers full\nsystem usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s"]; attribution: {"dbos.operation_outputs":{"notAllVisibleBlocks":[{"blkno":"1","all_visible":false,"all_frozen":false,"pd_all_visible":false},{"blkno":"2","all_visible":false,"all_frozen":false,"pd_all_visible":false},{"blkno":"3","all_visible":false,"all_frozen":false,"pd_all_visible":false},{"blkno":"4","all_visible":false,"all_frozen":false,"pd_all_visible":false},{"blkno":"5","all_visible":false,"all_frozen":false,"pd_all_visible":false}],"pgCheckVisible":[]},"preparedTransactions":[],"replicationSlots":[],"owners":[{"relation":"dbos.operation_outputs","owner":"rezics","settle_role":"rezics"}]}
+```
+
+Existing revision diagnostics provide the following actual counts from the first complete measurement sequence.
+These are sums of the emitted SQL histograms and the HTTP diagnostic array, not inferred engine work. Plan-text
+entries are labelled as such rather than asserted to be canonical statements or rows; returned-row totals and
+canonical rows/blocks are not emitted by that diagnostic. No missing observation is filled with zero.
+
+| Axis | N | History | M | SQLite executions | PG foreground SQL executions | PG plan-text entries | HTTP diagnostic attempts |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline-shared | 32 | 32 | 1 | 142 | 308 | 222 | 10 |
+| n | 128 | 32 | 1 | 142 | 308 | 222 | 10 |
+| n | 512 | 32 | 1 | 142 | 308 | 222 | 10 |
+| history | 32 | 128 | 1 | 142 | 308 | 222 | 10 |
+| history | 32 | 512 | 1 | 142 | 308 | 222 | 10 |
+| fields | 32 | 32 | 8 | 142 | 308 | 222 | 10 |
+| fields | 32 | 32 | 64 | 142 | 308 | 222 | 10 |
+
+The unchanged ceilings apply to actual SQLite executions and the separately derived PG client-calls-plus-raw-plans
+unit. The fixed diagnostic counts do not establish server batch-width series or global native cost success.
+The full focused log SHA-256 is `054bc0e2db9df34dfbb6250497e3530f3b5bd9b5557d55c5d6943392855bf654`.
+
+Specification delivery and native outcome proof are separate.
 There are no outside-declared-path changes. No frozen sibling capture/runtime/validator, source, policy, rights,
 credentials, settings, timeout, README, dependency or broad gate is modified.
 
