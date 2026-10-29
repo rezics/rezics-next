@@ -69,8 +69,9 @@ function claim(runtime: ApiRuntime, run: Run, key: string) {
 }
 function unresolved(statement: BatchStatement | Statement, key: string, wire: 'proposal' | 'native' = 'proposal') {
   expect(statement.value).toEqual({ type: 'somevalue' });
+  const property = wire === 'native' ? { id: 'wdt:P648', data_type: 'external-id' } : { id: 'wdt:P648' };
   expect(statement.qualifiers).toContainEqual<Statement['qualifiers'] | NonNullable<BatchStatement['qualifiers']>>({
-    property: wire === 'native' ? { id: 'wdt:P648', data_type: 'external-id' } : { id: 'wdt:P648' },
+    property,
     value: { type: 'value', content: key.split('/').at(-1) },
   });
 }
