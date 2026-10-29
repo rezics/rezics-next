@@ -326,6 +326,35 @@ test('pages select 100 keys with one lookahead; store/role cursors cross partiti
   expect(measured.statements.filter((sql) => sql.includes('FROM access.organization_member'))).toHaveLength(1);
 });
 
+test('the final routing partition completes once; replay is durable and stale or skipped pages cannot move progress', async () => {
+  const id = await obligation();
+  await history(id, 65535, 1);
+  await insert('erasure_progress', {
+    route: 64,
+    account_id: id,
+    store: 'organization_member',
+    role: 'member_account_id',
+    partition_no: 4095,
+  });
+  const result = await discover(id, 'organization_member', 'member_account_id');
+  expect(result.partition).toBe(4095);
+  expect(result.keys).toHaveLength(1);
+  expect(result.done).toBe(true);
+  expect(await discover(id, 'organization_member', 'member_account_id')).toEqual(result);
+  await expect(discover(id, 'organization_member', 'member_account_id', 1)).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  const other = await obligation();
+  await expect(discover(other, 'organization_member', 'member_account_id', 1)).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect((await discover(other, 'organization_member', 'member_account_id')).partition).toBe(0);
+  await discover(other, 'organization_member', 'member_account_id', 1);
+  await expect(discover(other, 'organization_member', 'member_account_id')).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+});
+
 test('a lost response replays the committed keys, and the next page neither repeats nor skips; pre-commit failure rolls back progress', async () => {
   const id = await obligation();
   await history(id, 1, 201);
