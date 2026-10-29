@@ -104,12 +104,14 @@ test('a short retention batch stays bounded as retained workflow history grows',
     },
     indexProbes: 40,
     async grow(growth, scale, previous) {
-      await seedShortBatch(growth, 'short-eligible', 10, scale * 10);
       await seedShortBatch(growth, 'short-warmup', 10, scale * 10);
       const added = historySize * (scale - previous);
       const offset = historySize * previous;
       await seedShortBatch(growth, 'short-long-lived', added, offset);
       await seedShortBatch(growth, 'short-recent', added, offset);
+    },
+    async prepare(growth, scale) {
+      await seedShortBatch(growth, 'short-eligible', 10, scale * 10);
     },
     async operation() {
       expect(await runWorkflowRetentionBatch(30, client)).toBe(10);
@@ -143,8 +145,10 @@ test('one retention batch stays bounded as retained and recent workflow history 
       const offset = historySize * previous;
       await seed(growth, 'old', added, offset);
       await seed(growth, 'recent', added, offset);
-      await seedShortBatch(growth, 'full-eligible', 1000, scale * 1000);
       await seedShortBatch(growth, 'full-warmup', 1000, scale * 1000);
+    },
+    async prepare(growth, scale) {
+      await seedShortBatch(growth, 'full-eligible', 1000, scale * 1000);
     },
     async operation() {
       expect(await runWorkflowRetentionBatch(30, client)).toBe(1000);

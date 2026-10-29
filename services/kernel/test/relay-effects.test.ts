@@ -118,7 +118,13 @@ test('effects relay discovery stays within its bound as outbox history grows', a
   const historyPerPartition = 125;
   const historyInitial = new Map<number, string>();
   const historyHeads = new Map<number, number>();
-  let savedCheckpoints: { partition_no: number; consumer: string; epoch: number; position: string }[] = [];
+  let savedCheckpoints: {
+    partition_no: number;
+    consumer: string;
+    epoch: number;
+    position: string;
+    updated_at: Date;
+  }[] = [];
 
   try {
     const saved = await growth.admin.query<{
@@ -126,9 +132,11 @@ test('effects relay discovery stays within its bound as outbox history grows', a
       consumer: string;
       epoch: number;
       position: string;
-    }>('SELECT partition_no, consumer, epoch, position::text FROM core.consumer_checkpoint WHERE consumer = $1', [
-      consumerName,
-    ]);
+      updated_at: Date;
+    }>(
+      'SELECT partition_no, consumer, epoch, position::text, updated_at FROM core.consumer_checkpoint WHERE consumer = $1',
+      [consumerName],
+    );
     savedCheckpoints = saved.rows;
     const hotPosition = await growth.admin.query<{ position: string }>(
       'SELECT position::text FROM core.partition WHERE partition_no = $1',
@@ -157,11 +165,12 @@ test('effects relay discovery stays within its bound as outbox history grows', a
     );
     for (const row of seeded.rows) insertedIds.push(row.id);
     await growth.admin.query(
-      `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+      `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position, updated_at)
        SELECT partition_no, $1, 1,
-              CASE WHEN partition_no = $2 THEN position ELSE position + 8192 END
+              CASE WHEN partition_no = $2 THEN position ELSE position + 8192 END, now()
        FROM core.partition
-       ON CONFLICT (consumer, partition_no) DO UPDATE SET epoch = 1, position = EXCLUDED.position`,
+       ON CONFLICT (consumer, partition_no) DO UPDATE
+       SET epoch = 1, position = EXCLUDED.position, updated_at = EXCLUDED.updated_at`,
       [consumerName, hot],
     );
     await checkGrowth(growth, {
