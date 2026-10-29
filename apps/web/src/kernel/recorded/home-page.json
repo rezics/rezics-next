@@ -147,16 +147,7 @@
           {
             "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
             "type": "schema:Book",
-            "labels": {
-              "en": "The Little Prince",
-              "zh-Hans": "小王子",
-              "zh-Hant": "小王子",
-              "ja": "星の王子さま",
-              "ko": "어린 왕자",
-              "de": "Der kleine Prinz",
-              "fr": "Le Petit Prince",
-              "es": "El Principito"
-            },
+            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である", "zh-Hans": "我是猫" },
             "summary": {
               "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
               "type": "schema:Book",
@@ -170,22 +161,13 @@
           {
             "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
             "type": "schema:Book",
-            "labels": {
-              "de": "Der kleine Prinz",
-              "en": "The Little Prince",
-              "es": "El Principito",
-              "fr": "Le Petit Prince",
-              "ja": "星の王子さま",
-              "ko": "어린 왕자",
-              "zh-Hans": "小王子",
-              "zh-Hant": "小王子"
-            },
+            "labels": { "en": "Kokoro", "ja": "こころ", "zh-Hans": "心" },
             "summary": {
               "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
               "type": "schema:Book",
               "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": { "value": "Le Petit Prince", "language": "fr" },
+              "label": { "value": "Kokoro", "language": "en" },
               "cover": null
             },
             "cover": null

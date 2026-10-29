@@ -11,12 +11,21 @@
     {
       "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
       "type": "schema:Book",
-      "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
+      "labels": {
+        "en": "The Little Prince",
+        "zh-Hans": "小王子",
+        "zh-Hant": "小王子",
+        "ja": "星の王子さま",
+        "ko": "어린 왕자",
+        "de": "Der kleine Prinz",
+        "fr": "Le Petit Prince",
+        "es": "El Principito"
+      },
       "summary": {
         "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "label": { "value": "The Little Prince", "language": "en" },
         "creativeWork": true,
         "cover": null
       },

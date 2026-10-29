@@ -70,7 +70,7 @@
         "creativeWork": true,
         "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
         "type": "schema:Book",
-        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "label": { "value": "The Little Prince", "language": "en" },
         "types": ["schema:Book"],
         "cover": null
       }
