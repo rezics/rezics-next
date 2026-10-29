@@ -21,7 +21,8 @@ no Person subject or target UUID is supplied. Actual returned create/candidate r
 exact own-binding keys and persisted receipt identities tie observations to writes.
 An authorized editor accepts and adopts retrieved IDs in Global before anonymous
 subject assertions. Author slots are addressed by their exact external `sameAs`.
-No composed page is claimed, and no projection is seeded or marked ready.
+No composed page is claimed. Anonymous subject relation previews consume the existing
+production semantic relay; no projection is seeded or marked ready.
 
 CC0-1.0 structured-data attribution is observed in the actual conversion capture,
 not invented as per-fact rights or a licence for output. Commands remain facts only;
@@ -64,8 +65,10 @@ is required for this narrower existing mapping case, and none was copied.
 
 Decisions: use URL as the changed accepted field, rather than immutable bootstrap
 labels/aliases/descriptions. Use exact external author slots and retrieved editorial
-heads. Assert anonymous subject output without a composed page, so no production relay
-delivery is required for a page relation preview. Keep CC0 at the source metadata seam.
+heads. Assert anonymous subject output without a composed page. Inspection of
+`semantic/subject.ts` and `link-freshness.ts` confirms that subject relation previews
+also consume the link projection, so deliver real events with `linkProjection` before
+those anonymous reads, reusing the existing native rich-field case's bounded drain. Keep CC0 at the source metadata seam.
 Do not infer an author resolution port from an unknown identity. No helper, product,
 definition, existing acceptance test or frozen file is edited.
 

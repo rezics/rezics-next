@@ -4,6 +4,8 @@ import entity from '../../../../specs/fixtures/imports/wikidata/entity.json';
 import { converter_revision, type WikidataConversion } from '../../../../packages/conversion/src/wikidata.ts';
 import type { Dump, Run } from '../../../../specs/imports-api-driver.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { openApiRuntime, type ApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
 
@@ -20,7 +22,7 @@ const owner = { source: 'wikidata', external_id: entity.id };
 const citation = (revision: number) => `https://www.wikidata.org/wiki/Q571?oldid=${revision}`;
 const identity = (id: string) => `http://www.wikidata.org/entity/${id}`;
 const part = (property: string, content: unknown) => ({
-  property: { id: property },
+  property: expect.objectContaining({ id: property }),
   value: { type: 'value', content },
 });
 const commands = (run: Run) => run.exchanges.flatMap((e) => (e.request.body as { commands: BatchCommand[] }).commands);
@@ -112,7 +114,20 @@ async function open() {
       });
       expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
     }
+    const links = linkProjection(runtime.database.pool);
     async function anonymous(id: string, context: string) {
+      // Subject relation previews consume the real relay, even without a composed page.
+      let caughtUp = false;
+      for (let batch = 0; batch < 16; batch++) {
+        const delivered = await links.run(partitionOf(routeOf(id)!));
+        expect(delivered.status).not.toBe('stopped');
+        expect(delivered.status).not.toBe('busy');
+        if (delivered.status === 'read' && delivered.envelopes === 0) {
+          caughtUp = true;
+          break;
+        }
+      }
+      expect(caughtUp).toBe(true);
       const response = await runtime.request(`/v1/subjects/${id}?context=${context}`);
       expect(response.status).toBe(200);
       return (await response.json()) as {
@@ -233,6 +248,17 @@ test('Wikidata synthetic native Book rich fields retain ranks qualifiers referen
           .map((c) => c.id)
           .sort(),
       );
+    for (const candidate of retrieved) {
+      const statement = publicView.subject.statements[candidate.statement.property.id]!.find(
+        (s) => s.id === candidate.id,
+      );
+      expect(statement).toMatchObject({
+        value: candidate.statement.value,
+        rank: candidate.statement.rank,
+        qualifiers: candidate.statement.qualifiers,
+        references: candidate.statement.references,
+      });
+    }
     const bytes = JSON.stringify([commands(run), captures, publicView]);
     for (const forbidden of [
       'P999999',
