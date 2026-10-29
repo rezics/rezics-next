@@ -1,4 +1,4 @@
-WITH removed AS (
+WITH input AS NOT MATERIALIZED (SELECT :time::timestamptz AS time), removed AS (
   DELETE FROM library.entry
   WHERE route = :route AND account_id = :account_id AND subject_id = :subject_id
     AND incarnation_id IS NOT NULL AND incarnation_id = :incarnation_id::uuid
@@ -11,10 +11,10 @@ INSERT INTO library.entry_deleted
    type_source_epoch, type_source_position, incarnation_id, library_profile_pin, owner_write_seq,
    deletion_id, deleted_revision, deleted_at, restore_until)
 SELECT route, account_id, subject_id, requested_subject_id, state, revision, created_at, updated_at,
-   transaction_id, activity_at, finished_at, type_id, type_source_id, type_source_partition,
-   type_source_epoch, type_source_position, incarnation_id, library_profile_pin, owner_write_seq,
-       :transaction_id::uuid, revision + 1, :time::timestamptz, :time::timestamptz + interval '720 hours'
-FROM removed
+       transaction_id, activity_at, finished_at, type_id, type_source_id, type_source_partition,
+       type_source_epoch, type_source_position, incarnation_id, library_profile_pin, owner_write_seq,
+       :transaction_id::uuid, revision + 1, input.time, input.time + interval '720 hours'
+FROM removed CROSS JOIN input
 RETURNING route, account_id AS "accountId", subject_id AS "subjectId",
        requested_subject_id AS "requestedSubjectId", state, revision,
        created_at::text AS "createdAt", updated_at::text AS "updatedAt",
