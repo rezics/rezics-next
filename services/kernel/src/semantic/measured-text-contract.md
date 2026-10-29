@@ -9,110 +9,93 @@ only the proposed association and its native cases; the
 [measurement research and complete matrix](../../../../docs/research/catalogue-filter-data-mappings.md)
 remain evidence, not a competing definition authority.
 
-## Proposed owner choice
+## Adopted whole-holder boundary and proposed native binding
 
-Retain the native Statement, Snak and Reference shapes. The subject addressed by
-`POST /v1/subjects/{id}/candidates` is the counted holder; the assertion's returned
-candidate ID and revision anchor its provenance. There is no extra measurement
-endpoint, measurement subject type, importer record or caller-assigned native ID.
-A trusted contributor or publisher proposes a cited measurement, an authorized
-acceptor accepts it, and the ordinary Context adoption selects it. Public read is
-`GET /v1/subjects/{id}`. A proposal, acceptance and selection are different states.
+The Definitions owner has adopted generic machine-readable whole-holder coverage,
+actual holder identity, language and version. Text-supplied measurements additionally
+require the actual raw UTF-8 text digest, measurement instant and versioned method
+Concept. A summary measures that summary only: even a digest of a complete summary
+cannot prove coverage of its containing Book. An independent admitted producer
+declaration must identify the measured realization and whole holder.
 
-Use one quantity statement per measured text, language, scope and method. Proposed
-terms use the existing `rezics:` namespace; these are vocabulary proposals rather
-than claims that the bundled release already contains them.
+A reviewed producer may instead report its own declared work, serial or publisher
+word total without text ingestion. That input does not require an invented text
+digest, measurement instant or counting-method Concept. Preserve its actual source
+convention, citation, version and date. Missing source revision stays unversioned,
+with the actual raw source digest; missing dates stay absent. This is generic input,
+not a Book-only branch or a restriction to owned ASCII text.
 
-| Position               | Property                  | Proposed datatype and meaning                                                                                                                                        |
-| ---------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Main value             | `schema:wordCount`        | Exact nonnegative integer quantity, unit `1`; reviewed exact correspondence to P6570, not characters                                                                 |
-| Main value alternative | `rezics:characterCount`   | Separate exact nonnegative integer quantity, unit `1`; character convention comes from the method; no external exact mapping                                         |
-| Qualifier              | `rezics:measuredText`     | String `sha256:` plus 64 lowercase hex digits, over the exact identified text's UTF-8 bytes before counting transformations; content-addressed text version          |
-| Qualifier              | `schema:inLanguage`       | Existing canonical BCP 47 string; the language of that measured text                                                                                                 |
-| Qualifier              | `rezics:measurementScope` | English monolingual text in the initial cases, exhaustively naming included body/parts and excluded material; other declared documentation languages remain possible |
-| Qualifier              | `wdt:P459`                | Item identifying an actually created/adopted, explicitly versioned method Concept; target `skos:Concept`, association relation with `inverse: none`                  |
-| Qualifier              | `rezics:measuredAt`       | String containing the actual UTC RFC 3339 instant with milliseconds, e.g. `2026-10-29T00:00:00.000Z`                                                                 |
-| Reference part         | `schema:url`              | Public stable citation or existing native Content document URL containing an auditable trusted assertion                                                             |
-| Reference part         | `schema:version`          | Revision of that cited record; for a Content record its returned snapshot digest. This does not identify measured text                                               |
+Partial, unknown and unsupported multilingual coverage retain their evidence but
+omit usable word-count discovery evidence, including under NOT. Words and characters
+are separate exact NONNEGATIVE INTEGER quantities, unit `1`: reject negative,
+fractional, uncertain, estimated and incompatible-unit values. Explicit zero is known;
+unknown, withheld and unmeasured are not zero. Edition/translation counts never
+transfer through representativeEdition, series membership or parts. P518 remains
+restricted to its existing StoryArc contracts.
 
-The five qualifiers are single concrete values for a usable exact measurement.
-Incomplete or unknown evidence can be retained through ordinary editorial writes,
-but it does not become a complete measurement and cannot satisfy a positive or
-negative measurement predicate. No required-qualifier schema extension is proposed
-merely to retain evidence. Duplicate/conflicting qualifier alternatives are
-ambiguous and cannot be repaired by combining candidates or references.
+## Closed source-input proposal
 
-The method Concept is a native identity, not a label lookup or a guessed external
-item. Its definition names the procedure and version, definition of a word or
-character, normalization, exclusions and any segmentation locale, dictionary,
-Unicode version and tailoring. A changed procedure needs a distinct versioned
-meaning. The cited immutable measurement record repeats the actual method
-definition as measured, so subsequent Concept edits cannot rewrite old evidence.
-All indispensable holder, text, language, scope, method, time and value details
-must be available together in at least one reference record. Two incomplete
-references cannot be joined into a fictional complete citation.
+[measured-text-contract.ts](measured-text-contract.ts) exports exactly the pair
+`CountProducerInput` / `CountProducerInputSchema`. It is a source-input type/schema,
+not a producer factory, HTTP envelope, endpoint, import option or permission/readiness
+certificate. A schema-valid object still needs reviewed producer authority, actual
+native identities, lossless binding and current disclosure. The exact serialization
+and vocabulary association require Semantic manager, Search and Imports review
+before native acceptance freeze or definition/producer implementation.
 
-The holder is the containing native subject, not an independently assignable field.
-A work measurement explicitly identifies its measured realization. Editions,
-translations and languages remain separate. `representativeEdition`, edition-of,
-series membership and containing parts never transfer or sum counts. A partial
-body assertion cannot stand for the whole Book. Scope includes the titles,
-footnotes, appendices, markup, ruby readings, whitespace and volume/part choices,
-including explicit statements that a category is absent. Arbitrary body scope does
-not use or widen `wdt:P518`: its existing StoryArc targets and credit/appearance
-filter contracts remain intact.
+The closed discriminated input has one actual native holder ID, producer ID, language,
+version, coverage declaration and native bulk Statement. Its Statement retains all
+qualifiers and references together; optional Source uses the actual bulk Source
+contract unchanged. Reported input carries a declared total kind and word/character
+convention; supplied-text input carries text, digest, actual instant and a method
+Concept with version and definition. Coverage is an explicit enum: `whole-holder`,
+`partial`, `unknown`, `unsupported-multilingual`. Included/excluded parts are declared
+lists; no English parser decides eligibility. Unknown coverage cannot be upgraded by
+its prose. Retained partial counts are evidence, not usable whole-holder counts.
 
-`schema:version` already describes a resource version; by itself it identifies
-neither measured text nor its bytes. Content's document UUID/digest identifies a
-serialized authored snapshot, which is a different digest domain from raw text.
-The proposed `measuredText` digest is explicit about that distinction. A digest
-alone says nothing about a counting method, trust, rights or permission to ingest.
+The input uses the delivered `valueSchema('quantity', { exact: true,
+integer: true, units: ['1'] })`, adding the count-specific nonnegative restriction.
+Future released properties use that fixed value schema and `minimum: 0` (LinkML
+`annotations.exact: true`, integer range, unit `1`, minimum zero). The generic exact
+primitive remains decimal/unit-flexible; no serialized exact property flag exists.
+Input schema tests supplement, never replace native property validation.
 
-The current `time` datatype admits only year/month/day precision and midnight.
-Therefore `measuredAt` is a patterned string rather than a false day-precision
-measurement instant. Its producer records when counting actually occurred, not
-when a fixture was seeded, when a source was fetched or when an index refreshed.
+Proposed native storage keeps the existing Statement/Snak/Reference contracts:
 
-Exact zero means an explicit measured empty result under that method/scope.
-Absent, `somevalue`, `novalue`, unavailable, unmeasured and withheld evidence are
-unknown for this predicate, including under NOT. Negative/fractional quantities,
-bounds, estimates and wrong units are not exact counts. Pages, durations, bytes,
-UTF-16 units and characters do not become words. Keep rejected source evidence
-without emitting a less qualified exact measurement.
+| Position                | Term                                                               | Meaning                                                                                       |
+| ----------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Main                    | `schema:wordCount`                                                 | Exact nonnegative integer unit `1`, words; exact P6570                                        |
+| Main alternative        | `rezics:characterCount`                                            | Distinct local character count; no guessed external exact mapping                             |
+| Qualifier               | `rezics:measurementScope`                                          | String enum coverage token above, never monolingual eligibility prose                         |
+| Qualifier               | `schema:inLanguage`                                                | Existing language string                                                                      |
+| Qualifier               | `schema:version`                                                   | Explicit measured realization/producer-declared version; not itself a text digest             |
+| Supplied-text qualifier | `rezics:measuredText`                                              | `sha256:` plus lowercase raw UTF-8 text digest                                                |
+| Supplied-text qualifier | `wdt:P459`                                                         | Actual adopted versioned method Concept, `skos:Concept` target, association/inverse none      |
+| Supplied-text qualifier | `rezics:measuredAt`                                                | Actual RFC 3339 millisecond UTC counting instant; native day-precision time cannot express it |
+| Reference parts         | `schema:url`, `schema:version`, `schema:dateModified` when present | Actual cited record and its own version/date, distinct from measured realization              |
 
-## Concrete owner decisions still required
+The citation records the complete machine declaration, included/excluded parts,
+holder, version, language, value and actual method/convention together. For supplied
+text it repeats the method definition, normalization, segmentation, word definition,
+locale/dictionary/Unicode version and tailoring as applicable. Content snapshot digest
+identifies serialized authored content, not raw manuscript bytes. Two incomplete
+references, conflicting alternatives or different candidates never combine into one
+eligible measurement. A qualifier token alone is a storage carrier, not an admitted
+producer declaration. No native binding currently proves that admission; the tests
+keep that missing prerequisite explicit rather than interpreting summary text.
 
-The existing release supports integer quantity patterns, minimum zero, unit lists,
-string patterns, item targets and allowed qualifier lists. Those suffice for the
-proposed vocabulary and ordinary storage of the association. Native statement
-and bulk schemas already allow the necessary snaks and reference parts. No new
-Statement object, nested private JSON payload or importer envelope is necessary.
+String equality must admit ANY declared string within existing limits, independently
+of patterns. It must not extend monolingual grammar, qualifier/leaves/depth budgets,
+or add another Boolean engine. The association may store more than four qualifiers;
+queries retain the current four-qualifier budget. Same-statement scope, language and
+version plus method fit four; digest-specific probes are separate queries. Query
+conformance is NOT YET FROZEN pending inspection/review of actual Source/index code.
+The delivered exact-quantity primitive resolves the old bounds-schema blocker;
+released helpers and lossless source/index binding remain separate gaps.
 
-Two shared constraints prevent adopting this as implemented:
-
-1. `valueSchema('quantity', { integer: true, units: ['1'] })` always permits
-   `lowerBound` and `upperBound`. `validateRelease` requires that exact fixed shape;
-   its `minimum` does not reject a legitimate uncertainty interval. Definitions
-   must choose a generic exact-quantity restriction, for example an optional
-   `exact: true` annotation that omits both bounds in the fixed value schema,
-   with portable/native validation and compiler support. Do not repurpose a
-   string pattern to pretend a number has no bounds, or remove bounds from every
-   quantity. This file does not adopt the proposed annotation's spelling.
-2. Shared filter qualifiers currently admit only item equality. Language and text
-   version here are strings; scope is monolingual text. Search and Semantic must
-   agree how the existing shared filter grammar admits and indexes typed qualifier
-   equality on the same statement. Minimal proposed first binding is canonical
-   patterned string equality for language and text digest, plus item method
-   equality; whole-body eligibility additionally requires the adopted scope and
-   complete current evidence. Do not turn language/digests into invented Concepts
-   or implement a private fixture matcher to bypass admission.
-
-These are cross-owner contract choices, not a reason to call required 422 outcomes
-complete. Stop before shared-schema/runtime implementation; preserve the native
-expected-201 reds. Semantic must adopt the vocabulary in the Definitions owner
-README and coordinate the exact-quantity and shared-filter decisions with their
-consumers before implementation or freezing accepted hashes. No owner approval is
-implied by the existence of this proposal.
+Withhold the entire measurement if any actual qualifier is skipped, unsupported,
+unresolved or narrowed. Native source version/date absent remains absent. No
+SourceRegistration option, fifth adapter, private proof or guessed identity is adopted.
 
 ## Native input proof and controlled cases
 
@@ -138,12 +121,17 @@ method definitions, returned holder and method IDs, scope, values and rights in
 an authored Content record. The manuscript and record are original controlled
 text licensed CC-BY-4.0. Authored `schema:abstract` is a storage carrier for the
 controlled manuscript, not an inference that every summary measures a Book's
-body. The record explicitly identifies this manuscript as the work's realization.
+body. The supplied-text case declares partial summary coverage. Only a separate
+machine whole-holder producer declaration could establish a whole-holder realization;
+its actual native admission binding remains REQUIRED NOT YET FROZEN.
 Public `GET /v1/documents/{id}` must return the actual snapshot, digest, licence,
 origin and candidate association. Numeric fixture values alone prove none of this.
 
 Threshold amounts 999999, 1000000 and 1000001 are separately labelled synthetic
-controls with the shared controlled-assertion citation. They exercise boundaries,
+controls with real created native publisher identities and authored declaration citations.
+The reported-total case preserves holder/language/version and a serial-total convention,
+without invented text/digest/measurement time/method. Its native expected-201/public-read
+checks are required; the source-input model is not a delivered provider mapping. They exercise boundaries,
 not a claim to have measured million-word manuscripts. They cannot establish
 real Book/import-provider coverage. No copyrighted full text is fetched.
 
@@ -164,11 +152,12 @@ Additional native cases require explicit zero, negative/fraction/unit/bounds rej
 A valid exact admission must succeed before invalid-count rejection can count;
 an unsupported property failure is not the invalid-input contract.
 
-The current shared fixture has closed privacy prerequisites and exposes no native
-moderation grant helper or source-fence producer. Omitted/unknown method and
+The shared fixture exposes actual native `grant` administration. Candidate hide/restore
+controls use `moderation:hide` and `moderation:takedown` on Global; source-fence
+producer dependencies remain closed. Omitted/unknown method and
 source-less input cases do not claim to cover actual source withdrawal. Native
 method-target hiding, cited-record withdrawal and foreign source fencing remain
-required in the shared privacy producer; losing any indispensable dependency
+REQUIRED NOT YET FROZEN in the shared privacy producer; losing any indispensable dependency
 must make the entire measurement unknown before disclosure, including NOT,
 order, counts and membership. Do not add a fake permission or private proof.
 
@@ -197,12 +186,12 @@ Use the actual admitted page routes and native disclosure dependencies. Zone is
 execution. Search owns executable same-statement observations, scope eligibility,
 current complete evidence and withheld dependency repair; Commerce owns personal
 population/state support. The test's grammar assertion deliberately exposes the
-missing string-qualifier admission without pretending that it executes that query.
+missing released qualifier admission without pretending that it executes that query.
 There is no second fixture/search engine or new endpoint in this proposal.
 
 Release/export gaps: count properties, allowed qualifiers and facets are absent
 or unadopted; actual measurement instants need the string term above; exact bounds
-need the shared decision. Data gaps: no trusted native million-word Book batch,
+are supported by the delivered shared primitive. Data gaps: no trusted native million-word Book batch,
 provider import record or production Concept binding is supplied. Runtime gaps:
 qualifier-safe conversion, indexed complete associations, disclosure dependencies
 and six-cell execution remain with their existing owners. Report each separately.
@@ -230,7 +219,7 @@ expected 422/400, skip, optional driver or test-only release for success.
   Concepts, schemes, candidates and authored Content records through ordinary
   create/propose/accept/adopt/read operations.
 - Bound: fewer than 100 subject creations, 300 editorial requests and 32 authored
-  records; each assertion has five qualifiers and at most two references. Setup
+  records; supplied assertions have six qualifiers and at most two references. Setup
   is fixed-size and uses no history scan, unbounded retry or catalogue enumeration.
 - Growth check: this specification adds no runtime operation. Shared producer and
   consumer owners retain their native growth requirements at 64/512/4096 with

@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { validateFilter } from '@rezics/filter';
+import { Compile } from 'typebox/schema';
+import { CountProducerInputSchema, type CountProducerInput } from '../../src/semantic/measured-text-contract.ts';
 import type { Statement, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import {
   createReleasedDiscoveryFixture,
@@ -20,14 +22,14 @@ const language = 'schema:inLanguage';
 const scope = 'rezics:measurementScope';
 const method = 'wdt:P459';
 const measuredAt = 'rezics:measuredAt';
+const realizationVersion = 'owned-manuscript-v1';
+const producerInput = Compile(CountProducerInputSchema);
 const body = 'Amber birds cross quiet winter fields.';
 const digest = (text: string) => `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
 const controlledRecord = {
   url: 'https://example.org/released-discovery/v1/controlled-assertions',
   digest: digest('Controlled association and threshold assertions; not a measured manuscript'),
 };
-const scopeText =
-  'Entire identified manuscript body; title, footnotes, appendices, markup and ruby absent. No other parts or volumes included.';
 const wordMethod =
   'Owned ASCII words v1: maximal runs [A-Za-z]+ count as words; punctuation and U+0020 delimit runs. No normalization, dictionary or locale tailoring; input restricted to ASCII English.';
 const characterMethod =
@@ -111,7 +113,7 @@ function measurement(
   methodId: string,
   record: { url: string; digest: string },
   time: string,
-  overrides: { text?: string; language?: string; scope?: string } = {},
+  overrides: { text?: string; language?: string; scope?: string; version?: string } = {},
 ): Input {
   return {
     ...part(property, { amount, unit: '1' }),
@@ -119,7 +121,8 @@ function measurement(
     qualifiers: [
       part(textVersion, overrides.text ?? digest(body)),
       part(language, overrides.language ?? 'en'),
-      part(scope, { language: 'en', text: overrides.scope ?? scopeText }),
+      part(scope, overrides.scope ?? 'partial'),
+      part('schema:version', overrides.version ?? realizationVersion),
       part(method, methodId),
       part(measuredAt, time),
     ],
@@ -147,6 +150,7 @@ async function ownedMeasurement() {
   expect(Array.from(body).filter((point) => point !== ' ')).toHaveLength(33);
   const time = new Date().toISOString();
   const holder = await fixture.createSubject('schema:Book', 'Owned six-word manuscript');
+  const producer = await fixture.createSubject('schema:Organization', 'Controlled native publisher identity');
   const manuscript = await authored(holder, body);
   const m = await methods();
   const evidence = await fixture.createSubject('schema:Book', 'Owned auditable measurement record');
@@ -158,20 +162,47 @@ async function ownedMeasurement() {
       manuscript: manuscript.url,
       measuredText: digest(body),
       language: 'en',
-      scope: scopeText,
+      coverage: { kind: 'partial', included: ['authored summary'], excluded: ['whole holder not declared'] },
       measuredAt: time,
       words: { amount: '+6', unit: '1', method: m.word.id, definition: wordMethod },
       characters: { amount: '+33', unit: '1', method: m.character.id, definition: characterMethod },
       rights: 'Original controlled manuscript and measurement record, CC-BY-4.0',
     }),
   );
-  return { holder, record, m, time };
+  return { holder, producer, record, m, time };
 }
 
 test('native measured word and character assertions preserve holder text version language method scope and evidence together', async () => {
-  const { holder, record, m, time } = await ownedMeasurement();
+  const { holder, producer, record, m, time } = await ownedMeasurement();
   const wordInput = measurement(words, '+6', m.word.id, record, time);
   const characterInput = measurement(characters, '+33', m.character.id, record, time);
+  const supplied: CountProducerInput = {
+    kind: 'supplied-text',
+    holder: holder.id,
+    producer: producer.id,
+    language: 'en',
+    version: { kind: 'declared', value: realizationVersion },
+    coverage: { kind: 'partial', included: ['authored summary'], excluded: ['whole holder not declared'] },
+    text: body,
+    digest: digest(body),
+    measuredAt: time,
+    method: { concept: m.word.id, version: 'v1', definition: wordMethod },
+    statement: {
+      property: { id: 'schema:wordCount' },
+      value: { type: 'value', content: { amount: '+6', unit: '1' } },
+      qualifiers: wordInput.qualifiers,
+      references: wordInput.references!,
+      rank: 'preferred',
+    },
+  };
+  expect(producerInput.Check(supplied)).toBe(true);
+  const { digest: omittedDigest, ...missingDigest } = supplied;
+  expect(omittedDigest).toBe(digest(body));
+  expect(producerInput.Check(missingDigest)).toBe(false);
+  expect(producerInput.Check({ ...supplied, inventedEligibility: true })).toBe(false);
+  for (const kind of ['partial', 'unknown', 'unsupported-multilingual'] as const) {
+    expect(producerInput.Check({ ...supplied, coverage: { ...supplied.coverage, kind } })).toBe(true);
+  }
   const observed = [];
   // Collect both actual admission outcomes before asserting: missing definitions are expected-201 reds.
   for (const input of [wordInput, characterInput]) {
@@ -185,11 +216,22 @@ test('native measured word and character assertions preserve holder text version
     { property: words, status: 201 },
     { property: characters, status: 201 },
   ]);
+  for (const content of [
+    { amount: '-1', unit: '1' },
+    { amount: '+0.5', unit: '1' },
+    { amount: '+1', unit: 'pages' },
+    { amount: '+1', unit: '1', lowerBound: '+1' },
+  ]) {
+    expect(
+      producerInput.Check({ ...supplied, statement: { ...supplied.statement, value: { type: 'value', content } } }),
+    ).toBe(false);
+  }
   const word = await selected(holder, wordInput);
   const character = await selected(holder, characterInput);
   expect(word.qualifiers.find((q) => q.property.id === method)!.value.content).toBe(m.word.id);
   expect(character.qualifiers.find((q) => q.property.id === method)!.value.content).toBe(m.character.id);
   const compactInput = structuredClone(wordInput);
+  expect(wordInput.qualifiers!.find((q) => q.property.id === scope)!.value.content).toBe('partial');
   compactInput.references = [
     { parts: [part('schema:url', 'https://example.org/released-discovery/v1/controlled-assertions')] },
   ];
@@ -207,7 +249,7 @@ test('native measured word and character assertions preserve holder text version
     q.property.id === textVersion
       ? part(textVersion, digest(body + ' Again.'))
       : q.property.id === scope
-        ? part(scope, { language: 'en', text: 'Controlled partial body; appendix excluded.' })
+        ? part(scope, 'partial')
         : q,
   );
   const pending = await propose(holder, alternate);
@@ -221,6 +263,20 @@ test('native measured word and character assertions preserve holder text version
     discoveryKey(),
   );
   expect(rejection.status, JSON.stringify(rejection.body)).toBe(200);
+  const global = (await read(holder)).context;
+  await fixture.grant('acceptor', ['moderation:hide', 'moderation:takedown'], global);
+  for (const action of ['hide', 'restore'] as const) {
+    const response = await fixture.request(
+      'acceptor',
+      'POST',
+      `/v1/subjects/${holder.id}/candidates/${word.id}:${action}`,
+      { reason: 'Controlled current measurement disclosure' },
+      discoveryKey(),
+    );
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    const visible = (await read(holder)).statements[words] ?? [];
+    expect(visible.some((s) => s.id === word.id)).toBe(action === 'restore');
+  }
   const publicWords = (await read(holder)).statements[words]! as NativeStatement[];
   expect(publicWords.filter((s) => s.rank !== 'deprecated')).toEqual([word]);
   expect(publicWords.find((s) => s.id === pending.body.candidate)).toMatchObject({
@@ -246,7 +302,12 @@ test('edition and characters never become Book work words and incomplete crossst
   expect((await read(characterOnly)).statements[words] ?? []).toEqual([]);
   const crossed = await fixture.createSubject('schema:Book', 'Crossed language and text versions');
   const en = measurement(words, '+1000000', m.word.id, record, time);
-  const ja = measurement(words, '+1000001', m.word.id, record, time, { language: 'ja', text: digest('Controlled v2') });
+  const ja = measurement(words, '+1000001', m.character.id, record, time, {
+    language: 'ja',
+    text: digest('Controlled v2'),
+    version: 'controlled-v2',
+    scope: 'whole-holder',
+  });
   // Compact multivalued statements retain both associations without successive replace adoptions.
   const tuples = await fixture.createSubject('schema:Book', 'Two complete measured versions', { [words]: [en, ja] });
   const actual = (await read(tuples)).statements[words]!;
@@ -276,8 +337,8 @@ test('edition and characters never become Book work words and incomplete crossst
     expect(tuple).toMatchObject({ value: input.value, qualifiers: input.qualifiers });
   }
   expect((await read(crossed)).statements[words] ?? []).toEqual([]);
-  // This is grammar admission, not execution. Current shared qualifiers are item-only;
-  // the contract requires an owner decision before this exact query can execute.
+  // Grammar admission is separate from Source/index query conformance, which is not frozen.
+  // Input grammar only: execution and current Source/index conformance are NOT YET FROZEN.
   const query = {
     and: [
       { type: { in: ['schema:Book'] } },
@@ -288,6 +349,7 @@ test('edition and characters never become Book work words and incomplete crossst
           qualifiers: [
             { property: language, in: ['en'] },
             { property: textVersion, in: [digest(body)] },
+            { property: scope, in: ['whole-holder'] },
             { property: method, in: [m.word.id] },
           ],
         },
@@ -300,16 +362,50 @@ test('edition and characters never become Book work words and incomplete crossst
 }, 120_000);
 
 test('controlled threshold values remain independent from proof of owned measurement input', async () => {
-  const { m, time } = await ownedMeasurement();
+  const { producer } = await ownedMeasurement();
   const record = controlledRecord;
   for (const amount of ['+999999', '+1000000', '+1000001', '+0']) {
-    const holder = await fixture.createSubject('schema:Book', `Controlled threshold ${amount}`);
-    const input = measurement(words, amount, m.word.id, record, time);
-    // These numbers are intentionally synthetic and never presented as the six-word measurement.
-    input.references = [
-      { parts: [part('schema:url', 'https://example.org/released-discovery/v1/controlled-assertions')] },
-    ];
-    await selected(holder, input);
+    const holder = await fixture.createSubject('schema:Book', `Controlled reported total ${amount}`);
+    const input: StatementInput = {
+      ...part(words, { amount, unit: '1' }),
+      rank: 'preferred',
+      qualifiers: [part(scope, 'whole-holder'), part(language, 'en'), part('schema:version', 'declared-total-v1')],
+      references: [{ parts: [part('schema:url', record.url), part('schema:version', record.digest)] }],
+    };
+    const declaration: CountProducerInput = {
+      kind: 'reported-total',
+      holder: holder.id,
+      producer: producer.id,
+      language: 'en',
+      version: { kind: 'declared', value: 'declared-total-v1' },
+      coverage: { kind: 'whole-holder', included: ['declared serial body total'], excluded: ['editorial apparatus'] },
+      declaration: {
+        kind: 'serial-total',
+        convention: 'Controlled producer-declared word total; no character conversion',
+      },
+      statement: {
+        property: { id: 'schema:wordCount' },
+        value: { type: 'value', content: { amount, unit: '1' } },
+        qualifiers: input.qualifiers,
+        references: input.references!,
+        rank: 'preferred',
+      },
+    };
+    expect(producerInput.Check(declaration)).toBe(true);
+    expect('digest' in declaration).toBe(false);
+    expect('measuredAt' in declaration).toBe(false);
+    expect('method' in declaration).toBe(false);
+    // Real native authored citation and receipts; synthetic totals, not a million-word manuscript/provider.
+    const evidence = await fixture.createSubject('schema:Book', `Controlled declared-total evidence ${amount}`);
+    const citation = await authored(evidence, JSON.stringify(declaration));
+    input.references = [{ parts: [part('schema:url', citation.url), part('schema:version', citation.digest)] }];
+    const response = await propose(holder, input);
+    expect(response.status, JSON.stringify(response.body)).toBe(201);
+    const value = await selected(holder, input);
+    expect(value.qualifiers.some((q) => [textVersion, method, measuredAt].includes(q.property.id))).toBe(false);
+    // A carrier plus summary is still not proof of native admitted producer binding.
+    expect(fixture.sources.state).toBe('prerequisite');
+    expect(BigInt(amount) > 1000000n).toBe(amount === '+1000001');
   }
 }, 120_000);
 
@@ -392,7 +488,10 @@ test('explicit zero identifies a genuinely empty measured realization rather tha
       kind: 'trusted contributor measurement assertion',
     }),
   );
-  await selected(holder, measurement(words, '+0', m.word.id, record, time, { text: digest(empty), scope: emptyScope }));
+  await selected(
+    holder,
+    measurement(words, '+0', m.word.id, record, time, { text: digest(empty), scope: 'whole-holder' }),
+  );
   const absent = await fixture.createSubject('schema:Book', 'No measurement exists');
   expect((await read(absent)).statements[words] ?? []).toEqual([]);
 }, 120_000);

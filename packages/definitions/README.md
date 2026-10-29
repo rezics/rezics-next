@@ -458,7 +458,9 @@ optional identifier lookup is not evidence of CLI wiring or already adopted bind
 
 `schema:wordCount` has exact P6570 correspondence for **words**. A separately named
 local character-count property has no invented external exact mapping. For either
-property, exact quantity structure means only a fixed amount and unit with no lower or
+property, the count-specific contract requires an exact NONNEGATIVE INTEGER amount,
+unit `1`; reject negative/fractional amounts, uncertainty and incompatible units.
+The generic exact primitive remains decimal/unit-flexible. Exact quantity structure means only a fixed amount and unit with no lower or
 upper uncertainty bound. It does not establish the counted holder, scope, producer,
 method or eligibility for discovery. Portable/native amount storage and admissible
 filter evidence remain distinct.
@@ -503,7 +505,7 @@ statement through reviewed bindings and admitted schema. If any actual qualifier
 would be skipped, unsupported, unresolved or semantically narrowed, withhold the
 entire measurement. Never strip language, method or part scope into an unqualified
 count. Qualified P6570 cannot pass through current no-qualifier property admission by
-dropping its qualifiers. Bare controlled ab3 quantities and automatically mapped
+dropping its qualifiers. Bare controlled shared-fixture quantities and automatically mapped
 Wikidata P6570 do not prove a genuine scoped measurement producer; released property
 admission alone does not provide provider support. No guessed method/scope vocabulary,
 SourceRegistration option or new identity is introduced here.
