@@ -40,6 +40,28 @@ For the pinned VNDB dump, `c_average` and `c_votecount` replace the VNDB source 
 
 Keep the same SQLite state path when resuming. Prepared writes and receipts are durable, and a retry reuses their original command keys and request bodies. Do not replace or clear the state file after an interrupted or uncertain request. Exit codes are 0 for committed/help, 2 for invalid input, 3 for mass disappearance, 4 for authorization denial, 5 for a busy source, and 130 for interruption; other unresolved import failures exit 1. Diagnostics contain only bounded maintained counters.
 
+A complete source reduction exceeding the default 20% disappearance threshold exits 3 before public effects and
+retains the last completed baseline. After reviewing the supplied input, invoke the same CLI with the same state
+and input and an explicit existing `--disappearance-threshold` value (for example, `0.5` admits losing two of five
+records). The stopped acquisition is terminal, so the next invocation acquires and validates the supplied input
+again; it does not resume an unapproved removal plan. Losing every prior record still stops at threshold `1`.
+Malformed framing, truncated JSON and input-read failure exit 2 before effects, regardless of threshold. A clean
+EOF on valid JSONL cannot detect upstream omission of complete records; the disappearance guard still applies.
+
+Stopped diagnostics report reconciliation outcomes, all zero when sealing stopped before classification. They
+do not estimate new/changed/unchanged/vanished counts by scanning the baseline. RunStore separately maintains
+prior, supplied and surviving-member counts for seal admission. An admitted three-of-five unchanged successor
+reports `unchanged=3 vanished=2`, and reopening that input reports `unchanged=3 vanished=0`. Source removal
+retracts only the missing records' owned candidates. Native subject identities, other Contexts' selections,
+independent facts and immutable bootstrap requests/receipts survive. Receipt replay uses current authorization;
+a revoked grant denies even an original bearer carrying a previously successful request.
+
+The [native CLI journey](../kernel/test/imports/disappearance-cli-native.test.ts) exercises this connected flow
+with five synthetic Bangumi metadata records, an approved account key, real Auth/Access and public editor
+acceptance/adoption. It observes exact durable baseline anchors, native removal proposals, original receipt bodies,
+authorized byte-identical replay and revoked-grant denial. It covers one controlled source reduction, with no
+external assets, provider matrix or new throughput claim.
+
 Limits follow the exports in `src/dumps-bytes.ts`, `src/vndb-tables.ts`, `src/import-fetch.ts`, and `src/import-client.ts`: dump chunks default to 256 KiB (1 MiB maximum), records default to 256 KiB (1 MiB maximum), VNDB archives default to 16 GiB and 512 entries (64 GiB and 2,048 entries maximum), and VNDB source pages contain at most 16 records. HTTP request bodies are capped at 2 MiB, public batch bodies at 64 KiB, responses at 1 MiB, and scheduled HTTP retry waits at 30 seconds per attempt and 60 seconds total with a 120-second request deadline. Each HTTP transport invocation defaults to three counted attempts and permits at most five, plus its existing one-time 401 renewal. Cover resolution handles at most 64 assets per record, with one POST and one status GET per invocation and no inline polling wait.
 
 Record write width starts at `recordConcurrency` (default 16). After a final transport `429` or a `503` problem with `retryable: true`, an admitted continuation halves the width, rounding down to at least one. The failed write goes to the front of the queue with the same envelope and command keys; its record resumes at that write, preserving completed planning, bootstrap and cover resolution. Nothing new starts while active records meet or exceed the width. Each successful write adds one slot up to the configured concurrency. A write started alone at width one that still overloads fails as before; older requests from a wider cohort can requeue while it drains. Other failures retain their existing behaviour. Width persists across pages and phases within a run and resets for the next run.
@@ -239,6 +261,12 @@ state while effects remain unresolved. Authoritative lifecycle work and its
 bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
+
+### Review and resume a bounded partial source reduction
+
+- Touches: the supplied current run, maintained seal counters, exact missing-record pages and their existing native removal commands and receipts.
+- Bound: existing current-run/source-key page seeks, at most 100 records per page and 300 current owned candidates per record, with the existing envelope and retry budgets. No global catalogue or receipt-history scan, new approval state or retry allowance is introduced.
+- Growth check: existing run-store and importer reconciliation growth cases retain their mass-loss and removal capture bounds. The native CLI journey above proves connected safety and recovery; it does not measure physical work at additional scales.
 
 ### Imports erasure disposition
 
