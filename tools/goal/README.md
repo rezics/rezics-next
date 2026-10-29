@@ -379,7 +379,11 @@ target. Tasks from other Goals continue to integrate into the integration branch
 New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
 landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork
 from `main`. If the integration branch does not exist, the controller creates it from `main`.
-Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
+`retry --brief` records a held task's amended brief while holding its task lease, before it waits for host capacity. If
+the amended `after:` dependencies remain unmet, the task stays held and the command returns; otherwise the task becomes
+ready and enters ordinary capacity admission before its worker starts. Capacity waits release the task lease and use
+the latest stored brief when admitted, so another amendment can hold the task again while it queues. Held tasks become
+ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
 cancelled worktrees one at a time, under idle I/O priority, after `/proc/pressure/io` reports `some avg10` at or below
