@@ -332,9 +332,9 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
         changed = true;
       }
       const delivered = await deliverFrontier.run(tx, key);
-      const newlyDelivered = delivered.length > 0;
+      const newlyDelivered = delivered !== null;
       changed ||= newlyDelivered;
-      const workflowUntil = record.workflowUntil ?? delivered[0]?.workflowUntil ?? null;
+      const workflowUntil = record.workflowUntil ?? delivered?.workflowUntil ?? null;
       let done = false;
       if (
         workflowUntil !== null &&

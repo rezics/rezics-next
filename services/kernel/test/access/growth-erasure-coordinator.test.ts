@@ -285,7 +285,7 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
     const accountId = newId(route);
     const partition = partitionOf(route);
     const workflowId = `erasure-growth-held:${accountId}`;
-    const explainFrontier = async (query = frontierWork) => {
+    const explainFrontier = async (query: typeof frontierWork | typeof statusFrontier = frontierWork) => {
       const input: Record<string, unknown> = { queue: LOCATOR_EFFECTS_QUEUE, workflow_until: '1000' };
       const { rows } = await db.admin.query(
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query.sql}`,
