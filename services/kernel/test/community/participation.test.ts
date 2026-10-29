@@ -88,7 +88,6 @@ function observeNativeGrowthPlans(database: GrowthDatabase): {
 
   const file = '.temp/content-growth-native-plans.jsonl';
   const plans: Array<NativeGrowthContext & {
-    backend: number | null;
     statement: string | null;
     nativePlanJson: string;
     nativeNotice: string;
@@ -129,7 +128,6 @@ function observeNativeGrowthPlans(database: GrowthDatabase): {
       }
       plans.push({
         ...current,
-        backend: typeof client.processID === 'number' ? client.processID : null,
         statement,
         nativePlanJson,
         nativeNotice: message,
