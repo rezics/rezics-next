@@ -41,9 +41,9 @@ WITH input AS NOT MATERIALIZED (
 ), assignment AS MATERIALIZED (
   SELECT i.assignment_request_id IS NULL OR EXISTS (
     SELECT 1 FROM (
-    -- Keep the exact anchor in primary-key order even when other consumers add
-    -- differently ordered discovery indexes over the same columns. Check the
-    -- assignee and interval after this unique-key seek.
+      -- Keep the exact anchor in primary-key order even when other consumers add
+      -- differently ordered discovery indexes over the same columns. Check the
+      -- assignee and interval after this unique-key seek.
       SELECT p.assigned_actor_id, p.valid FROM access.principal_assignment p
       WHERE ROW(p.route, p.principal_id, p.request_id)
             >= ROW(i.assignment_route, i.principal_id, i.assignment_request_id)

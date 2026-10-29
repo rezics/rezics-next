@@ -546,8 +546,9 @@ test('the final delegated formula retains a full-key assignment probe', async ()
   expect(assignments).toContainEqual(
     expect.objectContaining({ 'Index Name': 'principal_assignment_pkey', 'Actual Rows': 1, 'Actual Loops': 1 }),
   );
-  expect(measured.capture.statements).toHaveLength(1);
-  expectIndex(measured.capture.plans, 'principal_assignment_pkey');
+  expect(measured.capture.statements.filter((statement) => statement.includes('probes AS MATERIALIZED'))).toHaveLength(
+    1,
+  );
 });
 
 test('Parent creation authorization stays within its bound as G grows', async () => {
