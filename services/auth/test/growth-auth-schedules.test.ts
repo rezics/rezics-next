@@ -77,7 +77,7 @@ async function runGrowth() {
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
   let seedHistory: () => Promise<number>;
-  let scheduleStart: number | undefined;
+  let lastMeasuredStart: number | undefined;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -94,7 +94,6 @@ async function runGrowth() {
   });
   try {
     await workflows.start();
-    scheduleStart = Date.now();
     await maintenance!.start('0 0 1 1 *');
     await DBOS.pauseSchedule(AUTH_MAINTENANCE_SCHEDULE);
     await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
@@ -104,8 +103,8 @@ async function runGrowth() {
       const started = (
         await db.admin.query(
           `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status
-          WHERE queue_name=$1 AND created_at >= $2 ORDER BY created_at,workflow_uuid`,
-          [AUTH_MAINTENANCE_SCHEDULE, scheduleStart],
+          WHERE queue_name=$1 ORDER BY created_at,workflow_uuid`,
+          [AUTH_MAINTENANCE_SCHEDULE],
         )
       ).rows.map((row) => String(row.workflow_uuid));
       const pending = started.filter((id) => !drained.has(id));
@@ -177,6 +176,7 @@ async function runGrowth() {
             await db.admin.query(`VACUUM ANALYZE ${table}`);
         },
         async operation() {
+          lastMeasuredStart = Date.now();
           // Preparation and affected-row checks use only the uncaptured admin pool.
           // The same oldest 1000 rows are admitted regardless of background size.
           await db.admin
@@ -254,12 +254,12 @@ async function runGrowth() {
       }),
     );
   } catch (error) {
-    if (error instanceof GrowthSettleInfrastructureError && scheduleStart) {
+    if (error instanceof GrowthSettleInfrastructureError && lastMeasuredStart) {
       const writers = await db.admin.query(
         `SELECT name,workflow_uuid,status,queue_name,created_at
         FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status
         WHERE created_at >= $1 AND name <> 'growth.history' ORDER BY created_at,workflow_uuid`,
-        [scheduleStart],
+        [lastMeasuredStart],
       );
       const workflowIds = writers.rows.map((row) => row.workflow_uuid);
       const operations = workflowIds.length
