@@ -198,7 +198,7 @@ const hits = [
   ...invalid('hits.hits.0._id', [undefined, null, '', 17, marker]),
   ...invalid('hits.hits.0._index', [undefined, null, '', 17]),
   ...invalid('hits.hits.0._source', arrays),
-  ...invalid('hits.hits.0._source.partition', [...counters, 4096]),
+  ...invalid('hits.hits.0._source.partition', [...counters, 11, 4096]),
   ...invalid('hits.hits.0._source.security_revision', counters),
   { path: 'hits.hits', grow: 2 },
 ];
@@ -331,5 +331,39 @@ for (const operation of ['search', 'suggest', 'facet'] as const) {
     expect(body).not.toContain(index);
     expect(error).toBeInstanceOf(ProblemError);
     expect(error).toMatchObject({ code: 'index_not_ready', headers: { 'retry-after': '1' } });
+  });
+}
+
+for (const operation of ['search', 'suggest'] as const) {
+  test(`actual service rejects valid-range wrong-partition ${operation} payload before Source`, async () => {
+    const observed = observe({ path: 'hits.hits.0._source.partition', value: 11 });
+    let reads = 0;
+    const denied = async (): Promise<never> => {
+      reads++;
+      throw new Error('Source must not be reached');
+    };
+    const source: SubjectSource = { read: denied, count: denied, matchRelationFacets: denied };
+    const service = createSearchService({
+      pool,
+      client: observed.client,
+      prefix,
+      source,
+      cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) },
+    });
+    const pending =
+      operation === 'search' ? service.search('anonymous', { text: 'kokoro' }) : service.suggest('Koko');
+    const outcome = await pending.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
+    expect(reads).toBe(0);
+    expect(observed.replies).toHaveLength(1);
+    expect(observed.calls.filter(({ path }) => path.endsWith('/_search/template'))).toHaveLength(1);
+    const error = 'error' in outcome ? outcome.error : outcome;
+    expect(error).toBeInstanceOf(ProblemError);
+    expect(error).toMatchObject({ code: 'index_not_ready', headers: { 'retry-after': '1' } });
+    const response = problemResponse(error, { method: 'GET', id: 'partition-payload-test' });
+    expect(response.status).toBe(503);
+    expect(JSON.parse(await response.text())).toMatchObject({ code: 'index_not_ready', status: 503 });
   });
 }

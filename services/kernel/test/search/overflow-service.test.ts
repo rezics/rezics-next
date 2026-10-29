@@ -176,8 +176,8 @@ async function deployment(entries: IndexedSubject[]) {
     calls.length = 0;
     lineage.length = 0;
   };
-  async function request(operation: 'search' | 'facets', body: unknown) {
-    reset();
+  async function request(operation: 'search' | 'facets', body: unknown, resetBeforeRequest = true) {
+    if (resetBeforeRequest) reset();
     return kernel.handle(
       new Request(`http://kernel.test/v1/subjects:${operation}`, {
         method: 'POST',
@@ -387,7 +387,16 @@ test('overflow search rejects qualified relations and keeps final security check
     { doc: { partition: 11 } },
     { query: { refresh: true } },
   );
-  expect(ids(await env.search(value()))).toEqual([entries[1]!.id]);
+  const readsBeforeCorruption = env.reads.length;
+  const probesBeforeCorruption = env.probes.length;
+  const malformed = await env.request('search', { filter: value() }, false);
+  expect(malformed.status).toBe(503);
+  expect(malformed.headers.get('retry-after')).toBe('1');
+  const malformedBody = await malformed.json();
+  expect(malformedBody).toMatchObject({ code: 'index_not_ready', status: 503 });
+  expect(malformedBody).not.toHaveProperty('subjects');
+  expect(env.reads).toHaveLength(readsBeforeCorruption);
+  expect(env.probes).toHaveLength(probesBeforeCorruption);
   env.allow(false);
   const denied = await env.request('search', { filter: value() });
   expect(denied.status).toBe(403);
