@@ -150,12 +150,14 @@ export async function boardReady(context: { canvasElement: HTMLElement }) {
   await view.findByRole('heading', { level: 1, name: boardRecording.board.title });
   await view.findByRole('heading', { level: 2, name: m.board_threads_heading() });
   await listItemWithLink(view, title);
-  const hovered = await view.findByRole('link', { name: title });
+  const primary = await view.findByRole('link', { name: title });
   await view.findByRole('link', {
     name: 'A long title about the quiet planet, the little fox, and the stars that guide every traveler home',
   });
   await view.findByRole('link', { name: 'When the stars are quiet, where does the fox sleep?' });
-  await userEvent.hover(hovered);
+  const row = primary.closest<HTMLElement>('[data-slot="list-row"]');
+  if (!row) throw new Error('The board thread title is not in a ListRow.');
+  row.dataset.overlay = 'visible';
 }
 
 export async function threadReady(context: { canvasElement: HTMLElement }) {
