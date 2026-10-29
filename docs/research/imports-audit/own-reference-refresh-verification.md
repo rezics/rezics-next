@@ -1,7 +1,8 @@
 # Own-reference refresh verification
 
-Implementation revision: `0b648d744bb80da17a70a3907233fab3168b9112`. The frozen native acceptance was not edited;
-its SHA-256 is `9c0ec65033be4f94562f13a986bbb5873b5ea3b14f50d105bfc3bd4736ea0e51`.
+Implementation revision: `0b648d744bb80da17a70a3907233fab3168b9112`. Latest verification revision:
+`c79e538dfd`. The frozen native acceptance was not edited; its SHA-256 is
+`9c0ec65033be4f94562f13a986bbb5873b5ea3b14f50d105bfc3bd4736ea0e51`.
 
 ## Delivered behavior
 
@@ -19,56 +20,42 @@ The stored dependency signature is importer coordination metadata; it does not a
 
 ## Evidence
 
-The frozen native command ran twice during implementation. The final run produced **1 pass and 1 failure after 145
-assertions**:
+The latest frozen native command ran once on `c79e538dfd`:
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
 ```
 
-The first native flow passed all assertions: it created and retained the real work claim; resolved the edition
-relation to that returned subject ID; preserved the unknown author as `somevalue` with its Open Library qualifier;
-retrieved and adopted the actual target-addressed candidate; verified stable replay; and confirmed grant-denied
-replay returned 403 without disclosing the ID.
+It produced **1 pass and 1 failure**. The first native flow passed: it created and retained the real work claim;
+resolved the edition relation to that returned subject ID; preserved the unknown author as `somevalue` with its Open
+Library qualifier; retrieved and adopted the actual target-addressed candidate; verified stable replay; and confirmed
+grant-denied replay returned 403 without disclosing the ID.
 
-The late-learning flow passed the resolved candidate transition, semantic key/body change with stable source metadata,
-retention of the old unresolved history, independent community adoption, and stable replay assertions. Its final
-unknown-author check failed in the frozen helper: the public candidate response contains qualifier property
-`{ id: "wdt:P648", data_type: "external-id" }`, while the frozen assertion expects `{ id: "wdt:P648" }`. The
-converter's local proposal keeps the expected property shape; the additional field appears in the native candidate
-response. This is the older native-field `somevalue` oracle noted in the contract. No frozen test, converter mapping,
-kernel API, or target admission was changed to bypass it.
+The late-learning flow failed while relaying the subject partition after its first adoption: the frozen helper
+received `delivered.status === "busy"` and asserted that the relay was not busy. That invocation therefore did not
+reach the later transition or assertions. An earlier completed run on this implementation reached the resolved
+candidate transition, semantic key/body change with stable source metadata, old unresolved history, independent
+community adoption, and stable replay, then failed its final unknown-author response-shape assertion: the public
+candidate response contains qualifier property `{ id: "wdt:P648", data_type: "external-id" }`, while the frozen
+helper expects `{ id: "wdt:P648" }`. No frozen test, converter mapping, kernel API or target admission was changed.
 
-The first native attempt reached the later candidate listing with two `schema:author` candidates. The importer was
-then corrected to retain unchanged semantic candidates during a dependency refresh. The final native attempt got
-past that duplicate-candidate assertion and reached the response-shape mismatch above.
+An earlier native attempt reached the later candidate listing with two `schema:author` candidates. The importer was
+then corrected to retain unchanged semantic candidates during a dependency refresh; a subsequent completed run got
+past that duplicate-candidate assertion before reaching the response-shape mismatch above.
 
-The new local recovery regression passed:
+The new local recovery regression passed in the prior attempt. Its required rerun in this continuation did not produce
+a test result: after the wrapper's retry, transfer ended with
+`curl: (56) OpenSSL SSL_read: OpenSSL/3.5.9: error:0A000126:SSL routines::unexpected eof while reading, errno 0`.
+The same regression's earlier pass exercises the default importer with SQLite in the system temporary directory and
+a durable native-shaped public receipt transport. It records the original edition bootstrap request and receipt,
+closes and reopens the importer, learns the exact configured-alias work claim, repeats the unchanged edition,
+verifies the resolved relation uses the actual returned work ID, and checks the bootstrap bytes/key/receipt and
+resolved replay remain stable. This is local recovery evidence, not a substitute for the native permission and
+adoption boundary.
 
-```sh
-bun scripts/worker-check.ts -- bun test services/importer/tests/own-reference-refresh.test.ts
-```
-
-It exercises the default importer with SQLite in the system temporary directory and a durable native-shaped public
-receipt transport. It records the original edition bootstrap request and receipt, closes and reopens the importer,
-learns the exact configured-alias work claim, repeats the unchanged edition, verifies the resolved relation uses the
-actual returned work ID, and checks the bootstrap bytes/key/receipt and resolved replay remain stable. The existing
-37-line seam test still covers exact alias isolation. This is local recovery evidence, not a substitute for the
-native permission and adoption boundary.
-
-Root typecheck was attempted after the local regression. The first attempt stalled in `packages/ui`, then its
-wrapper retry failed during SSH/transfer (`Session open refused by peer`, followed by an incomplete archive). A
-subsequent attempt found and prompted correction of proposal-union typing in the new test, but verification then
-stalled without log growth and its SSH retry ended with `Session open refused by peer` and an unexpected EOF. A
-final attempt after the typing correction again failed to make progress; the wrapper reported
-`Invalid environment variable name evaluates to an empty string: cache_file#"$cache_root"/, file#"$run_root"/,
-first#@, relative#*/, relative%%/*, rest%%/*` and its retry ended with `Session open refused by peer` and an
-unexpected EOF. The root typecheck has no passing result; infrastructure evidence is not a claim that the corrected
-tree typechecks.
-
-The existing import-session and deferred-cover suites were also submitted after the importer planner change. Their
-worker check and its retry both stopped making log progress and failed with the same worker-check infrastructure
-error; no suite result was produced. The new own-reference recovery regression did pass separately.
+The root typecheck completed successfully with exit status 0 on the same product revision. The previously passed
+import-session and deferred-cover-recovery focused suites were not rerun because no product code changed after those
+results.
 
 ## Sources read
 

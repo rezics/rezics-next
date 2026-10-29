@@ -107,23 +107,25 @@ retained, while changed relation bodies are proposed with new keys. This avoids 
 candidate effects for unrelated fields such as an unchanged unknown author.
 
 The frozen [native cases](../kernel/test/imports/known-reference-refresh.test.ts) cover the
-default handoff and unchanged dependency refresh. On implementation revision
-`0b648d744bb80da17a70a3907233fab3168b9112`, the native command reached **1 pass and 1
-failure (145 assertions)**. The first flow passed, including the actual work claim,
-target-addressed candidate, editor adoption, stable replay, and denied replay. The late
-refresh flow reached the resolved candidate, adoption and retained-history checks; its last
-unknown-author assertion failed because the public candidate response's qualifier property
-contains `data_type: "external-id"`, while the frozen helper requires a property object with
-only `id`. See the
+default handoff and unchanged dependency refresh. Implementation revision:
+`0b648d744bb80da17a70a3907233fab3168b9112`. The latest verification
+on `c79e538dfd` passed the first flow, including the actual work claim, target-addressed
+candidate, editor adoption, stable replay, and denied replay. The late-refresh flow stopped
+at the subject-partition relay because it returned `busy`. An earlier completed run reached
+resolved adoption and retained-history checks, then failed the unknown-author assertion:
+the public candidate response's qualifier property contains `data_type: "external-id"`,
+while the frozen helper requires a property object with only `id`. The local recovery
+regression passed earlier; its continuation rerun produced no result after a transfer EOF.
+The root typecheck passed. See the
 [verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
-for the exact mismatch and evidence limits. The frozen native file hash is
+for exact evidence and limits. The frozen native file hash is
 `9c0ec65033be4f94562f13a986bbb5873b5ea3b14f50d105bfc3bd4736ea0e51`.
 
 ### Own-reference refresh cost
 
 - Touches: read at most 64 author/work relation keys from the bounded Open Library projection, with one indexed `RecordBindings.claim` point read per supplied key; compare and persist one signature for the record. A changed signature runs ordinary bounded candidate reconciliation. Existing journals and receipts are read only by their exact owner/key.
 - Bound: O(M + F log B) per supplied record for M projection bytes, F ≤ 64 native relation keys and B stored binding rows, plus existing bounded planning and writes. Durable dependency metadata is O(1) per record; source record admission retains its existing byte and field caps. No claim/history enumeration or source-wide dependency sweep is used.
-- Growth check: `services/importer/tests/own-reference-refresh.test.ts` verifies exact alias point reads and the default reopen/late-learning/stable-replay path. The frozen native case verifies target-addressed adoption and replay, but its final unknown-author response-shape assertion remains unresolved; no native growth measurement is claimed.
+- Growth check: `services/importer/tests/own-reference-refresh.test.ts` previously verified exact alias point reads and the default reopen/late-learning/stable-replay path; the continuation rerun was blocked by a check transfer failure. The frozen native case verifies target-addressed adoption and replay; the latest late-refresh run stopped at a busy relay, and an earlier run ended at the unknown-author response-shape mismatch. No native growth measurement is claimed.
 
 The exact native command is:
 
