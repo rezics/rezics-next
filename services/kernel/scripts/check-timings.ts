@@ -8,8 +8,10 @@ import {
 export {
   createRecorder,
   parseJunit,
+  readLatestRun,
   readLatest,
   writeTimings,
+  type CheckRunTiming,
   type FileTiming,
   type TestTiming,
 } from '../../../scripts/test-lanes.ts';

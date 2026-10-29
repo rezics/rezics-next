@@ -7,9 +7,11 @@ import {
   createRecorder,
   orderFiles,
   parseJunit,
+  readLatestRun,
   readLatest,
   timingsDirectory,
   writeTimings,
+  type CheckRunTiming,
   type FileTiming,
 } from '../scripts/check-timings.ts';
 
@@ -58,8 +60,8 @@ test('a check run records each file’s wall time and per-test times', async () 
         create: () => Bun.sleep(5),
         run: async (file) => {
           await Bun.sleep(40);
-          if (file === 'bad.test.ts') throw new Error('bun test failed');
-          return `${file} output`;
+          if (file === 'bad.test.ts') throw new Error('bun test failed\nREZICS_KERNEL_MODULE_IMPORT_SECONDS=0.0250');
+          return `${file} output\nREZICS_KERNEL_MODULE_IMPORT_SECONDS=0.0250`;
         },
         drop: () => Bun.sleep(5),
       },
@@ -79,11 +81,29 @@ test('a check run records each file’s wall time and per-test times', async () 
     expect(ok.create).toBeGreaterThanOrEqual(0.004);
     expect(ok.drop).toBeGreaterThanOrEqual(0.004);
     expect(ok.tests).toEqual(reported);
+    expect(ok.moduleLoad).toBe(0.025);
     // Module load and hooks: the wall time minus the tests' own time.
     expect(ok.outsideTests).toBeCloseTo(ok.wall - 0.015, 3);
 
     expect(latest['bad.test.ts']!.result).toBe('fail');
+    expect(latest['bad.test.ts']!.moduleLoad).toBe(0.025);
     expect(latest['bad.test.ts']!.tests).toEqual([]);
+  });
+});
+
+test('check-wide compiler and test phases are retained with file timings', async () => {
+  await withDirectory((directory) => {
+    const run: CheckRunTiming = {
+      compilerSeconds: 12.5,
+      qualitySeconds: 3.25,
+      testSeconds: 41.75,
+      totalSeconds: 70,
+      otherSeconds: 12.5,
+      analysisEntries: { compilerBefore: 0, compilerAfter: 42, sharedAfter: 42 },
+    };
+    writeTimings(directory, { 'a.test.ts': timing(10) }, { partial: false, run });
+    expect(readLatestRun(directory)).toEqual(run);
+    expect(JSON.parse(readFileSync(resolve(directory, 'latest.json'), 'utf8')).run).toEqual(run);
   });
 });
 

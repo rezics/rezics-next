@@ -12,15 +12,27 @@ import { acquireStackSlot, type StackSlot } from './stack-lease.ts';
 
 export type TestTiming = { name: string; time: number };
 
-/** Seconds. `outsideTests` is the wall time minus the tests' own time: module load and hooks. */
+/** Seconds. `outsideTests` is the file process wall time minus JUnit's test-case totals. */
 export type FileTiming = {
   wall: number;
   create: number;
   drop: number;
+  /** Test module import time measured from the preload until the first beforeAll hook. */
+  moduleLoad?: number;
   outsideTests: number;
   result: 'pass' | 'fail';
   peakConnections?: number;
   tests: TestTiming[];
+};
+
+/** Check-wide phases and native analysis entry counts, retained beside per-file timings. */
+export type CheckRunTiming = {
+  compilerSeconds: number;
+  qualitySeconds: number;
+  testSeconds: number;
+  totalSeconds: number;
+  otherSeconds: number;
+  analysisEntries: { compilerBefore: number; compilerAfter: number; sharedAfter: number };
 };
 
 export type FileOutcome<T> = { file: string; database: string; output?: T; error?: Error };
@@ -436,8 +448,12 @@ export function createRecorder() {
           const start = performance.now();
           try {
             const output = await runner.run(file, database);
+            if (typeof output === 'string') timing.moduleLoad = readModuleLoad(output);
             timing.result = 'pass';
             return output;
+          } catch (cause) {
+            if (cause instanceof Error) timing.moduleLoad = readModuleLoad(cause.message);
+            throw cause;
           } finally {
             timing.wall = round((performance.now() - start) / 1000);
             timing.tests = await readTests(file, database).catch(() => []);
@@ -459,6 +475,13 @@ export function createRecorder() {
       };
     },
   };
+}
+
+function readModuleLoad(output: string): number | undefined {
+  const marker = output.match(/^REZICS_KERNEL_MODULE_IMPORT_SECONDS=([\d.]+)$/m)?.[1];
+  if (marker === undefined) return undefined;
+  const seconds = Number(marker);
+  return Number.isFinite(seconds) && seconds >= 0 ? round(seconds) : undefined;
 }
 
 const variable = (service: string, name: string): string => `${service.toUpperCase()}_CHECK_${name}`;
@@ -517,22 +540,33 @@ function writeAtomically(path: string, content: string): void {
 export function writeTimings(
   directory: string,
   files: Record<string, FileTiming>,
-  options: { partial: boolean; now?: Date; warn?: (message: string) => void },
+  options: { partial: boolean; run?: CheckRunTiming; now?: Date; warn?: (message: string) => void },
 ): void {
   const warn = options.warn ?? ((message: string) => console.warn(message));
   try {
     mkdirSync(directory, { recursive: true });
     const now = options.now ?? new Date();
     const stamp = now.toISOString().replace(/[-:]/g, '');
-    const run = JSON.stringify({ recorded: now.toISOString(), files }, null, 2);
-    writeAtomically(resolve(directory, `${stamp}.json`), `${run}\n`);
+    const latestRun = options.run ?? (options.partial ? readLatestRun(directory) ?? undefined : undefined);
+    const runRecord = { recorded: now.toISOString(), files, ...(latestRun ? { run: latestRun } : {}) };
+    writeAtomically(resolve(directory, `${stamp}.json`), `${JSON.stringify(runRecord, null, 2)}\n`);
     const merged = options.partial ? { ...readLatest(directory), ...files } : files;
     writeAtomically(
       resolve(directory, 'latest.json'),
-      `${JSON.stringify({ recorded: now.toISOString(), files: merged }, null, 2)}\n`,
+      `${JSON.stringify({ recorded: now.toISOString(), files: merged, ...(latestRun ? { run: latestRun } : {}) }, null, 2)}\n`,
     );
   } catch (error) {
     warn(`Check timings were not written to ${directory}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/** Most recent check-wide phase record; older timing files without it return null. */
+export function readLatestRun(directory: string): CheckRunTiming | null {
+  try {
+    const parsed = JSON.parse(readFileSync(resolve(directory, 'latest.json'), 'utf8')) as { run?: unknown };
+    return parsed.run && typeof parsed.run === 'object' ? (parsed.run as CheckRunTiming) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -792,8 +826,17 @@ export async function capture(
 }
 
 /** Tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
-export function testCommand(file: string, junitFile: string): string[] {
-  return ['test', '--timeout', '60000', '--reporter=junit', `--reporter-outfile=${junitFile}`, '--dots', `./${file}`];
+export function testCommand(file: string, junitFile: string, preload?: string): string[] {
+  return [
+    ...(preload ? ['--preload', preload] : []),
+    'test',
+    '--timeout',
+    '60000',
+    '--reporter=junit',
+    `--reporter-outfile=${junitFile}`,
+    '--dots',
+    `./${file}`,
+  ];
 }
 
 export function fileBounds(record?: FileTiming): { silence: number; wall: number } {
@@ -815,6 +858,9 @@ export type LaneSuite = {
   environment: (database: string) => NodeJS.ProcessEnv;
   /** Runs after a file and its database clone finish, before this run's timings are written. */
   onFileComplete?: (outcome: FileOutcome<string>, timing: FileTiming) => void;
+  /** Runs after tests and clone drops to retain this check's compiler/test phase split. */
+  runTiming?: () => CheckRunTiming;
+  onRunTiming?: (timing: CheckRunTiming) => void;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -836,6 +882,22 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
     console.warn(`Check timings are not recorded: ${error instanceof Error ? error.message : String(error)}`);
   }
   const latest = timingsPath ? readLatest(timingsPath) : {};
+  const temporaryRoot = resolve(suite.directory, '.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const preloadDirectory = mkdtempSync(join(temporaryRoot, 'test-lanes-preload-'));
+  const preload = join(preloadDirectory, 'module-import-timing.ts');
+  writeFileSync(
+    preload,
+    [
+      "import { beforeAll } from 'bun:test';",
+      'const moduleImportStarted = performance.now();',
+      'beforeAll(() => {',
+      '  const seconds = Math.max(0, (performance.now() - moduleImportStarted) / 1000);',
+      '  process.stdout.write(`REZICS_KERNEL_MODULE_IMPORT_SECONDS=${seconds.toFixed(4)}\\n`);',
+      '});',
+      '',
+    ].join('\n'),
+  );
   const laneRunner: FileRunner<string> = {
     // Each file gets a fresh copy so its result cannot depend on writes from another file.
     create: async (file, database) => {
@@ -854,7 +916,7 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
       const report = join(reports, `${database}.xml`);
       const result = await capture(
         'bun',
-        testCommand(file, report),
+        testCommand(file, report, preload),
         { ...suite.environment(database), ...slot?.env },
         suite.directory,
         { file, ...fileBounds(latest[file]), ...(latest[file] ? { record: latest[file] } : {}) },
@@ -922,12 +984,13 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
         return growthFailures ?? classifyLoadInducedFailures(outcome, report);
       },
     );
-    if (timingsPath) {
-      const timings = retainStoppedTimings(recorder.timings(), latest, stoppedAtBound);
-      writeTimings(timingsPath, timings, { partial: suite.partial });
-    }
+    const timings = retainStoppedTimings(recorder.timings(), latest, stoppedAtBound);
+    const run = suite.runTiming?.();
+    if (timingsPath) writeTimings(timingsPath, timings, { partial: suite.partial, ...(run ? { run } : {}) });
+    if (run) suite.onRunTiming?.(run);
     return { failed: failed.map((outcome) => outcome.file), concurrency };
   } finally {
+    rmSync(preloadDirectory, { recursive: true, force: true });
     rmSync(reports, { recursive: true, force: true });
   }
 }

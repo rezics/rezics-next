@@ -254,6 +254,10 @@ The check starts its OpenSearch container after TypeScript, lint and formatting 
 Every test file's processes read Reylo's SQL analyses from one analysis database cloned from the template once, named by
 `REYLO_CONFIG`, so no file re-analyses the statements it imports against its own copy.
 Each test file gets `KERNEL_POOL_ACQUIRE_TIMEOUT_MS=2000` so cold connections have more time to establish on a loaded check host.
+The timing record keeps per-file clone and drop time, test-process wall time, JUnit case totals, outside-test time and
+module import time measured from the timing preload through the first `beforeAll` hook. Its run record separates the
+compiler, lint/format, test lane and remaining check-pipeline time from database startup through test completion;
+remote placement and final container teardown are outside that interval. A missing import marker is unmeasured.
 
 New kernel tests compose their app, Access and kernel through `test/support/test-kernel.ts`. `testKernel` mirrors the
 production route catalogue, Realm role reader and write-rate stage, substituting its supplied test pool, local Auth/JWKS

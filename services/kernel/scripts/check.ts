@@ -22,6 +22,7 @@ import {
   runTestFiles as runTestFilesIn,
   scheduleFiles as scheduleFilesIn,
   testCommand,
+  type CheckRunTiming,
   type FileOutcome,
   type FileRunner,
   type FileTiming,
@@ -43,6 +44,22 @@ const POSTGRES_ACTIVITY_QUERY = 'SELECT datname, count(*) FROM pg_stat_activity 
 
 // Cloned from the migrated template once and never used as a template; Reylo reads every analysis from it.
 const ANALYSIS_DATABASE = 'kernel_analysis';
+
+function reyloQueriesFor(config: string): string {
+  return resolve(dirname(resolve(config)), '.reylo', 'queries');
+}
+
+function reyloEntryCount(config: string): number {
+  try {
+    return readdirSync(reyloQueriesFor(config)).filter((file) => file.endsWith('.json')).length;
+  } catch {
+    return 0;
+  }
+}
+
+function seconds(started: number): number {
+  return Math.round(((performance.now() - started) / 1000) * 1000) / 1000;
+}
 
 type CheckPlan = { files: string[] | null; tests: string[] };
 
@@ -757,6 +774,9 @@ async function main(): Promise<void> {
     process.exitCode = placed;
     return;
   }
+  const runStarted = performance.now();
+  let compilerSeconds = 0;
+  let qualitySeconds = 0;
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
@@ -785,6 +805,8 @@ async function main(): Promise<void> {
   mkdirSync(temporaryRoot, { recursive: true });
   reyloDirectory = mkdtempSync(resolve(temporaryRoot, 'reylo-'));
   const reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
+  const compilerConfig = process.env.REYLO_CONFIG ?? resolve(directory, '.reylo.yaml');
+  const compilerEntriesBefore = reyloEntryCount(compilerConfig);
 
   const tsc = resolve(directory, '../../node_modules/.bin/tsc');
   const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
@@ -793,15 +815,21 @@ async function main(): Promise<void> {
     planNeedsSearch(plan, directory),
     async () => {
       if (plan.files === null) {
+        let phaseStarted = performance.now();
         run(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+        compilerSeconds += seconds(phaseStarted);
+        phaseStarted = performance.now();
         run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], env);
         run(oxfmt, ['--check', '.'], env);
+        qualitySeconds += seconds(phaseStarted);
       } else {
+        const compilerStarted = performance.now();
         const typecheck = await capture(
           tsc,
           ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
           env,
         );
+        compilerSeconds += seconds(compilerStarted);
         const diagnostics = ownDiagnostics(
           typecheck.output,
           diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null),
@@ -811,12 +839,14 @@ async function main(): Promise<void> {
           fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);
         }
 
+        const qualityStarted = performance.now();
         const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
         if (lintFiles.length)
           run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles], env);
 
         const formatFiles = formattedFiles(plan.files);
         if (formatFiles.length) run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], env);
+        qualitySeconds += seconds(qualityStarted);
       }
     },
     async () => {
@@ -880,12 +910,37 @@ async function main(): Promise<void> {
   sampler.start();
   let failedFiles: string[] = [];
   const outputByFile = new Map<string, string>();
+  const testStarted = performance.now();
   try {
     const result = await runLaneSuite({
       service: 'kernel',
       directory,
       files: testFiles,
       partial: plan.files !== null,
+      runTiming: (): CheckRunTiming => {
+        const testSeconds = seconds(testStarted);
+        const totalSeconds = seconds(runStarted);
+        return {
+          compilerSeconds,
+          qualitySeconds,
+          testSeconds,
+          totalSeconds,
+          otherSeconds: Math.max(0, Math.round((totalSeconds - compilerSeconds - qualitySeconds - testSeconds) * 1000) / 1000),
+          analysisEntries: {
+            compilerBefore: compilerEntriesBefore,
+            compilerAfter: reyloEntryCount(compilerConfig),
+            sharedAfter: reyloEntryCount(reyloConfig),
+          },
+        };
+      },
+      onRunTiming: (timing) => {
+        process.stdout.write(
+          `Kernel check phases: compiler=${timing.compilerSeconds}s quality=${timing.qualitySeconds}s tests=${timing.testSeconds}s other=${timing.otherSeconds}s total=${timing.totalSeconds}s\n`,
+        );
+        process.stdout.write(
+          `Reylo analysis entries: compiler=${timing.analysisEntries.compilerBefore}->${timing.analysisEntries.compilerAfter}; shared-test-project=${timing.analysisEntries.sharedAfter}\n`,
+        );
+      },
       createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
       dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
       environment: (database) =>
@@ -896,6 +951,10 @@ async function main(): Promise<void> {
         const peak = sampler.peakFor(outcome.database);
         timing.peakConnections = peak;
         filePeaks.set(outcome.file, peak);
+        const testCases = timing.tests.reduce((total, test) => total + test.time, 0);
+        process.stdout.write(
+          `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s\n`,
+        );
         process.stdout.write(`${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`);
       },
     });
