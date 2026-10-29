@@ -189,3 +189,10 @@ SHA256 hashes are both `f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f0
 Only this audit changed in the revalidation; there are no outside-path files or new reference-project sources.
 This tool blocker prevents the required evidence and does not change any acceptance requirement or establish
 native/API/growth success, integration or promotion.
+
+## Corrected launch continuation
+
+The current contract corrects the launch syntax to `bun scripts/worker-check.ts -- <command...>`.
+The earlier parser failures above remain historical tool evidence; this continuation uses the corrected syntax
+for the one actual original-scale cause capture. The restored CPU file still has the exact formatted hash
+`f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f080e1c751`; the old scales and assertions are unchanged.
