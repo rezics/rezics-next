@@ -8,7 +8,7 @@ const release = {
     'book-profile': {
       copies: {
         kinds: [
-          { id: 'print', labels: { en: 'Print' }, statuses: [{ id: 'shelf', labels: { en: 'On shelf' } }, { id: 'loan', labels: { en: 'On loan' }] },
+          { id: 'print', labels: { en: 'Print' }, statuses: [{ id: 'shelf', labels: { en: 'On shelf' } }, { id: 'loan', labels: { en: 'On loan' } }] },
           { id: 'digital', labels: { en: 'Digital' }, statuses: [{ id: 'available', labels: { en: 'Available' } }] },
         ],
       },
