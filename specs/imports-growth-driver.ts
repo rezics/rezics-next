@@ -20,7 +20,7 @@
  * At each scale seed runs ANALYZE outside measurement. Capture raw EXPLAIN QUERY
  * PLAN with the actual parameters for EVERY distinct executed SQLite SQL/binding,
  * also outside measurement. Never require statement-status, VM or index-height
- * estimates. SQLite blocks:0 means unavailable buffers, NOT zero physical I/O.
+ * estimates. SQLite buffers are unavailable; omit them from named counted samples.
  * Growing-table metadata comes from actual schema/index introspection, includes
  * every growing relation (including read aliases), and is checked in test support.
  * PostgreSQL retains actual examined rows and shared hits plus reads via growth.ts.
@@ -50,8 +50,10 @@
  * read + candidate insert + journal update + COMMIT = 7. Thus one bootstrap plus
  * one candidate already costs 28 SQLite statements BEFORE RunStore or Auth/Access.
  * Later proposals omit the first group insert (8 prepare + 7 acknowledge).
- * Exact combined budgets await real binding: declare additive per-method ceilings
- * before seed/measure, derived from production branches, never from observations.
+ * Binding declares static additive per-method ceilings before seed/measure,
+ * derived from production branches, never from observations. PostgreSQL client
+ * calls + raw plans and examined + ModifyTable rows remain separate derived units;
+ * canonical costOf(postgres) is never overridden.
  * Include retries, controls, nested security/receipt/fence paths and RunStore
  * prepare/acknowledge. Each term has fixed + per-item + per-field coefficients;
  * no dependence on N/history. Ratio checks remain mandatory for the full capture.
@@ -155,7 +157,7 @@ export interface SqliteStatement {
 }
 export interface PostgresStatement {
   engine: 'postgres';
-  /** Actual write row count, separate from auto_explain examined rows. */
+  /** Derived ModifyTable Actual Rows * Actual Loops, not independent affected-row truth. */
   rowsAppended: number;
   sql: string;
   /** Raw auto_explain JSON; empty only for captured transaction control or a failed attempt marked by the shared SQLSTATE. */
@@ -180,8 +182,15 @@ export interface Counters {
   };
   statements: readonly Statement[];
   networkRequests: number;
-  /** Reader/database phases only; absent for pure conversion, never fabricated. */
+  /** Actual accounting ingredients; parser observations exist only when a reader ran. */
+  accounting?: {
+    reader?: { pulledBytes: number; scannedBytes: number; copiedBytes: number };
+    requestBodyBytes: number;
+    pagePlanBytes: number;
+  };
+  /** Derived scanned+copied bytes + SQLite executions + PG client calls + raw plans; not CPU. */
   workUnits?: number;
+  /** Derived input/copy/request/page/plan accounting, not general heap allocation. */
   allocatedBytes?: number;
   peakRetainedBytes?: number;
   peakRetainedRecords?: number;

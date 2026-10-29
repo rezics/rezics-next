@@ -1374,6 +1374,19 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
         sqlite: captured.sqlite,
         statements: captured.statements,
         networkRequests,
+        accounting: {
+          ...(readerSample === undefined
+            ? {}
+            : {
+                reader: {
+                  pulledBytes: readerSample.counters.pulledBytes,
+                  scannedBytes: readerSample.counters.scannedBytes,
+                  copiedBytes: readerSample.counters.copiedBytes,
+                },
+              }),
+          requestBodyBytes: requestBytes,
+          pagePlanBytes: memory.allocated,
+        },
         workUnits: readerWork + sqliteStatements.length + pg.length + postgres.plans.length,
         allocatedBytes: readerBytes + readerCopied + requestBytes + memory.allocated,
         peakRetainedBytes: Math.max(readerSample?.peakBytes ?? 0, memory.peakBytes, requestPeak),

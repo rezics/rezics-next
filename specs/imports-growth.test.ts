@@ -9,6 +9,7 @@ import type { ConversionInput } from '../packages/conversion/src';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound';
+import { countedSample, countedViolations, validateCountedRun } from '../services/kernel/test/support/growth-counters';
 import { costOf, isControlStatement } from '../services/kernel/test/support/growth-cost';
 import type { Counters, Fixture, ImportGrowthDriver, Scenario, Seed, SqliteStatement } from './imports-growth-driver';
 import { assertIndexedSqlite } from './support/verify-import-api';
@@ -88,6 +89,9 @@ function integer(value: number) {
 function common(c: Counters): asserts c is Required<Counters> {
   for (const value of [c.networkRequests, c.workUnits, c.allocatedBytes, c.peakRetainedBytes, c.peakRetainedRecords])
     integer(value!);
+  expect(c.accounting).toBeDefined();
+  integer(c.accounting!.requestBodyBytes);
+  integer(c.accounting!.pagePlanBytes);
 }
 function purity(c: Counters) {
   integer(c.networkRequests);
@@ -100,6 +104,13 @@ function purity(c: Counters) {
 function readerCost(c: Counters, bytes: number, fields: number, byteCap = RECORD_CAP) {
   common(c);
   purity(c);
+  expect(c.accounting.reader).toBeDefined();
+  const reader = c.accounting.reader!;
+  for (const value of Object.values(reader)) integer(value);
+  expect(c.workUnits).toBe(reader.scannedBytes + reader.copiedBytes);
+  expect(c.allocatedBytes).toBe(reader.pulledBytes + reader.copiedBytes);
+  expect(c.accounting.requestBodyBytes).toBe(0);
+  expect(c.accounting.pagePlanBytes).toBe(0);
   expect(c.workUnits).toBeGreaterThan(0);
   expect(c.workUnits).toBeLessThanOrEqual(64 * (bytes + fields));
   expect(c.allocatedBytes).toBeGreaterThan(0);
@@ -210,17 +221,21 @@ function database(c: Counters, fixture: Fixture, seed: Seed, items = 1) {
   expect(c.allocatedBytes).toBeLessThanOrEqual(64 * (items * RECORD_CAP + seed.fields * 1024));
   expect(c.peakRetainedBytes).toBeLessThanOrEqual(4 * (B * RECORD_CAP + seed.fields * 1024));
   expect(c.peakRetainedRecords).toBeLessThanOrEqual(seed.scenario === 'bulk' ? items : B);
-  return {
-    // blocks:0 means unavailable SQLite buffers, not zero physical I/O.
-    sqlite: { rows: returned, blocks: 0, statements: sqliteStatements },
-    postgres: {
-      ...postgres,
-      rows: postgres.rows + appended,
-      statements: postgresStatements.length + c.postgres.plans.length,
-    },
-    // Status polls may repeat, so requests are compared with row slack.
-    network: { rows: c.networkRequests, blocks: 0, statements: 0 },
+  const counts = {
+    'sqlite returned rows': returned,
+    'sqlite executions': sqliteStatements,
+    'network requests': c.networkRequests,
+    'derived PG examined plus ModifyTable rows': postgres.rows + appended,
+    'derived PG client calls plus raw plans': postgresStatements.length + c.postgres.plans.length,
   };
+  // Keep the original composites, with their actual ingredients, outside canonical PG cost.
+  const reader = c.accounting.reader;
+  const work = sqliteStatements + postgresStatements.length + c.postgres.plans.length;
+  expect(c.workUnits).toBe(reader ? work + reader.scannedBytes + reader.copiedBytes : work);
+  const allocated = c.accounting.requestBodyBytes + c.accounting.pagePlanBytes;
+  expect(c.allocatedBytes).toBe(reader ? allocated + reader.pulledBytes + reader.copiedBytes : allocated);
+  validateCountedRun({ read: () => counts }, counts, seed.n);
+  return { postgres, counts };
 }
 const options = (scenario: Scenario, n = 32, history = 32, fields = 1): Seed =>
   Object.freeze({ n, history, fields, scenario, source: 'growth-source', key: 'fixed-record' });
@@ -416,6 +431,7 @@ async function reconcile(scenario: Scenario) {
   const fixed = new Map<number, string>();
   const samples = new Map<string, GrowthSample[]>();
   const pages = new Map<string, GrowthSample[]>();
+  const counted = new Map<string, { scale: number; counted: ReturnType<typeof countedSample> }[]>();
   for (const axis of ['n', 'history', 'fields'] as const)
     for (const scale of axisScales(axis)) {
       const seed = { ...options(scenario), [axis]: scale };
@@ -435,12 +451,12 @@ async function reconcile(scenario: Scenario) {
         expect(result.counters.networkRequests).toBeGreaterThanOrEqual(result.value.envelopes!.length);
       }
       const cost = database(result.counters, fixture, seed, items);
-      for (const engine of ['sqlite', 'postgres', 'network'] as const) {
-        const key = `${axis}:${engine}`;
-        const group = samples.get(key) ?? [];
-        group.push({ scale, cost: cost[engine] });
-        samples.set(key, group);
-      }
+      const group = samples.get(axis) ?? [];
+      group.push({ scale, cost: cost.postgres });
+      samples.set(axis, group);
+      const units = counted.get(axis) ?? [];
+      units.push({ scale, counted: countedSample([cost.counts]) });
+      counted.set(axis, units);
       const sql = result.counters.statements.map((s) => `${s.sql}\n${s.explain}`).join('\n');
       if (scenario === 'mass-disappearance') {
         expect(result.value.status).toBe('mass-disappearance-blocked');
@@ -476,12 +492,13 @@ async function reconcile(scenario: Scenario) {
           }),
         );
         const nextCost = database(next.counters, fixture, seed, B);
-        for (const engine of ['sqlite', 'postgres', 'network'] as const) {
-          const key = `${axis}:${engine}`;
-          const group = pages.get(key) ?? [];
-          group.push({ scale, cost: nextCost[engine] });
-          pages.set(key, group);
-        }
+        const group = pages.get(axis) ?? [];
+        group.push({ scale, cost: nextCost.postgres });
+        pages.set(axis, group);
+        const key = `${axis}:next-page`;
+        const units = counted.get(key) ?? [];
+        units.push({ scale, counted: countedSample([nextCost.counts]) });
+        counted.set(key, units);
         expect(next.value.visitedKeys).toEqual(fixture.vanishedKeys.slice(B, B * 2));
         expect(next.value.visitedKeys.length).toBeGreaterThan(0);
         expect(next.value.visitedKeys.length).toBeLessThanOrEqual(B);
@@ -489,14 +506,71 @@ async function reconcile(scenario: Scenario) {
       }
     }
   for (const [key, group] of [...samples, ...pages]) {
-    const payload = key.startsWith('fields:');
+    const payload = key === 'fields';
     assertGrowth(group, {
       rows: payload ? 'linear' : 'constant',
-      blocks: key.endsWith(':postgres') ? (payload ? 'linear' : 'logarithmic') : 'constant',
+      blocks: payload ? 'linear' : 'logarithmic',
       statements: payload ? 'linear' : 'constant',
     });
   }
+  for (const [axis, samples] of counted) {
+    const bound: 'linear' | 'constant' = axis.startsWith('fields') ? 'linear' : 'constant';
+    const bounds = Object.fromEntries(Object.keys(samples[0]!.counted).map((name) => [name, bound]));
+    expect(
+      countedViolations(
+        {
+          read: () => ({}),
+          bounds,
+          slack: {
+            'sqlite returned rows': { absolute: 2, relative: 0.1 },
+            'sqlite executions': { absolute: 0, relative: 0 },
+            'network requests': { absolute: 2, relative: 0.1 },
+            'derived PG examined plus ModifyTable rows': { absolute: 2, relative: 0.1 },
+            'derived PG client calls plus raw plans': { absolute: 0, relative: 0 },
+          },
+        },
+        samples,
+      ),
+    ).toEqual([]);
+  }
 }
+test('native import growth preserves canonical PostgreSQL capture and exact separate SQLite transport and derived work bounds', async () => {
+  const seed = options('unchanged');
+  const fixture = await d().seed(seed);
+  const result = await d().measure(() =>
+    d().run({
+      kind: 'unchanged',
+      source: seed.source,
+      key: seed.key,
+      fields: seed.fields,
+      pageCap: B,
+    }),
+  );
+  const raw = structuredClone(result.counters.postgres);
+  const summary = database(result.counters, fixture, seed);
+  expect(result.counters.postgres).toEqual(raw);
+  expect(summary.postgres).toEqual(costOf(raw));
+  const sqlite = result.counters.statements.filter((s) => s.engine === 'sqlite');
+  const pg = result.counters.statements.filter((s) => s.engine === 'postgres');
+  expect(summary.counts).toEqual({
+    'sqlite returned rows': sqlite.reduce((sum, s) => sum + s.rowsReturned, 0),
+    'sqlite executions': sqlite.length,
+    'network requests': result.counters.networkRequests,
+    'derived PG examined plus ModifyTable rows': costOf(raw).rows + pg.reduce((sum, s) => sum + s.rowsAppended, 0),
+    'derived PG client calls plus raw plans': raw.statements.length + raw.plans.length,
+  });
+  // Freeze the pre-existing static ceilings independently of observations or growth class.
+  for (const terms of Object.values(d().statementBudgets)) {
+    for (const engine of ['sqlite', 'postgres'] as const) {
+      const methods = terms.filter((term) => term.engine === engine);
+      expect(
+        ['fixed', 'perItem', 'perField'].map((key) =>
+          methods.reduce((sum, term) => sum + term[key as 'fixed' | 'perItem' | 'perField'], 0),
+        ),
+      ).toEqual(engine === 'sqlite' ? [1456, 144, 32] : [4000, 1000, 256]);
+    }
+  }
+});
 test('unchanged refresh still point seeks the fence without reading source or subject history', async () => {
   await reconcile('unchanged');
 });

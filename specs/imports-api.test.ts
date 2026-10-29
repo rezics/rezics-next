@@ -8,8 +8,9 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { documentText, parseDocument } from '@rezics/document';
-import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound';
+import { assertGrowth } from '../services/kernel/test/support/growth-bound';
 import { checkGrowth } from '../services/kernel/test/support/growth';
+import { countedSample, countedViolations, validateCountedRun } from '../services/kernel/test/support/growth-counters';
 import { costOf } from '../services/kernel/test/support/growth-cost';
 import { assertIndexedSqlite } from './support/verify-import-api';
 import { isAbsolute } from 'node:path';
@@ -984,6 +985,8 @@ function indexed(c: Counters) {
     expect(Number.isSafeInteger(value)).toBe(true);
     expect(value).toBeGreaterThanOrEqual(0);
   }
+  const counts = { 'sqlite returned rows': c.rowsReturned, 'sqlite executions': c.statements };
+  return validateCountedRun({ read: () => counts }, counts, 1);
 }
 test('fixed changes have bounded indexed work as unrelated catalogue and history grow independently', async () => {
   for (const dimension of ['catalogueRecords', 'historyRows', 'both'] as const) {
@@ -1024,13 +1027,22 @@ test('fixed changes have bounded indexed work as unrelated catalogue and history
         samples.push({ ...measured, stop: stop.reconcile, removal: removal.reconcile, removalApi: removal.api });
       });
     for (const phase of ['reconcile', 'api', 'stop', 'removal', 'removalApi'] as const) {
-      const sqlite: GrowthSample[] = samples.map((sample, i) => ({
-        scale: [32, 128, 512][i]!,
-        cost: { rows: sample[phase].rowsReturned, blocks: 0, statements: sample[phase].statements },
-      }));
-      assertGrowth(sqlite, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+      const scales = [32, 128, 512];
+      expect(
+        countedViolations(
+          {
+            read: () => ({}),
+            bounds: { 'sqlite returned rows': 'constant', 'sqlite executions': 'constant' },
+            slack: {
+              'sqlite returned rows': { absolute: 2, relative: 0.1 },
+              'sqlite executions': { absolute: 0, relative: 0 },
+            },
+          },
+          samples.map((sample, i) => ({ scale: scales[i]!, counted: countedSample([indexed(sample[phase])]) })),
+        ),
+      ).toEqual([]);
       assertGrowth(
-        samples.map((sample, i) => ({ scale: sqlite[i]!.scale, cost: costOf(sample[phase].postgres) })),
+        samples.map((sample, i) => ({ scale: scales[i]!, cost: costOf(sample[phase].postgres) })),
         { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       );
     }
