@@ -56,7 +56,12 @@ test('kindless native receipts retain their original digest and missing-kind HTT
         },
         { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
       );
-      return { value: copy, events: [] };
+      return {
+        value: copy,
+        events: [
+          { type: 'com.rezics.library.copy.updated.v1', subject: owner.actor.accountId, data: { copyId: copy.id } },
+        ],
+      };
     },
   );
   const patch = { revision: 1, status: 'lent', note: 'Historic update' };
@@ -83,7 +88,12 @@ test('kindless native receipts retain their original digest and missing-kind HTT
       );
       expect(changed).not.toBeNull();
       const { kind: _kind, ...copy } = changed!;
-      return { value: copy, events: [] };
+      return {
+        value: copy,
+        events: [
+          { type: 'com.rezics.library.copy.updated.v1', subject: owner.actor.accountId, data: { copyId: copy.id } },
+        ],
+      };
     },
   );
   expect(
