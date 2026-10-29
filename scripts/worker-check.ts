@@ -357,7 +357,6 @@ export async function runWorkerCheck(
     const retry = `worker-check: remote transport failed: ${transportReason}; retrying locally under memory lease\n`;
     process.stderr.write(retry);
     writeSync(descriptor, retry);
-    wait.stop();
     endLedger(remoteCode, transportReason);
     ledger = undefined;
   }

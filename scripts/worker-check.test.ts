@@ -740,6 +740,39 @@ test('a local memory lease wait is appended to the goal wait file while it is wa
   }
 });
 
+test('a remote transport retry keeps recording the local memory lease wait', async () => {
+  const fixture = workerFixture();
+  const leaseDirectory = join(fixture.root, 'lease');
+  const waitFile = join(fixture.root, 'goal-wait');
+  const old = { ...process.env };
+  writeFileSync(join(fixture.root, 'hosts.json'), JSON.stringify({ hosts: [] }));
+  const command = localCommand(fixture.localMarker);
+  const commandClass = checkClass(command, fixture.root);
+  for (const peak of [3, 3, 3]) recordPeak(fixture.memory, commandClass, peak * 2 ** 30);
+  const holder = await acquireStackSlot('holder', {
+    REZICS_STACK_SLOTS: '4',
+    REZICS_STACK_LEASE_DIR: leaseDirectory,
+  }, 4);
+  try {
+    workerEnv(fixture, join(fixture.root, 'hosts.json'));
+    process.env.WORKER_REMOTE_MODE = 'transport';
+    process.env.REZICS_CHECK_MEMORY_DIR = leaseDirectory;
+    process.env.REZICS_CHECK_MEMORY_GIB = '4';
+    process.env.GOAL_CHECK_WAIT_FILE = waitFile;
+    const running = runWorkerCheck(command, fixture.root, false, undefined, 15);
+    await untilRecorded(() => existsSync(waitFile) && readFileSync(waitFile, 'utf8').trim().split('\n').some((line) => Number(line) > 0));
+    await holder.release();
+    expect(await running).toBe(0);
+  } finally {
+    await holder.release();
+    for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_MEMORY_GIB', 'REZICS_CHECK_SCOPE', 'WORKER_REMOTE_EVENTS', 'WORKER_REMOTE_MODE', 'KERNEL_CHECK_REMOTE', 'GOAL_CHECK_WAIT_FILE']) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test('a remote transport failure is logged and rerun once locally, but a failed command is not retried', async () => {
   const fixture = workerFixture();
   const old = { ...process.env };
