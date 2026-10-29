@@ -10,7 +10,7 @@ import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { isRelationProperty, itemFacts, type Fact } from '../../src/semantic/item.ts';
-import { FRESHNESS_POLL_MS, FRESHNESS_WAIT_MS, linksCaughtUp, waitForSubjectLinks } from '../../src/semantic/link-freshness.ts';
+import { FRESHNESS_POLL_MS, FRESHNESS_WAIT_MS, waitForSubjectLinks } from '../../src/semantic/link-freshness.ts';
 import type { SessionComponent } from '../../src/tokens/session.ts';
 import { labelOrderKey } from '../../src/semantic/link-keys.ts';
 import { listSubjectRelations } from '../../src/semantic/links.ts';
