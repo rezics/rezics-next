@@ -335,4 +335,27 @@ The wrapper did not return its child's output before its unchanged timeout, so n
 Subsequent source review corrected only the reader parameter annotations to the shared
 `CountedCheck` default (`unknown`, narrowed to `Execution`); this erases to the same runtime
 JavaScript. The full diffs and hashes above describe that final source, not an earlier variant.
-Root typecheck terminal evidence is pending.
+Root typecheck exited 0. It waited 550.412 seconds for its slot, then transferred the
+worktree after the final reader correction was committed as `f7ea9f8a03` and ran all
+13 workspace typechecks. The remote command completed in 75.151 seconds; no rerun or
+infrastructure error was reported. Its terminal result was:
+
+```text
+check: exit status 0
+check: log .temp/goal/checks/worker-check-2026-10-29T13-32-57.734Z-83a88bd7.log
+```
+
+The focused wrapper terminal result was:
+
+```text
+check: exit status 1
+check: failure summary
+(fail) all import CLI outcomes pass with real source pipeline [120030.41ms]
+1 fail
+check: log .temp/goal/checks/worker-check-2026-10-29T13-32-33.925Z-9c3cf4af.log
+```
+
+Both recorded checks are terminal; none remains running. Acceptance remains unproved
+because the existing wrapper timed out. No passing base result is claimed, and no
+business or timeout policy was changed to force a pass. The only subsequent changes
+are this evidence record. No files outside the four declared paths changed.
