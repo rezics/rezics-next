@@ -170,8 +170,14 @@ export function createPins(deps: { pool: Pool; access: Access; tokens: KeyRing; 
             // Business failure belongs to a fresh NEW pin, after exact receipt replay.
             try {
               if (!remove) {
-                await targetGate(account, deadline, attempt.time);
-                await collections.readCollection(account, collectionId, deadline, { time: attempt.time, attempt });
+                const stored = await withConnection(pool, (connection) =>
+                  readPins(deadlineClient(connection, deadline), routeOf(account.accountId)!, account.accountId),
+                );
+                // Monotone CAS makes this probe safe: a changed list cannot enter the fresh body.
+                if (stored.revision === input.revision && !stored.ids.includes(collectionId)) {
+                  await targetGate(account, deadline, attempt.time);
+                  await collections.readCollection(account, collectionId, deadline, { time: attempt.time, attempt });
+                }
               }
               return { error: undefined };
             } catch (error) {
