@@ -11,7 +11,7 @@ import {
 import platformProfileJson from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import type { Related, Subject, Summary } from '../subject/types';
 import { demoAgentAccounts, demoAgentSubjects } from './agent-fixtures';
-import { answerFakeRoute, mergeFakeFixtures } from './fake-modules.ts';
+import { answerFakeRoute, discoveredRecordings, mergeFakeFixtures } from './fake-modules.ts';
 import defaultFixtures from './fixtures.json' with { type: 'json' };
 import { languageList, localizeRecording } from './fake/languages.ts';
 import homePageRecording from './recorded/home-page.json';
@@ -175,10 +175,17 @@ async function pageRecording(
     return Object.entries(recordings).find(
       ([name, recording]) => name.startsWith('agent-page') && recording.handle === account,
     )?.[1];
-  if (typeof route === 'string') return route === '/' ? recordings['home-page'] : undefined;
+  if (typeof route === 'string')
+    return route === '/' ? requestedRecording('home-page', request, recordings) : undefined;
   if (typeof subject !== 'string') return undefined;
   if (subject === missingSubjectId) return recordings['missing-subject-page'];
-  return subject === knownSubjectId(recordings) ? recordings['subject-page'] : undefined;
+  return subject === knownSubjectId(recordings) ? requestedRecording('subject-page', request, recordings) : undefined;
+}
+
+function requestedRecording(name: string, request: Request, recordings: Record<string, KernelRecording>) {
+  const locale = request.headers.get('accept-language')?.split(',')[0]?.trim().split('-q=')[0];
+  const localized = locale ? recordings[`${name}-${locale}`] : undefined;
+  return localized ?? recordings[name];
 }
 
 /** Keys of a recording that describe the request it answers; the rest is the response body. */
@@ -243,6 +250,7 @@ export const storyViewerId = 'story-viewer';
 
 /** Library reads by path. The member, change and unit pages hang off their parent's recorded id. */
 function libraryRecording(
+  request: Request,
   method: string,
   pathname: string,
   recordings: Record<string, KernelRecording>,
@@ -257,13 +265,13 @@ function libraryRecording(
     '/v1/publishedLogs': 'library-published-logs',
   };
   const list = lists[pathname];
-  if (list) return recordings[list];
+  if (list) return requestedRecording(list, request, recordings);
   const collection = /^\/v1\/collections\/([^/]+)(\/members)?$/.exec(pathname);
   if (
     collection?.[1] &&
     decodeURIComponent(collection[1]) === resourceId(recordings['library-collection'], 'collection')
   )
-    return recordings[collection[2] ? 'library-collection-members' : 'library-collection'];
+    return requestedRecording(collection[2] ? 'library-collection-members' : 'library-collection', request, recordings);
   const session = /^\/v1\/progressSessions\/([^/]+)(?:\/(changes|completedUnits))?$/.exec(pathname);
   if (
     session?.[1] &&
@@ -383,12 +391,15 @@ async function selectRecording(
       .catch(() => undefined);
     if (isRecord(body) && typeof body.text === 'string') {
       const type = filterType(body.filter);
-      const recording = Object.values(recordings).find(
-        (candidate) =>
+      const candidates = Object.entries(recordings).filter(
+        ([name, candidate]) =>
+          name.startsWith('search') &&
           candidate.query === body.text &&
           (candidate.filterType ?? undefined) === type &&
           Array.isArray(candidate.subjects),
       );
+      const locale = request.headers.get('accept-language')?.split(',')[0]?.trim();
+      const recording = candidates.find(([name]) => locale && name.endsWith(`-${locale}`))?.[1] ?? candidates[0]?.[1];
       if (recording) {
         const languages = languageList(body.languages);
         return languages.length > 0
@@ -402,7 +413,8 @@ async function selectRecording(
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
     const url = new URL(request.url);
     const continueEntries = recordings['library-continue-entries'];
-    if (url.searchParams.get('state') === 'in_progress' && continueEntries) return continueEntries;
+    if (url.searchParams.get('state') === 'in_progress' && continueEntries)
+      return requestedRecording('library-continue-entries', request, recordings) ?? continueEntries;
   }
   if (request.method === 'GET' && pathname === '/v1/progressSessions') {
     const url = new URL(request.url);
@@ -428,12 +440,12 @@ async function selectRecording(
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
     // A shelf reads one status at a time; the recording holds every status, so the answer keeps the asked one.
     const state = new URL(request.url).searchParams.get('state');
-    const recorded = recordings['library-entries'];
+    const recorded = requestedRecording('library-entries', request, recordings);
     const rows = recorded?.libraryEntries;
     if (state && recorded && Array.isArray(rows))
       return { ...recorded, libraryEntries: rows.filter((row) => isRecord(row) && row.state === state) };
   }
-  const library = libraryRecording(request.method, pathname, recordings);
+  const library = libraryRecording(request, request.method, pathname, recordings);
   if (library) return library;
   if (request.method === 'GET' && pathname === `/v1/accounts/${storyViewerId}/preferences`)
     return recordings['settings-preferences'];
@@ -577,9 +589,10 @@ export function createRecordedKernelFetch(recordings: Record<string, KernelRecor
     const request = new Request(input, init);
     const exposure = exposureResponse(request);
     if (exposure) return exposure;
-    const moduleRecording = await answerFakeRoute('story', request, recordings);
+    const available = { ...discoveredRecordings(), ...recordings };
+    const moduleRecording = await answerFakeRoute('story', request, available);
     if (moduleRecording) return recordedResponse(moduleRecording);
-    const recording = await selectRecording(request, new URL(request.url).pathname, recordings);
+    const recording = await selectRecording(request, new URL(request.url).pathname, available);
     if (!recording) return new Response(null, { status: 404 });
     return recordedResponse(recording);
   }) as typeof fetch;

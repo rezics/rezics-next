@@ -205,6 +205,7 @@ recordings override discovered recordings for module answers. Bun tests, Storybo
 files automatically once per process, with no shared index or import line.
 
 The recording check is in `tests/recorded-responses.test.ts`; it type-checks every committed kernel response against `@rezics/client`.
+Page stories draw subjects from `src/kernel/story-subjects.ts` by ID, and recordings that embed subject labels exist for each story locale.
 
 Treat the bundled definitions release and its `definitions-active` and `definitions-release` recordings as one generated
 change: whenever the bundled release changes, run `bun apps/web/scripts/record.ts definitions-active definitions-release`

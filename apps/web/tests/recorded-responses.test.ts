@@ -151,6 +151,11 @@ test('each recorded JSON response type-checks against the kernel client', async 
     'board-realm-thread.json': 'ThreadResponse',
     'board-realm-thread-posts.json': 'PostsResponse',
   };
+  for (const file of files) {
+    const name = basename(file).replace(/-(?:en|zh-Hans)\.json$/, '.json');
+    const original = basename(file);
+    if (name !== original && responseType[name]) responseType[original] = responseType[name]!;
+  }
   const unmapped = files.filter((file) => !(basename(file) in responseType));
   expect(unmapped, `Recorded JSON files without a kernel response type: ${unmapped.join(', ')}`).toEqual([]);
   files.forEach((file, index) => {

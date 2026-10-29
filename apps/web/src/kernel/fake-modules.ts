@@ -1,5 +1,6 @@
 import type { Fixtures, KernelRecording } from './fake.ts';
 import * as libraryContinue from './fake/library-continue.ts';
+import { storySubjects } from './story-subjects';
 
 type RouteContext = {
   request: Request;
@@ -67,17 +68,48 @@ function discover(): Discovered {
     recordings: Object.fromEntries(
       ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), recording]),
     ),
-    fixtures: ordered(fixtures).map(([, fixture]) => fixture),
+    fixtures: [
+      ...ordered(fixtures).map(([, fixture]) => fixture),
+      {
+        subjects: storySubjects.map((subject) => ({
+          id: subject.id,
+          type: subject.type,
+          labels: { ...subject.labels },
+          descriptions: {},
+          aliases: {},
+          statements: {
+            'schema:inLanguage': [
+              {
+                id: `${subject.id}:story-language`,
+                rank: 'normal',
+                property: { id: 'schema:inLanguage', data_type: 'string' },
+                value: { type: 'value', content: subject.originalLanguage },
+                qualifiers: [],
+                references: [],
+              },
+            ],
+          },
+          ...(subject.cover ? { cover: subject.cover } : {}),
+        })) as unknown as Fixtures['subjects'],
+      },
+    ],
   };
   return discovered;
+}
+
+export function discoveredRecordings(): Record<string, KernelRecording> {
+  return discover().recordings;
 }
 
 /** Append file contributions after the caller's fixtures and default demo cast, without mutating either. */
 export function mergeFakeFixtures(fixtures: Fixtures): Fixtures {
   const files = discover().fixtures;
+  const subjects = new Map<string, Fixtures['subjects'][number]>();
+  for (const subject of [...fixtures.subjects, ...files.flatMap((file) => file.subjects ?? [])])
+    subjects.set(subject.id, subject);
   return {
     ...fixtures,
-    subjects: [...fixtures.subjects, ...files.flatMap((file) => file.subjects ?? [])],
+    subjects: [...subjects.values()],
     accounts: [...(fixtures.accounts ?? []), ...files.flatMap((file) => file.accounts ?? [])],
   };
 }

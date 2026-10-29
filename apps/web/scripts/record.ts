@@ -8,6 +8,7 @@ import { facetProperties } from '@rezics/filter';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { stackRun } from '../../../scripts/stack-run.ts';
+import { storySubjects } from '../src/kernel/story-subjects';
 
 // Names on the command line select the recordings to write; with none, every recording is written.
 const only = Bun.argv.slice(2).filter((argument) => argument !== '--');
@@ -37,23 +38,12 @@ const matchingQuery = 'The';
 const typedQuery = 'Prince';
 const emptyQuery = 'zzzznotasubject';
 // Two subjects per vertical list of the home. They exist only in the search index and its in-process source.
-const homeSubjects = [
-  { id: '01a1773a-f6ff-7684-8e44-1a013af60d4b', type: 'schema:Book', en: 'Kokoro', ja: 'こころ' },
-  { id: '01a1773a-f700-7071-b5ef-2b02f7d0e8c6', type: 'schema:Book', en: 'I Am a Cat', ja: '吾輩は猫である' },
-  { id: '01a1773a-f700-7078-8000-000000000001', type: 'schema:Book', en: 'The Tale of Genji', ja: '源氏物語' },
-  { id: '01a1773a-f700-7078-8000-000000000003', type: 'schema:Book', en: 'Norwegian Wood', ja: 'ノルウェイの森' },
-  { id: '01a1773a-f700-7072-b9eb-3c03e51c0440', type: 'schema:TVSeries', en: 'Mushishi', ja: '蟲師' },
-  {
-    id: '01a1773a-f700-7073-bcc1-4d04f35ff67a',
-    type: 'schema:TVSeries',
-    en: "Frieren: Beyond Journey's End",
-    ja: '葬送のフリーレン',
-  },
-  { id: '01a1773a-f700-7074-b1ee-5e05671d3be3', type: 'wd:Q689445', en: 'Clannad', ja: 'クラナド' },
-  { id: '01a1773a-f700-7075-8008-6f06740bee6d', type: 'wd:Q689445', en: 'Steins Gate', ja: 'シュタインズ・ゲート' },
-  { id: '01a1773a-f700-7076-b2d2-7a07a9d7104f', type: 'schema:Recipe', en: 'Nikujaga', ja: '肉じゃが' },
-  { id: '01a1773a-f700-7077-883e-8b0879393d7d', type: 'schema:Recipe', en: 'Shakshuka', ja: 'シャクシュカ' },
-] as const;
+const homeSubjects = storySubjects.map(({ id, type, labels }) => ({
+  id,
+  type,
+  en: labels.en ?? Object.values(labels)[0]!,
+  ja: labels.ja ?? Object.values(labels)[0]!,
+}));
 let container = '';
 let searchContainer = '';
 let kernel: ReturnType<typeof spawn> | undefined;
@@ -238,42 +228,23 @@ async function libraryToken(account: string, scope = libraryScopes): Promise<str
 const librarySubjects = [
   {
     key: 'kokoro',
-    labels: {
-      en: 'Kokoro',
-      'zh-Hant': '心',
-      ja: 'こころ',
-      ko: '마음',
-      de: 'Kokoro',
-      es: 'Kokoro',
-    },
+    labels: storySubjects.find(({ labels }) => labels.en === 'Kokoro')!.labels,
   },
   {
     key: 'norwegian-wood',
-    labels: {
-      en: 'Norwegian Wood',
-      'zh-Hant': '挪威的森林',
-      ja: 'ノルウェイの森',
-      ko: '노르웨이의 숲',
-      de: 'Naokos Lächeln',
-    },
+    labels: storySubjects.find(({ labels }) => labels.en === 'Norwegian Wood')!.labels,
   },
   {
     key: 'genji',
-    labels: {
-      en: 'The Tale of Genji',
-      'zh-Hant': '源氏物語',
-      ja: '源氏物語',
-      ko: '겐지 이야기',
-      fr: 'Le Dit du Genji',
-    },
+    labels: storySubjects.find(({ labels }) => labels.en === 'The Tale of Genji')!.labels,
   },
   {
     key: 'cat',
-    labels: { en: 'I Am a Cat', 'zh-Hant': '我是貓', ja: '吾輩は猫である', de: 'Ich der Kater', es: 'Soy un gato' },
+    labels: storySubjects.find(({ labels }) => labels.en === 'I Am a Cat')!.labels,
   },
   {
     key: 'snow-country',
-    labels: { en: 'Snow Country', 'zh-Hant': '雪國', ja: '雪国', ko: '설국', fr: 'Pays de neige' },
+    labels: storySubjects.find(({ labels }) => labels.en === 'Snow Country')!.labels,
   },
 ] as const;
 
@@ -504,6 +475,7 @@ async function recordLibrary(input: {
     path: string,
     status: number,
     body?: unknown,
+    acceptLanguage?: string,
   ): Promise<JsonObject> => {
     const key = `"${Bun.randomUUIDv7()}"`;
     const response = await retryOverloaded(() =>
@@ -512,6 +484,7 @@ async function recordLibrary(input: {
         headers: {
           ...(token ? { authorization: `Bearer ${token}` } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(acceptLanguage ? { 'accept-language': acceptLanguage } : {}),
           ...(method === 'GET' ? {} : { 'idempotency-key': key }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -675,7 +648,23 @@ async function recordLibrary(input: {
   if (!writes('library-', 'settings-')) return new Map();
 
   const recordedLibrary = new Map<string, JsonObject>();
+  const localizedNames = new Set([
+    'library-entries',
+    'library-collections',
+    'library-collection',
+    'library-collection-members',
+    'library-continue-entries',
+  ]);
   const read = async (name: string, token: string | null, path: string) => {
+    if (localizedNames.has(name)) {
+      let english: JsonObject | undefined;
+      for (const locale of ['en', 'zh-Hans']) {
+        const body = await call(`${name}-${locale}`, token, 'GET', path, 200, undefined, locale);
+        recordedLibrary.set(locale === 'en' ? name : `${name}-${locale}`, { ...body, status: 200 });
+        if (locale === 'en') english = body;
+      }
+      return english!;
+    }
     const body = await call(name, token, 'GET', path, 200);
     recordedLibrary.set(name, { ...body, status: 200 });
     return body;
@@ -1135,16 +1124,7 @@ async function main(): Promise<void> {
     .setIssuedAt()
     .setExpirationTime('5m')
     .sign(privateJwk);
-  const labels = {
-    en: 'The Little Prince',
-    'zh-Hant': '小王子',
-    'zh-Hans': '小王子',
-    ja: '星の王子さま',
-    ko: '어린 왕자',
-    de: 'Der kleine Prinz',
-    fr: 'Le Petit Prince',
-    es: 'El Principito',
-  };
+  const labels = storySubjects.find(({ labels }) => labels.en === 'The Little Prince')!.labels;
   const create = async (body: JsonObject, description: string): Promise<string> => {
     const key = JSON.stringify(Bun.randomUUIDv7());
     const created = await retryOverloaded(() =>
@@ -1644,19 +1624,24 @@ async function main(): Promise<void> {
   recorded.set('search-facets', { ...facets, status: facetsResponse.status, query: matchingQuery });
   // Keep full label maps in recordings; replay projects them to the language list requested by each story.
   const searchFor = async (name: string, text: string, extra: JsonObject = {}, request: JsonObject = {}) => {
-    const response = await retryOverloaded(async () =>
-      appHandle.handle(
-        new Request('http://kernel.test/v1/subjects:search', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text, limit: 100, descriptions: true, ...extra }),
-        }),
-      ),
-    );
-    const body = objectBody(await response.json(), name);
-    if (response.status !== 200) throw new Error(`${name} returned ${response.status}: ${JSON.stringify(body)}`);
-    recorded.set(name, { ...body, status: response.status, query: text, ...request });
-    return body;
+    let english: JsonObject | undefined;
+    for (const locale of ['en', 'zh-Hans']) {
+      const response = await retryOverloaded(async () =>
+        appHandle.handle(
+          new Request('http://kernel.test/v1/subjects:search', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'accept-language': locale },
+            body: JSON.stringify({ text, limit: 100, descriptions: true, ...extra }),
+          }),
+        ),
+      );
+      const body = objectBody(await response.json(), name);
+      if (response.status !== 200) throw new Error(`${name} returned ${response.status}: ${JSON.stringify(body)}`);
+      recorded.set(`${name}-${locale}`, { ...body, status: response.status, query: text, ...request });
+      if (locale === 'en') english = body;
+    }
+    if (name !== 'search-empty' && english) recorded.set(name, { ...english, query: text, ...request });
+    return english!;
   };
   const matched = await searchFor('search', matchingQuery);
   const unmatched = await searchFor('search-empty', emptyQuery);
@@ -1688,20 +1673,23 @@ async function main(): Promise<void> {
     throw new Error(`Empty search returned hits: ${JSON.stringify(unmatched)}`);
 
   // The home lists are searches, so the home is read through the kernel that mounts search over the index above.
-  const homeResponse = await retryOverloaded(async () =>
-    appHandle.handle(
-      new Request('http://kernel.test/v1/pages:read', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: { route: '/' } }),
-      }),
-    ),
-  );
-  recorded.set('home-page', {
-    ...objectBody(await homeResponse.json(), 'home-page'),
-    status: homeResponse.status,
-  });
-  if (homeResponse.status !== 200) throw new Error(`home-page returned ${JSON.stringify(recorded.get('home-page'))}`);
+  for (const locale of ['en', 'zh-Hans']) {
+    const homeResponse = await retryOverloaded(async () =>
+      appHandle.handle(
+        new Request('http://kernel.test/v1/pages:read', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'accept-language': locale },
+          body: JSON.stringify({ target: { route: '/' } }),
+        }),
+      ),
+    );
+    const name = locale === 'en' ? 'home-page' : `home-page-${locale}`;
+    recorded.set(name, {
+      ...objectBody(await homeResponse.json(), 'home-page'),
+      status: homeResponse.status,
+    });
+    if (homeResponse.status !== 200) throw new Error(`home-page returned ${JSON.stringify(recorded.get(name))}`);
+  }
   const homePage = objectBody(recorded.get('home-page'), 'home-page');
   const homeTemplate = objectBody(homePage.template, 'home-page template');
   if (
@@ -1729,29 +1717,34 @@ async function main(): Promise<void> {
   // The library recording opened the collections gate and put the subject on a shelf; the shelf's listing catches up
   // in the background, so the page is read again until it names a collection.
   const finalDeadline = Date.now() + 60_000;
-  for (;;) {
-    const finalPage = await retryOverloaded(() =>
-      fetch(new URL('/v1/pages:read', origin), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: { subject: subjectId } }),
-      }),
-    );
-    const finalBody = objectBody(await finalPage.json(), 'subject-page');
-    const finalReads = Object.values(objectBody(finalBody.reads ?? {}, 'subject-page reads')).map((read) =>
-      objectBody(read, 'subject-page read'),
-    );
-    const collected = finalReads.some((read) => {
-      const collections = objectBody(read.body, 'subject-page read body').collections;
-      return Array.isArray(collections) && collections.length > 0;
-    });
-    if (finalPage.status === 200 && collected && finalReads.every((read) => read.status === 200)) {
-      recorded.set('subject-page', { ...finalBody, status: finalPage.status });
-      break;
+  for (const locale of ['en', 'zh-Hans']) {
+    for (;;) {
+      const finalPage = await retryOverloaded(() =>
+        fetch(new URL('/v1/pages:read', origin), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'accept-language': locale },
+          body: JSON.stringify({ target: { subject: subjectId } }),
+        }),
+      );
+      const finalBody = objectBody(await finalPage.json(), 'subject-page');
+      const finalReads = Object.values(objectBody(finalBody.reads ?? {}, 'subject-page reads')).map((read) =>
+        objectBody(read, 'subject-page read'),
+      );
+      const collected = finalReads.some((read) => {
+        const collections = objectBody(read.body, 'subject-page read body').collections;
+        return Array.isArray(collections) && collections.length > 0;
+      });
+      if (finalPage.status === 200 && collected && finalReads.every((read) => read.status === 200)) {
+        recorded.set(locale === 'en' ? 'subject-page' : `subject-page-${locale}`, {
+          ...finalBody,
+          status: finalPage.status,
+        });
+        break;
+      }
+      if (Date.now() > finalDeadline)
+        throw new Error(`subject-page has failed or empty reads: ${JSON.stringify(finalBody)}`);
+      await Bun.sleep(1000);
     }
-    if (Date.now() > finalDeadline)
-      throw new Error(`subject-page has failed or empty reads: ${JSON.stringify(finalBody)}`);
-    await Bun.sleep(1000);
   }
 
   const output = process.env.WEB_RECORD_OUTPUT ?? join(app, 'src/kernel/recorded');
