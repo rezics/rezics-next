@@ -395,6 +395,10 @@ const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
   // landings; 30 s per test keeps a real hang visible.
   ['bun', 'test', '--timeout', '30000', 'tools/goal/src'],
 ];
+const LAUNCH_SMOKE_PATHS = defaults.launchSmokePaths as string[];
+export function launchSmokeRequired(changed: readonly string[]): boolean {
+  return changed.some((path) => matchesPath(path, LAUNCH_SMOKE_PATHS));
+}
 
 function isAncestor(cwd: string, ancestor: string, descendant: string): boolean {
   return spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd }).status === 0;
@@ -793,6 +797,8 @@ export type TrainOptions = {
   sink: GateOutcomeSink;
   derivedFiles?: DerivedFile[];
   runGate?: GateRunner;
+  /** Real launch smoke seam; production uses the bounded candidate smoke after control-plane checks. */
+  runLaunchSmoke?: GateRunner;
   gateIdentity?: string;
   mainBranch?: string;
   integrationBranch?: string;
@@ -2165,6 +2171,23 @@ export class MergeTrain {
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
             throw new Error('Control-plane checks changed the candidate commit');
           git(trainTree, 'diff', '--quiet', 'HEAD', '--');
+          if (launchSmokeRequired(result.changedFiles)) {
+            appendFileSync(logPath, '\nLaunch smoke on control-plane candidate\n');
+            const smoke = await runIntegrationChecks(
+              [['bun', 'tools/goal/scripts/launch-smoke.ts']],
+              trainTree,
+              logPath,
+              o.runLaunchSmoke ?? gateRunner(300_000),
+            );
+            if (!smoke.passed) {
+              result.firstFailure = firstFailure(smoke.output);
+              result.failedCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts'];
+              result.stage = 'gate';
+              return finish();
+            }
+            if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
+              throw new Error('Launch smoke changed the candidate commit');
+          }
         }
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);

@@ -115,5 +115,18 @@
     "toolOutputTokens": 4000,
     "backgroundTerminalMaxTimeoutMs": 7200000
   },
+  "launchSmokePaths": [
+    "tools/goal/src/launch.ts",
+    "tools/goal/src/settle.ts",
+    "tools/goal/src/job.ts",
+    "tools/goal/src/records.ts",
+    "tools/goal/src/worker-slice.ts",
+    "tools/goal/src/agent*.ts",
+    "tools/goal/src/*agent*.ts",
+    "tools/goal/src/**/agent*.ts",
+    "tools/goal/src/agents/**",
+    "tools/goal/src/worker-prompt.ts",
+    "tools/goal/worker-result.schema.json"
+  ],
   "gate": ["bun", "scripts/gate.ts"]
 }
