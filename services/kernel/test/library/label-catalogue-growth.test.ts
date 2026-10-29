@@ -16,7 +16,6 @@ import {
   checkGrowth,
   catalogStatementBound,
   openGrowthDatabase,
-  settle,
   type GrowthDatabase,
   seed,
   type Population,
@@ -506,18 +505,27 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale) {
       await grow(database, scale);
+      const before = Number(
+        (await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label'))
+          .rows[0]!.count,
+      );
       for (const operation of operations) await assertCapturedOperation(scale, operation);
+      const after = Number(
+        (await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label'))
+          .rows[0]!.count,
+      );
+      if (counts[String(scale)] && typeof counts[String(scale)] === 'object')
+        Object.assign(counts[String(scale)] as Record<string, unknown>, { fixedMeasurementRows: after - before });
     },
     async warmup() {
       for (const operation of operations) operation.assert(await operation.run(await operation.prepare()));
     },
-    async prepare(database, _scale, repetition) {
+    async prepare(_database, _scale, repetition) {
       const prepared = new Array<State>(operations.length);
       for (const [index, operation] of operations.entries())
         if (!operation.name.startsWith('list')) prepared[index] = await operation.prepare();
       for (const [index, operation] of operations.entries())
         if (operation.name.startsWith('list')) prepared[index] = await operation.prepare();
-      await settle(database);
       states.set(repetition, prepared);
     },
     async operation(_database, _scale, repetition) {
