@@ -22,11 +22,6 @@ mock.module('@tanstack/react-start/server', () => ({
   },
   setResponseHeader() {},
 }));
-mock.module('@tanstack/react-router', () => ({
-  notFound() {
-    return new Error('Not Found');
-  },
-}));
 
 const app = join(import.meta.dir, '..');
 const contentId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
@@ -338,8 +333,6 @@ test('checkout start stays within its bound as s grows', async () => {
     holdCatalogue(s);
     expect(heldOffers).toHaveLength(s);
     expect(heldOrders).toHaveLength(s);
-    const warmed = await fetch(`${origin}/en/offers/${targetOfferId}`);
-    expect(warmed.status).toBe(200);
     kernelCalls.length = 0;
     authCalls.length = 0;
     const { counts, env } = sessionHarness();
@@ -511,6 +504,8 @@ test('offer page stays within its bound as s grows', async () => {
     holdCatalogue(s);
     expect(heldOffers).toHaveLength(s);
     expect(heldOrders).toHaveLength(s);
+    const warmed = await fetch(`${origin}/en/offers/${targetOfferId}`);
+    expect(warmed.status).toBe(200);
     kernelCalls.length = 0;
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/offers/${targetOfferId}`);
