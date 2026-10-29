@@ -38,7 +38,8 @@ fixtures use no affected or sibling checks and never inherit the repository's li
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. Rebase conflicts regenerate declared
 files from either stage, including on dev landings and retries. Promotion-stage files may declare `inputs`; a dev
 landing that changes one of those inputs runs the declared generator against the rebased candidate and includes changed
-outputs in its landing commit. Promotion still runs promotion-stage generators on the `dev` head before its final gates.
+outputs in its landing commit. Promotion runs promotion-stage generators on `dev-verified` before its final gates,
+falling back to `dev` before the verifier initializes that ref.
 
 Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
 ` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller runs the
@@ -76,7 +77,8 @@ Isolated worktrees remain the default. Local settings can name modules as path g
 ```
 
 A task whose declared paths all fit one configured module uses that module's single worktree at
-`<worktreeRoot>/modules/<module>`, on `ws/<module>`, created from dev on first use. Matching includes exact paths,
+`<worktreeRoot>/modules/<module>`, on `ws/<module>`, created from `dev-verified` on first use (or `dev` before that
+ref exists). Matching includes exact paths,
 identical globs and subtrees under a configured `/**` root; unproved glob containment, mixed-module and unmatched
 tasks keep isolated worktrees. Stabilize-target tasks also keep their existing isolated workflow. Module mappings
 cannot overlap. Explicit brief dependencies still apply; overlapping paths introduce no dependencies, reservations,
@@ -441,15 +443,15 @@ reverts the culprit and its `after:` dependents in the batch in one forward comm
 the normal fix-round handling, holds those dependents, and promotes the remaining tasks.
 
 When no stabilize branch exists, promotion first runs the root typecheck and compiles the bundled definitions
-catalogue against one detached dev snapshot. It creates the initial stabilize branch only if both checks pass and dev
-still points at that snapshot; a failed preflight leaves stabilize absent for a later retry. Once cut, that candidate
-is frozen while its long gate runs, even as dev advances. While the stabilize branch exists, promotion gates its head
+catalogue against one detached `dev-verified` snapshot. It creates the initial stabilize branch only if both checks pass
+and `dev-verified` still points at that snapshot; a failed preflight leaves stabilize absent for a later retry. Once
+cut, that candidate is frozen while its long gate runs, even as `dev-verified` advances. While the stabilize branch exists, promotion gates its head
 and does not bisect, because only fixes reach it. An
 infrastructure-only failure (process timeout, Docker setup/run failure, or SSH/rsync transport failure) reruns the
 failing workspace checks on the same candidate up to twice; each rerun is recorded in the promotion run. Assertion
 failures block immediately. A passing gate merges newer control-plane-only commits from main into the candidate,
-then fast-forwards main when possible; other main history changes still need a fresh gate. The branch moves to the dev head, starting the
-next window. Deleting the branch starts a fresh preflight of dev.
+then fast-forwards main when possible; other main history changes still need a fresh gate. The branch moves to the
+`dev-verified` head, starting the next window. Deleting the branch starts a fresh preflight of `dev-verified`.
 
 `defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown, an already supported import-only conflict, or a configured flat JSON message catalog; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Configured `jsonMessageConflicts` patterns use a three-way key merge, retain the checked-out catalog's order and append keys introduced by the worker, and format the result with the repository formatter. A key changed to different values on both sides remains a conflict and the error names that key. Other non-generated conflicts stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
 `defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. This includes `bun.lock`: the train keeps the integration lockfile and runs `bun install` against the merged manifests, stages the regenerated lockfile and continues. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown or an already supported import-only conflict; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Other non-generated conflicts stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
@@ -503,6 +505,7 @@ bun tools/goal/src/cli.ts attempts --json
 bun tools/goal/src/cli.ts report [--json]
 bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
+bun tools/goal/src/cli.ts verify
 bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
 bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
@@ -532,6 +535,21 @@ stops those app-servers on shutdown, and a replacement host stops any surviving 
 threads. Recovery reopens each Codex viewer on the current endpoint with `codex resume <thread> --remote <endpoint>`.
 Codex managers use a goal budget. Claude uses its configured executable and configuration directory, interactive
 window and turn-accounting hooks.
+
+### Development verification
+
+Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head after the
+merge train has landed its batch. It starts from `dev-verified`, runs the root typecheck with `TYPECHECK_CHANGED`,
+the affected checks for changed paths, and each landed task's acceptance command (except specification and research
+tasks). Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries and rebases use that
+verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the verified commit,
+how many landings `dev` is ahead, and whether verification is pending, running or current.
+
+When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
+landings. It reverts each culprit's changes in one commit, returns the task to its manager with the failing log, and
+advances the verified ref past the culprits. The worker can retry from that verified base. Infrastructure failures
+rerun only the failed command, up to twice, and do not revert a landing. This moves expensive checks after integration
+and lets a batch share them while keeping unstable `dev` separate from promotion's verified input.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to write
 `.temp/goal/<manager>/CONTINUATION.md` with live task IDs and states, current decisions, pending cross-owner agreements

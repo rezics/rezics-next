@@ -9,6 +9,7 @@ import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import { formatUsageReport, report } from './report.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
+import { devVerificationState } from './dev-verifier.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -61,7 +62,24 @@ export async function runWorkerCommand(
         task.state === 'held'
           ? { ...task, waitingFor: (task.brief.after ?? []).filter((id) => store.task(id).state !== 'merged') }
           : task;
-      print(JSON.stringify(arg ? show(store.task(arg)) : store.tasks().map(show), null, 2));
+      const tasksValue = arg ? show(store.task(arg)) : store.tasks().map(show);
+      print(
+        JSON.stringify(
+          arg
+            ? tasksValue
+            : {
+                devVerification: devVerificationState(
+                  settings.mainCheckout,
+                  settings.stateDirectory,
+                  settings.integrationBranch,
+                  store.tasks(),
+                ),
+                tasks: tasksValue,
+              },
+          null,
+          2,
+        ),
+      );
     } else if (command === 'attempts') {
       if (argv.some((a) => a !== '--json')) throw new Error('usage: attempts [--json]');
       print(

@@ -183,15 +183,20 @@ export class WorkerTasks {
       return main;
     }
   }
-  private integrationHead(): string {
-    return this.branchHead(this.settings.integrationBranch, true);
-  }
   private taskBaseBranch(brief: { goal?: string; target?: 'stabilize' }): string {
     return brief.goal === 'control-plane'
       ? this.settings.mainBranch
       : brief.target === 'stabilize'
         ? this.settings.stabilizeBranch
-        : this.settings.integrationBranch;
+        : this.existingVerifiedBranch();
+  }
+  private existingVerifiedBranch(): string {
+    try {
+      this.branchHead('dev-verified', false);
+      return 'dev-verified';
+    } catch {
+      return this.settings.integrationBranch;
+    }
   }
   /**
    * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A

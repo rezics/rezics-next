@@ -17,7 +17,7 @@ const workerCommands = [
   'import-attempt',
   'event',
 ];
-const integrationCommands = ['land', 'train', 'promote', 'manager', 'inbox', '_manager-host'];
+const integrationCommands = ['land', 'train', 'promote', 'verify', 'manager', 'inbox', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
 /** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
 export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox']);
