@@ -31,7 +31,7 @@ no output from the stalled attempt is represented as an assertion failure.
 
 The frozen native acceptance file hash before and after implementation is
 `c96e29014e1d1a3fb92c9f15b2ecff1c9637048c41cb5ed3c6b6f8f91b21e7d5`.
-It contains eight native scenarios. Its bytes were not changed.
+It contains six native scenarios. Its bytes were not changed.
 
 | Check | Command | Result |
 | --- | --- | --- |
