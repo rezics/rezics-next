@@ -81,6 +81,22 @@ export async function membersPreparationRuntime() {
     expect(token.status).toBe(200);
     return { accountId: row.accountId, bearer: ((await token.json()) as { access_token: string }).access_token };
   }
+  async function withoutScope(persona: Persona, omitted: string): Promise<Persona> {
+    if (!scopes.includes(omitted)) throw new Error(`Native test client does not register ${omitted}`);
+    const signed = await auth.request('/signin', {
+      account_id: persona.accountId,
+      password,
+      client_id: clientId,
+      scope: scopes.filter((scope) => scope !== omitted),
+    });
+    expect(signed.status).toBe(200);
+    const issued = await auth.request('/token', {}, cookies(signed));
+    expect(issued.status).toBe(200);
+    return {
+      accountId: persona.accountId,
+      bearer: ((await issued.json()) as { access_token: string }).access_token,
+    };
+  }
   async function fixture(selectedOwner?: Persona) {
     const owner = selectedOwner ?? (await person());
     const created = await send(owner, 'POST', '/v1/collections', {
@@ -164,6 +180,7 @@ export async function membersPreparationRuntime() {
     store,
     send,
     person,
+    withoutScope,
     fixture,
     step,
     rows,

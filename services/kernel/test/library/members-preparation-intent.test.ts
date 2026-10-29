@@ -175,11 +175,7 @@ test('foreign and anonymous private-Collection reservation deny with native not_
 
 test('native insufficient scope and pre-suspension bearer retain existing HTTP denial shapes before preparation writes', async () => {
   const f = await native.fixture(native.personas.alice);
-  const unscoped = await native.personas.unscoped(
-    'collection:read',
-    { route: routeOf(f.collectionId)!, id: f.collectionId },
-    native.personas.staff,
-  );
+  const unscoped = await native.withoutScope(f.owner, 'collection:read');
   const denied = await capture(native.db, async () => {
     const scoped = await native.actor(unscoped);
     await expect(f.store.reserve(scoped, f.collectionId, [definition()])).rejects.toMatchObject(
