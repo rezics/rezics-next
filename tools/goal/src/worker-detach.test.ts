@@ -133,7 +133,7 @@ test('a restarted controller adopts such a worker and settles it only after it h
     const worktree = h.store.task(task.id).worktree;
     // The helper's in-process recovery stands in for a host that has since restarted.
     h.store.updateAttempt(ref, (current) => {
-      delete current.driver;
+      current.driver = { pid: -1, start: 'missing', boot: 'missing', group: -1 };
     });
     let done = false;
     const recovery = new WorkerJob(h.tasks, { enqueue: (r) => requests.push(r) }, { deliver() {} })
