@@ -288,7 +288,10 @@ test('513-scope tokens and snapshots fail with typed refusals before writes or P
   const oversized = [...maximum, 'extra'];
   const f = await h.fixture(false, maximum);
   const verifier = await createProductionAccess({ actions: [maximum[0]!] });
-  const bearer = await verifier.mint(f.id, oversized);
+  const bearer = await verifier.mint(
+    f.id,
+    Array.from({ length: MAX_CONSENTED_SCOPES + 1 }, (_, i) => `scope:${i}`),
+  );
   const token = await measure(h.db, async () => {
     await expect(verifier.access.authenticate(bearer, h.context())).rejects.toMatchObject({ status: 401 });
   });
