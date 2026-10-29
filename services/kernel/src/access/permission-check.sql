@@ -1,7 +1,8 @@
 -- unbound: one permission formula probes the bounded read batch or single-route page and the fixed Global Context for governance reach.
--- Scalar counts are bounded by exact identity/action and native valid-range
--- keys (one grant per key, at most three denial reasons). They cannot become
--- an alternative hashed EXISTS subplan that enumerates the resource ACL.
+-- The B-tree companion to the temporal grant key seeks the last range starting
+-- at or before T. Non-overlap makes it the only possible grant at T; check
+-- containment after LIMIT so neither expired nor future history is enumerated.
+-- Scalar role-grant/denial counts cannot become hashed ACL-wide EXISTS plans.
 -- The optional explicit branch uses this same formula with no floor or role grants.
 -- Access checks scope in process for the authenticated grant and explicit branches.
 WITH input AS NOT MATERIALIZED (
@@ -47,11 +48,13 @@ WITH input AS NOT MATERIALIZED (
   FROM input i CROSS JOIN authority t
 ), probes AS MATERIALIZED (
   SELECT target.route, target.resource_id, b.explicit, b.public, k.*,
-    ((SELECT count(*) FROM access.resource_grant g
+    ((SELECT count(*) FROM (
+      SELECT g.valid FROM access.resource_grant g
       WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.action = i.action
         AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
-        AND g.valid @> (SELECT at FROM authority)
-    ) > 0 OR (NOT b.explicit AND (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
+        AND g.valid <= tstzrange((SELECT at FROM authority), NULL, '[)')
+      ORDER BY g.valid DESC LIMIT 1
+    ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0 OR (NOT b.explicit AND (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
       WHERE (SELECT count(*) FROM access.resource_role_grant g
         WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.grant_role = role.grant_role
           AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role

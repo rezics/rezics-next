@@ -1696,6 +1696,13 @@ CREATE INDEX resource_denial_permission ON access.resource_denial USING gist (ro
 
 
 --
+-- Name: resource_grant_pkey_lookup; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX resource_grant_pkey_lookup ON access.resource_grant USING btree (route, resource_id, subject_kind, subject_id, subject_role, action, valid);
+
+
+--
 -- Name: resource_role_grant_open; Type: INDEX; Schema: access; Owner: -
 --
 
