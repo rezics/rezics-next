@@ -65,5 +65,20 @@ there are no changes outside the declared paths and no README edit.
 
 The existing acceptance scenarios already cover the named contract, so no duplicate acceptance test or fixture was
 added. The contract's specific no-shared-type-change exception selects the focused file and importer-scoped
-typecheck, without a root typecheck or whole-workspace suite. Commands and terminal results will be recorded after
-the committed test revision is checked.
+typecheck, without a root typecheck or whole-workspace suite.
+
+Checked test revision `544b424904f81d2e5b78f2c1cb66a30779a001c2` once with each managed command:
+
+```sh
+bun scripts/worker-check.ts -- bun test services/importer/tests/vndb-chunk-growth.test.ts
+bun scripts/worker-check.ts -- bun run --cwd services/importer typecheck
+```
+
+- Focused acceptance: terminal exit status 0; 5 pass, 0 fail, 571 `expect()` calls across one file (363 ms).
+  Log: `.temp/goal/checks/worker-check-2026-10-29T13-31-58.652Z-15f8cb43.log`.
+- Importer typecheck: terminal exit status 0; no type errors in 133 files (391.63 ms). It queued for 613.060 seconds
+  and was awaited on the same check through completion; no second run or diagnostic rerun was started.
+  Log: `.temp/goal/checks/worker-check-2026-10-29T13-32-04.339Z-4b5f7304.log`.
+
+Both checks are terminal, with no runtime conflict, infrastructure failure or remaining live check. The only later
+edit records these results in this report; test bytes remain the checked revision's bytes.
