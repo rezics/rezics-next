@@ -143,7 +143,7 @@ export function agentPageHead(
   const entityImage = image ? absoluteImage(image, origin) : undefined;
   const publishedLinks = sameAs(profile);
   const entity = {
-    '@type': profile?.kind === 'organization' ? 'Organization' : 'Person',
+    '@type': profile?.kind === 'organization' ? 'Organization' : profile?.automated ? 'SoftwareApplication' : 'Person',
     name,
     alternateName: handle,
     url: `${origin.replace(/\/+$/, '')}/${locale}${agentPath(locale, handle).slice(`/${locale}`.length)}`,

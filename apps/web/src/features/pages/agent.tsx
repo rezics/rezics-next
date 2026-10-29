@@ -7,7 +7,13 @@ import { isRecord } from './shared';
 
 export type AgentPageLoad =
   | { kind: 'missing' }
-  | { kind: 'page'; page: SubjectPageData & { account: NonNullable<SubjectPageData['account']> } };
+  | {
+      kind: 'page';
+      page: SubjectPageData & {
+        account: NonNullable<SubjectPageData['account']>;
+        operator?: { id: string; handle: string | null; displayName: string | null };
+      };
+    };
 
 /** The activity lists an agent page reads from the account, by the page read that names each. */
 const LIST_READS = new Set(['accountPosts', 'accountThreads', 'accountCollections']);

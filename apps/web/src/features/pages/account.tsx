@@ -18,6 +18,14 @@ function dateText(value: unknown, locale: string): string | null {
     : null;
 }
 
+export function accountSchemaType(profile: { kind: string; automated?: boolean }): string {
+  return profile.kind === 'organization'
+    ? 'schema:Organization'
+    : profile.automated
+      ? 'schema:SoftwareApplication'
+      : 'schema:Person';
+}
+
 /**
  * The agent's own presentation, which stands in for the subject's header: avatar in a square frame, display name,
  * handle, bio and links. Facts about the agent stay statements further down the page.
@@ -32,7 +40,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
   const subject = {
     id: profile.id,
     title: name,
-    types: [profile.kind === 'organization' ? 'schema:Organization' : 'schema:Person'],
+    types: [accountSchemaType(profile)],
   };
   const avatar = (size: 'sm' | 'md') => (
     <Cover
@@ -68,6 +76,16 @@ export function AccountIdentity(props: Record<string, unknown>) {
             </p>
           )}
           {profile.bio && <p className="max-w-prose leading-7 text-pretty whitespace-pre-line">{profile.bio}</p>}
+          {profile.automated && value.operator && (
+            <p data-slot="agent-operator" className="text-sm text-muted-foreground">
+              {m.agent_operated_by({}, { locale: value.locale as never })}{' '}
+              <value.link
+                href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle ?? '')}`}
+              >
+                {value.operator.displayName || value.operator.handle}
+              </value.link>
+            </p>
+          )}
           {links.length > 0 && (
             <ul
               aria-label={m.agent_links({}, { locale: value.locale as never })}

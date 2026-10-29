@@ -11,6 +11,8 @@ export type AccountProfile = {
   links: { label: string; url: string }[];
   avatar: CoverSummary | null;
   verified: boolean;
+  automated: boolean;
+  operatorId: string | null;
   publicViews: { posts: boolean; reviews: boolean; collections: boolean };
 };
 
@@ -33,6 +35,8 @@ export function accountOf(body: unknown): AccountProfile | undefined {
     ),
     avatar: isRecord(account.avatar) ? (account.avatar as unknown as CoverSummary) : null,
     verified: account.verified === true,
+    automated: account.automated === true,
+    operatorId: typeof account.operatorId === 'string' ? account.operatorId : null,
     publicViews: {
       posts: views.posts !== false,
       reviews: views.reviews !== false,

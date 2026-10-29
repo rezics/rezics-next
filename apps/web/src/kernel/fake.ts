@@ -117,7 +117,7 @@ export type FixtureAccount = {
   collections?: Record<string, unknown>[];
 };
 
-export type KernelRecording = { status: number; [key: string]: unknown };
+export type KernelRecording = { status: number; headers?: Record<string, string>; [key: string]: unknown };
 
 /** A fake-kernel request summary for bounded-read and anonymous-render tests. */
 export type FakeKernelCall = {
@@ -182,7 +182,7 @@ async function pageRecording(
 }
 
 /** Keys of a recording that describe the request it answers; the rest is the response body. */
-const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle']);
+const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle', 'headers']);
 
 function recordedResponse(recording: KernelRecording): Response {
   const recordedHeaders = new Headers({
@@ -209,7 +209,10 @@ function recordedResponse(recording: KernelRecording): Response {
   if (isRecord(recording.headers)) return Response.json(body, { status: recording.status, headers: recordedHeaders });
   return Response.json(body, {
     status: recording.status,
-    headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
+    headers: {
+      'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json',
+      ...recording.headers,
+    },
   });
 }
 

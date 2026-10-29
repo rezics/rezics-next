@@ -4,6 +4,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/sha
 import type { ComponentProps, ReactNode } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
+import { accountOf } from './account-read';
 import type { Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject } from '../../subject/types';
@@ -34,7 +35,7 @@ export type SubjectPageData = {
 
 export type SubjectPageLoad =
   | { kind: 'missing' }
-  | { kind: 'redirect'; id: string }
+  | { kind: 'redirect'; id: string; target?: 'account' }
   | { kind: 'page'; page: SubjectPageData };
 
 export type SubjectActionsInput = { id: string; type: string; locale: string };
@@ -93,9 +94,21 @@ export async function loadSubjectPage(
     languages: requestLanguages(locale),
   });
   if (result.status === 404) return { kind: 'missing' };
+  if (result.status === 308 && result.data?.redirect) {
+    return { kind: 'redirect', id: result.data.redirect.to, target: 'account' };
+  }
   if (result.status === 200 && result.data) {
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
+    if (typeof result.data.account === 'string') {
+      const raw = result.data as unknown as SubjectPageData;
+      const reads = planReads(platformRegistry, raw.document as CompositionDocument, pageContext(raw)).reads;
+      for (const [key, read] of Object.entries(reads)) {
+        if (read.kind !== 'account' || raw.reads[key]?.status !== 200) continue;
+        const handle = accountOf(raw.reads[key]?.body)?.handle;
+        if (handle) return { kind: 'redirect', id: handle, target: 'account' };
+      }
+    }
     return { kind: 'page', page: result.data as unknown as SubjectPageData };
   }
   throw problemError(result.error?.value);
@@ -180,6 +193,7 @@ export function SubjectPage({
   heading,
   invitation,
   base,
+  operator,
 }: {
   page: SubjectPageData;
   locale: string;
@@ -207,6 +221,7 @@ export function SubjectPage({
   invitation?: string;
   /** The address of the overview when it is not the subject's own: an agent's `/@handle`. */
   base?: string;
+  operator?: { id: string; handle: string | null; displayName: string | null };
 }) {
   const overview = view === 'overview';
   const read = subjectBody(page);
@@ -253,6 +268,7 @@ export function SubjectPage({
           subject={page.subject}
           {...(read ? { subjectLabel: subjectPageTitle(page, locale) } : {})}
           {...(page.account ? { account: page.account } : {})}
+          {...(operator ? { operator } : {})}
           {...(base ? { base } : {})}
           document={page.document}
           reads={page.reads}

@@ -6,6 +6,7 @@
   "agent_collection_items": "{count} 项",
   "agent_empty": "这里暂时没有内容。",
   "agent_links": "链接",
+  "agent_operated_by": "运营者",
   "board_context_label": "面包屑导航",
   "board_meta_description": "{title}上的讨论。",
   "board_meta_description_realm": "{realm}里的{title}讨论。",

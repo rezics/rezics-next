@@ -77,7 +77,7 @@ export function subjectFrame(overview: SubjectPageData, locale: string): Subject
 
 export type ViewPagesLoad =
   | { kind: 'missing' }
-  | { kind: 'redirect'; id: string }
+  | { kind: 'redirect'; id: string; target?: 'account' }
   | { kind: 'page'; page: SubjectPageData; overview: SubjectPageData };
 
 /** One `pages.read` of the view and one of the overview, whose previews give the tab bar its counts and the frame its subject. */
@@ -92,7 +92,8 @@ export async function loadViewPages(
     loadSubjectPage(client, id, undefined, locale),
   ]);
   if (result.kind === 'missing' || overview.kind === 'missing') return { kind: 'missing' };
-  if (result.kind === 'redirect') return { kind: 'redirect', id: result.id };
+  if (result.kind === 'redirect')
+    return { kind: 'redirect', id: result.id, ...(result.target ? { target: result.target } : {}) };
   if (overview.kind === 'redirect') return { kind: 'missing' };
   return { kind: 'page', page: result.page, overview: overview.page };
 }

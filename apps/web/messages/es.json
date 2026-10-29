@@ -6,6 +6,7 @@
   "agent_collection_items": "{count} elementos",
   "agent_empty": "Todavía no hay nada que mostrar.",
   "agent_links": "Enlaces",
+  "agent_operated_by": "Operado por",
   "board_context_label": "Ruta de navegación",
   "board_meta_description": "Debates en {title}.",
   "board_meta_description_realm": "Debates en {title}, en {realm}.",

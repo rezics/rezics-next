@@ -6,6 +6,7 @@
   "agent_collection_items": "{count} éléments",
   "agent_empty": "Rien à afficher pour le moment.",
   "agent_links": "Liens",
+  "agent_operated_by": "Géré par",
   "board_context_label": "Fil d’Ariane",
   "board_meta_description": "Discussions sur {title}.",
   "board_meta_description_realm": "Discussions sur {title} dans {realm}.",

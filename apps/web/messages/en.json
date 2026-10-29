@@ -6,6 +6,7 @@
   "agent_collection_items": "{count} items",
   "agent_empty": "Nothing to show here yet.",
   "agent_links": "Links",
+  "agent_operated_by": "Operated by",
   "board_context_label": "Breadcrumb",
   "board_meta_description": "Discussions on {title}.",
   "board_meta_description_realm": "Discussions on {title} in {realm}.",

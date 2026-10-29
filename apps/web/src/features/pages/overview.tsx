@@ -43,6 +43,7 @@ export type OverviewValue = {
   agentBase?: string;
   /** The account's public profile, when the page's account read succeeded. */
   profile?: AccountProfile;
+  operator?: { id: string; handle: string | null; displayName: string | null };
   link: PageLink;
   reader: Reader;
   labels: ValueLabels;

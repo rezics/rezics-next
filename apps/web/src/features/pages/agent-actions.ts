@@ -4,12 +4,15 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
+import { readPageAuthors } from '../../identity/read';
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SessionEnv } from '../../session/client';
 import { relationLabels } from '../../subject/definitions';
 import { loadReader } from '../../subject/load-reader';
 import type { Reader } from '../../subject/reader';
 import { continueAgentList, loadAgentPage, agentTitle } from './agent';
-import { pageRelationProperties } from './subject';
+import { accountOf } from './account-read';
+import { pageContext, pageRelationProperties } from './subject';
 import { subjectTabs } from './views';
 
 /** The page read of one agent, with the tab bar the overview's previews decide. */
@@ -33,12 +36,24 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
     // The same not-found page for every handle the kernel does not answer, whatever the reason.
     if (result.kind === 'missing' || overview?.kind === 'missing') throw notFound();
     const shown = overview ?? result;
+    const operatorId = Object.entries(
+      planReads(platformRegistry, shown.page.document as CompositionDocument, pageContext(shown.page)).reads,
+    ).flatMap(([key, planned]) => {
+      const read = shown.page.reads[key];
+      return planned.kind === 'account' && read?.status === 200 ? [accountOf(read.body)?.operatorId] : [];
+    })[0];
+    const operators = operatorId ? await readPageAuthors(client, [operatorId]) : {};
+    const identity = operatorId ? operators?.[operatorId] : undefined;
+    const operator = identity
+      ? { id: identity.id, handle: identity.handle, displayName: identity.displayName }
+      : undefined;
     const page = view && data.cursor ? await continueAgentList(client, result.page, data.cursor) : result.page;
     return {
       view: view ?? ('overview' as View),
       handle: data.handle,
       page,
       overview: shown.page,
+      ...(operator ? { operator } : {}),
       ...(data.cursor ? { cursor: data.cursor } : {}),
       relations: await relationLabels(pageRelationProperties(shown.page), data.locale),
       tabs: subjectTabs(shown.page),

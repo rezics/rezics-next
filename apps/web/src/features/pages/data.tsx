@@ -561,6 +561,7 @@ export function PageData({
   subject = null,
   subjectLabel,
   account,
+  operator,
   base,
   document,
   reads,
@@ -578,6 +579,7 @@ export function PageData({
   subjectLabel?: string;
   /** The account of an agent page, and the address of its overview. */
   account?: { id: string; handle: string };
+  operator?: { id: string; handle: string | null; displayName: string | null };
   base?: string;
   document: PageDocument;
   reads: Record<string, { status: number; body: unknown }>;
@@ -689,6 +691,7 @@ export function PageData({
     ...(account ? { account } : {}),
     ...(base !== undefined ? { agentBase: base } : {}),
     ...(profile ? { profile } : {}),
+    ...(operator ? { operator } : {}),
     link,
     reader,
     labels,

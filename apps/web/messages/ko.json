@@ -6,6 +6,7 @@
   "agent_collection_items": "{count}개 항목",
   "agent_empty": "아직 표시할 내용이 없습니다.",
   "agent_links": "링크",
+  "agent_operated_by": "운영자",
   "board_context_label": "탐색 경로",
   "board_meta_description": "{title} 토론.",
   "board_meta_description_realm": "{realm}의 {title} 토론.",

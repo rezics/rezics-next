@@ -88,6 +88,11 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
     ]);
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'redirect') {
+      if (result.target === 'account')
+        throw redirect({
+          href: keepSearch(`/${encodeURIComponent(data.locale)}/@${encodeURIComponent(result.id)}`, data.search),
+          statusCode: 308,
+        });
       const survivor = await loadSubject(client, result.id, data.locale as never);
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({ href: keepSearch(subjectUrlForView(survivor.value, data.view), data.search), statusCode: 301 });

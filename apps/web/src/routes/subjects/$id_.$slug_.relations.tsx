@@ -65,6 +65,14 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
     ]);
     if (overview.kind === 'missing') throw notFound();
     if (overview.kind === 'redirect') {
+      if (overview.target === 'account')
+        throw redirect({
+          href: keepSearch(
+            `/${encodeURIComponent(data.locale)}/@${encodeURIComponent(overview.id)}/relations`,
+            data.search,
+          ),
+          statusCode: 308,
+        });
       const survivor = await loadSubject(client, overview.id, data.locale as never);
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({

@@ -6,6 +6,7 @@
   "agent_collection_items": "{count} Einträge",
   "agent_empty": "Hier gibt es noch nichts zu sehen.",
   "agent_links": "Links",
+  "agent_operated_by": "Betrieben von",
   "board_context_label": "Brotkrumennavigation",
   "board_meta_description": "Diskussionen auf {title}.",
   "board_meta_description_realm": "Diskussionen auf {title} in {realm}.",
