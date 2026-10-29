@@ -31,7 +31,7 @@ CREATE FUNCTION semantic.capture_identity_epoch_key(r integer, id uuid) RETURNS 
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL WHERE partition_no=r/16;
+  UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL,sealed_transaction_id=NULL,sealed_epoch=NULL,sealed_position=NULL WHERE partition_no=r/16;
   INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES(r,id)
   ON CONFLICT(route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
   UPDATE semantic.identity_epoch_group SET ready=false,version=version+1
@@ -510,6 +510,9 @@ CREATE TABLE semantic.identity_epoch_bootstrap_home (
     owner_epoch integer,
     needs_work boolean DEFAULT true NOT NULL,
     sealed_generation bigint,
+    sealed_transaction_id uuid,
+    sealed_epoch integer,
+    sealed_position bigint,
     CONSTRAINT identity_epoch_bootstrap_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT identity_epoch_bootstrap_home_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
 );
@@ -556,6 +559,17 @@ CREATE TABLE semantic.identity_epoch_bootstrap_topology (
     CONSTRAINT identity_epoch_bootstrap_topology_next_partition_check CHECK (((next_partition >= 0) AND (next_partition <= 4095))),
     CONSTRAINT identity_epoch_bootstrap_topology_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT identity_epoch_bootstrap_topology_remaining_check CHECK (((remaining >= 0) AND (remaining <= 4096)))
+);
+
+
+--
+-- Name: identity_epoch_bootstrap_topology_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_bootstrap_topology_home (
+    source_partition integer CONSTRAINT identity_epoch_bootstrap_topology_hom_source_partition_not_null NOT NULL,
+    closed boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_topology_home_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
 );
 
 
@@ -804,6 +818,8 @@ CREATE TABLE semantic.identity_epoch_topology_custody (
     source_partition integer NOT NULL,
     source_generation bigint NOT NULL,
     source_epoch integer NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    source_position bigint NOT NULL,
     CONSTRAINT identity_epoch_topology_custody_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
 );
 
@@ -1303,6 +1319,14 @@ ALTER TABLE ONLY semantic.identity_epoch_bootstrap_row
 
 
 --
+-- Name: identity_epoch_bootstrap_topology_home identity_epoch_bootstrap_topology_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_topology_home
+    ADD CONSTRAINT identity_epoch_bootstrap_topology_home_pkey PRIMARY KEY (source_partition);
+
+
+--
 -- Name: identity_epoch_bootstrap_topology identity_epoch_bootstrap_topology_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -1685,6 +1709,13 @@ CREATE INDEX identity_epoch_original_group ON semantic.identity_epoch_original U
 --
 
 CREATE INDEX identity_epoch_original_source ON semantic.identity_epoch_original USING btree (source_partition, original) WHERE present;
+
+
+--
+-- Name: identity_epoch_topology_open_home; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_topology_open_home ON semantic.identity_epoch_bootstrap_topology_home USING btree (source_partition) WHERE (NOT closed);
 
 
 --

@@ -437,7 +437,7 @@ export const identityEpochStore: IdentityEpochStore = {
           work: saved.work, receipt };
         const previous = (await tx.query(sql33.sql, [receipt.job.jobId,receipt.step])).rows[0];
         if (previous) {
-          if (json(previous.progress)!==json(JSON.parse(json(progress)))) throw invalidReceipt();
+          if (canonicalize(previous.progress)!==canonicalize(JSON.parse(json(progress)))) throw invalidReceipt();
           return noEffect(decodeProgress(previous.progress));
         }
         await tx.query(sql34.sql, [identityJobPartition(receipt.job),receipt.job.jobId,receipt.step,job.scope_digest,json(progress),receipt.native.partition,
