@@ -328,6 +328,7 @@ export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
  * available. Otherwise it waits; it is never refused. Fifty-two workers on this host exhausted memory and swap and
  * killed unrelated processes (2026-10-27). `<state>/capacity.json` overrides the defaults and is read on every check.
  */
+const CRITICAL_HEAD_START_MS = 30 * 60_000;
 export async function awaitHostCapacity(
   store: WorkerStore,
   stateDirectory: string,
@@ -339,12 +340,13 @@ export async function awaitHostCapacity(
   if (!existsSync(file)) return;
   // Waiters hold tickets so the oldest starts first: polling alone let a start wait over an hour behind newer ones.
   const queue = join(stateDirectory, 'capacity-queue');
-  // The ticket names its task, so the host can tell a waiting start from a lost one.
-  const ticket = `${String(Date.now()).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
-  if (!first) {
-    mkdirSync(queue, { recursive: true });
-    writeFileSync(join(queue, ticket), '');
-  }
+  // The ticket names its task, so the host can tell a waiting start from a lost one. Critical-path starts used to skip
+  // the cap and the queue; with most backend tasks critical path the running count stayed above the cap and ordinary
+  // starts (most web tasks) waited for days (2026-10-29). Every start now respects the cap; critical path only dates
+  // its ticket half an hour earlier, so it goes ahead of recent waiters without starving older ones.
+  const ticket = `${String(Date.now() - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
+  mkdirSync(queue, { recursive: true });
+  writeFileSync(join(queue, ticket), '');
   let reported = false;
   try {
     for (;;) {
@@ -355,8 +357,8 @@ export async function awaitHostCapacity(
       } catch {
         /* Defaults. */
       }
-      const running = first ? 0 : store.runningAttemptsCount();
-      const ahead = first ? 0 : waitersAhead(queue, ticket);
+      const running = store.runningAttemptsCount();
+      const ahead = waitersAhead(queue, ticket);
       if (hasCapacity(running + ahead, availableMiB(), capacity)) return;
       if (!reported)
         console.error(
@@ -366,7 +368,7 @@ export async function awaitHostCapacity(
       await new Promise((resolve) => setTimeout(resolve, 15_000));
     }
   } finally {
-    if (!first) rmSync(join(queue, ticket), { force: true });
+    rmSync(join(queue, ticket), { force: true });
   }
 }
 /** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
