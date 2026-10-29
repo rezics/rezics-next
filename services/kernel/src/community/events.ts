@@ -12,7 +12,10 @@ const spaceRevision = Type.Object({ spaceId: id, revisionId: id }, { additionalP
 const realmRevision = Type.Object({ realmId: id, revisionId: id }, { additionalProperties: false });
 const addressOnly = Type.Object({ spaceId: id, address }, { additionalProperties: false });
 const addressRevision = Type.Object({ spaceId: id, revisionId: id, address }, { additionalProperties: false });
-const revisionWork = Type.Object({ accountId: id, found: Type.Integer({ minimum: 0, maximum: 50 }) }, { additionalProperties: false });
+const revisionWork = Type.Object(
+  { accountId: id, found: Type.Integer({ minimum: 0, maximum: 50 }) },
+  { additionalProperties: false },
+);
 
 function publication(verdict: 'adopt' | 'withdraw' | 'reject') {
   return Type.Object(
