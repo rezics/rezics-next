@@ -7,6 +7,11 @@ import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions
 import { createSubject } from '../../src/semantic/subject.ts';
 import { newId } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
+import {
+  stepIdentityEpochAdmission,
+  cancelIdentityEpochAdmission,
+  acquireIdentityEpochAdmissionHome,
+} from '../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { home, digest, seedLegacyGroup } from './support/identity-epoch.ts';
@@ -237,6 +242,78 @@ test('native capped admission includes current authorization, immutable inputs a
   };
   await checkGrowth(db, {
     name: 'native identity admit across unrelated history',
+    scales: [64, 512, 4096],
+    warmups: 1,
+    repetitions: 3,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: growHistory,
+    prepare,
+    operation,
+    async warmup(database, scale, repetition) {
+      await prepare(database, scale, repetition);
+      return operation(database);
+    },
+  });
+}, 600_000);
+
+test('coherent admission and ordered cancellation stay indexed', async () => {
+  let survivor = '';
+  let redirected = '';
+  let key = '';
+  let authorization: Awaited<ReturnType<typeof accessCommandAuthorization>>;
+  const prepare = async (_database: GrowthDatabase, _scale: number, repetition: number) => {
+    redirected = await createNative(0x7800 + repetition * 32);
+    survivor = await createNative(0x7810 + repetition * 32);
+    key = randomUUID();
+    authorization = await accessCommandAuthorization(
+      access,
+      actor,
+      'subject:merge',
+      globalResource,
+      { pool: db.pool, deadline: Date.now() + 5000 },
+      () => new Error('Fixture denied subject:merge'),
+    );
+    await settle(db, { analyze: true });
+  };
+  const operation = async (database: GrowthDatabase) => {
+    const job = await identityEpochStore.prepareAdmission(
+      database.pool,
+      {
+        authorization,
+        basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      },
+      {
+        intent: { kind: 'merge', survivor, redirected, release: release.digest },
+        receipt: {
+          kind: 'subject.merge',
+          command: {
+            actorAccountId: actor.accountId,
+            kind: 'subject.merge',
+            key,
+            digest: digest(key),
+          },
+        },
+      },
+    );
+    await stepIdentityEpochAdmission(database.pool, job);
+    // A committed receiving effect without job-home custody is an actual uncertain delivery.
+    await acquireIdentityEpochAdmissionHome(database.pool, job, home(survivor));
+    await cancelIdentityEpochAdmission(database.pool, job);
+    for (let i = 0; i < 3; i++) {
+      const progress = await stepIdentityEpochAdmission(database.pool, job);
+      expect(progress.work.rows).toBeLessThanOrEqual(100);
+      expect(progress.work.statements).toBeGreaterThan(0);
+      expect(progress.work.bytes).toBeGreaterThan(0);
+      if (i === 2) expect(progress.state).toBe('cancelled');
+    }
+    expect(await identityEpochStore.readMapping(database.pool, redirected)).toMatchObject({
+      state: 'mapped',
+      terminal: redirected,
+    });
+    return job;
+  };
+  await checkGrowth(db, {
+    name: 'coherent admission and ordered cancellation stay indexed',
     scales: [64, 512, 4096],
     warmups: 1,
     repetitions: 3,
