@@ -138,7 +138,7 @@ function Logo() {
 function Navigation({ pathname, session }: { pathname: string; session: ShellSession }) {
   const offered = useOfferedDestinations(session);
   return (
-    <nav aria-label={m.shell_navigation()} className="flex min-h-0 w-full flex-1 flex-col">
+    <nav aria-label={m.shell_navigation()} className="sticky top-16 flex min-h-0 w-full flex-1 flex-col">
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
@@ -182,7 +182,7 @@ function NavigationColumn({ pathname, session }: { pathname: string; session: Sh
   const { isMobile } = useSidebar();
   if (isMobile) return null;
   return (
-    <Sidebar collapsible="icon" className="top-16! h-[calc(100svh-4rem)]!">
+    <Sidebar collapsible="icon" className="static! top-auto! h-full! min-h-[calc(100svh-4rem)]!">
       <Navigation pathname={pathname} session={session} />
     </Sidebar>
   );
