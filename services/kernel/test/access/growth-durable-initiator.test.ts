@@ -2,7 +2,7 @@ import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { nativeModule } from './durable-initiator.test.ts';
-import { checkGrowth, capture, measure } from '../support/growth.ts';
+import { checkGrowth, capture } from '../support/growth.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 
 let h: Awaited<ReturnType<typeof nativeModule>>;
