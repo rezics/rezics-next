@@ -16,6 +16,7 @@ import { createSemanticDriver, type SemanticOutcomeDriver } from '../../semantic
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { createOutcomeRpc, type OutcomeRpc } from './outcome-rpc.ts';
 import type { WorkerStats } from './outcome-worker.ts';
+import { createReleasedBookImport } from './released-imports.ts';
 
 export type OwnedResource =
   | OwnedSemanticResource
@@ -118,6 +119,7 @@ function supervise(parent: OutcomeRpc) {
     workerOutput: '',
   };
   let semantic: SemanticOutcomeDriver | undefined;
+  let releasedBook: ReturnType<typeof createReleasedBookImport> | undefined;
   let proxy: Awaited<ReturnType<typeof searchProxy>> | undefined;
   let worker: ChildProcess | undefined;
   let workerRpc: OutcomeRpc | undefined;
@@ -179,6 +181,7 @@ function supervise(parent: OutcomeRpc) {
   let beforeClosing: Promise<void> | undefined;
   function beforeClose() {
     return (beforeClosing ??= (async () => {
+      await attempt(async () => releasedBook?.close());
       await attempt(() => phase('worker', stopWorker));
       // Never release bindings or pools while a process could still be accessing them.
       if (worker && !exited) throw new Error('Worker exit was not confirmed');
@@ -354,6 +357,10 @@ function supervise(parent: OutcomeRpc) {
   }
 
   async function operate(method: string, params: unknown) {
+    if (method === 'importReleasedBook') {
+      releasedBook ??= createReleasedBookImport(semantic!);
+      return releasedBook.import(params);
+    }
     if (method === 'nativeVoter') {
       exact(params, ['name']);
       if (
@@ -508,9 +515,17 @@ function supervise(parent: OutcomeRpc) {
         return (starting = init(endpoint.href));
       }
       if (
-        !['request', 'remove', 'indexing', 'searchNode', 'rebuild', 'inspect', 'nativeVoter', 'nativeVote'].includes(
-          method,
-        )
+        ![
+          'request',
+          'remove',
+          'indexing',
+          'searchNode',
+          'rebuild',
+          'inspect',
+          'nativeVoter',
+          'nativeVote',
+          'importReleasedBook',
+        ].includes(method)
       )
         throw new Error(`Unknown control: ${method}`);
       if (!ready) throw new Error('Search supervisor is not initialized');

@@ -2,6 +2,7 @@ import { fork } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { HttpResponse, SearchDriver } from '../../../../../specs/search-driver.ts';
 import { createOutcomeRpc } from './outcome-rpc.ts';
+import type { ReleasedBookInput, ReleasedBookReceipt } from './released-imports.ts';
 import type { OwnedResource, SupervisorObservation, SupervisorReady, WireResponse } from './outcome-supervisor.ts';
 
 const STARTUP_MS = 180_000;
@@ -33,6 +34,8 @@ export interface DriverClient {
   nativeVoter(name: string): Promise<NativeVoter>;
   /** An opaque local handle, routable target UUID and integer 0..20, or null for DELETE. */
   nativeVote(voter: string, targetId: string, units: number | null, options?: NativeVoteOptions): Promise<HttpResponse>;
+  /** Fixed synthetic Wikidata Book; imports, selects and reopens in this Search world. */
+  importReleasedBook(input: ReleasedBookInput): Promise<ReleasedBookReceipt>;
   init(): Promise<SearchDriver>;
   inspect(): Promise<SupervisorObservation>;
   ledger(): DriverLedger;
@@ -323,6 +326,7 @@ export function createDriverClient(endpoint = process.env.OPENSEARCH_URL): Drive
   return {
     close,
     ledger: () => structuredClone(ledger),
+    importReleasedBook: (input) => admit<ReleasedBookReceipt>('importReleasedBook', input),
     inspect: () => admit<SupervisorObservation>('inspect'),
     nativeVoter: (name) => admit<NativeVoter>('nativeVoter', { name }),
     async nativeVote(voter, targetId, units, options) {

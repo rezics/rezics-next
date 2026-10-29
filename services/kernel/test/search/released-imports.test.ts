@@ -41,15 +41,20 @@ test('the normal importer commits and adopts the pinned Book in the same native 
       expect(selected.acceptance.status).toBe(200);
       expect(selected.adoption.status).toBe(200);
       expect(selected.source).toMatchObject({
-        source: 'wikidata', external_id: fixture.id, record_revision: String(fixture.lastrevid),
-        converter_revision: imported.converterRevision, field_group: 'facts',
+        source: 'wikidata',
+        external_id: fixture.id,
+        record_revision: String(fixture.lastrevid),
+        converter_revision: imported.converterRevision,
+        field_group: 'facts',
       });
       expect(selected.source.digest).toMatch(/^[a-f0-9]{64}$/);
       const parts = selected.statement.references.flatMap((reference) => reference.parts);
-      expect(parts).toContainEqual(expect.objectContaining({
-        property: expect.objectContaining({ id: 'schema:url' }),
-        value: { type: 'value', content: `https://www.wikidata.org/wiki/${fixture.id}?oldid=${fixture.lastrevid}` },
-      }));
+      expect(parts).toContainEqual(
+        expect.objectContaining({
+          property: expect.objectContaining({ id: 'schema:url' }),
+          value: { type: 'value', content: `https://www.wikidata.org/wiki/${fixture.id}?oldid=${fixture.lastrevid}` },
+        }),
+      );
     }
     const active = await driver.request('anonymous', 'GET', '/v1/definitions/active');
     expect(active.status).toBe(200);
@@ -59,13 +64,28 @@ test('the normal importer commits and adopts the pinned Book in the same native 
     const subject = point.body.subject as Subject;
     expect(subject.release).toBe(imported.release);
     expect(subject.type).toBe('schema:Book');
-    expect(subject.labels).toEqual(Object.fromEntries(Object.entries(fixture.labels).map(([k, v]) => [k, (v as { value: string }).value])));
-    expect(subject.aliases).toEqual(Object.fromEntries(Object.entries(fixture.aliases).map(([k, v]) => [k, (v as { value: string }[]).map((a) => a.value)])));
-    expect(subject.descriptions).toEqual(Object.fromEntries(Object.entries(fixture.descriptions).map(([k, v]) => [k, (v as { value: string }).value])));
-    expect(subject.statements['schema:name']!.map((s) => s.value.content)).toEqual(expect.arrayContaining(
-      Object.values(fixture.labels).map((v) => ({ language: (v as { language: string }).language, text: (v as { value: string }).value })),
-    ));
-    expect(subject.statements['schema:url']!.map((s) => s.value.content)).toEqual([fixture.claims.P856[0].mainsnak.datavalue.value]);
+    expect(subject.labels).toEqual(
+      Object.fromEntries(Object.entries(fixture.labels).map(([k, v]) => [k, (v as { value: string }).value])),
+    );
+    expect(subject.aliases).toEqual(
+      Object.fromEntries(
+        Object.entries(fixture.aliases).map(([k, v]) => [k, (v as { value: string }[]).map((a) => a.value)]),
+      ),
+    );
+    expect(subject.descriptions).toEqual(
+      Object.fromEntries(Object.entries(fixture.descriptions).map(([k, v]) => [k, (v as { value: string }).value])),
+    );
+    expect(subject.statements['schema:name']!.map((s) => s.value.content)).toEqual(
+      expect.arrayContaining(
+        Object.values(fixture.labels).map((v) => ({
+          language: (v as { language: string }).language,
+          text: (v as { value: string }).value,
+        })),
+      ),
+    );
+    expect(subject.statements['schema:url']!.map((s) => s.value.content)).toEqual([
+      fixture.claims.P856[0].mainsnak.datavalue.value,
+    ]);
     const date = fixture.claims.P577[0].mainsnak.datavalue.value;
     expect(subject.statements['schema:datePublished']!.map((s) => s.value.content)).toEqual([
       { time: date.time, precision: date.precision, calendarmodel: date.calendarmodel },
@@ -73,12 +93,30 @@ test('the normal importer commits and adopts the pinned Book in the same native 
     const authors = imported.selected.filter((c) => c.property === 'schema:author');
     expect(authors).toHaveLength(fixture.claims.P50.length);
     for (const [index, author] of fixture.claims.P50.entries()) {
-      expect(authors.some((c) => c.statement.value.type === 'somevalue' && c.statement.qualifiers.some((q) =>
-        q.property.id === 'schema:sameAs' && q.value.type === 'value' && q.value.content === `http://www.wikidata.org/entity/${author.mainsnak.datavalue.value.id}`,
-      ))).toBe(true);
-      if (index === 0) expect(authors.some((c) => c.statement.references.some((r) => r.parts.some((p) =>
-        p.property.id === 'schema:url' && p.value.content === fixture.claims.P50[0].references[0].snaks.P854[0].datavalue.value,
-      )))).toBe(true);
+      expect(
+        authors.some(
+          (c) =>
+            c.statement.value.type === 'somevalue' &&
+            c.statement.qualifiers.some(
+              (q) =>
+                q.property.id === 'schema:sameAs' &&
+                q.value.type === 'value' &&
+                q.value.content === `http://www.wikidata.org/entity/${author.mainsnak.datavalue.value.id}`,
+            ),
+        ),
+      ).toBe(true);
+      if (index === 0)
+        expect(
+          authors.some((c) =>
+            c.statement.references.some((r) =>
+              r.parts.some(
+                (p) =>
+                  p.property.id === 'schema:url' &&
+                  p.value.content === fixture.claims.P50[0].references[0].snaks.P854[0].datavalue.value,
+              ),
+            ),
+          ),
+        ).toBe(true);
     }
     for (const selected of imported.selected) {
       const disclosed = subject.statements[selected.property]!.find((s) => s.id === selected.candidate);
@@ -99,17 +137,29 @@ test('the normal importer commits and adopts the pinned Book in the same native 
     const hits = search!.body.subjects as { id: string; labels: unknown }[];
     expect(hits.map((s) => s.id)).toEqual([subject.id]);
     expect(hits[0]!.labels).toEqual(subject.labels);
-    for (const sentinel of ['USER_POST_SENTINEL', 'PRIVATE_ACCOUNT_SENTINEL', 'PRIVATE_TEXT_SENTINEL', 'UNKNOWN_PROPERTY_SENTINEL']) {
+    for (const sentinel of [
+      'USER_POST_SENTINEL',
+      'PRIVATE_ACCOUNT_SENTINEL',
+      'PRIVATE_TEXT_SENTINEL',
+      'UNKNOWN_PROPERTY_SENTINEL',
+    ]) {
       expect(JSON.stringify([point.body, search!.body, imported.selected])).not.toContain(sentinel);
     }
     expect(subject.statements).not.toHaveProperty('schema:wordCount');
     expect(subject.statements).not.toHaveProperty('schema:abstract');
-    console.log('Released Book native receipt', JSON.stringify({
-      fixtureHash: imported.fixtureHash, converterRevision: imported.converterRevision, release: imported.release,
-      subjectId: subject.id, candidates: receiptCandidates,
-      receipts: imported.initial.batches.flatMap((b) => b.response.body.results),
-      search: search!.body, reopened: imported.reopened.run.counts,
-    }));
+    console.log(
+      'Released Book native receipt',
+      JSON.stringify({
+        fixtureHash: imported.fixtureHash,
+        converterRevision: imported.converterRevision,
+        release: imported.release,
+        subjectId: subject.id,
+        candidates: receiptCandidates,
+        receipts: imported.initial.batches.flatMap((b) => b.response.body.results),
+        search: search!.body,
+        reopened: imported.reopened.run.counts,
+      }),
+    );
   } finally {
     await client.close();
   }
