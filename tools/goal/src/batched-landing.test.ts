@@ -50,6 +50,17 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     await h.start(second);
     await h.start(controlPlane);
     await h.start(stabilize);
+    const cpRow = h.store.db.query('SELECT request FROM landing_queue WHERE task=?').get(controlPlane.id) as
+      | { request: string }
+      | null;
+    console.log('control-plane batch fixture', {
+      state: h.store.task(controlPlane.id).state,
+      goal: h.store.task(controlPlane.id).brief.goal,
+      base: h.store.task(controlPlane.id).base,
+      main: h.head('main'),
+      request: cpRow ? JSON.parse(cpRow.request) : null,
+      mainQueue: h.queue.nextBatch(20, [], 'main').map(({ id, taskId }) => ({ id, taskId })),
+    });
     await h.train(async () => ({ passed: true, output: '', timedOut: false }));
 
     expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
