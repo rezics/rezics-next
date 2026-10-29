@@ -31,8 +31,13 @@ export async function run(
 ): Promise<number> {
   const [command, ...args] = argv;
   if (command === 'deps' && args[0] === 'private' && args.length === 1) {
-    try { installPrivate(process.cwd()); return 0; }
-    catch (error) { console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error)); return 1; }
+    try {
+      installPrivate(process.cwd());
+      return 0;
+    } catch (error) {
+      console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+      return 1;
+    }
   }
   if (!command || !commands.includes(command)) {
     console.error(`usage: goal <${commands.join('|')}> [args]`);
