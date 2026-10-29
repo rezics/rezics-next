@@ -146,7 +146,12 @@ function observeNativeClient(client: PoolClient): void {
       const config = args[0] as string | { text?: string };
       const statement = typeof config === 'string' ? config : (config.text ?? '<unnamed>');
       void result.catch((error: { code?: string; message: string; detail?: string }) => {
-        failures.push({ statement, code: error.code, message: error.message, detail: error.detail });
+        failures.push({
+          statement,
+          message: error.message,
+          ...(error.code === undefined ? {} : { code: error.code }),
+          ...(error.detail === undefined ? {} : { detail: error.detail }),
+        });
       });
     }
     return result;
