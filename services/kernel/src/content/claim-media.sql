@@ -5,15 +5,16 @@ WITH input AS NOT MATERIALIZED (
          :authorization_resource_id::uuid AS authorization_resource_id, :new_thread::boolean AS new_thread
 ), locked AS MATERIALIZED (
   SELECT m.route, m.media_id, m.container_id, m.uploader_id, m.purpose, m.state,
-         m.erased, m.collection_pending, m.taken_down, m.claimed_at
+         m.erased, m.collection_pending, m.taken_down, m.claimed_at, m.claimed_item_id
   FROM content.media m CROSS JOIN input i
   WHERE m.route = i.route AND m.media_id = ANY(i.media_ids)
   ORDER BY m.media_id
   FOR UPDATE OF m
 ), valid AS MATERIALIZED (
-  SELECT m.route, m.media_id, m.claimed_at FROM locked m CROSS JOIN input i
+  SELECT m.route, m.media_id, m.claimed_at, m.claimed_item_id FROM locked m CROSS JOIN input i
   WHERE m.container_id = i.container_id AND m.uploader_id = i.uploader_id
     AND m.purpose = 'post-image' AND m.state = 'available'
+    AND (m.claimed_item_id IS NULL OR m.claimed_item_id = i.item_id)
     AND NOT m.erased AND NOT m.collection_pending AND NOT m.taken_down
     AND EXISTS (
       SELECT 1 FROM content.post p
@@ -31,10 +32,10 @@ WITH input AS NOT MATERIALIZED (
     )
 ), changed AS (
   UPDATE content.media m
-  SET claimed_at = i.at
+  SET claimed_at = COALESCE(v.claimed_at, i.at), claimed_item_id = i.item_id
   FROM valid v CROSS JOIN input i
   WHERE m.route = i.route AND m.route = v.route AND m.media_id = v.media_id
-    AND v.claimed_at IS NULL
+    AND v.claimed_item_id IS NULL
   RETURNING m.media_id
 )
 SELECT media_id FROM valid;

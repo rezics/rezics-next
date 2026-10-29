@@ -10,6 +10,7 @@ WITH input AS NOT MATERIALIZED (
   CROSS JOIN LATERAL unnest(r.media_ids) AS ref(media_id)
   JOIN content.media m ON m.route = i.route AND m.media_id = ref.media_id
   WHERE p.availability = 'erased'
+    AND m.claimed_item_id = p.post_id
     AND m.uploader_id = p.author_account_id
     AND m.container_id IN (p.post_id, p.thread_id, p.reply_to_post_id)
     AND NOT m.collection_pending

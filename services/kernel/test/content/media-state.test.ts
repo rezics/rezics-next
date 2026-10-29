@@ -410,7 +410,7 @@ test('claims use the referencing transaction, actual container, verified author 
   expect(new Date((await row(media.id)).claimed_at).toISOString()).toBe(new Date(result.value.at).toISOString());
   const before = await row(media.id);
   expect((await reference([media.id], { key: requestKey })).replayed).toBe(true);
-  await reference([media.id]);
+  await unchanged(() => reference([media.id]));
   expect(await row(media.id)).toEqual(before);
   const wrongContainer = await available({ containerId: secondThread });
   await unchanged(() => reference([wrongContainer.id]));

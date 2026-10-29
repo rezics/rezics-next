@@ -279,7 +279,7 @@ Image publication decodes the original once and writes AVIF and WebP variants at
 
 Metadata is stripped from every variant. Variants are deterministic, so a reprocess with the same settings produces the same keys. Every image within the upload limits (20 MiB, 40 million pixels) gets variants; no valid cover is replaced by a placeholder because it is large, and no original is ever served in place of a variant.
 
-An importer that fetches a source cover stores it through this same path, with the source's cover role mapped to `cover` (not to a gallery or screenshot role); a source record whose cover is missing or rejected leaves the subject without one, and the import report says why.
+An importer that fetches a source cover stores it through this same path, with the source's cover role mapped to `cover` (not to a gallery or screenshot role); a source record whose cover is missing or rejected leaves the subject without one, and the import report says why. A decode fault (a corrupt image or one over 40 megapixels) is reserved, uploaded, then rejected with `image-rejected`; a fault before storage is reserved, then rejected with a `source-*` code, where `source-integrity` means a byte count or digest mismatch.
 
 ### The cover summary
 
@@ -381,8 +381,7 @@ does not authorize disclosure.
 `eraseAuthoredField` requires account admission and `document:erase` on the document at the command's authorization time.
 It runs in the document's partition, clears the body and marks the row erased, while retaining its identity and digest.
 Only the author receives this owner permission. A repeat succeeds without another erased event. Moderation is separate:
-a harmful field document is handled by retracting its semantic statement, which ends the candidate's disclosure so its
-body is no longer served.
+moderators end a harmful field's disclosure with native candidate hide or takedown, so its body is no longer served.
 
 `GET /v1/documents/{id}` serves an authored field document only while its stored semantic candidate is disclosed and
 the subject passes the current `subject:read` check. Its response identifies `origin: account`, the author account and
@@ -392,7 +391,9 @@ deletion and authorized replay return 204 with the stored session position.
 
 ## Media claims
 
-A malformed media ID list is a 400 `invalid_request`. Any well-formed reference that cannot be claimed returns the same 409 `media_unavailable` response, whether its ID is unknown, belongs to another route, container or uploader, or its media is reserved, uploaded, rejected, erased or already claimed. This response does not identify which case applied; uploaders can read their own media state through the media routes. A 422 `idempotency_conflict` is reserved for reusing an idempotency key with a different request.
+A post image belongs to the first post that claims it; that post's later revisions may name it again, any other reference is `media_unavailable`, and erasing the post erases it.
+
+A malformed media ID list is a 400 `invalid_request`. Any well-formed reference that cannot be claimed returns the same 409 `media_unavailable` response, whether its ID is unknown, belongs to another route, container or uploader, or its media is reserved, uploaded, rejected, erased or claimed by another post. This response does not identify which case applied; uploaders can read their own media state through the media routes. A 422 `idempotency_conflict` is reserved for reusing an idempotency key with a different request.
 
 ## Cost
 
