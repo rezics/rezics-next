@@ -105,6 +105,7 @@ function diagnosed(run: Run) {
   );
 }
 async function established(editor: Awaited<ReturnType<typeof openApiObserver>>, entity: Entity) {
+  type Statement = Extract<BatchCommand, { op: 'propose' }>['statement'];
   const view = await editor.read('wikidata', entity.id);
   expect(view.subject?.type).toBe('schema:Book');
   for (const id of ['schema:name', 'schema:datePublished', 'schema:url']) {
@@ -112,7 +113,7 @@ async function established(editor: Awaited<ReturnType<typeof openApiObserver>>, 
     expect(rows.length, id).toBeGreaterThan(0);
     expect(rows.every((candidate) => candidate.references.length > 0)).toBe(true);
   }
-  const authors: { statement: BatchStatement }[] = [];
+  const authors: { statement: Statement }[] = [];
   for (const claim of entity.claims.P50!) {
     const target = (claim.mainsnak.datavalue!.value as { id: string }).id;
     const sameAs = `http://www.wikidata.org/entity/${target}`;
@@ -125,7 +126,7 @@ async function established(editor: Awaited<ReturnType<typeof openApiObserver>>, 
     );
     expect(response.status).toBe(200);
     expect(response.body.next).toBeNull();
-    const rows = response.body.candidates as { statement: BatchStatement }[];
+    const rows = response.body.candidates as { statement: Statement }[];
     expect(rows.length, sameAs).toBeGreaterThan(0);
     for (const candidate of rows) {
       expect(candidate.statement.property.id).toBe('schema:author');
