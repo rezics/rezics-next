@@ -119,6 +119,7 @@ export async function runWorkerCheck(
   if (argv[0] === '--') argv = argv.slice(1);
   if (argv.length === 0) throw new Error('Usage: worker-check.ts [--local] -- <command...>');
   const root = resolve(cwd);
+  const command = resolveRepositoryBun(argv, root);
   const file = recordedLog ?? logPath(root);
   const descriptor = openSync(file, 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
@@ -148,7 +149,7 @@ export async function runWorkerCheck(
   };
   if (remoteEligible) {
     let remoteOutput = '';
-    const remote = spawn(process.execPath, [join(root, 'scripts/remote-check.ts'), root, '--', ...argv], {
+    const remote = spawn(resolveRepositoryBun(['bun'], root)[0]!, [join(root, 'scripts/remote-check.ts'), root, '--', ...command], {
       cwd: root,
       env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
       stdio: ['inherit', 'pipe', 'pipe'],
@@ -253,7 +254,7 @@ export async function runWorkerCheck(
     const capture =
       '"$@"; status=$?; cgroup=$(sed -n \'s/^0:://p\' /proc/self/cgroup); if [ -n "$cgroup" ] && [ -r "/sys/fs/cgroup$cgroup/memory.peak" ]; then cat "/sys/fs/cgroup$cgroup/memory.peak" > "$REZICS_CHECK_PEAK_FILE"; fi; exit "$status"';
     child = spawn(
-      scoped ? 'systemd-run' : argv[0]!,
+      scoped ? 'systemd-run' : command[0]!,
       scoped
         ? [
             '--user',
@@ -268,9 +269,9 @@ export async function runWorkerCheck(
             '-c',
             capture,
             'worker-check-scope',
-            ...argv,
+            ...command,
           ]
-        : argv.slice(1),
+        : command.slice(1),
       {
         cwd: root,
         env: { ...env, REZICS_CHECK_PEAK_FILE: peakFile },
@@ -332,6 +333,18 @@ export async function runWorkerCheck(
     process.stdout.write(`check: log ${relativeLogPath}\n`);
   }
   return signalNumber === undefined ? code : 128 + signalNumber;
+}
+
+/** Use the caller only when it is the repository's pinned Bun; otherwise select the installed repository binary. */
+export function resolveRepositoryBun(command: readonly string[], root: string, executable = process.execPath): string[] {
+  if (command[0] !== 'bun') return [...command];
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+    packageManager?: string;
+  };
+  const expected = manifest.packageManager?.startsWith('bun@') ? manifest.packageManager.slice(4) : '';
+  const actual = typeof Bun === 'undefined' ? '' : Bun.version;
+  const pinned = actual === expected ? executable : join(root, 'node_modules/.bin/bun');
+  return [pinned, ...command.slice(1)];
 }
 
 /** Start a detached check whose durable result can be retrieved by id after this process exits. */

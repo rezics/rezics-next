@@ -2,6 +2,9 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { resolveBunCommand } from './gate.ts';
+import { runScript } from './remote-check.ts';
+import { resolveTypecheckCommand } from './typecheck.ts';
+import { resolveRepositoryBun } from './worker-check.ts';
 
 const root = resolve(import.meta.dir, '..');
 const bun = join(root, 'node_modules/.bin/bun');
@@ -53,6 +56,25 @@ test('the gate invokes the installed Bun explicitly instead of Bun.spawn selecti
   expect(result.output.trim()).toBe('1.4.4-canary.1+a0cc096ce');
   expect(resolveBunCommand(['bun', '--revision'], directory)).toEqual(['bun', '--revision']);
   expect(resolveBunCommand(['other-tool', '--version'], root)).toEqual(['other-tool', '--version']);
+});
+
+test('worker checks select the pinned repository Bun and remote checks verify both Bun executables', async () => {
+  const manifest = await Bun.file(join(root, 'package.json')).json();
+  const workerCommand = resolveRepositoryBun(['bun', '--version'], root);
+  const worker = run(workerCommand);
+  expect(worker.code, worker.error).toBe(0);
+  expect(worker.output.trim()).toBe(manifest.devDependencies.bun);
+
+  const typecheckCommand = resolveTypecheckCommand(['bun', '--version'], root);
+  const typecheckBun = run(typecheckCommand);
+  expect(typecheckBun.code, typecheckBun.error).toBe(0);
+  expect(typecheckBun.output.trim()).toBe(manifest.devDependencies.bun);
+
+  const remote = runScript('run-id', '/srv/rezics-check/runs/run-id', '.', ['bun', 'test'], 'host-a');
+  expect(remote).toContain(`/usr/local/bin/bun --eval`);
+  expect(remote).toContain(`expected_bun='${manifest.packageManager.slice(4)}'`);
+  expect(remote).toContain('"$PWD/node_modules/.bin/bun" --eval');
+  expect(remote).toContain('/usr/local/bin/bun install --frozen-lockfile');
 });
 
 for (const [extension, source] of [

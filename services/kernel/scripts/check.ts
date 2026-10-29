@@ -234,6 +234,21 @@ export function ownDiagnostics(output: string, files: string[]): string[] {
   return diagnostics;
 }
 
+/** Include changed kernel sources in file-mode diagnostics, even when the caller named only test files. */
+export function diagnosticFiles(
+  files: string[],
+  moduleDirectory: string,
+  revision: string | null,
+  changed: (revision: string) => string[] = gitChangedPaths,
+): string[] {
+  if (!revision) return files;
+  const repository = resolve(moduleDirectory, '../..');
+  const prefix = `${relative(repository, resolve(moduleDirectory)).split(sep).join('/')}/`;
+  const all = new Set(files);
+  for (const file of changed(revision)) if (file.startsWith(prefix)) all.add(file.slice(prefix.length));
+  return Array.from(all).sort();
+}
+
 /**
  * Writes the Reylo project file that points every analysis at `analysisUrl`, in `directory`, which then holds `.reylo/`.
  * Reylo keys its entries by database name, so analysing in each file's own copy re-describes every statement there.
@@ -753,7 +768,10 @@ async function main(): Promise<void> {
       ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
       env,
     );
-    const diagnostics = ownDiagnostics(typecheck.output, plan.files);
+    const diagnostics = ownDiagnostics(
+      typecheck.output,
+      diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null),
+    );
     if (diagnostics.length) fail(diagnostics.join('\n'));
     if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
       fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);

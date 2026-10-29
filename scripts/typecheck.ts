@@ -2,6 +2,7 @@
 // Typecheck every workspace from the repository root. One throwaway database receives the kernel and Auth
 // schemas, is shared, then removed.
 import { dirname, join, relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { resolveBunCommand } from './gate.ts';
 
 export type StartedDatabase = {
@@ -34,6 +35,17 @@ type Workspace = {
   needsDatabase: boolean;
 };
 type WorkspaceResult = { block: string; code: number };
+
+/** Keep workspace package scripts on the repository-pinned Bun even when the caller came from PATH. */
+export function resolveTypecheckCommand(command: string[], root: string, executable = process.execPath): string[] {
+  if (command[0] !== 'bun') return resolveBunCommand(command, root);
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+    packageManager?: string;
+  };
+  const expected = manifest.packageManager?.startsWith('bun@') ? manifest.packageManager.slice(4) : '';
+  const pinned = Bun.version === expected ? executable : join(root, 'node_modules/.bin/bun');
+  return [pinned, ...command.slice(1)];
+}
 
 function environmentWith(base: NodeJS.ProcessEnv, databaseUrl: string): Record<string, string> {
   const env: Record<string, string> = {};
@@ -142,7 +154,7 @@ async function runWorkspace(root: string, workspace: Workspace, env: Record<stri
   if (!workspace.hasCheck)
     return blockFor(root, workspace, 1, '', 'error: package.json has no check script, which the root gate requires', 0);
   try {
-    const child = Bun.spawn(resolveBunCommand(workspace.command, root), {
+    const child = Bun.spawn(resolveTypecheckCommand(workspace.command, root), {
       cwd: workspace.directory,
       env,
       stdin: 'ignore',
