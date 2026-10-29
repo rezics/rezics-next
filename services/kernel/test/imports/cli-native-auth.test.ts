@@ -164,7 +164,7 @@ test('the real CLI account-key and public-write journey is frozen against native
         [route, subject],
       );
       const candidates = await runtime.database.admin.query(
-        'SELECT candidate_id,statement,retracted FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100',
+        'SELECT candidate.candidate_id,candidate.statement,retraction.revision AS retracted FROM semantic.candidate candidate LEFT JOIN LATERAL (SELECT revision FROM semantic.retraction WHERE route=candidate.route AND subject_id=candidate.subject_id AND candidate_id=candidate.candidate_id ORDER BY revision DESC LIMIT 1) retraction ON true WHERE candidate.route=$1 AND candidate.subject_id=$2 ORDER BY candidate.candidate_id LIMIT 100',
         [route, subject],
       );
       const receipts = [];
