@@ -793,3 +793,377 @@ worker-check: bun run typecheck peak 3.6 GiB (weight 4)
 check: exit status 0
 check: log .temp/goal/checks/worker-check-2026-10-29T11-41-43.875Z-9573bcf2.log
 ```
+
+## Completed seventeen-case native verification
+
+The resumed native acceptance reached all seventeen cases on the unchanged formatted test file above.
+The earlier dependency-installation blocker is resolved for this run; its output remains historical evidence.
+Command: `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/presentation/realm-context-user-cases.test.ts`.
+Exit status: 1. Native result: **1 pass, 16 failures, 255 assertions across 17 tests**; no load reruns.
+
+The first failure remains expected 200 versus actual 400 `invalid_request`, with `/target/realm` reported as
+`unknown_field`. Both original Context deletion cases still fail at native DELETE, expected 200 versus actual
+404, before their deletion-dependent page assertions. The genuine suspended-bearer case passes. All four added
+schedules complete their native setup and fail immediately on missing Realm page wire, before any claimed
+barrier or currentness proof. No barrier timeout, fabricated success or infrastructure failure replaces those
+assertions. This is the required additive red specification evidence, not passing runtime acceptance.
+
+The test file remains SHA-256 `c408aa576fede18fa7dea6fec842f2c834891cd779df711ad23975be9df2b95d`.
+The original thirteen cases, original A-to-B schedule and frozen Global aggregate-authority suite are unchanged.
+Only the three declared files differ from the specification's starting revision. No external reference project
+was required, no file outside those paths was changed, and no runtime growth or lifecycle delivery is claimed.
+Current code still exports the sticky public audience boundary and still lacks Context DELETE; the duplicate
+board-scheme reader remains pending cleanup. The source receipt and required owner bindings above still apply.
+
+### Full seventeen-case native output
+
+Local log: `.temp/goal/checks/worker-check-2026-10-29T14-08-55.413Z-8eb9fb4b.log`.
+
+```text
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, c 0/3 free, a 0/4 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, b 0/6 free, c 0/3 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, c 0/3 free, b 0/6 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, c 0/3 free, b 0/6 free)
+remote-check: every check slot is busy; waiting for a free one (a 0/4 free, c 0/3 free, b 0/6 free)
+remote-check: every check slot is busy; waiting for a free one (b 0/6 free, a 0/4 free, c 0/3 free)
+remote-check: slot wait 467.211 s on b
+
+Number of files: 5,324 (reg: 4,993, dir: 330, link: 1)
+Number of created files: 12 (reg: 12)
+Number of deleted files: 0
+Number of regular files transferred: 52
+Total file size: 57,651,227 bytes
+Total transferred file size: 938,673 bytes
+Literal data: 248,364 bytes
+Matched data: 690,309 bytes
+File list size: 196,592
+File list generation time: 1.118 seconds
+File list transfer time: 0.000 seconds
+Total bytes sent: 316,619
+Total bytes received: 23,870
+
+sent 316,619 bytes  received 23,870 bytes  40,057.53 bytes/sec
+total size is 57,651,227  speedup is 169.32
+remote-check: rsync 9.023 s on b
+remote-check: running on b
+bun install v1.4.4-canary.1 (a0cc096ce)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+
++ @types/bun@1.4.4
++ bun@1.4.4-canary.20261027.1
++ oxfmt@0.74.0
++ oxlint@1.89.0
++ typescript@7.1.0-beta
+
+896 packages installed [420.00ms]
+remote-check: bun install 0.438 s on b
+$ bun scripts/check.ts test/presentation/realm-context-user-cases.test.ts
+stack-run: kernel check local, already on a check host
+test/presentation/realm-context-user-cases.test.ts: FAIL; peak database connections 0
+test/presentation/realm-context-user-cases.test.ts: bun test ./test/presentation/realm-context-user-cases.test.ts failed:
+bun test v1.4.4-canary.1 (a0cc096ce)
+
+test/presentation/realm-context-user-cases.test.ts:
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-1e74-76aa-b805-2520f7f024fd","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:416:3)
+(fail) Realm subject page selects only the current authorized published Context with unchanged caller and public candidate audience [128.96ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-1eb3-779f-958c-bc7fa59c3b73","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:470:5)
+(fail) Realm selector preserves Global agent candidate audience without publisher-private candidates or related ids while standalone hydration stays private [55.43ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-1f89-7773-9f58-8e7838fc26a0","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at fallback (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:498:3)
+(fail) readable unpublished Realm falls back to independently authorized labelled Global without revealing Realm data [214.64ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-20a7-771a-aae2-e8f5e4bc73a4","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at fallback (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:498:3)
+(fail) readable withdrawn Realm uses independently authorized labelled Global without Realm disclosure [286.19ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-21d6-77be-b021-772771dfbe50","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at fallback (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:498:3)
+(fail) readable rejected Realm uses independently authorized labelled Global without Realm disclosure [302.34ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2255-7090-8f40-ae001703799d","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:553:7)
+(fail) Realm contextA toB change cannot publish staleA success [127.96ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2258-74c6-9f58-6006b3423e5a","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 404
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:590:3)
+(fail) unknown denied and currently banned protected Realms conceal even over an independent read grant [2.07ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"code":"not_found","retryable":false,"effect_status":"not_applied","request_id":"01a18807-22e9-747d-bcf6-aa3512bcf4c7"}
+
+Expected: 200
+Received: 404
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:619:3)
+(fail) current subject hiding and Context deletion conceal selected Realm facts and fallback cannot revive a hidden subject [144.19ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"code":"not_found","retryable":false,"effect_status":"not_applied","request_id":"01a18807-237d-7239-8ebe-50a7690d4fa8"}
+
+Expected: 200
+Received: 404
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:643:3)
+(fail) Realm read grant and publication pointer never replace current Context authority [147.79ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2449-7377-af96-83cb0ac9ea01","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 404
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:667:3)
+(fail) current subject takedown and candidate moderation remain authoritative on published Realm pages [204.59ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-245c-74a0-9870-d351e81e4362","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:713:3)
+(fail) Realm selector validates the existing single target family and rejects raw Context and unknown fields [18.40ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-256b-76d6-a0f5-b805d59c2127","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:725:3)
+(fail) agent Realm selectors retain canonical Global redirects and old Global reads retain their response shape [274.89ms]
+.
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-25f2-709a-bbd8-a1083a1367fe","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 404
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at <anonymous> (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:775:7)
+(fail) protected ban after the first actual Realm read conceals publication not_found without Global fallback [127.86ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-27b1-75d0-ad4e-d28bf0952c96","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at lateAuthority (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:863:7)
+(fail) publication withdraw after selected subject and links cannot survive an unchanged Realm head guard [447.48ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expect(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2981-70ea-bc74-b91f3f193539","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at lateAuthority (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:863:7)
+(fail) publication reject after selected subject and links cannot survive an unchanged Realm head guard [463.83ms]
+76 | let digest: string;
+77 | const localA = 'https://example.test/selected-context-a';
+78 | const localB = 'https://example.test/selected-context-b';
+79 |
+80 | function status(response: HttpResponse, expected: number) {
+81 |   expectPostgreSQL connections: peak 26/500 max_connections; highest file peaks: test/presentation/realm-context-user-cases.test.ts=0
+(response.status, JSON.stringify(response.body)).toBe(expected);
+                                                              ^
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2b06-7608-ba45-d0b1f6cbcc64","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+
+Expected: 200
+Received: 400
+
+      at status (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:81:58)
+      at lateAuthority (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/test/presentation/realm-context-user-cases.test.ts:863:7)
+(fail) protected ban after selected subject and links conceals despite an unchanged Realm head and independent grant [388.15ms]
+
+
+1 pass
+16 fail
+255 expect() calls
+Ran 17 tests across 1 file. [37.32s]
+
+Load reruns: 0 files, 0 s alone (0 passed alone)
+Reylo analyses written: 619
+671 |   }
+672 |   if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
+673 | }
+674 |
+675 | function fail(message: string): never {
+676 |   throw new Error(message);
+                  ^
+error: Kernel tests failed for 1 file(s):
+test/presentation/realm-context-user-cases.test.ts
+      at fail (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/scripts/check.ts:676:13)
+      at main (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/scripts/check.ts:904:27)
+
+error: script "check" exited with code 1
+remote-check: command 120.691 s on b
+remote-check: run used 142.737 CPU seconds over 121.264 s (1.18 cores), peak memory 3060 MiB on b
+worker-check: bun run --cwd services/kernel check test peak 3.0 GiB (weight 6)
+check: exit status 1
+check: failure summary
+ield"}]}
+Expected: 404
+(fail) unknown denied and currently banned protected Realms conceal even over an independent read grant [2.07ms]
+error: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"code":"not_found","retryable":false,"effect_status":"not_applied","request_id":"01a18807-22e9-747d-bcf6-aa3512bcf4c7"}
+Received: 404
+(fail) current subject hiding and Context deletion conceal selected Realm facts and fallback cannot revive a hidden subject [144.19ms]
+error: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"code":"not_found","retryable":false,"effect_status":"not_applied","request_id":"01a18807-237d-7239-8ebe-50a7690d4fa8"}
+(fail) Realm read grant and publication pointer never replace current Context authority [147.79ms]
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2449-7377-af96-83cb0ac9ea01","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+(fail) current subject takedown and candidate moderation remain authoritative on published Realm pages [204.59ms]
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-245c-74a0-9870-d351e81e4362","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+(fail) Realm selector validates the existing single target family and rejects raw Context and unknown fields [18.40ms]
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-256b-76d6-a0f5-b805d59c2127","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+(fail) agent Realm selectors retain canonical Global redirects and old Global reads retain their response shape [274.89ms]
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-25f2-709a-bbd8-a1083a1367fe","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+(fail) protected ban after the first actual Realm read conceals publication not_found without Global fallback [127.86ms]
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-27b1-75d0-ad4e-d28bf0952c96","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+(fail) publication withdraw after selected subject and links cannot survive an unchanged Realm head guard [447.48ms]
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2981-70ea-bc74-b91f3f193539","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+(fail) publication reject after selected subject and links cannot survive an unchanged Realm head guard [463.83ms]
+(response.status, JSON.stringify(response.body)).toBe(expected);
+error: {"type":"https://rezics.com/problems/invalid_request","title":"Invalid Request","status":400,"code":"invalid_request","retryable":false,"effect_status":"not_applicable","request_id":"01a18807-2b06-7608-ba45-d0b1f6cbcc64","errors":[{"pointer":"/target/realm","code":"unknown_field"}]}
+(fail) protected ban after selected subject and links conceals despite an unchanged Realm head and independent grant [388.15ms]
+16 fail
+675 | function fail(message: string): never {
+676 |   throw new Error(message);
+error: Kernel tests failed for 1 file(s):
+at fail (/srv/rezics-check/runs/mvtmmx8z-c09f7897/services/kernel/scripts/check.ts:676:13)
+error: script "check" exited with code 1
+check: log .temp/goal/checks/worker-check-2026-10-29T14-08-55.413Z-8eb9fb4b.log
+```
