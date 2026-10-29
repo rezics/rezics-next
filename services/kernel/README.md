@@ -137,8 +137,10 @@ written in the artifact's physical partition in the same transaction as the arti
 prefix in each of the fixed 4,096 partitions, one per step, and never scans account-wide JSON or names. This is fixed
 discovery work at erasure, with no cross-partition locator write on the hot command path.
 
-Durable workflow arguments and results each have a 4096-byte UTF-8 budget; workflow history also requires fixed
-row and byte limits for every retained field and nested payload. Account-bearing durable work is canceled and deleted
+Durable workflow arguments and results follow the 4096-byte UTF-8 JSON limit in [Bounded job steps](#bounded-job-steps).
+Workflow-history budgets count steps and rows, with bytes following from that limit. Shared-history durable work carries
+locators and identifiers, never artifact payloads. There is no 64 KiB step budget or per-execution byte total; widening
+the limit is a Performance decision. Account-bearing durable work is canceled and deleted
 through supported DBOS APIs only after native obligations are settled or transferred. All durable work, its exact
 account scope and locators are enqueued with `enqueueIntent` on the producing transaction's connection in the same
 kernel database. Every direct workflow-start or client-enqueue producer must use this path. No relay transaction,
