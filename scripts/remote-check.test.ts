@@ -354,6 +354,7 @@ if (script.includes('/proc/loadavg')) {
     multiWaitingId,
     landingWaitingSlots,
     landingWaitingId,
+    landingMarkerFiles: readdirSync(dir).filter((name) => name.startsWith(landingMarkerPrefix)),
   };
   log(probeEvent);
   writeFileSync(probeScriptFile, '1');
@@ -3905,7 +3906,7 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
     }
     expect(
       events().some((event) => event.kind === 'run' && String(event.script).includes('echo landing')),
-      JSON.stringify(events().map(({ kind, requested, granted, reason, landingWaitingSlots }) => ({ kind, requested, granted, reason, landingWaitingSlots }))),
+      JSON.stringify(events().map(({ kind, requested, granted, reason, landingWaitingSlots, landingMarkerFiles }) => ({ kind, requested, granted, reason, landingWaitingSlots, landingMarkerFiles }))),
     ).toBe(true);
     const grants = events().filter((event) => event.kind === 'slot' && event.granted);
     const landingGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_PRIORITY landing'));
