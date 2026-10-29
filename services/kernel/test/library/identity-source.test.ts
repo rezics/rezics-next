@@ -41,7 +41,7 @@ test('bounded native legacy bootstrap supplies the Library members reader with t
   const actor = await fixture.actor();
   expect(await resolveSubject({ pool: fixture.pool, access: fixture.access }, actor, original!)).toEqual({
     subjectId: root,
-    requestedSubjectId: original,
+    requestedSubjectId: original!,
   });
   await fixture.admin.query(
     "UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE subject_id=$1",
