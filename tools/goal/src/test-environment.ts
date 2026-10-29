@@ -20,3 +20,24 @@ delete process.env.KERNEL_CHECK_ON_REMOTE;
 // Test repositories live inside the checkout's .temp. Git must not walk up from a test directory into the
 // checkout or worktree that runs the tests, where a fake worker's commit would land on a live task branch.
 process.env.GIT_CEILING_DIRECTORIES = resolve(import.meta.dir, '../../../.temp/goal-tests');
+// Git exports the repository's location to commands it runs (bisect run, rebase --exec, hooks). A test that runs
+// `git init` in a temporary directory with those variables would reinitialise the checkout's own repository: a
+// bisect over such a test wrote core.bare=true into the shared config. Tests start outside any repository.
+for (const key of [
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CONFIG',
+  'GIT_CONFIG_PARAMETERS',
+  'GIT_CONFIG_COUNT',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_IMPLICIT_WORK_TREE',
+  'GIT_GRAFT_FILE',
+  'GIT_INDEX_FILE',
+  'GIT_NO_REPLACE_OBJECTS',
+  'GIT_REPLACE_REF_BASE',
+  'GIT_PREFIX',
+  'GIT_SHALLOW_FILE',
+  'GIT_COMMON_DIR',
+])
+  delete process.env[key];
