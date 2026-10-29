@@ -216,11 +216,10 @@ export async function startDevServer(
     }
     return { origin, stop };
   } catch (error) {
-    lastError = error;
     const elapsed = Date.now() - phaseStart;
     await stop();
     throw new Error(
-      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(lastError)}\nCaptured output:\n${output}`,
+      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
     );
   }
 }
