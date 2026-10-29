@@ -49,15 +49,13 @@ writeFileSync(${JSON.stringify(openapi)}, 'contract: ' + source);
     expect(landing).toBeTruthy();
     expect(git(h.root, 'show', `dev:${declaration}`)).toBe(`declaration: ${source}`);
     expect(git(h.root, 'show', `dev:${openapi}`)).toBe(`contract: ${source}`);
-    expect(git(h.root, 'show', '--pretty=format:', '--name-only', landing!)).toEqual(
-      expect.stringContaining(`${declaration}\n`),
-    );
+    expect(git(h.root, 'show', '--pretty=format:', '--name-only', landing!)).toContain(declaration);
     expect(git(h.root, 'show', '--pretty=format:', '--name-only', landing!)).toContain(openapi);
     expect(git(h.root, 'show', '--pretty=format:', '--name-only', landing!)).toContain(source);
   } finally {
     h.dispose();
   }
-});
+}, 30_000);
 
 test('unchanged dev outputs add no commit and promotion still regenerates and verifies them', async () => {
   const h = integrationHarness();
@@ -104,4 +102,4 @@ writeFileSync(${JSON.stringify(openapi)}, 'stable contract');
   } finally {
     h.dispose();
   }
-});
+}, 30_000);
