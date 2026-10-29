@@ -71,6 +71,7 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
         : phase === 'closed'
           ? m.offer_start_closed()
           : null;
+  const buyDisabled = !admitted || phase !== 'ready' || session === 'unknown';
 
   return (
     <article className="max-w-3xl min-w-0 space-y-8 text-foreground" data-idempotency-key={offer.idempotencyKey}>
@@ -106,9 +107,10 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
           </Button>
         ) : phase === 'closed' ? null : (
           <Button
+            variant={buyDisabled ? 'outline' : 'default'}
             size="lg"
             className="w-full disabled:opacity-100 sm:w-auto"
-            disabled={!admitted || phase !== 'ready' || session === 'unknown'}
+            disabled={buyDisabled}
             onClick={() => void start()}
           >
             {m.offer_buy()}
