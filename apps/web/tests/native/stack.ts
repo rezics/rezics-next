@@ -16,13 +16,14 @@ export type NativeKernelRequest = {
 };
 export type NativeWebStack = {
   kernelOrigin: string;
+  authIssuer: string;
   web: string;
   kernel(path: string, init?: RequestInit, persona?: string): Promise<Response>;
   request(url: string, persona?: string, headers?: Record<string, string>): Promise<Response>;
   credentials(persona: string): Promise<NativeCredentials>;
   kernelRequests(): readonly NativeKernelRequest[];
   peakMemoryBytes(): number;
-  restartWeb(options: { publicOrigin: string }): Promise<void>;
+  restartWeb(options: { publicOrigin: string; authIssuer?: string }): Promise<void>;
   stop(): Promise<void>;
 };
 
@@ -212,6 +213,7 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{ pid
 
 async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>> {
   let kernelServer: ReturnType<typeof Bun.serve> | undefined;
+  let authServer: ReturnType<typeof Bun.serve> | undefined;
   const activeKernelRequests = new Set<Promise<Response>>();
   let durableWorker: { pid?: number; stop(): Promise<void> } | undefined;
   let webProcess: WebProcess | undefined;
@@ -262,6 +264,7 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
       console.info('Native web stack cleanup: stopping listeners and durable worker');
       await Promise.all([
         attempt(() => stopWeb(webProcess)),
+        attempt(() => authServer?.stop(true)),
         attempt(async () => {
           // Match the production HTTP host: drain handlers before closing the
           // pools they use, including requests whose clients disconnected.
@@ -389,6 +392,8 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
       },
     );
 
+    authServer = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => auth.service.handler(request) });
+
     const workerEnv = {
       ...workerTestEnv({
         AUTH_ISSUER: driver.fixtures.runtime.authIssuer,
@@ -480,12 +485,18 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
       return responseCookie(completed, '__Host-rezics_session');
     };
     let publicOrigin = 'https://rezics.example.test';
-    const launch = async () => startWeb(webOrigin, kernelOrigin, publicOrigin, authEnvironment);
+    let authPageOrigin: string | undefined;
+    const launch = async () =>
+      startWeb(webOrigin, kernelOrigin, publicOrigin, {
+        ...authEnvironment,
+        ...(authPageOrigin ? { AUTH_ISSUER: authPageOrigin } : {}),
+      });
     console.info('Native web stack startup: starting production web Worker');
     webProcess = await launch();
 
     return {
       kernelOrigin,
+      authIssuer: authServer.url.origin,
       web: webOrigin,
       async credentials(persona) {
         const { bearer } = await getAccount(persona);
@@ -509,6 +520,7 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
         webProcess = undefined;
         webCookies.clear();
         publicOrigin = options.publicOrigin;
+        authPageOrigin = options.authIssuer;
         webProcess = await launch();
       },
       stop,
@@ -527,11 +539,16 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
 // and a second (or failed) stack never reuses an earlier stack's database or sessions.
 type Observation = { requests: NativeKernelRequest[]; peakMemory: number };
 type HostReply =
-  | { ready: { kernelOrigin: string; web: string; databaseUrl: string }; observation: Observation }
+  | { ready: { kernelOrigin: string; authIssuer: string; web: string; databaseUrl: string }; observation: Observation }
   | { id: number; value?: unknown; error?: string; observation: Observation }
   | { startupError: string }
   | { analysisDatabase: string };
-type HostCall = { id: number; method: 'credentials' | 'restartWeb' | 'observe' | 'stop'; argument?: string };
+type HostCall = {
+  id: number;
+  method: 'credentials' | 'restartWeb' | 'observe' | 'stop';
+  argument?: string;
+  options?: { publicOrigin: string; authIssuer?: string };
+};
 
 export async function startNativeWebStack(): Promise<NativeWebStack> {
   const originalDatabaseUrl = process.env.DATABASE_URL;
@@ -573,12 +590,14 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   let closed: Promise<void> | undefined;
   let dead: Error | undefined;
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  let ready!: (value: { kernelOrigin: string; web: string; databaseUrl: string }) => void;
+  let ready!: (value: { kernelOrigin: string; authIssuer: string; web: string; databaseUrl: string }) => void;
   let failed!: (error: Error) => void;
-  const startup = new Promise<{ kernelOrigin: string; web: string; databaseUrl: string }>((resolve, reject) => {
-    ready = resolve;
-    failed = reject;
-  });
+  const startup = new Promise<{ kernelOrigin: string; authIssuer: string; web: string; databaseUrl: string }>(
+    (resolve, reject) => {
+      ready = resolve;
+      failed = reject;
+    },
+  );
   const fail = (error: Error) => {
     dead = error;
     failed(error);
@@ -610,7 +629,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     });
   };
   try {
-    const { kernelOrigin, web, databaseUrl } = await startup;
+    const { kernelOrigin, authIssuer, web, databaseUrl } = await startup;
     // Retain the existing fixture's observable setup environment. The host has
     // its own environment, including Reylo config and pool timeout overrides.
     if (originalDatabaseUrl === undefined) process.env.DATABASE_URL = databaseUrl;
@@ -630,6 +649,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     };
     return {
       kernelOrigin,
+      authIssuer,
       web,
       credentials,
       kernelRequests: () => observation.requests.slice(),
@@ -652,8 +672,12 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
         // its headers, changes its status, or follows a Worker redirect.
         return observe(await fetch(target, { headers, redirect: 'manual' }));
       },
-      async restartWeb({ publicOrigin }) {
-        await call('restartWeb', publicOrigin);
+      async restartWeb(options) {
+        const id = ++serial;
+        await new Promise<void>((resolve, reject) => {
+          pending.set(id, { resolve: () => resolve(), reject });
+          host.send({ id, method: 'restartWeb', options } satisfies HostCall);
+        });
       },
       stop() {
         return (closed ??= (async () => {
@@ -701,11 +725,11 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
       observedRequests = requests.length;
       return next;
     };
-    process.on('message', async ({ id, method, argument }: HostCall) => {
+    process.on('message', async ({ id, method, argument, options }: HostCall) => {
       try {
         let value: unknown;
         if (method === 'credentials') value = await stack.credentials(argument!);
-        else if (method === 'restartWeb') await stack.restartWeb({ publicOrigin: argument! });
+        else if (method === 'restartWeb') await stack.restartWeb(options!);
         else if (method === 'stop') await stack.stop();
         send({ id, value, observation: observation() } satisfies HostReply, method === 'stop' ? 0 : undefined);
       } catch (error) {
@@ -720,7 +744,12 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
       }
     });
     send({
-      ready: { kernelOrigin: stack.kernelOrigin, web: stack.web, databaseUrl: process.env.DATABASE_URL! },
+      ready: {
+        kernelOrigin: stack.kernelOrigin,
+        authIssuer: stack.authIssuer,
+        web: stack.web,
+        databaseUrl: process.env.DATABASE_URL!,
+      },
       observation: observation(),
     } satisfies HostReply);
   } catch (error) {

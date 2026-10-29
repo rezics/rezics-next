@@ -1,5 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chromium, type Browser, type BrowserContext, type Page, type Response as PlaywrightResponse } from 'playwright';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+  type Response as PlaywrightResponse,
+} from 'playwright';
 import { resolve } from 'node:path';
 import type { NativeWebStack } from './stack.ts';
 
@@ -75,12 +81,8 @@ async function hydrate(page: Page): Promise<void> {
 }
 
 export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthStack> {
-  // The native Worker has the actual issuer in its test variables; its sign-in entry
-  // returns an authorization redirect to that listener.
-  const authEntry = await fetch(`${stack.web}/auth/sign-in`, { redirect: 'manual' });
-  const authLocation = authEntry.headers.get('location');
-  if (!authLocation) throw new Error(`Native web sign-in did not redirect to Auth: ${authEntry.status}`);
-  const authOrigin = new URL(authLocation).origin;
+  const startupStarted = performance.now();
+  const authIssuer = stack.authIssuer;
 
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
@@ -102,7 +104,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
-      AUTH_ORIGIN: authOrigin,
+      AUTH_ORIGIN: authIssuer,
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
       TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
     },
@@ -115,6 +117,8 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
   try {
     await waitForPage(origin, child, () => output);
     browser = await chromium.launch();
+    await stack.restartWeb({ publicOrigin: stack.web, authIssuer: origin });
+    console.info(`Native Auth app startup: ${Math.round(performance.now() - startupStarted)}ms`);
     const context = async (persona: AuthPersona) => {
       let value = contexts.get(persona);
       if (!value) {
@@ -129,6 +133,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       return value;
     };
     async function journey(persona: AuthPersona, signup: boolean): Promise<AuthJourney> {
+      const journeyStarted = performance.now();
       const browserContext = await context(persona);
       const page = await browserContext.newPage();
       page.setDefaultTimeout(15_000);
@@ -138,7 +143,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       page.on('response', (response) => {
         if (new URL(response.url()).pathname === '/signin') authResponses.push(response);
       });
-      const email = signup ? `${crypto.randomUUID()}@example.test` : await nativeEmail(stack, authOrigin, persona);
+      const email = signup ? `${crypto.randomUUID()}@example.test` : await nativeEmail(stack, authIssuer, persona);
       await page.goto(`${stack.web}/auth/sign-in`, { waitUntil: 'domcontentloaded' });
       await hydrate(page);
       if (signup) {
@@ -169,6 +174,10 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         const consent = page.getByRole('button', { name: /approve|allow|continue/i }).first();
         if (await consent.count()) await consent.click();
       }
+      if (!signup)
+        console.info(
+          `Native Auth sign-in: ${Math.round(performance.now() - journeyStarted)}ms; browser peak RSS unavailable from Playwright`,
+        );
       const current = page.url();
       const response = () => {
         const latest = authResponses.at(-1);
