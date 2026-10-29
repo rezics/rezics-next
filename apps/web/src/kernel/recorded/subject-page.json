@@ -442,6 +442,7 @@
             ]
           },
           "relationCounts": {
+            "rezics:storyArc": 0,
             "rezics:alternativeSetting": 0,
             "rezics:alternativeVersion": 0,
             "rezics:artbookCounterpart": 0,
@@ -563,6 +564,9 @@
             }
           },
           "01a17a3b-07ab-779f-a76f-c4de973680d4": {
+            "type": "schema:Person",
+            "types": ["schema:Person", "schema:Thing"],
+            "cover": null,
             "labels": {
               "de": "Antoine de Saint-Exupéry",
               "en": "Antoine de Saint-Exupéry",
@@ -575,6 +579,9 @@
             }
           },
           "01a17a3b-0870-73a0-8b41-d281ed8a1465": {
+            "type": "skos:Concept",
+            "types": ["skos:Concept", "schema:Thing"],
+            "cover": null,
             "labels": {
               "de": "Fabel",
               "en": "Fable",

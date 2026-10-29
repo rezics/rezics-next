@@ -1,0 +1,459 @@
+{
+  "subject": "01a186da-0514-7685-9a80-18f46d3d3c91",
+  "profile": "sha256:47976876913edbfa03e4f2641f4c20d3ce57528e1f2d2fe9f23dc67b1665c885",
+  "template": { "scope": "base", "key": "schema:CreativeWork" },
+  "document": {
+    "root": { "props": {} },
+    "content": [
+      {
+        "type": "Slot",
+        "props": {
+          "id": "header",
+          "name": "header",
+          "children": [
+            { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+            { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+          ]
+        }
+      },
+      { "type": "Summary", "props": { "id": "summary" } },
+      {
+        "type": "Statements",
+        "props": {
+          "id": "statements",
+          "properties": [
+            "schema:author",
+            "schema:illustrator",
+            "schema:translator",
+            "schema:publisher",
+            "schema:datePublished",
+            "schema:inLanguage",
+            "schema:genre",
+            "schema:isPartOf"
+          ]
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "editions",
+          "limit": 12,
+          "title": {
+            "de": "Ausgaben",
+            "en": "Editions",
+            "es": "Ediciones",
+            "fr": "Éditions",
+            "ja": "版",
+            "ko": "판",
+            "zh-Hans": "版本",
+            "zh-Hant": "版本"
+          },
+          "property": "schema:exampleOfWork"
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "side-stories",
+          "limit": 12,
+          "title": {
+            "de": "Nebengeschichten",
+            "en": "Side stories",
+            "es": "Historias paralelas",
+            "fr": "Histoires parallèles",
+            "ja": "外伝",
+            "ko": "외전",
+            "zh-Hans": "外传",
+            "zh-Hant": "外傳"
+          },
+          "property": "rezics:sideStoryOf"
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "adaptations",
+          "limit": 12,
+          "title": {
+            "de": "Adaptionen",
+            "en": "Adaptations",
+            "es": "Adaptaciones",
+            "fr": "Adaptations",
+            "ja": "派生作品",
+            "ko": "파생 작품",
+            "zh-Hans": "改编作品",
+            "zh-Hant": "改編作品"
+          },
+          "property": "wdt:P144"
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "versions",
+          "limit": 12,
+          "title": {
+            "de": "Alternative Fassungen",
+            "en": "Alternative versions",
+            "es": "Versiones alternativas",
+            "fr": "Versions alternatives",
+            "ja": "別バージョン",
+            "ko": "다른 버전",
+            "zh-Hans": "其他版本",
+            "zh-Hant": "其他版本"
+          },
+          "property": "rezics:alternativeVersion"
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "related",
+          "limit": 12,
+          "title": {
+            "de": "Verwandtes",
+            "en": "Related",
+            "es": "Obras relacionadas",
+            "fr": "Œuvres liées",
+            "ja": "関連作品",
+            "ko": "관련 작품",
+            "zh-Hans": "相关作品",
+            "zh-Hant": "相關作品"
+          },
+          "property": "rezics:bangumiRelatedTo"
+        }
+      },
+      {
+        "type": "Appearances",
+        "props": { "id": "characters", "limit": 12, "property": "schema:character", "direction": "forward" }
+      },
+      {
+        "type": "Credits",
+        "props": { "id": "credits", "limit": 12, "property": "schema:contributor", "direction": "forward" }
+      },
+      { "type": "RatingSummary", "props": { "id": "ratings" } },
+      { "type": "ReviewList", "props": { "id": "reviews" } },
+      { "type": "ThreadList", "props": { "id": "threads" } },
+      {
+        "type": "CollectionList",
+        "props": {
+          "id": "lists",
+          "limit": 6,
+          "title": {
+            "de": "Listen",
+            "en": "Lists",
+            "es": "Listas",
+            "fr": "Listes",
+            "ja": "リスト",
+            "ko": "목록",
+            "zh-Hans": "清单",
+            "zh-Hant": "清單"
+          }
+        }
+      },
+      { "type": "Sources", "props": { "id": "sources" } }
+    ]
+  },
+  "views": ["overview", "editions", "characters", "credits", "relations", "reviews", "discussion", "lists", "details"],
+  "reads": {
+    "r0": {
+      "status": 200,
+      "body": {
+        "subject": {
+          "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
+          "type": "schema:Book",
+          "revision": 1,
+          "release": "sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702",
+          "context": "00000000-0000-8000-8000-000000000000",
+          "resolution": {},
+          "relationCounts": {
+            "rezics:alternativeSetting": 0,
+            "rezics:alternativeVersion": 0,
+            "rezics:artbookCounterpart": 0,
+            "rezics:bangumiLegacyVersion": 0,
+            "rezics:bangumiRelatedTo": 0,
+            "rezics:collaborationWith": 0,
+            "rezics:crossMediaCounterpart": 0,
+            "rezics:editionCounterpart": 0,
+            "rezics:expansionCounterpart": 0,
+            "rezics:representativeEdition": 0,
+            "rezics:sameCharacters": 0,
+            "rezics:sameSetting": 0,
+            "rezics:sideStoryOf": 0,
+            "rezics:spinOffOf": 0,
+            "rezics:storyArc": 0,
+            "rezics:summaryOf": 0,
+            "schema:author": 1,
+            "schema:contributor": 0,
+            "wdt:P155": 0,
+            "wdt:P179": 0,
+            "wdt:P361": 0
+          },
+          "labels": {
+            "fr": "Le Petit Prince",
+            "de": "Der kleine Prinz",
+            "es": "El Principito",
+            "ja": "星の王子さま",
+            "ko": "어린 왕자",
+            "zh-Hant": "小王子",
+            "zh-Hans": "小王子",
+            "en": "The Little Prince"
+          },
+          "descriptions": {
+            "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。",
+            "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。",
+            "fr": "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde.",
+            "en": "A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential."
+          },
+          "aliases": { "ja": ["星の王子様"], "en": ["Le Petit Prince"] },
+          "statements": {
+            "schema:author": [
+              {
+                "id": "13924fea-b4d7-8a6c-aa65-18f490323e66",
+                "rank": "normal",
+                "property": { "id": "schema:author", "data_type": "wikibase-item" },
+                "value": { "type": "value", "content": "01a186da-0438-7215-9ace-8227e79b9790" },
+                "qualifiers": [],
+                "references": [],
+                "rezics": {
+                  "release": "sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702",
+                  "revision": 1
+                }
+              }
+            ],
+            "schema:datePublished": [
+              {
+                "id": "68634f99-446a-8b9c-b203-18f40f12a959",
+                "rank": "normal",
+                "property": { "id": "schema:datePublished", "data_type": "time" },
+                "value": {
+                  "type": "value",
+                  "content": {
+                    "time": "+1943-04-06T00:00:00Z",
+                    "precision": 11,
+                    "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+                  }
+                },
+                "qualifiers": [],
+                "references": [],
+                "rezics": {
+                  "release": "sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702",
+                  "revision": 1
+                }
+              }
+            ],
+            "schema:genre": [
+              {
+                "id": "6bbe1411-d533-8993-8e2e-18f46159c5fd",
+                "rank": "normal",
+                "property": { "id": "schema:genre", "data_type": "wikibase-item" },
+                "value": { "type": "value", "content": "01a186da-04f3-77dc-84aa-1e530a35325b" },
+                "qualifiers": [],
+                "references": [],
+                "rezics": {
+                  "release": "sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702",
+                  "revision": 1
+                }
+              }
+            ],
+            "schema:inLanguage": [
+              {
+                "id": "ec64ebc3-82e1-8b36-8377-18f4a4ad93f5",
+                "rank": "normal",
+                "property": { "id": "schema:inLanguage", "data_type": "string" },
+                "value": { "type": "value", "content": "fr" },
+                "qualifiers": [],
+                "references": [],
+                "rezics": {
+                  "release": "sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702",
+                  "revision": 1
+                }
+              }
+            ]
+          }
+        },
+        "account": null,
+        "summary": {
+          "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
+          "type": "schema:Book",
+          "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+          "label": { "value": "Le Petit Prince", "language": "fr" },
+          "creativeWork": true,
+          "cover": null
+        },
+        "related": {
+          "schema:author": {
+            "labels": {
+              "de": "Autor",
+              "en": "author",
+              "es": "autor",
+              "fr": "auteur ou autrice",
+              "ja": "著者",
+              "ko": "저자",
+              "zh-Hans": "作者",
+              "zh-Hant": "作者"
+            }
+          },
+          "schema:datePublished": {
+            "labels": {
+              "de": "Veröffentlichungsdatum",
+              "en": "publication date",
+              "es": "fecha de publicación",
+              "fr": "date de publication",
+              "ja": "出版日",
+              "ko": "출판 날짜",
+              "zh-Hans": "出版日期",
+              "zh-Hant": "出版日期"
+            }
+          },
+          "schema:genre": {
+            "labels": {
+              "de": "Genre",
+              "en": "genre",
+              "es": "género",
+              "fr": "genre",
+              "ja": "ジャンル",
+              "ko": "장르",
+              "zh-Hans": "类型",
+              "zh-Hant": "類型"
+            }
+          },
+          "schema:inLanguage": {
+            "labels": {
+              "de": "Sprache",
+              "en": "language",
+              "es": "idioma",
+              "fr": "langue",
+              "ja": "言語",
+              "ko": "언어",
+              "zh-Hans": "语言",
+              "zh-Hant": "語言"
+            }
+          },
+          "01a186da-0438-7215-9ace-8227e79b9790": {
+            "labels": {
+              "de": "Antoine de Saint-Exupéry",
+              "en": "Antoine de Saint-Exupéry",
+              "es": "Antoine de Saint-Exupéry",
+              "fr": "Antoine de Saint-Exupéry",
+              "ja": "アントワーヌ・ド・サン＝テグジュペリ",
+              "ko": "앙투안 드 생텍쥐페리",
+              "zh-Hans": "安托万·德·圣埃克苏佩里",
+              "zh-Hant": "安東尼·聖修伯里"
+            },
+            "type": "schema:Person",
+            "types": ["schema:Person", "schema:Thing"],
+            "cover": null
+          },
+          "01a186da-04f3-77dc-84aa-1e530a35325b": {
+            "labels": {
+              "de": "Fabel",
+              "en": "Fable",
+              "es": "Fábula",
+              "fr": "Fable",
+              "ja": "寓話",
+              "ko": "우화",
+              "zh-Hans": "寓言",
+              "zh-Hant": "寓言"
+            },
+            "type": "skos:Concept",
+            "types": ["skos:Concept", "schema:Thing"],
+            "cover": null
+          }
+        }
+      }
+    },
+    "r1": {
+      "status": 200,
+      "body": {
+        "links": [
+          {
+            "subject": "01a186da-0536-7505-a3bd-cfe7deb43a2e",
+            "property": "schema:exampleOfWork",
+            "statement": "b1ab350a-719c-82fc-a7b6-cfe75e040365",
+            "type": "bf:Instance",
+            "label": "The Little Prince (Reynal & Hitchcock, 1943)",
+            "summary": {
+              "id": "01a186da-0536-7505-a3bd-cfe7deb43a2e",
+              "type": "bf:Instance",
+              "types": ["bf:Instance", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "The Little Prince (Reynal & Hitchcock, 1943)", "language": "en" },
+              "creativeWork": true,
+              "cover": null
+            }
+          },
+          {
+            "subject": "01a186da-0556-7193-9e14-f5cfb5bdec11",
+            "property": "schema:exampleOfWork",
+            "statement": "cdfc7f23-9c19-843e-a283-f5cf2197c254",
+            "type": "bf:Instance",
+            "label": "Le Petit Prince (Gallimard, 1946)",
+            "summary": {
+              "id": "01a186da-0556-7193-9e14-f5cfb5bdec11",
+              "type": "bf:Instance",
+              "types": ["bf:Instance", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "Le Petit Prince (Gallimard, 1946)", "language": "fr" },
+              "creativeWork": true,
+              "cover": null
+            }
+          }
+        ],
+        "count": { "value": 2, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r2": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": { "value": 0, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r3": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": { "value": 0, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r4": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": { "value": 0, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r5": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": { "value": 0, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r6": {
+      "status": 200,
+      "body": {
+        "collections": [
+          {
+            "id": "01a186da-7942-729f-85dd-1a12609e7990",
+            "curatorAccountId": "01a186d9-4a54-7793-bc31-1a12a4175e35",
+            "title": "Books I come back to",
+            "multiplicity": 1
+          }
+        ],
+        "count": { "value": 1, "exact": true },
+        "next": null
+      }
+    }
+  },
+  "status": 200
+}

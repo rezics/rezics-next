@@ -1,0 +1,62 @@
+{
+  "members": [
+    {
+      "id": "01a186da-79ec-74b1-997d-1a12d590860d",
+      "subjectId": "01a186da-788f-74c4-8ec3-3343f539fb10",
+      "note": null,
+      "addedAt": "2026-10-29T08:50:27.425Z",
+      "subject": {
+        "id": "01a186da-788f-74c4-8ec3-3343f539fb10",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Snow Country", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "id": "01a186da-7988-75a1-a4e9-1a1208d255d3",
+      "subjectId": "01a186da-7861-7662-866e-2bcecd745204",
+      "note": null,
+      "addedAt": "2026-10-29T08:50:27.323Z",
+      "subject": {
+        "id": "01a186da-7861-7662-866e-2bcecd745204",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "The Tale of Genji", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "id": "01a186da-79aa-71a9-a86e-1a1275285845",
+      "subjectId": "01a186da-0514-7685-9a80-18f46d3d3c91",
+      "note": "Read it first as a child, and again whenever I need to be reminded what matters.",
+      "addedAt": "2026-10-29T08:50:27.357Z",
+      "subject": {
+        "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "id": "01a186da-79d6-72fe-b0b8-1a12f4d4c9de",
+      "subjectId": "01a186da-7828-77f5-8c18-5b1d98094510",
+      "note": "The letter in the third part is the reason this one stays on the shelf.",
+      "addedAt": "2026-10-29T08:50:27.398Z",
+      "subject": {
+        "id": "01a186da-7828-77f5-8c18-5b1d98094510",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Kokoro", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    }
+  ],
+  "next": null,
+  "status": 200
+}

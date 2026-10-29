@@ -6,6 +6,7 @@
       "note": null,
       "addedAt": "2026-10-26T18:22:28.256Z",
       "subject": {
+        "creativeWork": true,
         "id": "01a17a3b-6c01-77c8-94fd-810a3ae73369",
         "type": "schema:Book",
         "label": "Snow Country",
@@ -19,6 +20,7 @@
       "note": null,
       "addedAt": "2026-10-26T18:22:28.195Z",
       "subject": {
+        "creativeWork": true,
         "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
         "type": "schema:Book",
         "label": "The Tale of Genji",
@@ -27,23 +29,12 @@
           "media": "01a17a3b-0884-7c01-8a3f-c0de00000001",
           "width": 320,
           "height": 480,
-          "placeholder": {
-            "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX",
-            "color": "#6d4d6f"
-          },
-          "variants": [
-            {
-              "format": "webp",
-              "width": 320
-            }
-          ],
+          "placeholder": { "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX", "color": "#6d4d6f" },
+          "variants": [{ "format": "webp", "width": 320 }],
           "focalPoint": null,
           "credit": {
             "rightsHolder": "REZICS fixtures",
-            "via": {
-              "name": "Generated fixture",
-              "url": "https://rezics.com"
-            },
+            "via": { "name": "Generated fixture", "url": "https://rezics.com" },
             "license": "CC0-1.0",
             "obligations": []
           }
@@ -56,6 +47,7 @@
       "note": "Read it first as a child, and again whenever I need to be reminded what matters.",
       "addedAt": "2026-10-26T18:22:28.215Z",
       "subject": {
+        "creativeWork": true,
         "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
         "type": "schema:Book",
         "label": "The Little Prince",
@@ -69,6 +61,7 @@
       "note": "The letter in the third part is the reason this one stays on the shelf.",
       "addedAt": "2026-10-26T18:22:28.239Z",
       "subject": {
+        "creativeWork": true,
         "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
         "type": "schema:Book",
         "label": "Kokoro",
@@ -77,23 +70,12 @@
           "media": "01a17a3b-0884-7c01-8a3f-c0de00000001",
           "width": 320,
           "height": 480,
-          "placeholder": {
-            "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX",
-            "color": "#6d4d6f"
-          },
-          "variants": [
-            {
-              "format": "webp",
-              "width": 320
-            }
-          ],
+          "placeholder": { "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX", "color": "#6d4d6f" },
+          "variants": [{ "format": "webp", "width": 320 }],
           "focalPoint": null,
           "credit": {
             "rightsHolder": "REZICS fixtures",
-            "via": {
-              "name": "Generated fixture",
-              "url": "https://rezics.com"
-            },
+            "via": { "name": "Generated fixture", "url": "https://rezics.com" },
             "license": "CC0-1.0",
             "obligations": []
           }
