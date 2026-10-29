@@ -83,6 +83,7 @@
       "inputs": ["services/kernel/**"]
     }
   ],
+  "jsonMessageConflicts": ["apps/web/messages/*.json"],
   "integration": {
     "batchSize": 4,
     "gateConcurrency": 1,
