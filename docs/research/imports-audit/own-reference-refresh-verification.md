@@ -1,9 +1,9 @@
 # Own-reference refresh verification
 
 Implementation revision: `0b648d744b3ed6f34bf435866606c102d1b0707d`. Current frozen installation:
-`34f4833079b8faa11fa1ee5ec5a4137b6ec4a235`. Its SHA-256 is
-`c2a3e80acba22a911bc2d118b07286ceb7494c6c528da7be4572c8fa76b65bf7`, exactly matching the
-controller registry and the approved combined raw file. No worker formatting or amendment was applied.
+`e196a3759be4363182088f66515c9ce96e44800c`. Its SHA-256 is
+`720b74e64eb29d8a1a10403f16c9e9a329d01aab93255fe5c69bc46f97d1db51`, exactly matching the
+read-only controller registry, worker bytes and approved raw file. No worker formatting or amendment was applied.
 The controller committed the observation correction; this continuation preserves all frozen bytes.
 
 ## Delivered behavior
@@ -22,6 +22,20 @@ The stored dependency signature is importer coordination metadata; it does not a
 
 ## Current verification
 
+The latest authorized correction adds only the erased generic argument
+`<Statement['qualifiers'] | NonNullable<BatchStatement['qualifiers']>>` to the existing
+`toContainEqual` call. The one-hunk diff from `771aa0b7203c2285d03cca3d73548264db3b9450`
+changes no received value, expected object, matcher method or executable assertion. Native read datatype,
+proposal id-only properties, 16 relay calls, busy 5 ms sleep, fatal stopped status and read-zero readiness
+are unchanged. The installed file already has the exact approved bytes; no further frozen edit is needed.
+
+Run the root typecheck once first on a committed revision. Only a zero compiler exit permits the focused
+native acceptance once. Results are pending. Reuse the unchanged local bootstrap/reopen 2-case/16-assertion
+and post-retention adjacent 11-case/158-assertion evidence below; runtime, storage and local regression
+bytes remain identical to `c79e538dfd`. No rebase, merge, infrastructure or dependency change is needed.
+
+## Previous three-type-edit verification
+
 The controller installed the authorized three type-only edits: import native `Statement` with `import type`,
 type `Candidate.statement` as `Statement`, and accept `BatchStatement | Statement` in the unresolved helper.
 The complete three-hunk diff changes no executable expression or assertion. The exact installed worker hash
@@ -38,8 +52,7 @@ test/imports/known-reference-refresh.test.ts(73,53): error TS2769: No overload m
 
 The authorized `BatchStatement | Statement` annotation does not close the matcher overload error.
 The expected native qualifier still fails contextual typing at `toContainEqual`. Changing the native read
-schema or portable proposal shape would violate their existing contracts; another frozen helper amendment
-is not authorized. The worker preserved the installed file. This is a frozen acceptance/type conflict,
+schema or portable proposal shape would violate their existing contracts; the later authorized matcher generic was not installed in that run. The worker preserved the installed file. This is a frozen acceptance/type conflict,
 not a tooling failure, and no current native transition or successful native assertion is claimed.
 
 | Required check | Terminal result | Receipt |
