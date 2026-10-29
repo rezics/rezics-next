@@ -9,14 +9,27 @@ import { linkProjection } from './links.ts';
 export const semanticWorkModule: WorkModule = {
   name: 'semantic',
   register(context) {
-    context.addEffects([{
-      name: 'identity_epoch_bootstrap',
-      types: [IDENTITY_EPOCH_BOOTSTRAP, SUBJECT_MERGED, SUBJECT_REVISED, LINKS_MOVING, 'com.rezics.subject.created.v1'],
-      run: async () => { await stepIdentityEpochBootstrapWork(context.pool); },
-    }]);
+    context.addEffects([
+      {
+        name: 'identity_epoch_bootstrap',
+        types: [
+          IDENTITY_EPOCH_BOOTSTRAP,
+          SUBJECT_MERGED,
+          SUBJECT_REVISED,
+          LINKS_MOVING,
+          'com.rezics.subject.created.v1',
+        ],
+        run: async () => {
+          await stepIdentityEpochBootstrapWork(context.pool);
+        },
+      },
+    ]);
     context.addService(async () => {
-      await runCommand(context.pool, {partition:0}, async () => ({value:null,events:[identityBootstrapWake(0,1n)]}));
-      return {stop:async()=>{}};
+      await runCommand(context.pool, { partition: 0 }, async () => ({
+        value: null,
+        events: [identityBootstrapWake(0, 1n)],
+      }));
+      return { stop: async () => {} };
     });
     context.addService(() => startRelays(context.pool, [linkProjection(context.pool)]));
   },

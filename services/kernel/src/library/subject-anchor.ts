@@ -7,6 +7,7 @@ import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubjectReference } from '../semantic/references.ts';
+import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
@@ -34,6 +35,17 @@ export async function resolveSubject(
   subjectId: string,
   at?: AuthoritativeTime,
 ): Promise<ResolvedSubject | null> {
+  const mapping = await identityEpochStore.readMapping(deps.pool, subjectId);
+  return resolveMappedSubject(deps, actor, subjectId, mapping, at);
+}
+
+async function resolveMappedSubject(
+  deps: SubjectAnchorDependencies,
+  actor: Actor,
+  subjectId: string,
+  mapping: IdentityMapping,
+  at?: AuthoritativeTime,
+): Promise<ResolvedSubject | null> {
   async function authorizeAnchor(id: string) {
     const route = routeOf(id);
     if (route === null) return null;
@@ -44,7 +56,6 @@ export async function resolveSubject(
     });
     return (client: Parameters<typeof check>[0]) => check(client, at);
   }
-  const mapping = await identityEpochStore.readMapping(deps.pool, subjectId);
   if (mapping.state === 'absent') return null;
   if (mapping.state === 'pending') return null;
   if (mapping.state === 'unavailable') throw new SubjectIdentityUnavailableError(mapping.reason);
@@ -80,13 +91,14 @@ export async function readableSubjects(
     throw new RangeError(`Subject page must contain at most ${MAX_SUBJECT_IDS} IDs`);
 
   const distinctIds = [...new Set(subjectIds)];
+  const mappings = await identityEpochStore.readMappings(deps.pool, distinctIds);
   const resolved: (ResolvedSubject | null)[] = new Array(distinctIds.length);
   let nextIndex = 0;
   const outcomes = await Promise.allSettled(
     Array.from({ length: Math.min(MAX_CONCURRENT_SUBJECT_READS, distinctIds.length) }, async () => {
       while (nextIndex < distinctIds.length) {
         const index = nextIndex++;
-        resolved[index] = await resolveSubject(deps, actor, distinctIds[index]!);
+        resolved[index] = await resolveMappedSubject(deps, actor, distinctIds[index]!, mappings[index]!);
       }
     }),
   );

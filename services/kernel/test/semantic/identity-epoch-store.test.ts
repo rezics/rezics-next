@@ -1,11 +1,16 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { writeSubject } from '../../src/semantic/subject.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
-import { readIdentityEpochCutover, stepIdentityEpochBootstrap, stepIdentityEpochBootstrapWork } from '../../src/semantic/identity-epoch-bootstrap.ts';
+import {
+  readIdentityEpochCutover,
+  stepIdentityEpochBootstrap,
+  stepIdentityEpochBootstrapWork,
+} from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { resolveSubject, readableSubjects } from '../../src/library/subject-anchor.ts';
 import {
   digest,
@@ -37,7 +42,7 @@ async function admission(intent: IdentityIntent, key = randomUUID(), receiptDige
     return runCommand(
       f.pool,
       {
-        partition: home(next.kind==='merge'?next.survivor:next.original),
+        partition: home(next.kind === 'merge' ? next.survivor : next.original),
         basis: { actorAccountId: current.accountId, clientId: current.clientId, requestedBy: current.requestedBy },
         authorization: await f.authorization('subject:merge', persona),
       },
@@ -72,11 +77,11 @@ async function bootstrapHome(partition: number) {
 }
 
 async function requireCutover(_ids: string[]) {
-  for (let step=0;step<100_000;step++) {
-    const progress=await stepIdentityEpochBootstrapWork(f.pool);
+  for (let step = 0; step < 100_000; step++) {
+    const progress = await stepIdentityEpochBootstrapWork(f.pool);
     if (!progress) break;
     expect(progress.work.rows).toBeLessThanOrEqual(100);
-    if (step===99_999) throw new Error('Native bootstrap scheduler failed to settle finite topology');
+    if (step === 99_999) throw new Error('Native bootstrap scheduler failed to settle finite topology');
   }
   expect((await readIdentityEpochCutover(f.pool)).state).toBe('ready');
 }
@@ -112,8 +117,9 @@ test('bounded bootstrap never infers self or readiness from absent mapping', asy
       .rows[0].n,
   ).toBe('102');
   expect(await store.readEpoch(f.pool)).toEqual({ state: 'unavailable', reason: 'bootstrap' });
-  expect(await readIdentityEpochCutover(f.pool)).toEqual({state:'blocked'});
-  const outside = (await f.admin.query('SELECT 1 FROM semantic.identity_epoch_bootstrap_home WHERE partition_no=4094')).rowCount;
+  expect(await readIdentityEpochCutover(f.pool)).toEqual({ state: 'blocked' });
+  const outside = (await f.admin.query('SELECT 1 FROM semantic.identity_epoch_bootstrap_home WHERE partition_no=4094'))
+    .rowCount;
   expect(outside).toBe(0);
   // A create after the scan, and a redirect at an already visited key, must enter maintained dirty work.
   const concurrent = (await f.create('Concurrent legacy create', 0x5e10)).subject.id;
@@ -124,14 +130,14 @@ test('bounded bootstrap never infers self or readiness from absent mapping', asy
     (await f.admin.query('SELECT terminal FROM semantic.identity_epoch_original WHERE original=$1', [concurrent]))
       .rows[0].terminal,
   ).toBe(survivor);
-  expect(await store.readMapping(f.pool, members[0]!)).toMatchObject({state:'mapped',terminal:original});
+  expect(await store.readMapping(f.pool, members[0]!)).toMatchObject({ state: 'mapped', terminal: original });
   const before = await storeSnapshot([original]);
   await expect(
     (await admission({ kind: 'merge', survivor: original, redirected: concurrent, release: release.digest })).execute(),
   ).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
   expect(await storeSnapshot([original])).toEqual(before);
   await requireCutover([original]);
-  expect(await store.readMapping(f.pool,members[0]!)).toMatchObject({state:'mapped',terminal:original});
+  expect(await store.readMapping(f.pool, members[0]!)).toMatchObject({ state: 'mapped', terminal: original });
 }, 600_000);
 
 test('native identity store admits one capped durable job with no early publication and idempotent authorized receipt', async () => {
@@ -297,46 +303,98 @@ test('stale home effect and fabricated step receipt cannot publish identity epoc
   }
 });
 
-
 test('partition P=1 refuses a second local reservation without effects while disjoint Library members progress', async () => {
-  const left=(await f.create('First native reservation',0x6110)).subject.id;
-  const right=(await f.create('First native input',0x6110)).subject.id;
-  const job=(await (await admission({kind:'merge',survivor:left,redirected:right,release:release.digest})).execute()).value;
-  expect(await store.readMapping(f.pool,left)).toEqual({state:'pending',original:left,job});
-  expect(await resolveSubject({pool:f.pool,access:f.access},await f.actor(),left)).toBeNull();
-  const localA=(await f.create('Independent same-home group',0x6110)).subject.id;
-  const localB=(await f.create('Independent same-home input',0x6110)).subject.id;
-  const before=await storeSnapshot([localA,localB]);
-  await expect((await admission({kind:'merge',survivor:localA,redirected:localB,release:release.digest})).execute())
-    .rejects.toMatchObject({code:'identity_epoch_unavailable'});
-  expect(await storeSnapshot([localA,localB])).toEqual(before);
-  const disjoint=(await f.create('Disjoint shelf source',0x6120)).subject.id;
-  expect(await readableSubjects({pool:f.pool,access:f.access},await f.actor(),[left,disjoint])).toEqual([disjoint]);
-  const other=(await f.create('Disjoint merge input',0x6120)).subject.id;
-  const second=(await (await admission({kind:'merge',survivor:disjoint,redirected:other,release:release.digest})).execute()).value;
+  const left = (await f.create('First native reservation', 0x6110)).subject.id;
+  const right = (await f.create('First native input', 0x6110)).subject.id;
+  const job = (
+    await (await admission({ kind: 'merge', survivor: left, redirected: right, release: release.digest })).execute()
+  ).value;
+  expect(await store.readMapping(f.pool, left)).toEqual({ state: 'pending', original: left, job });
+  expect(await resolveSubject({ pool: f.pool, access: f.access }, await f.actor(), left)).toBeNull();
+  const localA = (await f.create('Independent same-home group', 0x6110)).subject.id;
+  const localB = (await f.create('Independent same-home input', 0x6110)).subject.id;
+  const before = await storeSnapshot([localA, localB]);
+  await expect(
+    (await admission({ kind: 'merge', survivor: localA, redirected: localB, release: release.digest })).execute(),
+  ).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
+  expect(await storeSnapshot([localA, localB])).toEqual(before);
+  const disjoint = (await f.create('Disjoint shelf source', 0x6120)).subject.id;
+  expect(await readableSubjects({ pool: f.pool, access: f.access }, await f.actor(), [left, disjoint])).toEqual([
+    disjoint,
+  ]);
+  const other = (await f.create('Disjoint merge input', 0x6120)).subject.id;
+  const second = (
+    await (await admission({ kind: 'merge', survivor: disjoint, redirected: other, release: release.digest })).execute()
+  ).value;
   expect(second.jobId).not.toBe(job.jobId);
-  expect(await store.readMapping(f.pool,disjoint)).toEqual({state:'pending',original:disjoint,job:second});
-  expect((await store.readJob(f.pool,job))?.state).toBe('pending');
-  for (const pending of [job,second]) await expect(runCommand(f.pool,{partition:home(pending.jobId)},tx=>store.publish(tx,pending)))
-    .rejects.toMatchObject({code:'identity_participants_incomplete'});
+  expect(await store.readMapping(f.pool, disjoint)).toEqual({ state: 'pending', original: disjoint, job: second });
+  expect((await store.readJob(f.pool, job))?.state).toBe('pending');
+  for (const pending of [job, second])
+    await expect(
+      runCommand(f.pool, { partition: home(pending.jobId) }, (tx) => store.publish(tx, pending)),
+    ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
 });
 
 test('complete resulting group of exactly 4096 originals is admitted and remains pending without participant custody', async () => {
-  const survivor=(await f.create('4096 terminal',0x6130)).subject.id;
-  const redirected=(await f.create('4096 merged root',0x6130)).subject.id;
-  await seedLegacyGroup(f,redirected,4094);
-  await requireCutover([survivor,redirected]);
-  const job=(await (await admission({kind:'merge',survivor,redirected,release:release.digest})).execute()).value;
-  let after:string|null=null;
-  let total=0;
+  const survivor = (await f.create('4096 terminal', 0x6130)).subject.id;
+  const redirected = (await f.create('4096 merged root', 0x6130)).subject.id;
+  await seedLegacyGroup(f, redirected, 4094);
+  await requireCutover([survivor, redirected]);
+  const job = (await (await admission({ kind: 'merge', survivor, redirected, release: release.digest })).execute())
+    .value;
+  let after: string | null = null;
+  let total = 0;
   do {
-    const page=await store.pageChanges(f.pool,job,after);
+    const page = await store.pageChanges(f.pool, job, after);
     expect(page.changes.length).toBeLessThanOrEqual(100);
-    total+=page.changes.length;
-    after=page.next;
-  } while(after!==null);
+    total += page.changes.length;
+    after = page.next;
+  } while (after !== null);
   expect(total).toBe(4096);
-  expect(await store.readMapping(f.pool,redirected)).toEqual({state:'pending',original:redirected,job});
-  await expect(runCommand(f.pool,{partition:home(job.jobId)},tx=>store.publish(tx,job)))
-    .rejects.toMatchObject({code:'identity_participants_incomplete'});
-},600_000);
+  expect(await store.readMapping(f.pool, redirected)).toEqual({ state: 'pending', original: redirected, job });
+  await expect(
+    runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
+  ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
+}, 600_000);
+
+test('one native RR cut stays coherent when admission commits between source and control reads', async () => {
+  const survivor = (await f.create('RR survivor', 0x6140)).subject.id;
+  const redirected = (await f.create('RR input', 0x6140)).subject.id;
+  let captured!: () => void;
+  let releaseSnapshot!: () => void;
+  const sourceRead = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
+  const proceed = new Promise<void>((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  let restore: (() => void) | undefined;
+  f.pool.once('acquire', (client: PoolClient) => {
+    const query = client.query;
+    restore = () => {
+      client.query = query;
+    };
+    client.query = async function (...args: unknown[]) {
+      const result = await Reflect.apply(query, client, args);
+      const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text;
+      if (text?.includes('identity_epoch_mapping')) {
+        restore!();
+        captured();
+        await proceed;
+      }
+      return result;
+    } as PoolClient['query'];
+  });
+  const observation = store.readMapping(f.pool, survivor);
+  let job: IdentityJobRef;
+  try {
+    await sourceRead;
+    job = (await (await admission({ kind: 'merge', survivor, redirected, release: release.digest })).execute()).value;
+  } finally {
+    restore?.();
+    releaseSnapshot();
+  }
+  // The snapshot predates the admission; neither a later control cut nor an extra source snapshot is mixed in.
+  expect(await observation).toMatchObject({ state: 'mapped', terminal: survivor });
+  expect(await store.readMapping(f.pool, survivor)).toEqual({ state: 'pending', original: survivor, job });
+});

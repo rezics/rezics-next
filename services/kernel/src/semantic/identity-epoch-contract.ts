@@ -110,6 +110,8 @@ export type IdentityEpochStore = Readonly<{
    * Missing/unready/moved source OR control is unavailable, never guessed self.
    */
   readMapping(pool: Pool, original: string): Promise<IdentityMapping>;
+  /** Same producer and snapshot shared across a bounded page; no per-ID control probes. */
+  readMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]>;
   /** Exact maintained group cardinality (including the terminal), cap 4096 BEFORE any effect.
    * Busy conflicts without a second pending epoch. Repeated identical receipt returns the same job.
    * Emits native durable wakeup in the same command as pending + immutable intent.

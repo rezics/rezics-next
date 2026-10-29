@@ -19,6 +19,8 @@ ALTER TABLE semantic.identity_epoch_original DROP CONSTRAINT identity_epoch_orig
 ALTER TABLE semantic.identity_epoch_legacy_member DROP CONSTRAINT identity_epoch_legacy_member_partition_no_check;
 ALTER TABLE semantic.identity_epoch_bootstrap_custody DROP CONSTRAINT identity_epoch_bootstrap_custody_partition_no_check;
 ALTER TABLE semantic.identity_epoch_group ADD COLUMN generation uuid NOT NULL DEFAULT gen_random_uuid();
+ALTER TABLE semantic.identity_epoch_group ADD COLUMN owner_epoch integer;
+UPDATE semantic.identity_epoch_group g SET owner_epoch=p.epoch FROM core.partition p WHERE p.partition_no=g.partition_no;
 ALTER TABLE semantic.identity_epoch_group ADD COLUMN version bigint NOT NULL DEFAULT 1;
 ALTER TABLE semantic.identity_epoch_group ADD COLUMN ready boolean NOT NULL DEFAULT false;
 ALTER TABLE semantic.identity_epoch_mapping ADD COLUMN control_partition integer;

@@ -44,8 +44,18 @@ export const IDENTITY_EPOCH_BOOTSTRAP = 'com.rezics.semantic.identity-epoch.boot
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
-  [IDENTITY_EPOCH_ADMITTED]: Type.Object({jobId: UUID, epoch: Type.String({pattern:'^[1-9][0-9]*$'}), partition: Type.Integer({minimum:0,maximum:4095})}, {additionalProperties:false}),
-  [IDENTITY_EPOCH_PROGRESS]: Type.Object({partition: Type.Integer({minimum:0,maximum:4095}), generation: Type.String({pattern:'^[1-9][0-9]*$'})}, {additionalProperties:false}),
+  [IDENTITY_EPOCH_ADMITTED]: Type.Object(
+    {
+      jobId: UUID,
+      epoch: Type.String({ pattern: '^[1-9][0-9]*$' }),
+      partition: Type.Integer({ minimum: 0, maximum: 4095 }),
+    },
+    { additionalProperties: false },
+  ),
+  [IDENTITY_EPOCH_PROGRESS]: Type.Object(
+    { partition: Type.Integer({ minimum: 0, maximum: 4095 }), generation: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    { additionalProperties: false },
+  ),
   [IDENTITY_EPOCH_BOOTSTRAP]: Type.Object(
     { partition: Type.Integer({ minimum: 0, maximum: 4095 }), generation: Type.String({ pattern: '^[1-9][0-9]*$' }) },
     { additionalProperties: false },

@@ -86,4 +86,6 @@ test('native current mapping remains bounded as unrelated subject history grows'
     },
   });
   expect(report.samples).toHaveLength(3);
+  for (const sample of report.samples)
+    for (const cost of sample.repetitions) expect(cost.statements + cost.controlStatements).toBeLessThanOrEqual(8);
 }, 600_000);
