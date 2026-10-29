@@ -362,6 +362,13 @@ keep these ordered per-run records in `occurrenceRepetitions`, with foreground a
 separate. Use these records for checks that must prove the cost of each attempt, such as an aborted transaction and
 its successful retry. `statementRepetitions` and grouped statement attributions remain useful for overall profiles;
 they combine matching SQL across runs and must not be split by attempt.
+Checks may declare `attempts: { commands }` to count top-level transaction attempts per backend. Reports retain
+inclusive statement, row and block totals and the failed-statement SQLSTATE ledger, while also listing committed and
+aborted attempts by SQLSTATE for each scale and repetition. With attempts declared, each statement fingerprint's rows
+and blocks per execution must meet the check's growth bounds; committed attempts must have the same statement count
+across scales and repetitions, and aborted attempts may run no more statements. Executed attempts per declared command
+form a separate series: contention may fall as data grows but may not rise. The owner sets any absolute retry-rate
+ceiling. Checks without `attempts` keep their existing bounds.
 Growth checks can also declare `counted` units: `read(value, scale)` extracts per-run integer counts, while `limits`
 sets a ceiling at every scale and `bounds` sets a growth rule; reports include each unit's median and measured values.
 The harness provides `connections` as the number of distinct backend processes used by the operation when

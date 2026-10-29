@@ -76,6 +76,8 @@ export type GrowthCheck = {
   /** Counts returned by the operation. `includeBackends` makes the harness-provided `connections` count available. */
   readonly counted?: CountedCheck;
   readonly includeBackends?: boolean;
+  /** Number of logical top-level transaction commands in each measured run. Enables attempt-based bounds. */
+  readonly attempts?: { readonly commands: number };
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
   /**
    * Unmeasured runs per scale, after `grow` and before the measured runs, default 1. Calls `warmup` when given,
@@ -120,7 +122,124 @@ export type ReportSample = {
   /** Measured runs discarded because they touched a backend not seen earlier at this scale. */
   readonly coldBackendDiscards: number;
   readonly counted?: CountedSample;
+  readonly attempts?: AttemptSample;
 };
+
+export type AttemptOutcome = 'committed' | `aborted:${string}`;
+export type AttemptRecord = {
+  readonly backend: number;
+  readonly outcome: AttemptOutcome;
+  readonly statements: number;
+  readonly occurrences: readonly number[];
+};
+export type AttemptSample = {
+  readonly commands: number;
+  readonly byOutcome: Readonly<Record<string, number>>;
+  readonly attemptsPerCommand: number;
+  readonly repetitions: readonly {
+    readonly byOutcome: Readonly<Record<string, number>>;
+    readonly attemptsPerCommand: number;
+    readonly ledger: readonly AttemptRecord[];
+  }[];
+};
+
+function attemptRecords(capture: Capture, occurrences: StatementOccurrences): AttemptRecord[] {
+  const backends = capture.statementBackends;
+  if (!backends || backends.length !== capture.statements.length)
+    throw new TypeError('attempts require captures with backend attribution');
+  const active = new Map<number, number[]>();
+  const records: AttemptRecord[] = [];
+  for (const occurrence of occurrences.statements) {
+    const backend = occurrence.backend;
+    if (backend === undefined) throw new TypeError('attempts require a backend PID for every statement');
+    const text = capture.statements[occurrence.index]!;
+    if (/^\s*(?:BEGIN|START\s+TRANSACTION)\b/i.test(text)) {
+      if (active.has(backend)) throw new TypeError(`backend ${backend} began a transaction before ending its previous attempt`);
+      active.set(backend, [occurrence.index]);
+      continue;
+    }
+    const attempt = active.get(backend);
+    if (!attempt) continue;
+    attempt.push(occurrence.index);
+    if (/^\s*(?:COMMIT|END|ROLLBACK|ABORT)\b/i.test(text)) {
+      const sqlstate = attempt.map((index) => capture.statementErrors?.[index] ?? null)
+        .find((code) => code === '40001' || code === '40P01');
+      const error = sqlstate ?? (capture.statementErrors?.[occurrence.index] ?? null);
+      const outcome: AttemptOutcome = error === null ? 'committed' : `aborted:${error}`;
+      const statements = attempt.filter((index) => !isControlStatement(capture.statements[index]!)).length;
+      records.push({ backend, outcome, statements, occurrences: [...attempt] });
+      active.delete(backend);
+    }
+  }
+  if (active.size) throw new TypeError(`capture ended with unterminated transaction attempts on backends ${[...active.keys()].join(', ')}`);
+  return records;
+}
+
+/** Build the foreground transaction attempt ledger from a captured run. */
+export function readAttemptLedger(capture: Capture): AttemptRecord[] {
+  return attemptRecords(capture, statementOccurrences(capture));
+}
+
+function summarizeAttempts(commands: number, runs: readonly AttemptRecord[][]): AttemptSample {
+  const repetitions = runs.map((ledger) => {
+    const byOutcome: Record<string, number> = {};
+    for (const attempt of ledger) byOutcome[attempt.outcome] = (byOutcome[attempt.outcome] ?? 0) + 1;
+    return { byOutcome, attemptsPerCommand: ledger.length / commands, ledger };
+  });
+  const byOutcome: Record<string, number> = {};
+  for (const repetition of repetitions)
+    for (const [outcome, count] of Object.entries(repetition.byOutcome))
+      byOutcome[outcome] = (byOutcome[outcome] ?? 0) + count / repetitions.length;
+  return {
+    commands,
+    byOutcome,
+    attemptsPerCommand: repetitions.reduce((sum, item) => sum + item.attemptsPerCommand, 0) / repetitions.length,
+    repetitions,
+  };
+}
+
+export function validateAttemptSamples(check: GrowthCheck, samples: readonly ReportSample[]): void {
+  if (!check.attempts) return;
+  const ledgers = samples.map(({ attempts, scale }) => {
+    if (!attempts) throw new TypeError(`${check.name}: missing attempt ledger at scale ${scale}`);
+    for (const [index, run] of attempts.repetitions.entries()) {
+      const committed = run.ledger.filter(({ outcome }) => outcome === 'committed');
+      if (committed.length !== check.attempts!.commands)
+        throw new Error(`${check.name}: attempts declared ${check.attempts!.commands} commands at scale ${scale}, repetition ${index}, but observed ${committed.length} committed attempts`);
+    }
+    return attempts.repetitions.map(({ ledger }) => ledger);
+  });
+  const committedCounts = ledgers.flatMap((runs) => runs.map((ledger) => ledger.filter(({ outcome }) => outcome === 'committed').map(({ statements }) => statements).sort((a, b) => a - b)));
+  const expected = committedCounts[0] ?? [];
+  for (const [runIndex, counts] of committedCounts.entries()) {
+    if (counts.length !== expected.length || counts.some((count, index) => count !== expected[index]))
+      throw new Error(`${check.name}: committed attempt ${runIndex} statement counts differ; expected [${expected.join(', ')}], got [${counts.join(', ')}]`);
+  }
+  const committedMaximum = Math.max(0, ...committedCounts.flatMap((counts) => counts));
+  for (const runs of ledgers) for (const ledger of runs) for (const attempt of ledger)
+    if (attempt.outcome !== 'committed' && attempt.statements > committedMaximum)
+      throw new Error(`${check.name}: aborted attempt ${attempt.outcome} ran ${attempt.statements} statements, exceeding committed attempt count ${committedMaximum}`);
+  const attemptsByScale = samples.map(({ attempts }) => attempts!.attemptsPerCommand);
+  if (attemptsByScale.some((count, index) => index > 0 && count > attemptsByScale[index - 1]!))
+    throw new Error(`${check.name}: attempts per command grew with scale: ${attemptsByScale.join(', ')}`);
+
+  for (const metric of ['rows', 'blocks'] as const) {
+    const fingerprints = new Set(samples.flatMap(({ occurrenceRepetitions }) =>
+      occurrenceRepetitions.flatMap(({ statements }) => statements.map(({ statement }) => statement))));
+    for (const fingerprint of fingerprints) {
+      const points = samples.map((sample) => ({
+        scale: sample.scale,
+        repetitions: sample.occurrenceRepetitions.map(({ statements }) =>
+          Math.max(0, ...statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric]))),
+        uncertainty: Math.max(GROWTH_UNCERTAINTY[metric].absolute, GROWTH_UNCERTAINTY[metric].relative * Math.max(0,
+          ...sample.occurrenceRepetitions.flatMap(({ statements }) => statements.filter(({ statement }) => statement === fingerprint).map((item) => item[metric])))),
+      }));
+      const verdict = classifySeries(points, check.bounds[metric], metric === 'blocks' ? (check.indexProbes ?? 0) : 0);
+      if (verdict.outcome === 'violation')
+        throw new Error(`${check.name}: statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
+    }
+  }
+}
 
 export type StatementAttribution = {
   readonly statement: string;
@@ -198,6 +317,9 @@ function appendProfile(report: GrowthReport): void {
       coldBackendDiscards: samples.map(({ coldBackendDiscards }) => coldBackendDiscards),
       ...(samples.some(({ counted }) => counted !== undefined)
         ? { counted: samples.map(({ counted }) => counted ?? {}) }
+        : {}),
+      ...(samples.some(({ attempts }) => attempts !== undefined)
+        ? { attempts: samples.map(({ attempts }) => attempts ?? null) }
         : {}),
       relationSizes: samples.map(({ relationSizes }) => relationSizes),
       statements: profileStatements(samples),
@@ -328,6 +450,12 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const scales = check.scales ?? [1, 8, 64];
   const repetitions = check.repetitions ?? 5;
   const warmups = check.warmups ?? 1;
+  if (check.attempts) {
+    if (!Number.isSafeInteger(check.attempts.commands) || check.attempts.commands <= 0)
+      throw new TypeError(`${check.name}: attempts.commands must be a positive safe integer`);
+    if (check.includeBackends === false)
+      throw new TypeError(`${check.name}: attempts require includeBackends`);
+  }
   if (check.indexProbes !== undefined) {
     if (!Number.isSafeInteger(check.indexProbes) || check.indexProbes <= 0)
       throw new TypeError(`${check.name}: indexProbes must be a positive safe integer`);
@@ -396,6 +524,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const costs: Cost[] = [];
     const statementRepetitions: StatementAttribution[][] = [];
     const occurrenceRepetitions: StatementOccurrences[] = [];
+    const attemptRuns: AttemptRecord[][] = [];
     const countedRuns: Record<string, number>[] = [];
     const backendRepetitions: number[][] = [];
     let coldBackendDiscards = 0;
@@ -467,9 +596,11 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         costs.push(cost);
         statementRepetitions.push(statementAttributions(measured.capture));
         occurrenceRepetitions.push(statementOccurrences(measured.capture));
+        if (check.attempts) attemptRuns.push(attemptRecords(measured.capture, occurrenceRepetitions.at(-1)!));
         repetition++;
         accepted = true;
       }
+
     }
     samples.push({
       scale,
@@ -482,6 +613,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       occurrenceRepetitions,
       backendRepetitions,
       coldBackendDiscards,
+      ...(check.attempts ? { attempts: summarizeAttempts(check.attempts.commands, attemptRuns) } : {}),
     });
     previous = scale;
   }
@@ -516,6 +648,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   };
   appendProfile(report);
   assertBackgroundBound(check.name, samples);
+  validateAttemptSamples(check, samples);
   try {
     const countedFailures = check.counted
       ? countedViolations(
@@ -524,8 +657,11 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         )
       : [];
     if (rule === 'step') {
-      const metricViolations =
-        check.byteBounds === undefined
+      const metricViolations = check.attempts
+        ? check.byteBounds === undefined
+          ? []
+          : growthByteViolations(samples, check.byteBounds, check.slack)
+        : check.byteBounds === undefined
           ? growthViolations(samples, check.bounds, check.slack)
           : [
               ...growthViolations(samples, check.bounds, check.slack),
@@ -560,6 +696,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         throw error;
       }
       for (const metric of ['rows', 'blocks', 'statements'] as const) {
+        if (check.attempts) continue;
         const uncertainties = shadow[metric].uncertainties;
         const verdict = classifySeries(
           samples.map(({ scale, repetitions }, index) => ({
