@@ -103,14 +103,14 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
     expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
     for (const [at, allowed] of [
       ['-infinity', true],
-      ['1899-01-01', false],
-      ['2029-12-31', false],
-      ['2030-01-01', true],
-      ['2030-01-02', false],
-      ['2030-01-03', true],
-      ['2030-01-04', false],
-      ['2199-12-31', false],
-      ['2200-01-01', true],
+      ['1899-01-01T00:00:00Z', false],
+      ['2029-12-31T00:00:00Z', false],
+      ['2030-01-01T00:00:00Z', true],
+      ['2030-01-02T00:00:00Z', false],
+      ['2030-01-03T00:00:00Z', true],
+      ['2030-01-04T00:00:00Z', false],
+      ['2199-12-31T00:00:00Z', false],
+      ['2200-01-01T00:00:00Z', true],
       ['infinity', true],
     ] as const)
       await probe(at, allowed);
