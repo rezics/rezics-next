@@ -86,11 +86,41 @@ adopted projection is claimed, so no synthetic adoption is used to mask rejectio
 
 ## Verification record
 
-The artifact acceptance is `test -s docs/research/imports-audit/exact-quantity-qualifiers.md`.
-The focused native command and affected root typecheck run through worker-check;
-SQLite uses tmpfs via TMPDIR=/dev/shm. Check outcomes and first reached failures
-will be recorded after the committed freeze is exercised. No old suite, full
-kernel/web gate, timeout change or default converter repair is authorized here.
+Frozen test revision: `edc7800dde`. The artifact acceptance is
+`test -s docs/research/imports-audit/exact-quantity-qualifiers.md`; its execution
+result accompanies the final handoff and proves specification delivery only.
+
+Commands from the worktree root:
+
+```sh
+bun scripts/worker-check.ts -- env TMPDIR=/dev/shm KERNEL_CHECK_SKIP_STALE_CLEANUP=1 bun run --cwd services/kernel check test/imports/exact-quantity-qualifiers.test.ts
+bun scripts/worker-check.ts -- env TYPECHECK_CHANGED=services/kernel/test/imports/exact-quantity-qualifiers.test.ts KERNEL_CHECK_SKIP_STALE_CLEANUP=1 bun scripts/typecheck.ts
+```
+
+Affected root typecheck: **exit 0**, checking the kernel (one of thirteen
+workspaces), including construct. Log:
+`.temp/goal/checks/worker-check-2026-10-29T05-08-37.306Z-f0e5acad.log`.
+
+Focused native check: **infrastructure exit 1**, after the wrapper automatically
+retried once under the same check ID. Both runs completed dependency installation
+and reached `stack-run: kernel check local, already on a check host`, then produced
+no further output. First run log:
+`.temp/goal/checks/worker-check-2026-10-29T05-07-55.981Z-ebb29a59.log`.
+Retry log:
+`.temp/goal/checks/worker-check-2026-10-29T05-21-09.872Z-9a67a07c.log`.
+The first reached failure was the wrapper's log-growth infrastructure monitor,
+not a native scenario assertion. Its final exact error line was:
+
+```text
+worker-check: infrastructure failure (log did not grow for 10 minutes) on ah-ipv6; second runner failed; log .temp/goal/checks/worker-check-2026-10-29T05-21-09.872Z-9a67a07c.log
+```
+
+The command requested SQLite tmpfs via TMPDIR=/dev/shm. None of the three
+scenario outcomes, native candidate observations or receipt immutability assertions
+was reached or verified in this attempt. Source inspection identifies the unsafe
+paths; it is not a substitute for the unavailable native run. No pass or red
+assertion is manufactured. All started checks were awaited to an exit status.
+No old suite, full kernel/web gate, timeout change or default converter repair ran.
 
 ## Limits and decisions
 
