@@ -499,7 +499,7 @@ test('growth profile: a worker check sent to a remote host with GROWTH_PROFILE n
     for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
     expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
     const remoteArgs = JSON.parse(readFileSync(fixture.remoteArgs, 'utf8')) as string[];
-    expect(remoteArgs.slice(0, 3)).toEqual(['--returns', profile, fixture.root]);
+    expect(remoteArgs.slice(0, 5)).toEqual(['--memory-gib', '2', '--returns', profile, fixture.root]);
     expect(remoteArgs).toContain(profile);
     expect(remoteArgs).toContain('export GROWTH_PROFILE="$PWD/$1"; shift; exec "$@"');
   } finally {
@@ -599,7 +599,7 @@ test('growth profile: a worker check without GROWTH_PROFILE passes no extra envi
     for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
     expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
     const remoteArgs = JSON.parse(readFileSync(fixture.remoteArgs, 'utf8')) as string[];
-    expect(remoteArgs).toEqual([fixture.root, '--', ...command]);
+    expect(remoteArgs).toEqual(['--memory-gib', '2', fixture.root, '--', ...command]);
     expect(remoteArgs).not.toContain('--returns');
   } finally {
     for (const key of [
