@@ -183,15 +183,14 @@ test('promotion gates the dev head and fast-forwards main and marks every task i
   }
 });
 
-test('a failing promotion reverts the culprit on dev and sends it a fix round and promotes the remaining tasks', async () => {
+test('a failing stabilize candidate stays on dev for a fix without reverting tasks', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('alpha');
-    const prefix = h.head();
     const culprit = await h.seed('bad');
-    const failingPrefix = h.head();
     const last = await h.seed('omega');
-    const dev = h.head();
+    const dev = h.head(),
+      main = h.head('main');
     h.settings.gate = failsWith('bad');
     h.settings.promotionParallelism = 2;
     let active = 0,
@@ -207,47 +206,44 @@ test('a failing promotion reverts the culprit on dev and sends it a fix round an
         active--;
       }
     });
-    expect(checked.has(prefix)).toBe(true);
-    expect(checked.has(failingPrefix)).toBe(true);
-    expect(peak).toBeGreaterThan(1);
+    expect(checked).toEqual(new Set([dev]));
+    expect(peak).toBe(1);
     expect(peak).toBeLessThanOrEqual(2);
-    ancestor(h.root, dev, h.head());
-    expect(git(h.root, 'rev-list', '--count', `${dev}..dev`)).toBe('1');
-    expect(git(h.root, 'diff', '--name-only', dev, 'dev')).toBe('bad');
-    expect(h.head('main')).toBe(h.head());
-    expect(existsSync(join(h.root, 'bad'))).toBe(false);
-    expect(h.store.task(first.id).state).toBe('merged');
-    expect(h.store.task(last.id).state).toBe('merged');
-    const retry = h.store.task(culprit.id);
-    expect(retry.currentAttempt).toBe(2);
-    expect(h.store.attempt({ taskId: culprit.id, attempt: 2 }).fixRound).toBe(1);
-    expect(h.inbox).toEqual([]);
+    expect(h.head()).toBe(dev);
+    expect(h.head('main')).toBe(main);
+    expect(git(h.root, 'show', 'dev:bad')).toBe('bad');
+    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
+    for (const task of [first, culprit, last]) {
+      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(h.store.task(task.id).currentAttempt).toBe(1);
+    }
+    expect(h.inbox.map((event) => event.kind)).toEqual(['environment']);
   } finally {
     h.dispose();
   }
 });
 
-test('a reverted culprit takes its after dependents in the batch with it and they are held behind it', async () => {
+test('a failing stabilize candidate leaves its dependent tasks integrated pending a fix', async () => {
   const h = integrationHarness();
   try {
     const culprit = await h.seed('bad', [], failsWith('bad'));
     const direct = await h.seed('direct', [culprit.id]);
     const transitive = await h.seed('transitive', [direct.id]);
     const independent = await h.seed('independent');
-    const dev = h.head();
+    const dev = h.head(),
+      main = h.head('main');
     await h.promote();
-    ancestor(h.root, dev, h.head());
-    expect(git(h.root, 'rev-list', '--count', `${dev}..dev`)).toBe('1');
-    expect(git(h.root, 'diff', '--name-only', dev, 'dev').split('\n')).toEqual(['bad', 'direct', 'transitive']);
-    expect(h.head('main')).toBe(h.head());
-    expect(existsSync(join(h.root, 'independent'))).toBe(true);
+    expect(h.head()).toBe(dev);
+    expect(h.head('main')).toBe(main);
+    expect(git(h.root, 'show', 'dev:independent')).toBe('independent');
     for (const dependent of [direct, transitive]) {
-      expect(h.store.task(dependent.id).state).toBe('held');
+      expect(h.store.task(dependent.id).state).toBe('integrated');
       expect(h.store.task(dependent.id).currentAttempt).toBe(1);
       expect(h.store.task(dependent.id).brief.after).toEqual(dependent.brief.after);
     }
-    expect(h.store.task(independent.id).state).toBe('merged');
-    expect(h.store.task(culprit.id).currentAttempt).toBe(2);
+    expect(h.store.task(independent.id).state).toBe('integrated');
+    expect(h.store.task(culprit.id).currentAttempt).toBe(1);
+    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
   } finally {
     h.dispose();
   }
