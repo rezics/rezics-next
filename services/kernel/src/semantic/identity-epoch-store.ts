@@ -111,10 +111,10 @@ export function recordIdentityEpochNativeCommit(tx: CommandTransaction, purpose:
   });
 }
 
-function json(value: unknown): string {
+export function serializeIdentityValue(value: unknown): string {
   return JSON.stringify(value, (_key, entry: unknown) => (typeof entry === 'bigint' ? entry.toString() : entry));
 }
-function receiptValue(receipt: IdentityReceipt) {
+export function identityReceiptValue(receipt: IdentityReceipt) {
   return receipt.kind === 'subject.merge'
     ? {
         kind: receipt.kind,
@@ -122,15 +122,40 @@ function receiptValue(receipt: IdentityReceipt) {
       }
     : receipt;
 }
-function receiptKey(receipt: IdentityReceipt): string {
+export function identityReceiptKey(receipt: IdentityReceipt): string {
   return receipt.kind === 'subject.merge'
     ? json([receipt.kind, receipt.command.actorAccountId, receipt.command.kind, receipt.command.key])
     : json([receipt.kind, receipt.account, receipt.receipt]);
 }
-function decodeReceipt(value: ReturnType<typeof receiptValue>): IdentityReceipt {
+const json = serializeIdentityValue;
+const receiptValue = identityReceiptValue;
+const receiptKey = identityReceiptKey;
+function decodeReceipt(value: ReturnType<typeof identityReceiptValue>): IdentityReceipt {
   return value.kind === 'subject.merge'
     ? { ...value, command: { ...value.command, digest: Buffer.from(value.command.digest, 'base64') } }
     : value;
+}
+
+export function authorizeIdentityAdmission(tx: CommandTransaction, receipt: IdentityReceipt): void {
+  const command = currentCommand(tx);
+  if (receipt.kind !== 'subject.merge') {
+    if (command.basis !== null) throw new TypeError('Accounts identity admission requires native platform intent');
+    throw new IdentityEpochStoreError(
+      'identity_epoch_unavailable',
+      'Missing Accounts persisted decision to identity intent owner hook',
+    );
+  }
+  const authorization = command.authorization;
+  if (
+    !command.basis ||
+    command.basis.actorAccountId !== receipt.command.actorAccountId ||
+    !authorization ||
+    authorization.mode !== 'execute' ||
+    authorization.action !== 'subject:merge' ||
+    authorization.resource.route !== 0 ||
+    authorization.resource.id !== GLOBAL_CONTEXT
+  )
+    throw new TypeError('Identity admission requires current native Global subject:merge authorization');
 }
 function decodeProgress(value: IdentityStepProgress): IdentityStepProgress {
   return {
@@ -203,25 +228,7 @@ export const identityEpochStore: IdentityEpochStore = {
   },
   async admit(tx, { intent, receipt }) {
     const command = control(tx);
-    if (receipt.kind === 'subject.merge') {
-      const authorization = command.authorization;
-      if (
-        !command.basis ||
-        command.basis.actorAccountId !== receipt.command.actorAccountId ||
-        !authorization ||
-        authorization.mode !== 'execute' ||
-        authorization.action !== 'subject:merge' ||
-        authorization.resource.route !== 0 ||
-        authorization.resource.id !== GLOBAL_CONTEXT
-      )
-        throw new TypeError('Identity admission requires current native Global subject:merge authorization');
-    } else {
-      if (command.basis !== null) throw new TypeError('Accounts identity admission requires native platform intent');
-      throw new IdentityEpochStoreError(
-        'identity_epoch_unavailable',
-        'Missing Accounts persisted decision to identity intent owner hook',
-      );
-    }
+    authorizeIdentityAdmission(tx, receipt);
     const prior = (await tx.query(storeSelectJob3.sql, [receiptKey(receipt)])).rows[0];
     if (prior) {
       if (

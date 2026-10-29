@@ -83,7 +83,7 @@ export type IdentityJob = Readonly<{
   ref: IdentityJobRef;
   intent: IdentityIntent;
   receipt: IdentityReceipt;
-  state: 'pending' | 'published';
+  state: 'preparing' | 'pending' | 'cancelling' | 'cancelled' | 'published';
   mapping: IdentityStepProgress | null;
   participants: Readonly<{
     'search-canonical-index': IdentityStepProgress | null;

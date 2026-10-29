@@ -1,7 +1,14 @@
 import { startRelays } from '../events/relays.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { stepIdentityEpochBootstrapWork, identityBootstrapWake } from './identity-epoch-bootstrap.ts';
-import { IDENTITY_EPOCH_BOOTSTRAP, SUBJECT_MERGED, SUBJECT_REVISED, LINKS_MOVING } from './events.ts';
+import {
+  IDENTITY_EPOCH_BOOTSTRAP,
+  IDENTITY_EPOCH_ADMITTED,
+  SUBJECT_MERGED,
+  SUBJECT_REVISED,
+  LINKS_MOVING,
+} from './events.ts';
+import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
 import { runCommand } from '../command/command.ts';
 import { linkProjection } from './links.ts';
 
@@ -10,6 +17,14 @@ export const semanticWorkModule: WorkModule = {
   name: 'semantic',
   register(context) {
     context.addEffects([
+      {
+        name: 'identity_epoch_admission',
+        types: [IDENTITY_EPOCH_ADMITTED],
+        run: async (event) => {
+          const data = event.data as { jobId: string; epoch: string };
+          await stepIdentityEpochAdmission(context.pool, { jobId: data.jobId, epoch: BigInt(data.epoch) });
+        },
+      },
       {
         name: 'identity_epoch_bootstrap',
         types: [
