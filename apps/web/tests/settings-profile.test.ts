@@ -61,8 +61,12 @@ test('profile story responses accept the relative URL used by PageStory and incl
   }
 });
 
-test('profile reads one public identity by ids and maps its display name, biography, avatar and links', async () => {
-  const { client, calls } = clientFor(() => Response.json({ accounts: [account] }));
+test('profile reads the signed-in identity by id, then loads editable values by handle', async () => {
+  const { client, calls } = clientFor((request) =>
+    new URL(request.url).searchParams.has('ids')
+      ? Response.json({ accounts: [{ id: 'alice', kind: 'actor', handle: 'alice', displayName: 'Alice' }] })
+      : Response.json({ accounts: [account] }),
+  );
   const profile = await loadProfileRecord(client, 'Bearer page-token', 'alice');
   expect(profile).toMatchObject({
     accountId: 'alice',
@@ -72,7 +76,10 @@ test('profile reads one public identity by ids and maps its display name, biogra
     avatar: { id: 'media-old' },
     links: [{ label: 'Home', url: 'https://example.test' }],
   });
-  expect(calls).toEqual([{ method: 'GET', url: '/v1/accounts?ids=alice', body: null, key: null }]);
+  expect(calls).toEqual([
+    { method: 'GET', url: '/v1/accounts?ids=alice', body: null, key: null },
+    { method: 'GET', url: '/v1/accounts?handle=alice', body: null, key: null },
+  ]);
   expect(profile).not.toHaveProperty('speakersListed');
 });
 
