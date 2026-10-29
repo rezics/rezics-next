@@ -177,7 +177,7 @@ async function readHome(
       .map((board) => ({
         id: board.id,
         title: board.title,
-        description: (board as typeof board & { description?: string | null }).description,
+        description: (board as typeof board & { description?: string | null }).description ?? null,
         purpose: board.purpose,
         visibility: board.visibility,
       })),
@@ -275,7 +275,7 @@ export async function loadMyRealms(
     realms: page.items.map((item) => ({
       realmId: item.realmId,
       name: item.name,
-      description: (item as typeof item & { description?: string | null }).description,
+      description: (item as typeof item & { description?: string | null }).description ?? null,
     })),
     next: page.next,
   };
