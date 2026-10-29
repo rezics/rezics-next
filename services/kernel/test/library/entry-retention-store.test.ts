@@ -18,10 +18,10 @@ test('native retained entry DAO preserves complete independent deletions and res
       acceptingType: null,
       profileId: 'legacy-fixed-v1',
     };
-    const seed = async (inc: string) =>
+    const seed = async (inc: string, sequence: string | null = '9007199254740995') =>
       c.query(
-        `INSERT INTO library.entry(route,account_id,subject_id,requested_subject_id,state,revision,created_at,updated_at,transaction_id,activity_at,finished_at,type_id,type_source_id,type_source_partition,type_source_epoch,type_source_position,incarnation_id,library_profile_pin) VALUES($1,$2,$3,$4,'completed',1,$5,$5,$6,$5,$5,$7,$8,$9,2,9007199254740993,$10,$11)`,
-        [route, id(1), id(2), id(3), original, id(80), id(4), id(5), route >> 4, inc, pin],
+        `INSERT INTO library.entry(route,account_id,subject_id,requested_subject_id,state,revision,created_at,updated_at,transaction_id,activity_at,finished_at,type_id,type_source_id,type_source_partition,type_source_epoch,type_source_position,incarnation_id,library_profile_pin,owner_write_seq) VALUES($1,$2,$3,$4,'completed',1,$5,$5,$6,$5,$5,$7,$8,$9,2,9007199254740993,$10,$11,$12)`,
+        [route, id(1), id(2), id(3), original, id(80), id(4), id(5), route >> 4, inc, pin, sequence],
       );
     const key = { route, accountId: id(1), subjectId: id(2) };
     const context = (n: number, time = deleted) => ({ transactionId: id(n), time });
@@ -48,14 +48,18 @@ test('native retained entry DAO preserves complete independent deletions and res
     ).rows[0]!;
     for (const column of Object.keys(a)) expect(raw[column]).toEqual(a[column]);
     expect(raw.type_source_position).toBe('9007199254740993');
+    expect(raw.owner_write_seq).toBe('9007199254740995');
+    expect(d1!.ownerWriteSeq).toBe('9007199254740995');
     expect(
       (await c.query('SELECT subject_id FROM library.entry WHERE route=$1 AND account_id=$2', [route, id(1)])).rows,
     ).toEqual([]);
-    await seed(id(11));
+    await seed(id(11), null);
     const undo1 = { ...key, deletionId: id(21), deletedRevision: 2 };
     expect(await s.restoreRetainedEntryDeletion(c, undo1, context(22))).toBeNull();
     expect(await s.readRetainedEntryDeletion(c, { ...key, deletionId: id(21) })).not.toBeNull();
     const d2 = await s.retainEntryDeletion(c, { ...key, incarnationId: id(11), revision: 1 }, context(23));
+    expect(d2!.ownerWriteSeq).toBeNull();
+    expect((await s.readRetainedEntryDeletion(c, { ...key, deletionId: id(23) }))!.ownerWriteSeq).toBeNull();
     expect(d2!.deletionId).not.toBe(d1!.deletionId);
     expect(await s.restoreRetainedEntryDeletion(c, undo1, context(24, d1!.restoreUntil))).toBeNull();
     const restored = await s.restoreRetainedEntryDeletion(c, undo1, context(25));
@@ -71,6 +75,8 @@ test('native retained entry DAO preserves complete independent deletions and res
       expect(live[column]).toEqual(a[column]);
     expect(live.revision).toBe(3);
     expect(live.transaction_id).toBe(id(25));
+    expect(live.owner_write_seq).toBe('9007199254740995');
+    expect(restored!.ownerWriteSeq).toBe('9007199254740995');
     expect(await s.readRetainedEntryDeletion(c, { ...key, deletionId: id(21) })).toBeNull();
     expect(await s.readRetainedEntryDeletion(c, { ...key, deletionId: id(23) })).not.toBeNull();
     const d3 = await s.retainEntryDeletion(c, { ...key, incarnationId: id(10), revision: 3 }, context(26));
