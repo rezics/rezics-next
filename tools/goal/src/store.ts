@@ -301,8 +301,12 @@ export class WorkerStore implements AttemptFence {
   }
   recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
     this.db.transaction(() => {
-      this.assertCurrent(ref);
       const task = this.task(ref.taskId);
+      if (
+        task.currentAttempt !== ref.attempt ||
+        (ref.attempt > 0 && ['superseded', 'cancelled'].includes(this.attempt(ref).state))
+      )
+        throw new StaleAttemptError(ref, task.currentAttempt);
       update(task);
       this.saveTask(task);
       const existing = this.retryIntent(ref);
