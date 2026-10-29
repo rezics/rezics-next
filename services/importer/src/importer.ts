@@ -726,9 +726,7 @@ export class Importer {
     if (claim?.state !== 'bound') return { outcome: 'failed', kind: deferred.kind };
     // The context-free conversion exists only as input to identifier lookup.
     const lookup = this.options.identifierLookup;
-    const ownReferences = lookup
-      ? null
-      : resolveOwnReferences(deferred.projection, row.source, this.session.bindings);
+    const ownReferences = lookup ? null : resolveOwnReferences(deferred.projection, row.source, this.session.bindings);
     const resolvedReferences = lookup
       ? await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal })
       : ownReferences?.resolvedReferences;

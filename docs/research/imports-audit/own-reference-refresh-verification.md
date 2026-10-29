@@ -147,10 +147,10 @@ The expected native qualifier still fails contextual typing at `toContainEqual`.
 schema or portable proposal shape would violate their existing contracts; the later authorized matcher generic was not installed in that run. The worker preserved the installed file. This is a frozen acceptance/type conflict,
 not a tooling failure, and no current native transition or successful native assertion is claimed.
 
-| Required check | Terminal result | Receipt |
-| --- | --- | --- |
-| Focused native acceptance | Exit 1, compile failure before cases; 4,424.201 seconds queued, then ran on a | `c24ed1bd-2d86-4674-babf-06c56216869e`; `.temp/goal/checks/worker-check-2026-10-29T12-05-00.809Z-9efe7750.log` |
-| Root typecheck | Exit 1, same kernel test error; all other 12 workspaces completed without errors; 1,199.816 seconds queued, then ran on b | `3e9d7874-a93b-4f1e-9f97-f79f0aa0bad7`; `.temp/goal/checks/worker-check-2026-10-29T12-08-12.564Z-c501505c.log` |
+| Required check            | Terminal result                                                                                                           | Receipt                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Focused native acceptance | Exit 1, compile failure before cases; 4,424.201 seconds queued, then ran on a                                             | `c24ed1bd-2d86-4674-babf-06c56216869e`; `.temp/goal/checks/worker-check-2026-10-29T12-05-00.809Z-9efe7750.log` |
+| Root typecheck            | Exit 1, same kernel test error; all other 12 workspaces completed without errors; 1,199.816 seconds queued, then ran on b | `3e9d7874-a93b-4f1e-9f97-f79f0aa0bad7`; `.temp/goal/checks/worker-check-2026-10-29T12-08-12.564Z-c501505c.log` |
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts

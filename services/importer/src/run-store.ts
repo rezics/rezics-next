@@ -686,11 +686,13 @@ export class RunStore<Projection = BatchStatement[]> {
   referenceSignature(source: string, key: string): string | null {
     sourceId(source);
     keyId(key);
-    return this.get<{ signature: string }>(
-      'SELECT signature FROM run_reference_signatures WHERE source=? AND record_key=?',
-      source,
-      key,
-    )?.signature ?? null;
+    return (
+      this.get<{ signature: string }>(
+        'SELECT signature FROM run_reference_signatures WHERE source=? AND record_key=?',
+        source,
+        key,
+      )?.signature ?? null
+    );
   }
   stageReferenceSignature(run: Run, key: string, signature: string): void {
     validateRun(run);

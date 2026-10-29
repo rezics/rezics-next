@@ -18,8 +18,9 @@ export function resolveOwnReferences(
     authors?: { key?: string }[];
     works?: { key?: string }[];
   };
-  const keys = [...(normalized.authors ?? []), ...(normalized.works ?? [])]
-    .flatMap((relation) => (relation.key ? [relation.key] : []));
+  const keys = [...(normalized.authors ?? []), ...(normalized.works ?? [])].flatMap((relation) =>
+    relation.key ? [relation.key] : [],
+  );
   if (keys.length > 64) throw new Error('Open Library relation bound exceeded');
   const resolutions: [string, string | null][] = [];
   const resolvedReferences: Record<string, string> = {};
