@@ -44,6 +44,7 @@ import {
   IdempotencyConflictError,
   type CommandTransaction,
 } from '../command/command.ts';
+import { identityHomeAvailable } from './identity-epoch-admission.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readIdentityMappings } from './identity-epoch-read.ts';
@@ -536,7 +537,10 @@ export const identityEpochStore: IdentityEpochStore = {
     await tx.query(storeUpdateGroup2.sql, [partition, job.epoch.toString(), job.jobId]);
     return {
       value: job,
-      events: [{ type: IDENTITY_EPOCH_ADMITTED, data: { jobId: job.jobId, epoch: job.epoch.toString(), partition } }],
+      events: [
+        { type: IDENTITY_EPOCH_ADMITTED, data: { jobId: job.jobId, epoch: job.epoch.toString(), partition } },
+        identityHomeAvailable(partition),
+      ],
     };
   },
 };

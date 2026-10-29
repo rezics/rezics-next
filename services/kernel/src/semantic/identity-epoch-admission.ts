@@ -1,3 +1,4 @@
+import waiters from './identity-epoch-admission-waiters.sql';
 import collect from './identity-epoch-admission-collect.sql';
 import insertJob from './identity-epoch-admission-insert-job.sql';
 import insertBases from './identity-epoch-admission-insert-bases.sql';
@@ -36,7 +37,7 @@ import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readIdentityEpochCutover } from './identity-epoch-bootstrap.ts';
-import { IDENTITY_EPOCH_ADMITTED } from './events.ts';
+import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events.ts';
 import {
   IdentityEpochStoreError,
   identityJobPartition,
@@ -253,7 +254,7 @@ async function deliverHome(pool: Pool, ref: IdentityJobRef, scope: string, home:
         const recorded = await tx.query(record.sql, [home, transactionId, ref.jobId, stage]);
         if (recorded.rowCount !== 1) throw stale();
       });
-      return { value: null, events: [wake(ref)] };
+      return { value: null, events: [wake(ref), ...(stage === 'closed' ? [identityHomeAvailable(home)] : [])] };
     });
   } catch (error) {
     translate(error);
@@ -329,4 +330,23 @@ export async function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef
     },
   );
   return { job: ref, state: finalized.value, work: { ...work(), rows: 1 } };
+}
+
+export function identityHomeAvailable(partition: number, after = '00000000-0000-0000-0000-000000000000') {
+  return { type: IDENTITY_EPOCH_HOME_AVAILABLE, data: { partition, after } };
+}
+
+/** Native release wakes retained waiters through the existing bounded outbox/effect runner. No new queue or timer. */
+export async function wakeIdentityEpochAdmissionWaiters(pool: Pool, partition: number, after: string): Promise<void> {
+  await runCommand(pool, { partition }, async (tx) => {
+    const pending = (await tx.query(waiters.sql, [partition, after])).rows;
+    if (!pending.length) return noEffect(null);
+    return {
+      value: null,
+      events: [
+        ...pending.map((p) => wake({ jobId: p.job_id, epoch: BigInt(p.epoch) })),
+        ...(pending.length === 100 ? [identityHomeAvailable(partition, pending[99]!.job_id)] : []),
+      ],
+    };
+  });
 }

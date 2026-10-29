@@ -146,8 +146,14 @@ Admission captures exact native input generations before effects, checks the 409
 at the local control home. Overlapping input claims are busy; a different job occupying that home is locally
 unavailable. Disjoint homes retain independent progress. `identityJobPartition(job)` resolves routed job custody.
 Search and Library participant completion is never inferred from a receipt locator or bootstrap exhaustion.
-Cross-home preparation and output generation retirement remain incomplete; successful public merge and account
-verification/reversal delivery are not established by a pending store job.
+`prepareIdentityEpochAdmission(pool, authority, {intent, receipt})` double-collects released current input bases,
+then reserves the first ordered native control home. `stepIdentityEpochAdmission(pool, job)` acquires one planned
+home and reconciles its actual committed receipt into job custody. The default WorkModule runs that same step.
+`cancelIdentityEpochAdmission(pool, job)` selects cancellation before admission; bounded steps close every planned
+home, including uncertain or never-acquired homes, before releasing immutable input references. Delayed acquisition
+checks an irreversible receiving fence. Cancellation needs no new slot; admitted jobs cannot be cancelled.
+Output generation maintenance/retirement and the real mapping/Search/Library completion participants remain separate
+producers. Successful public merge and account verification/reversal delivery are not established by a pending store job.
 
 ## Agents
 

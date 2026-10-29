@@ -3,12 +3,14 @@ import type { WorkModule } from '../work/registry.ts';
 import { stepIdentityEpochBootstrapWork, identityBootstrapWake } from './identity-epoch-bootstrap.ts';
 import {
   IDENTITY_EPOCH_BOOTSTRAP,
+  IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
   IDENTITY_EPOCH_ADMITTED,
+  IDENTITY_EPOCH_HOME_AVAILABLE,
   SUBJECT_MERGED,
   SUBJECT_REVISED,
   LINKS_MOVING,
 } from './events.ts';
-import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
+import { stepIdentityEpochAdmission, wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts';
 import { runCommand } from '../command/command.ts';
 import { linkProjection } from './links.ts';
 
@@ -17,6 +19,14 @@ export const semanticWorkModule: WorkModule = {
   name: 'semantic',
   register(context) {
     context.addEffects([
+      {
+        name: 'identity_epoch_admission_wake',
+        types: [IDENTITY_EPOCH_HOME_AVAILABLE],
+        run: async (event) => {
+          const data = event.data as { partition: number; after: string };
+          await wakeIdentityEpochAdmissionWaiters(context.pool, data.partition, data.after);
+        },
+      },
       {
         name: 'identity_epoch_admission',
         types: [IDENTITY_EPOCH_ADMITTED],
@@ -29,6 +39,7 @@ export const semanticWorkModule: WorkModule = {
         name: 'identity_epoch_bootstrap',
         types: [
           IDENTITY_EPOCH_BOOTSTRAP,
+          IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
           SUBJECT_MERGED,
           SUBJECT_REVISED,
           LINKS_MOVING,

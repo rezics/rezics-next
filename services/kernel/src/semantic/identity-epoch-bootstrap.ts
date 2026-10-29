@@ -411,7 +411,11 @@ export async function stepIdentityEpochBootstrapWork(pool: Pool): Promise<Identi
   });
   await runCommand(pool, { partition: 0 }, async (tx) => {
     const state = (await tx.query(bootstrapSelectBootstrapTopology3.sql)).rows[0];
-    if (state.remaining === 0) return { value: null, events: [identityBootstrapWake(partition, progress.generation)] };
+    if (state.remaining === 0)
+      return {
+        value: null,
+        events: [{ ...identityBootstrapWake(partition, progress.generation), type: IDENTITY_EPOCH_PROGRESS }],
+      };
     // Concurrent scheduler deliveries may have advanced the cursor, but receipt custody is idempotent per source.
     // A raced delivery cannot close a different source or decrement remaining twice.
     const inserted = evidence
@@ -426,7 +430,10 @@ export async function stepIdentityEpochBootstrapWork(pool: Pool): Promise<Identi
         ).rowCount
       : 0;
     await tx.query(bootstrapUpdateBootstrapTopology.sql, [partition, inserted]);
-    return { value: null, events: [identityBootstrapWake(partition, progress.generation)] };
+    return {
+      value: null,
+      events: [{ ...identityBootstrapWake(partition, progress.generation), type: IDENTITY_EPOCH_PROGRESS }],
+    };
   });
   return progress;
 }

@@ -757,8 +757,8 @@ transaction ID AND component. The suite has no skip, todo, permanent throw or
 successful test adapter. Admission preservation is not proof of preservation through completed maintenance.
 
 The following exact integration cells are **NOT YET FROZEN**. They remain required outcomes; their prose is not a
-claim of executable coverage. STORE, mapping, fixed Search/Library adapters and coordinator exports above are still
-missing. Do not invent their schema, participant paths or barrier exports to make this suite green.
+claim of executable coverage. The native STORE and bootstrap exports are implemented; mapping maintenance, fixed
+Search/Library adapters and coordinator exports remain missing. Do not invent their schema, participant paths or barrier exports to make this suite green.
 
 | Scenario title                                                              | Required native schedule and missing prerequisite for owner review                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1306,9 +1306,9 @@ Existing `test/semantic/identity-epoch-admission.test.ts`, `identity-epoch-publi
 Their globally sole-job assertion, implicit bootstrap via readEpoch, legacy-only snapshot, stale wrong-destination
 first-apply case, legacy fact-table directory assertion and hypothetical suspended-bearer expectations cannot freeze
 the new boundary. Preserve the original safety/DTO/custody outcomes in the REQUIRED schedules above; revise native
-SPEC/executables only AFTER Cost confirmation and owner review. Earlier bootstrap P1114/setup reds did not execute
-the nineteen cutover scenarios and supply neither a native pass nor Cost confirmation. No costly retry is part of
-this documentation closure.
+SPEC/executables retain their business and custody outcomes while native scoped STORE and bootstrap acceptance
+replace the obsolete global-control assumptions. Earlier setup failures establish no native Cost result. Full
+publication still requires the actual mapping and fixed participant producers.
 
 ## Evidence and review boundary
 
