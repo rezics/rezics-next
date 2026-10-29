@@ -26,6 +26,7 @@ export type CheckHostProbeResult = { status: number | null; stderr: string };
 export type CheckHostProbe = (host: CheckHost, complete: (result: CheckHostProbeResult) => void) => void;
 type State = {
   alerts: Record<string, string>;
+  longAttemptReports?: Record<string, { at: string; command: string; commits: number }>;
   stabilizeBehindSince?: string;
   lastHostProbeAt?: string;
   hostProbeFailures?: Record<string, number>;
@@ -258,8 +259,8 @@ function longAttemptIncidents(
   tasks: Task[],
   now: number,
   limitFor: (task: Task) => number,
-): { key: string; managerId: string; kind: ManagerEventKind; summary: string }[] {
-  const found: { key: string; managerId: string; kind: ManagerEventKind; summary: string }[] = [];
+): { key: string; managerId: string; kind: ManagerEventKind; summary: string; command?: string; commits?: number }[] {
+  const found: { key: string; managerId: string; kind: ManagerEventKind; summary: string; command?: string; commits?: number }[] = [];
   for (const task of tasks) {
     if (task.state !== 'running' || task.currentAttempt < 1) continue;
     let attempt: Attempt;
@@ -272,18 +273,22 @@ function longAttemptIncidents(
     const elapsed = now - Date.parse(attempt.startedAt);
     if (!Number.isFinite(elapsed)) continue;
     const commands = recentCommands(attempt);
+    const command = commands.at(-1) ?? '(none recorded)';
+    const commits = commitCount(task);
     const waitsForCheck = commands.some((command) => /(?:^|[\s/])worker-check\.ts\b/.test(command));
     const longRunning = elapsed >= Math.max(1, limitFor(task));
     const processCommands = commands.filter(inspectsProcesses);
     const polling = !waitsForCheck && processCommands.length >= 2;
     if (longRunning || polling) {
-      const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commitCount(task)} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
+      const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commits} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
       if (longRunning)
         found.push({
           key: `long-attempt:${task.id}:${attempt.attempt}`,
           managerId: task.brief.manager,
           kind: 'stalled',
           summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
+          command,
+          commits,
         });
       if (polling)
         found.push({
@@ -488,8 +493,20 @@ export function watch(
   let count = 0;
   for (const violation of found) {
     const attemptAlert = longAttempts.find((alert) => alert.key === violation.key);
+    const isLongAttempt = attemptAlert?.key.startsWith('long-attempt:') ?? false;
     const last = state.alerts[violation.key] ? Date.parse(state.alerts[violation.key]!) : 0;
-    if (attemptAlert ? state.alerts[violation.key] !== undefined : now - last < ALERT_EVERY_MS) continue;
+    if (isLongAttempt && attemptAlert) {
+      const reports = (state.longAttemptReports ??= {});
+      const previous = reports[violation.key];
+      const unchanged = previous !== undefined && previous.command === attemptAlert.command && previous.commits === attemptAlert.commits;
+      const lastReportAt = previous ? Date.parse(previous.at) : Number.NaN;
+      if (unchanged && Number.isFinite(lastReportAt) && now - lastReportAt < 60 * 60_000) continue;
+      reports[violation.key] = {
+        at: new Date(now).toISOString(),
+        command: attemptAlert.command ?? '(none recorded)',
+        commits: attemptAlert.commits ?? 0,
+      };
+    } else if (attemptAlert ? state.alerts[violation.key] !== undefined : now - last < ALERT_EVERY_MS) continue;
     deliver(
       attemptAlert
         ? violation.summary
@@ -517,6 +534,8 @@ export function watch(
     const activeAlert = /^(?:long-attempt|attempt-polling):(.+)$/.exec(key);
     if (!live.has(key) && (!activeAlert || !activeAttempts.has(activeAlert[1]!))) delete state.alerts[key];
   }
+  for (const key of Object.keys(state.longAttemptReports ?? {}))
+    if (!live.has(key)) delete state.longAttemptReports![key];
   writeFileSync(`${path}.tmp`, JSON.stringify(state, null, 2));
   renameSync(`${path}.tmp`, path);
   return count;
