@@ -32,7 +32,7 @@ test('waits for a passing quick gate, then cuts from the newest passing dev head
       },
     });
     expect(commands.slice(0, 2)).toEqual([
-      ['bun', 'run', 'typecheck'],
+      ['bun', 'scripts/typecheck.ts'],
       ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
     ]);
     expect(h.head('stabilize')).toBe(newestGreen);

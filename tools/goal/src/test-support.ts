@@ -115,8 +115,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   writeFileSync(join(root, '.gitignore'), '.temp/\n');
   writeFileSync(
     join(root, 'package.json'),
-    JSON.stringify({ name: 'goal-fixture', private: true, workspaces: ['packages/*'], scripts: { typecheck: 'true' } }),
+    JSON.stringify({ name: 'goal-fixture', private: true, workspaces: ['packages/*'] }),
   );
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  writeFileSync(join(root, 'scripts/typecheck.ts'), 'process.exit(0);\n');
   mkdirSync(join(root, 'packages/definitions'), { recursive: true });
   writeFileSync(
     join(root, 'packages/definitions/package.json'),
@@ -267,7 +269,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         runGate: (command, cwd, logPath) => {
           // Most harness callbacks model the full promotion gate. Keep the newly added quick preflight independent;
           // tests for that preflight use promote() directly so their failure is observable.
-          if (JSON.stringify(command) === JSON.stringify(['bun', 'run', 'typecheck']) ||
+          if (JSON.stringify(command) === JSON.stringify(['bun', 'scripts/typecheck.ts']) ||
               JSON.stringify(command) === JSON.stringify(['bun', 'run', '--cwd', 'packages/definitions', 'release']))
             return Promise.resolve({ passed: true, output: '', timedOut: false });
           return fallback(command, cwd, logPath);

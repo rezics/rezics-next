@@ -27,7 +27,7 @@ export type PromotionOptions = {
 // default stopped every full gate before it could pass.
 export const PROMOTION_GATE_TIMEOUT_MS = 2 * 60 * 60_000;
 const STABILIZE_QUICK_GATE = [
-  ['bun', 'run', 'typecheck'],
+  ['bun', 'scripts/typecheck.ts'],
   ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
 ] as const;
 const ref = (branch: string) => `refs/heads/${branch}`;
