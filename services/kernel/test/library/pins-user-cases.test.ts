@@ -212,6 +212,10 @@ test(
     world(async (f) => {
       const a = await collection(f);
       const b = await collection(f);
+      const emptyPosition = await position(f);
+      revision(await remove(f, b.id, 0), 0);
+      expect(await list(f)).toEqual({ pins: [], revision: 0, next: null });
+      expect(await position(f)).toEqual(emptyPosition);
       revision(await put(f, a.id, 0), 1);
       revision(await put(f, b.id, 1), 2);
       const before = await position(f);
@@ -468,7 +472,7 @@ test(
           discoveryKey(),
         ])) as HttpResponse,
         200,
-      ).body.collection;
+      ).body.collection as Header;
       const current = status(await f.request('alice', 'GET', `/v1/collections/${a.id}`), 200).body.collection as Header;
       expect(current).toEqual(renamed);
       const concealed = status(
