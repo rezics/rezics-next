@@ -822,17 +822,34 @@ function stableRecording(value: unknown, previous: unknown): unknown {
 }
 
 /** Recorded story rows use the shared identity, labels and cover, projected to the story locale. */
-function applyStorySubjects(value: unknown, locale: string): unknown {
-  if (Array.isArray(value)) return value.map((item) => applyStorySubjects(item, locale));
+function applyStorySubjects(value: unknown, locale: string, name: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => applyStorySubjects(item, locale, name));
   if (!value || typeof value !== 'object') return value;
   const result = Object.fromEntries(
-    Object.entries(value).map(([name, child]) => [name, applyStorySubjects(child, locale)]),
+    Object.entries(value).map(([key, child]) => [key, applyStorySubjects(child, locale, name)]),
   ) as Record<string, unknown>;
+  if (typeof result.id !== 'string' || typeof result.type !== 'string' || !(result.labels || result.label))
+    return result;
+  const labelValues = [
+    ...(result.labels && typeof result.labels === 'object' && !Array.isArray(result.labels)
+      ? Object.values(result.labels)
+      : []),
+    typeof result.label === 'string'
+      ? result.label
+      : result.label && typeof result.label === 'object' && 'value' in result.label
+        ? result.label.value
+        : undefined,
+  ].filter((label): label is string => typeof label === 'string');
+  const isPersonalStory = name.startsWith('library-') || name.startsWith('subject-page');
+  const candidates = storySubjects.filter((entry) =>
+    labelValues.some((label) => Object.values(entry.labels).includes(label)),
+  );
   const subject =
-    typeof result.id === 'string' && typeof result.type === 'string' && (result.labels || result.label)
-      ? storySubjects.find((entry) => entry.id === result.id)
-      : undefined;
+    storySubjects.find((entry) => entry.id === result.id) ??
+    candidates.find((entry) => entry.id.startsWith('01a17a3b-') === isPersonalStory) ??
+    candidates[0];
   if (subject) {
+    result.id = subject.id;
     const localizedLabel = subject.labels[locale] ?? subject.labels.en ?? Object.values(subject.labels)[0]!;
     result.type = subject.type;
     if (result.labels && typeof result.labels === 'object' && !Array.isArray(result.labels))
@@ -1800,7 +1817,8 @@ async function main(): Promise<void> {
     const generated = name === 'definitions-active' || name === 'definitions-release';
     const previous = !generated && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
     const locale = name.endsWith('-zh-Hans') ? 'zh-Hans' : 'en';
-    await writeFile(file, JSON.stringify(applyStorySubjects(stableRecording(body, previous), locale)));
+    const canonical = applyStorySubjects(body, locale, name);
+    await writeFile(file, JSON.stringify(applyStorySubjects(stableRecording(canonical, previous), locale, name)));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
   if (written.length) {
