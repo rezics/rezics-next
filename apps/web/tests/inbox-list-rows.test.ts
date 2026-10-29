@@ -5,10 +5,6 @@ import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser } from 'playwright';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('@tanstack/react-router', () => ({
-  Link: ({ children, to, ...props }: { children: unknown; to: string } & Record<string, unknown>) =>
-    createElement('a', { ...props, href: to }, children as never),
-}));
 
 const { InboxRows } = await import('../src/inbox/inbox-page');
 type Item = import('../src/inbox/inbox-read').ResolvedInboxPage['items'][number];
