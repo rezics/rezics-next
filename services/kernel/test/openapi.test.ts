@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { withHeaders } from '@elysia/openapi';
+import { toOpenAPISchema, withHeaders } from '@elysia/openapi';
 import { Elysia, t } from 'elysia';
 import { resolve } from 'node:path';
 import type { OpenAPIV3_1 } from 'openapi-types';
@@ -96,6 +96,56 @@ test('request bodies are JSON only and hidden routes are left out', () => {
     { name: 'idempotency-key', in: 'header', required: true, schema: { type: 'string', maxLength: 255 } },
   ]);
   expect(Object.keys(document.paths!)).toEqual(['/v1/things', '/v1/things/{id}']);
+});
+
+test('global body parser restores JSON schemas and preserves raw request content types', () => {
+  const build = (withGlobalParser: boolean) => {
+    const app = createApp({ pool })
+      .post(
+        '/v1/global-body',
+        { body: t.Object({ name: t.String() }), detail: { operationId: 'global.body' } },
+        () => ({ ok: true }),
+      )
+      .post(
+        '/v1/raw-body',
+        {
+          detail: {
+            operationId: 'raw.body',
+            'x-body-mode': 'raw',
+            requestBody: {
+              required: true,
+              content: {
+                'text/plain': { schema: { type: 'string' } },
+                'application/octet-stream': { schema: { type: 'string', format: 'binary' } },
+              },
+            },
+          },
+        },
+        () => ({ ok: true }),
+      );
+    return withGlobalParser ? app.onParse('global', async () => ({})) : app;
+  };
+
+  const withoutHook = build(false);
+  const withHook = build(true);
+  const rawGenerated = toOpenAPISchema(withHook, { staticFile: false }).paths['/v1/global-body']?.post?.requestBody;
+  console.log('Global parser generated request body:', JSON.stringify(rawGenerated));
+  expect(rawGenerated?.content).toEqual({});
+
+  const withoutHookDocument = openApiDocument(withoutHook);
+  const withHookDocument = openApiDocument(withHook);
+  expect(withHookDocument).toEqual(withoutHookDocument);
+
+  const globalBody = withHookDocument.paths['/v1/global-body']!.post!.requestBody!;
+  expect(Object.keys(globalBody.content!)).toEqual(['application/json']);
+  expect(globalBody.content!['application/json']!.schema).toMatchObject({
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name'],
+  });
+
+  const rawBody = withHookDocument.paths['/v1/raw-body']!.post!.requestBody!;
+  expect(Object.keys(rawBody.content!)).toEqual(['text/plain', 'application/octet-stream']);
 });
 
 test('generation refuses an error response that is not a problem and an unknown security scheme', () => {
