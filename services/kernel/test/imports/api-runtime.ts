@@ -132,7 +132,7 @@ afterAll(async () => {
 
 /** One owner of credentials, public transport, worker, durable journal and cleanup. */
 export async function openApiRuntime(
-  options: DriverOptions,
+  options: DriverOptions & { readonly sourceStatistics?: 'vndb' },
   growthSqlite?: GrowthSqliteCapture,
   growthObserver?: GrowthObserver,
   growthWriteRate?: StartupWriteRate,
@@ -215,6 +215,7 @@ export async function openApiRuntime(
         database: ownedDatabase!,
         authTemplate: prepared.auth.name,
         clock: () => new Date(),
+        ...(options.sourceStatistics === undefined ? {} : { sourceStatistics: options.sourceStatistics }),
         async configured(configuration) {
           const auth = configuration.accessConfig.auth!;
           boundary = await time('media boundary', () =>
@@ -332,6 +333,16 @@ export async function openApiRuntime(
       }
     }
 
+    if (options.sourceStatistics === 'vndb') {
+      const response = await request(
+        '/v1/platform/exposure/personal_library:open',
+        {},
+        identitySupport(identity).managementBearer,
+      );
+      if (response.status !== 200)
+        throw new Error(`VNDB statistic exposure setup: HTTP ${response.status}: ${await response.text()}`);
+      await response.body?.cancel();
+    }
     const tierKey = randomUUID();
     const tierResponse = await request(
       `/v1/accounts/${bulk.accountId}:setRateTier`,
@@ -464,7 +475,7 @@ export async function openApiRuntime(
         try {
           req.signal.throwIfAborted();
           const atMs = Date.now();
-          const bytes = req.method === 'POST' ? await req.clone().text() : '';
+          const bytes = req.method === 'POST' || req.method === 'PUT' ? await req.clone().text() : '';
           const { key: requestKey, commandKeys } = transportKey(req, bytes);
           const scheduled = pendingDeadlines.shift();
           if (scheduled) {
@@ -587,6 +598,14 @@ export async function openApiRuntime(
         instrumentDatabase: growthSqlite?.instrument ?? measurement.instrument,
         transport: {
           batchWrite: (body) => transport.batch(body, current?.abort.signal),
+          ...(options.sourceStatistics === 'vndb'
+            ? {
+                writeSourceStatistic: (
+                  input: Parameters<typeof transport.writeSourceStatistic>[0],
+                  signal?: AbortSignal,
+                ) => transport.writeSourceStatistic(input, signal ?? current?.abort.signal),
+              }
+            : {}),
           readFence: (tuple) =>
             transport.fence(
               { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group },

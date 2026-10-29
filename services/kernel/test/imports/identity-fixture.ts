@@ -42,6 +42,8 @@ export function importActionCatalogue(database: GrowthDatabase, routeKey: Uint8A
 }
 
 export interface ImportIdentityOptions {
+  /** Explicit VNDB composition; other sources retain their existing authority. */
+  readonly sourceStatistics?: 'vndb';
   /** Borrowed application database, including its original capture pool. */
   readonly database: GrowthDatabase;
   readonly clock: NonNullable<AccountWorkflowOptions['clock']>;
@@ -241,6 +243,8 @@ export type IdentitySupport = {
   /** Current management bearer; call `renewManagement` first when the run may have outlasted 300 s. */
   readonly managementBearer: string;
   renewManagement(): Promise<void>;
+  /** Change only the VNDB Global statistic grant, preserving issued credentials. */
+  setStatisticGrant(enabled: boolean): Promise<void>;
   approveOpening(key: string): Promise<string>;
   seedBaseline(count: number): Promise<void>;
   grow(index: number): Promise<void>;
@@ -254,8 +258,11 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   const counters = { authMigrationCalls: 0, baselineWorkflowCalls: { registrations: 0, keyInstalls: 0 } };
   let countingBaselineCalls = false;
   const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS];
+  const statisticScopes = options.sourceStatistics === 'vndb' ? ['source_statistic:write'] : [];
   const managementScopes = [
     ...importerScopes,
+    ...statisticScopes,
+    ...(options.sourceStatistics === 'vndb' ? ['exposure:open'] : []),
     'access:grant',
     'source_fence:takedown',
     'account:manage',
@@ -362,7 +369,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const client = {
       clientId: `importer-${randomUUID()}`,
       firstParty: true,
-      scopes: [...COMMON_ACTIONS, ...IMPORT_ACTIONS, 'statement:propose', 'media:read_reservation'],
+      scopes: [...COMMON_ACTIONS, ...IMPORT_ACTIONS, 'statement:propose', 'media:read_reservation', ...statisticScopes],
     };
     const managementClient = `governance-${randomUUID()}`;
     await auth.internal.registerClient(client);
@@ -556,14 +563,16 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       if (path === '/v1/grants') grantLocators.push(body.grant);
     }
     await grant('/v1/grants', robot.accountId, importerScopes);
+    if (statisticScopes.length) await grant('/v1/grants', robot.accountId, statisticScopes);
     await grant('/v1/grants', comparison.accountId, COMMON_ACTIONS);
     await options.afterStage?.('grants');
     const [governance, ordinary, bulk] = await Promise.all([
-      issue(human.accountId, importerScopes),
+      issue(human.accountId, [...importerScopes, ...statisticScopes]),
       issue(comparison.accountId, COMMON_ACTIONS),
-      issue(robot.accountId, importerScopes),
+      issue(robot.accountId, options.sourceStatistics === 'vndb' ? client.scopes : importerScopes),
     ]);
     let bulkEnabled = true;
+    let statisticEnabled = statisticScopes.length > 0;
     const result: ImportIdentity = {
       database,
       access,
@@ -903,6 +912,13 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         return management.bearer;
       },
       renewManagement,
+      async setStatisticGrant(enabled) {
+        if (options.sourceStatistics !== 'vndb')
+          throw new Error('Explicit VNDB source statistics configuration required');
+        if (enabled === statisticEnabled) return;
+        await grant(enabled ? '/v1/grants' : '/v1/grants:revoke', robot.accountId, statisticScopes);
+        statisticEnabled = enabled;
+      },
       async approveOpening(key) {
         const operation = {
           kind: 'opening' as const,
