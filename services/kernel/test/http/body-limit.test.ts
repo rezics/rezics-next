@@ -29,7 +29,7 @@ function streamed(chunks: Uint8Array[], extraHeaders: Record<string, string> = {
       cancel() {
         cancelled = true;
       },
-    }),
+    }, { highWaterMark: 0 }),
     // Bun's Request requires duplex for streamed bodies; its type omits the extension.
     duplex: 'half',
   } as RequestInit);
@@ -112,6 +112,7 @@ test('a raw route delivers a non-JSON body as bytes without request-path JSON va
       detail: {
         operationId: 'probe.raw_body',
         'x-body-mode': 'raw',
+        'x-exposure': 'public',
         security: [{ bearerAuth: [] }, {}],
       } as never,
     },
