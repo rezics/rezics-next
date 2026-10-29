@@ -236,3 +236,33 @@ index was read; it does not require a Wikidata reference implementation here.
 The earlier URL refresh, unresolved author and CC0 decisions remain unchanged.
 No outside-path file, product, helper or definition is changed. The same fixed
 record/candidate neighbourhood and deferred gaps above apply.
+
+
+The focused native check ran once at committed revision
+`6ad0c07c72550d52c84b4cd59d6aeb46084d182e`, with the installed hash above.
+Handle: `738e6495-ecbd-4f90-988a-f3da8476c156`.
+Terminal result: **exit 0; 2 pass, 0 fail, 292 expect() calls**, two tests
+across one file in 50.71 seconds. Both exact titles in Cases and boundaries
+passed. There is no reached assertion failure in this run. The runner emits
+two dots and the aggregate counts rather than repeating successful titles.
+Log: `.temp/goal/checks/worker-check-2026-10-29T16-51-40.150Z-8fd5499c.log`.
+It waited 143.002 seconds for host b, then completed with zero load reruns.
+The kernel command's affected type and format checks also completed successfully.
+No second native command, extra suite or broad gate was run.
+
+The rich-field case now reaches anonymous mapped value/rank/qualifier/reference
+preservation, sentinel exclusion and the actual persisted effect observation
+(one subject and seven receipts), after real editor selection and relay delivery.
+The revision-refresh case again passes stable subject, changed source digest,
+distinct new candidate/receipt and updated pinned citations, retained old source
+history/receipt and independent adoption, editor reselection, restart idempotence
+and exact request replay without duplicate persisted effects. These are real
+native results for the synthetic record, not a live Q571 observation or a growth
+claim. The previous busy failure is retained above as historical evidence.
+
+The artifact command is run once after committing this result record; its
+terminal status accompanies the delivery. It checks this specification artifact
+only and does not replace the focused native result. The earlier landing error
+`POST /v1/subjects: request bodies must include application/json` arose in a
+separate derived-file landing check; this attempt does not rerun that broad gate
+or claim to repair it. No outside-path file changed in this continuation.
