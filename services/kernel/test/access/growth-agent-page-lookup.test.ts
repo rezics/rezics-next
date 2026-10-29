@@ -95,7 +95,9 @@ test('agent page lookup stays within its bound as unrelated verified subjects gr
     },
     async operation() {
       const response = await kernel.handle(new Request(`https://kernel.test/v1/accounts?agent=${targetSubject}`));
-      const body = (await response.json()) as { accounts: { id: string }[] };
+      const body = (await response.json()) as {
+        accounts: { id: string; subject: { id: string; label: string; type: string } | null }[];
+      };
       expect(response.status).toBe(200);
       expect(body.accounts.map(({ id }) => id)).toEqual([targetAccount]);
       expect(body.accounts[0]?.subject).toEqual({
