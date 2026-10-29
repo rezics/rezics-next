@@ -88,6 +88,13 @@ test('the worker prompt forbids touching resources the attempt did not start', (
   expect(prompt).toContain('Never write under node_modules');
   // Promotion gates and repeated full worker checks left a 13-slot fleet with a 1.9-hour p95 slot wait (2026-10-28).
   expect(prompt).toContain('Check slots are the scarce shared resource');
+  expect(prompt).toContain('run your acceptance command once after your last relevant edit');
+  expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
+  expect(prompt).toContain(
+    'The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests',
+  );
+  expect(prompt).toContain('a regression found there comes back as a retry with the failing log');
+  expect(prompt).not.toMatch(/plus the root typecheck|run the tests that cover every file/i);
 });
 
 test('every worker can ask for research, and a research worker is told how to do it', () => {

@@ -27,7 +27,7 @@ function markAffectedFailure(h: ReturnType<typeof integrationHarness>, taskId: s
   h.store.db.query('UPDATE landing_queue SET request=? WHERE id=?').run(JSON.stringify(request), row.id);
 }
 
-test('the dev lane batches eligible entries across control-plane, stabilize, and affected-failure entries', async () => {
+test('the dev lane batches eligible dev entries without worker-side affected results', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -42,13 +42,12 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     markTask(h, stabilize.id, { target: 'stabilize' });
     await h.start(first);
     await h.start(affected);
-    markAffectedFailure(h, affected.id);
     await h.start(second);
     await h.start(controlPlane);
     await h.start(stabilize);
     await h.train(async () => ({ passed: true, output: '', timedOut: false }));
 
-    expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
+    expect(h.outcomes.find(({ taskId }) => taskId === affected.id)?.passed).toBe(true);
     expect(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)?.passed).toBe(true);
     expect(h.outcomes.find(({ taskId }) => taskId === stabilize.id)?.passed).toBe(true);
     expect(
@@ -63,14 +62,14 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     expect(controlPlaneLog).toContain('Control-plane checks on');
     expect(controlPlaneLog).not.toContain('Batch integration check on');
     expect(stabilizeLog).not.toContain('Batch integration check on');
-    expect(affectedLog).not.toContain('Batch integration check on');
-    expect(devLogs.every((log) => log.includes('Batch integration check on'))).toBe(true);
+    expect(affectedLog).toContain('Batch integration check on');
+    expect(devLogs.some((log) => log.includes('Batch integration check on'))).toBe(true);
   } finally {
     h.dispose();
   }
 }, 60_000);
 
-test('the dev batch fills to its limit in eligible queue order when prioritized entries lead the queue', async () => {
+test('the dev batch fills in eligible queue order when prioritized entries lead the queue', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -90,7 +89,6 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     await h.start(stabilize);
     await h.start(first);
     await h.start(affected);
-    markAffectedFailure(h, affected.id);
     await h.start(second);
     await h.start(third);
     await h.start(fourth);
@@ -107,11 +105,10 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
       true,
       true,
     ]);
-    expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
+    expect(h.outcomes.find(({ taskId }) => taskId === affected.id)?.passed).toBe(true);
     const logs = dev.map(({ id }) => readFileSync(h.outcomes.find(({ taskId }) => taskId === id)!.logPath, 'utf8'));
     expect(logs.slice(0, 3).every((log) => log.includes('Batch integration check on'))).toBe(true);
-    expect(logs[3]).toContain('Integration check on');
-    expect(logs[3]).not.toContain('Batch integration check on');
+    expect(logs[3]).toContain('Batch integration check on');
     for (const entry of [controlPlane, stabilize]) {
       const log = readFileSync(h.outcomes.find(({ taskId }) => taskId === entry.id)!.logPath, 'utf8');
       expect(log).toContain(entry.id === controlPlane.id ? 'Control-plane checks on' : 'Integration check on');
