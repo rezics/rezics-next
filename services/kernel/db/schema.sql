@@ -130,6 +130,10 @@ CREATE TABLE core.consumer_lag (
     oldest_pending_at timestamp with time zone,
     observed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT consumer_lag_consumer_check CHECK ((consumer ~ '^[a-z][a-z0-9_]{0,62}$'::text))
+);
+
+
+--
 -- Name: history_locator; Type: TABLE; Schema: core; Owner: -
 --
 
@@ -339,6 +343,9 @@ ALTER TABLE ONLY core.consumer_checkpoint
 
 ALTER TABLE ONLY core.consumer_lag
     ADD CONSTRAINT consumer_lag_pkey PRIMARY KEY (consumer);
+
+
+--
 -- Name: history_locator history_locator_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
