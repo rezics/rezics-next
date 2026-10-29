@@ -61,22 +61,65 @@ Log: `.temp/goal/checks/worker-check-2026-10-29T14-09-17.611Z-8607eb08.log`.
 The actual interrupted native command and result were:
 
 ```json
-{"command":{"op":"propose","key":"bangumi:424242:1c4e280df87f6586c8695f22d18de952165024ef48ae5a5975ebef73aa34f5ea","source":{"source":"bangumi","external_id":"424242","record_revision":"unversioned","converter_revision":"bangumi@3","digest":"cff54636a2b8bca8cff5d1457b80ea57364fbba190a670aa1d0971fe91b67f9b","field_group":"cover"},"subject":"01a18803-b3fc-75a1-a706-b3f99b78d2a6","statement":{"property":{"id":"schema:image"},"value":{"type":"value","content":"01a18803-b8ab-739f-97cc-b3f9e6eb0215"},"references":[{"parts":[{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://bgm.tv/subject/424242"}},{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://lain.bgm.tv/pic/cover/l/ab/cd/replacement.jpg"}}]}]}},"result":{"key":"bangumi:424242:1c4e280df87f6586c8695f22d18de952165024ef48ae5a5975ebef73aa34f5ea","status":201,"value":{"candidate":"6366b3c8-43ad-87f8-9c32-b3f957e53559","revision":22}}}
+{
+  "command": {
+    "op": "propose",
+    "key": "bangumi:424242:1c4e280df87f6586c8695f22d18de952165024ef48ae5a5975ebef73aa34f5ea",
+    "source": {
+      "source": "bangumi",
+      "external_id": "424242",
+      "record_revision": "unversioned",
+      "converter_revision": "bangumi@3",
+      "digest": "cff54636a2b8bca8cff5d1457b80ea57364fbba190a670aa1d0971fe91b67f9b",
+      "field_group": "cover"
+    },
+    "subject": "01a18803-b3fc-75a1-a706-b3f99b78d2a6",
+    "statement": {
+      "property": { "id": "schema:image" },
+      "value": { "type": "value", "content": "01a18803-b8ab-739f-97cc-b3f9e6eb0215" },
+      "references": [
+        {
+          "parts": [
+            {
+              "property": { "id": "schema:url" },
+              "value": { "type": "value", "content": "https://bgm.tv/subject/424242" }
+            },
+            {
+              "property": { "id": "schema:url" },
+              "value": { "type": "value", "content": "https://lain.bgm.tv/pic/cover/l/ab/cd/replacement.jpg" }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "result": {
+    "key": "bangumi:424242:1c4e280df87f6586c8695f22d18de952165024ef48ae5a5975ebef73aa34f5ea",
+    "status": 201,
+    "value": { "candidate": "6366b3c8-43ad-87f8-9c32-b3f957e53559", "revision": 22 }
+  }
+}
 ```
 
 The exact persisted native receipt, unchanged across recovery and replay:
 
 ```json
-{"partition_no":2879,"principal_kind":"account","principal_id":"764ada75-62ac-8c41-a37c-aefc8c0cfe2a","command_kind":"subject.batch_propose","idempotency_key":"bangumi:424242:1c4e280df87f6586c8695f22d18de952165024ef48ae5a5975ebef73aa34f5ea"}
+{
+  "partition_no": 2879,
+  "principal_kind": "account",
+  "principal_id": "764ada75-62ac-8c41-a37c-aefc8c0cfe2a",
+  "command_kind": "subject.batch_propose",
+  "idempotency_key": "bangumi:424242:1c4e280df87f6586c8695f22d18de952165024ef48ae5a5975ebef73aa34f5ea"
+}
 ```
 
 The recovered local binding retained that command key, candidate, subject and exact serialized command bytes.
 Its binding signature was `2c20b2e994e6f6945e08cb8b74f8e95ca82a713646b501a8f35d701f03ae2188`.
 All three originals matched their acknowledged native SHA-256 and available media identity:
 
-| Input | Native media | Original SHA-256 |
-| --- | --- | --- |
-| Red | `01a18803-b445-70e1-8c67-b3f920058e00` | `73b890ef39bd02ae80be6353cddd8b286d754874289b20050d2491c4f271ab99` |
+| Input           | Native media                           | Original SHA-256                                                   |
+| --------------- | -------------------------------------- | ------------------------------------------------------------------ |
+| Red             | `01a18803-b445-70e1-8c67-b3f920058e00` | `73b890ef39bd02ae80be6353cddd8b286d754874289b20050d2491c4f271ab99` |
 | Recovered green | `01a18803-b8ab-739f-97cc-b3f9e6eb0215` | `68fa4b251cdcb8b79083c873db5090a2351d508c3f35bc6d83417d24963b5dcc` |
 | Subsequent blue | `01a18803-bc1a-77e5-b4e6-b3f9530effd5` | `384ac8c8ffc149c4bbbb7d4ac2f60d627c75576810ab81310f314cfb56c30a12` |
 
@@ -254,7 +297,6 @@ Submitted at revision `e489580f74` through `bun scripts/worker-check.ts --`:
 Submission succeeded; execution results are pending manager delivery. No polling or old-case rerun
 was performed. The native command/receipt and counts above remain historical until fresh results arrive.
 
-
 ### Fresh validation results
 
 All three submitted checks exited **0**, as delivered by the manager and confirmed in their logs.
@@ -279,20 +321,63 @@ Logs, corresponding to the submitted IDs immediately above:
 Fresh actual interrupted command/result:
 
 ```json
-{"command":{"op":"propose","key":"bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e","source":{"source":"bangumi","external_id":"424242","record_revision":"unversioned","converter_revision":"bangumi@3","digest":"cff54636a2b8bca8cff5d1457b80ea57364fbba190a670aa1d0971fe91b67f9b","field_group":"cover"},"subject":"01a18901-3b35-740f-a721-7b4081e40d74","statement":{"property":{"id":"schema:image"},"value":{"type":"value","content":"01a18901-4088-7091-86ca-7b401d0a42ed"},"references":[{"parts":[{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://bgm.tv/subject/424242"}},{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://lain.bgm.tv/pic/cover/l/ab/cd/replacement.jpg"}}]}]}},"result":{"key":"bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e","status":201,"value":{"candidate":"04b8b8da-cb20-8617-88a6-7b40e2730042","revision":22}}}
+{
+  "command": {
+    "op": "propose",
+    "key": "bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e",
+    "source": {
+      "source": "bangumi",
+      "external_id": "424242",
+      "record_revision": "unversioned",
+      "converter_revision": "bangumi@3",
+      "digest": "cff54636a2b8bca8cff5d1457b80ea57364fbba190a670aa1d0971fe91b67f9b",
+      "field_group": "cover"
+    },
+    "subject": "01a18901-3b35-740f-a721-7b4081e40d74",
+    "statement": {
+      "property": { "id": "schema:image" },
+      "value": { "type": "value", "content": "01a18901-4088-7091-86ca-7b401d0a42ed" },
+      "references": [
+        {
+          "parts": [
+            {
+              "property": { "id": "schema:url" },
+              "value": { "type": "value", "content": "https://bgm.tv/subject/424242" }
+            },
+            {
+              "property": { "id": "schema:url" },
+              "value": { "type": "value", "content": "https://lain.bgm.tv/pic/cover/l/ab/cd/replacement.jpg" }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "result": {
+    "key": "bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e",
+    "status": 201,
+    "value": { "candidate": "04b8b8da-cb20-8617-88a6-7b40e2730042", "revision": 22 }
+  }
+}
 ```
 
 Exact actual native receipt retained across recovery/replay:
 
 ```json
-{"partition_no":1972,"principal_kind":"account","principal_id":"764ada75-62ac-8c41-a37c-4d9a8c0cfe2a","command_kind":"subject.batch_propose","idempotency_key":"bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e"}
+{
+  "partition_no": 1972,
+  "principal_kind": "account",
+  "principal_id": "764ada75-62ac-8c41-a37c-4d9a8c0cfe2a",
+  "command_kind": "subject.batch_propose",
+  "idempotency_key": "bangumi:424242:29688a45fadae520afe24bd3b4bd02e91443582caa1ce31947c0831f52b7029e"
+}
 ```
 
 Recovered binding signature: `03ff5ce07537542147b8b43a9d4dda4d9e74a8fa9444c5b678a367b1076da419`.
 
-| Input | Actual native media | Original SHA-256 |
-| --- | --- | --- |
-| Red | `01a18901-3b7f-733b-9a2d-7b408096f006` | `73b890ef39bd02ae80be6353cddd8b286d754874289b20050d2491c4f271ab99` |
+| Input           | Actual native media                    | Original SHA-256                                                   |
+| --------------- | -------------------------------------- | ------------------------------------------------------------------ |
+| Red             | `01a18901-3b7f-733b-9a2d-7b408096f006` | `73b890ef39bd02ae80be6353cddd8b286d754874289b20050d2491c4f271ab99` |
 | Recovered green | `01a18901-4088-7091-86ca-7b401d0a42ed` | `68fa4b251cdcb8b79083c873db5090a2351d508c3f35bc6d83417d24963b5dcc` |
 | Subsequent blue | `01a18901-4481-70e5-b07f-7b40afa28893` | `384ac8c8ffc149c4bbbb7d4ac2f60d627c75576810ab81310f314cfb56c30a12` |
 
