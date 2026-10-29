@@ -17,14 +17,7 @@ import { createReactionCountEffect } from '../../src/content/reaction-projection
 import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import {
-  capture,
-  checkGrowth,
-  openGrowthDatabase,
-  seed,
-  type GrowthDatabase,
-  type Population,
-} from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
