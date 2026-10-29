@@ -202,7 +202,7 @@ async function fixture() {
     const ctx = { deadline: context.deadline, idempotencyKey: key, requestId: newId(route) };
     if (mode === 'author') return beginAuthorErasure(deps, identity, { threadId, authorId: accountId }, ctx);
     if (mode === 'takedown')
-      return takedown(deps, identity, { target: { kind: 'post', id: postId }, reason: 'fixture' }, ctx);
+      return takedown(deps, identity, { target: { kind: 'post', id: point.postId }, reason: 'fixture' }, ctx);
     if (mode === 'post') return erasePost(deps, identity, { postId: point.postId, reason: 'fixture' }, ctx);
     return eraseStandaloneMedia(deps, identity, { mediaId: point.mediaId, reason: 'fixture' }, ctx);
   }
@@ -293,36 +293,17 @@ for (const mode of modes) {
 }
 
 test('shared admission and native point/author commands stay bounded at three population scales', async () => {
-  const f = await fixture();
-  // A fixed target set is allocated before growth. Each terminal erasure commits
-  // once; no actor or erased resource is restored between measurements.
-  const targets: { postId: string; mediaId: string }[] = [];
-  for (let n = 0; n < 12; n++) {
-    const postId = newId(route),
-      mediaId = newId(route),
-      revisionId = newId(route);
-    await db.admin.query(
-      `WITH p AS (
-       INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id,created_at)
-       VALUES ($1,$2,$3,$4,$5,'published',1,$2,'2001-01-01') RETURNING *
-       ) INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-       SELECT route,thread_id,post_id,head_revision_id,'private',sha256('private'::bytea),'private','CC0-1.0','{}',$2,'available',$2 FROM p`,
-      [route, f.threadId, postId, f.accountId, revisionId],
-    );
-    await db.admin.query(
-      `INSERT INTO content.media(route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,state,key,transaction_id)
-       VALUES ($1,$2::uuid,$3,$4,$2::text,'post-image','image/png',1,'reserved','m/'||$2::text||'/original',$3)`,
-      [route, mediaId, f.threadId, f.accountId],
-    );
-    await grant({ route, id: postId }, f.accountId, 'post:erase');
-    await grant({ route, id: mediaId }, f.accountId, 'media:erase');
-    targets.push({ postId, mediaId });
-  }
+  // Every warm-up and sample owns a fresh post, media and author/thread scope.
+  // Takedown and erasure see the same transitions at every scale.
+  const targets: Fixture[] = [];
+  for (let run = 0; run < 12; run++) targets.push(await fixture());
+  const f = targets[0]!;
   const population: Population = {
     name: 'point-command-admission',
     hotPartition: partitionOf(route),
     hotShare: 1,
     rows: ({ ordinal }) => {
+      const target = targets[ordinal % targets.length]!;
       const rows: Record<string, Record<string, unknown>[]> = {};
       const add = (table: string, row: Record<string, unknown>) => (rows[table] ??= []).push(row);
       // Two rows per logical unit put every read relation above 500 at scale 256.
@@ -384,7 +365,7 @@ test('shared admission and native point/author commands stay bounded at three po
         add('content.thread', {
           route,
           thread_id: id,
-          author_account_id: f.accountId,
+          author_account_id: target.accountId,
           board_id: id,
           title: 'filler',
           visibility: 'published',
@@ -393,9 +374,9 @@ test('shared admission and native point/author commands stay bounded at three po
         });
         add('content.post', {
           route,
-          thread_id: f.threadId,
+          thread_id: target.threadId,
           post_id: id,
-          author_account_id: f.accountId,
+          author_account_id: target.accountId,
           head_revision_id: revision,
           visibility: 'published',
           security_revision: 1,
@@ -404,7 +385,7 @@ test('shared admission and native point/author commands stay bounded at three po
         });
         add('content.revision', {
           route,
-          thread_id: f.threadId,
+          thread_id: target.threadId,
           post_id: id,
           revision_id: revision,
           body: Buffer.from('private'),
@@ -418,14 +399,14 @@ test('shared admission and native point/author commands stay bounded at three po
         });
         add('content.revision', {
           ...rows['content.revision']!.at(-1)!,
-          post_id: targets[ordinal % targets.length]!.postId,
+          post_id: target.postId,
           revision_id: newId(route),
         });
         add('content.media', {
           route,
           media_id: id,
-          container_id: f.threadId,
-          uploader_id: f.accountId,
+          container_id: target.threadId,
+          uploader_id: target.accountId,
           reservation_request_id: id,
           purpose: 'post-image',
           media_type: 'image/png',
@@ -453,6 +434,7 @@ test('shared admission and native point/author commands stay bounded at three po
   const jwksReads = fetches;
   const report = await checkGrowth(db, {
     name: 'Authenticated content command admission',
+    rule: 'series',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,
@@ -460,9 +442,10 @@ test('shared admission and native point/author commands stay bounded at three po
       await seed(database, population, { from: previous, to: scale });
     },
     async operation(_database, _scale, repetition) {
+      const f = targets[repetition]!;
       for (const mode of modes) {
         statements.length = 0;
-        const result = await f.execute(mode, crypto.randomUUID(), f.actor, targets[repetition]!);
+        const result = await f.execute(mode, crypto.randomUUID());
         expect(result.replayed).toBe(false);
         oneRead(f);
         expect(statements.some(({ text }) => text.includes('FROM content.revision'))).toBe(false);

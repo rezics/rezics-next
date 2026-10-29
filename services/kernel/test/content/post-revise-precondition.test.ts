@@ -6,7 +6,7 @@ import { standingFixture } from '../access/standing-fixture.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
@@ -247,8 +247,9 @@ describe('post revise precondition through the mounted kernel', () => {
   });
 
   test('revise with a precondition and the revisedAt read stay fixed as other revisions grow', async () => {
-    const thread = await create('Fixed measured bytes');
-    const postId = thread.firstPost.id;
+    const targets: ThreadView[] = [];
+    for (let run = 0; run < 12; run++) targets.push(await create('Fixed measured bytes'));
+    const thread = targets[0]!;
     const distractorThreadId = newId(thread.route);
     await db.admin.query(
       `INSERT INTO content.thread
@@ -258,60 +259,61 @@ describe('post revise precondition through the mounted kernel', () => {
     );
     const bytes = Buffer.from('seed');
     const digest = createHash('sha256').update(bytes).digest();
+    const population: Population = {
+      name: 'other post revisions',
+      hotPartition: partitionOf(thread.route),
+      hotShare: 1,
+      rows() {
+        const siblingId = newId(thread.route);
+        const revisionId = newId(thread.route);
+        const transactionId = randomUUID();
+        return {
+          'content.post': [
+            {
+              route: thread.route,
+              thread_id: distractorThreadId,
+              post_id: siblingId,
+              author_account_id: actor.accountId,
+              head_revision_id: revisionId,
+              visibility: 'published',
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+            },
+          ],
+          'content.revision': [
+            {
+              route: thread.route,
+              thread_id: distractorThreadId,
+              post_id: siblingId,
+              revision_id: revisionId,
+              body: bytes,
+              body_sha256: digest,
+              search_text: 'seed',
+              licence: 'MIT',
+              subject_ids: [],
+              board_id: boardId,
+              availability: 'available',
+              recorded_transaction_id: transactionId,
+              media_ids: [],
+            },
+          ],
+        };
+      },
+    };
     const report = await checkGrowth(db, {
       name: 'post revise precondition and revisedAt read',
+      rule: 'series',
       scales: [64, 512, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 3,
       warmups: 1,
       async grow(database, scale, previous) {
-        await seed(
-          database,
-          {
-            name: 'other post revisions',
-            hotPartition: partitionOf(thread.route),
-            hotShare: 1,
-            rows() {
-              const siblingId = newId(thread.route);
-              const revisionId = newId(thread.route);
-              const transactionId = randomUUID();
-              return {
-                'content.post': [
-                  {
-                    route: thread.route,
-                    thread_id: distractorThreadId,
-                    post_id: siblingId,
-                    author_account_id: actor.accountId,
-                    head_revision_id: revisionId,
-                    visibility: 'published',
-                    security_revision: 1,
-                    recorded_transaction_id: transactionId,
-                  },
-                ],
-                'content.revision': [
-                  {
-                    route: thread.route,
-                    thread_id: distractorThreadId,
-                    post_id: siblingId,
-                    revision_id: revisionId,
-                    body: bytes,
-                    body_sha256: digest,
-                    search_text: 'seed',
-                    licence: 'MIT',
-                    subject_ids: [],
-                    board_id: boardId,
-                    availability: 'available',
-                    recorded_transaction_id: transactionId,
-                    media_ids: [],
-                  },
-                ],
-              };
-            },
-          },
-          { from: previous, to: scale },
-        );
+        if (previous === 0)
+          await seed(database, { ...population, name: 'other post revisions baseline' }, { from: 0, to: 4096 });
+        await seed(database, population, { from: previous, to: scale });
       },
       async operation(_database, _scale, repetition) {
+        const postId = targets[repetition]!.firstPost.id;
         const read = await call('GET', `/v1/posts/${postId}`);
         expect(read.response.status).toBe(200);
         expect(read.response.headers.get('etag')).toBe(JSON.stringify(read.body.post.revisionId));

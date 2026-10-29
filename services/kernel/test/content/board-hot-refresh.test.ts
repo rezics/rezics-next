@@ -430,15 +430,29 @@ test.serial(
   'one refresh batch stays within its bound as candidates and reactions grow',
   async () => {
     const baseAt = new Date(Date.now() + 20 * 60_000);
-    const population = refreshPopulation(baseAt);
-    const refresh = async (_growthDb: GrowthDatabase, _scale: number, repetition: number) => {
-      const at = new Date(baseAt.getTime() + repetition * 11 * 60_000);
-      const refreshed = await refreshBoardRankBatch(db.pool, at, [partitionOf(boardRoute)]);
+    const background = refreshPopulation(baseAt);
+    const population: Population = {
+      ...background,
+      rows(placement) {
+        const rows = background.rows!(placement);
+        return {
+          ...rows,
+          'content.board_thread': rows['content.board_thread']!.map((row) => ({
+            ...row,
+            rank_refreshed_at: new Date(baseAt.getTime() + 60 * 60_000).toISOString(),
+          })),
+        };
+      },
+    };
+    const refresh = async () => {
+      // A fixed clock keeps completed batches outside the due window.
+      const refreshed = await refreshBoardRankBatch(db.pool, baseAt, [partitionOf(boardRoute)]);
       expect(refreshed).toBe(500);
       return refreshed;
     };
     const report = await checkGrowth(db, {
       name: 'one hot rank refresh batch',
+      rule: 'series',
       scales,
       bounds: {
         rows: 'constant',
@@ -446,12 +460,12 @@ test.serial(
         statements: 'constant',
       },
       repetitions: 1,
-      // This check grows 500 × scale candidates and matching reaction totals outside one fixed 500-row due batch.
-      grow: async (growthDb, scale, previous) =>
-        seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
-          from: previous * 500,
-          to: scale * 500,
-        }),
+      // Grow 500 × scale unrelated candidates and totals; consume two fresh due batches per scale.
+      grow: async (growthDb, scale, previous) => {
+        await seed(growthDb, population, { from: previous * 500, to: scale * 500 });
+        for (let batch = 0; batch < 2; batch++)
+          await seed(growthDb, refreshPopulation(baseAt), { from: 0, to: dueCandidates });
+      },
       warmup: refresh,
       operation: refresh,
     });

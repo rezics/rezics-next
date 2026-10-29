@@ -746,6 +746,70 @@ test.serial('a content write has constant participation cost as unrelated Realms
       const transactionId = newId(growthRoute);
       const at = '2020-01-01T00:00:00.000Z';
       return {
+        'access.account': [
+          {
+            route: growthRoute,
+            account_id: transactionId,
+            kind: 'actor',
+            state: 'active',
+            transaction_id: transactionId,
+          },
+        ],
+        'access.resource_initialization': [
+          {
+            route: growthRoute,
+            resource_id: threadId,
+            resource_type: 'content.thread',
+            creator_id: syntheticAccount,
+            initialized_at: at,
+          },
+          {
+            route: growthRoute,
+            resource_id: postId,
+            resource_type: 'content.post',
+            creator_id: syntheticAccount,
+            initialized_at: at,
+          },
+        ],
+        'core.receipt': [
+          {
+            partition_no: partitionOf(growthRoute),
+            principal_kind: 'account',
+            principal_id: syntheticAccount,
+            command_kind: 'content.thread.create',
+            idempotency_key: transactionId,
+            request_digest: new Uint8Array(32),
+            epoch: 1,
+            position: 1,
+            transaction_id: transactionId,
+            response: {},
+          },
+        ],
+        'editorial.write_basis': [
+          {
+            partition_no: partitionOf(growthRoute),
+            transaction_id: transactionId,
+            epoch: 1,
+            position: 1_000_000 + ordinal,
+            principal_kind: 'account',
+            principal_id: syntheticAccount,
+            client_id: 'growth-fixture',
+            requested_by: null,
+          },
+        ],
+        'core.outbox': [
+          {
+            partition_no: partitionOf(growthRoute),
+            position: 1_000_000 + ordinal,
+            event_seq: 0,
+            event_count: 1,
+            epoch: 1,
+            id: transactionId,
+            type: 'com.rezics.content.thread.created.v1',
+            subject: threadId,
+            data: {},
+          },
+        ],
         'access.membership_inverse': [
           {
             route: growthRoute,
@@ -758,6 +822,16 @@ test.serial('a content write has constant participation cost as unrelated Realms
           },
         ],
         'access.resource_role_grant': [
+          ...[threadId, postId].map((id, index) => ({
+            route: growthRoute,
+            resource_id: id,
+            subject_kind: 'identity',
+            subject_id: syntheticAccount,
+            subject_role: '',
+            grant_role: index === 0 ? 'content.thread.owner' : 'content.post.owner',
+            valid: '[2020-01-01 00:00:00+00,infinity)',
+            transaction_id: transactionId,
+          })),
           {
             route: growthRoute,
             resource_id: realmId,
@@ -915,11 +989,14 @@ test.serial('a content write has constant participation cost as unrelated Realms
   };
   const report = await checkGrowth(db, {
     name: 'content write participation with unrelated Realms, members and bans',
+    rule: 'series',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    repetitions: 1,
+    repetitions: 3,
     async grow(database, scale, previous) {
-      await seed(database, population, { from: previous, to: scale });
+      // Start every growing write/Access/C relation on its indexed production plan.
+      const baseline = 4096;
+      await seed(database, population, { from: previous === 0 ? 0 : baseline + previous, to: baseline + scale });
     },
     async operation(_database, _scale, repetition) {
       const before = participationEvaluations;

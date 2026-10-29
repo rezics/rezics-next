@@ -286,31 +286,41 @@ test('Subject reaction slot', async () => {
 }, 120_000);
 
 test('Subject reaction relay', async () => {
-  const targetId = await subject('Subject reaction relay growth target');
-  const warmupTargets = new Map<number, string>();
-  for (const scale of [64, 512, 4096])
-    warmupTargets.set(scale, await subject(`Subject reaction relay warmup ${scale}`));
+  const scales = [64, 512, 4096] as const;
+  const targets = new Map<number, { measured: string; warmup: string }>();
+  for (const scale of scales)
+    targets.set(scale, {
+      measured: await subject(`Subject reaction relay growth target ${scale}`),
+      warmup: await subject(`Subject reaction relay warmup ${scale}`),
+    });
   const relayActorRoute = 0x3312;
   const sourcePartition = partitionOf(relayActorRoute);
-  await f.db.admin.query(
-    `INSERT INTO content.reaction_count
-       (route,target_id,source_partition,kind,count,source_epoch,source_position)
-     VALUES ($1,$2,$3,'like',1,1,1)`,
-    [f.targetRoute, targetId, sourcePartition],
-  );
-  await f.db.admin.query(
-    `INSERT INTO content.reaction_total (route,target_id,kind,count,source_epoch,source_position)
-     VALUES ($1,$2,'like',1,1,1)`,
-    [f.targetRoute, targetId],
-  );
+  const subjectIds = [...targets.values()].flatMap(({ measured, warmup }) => [measured, warmup]);
+  // Both paths update a live counter exactly once, with identical initial versions.
+  for (const targetId of subjectIds) {
+    await f.db.admin.query(
+      `INSERT INTO content.reaction_count
+         (route,target_id,source_partition,kind,count,source_epoch,source_position)
+       VALUES ($1,$2,$3,'like',1,1,1)`,
+      [f.targetRoute, targetId, sourcePartition],
+    );
+    await f.db.admin.query(
+      `INSERT INTO content.reaction_total (route,target_id,kind,count,source_epoch,source_position)
+       VALUES ($1,$2,'like',1,1,1)`,
+      [f.targetRoute, targetId],
+    );
+  }
   const population: Population = {
     name: `subject-reaction-reactors-${crypto.randomUUID()}`,
     hotPartition: partitionOf(f.targetRoute),
     hotShare: 1,
     rows: ({ route }) => ({
-      'content.subject_reactor': [
-        { route: f.targetRoute, subject_id: targetId, actor_account_id: newId(route), kind: 'like' },
-      ],
+      'content.subject_reactor': subjectIds.map((subjectId) => ({
+        route: f.targetRoute,
+        subject_id: subjectId,
+        actor_account_id: newId(route),
+        kind: 'like',
+      })),
     }),
   };
   const effect = createReactionCountEffect(f.db.pool);
@@ -330,16 +340,17 @@ test('Subject reaction relay', async () => {
   let position = 1;
   const report = await checkGrowth(f.db, {
     name: 'Subject reaction relay',
-    scales: [64, 512, 4096],
+    rule: 'series',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(database, scale, previous) {
       await seed(database, population, { from: previous, to: scale });
     },
     async warmup(_database, scale) {
-      await effect.run(event(warmupTargets.get(scale)!, ++position));
+      await effect.run(event(targets.get(scale)!.warmup, ++position));
     },
-    async operation() {
-      await effect.run(event(targetId, ++position));
+    async operation(_database, scale) {
+      await effect.run(event(targets.get(scale)!.measured, ++position));
     },
     repetitions: 1,
   });
@@ -351,9 +362,11 @@ test('Subject reaction relay', async () => {
   }
   expect(report.samples[0]!.cost.rows).toBe(report.samples[2]!.cost.rows);
   expect(report.samples[0]!.cost.statements).toBe(report.samples[2]!.cost.statements);
-  const indexed = await f.db.admin.query<{ reactors: number }>(
-    'SELECT count(*)::int AS reactors FROM content.subject_reactor WHERE route=$1 AND subject_id=$2',
-    [f.targetRoute, targetId],
-  );
-  expect(indexed.rows[0]!.reactors).toBe(4096 + 3);
+  for (const targetId of subjectIds) {
+    const indexed = await f.db.admin.query<{ reactors: number }>(
+      'SELECT count(*)::int AS reactors FROM content.subject_reactor WHERE route=$1 AND subject_id=$2',
+      [f.targetRoute, targetId],
+    );
+    expect(indexed.rows[0]!.reactors).toBe(4096 + 1);
+  }
 }, 120_000);
