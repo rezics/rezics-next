@@ -39,12 +39,14 @@ const targets = [
     value: {
       post: {
         body: {
+          version: 'rezics-document-v1',
           profile: 'blocks',
           doc: {
             type: 'doc',
             content: [
               {
                 type: 'paragraph',
+                attrs: { id: 'moderation-report-post' },
                 content: [
                   {
                     type: 'text',

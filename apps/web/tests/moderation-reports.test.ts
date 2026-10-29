@@ -208,10 +208,17 @@ test('reported post documents are extracted from the block profile read shape', 
           value: {
             post: {
               body: {
+                version: 'rezics-document-v1',
                 profile: 'blocks',
                 doc: {
                   type: 'doc',
-                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reported block post text' }] }],
+                  content: [
+                    {
+                      type: 'paragraph',
+                      attrs: { id: 'reported-block-post' },
+                      content: [{ type: 'text', text: 'Reported block post text' }],
+                    },
+                  ],
                 },
               },
             },
