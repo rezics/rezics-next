@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { setCopiesStoryMode, type CopiesStoryMode } from '../kernel/fake/copies-page-stories';
 import { setCopyKindsStory } from '../kernel/fake/copies-kinds';
+import recording from '../kernel/recorded/library-copies.json';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths } from './page';
 
@@ -26,8 +27,15 @@ export const ManyCopies: Story = {
     await ready(args);
     const canvas = within(args.canvasElement);
     const kokoro = canvas.getByText('Kokoro').closest('li');
+    const coverMedia = recording.copies[1]?.subject.cover?.media;
+    if (typeof coverMedia !== 'string') throw new Error('The recorded Kokoro copy has no cover media.');
+    if (!kokoro) throw new Error('The recorded Kokoro copy did not render in the list.');
     expect(kokoro?.textContent).toContain('Digital');
     expect(kokoro?.textContent).not.toContain('Physical');
+    const image = kokoro.querySelector('[data-slot="cover"] img');
+    if (!image?.getAttribute('src')?.includes(`/media/${coverMedia}/`)) {
+      throw new Error('The recorded Kokoro copy cover did not render from its /media/ fixture.');
+    }
     await userEvent.hover(canvas.getByText('The Little Prince'));
   },
 };

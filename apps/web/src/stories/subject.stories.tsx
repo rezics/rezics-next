@@ -48,14 +48,23 @@ const meta = { title: 'Pages/Subject', parameters: { layout: 'fullscreen' } } sa
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function subjectReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const canvas = within(context.canvasElement);
+  await canvas.findByRole('heading', { level: 1, name: 'The Little Prince' });
+  const cover = context.canvasElement.querySelector('[data-slot="subject-frame"] [data-slot="cover"]');
+  if (!cover) throw new Error('The recorded subject header cover frame did not render.');
+  await expect(cover).toHaveAttribute('data-state', 'placeholder');
+}
+
 export const SignedIn: Story = {
   name: 'Signed In',
-  play: pageReady,
+  play: subjectReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
 export const SignedOut: Story = {
   name: 'Signed Out',
-  play: pageReady,
+  play: subjectReady,
   render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
 };
 

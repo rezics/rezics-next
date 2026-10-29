@@ -2,11 +2,56 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 
-type Entry = { id: string; title: string; name: string; type: string };
-type Index = { entries: Record<string, Entry> };
+export type SmokeStoryEntry = { id: string; title: string; name: string; type: string };
+export type SmokeStoryIndex = { entries: Record<string, SmokeStoryEntry> };
+export type CopyRecording = {
+  copies?: Array<{ subject?: { cover?: { media?: string | null } | null } | null }>;
+};
+export type SmokeStories = {
+  shell: SmokeStoryEntry;
+  signedInShell: SmokeStoryEntry;
+  uiCoverCard: SmokeStoryEntry;
+  subject: SmokeStoryEntry;
+  copies: SmokeStoryEntry;
+  coverMedia: string;
+};
 type StoryPreview = {
   __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
 };
+
+export function selectSmokeStories(
+  webIndex: SmokeStoryIndex,
+  uiIndex: SmokeStoryIndex,
+  copies: CopyRecording,
+): SmokeStories {
+  const select = (entries: SmokeStoryEntry[], title: string, name?: string) =>
+    entries.find(
+      (entry) => entry.type === 'story' && entry.title === title && (name === undefined || entry.name === name),
+    );
+  const webEntries = Object.values(webIndex.entries);
+  const uiEntries = Object.values(uiIndex.entries);
+  const shell = select(webEntries, 'Pages/Shell', 'Signed Out');
+  const signedInShell = select(webEntries, 'Pages/Shell', 'Signed In');
+  const uiCoverCard = select(uiEntries, 'Rezics UI/Cover Card');
+  const subject = select(webEntries, 'Pages/Subject', 'Signed In');
+  const copiesStory = select(webEntries, 'Pages/Library/Copies', 'Many Copies');
+  const coverMedia = copies.copies?.[1]?.subject?.cover?.media;
+
+  if (typeof coverMedia !== 'string' || !coverMedia) {
+    throw new Error('The recorded second Library Copies member has no cover media.');
+  }
+  if (!shell || !signedInShell || !uiCoverCard || !subject || !copiesStory) {
+    const summaries = {
+      pages: webEntries
+        .filter((entry) => entry.type === 'story' && entry.title.startsWith('Pages/'))
+        .map(({ id, title, name }) => ({ id, title, name })),
+      uiTitles: uiEntries.filter((entry) => entry.type === 'story').map(({ id, title, name }) => ({ id, title, name })),
+    };
+    throw new Error(`A required smoke story is absent from the built index: ${JSON.stringify(summaries)}`);
+  }
+
+  return { shell, signedInShell, uiCoverCard, subject, copies: copiesStory, coverMedia };
+}
 
 export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser): Promise<void> {
   const app = resolve(import.meta.dir, '..');
@@ -27,38 +72,26 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         },
       });
   const base = origin ?? server!.url.toString();
-  const webIndex = JSON.parse(readFileSync(resolve(output, 'index.json'), 'utf8')) as Index;
-  const uiIndex = JSON.parse(readFileSync(resolve(output, 'ui/index.json'), 'utf8')) as Index;
-  const pageStory = Object.values(webIndex.entries).find(
-    (entry) => entry.type === 'story' && entry.title === 'Pages/Shell' && entry.name === 'Signed Out',
-  );
-  const signedInStory = Object.values(webIndex.entries).find(
-    (entry) => entry.type === 'story' && entry.title === 'Pages/Shell' && entry.name === 'Signed In',
-  );
-  const uiStory = Object.values(uiIndex.entries).find(
-    (entry) => entry.type === 'story' && entry.title === 'Rezics UI/Cover Card',
-  );
-  const coverStory = Object.values(webIndex.entries).find(
-    (entry) => entry.type === 'story' && entry.title === 'Pages/Subject',
-  );
-  if (!pageStory || !signedInStory || !uiStory || !coverStory) {
-    const summaries = {
-      pages: Object.values(webIndex.entries)
-        .filter((entry) => entry.type === 'story' && entry.title.startsWith('Pages/'))
-        .map(({ id, title, name }) => ({ id, title, name })),
-      uiTitles: Object.values(uiIndex.entries)
-        .filter((entry) => entry.type === 'story')
-        .map(({ id, title, name }) => ({ id, title, name })),
-    };
-    throw new Error(`A required smoke story is absent from the built index: ${JSON.stringify(summaries)}`);
-  }
+  const webIndex = JSON.parse(readFileSync(resolve(output, 'index.json'), 'utf8')) as SmokeStoryIndex;
+  const uiIndex = JSON.parse(readFileSync(resolve(output, 'ui/index.json'), 'utf8')) as SmokeStoryIndex;
+  const copyRecording = JSON.parse(
+    readFileSync(resolve(app, 'src/kernel/recorded/library-copies.json'), 'utf8'),
+  ) as CopyRecording;
+  const stories = selectSmokeStories(webIndex, uiIndex, copyRecording);
 
-  const scenarios = [
-    { id: pageStory.id, globals: '', composed: false, requiresCover: false },
-    { id: signedInStory.id, globals: '', composed: false, requiresCover: false },
-    { id: uiStory.id, globals: '', composed: true, requiresCover: false },
-    { id: pageStory.id, globals: 'locale:ja;theme:dark', composed: false, requiresCover: false },
-    { id: coverStory.id, globals: '', composed: false, requiresCover: true },
+  const scenarios: {
+    id: string;
+    globals: string;
+    composed: boolean;
+    requiresCover: boolean;
+    coverMedia?: string;
+  }[] = [
+    { id: stories.shell.id, globals: '', composed: false, requiresCover: false },
+    { id: stories.signedInShell.id, globals: '', composed: false, requiresCover: false },
+    { id: stories.uiCoverCard.id, globals: '', composed: true, requiresCover: false },
+    { id: stories.shell.id, globals: 'locale:ja;theme:dark', composed: false, requiresCover: false },
+    { id: stories.subject.id, globals: '', composed: false, requiresCover: false },
+    { id: stories.copies.id, globals: '', composed: false, requiresCover: true, coverMedia: stories.coverMedia },
   ];
   try {
     for (const scenario of scenarios) {
@@ -116,7 +149,7 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         if ((await phase.jsonValue()) !== 'finished') {
           throw new Error(`Story ${storyId} failed its play function: ${errors.join('; ')}`);
         }
-        if (scenario.id === pageStory.id || scenario.id === signedInStory.id) {
+        if (scenario.id === stories.shell.id || scenario.id === stories.signedInShell.id) {
           await frame.getByRole('menu').waitFor({ state: 'visible', timeout: 10_000 });
         }
         if (scenario.globals) {
@@ -145,6 +178,12 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         }
         if (scenario.requiresCover && !images.some((image) => image.src.includes('/media/') && image.loaded)) {
           throw new Error('The recorded cover fixture did not load from /media/.');
+        }
+        if (
+          scenario.coverMedia &&
+          !images.some((image) => image.src.includes(`/media/${scenario.coverMedia}/`) && image.loaded)
+        ) {
+          throw new Error(`The recorded cover media ${scenario.coverMedia} did not load from /media/.`);
         }
         if (errors.length) throw new Error(`Story ${storyId} emitted browser errors: ${errors.join('; ')}`);
       } finally {
