@@ -197,14 +197,17 @@ export class WorkerTasks {
    * stabilize dependency of a dev task counts only after stabilize has been merged into dev: released earlier, the
    * dependent started without the fix it waited for.
    */
-  dependenciesMet(task: Pick<Task, 'brief'>, tasks: readonly Task[] = this.store.tasks()): boolean {
-    const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]));
+  dependenciesMet(task: Pick<Task, 'brief'>, tasks?: readonly Task[]): boolean {
+    const byId = tasks ? new Map(tasks.map((candidate) => [candidate.id, candidate])) : undefined;
     const branch = this.taskBaseBranch(task.brief);
     return task.brief.after.every((id) => {
-      const dependency = byId.get(id);
+      const loaded = byId?.get(id);
+      const dependency = loaded
+        ? { state: loaded.state, target: loaded.brief.target, commit: loaded.integratedCommit ?? loaded.mergedCommit }
+        : this.store.dependency(id);
       if (!dependency || !['integrated', 'merged'].includes(dependency.state)) return false;
-      if (dependency.brief.target === task.brief.target) return true;
-      const commit = dependency.integratedCommit ?? dependency.mergedCommit;
+      if (dependency.target === task.brief.target) return true;
+      const commit = dependency.commit;
       if (!commit) return true;
       return (
         spawnSync('git', ['merge-base', '--is-ancestor', commit, `refs/heads/${branch}`], {
@@ -279,8 +282,8 @@ export class WorkerTasks {
     }
     const taskClass = classifyTask(brief);
     if (taskClass === 'mechanical') throw new Error('run mechanical commands directly without a worker');
-    const existingTasks = this.store.tasks().filter((task) => task.id !== excludingTask);
-    const known = new Set(existingTasks.map((task) => task.id));
+    const known = new Set(this.store.taskIds());
+    if (excludingTask) known.delete(excludingTask);
     for (const dependency of brief.after)
       if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
     return { brief, taskClass };
@@ -561,9 +564,8 @@ export class WorkerTasks {
           { abandonPending: true },
         );
       }
-      const byId = new Map(this.store.tasks().map((candidate) => [candidate.id, candidate]));
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
-      if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief }, [...byId.values()])) {
+      if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief })) {
         if (!heldAmendment) {
           const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
           mkdirSync(dirname(briefPath), { recursive: true });
@@ -892,7 +894,7 @@ export class WorkerTasks {
     await this.stop(taskId, true);
     const dependency = this.store.task(taskId);
     const heldByManager = new Map<string, string[]>();
-    for (const task of this.store.tasks()) {
+    for (const task of this.store.activeTasks()) {
       if (task.state !== 'held' || !task.brief.after.includes(taskId)) continue;
       const held = heldByManager.get(task.brief.manager) ?? [];
       held.push(task.id);
@@ -938,9 +940,9 @@ export class WorkerTasks {
     }
   }
   completionScope(goal: string): string[] {
-    return this.store
-      .tasks()
-      .filter((task) => task.brief.goal === goal && task.state !== 'cancelled')
-      .map((task) => task.id);
+    return this.store.db
+      .query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal')=? AND json_extract(body, '$.state') != 'cancelled' ORDER BY sequence")
+      .all(goal)
+      .map((row) => (row as { id: string }).id);
   }
 }

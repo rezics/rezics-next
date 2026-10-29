@@ -560,7 +560,7 @@ export class WorkerJob implements GateOutcomeSink {
   /** Release held tasks whose dependencies are met; returns their ids. */
   private releaseMetDependents(): string[] {
     const store = this.tasks.store;
-    const tasks = store.tasks();
+    const tasks = store.activeTasks();
     const candidates = tasks
       .filter((candidate) => candidate.state === 'held' && this.tasks.dependenciesMet(candidate, tasks))
       .map((candidate) => candidate.id);
@@ -575,7 +575,7 @@ export class WorkerJob implements GateOutcomeSink {
       }
       try {
         const candidate = store.task(taskId);
-        if (candidate.state !== 'held' || !this.tasks.dependenciesMet(candidate, store.tasks())) continue;
+        if (candidate.state !== 'held' || !this.tasks.dependenciesMet(candidate)) continue;
         const ref = { taskId, attempt: candidate.currentAttempt };
         if (candidate.currentAttempt)
           store.updateHeldRetryTask(
@@ -599,7 +599,7 @@ export class WorkerJob implements GateOutcomeSink {
   /** Surface pre-existing held tasks with cancelled dependencies once, across host sweeps. */
   private reportCancelledDependencies(): void {
     const store = this.tasks.store;
-    const tasks = store.tasks();
+    const tasks = store.activeTasks();
     const byId = new Map(tasks.map((task) => [task.id, task]));
     for (const task of tasks) {
       if (task.state !== 'held') continue;
@@ -631,7 +631,7 @@ export class WorkerJob implements GateOutcomeSink {
     // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
     // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.
     if (adoptRunning) this.releaseMetDependents();
-    const tasks = adoptRunning ? store.tasks() : [];
+    const tasks = adoptRunning ? store.activeTasks() : [];
     let sweepItems = 0;
     const yieldSweep = async () => {
       if (++sweepItems % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
@@ -698,7 +698,7 @@ export class WorkerJob implements GateOutcomeSink {
     if (adoptRunning) {
       const graceMs = 2 * (this.tasks.settings.startGraceMs ?? START_GRACE_MS);
       const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
-      for (const task of store.tasks()) {
+      for (const task of store.activeTasks()) {
         await yieldSweep();
         if (task.state !== 'ready' || task.currentAttempt !== 0 || this.recovering.has(task.id)) continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
@@ -819,7 +819,7 @@ export class WorkerJob implements GateOutcomeSink {
     const store = this.tasks.store;
     const goals = new Set(taskIds.map((id) => store.task(id).brief.goal));
     for (const goal of goals) {
-      const goalTasks = store.tasks().filter((task) => task.brief.goal === goal);
+      const goalTasks = store.activeTasks().filter((task) => task.brief.goal === goal);
       if (!goalTasks.some((task) => (task.brief.after ?? []).length)) continue;
       if (goalTasks.some((task) => ['ready', 'running', 'landing', 'held', 'integrated'].includes(task.state)))
         continue;
@@ -1119,7 +1119,7 @@ export class WorkerJob implements GateOutcomeSink {
             store.event(outcome, 'research-integrated', event);
             this.inbox.deliver(event);
           }
-          const goalTasks = store.tasks().filter((candidate) => candidate.brief.goal === task.brief.goal);
+          const goalTasks = store.activeTasks().filter((candidate) => candidate.brief.goal === task.brief.goal);
           const goalInFlight = goalTasks.some((candidate) =>
             ['ready', 'running', 'landing', 'held', 'integrated'].includes(candidate.state),
           );

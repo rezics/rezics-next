@@ -64,39 +64,157 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
 export class WorkerStore implements AttemptFence {
+  private readVersion = -1;
+  private readonly taskSnapshot = new Map<string, Task>();
+  private readonly attemptSnapshot = new Map<string, Attempt>();
+  private decodedTaskRows = 0;
+  private decodedAttemptRows = 0;
+  private decodedTaskBytes = 0;
+  private decodedAttemptBytes = 0;
   constructor(readonly db: Database) {
     migrate(db, workerMigrations);
   }
+  /** Counts bodies decoded since the previous reset; useful for guarding host read budgets. */
+  decodedRows(): { tasks: number; attempts: number } {
+    return { tasks: this.decodedTaskRows, attempts: this.decodedAttemptRows };
+  }
+  decodedBytes(): { tasks: number; attempts: number } {
+    return { tasks: this.decodedTaskBytes, attempts: this.decodedAttemptBytes };
+  }
+  resetDecodedRows(): void {
+    this.decodedTaskRows = 0;
+    this.decodedAttemptRows = 0;
+    this.decodedTaskBytes = 0;
+    this.decodedAttemptBytes = 0;
+  }
+  private refreshSnapshot(): void {
+    const current = (this.db.query('PRAGMA data_version').get() as { data_version: number }).data_version;
+    if (current !== this.readVersion) {
+      this.taskSnapshot.clear();
+      this.attemptSnapshot.clear();
+      this.readVersion = current;
+    }
+  }
+  private invalidateSnapshot(): void {
+    this.taskSnapshot.clear();
+    this.attemptSnapshot.clear();
+    this.readVersion = (this.db.query('PRAGMA data_version').get() as { data_version: number }).data_version;
+  }
+  private taskBody(row: unknown): Task | undefined {
+    if (!row) return undefined;
+    this.decodedTaskRows++;
+    this.decodedTaskBytes += Buffer.byteLength((row as Body).body);
+    return decode<Task>(row);
+  }
+  private attemptBody(row: unknown): Attempt | undefined {
+    if (!row) return undefined;
+    this.decodedAttemptRows++;
+    this.decodedAttemptBytes += Buffer.byteLength((row as Body).body);
+    return decode<Attempt>(row);
+  }
   task(id: string): Task {
-    const task = decode<Task>(this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(id));
+    this.refreshSnapshot();
+    const cached = this.taskSnapshot.get(id);
+    if (cached) return cached;
+    const task = this.taskBody(this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(id));
     if (!task) throw new Error(`unknown task: ${id}`);
+    this.taskSnapshot.set(id, task);
     return task;
   }
   tasks(): Task[] {
+    this.refreshSnapshot();
+    return this.db.query('SELECT id, body FROM worker_tasks ORDER BY sequence').all().map((row) => {
+      const value = row as { id: string; body: string };
+      const cached = this.taskSnapshot.get(value.id);
+      if (cached) return cached;
+      const task = this.taskBody(value)!;
+      this.taskSnapshot.set(value.id, task);
+      return task;
+    });
+  }
+  /** All non-terminal tasks, bounded by the worker_tasks_state expression index. */
+  activeTasks(): Task[] {
+    this.refreshSnapshot();
     return this.db
-      .query('SELECT body FROM worker_tasks ORDER BY sequence')
+      .query("SELECT id, body FROM worker_tasks WHERE json_extract(body, '$.state') IN ('held','ready','running','landing','stopped') ORDER BY sequence")
       .all()
-      .map((row) => decode<Task>(row)!);
+      .map((row) => {
+        const value = row as { id: string; body: string };
+        const cached = this.taskSnapshot.get(value.id);
+        if (cached) return cached;
+        const task = this.taskBody(value)!;
+        this.taskSnapshot.set(value.id, task);
+        return task;
+      });
+  }
+  taskIds(): string[] {
+    return this.db.query('SELECT id FROM worker_tasks ORDER BY sequence').all().map((row) => (row as { id: string }).id);
+  }
+  taskState(id: string): string | undefined {
+    return (this.db.query("SELECT json_extract(body, '$.state') AS state FROM worker_tasks WHERE id=?").get(id) as { state?: string } | null)?.state;
+  }
+  dependency(id: string): { state: string; target?: string; commit?: string } | undefined {
+    return this.db.query("SELECT json_extract(body, '$.state') AS state, json_extract(body, '$.brief.target') AS target, coalesce(json_extract(body, '$.integratedCommit'), json_extract(body, '$.mergedCommit')) AS commit FROM worker_tasks WHERE id=?")
+      .get(id) as { state: string; target?: string; commit?: string } | undefined;
   }
   attempt(ref: AttemptRef): Attempt {
-    const attempt = decode<Attempt>(
-      this.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
+    this.refreshSnapshot();
+    const key = `${ref.taskId}:${ref.attempt}`;
+    const cached = this.attemptSnapshot.get(key);
+    if (cached) return cached;
+    const attempt = this.attemptBody(
+      this.db.query('SELECT task_id, attempt, body FROM worker_attempts WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
     );
     if (!attempt) throw new Error('unknown attempt');
+    this.attemptSnapshot.set(key, attempt);
     return attempt;
   }
   attempts(taskId?: string): Attempt[] {
     const rows = taskId
-      ? this.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(taskId)
-      : this.db.query('SELECT body FROM worker_attempts ORDER BY task_id, attempt').all();
-    return rows.map((row) => decode<Attempt>(row)!);
+      ? this.db.query('SELECT task_id, attempt, body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(taskId)
+      : this.db.query('SELECT task_id, attempt, body FROM worker_attempts ORDER BY task_id, attempt').all();
+    this.refreshSnapshot();
+    return rows.map((row) => {
+      const value = row as { task_id: string; attempt: number; body: string };
+      const key = `${value.task_id}:${value.attempt}`;
+      const cached = this.attemptSnapshot.get(key);
+      if (cached) return cached;
+      const attempt = this.attemptBody(value)!;
+      this.attemptSnapshot.set(key, attempt);
+      return attempt;
+    });
+  }
+  /** Pending, running and exited attempts are the only attempts needed for host recovery. */
+  activeAttempts(): Attempt[] {
+    this.refreshSnapshot();
+    return this.db
+      .query("SELECT task_id, attempt, body FROM worker_attempts WHERE json_extract(body, '$.state') IN ('pending','running','exited') ORDER BY task_id, attempt")
+      .all()
+      .map((row) => {
+        const value = row as { task_id: string; attempt: number; body: string };
+        const key = `${value.task_id}:${value.attempt}`;
+        const cached = this.attemptSnapshot.get(key);
+        if (cached) return cached;
+        const attempt = this.attemptBody(value)!;
+        this.attemptSnapshot.set(key, attempt);
+        return attempt;
+      });
   }
   /** Reads one state through the attempt state index; used for the host's pending launcher recovery. */
   attemptsInState(state: Attempt['state']): Attempt[] {
+    this.refreshSnapshot();
     return this.db
-      .query("SELECT body FROM worker_attempts WHERE json_extract(body, '$.state') = ? ORDER BY task_id, attempt")
+      .query("SELECT task_id, attempt, body FROM worker_attempts WHERE json_extract(body, '$.state') = ? ORDER BY task_id, attempt")
       .all(state)
-      .map((row) => decode<Attempt>(row)!);
+      .map((row) => {
+        const value = row as { task_id: string; attempt: number; body: string };
+        const key = `${value.task_id}:${value.attempt}`;
+        const cached = this.attemptSnapshot.get(key);
+        if (cached) return cached;
+        const attempt = this.attemptBody(value)!;
+        this.attemptSnapshot.set(key, attempt);
+        return attempt;
+      });
   }
   /**
    * Candidate work is anchored by running tasks, then follows each task's current-attempt primary key.
@@ -349,7 +467,7 @@ export class WorkerStore implements AttemptFence {
   }
   /** Keep the check and every associated write under BEGIN IMMEDIATE. */
   write<T>(ref: AttemptRef, action: () => T): T {
-    return this.db
+    const result = this.db
       .transaction(() => {
         this.assertCurrent(ref);
         const result = action();
@@ -357,6 +475,8 @@ export class WorkerStore implements AttemptFence {
         return result;
       })
       .immediate();
+    this.invalidateSnapshot();
+    return result;
   }
   createTask(
     brief: Brief,
@@ -364,12 +484,12 @@ export class WorkerStore implements AttemptFence {
     taskClass: Task['taskClass'],
     id = crypto.randomUUID(),
   ): Task {
-    return this.db
+    const task = this.db
       .transaction(() => {
         const after = brief.after ?? [];
-        const dependencies = new Map(this.tasks().map((task) => [task.id, task]));
+        const dependencies = new Map(after.map((id) => [id, this.dependency(id)]));
         for (const dependency of after)
-          if (!dependencies.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
+          if (!dependencies.get(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
         const state = after.every((dependency) =>
           ['integrated', 'merged'].includes(dependencies.get(dependency)?.state ?? ''),
         )
@@ -392,16 +512,20 @@ export class WorkerStore implements AttemptFence {
         return task;
       })
       .immediate();
+    this.invalidateSnapshot();
+    return task;
   }
   private saveTask(task: Task): void {
     this.db
       .query('UPDATE worker_tasks SET current_attempt=?, body=? WHERE id=?')
       .run(task.currentAttempt, JSON.stringify(task), task.id);
+    this.invalidateSnapshot();
   }
   private saveAttempt(attempt: Attempt): void {
     this.db
       .query('INSERT OR REPLACE INTO worker_attempts VALUES (?,?,?)')
       .run(attempt.taskId, attempt.attempt, JSON.stringify(attempt));
+    this.invalidateSnapshot();
   }
   updateTask(ref: AttemptRef, update: (task: Task) => void): Task {
     return this.write(ref, () => {
