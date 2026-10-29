@@ -391,7 +391,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
   const hasFilterPanel = Boolean(
     query && result?.subjects.length && data?.facetsAvailable && (data.typeChoices.length || type),
   );
-  const results = renderResults(query, cursor, result, locale, type, selectedFacets, data);
+  const results = renderResults(query, result, locale, type, selectedFacets, data);
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="space-y-5 pt-3 lg:pt-0">
