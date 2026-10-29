@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, spyOn, test } from 'bun:test';
 import pg from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { consumerReady, readConsumerLag } from '../../src/events/consumer-lag.ts';
@@ -50,22 +50,22 @@ async function until(
   condition: () => boolean | Promise<boolean>,
   timeoutMs = 10_000,
   errors: unknown[][] = [],
+  message = 'condition not reached',
 ): Promise<void> {
   const deadline = performance.now() + timeoutMs;
   for (;;) {
-    if (errors.length > 0) throw new Error(`relay logged an error: ${String(errors[0]?.[0])}`);
+    if (errors.length > 0) throw new Error(`relay logged an error: ${errors[0]!.map(String).join(': ')}`);
     if (await condition()) {
-      if (errors.length > 0) throw new Error(`relay logged an error: ${String(errors[0]?.[0])}`);
+      if (errors.length > 0) throw new Error(`relay logged an error: ${errors[0]!.map(String).join(': ')}`);
       return;
     }
-    if (performance.now() > deadline) throw new Error('condition not reached');
+    if (performance.now() > deadline) throw new Error(message);
     await Bun.sleep(10);
   }
 }
 
 test('relay ticks record the oldest pending envelope across partitions and a caught-up observation', async () => {
   const errors: unknown[][] = [];
-  const errorSpy = spyOn(console, 'error').mockImplementation((...args: unknown[]) => errors.push(args));
   const consumer = await consumerAtHead();
   const partitions = (
     await admin.query<{ partition_no: number }>('SELECT partition_no FROM core.partition ORDER BY partition_no LIMIT 2')
@@ -74,15 +74,15 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
 
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  let started!: () => void;
-  const running = new Promise<void>((resolve) => (started = resolve));
+  let running = false;
+  const errorSpy = spyOn(console, 'error').mockImplementation((...args: unknown[]) => errors.push(args));
   const relay = startRelays(
     pool,
     [
       {
         consumer,
         async run() {
-          started();
+          running = true;
           await held;
           return { status: 'read' as const, envelopes: 0, position: 0n };
         },
@@ -91,7 +91,12 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
     { intervalMs: 20, concurrency: 1 },
   );
   try {
-    await until(async () => (await withConnection(pool, (client) => readConsumerLag(client, consumer))) !== null, 10_000, errors);
+    await until(
+      async () => (await withConnection(pool, (client) => readConsumerLag(client, consumer))) !== null,
+      10_000,
+      errors,
+      'relay did not record its first lag observation',
+    );
     const caughtUp = await withConnection(pool, (client) => readConsumerLag(client, consumer));
     expect(caughtUp?.oldestPendingAt).toBeNull();
     expect(caughtUp?.observedAt).toBeInstanceOf(Date);
@@ -104,7 +109,7 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
       'SELECT min(recorded_at) AS oldest FROM core.outbox WHERE partition_no = ANY($1::integer[])',
       [partitions],
     );
-    await running;
+    await until(() => running, 10_000, errors, 'relay did not start pending work');
     await until(
       async () => {
         const lag = await withConnection(pool, (client) => readConsumerLag(client, consumer));
@@ -112,6 +117,7 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
       },
       10_000,
       errors,
+      'relay did not record the oldest pending envelope',
     );
     const pending = await withConnection(pool, (client) => readConsumerLag(client, consumer));
     expect(pending?.oldestPendingAt).toEqual(expected.rows[0]?.oldest);
@@ -121,7 +127,7 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
     await relay.stop();
     errorSpy.mockRestore();
   }
-});
+}, 40_000);
 
 test('consumer readiness requires a row and fresh observation and pending time', () => {
   const now = new Date('2026-01-01T00:10:00.000Z');
