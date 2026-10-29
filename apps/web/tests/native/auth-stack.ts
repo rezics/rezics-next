@@ -9,7 +9,7 @@ import {
 import { resolve } from 'node:path';
 import type { NativeWebStack } from './stack.ts';
 
-export type AuthPersona = 'alice' | 'bob' | 'suspended' | 'newcomer';
+export type AuthPersona = 'alice' | 'bob' | 'suspended' | 'newcomer' | 'anonymous';
 export type AuthJourney = {
   url: string;
   context: BrowserContext;
@@ -20,7 +20,7 @@ export type AuthJourney = {
 export type NativeAuthStack = {
   origin: string;
   context(persona: AuthPersona): Promise<BrowserContext>;
-  signIn(persona: Exclude<AuthPersona, 'newcomer'>): Promise<AuthJourney>;
+  signIn(persona: Exclude<AuthPersona, 'newcomer' | 'anonymous'>): Promise<AuthJourney>;
   signUp(persona: 'newcomer'): Promise<AuthJourney>;
   stop(): Promise<void>;
 };
@@ -192,8 +192,16 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
           page.getByRole('button', { name: 'Sign in', exact: true }).click(),
         ]);
       }
-      if (persona !== 'suspended')
-        await page.waitForURL((url) => url.origin === new URL(stack.web).origin, { timeout: 30_000 });
+      if (persona !== 'suspended') {
+        // The callback is also on the web origin. Finish its document redirect
+        // before observing hydration or returning a usable served web page.
+        await page.waitForURL(
+          (url) => url.origin === new URL(stack.web).origin && url.pathname !== '/auth/callback',
+          { timeout: 30_000 },
+        );
+        await hydrate(page);
+        await page.locator('#account-menu-button').waitFor({ state: 'visible' });
+      }
       await page.waitForLoadState('domcontentloaded');
       await sampleMemory();
       if (!signup)
