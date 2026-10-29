@@ -256,7 +256,7 @@ test('missing permission, mismatched principal, receipt-only and expired request
         native.db.pool,
         {
           ...options,
-          principal: { kind: 'account', id: native.accounts[1]! },
+          principal: { kind: 'account' as const, id: native.accounts[1]! },
         },
         async () => {
           calls++;
@@ -271,7 +271,7 @@ test('missing permission, mismatched principal, receipt-only and expired request
           authorization: {
             ...options.authorization!,
             async authorize() {
-              return 'receipt-only';
+              return 'receipt-only' as const;
             },
           },
         },
