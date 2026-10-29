@@ -297,9 +297,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
     // One entry per type term, never merged by name: the most matches first, then by name in the reader's language.
     const collator = new Intl.Collator(data.locale);
-    const typesWithCounts =
-      typeFacets === null ? typeChoices : typeChoices.filter((choice) => typeFacets.has(choice.id));
-    const orderedTypes = typesWithCounts
+    const orderedTypes = typeChoices
       .map((choice) => {
         const facet = typeFacets?.get(choice.id);
         const labels = facet && Object.keys(facet.labels).length > 0 ? facet.labels : choice.labels;
