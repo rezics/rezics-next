@@ -61,7 +61,6 @@ for (const delegated of [false, true]) {
 
 test('capture keeps constant statements and rows at 8, 64 and 512 consented scopes', async () => {
   const fixtures = new Map<number, Awaited<ReturnType<typeof captureFixture>>>();
-  const complete = new Error('Measured before writes');
   const report = await checkGrowth(db, {
     name: 'durable initiator capture by consented scope count',
     scales: [8, 64, MAX_CONSENTED_SCOPES],
@@ -72,12 +71,9 @@ test('capture keeps constant statements and rows at 8, 64 and 512 consented scop
     },
     async operation(_database, scale) {
       const f = fixtures.get(scale)!;
-      await expect(
-        captureAttempt(f, async (context) => {
-          await captureDurableInitiator(context, f.actor);
-          throw complete;
-        }),
-      ).rejects.toBe(complete);
+      expect(await captureDurableInitiator(f.context, f.actor)).toMatchObject({
+        originalAccount: { minimumAuthnEpoch: '1' },
+      });
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([8, 64, MAX_CONSENTED_SCOPES]);
