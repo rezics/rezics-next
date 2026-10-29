@@ -26,13 +26,14 @@ Current implementation evidence is narrower than the capability:
   helpers do not implement the shared members service or the adopted complete indexed filter/identity plan.
 - `builtin-identity.ts` deterministically derives Everything/state IDs. `builtin-reference-store.ts` binds exact
   entry witnesses; it does not prove copy/session-only whole-state-set support, all siblings or writer coverage.
-  Liked identity and Content's indexed reaction adapter are not implemented by these helpers.
+  These helpers implement neither Liked identity nor its Content reaction integration.
 - Pin/kind columns, retained-entry/due storage, labels/reservations, source-head hooks and canonical tables exist.
   Entry/copy/session row adapters still use the fixed pre-profile values and omit accepted pins. Label DAOs provide
   metadata lifecycle and reservation admission, not HTTP commands, complete assignment undo/pages or automatic purge.
-- Neither `entry` nor `entry_deleted` has `owner_write_seq`; there is no owner state-write counter or allocator.
-  `entries.ts` and entry insert/update/delete SQL do not sequence state writes. `fact_source_head.generation` is an
-  existing source-hook stamp, not this ordering counter. Required producers are described below, not implemented.
+- The native [owner sequence allocator/schema](owner-write-sequence.md) and
+  [owner fact invalidation ABI](owner-fact-version.md), including full changed-row UPDATE coverage, are integrated.
+  `entries.ts` and production entry/clear/Undo writers still do not allocate or persist state-write sequences.
+  These primitives establish neither complete owner-query coverage nor dynamic/canonical runtime readiness.
 - Every method of `createCollectionSource` and the canonical-source-store factories throws `dependency_unavailable`.
   Integrated tables, typed ports, outcome interfaces and missing-driver verifiers are not runtime completion.
 - `work-module.ts` registers `work.ts` Collection listing effects only. No integrated `purgeAccountFactsPage` export
@@ -44,8 +45,15 @@ Use one Collection members service/surface for curated, Everything, state and Li
 truth. One derived owner-level subject candidate index may serve built-ins; no per-built-in membership cache or
 copied exact-fact-witness store. Every qualifying producer must insert discovery coverage atomically or establish
 readiness through bounded durable preparation. Missing coverage returns preparing, never false empty. Stale positive
-candidates lose membership/disclosure immediately under current native checks. GET performs no repair, header/grant
-creation or work enqueue.
+candidates lose membership/disclosure immediately under current native checks. Logical Library/Collection list and
+detail reads are pure: no repair, header/grant creation, receipt or domain event. Only the common members GET may
+start bounded idempotent derived preparation and its work intent, keyed by actual viewer, Collection, validated
+filter/sort and accepted release/meaning, under [Dynamic Collections](../../../../docs/dynamic-collections.md#model-and-identity).
+It writes no domain state, header, grant, event or receipt. Retained preparation returns `202 application/json`,
+exactly `{preparing:true}`, `Retry-After` and owner-private `no-store`; retry the same validated URL and cursor.
+No members, next, operation ID or partial data accompanies `202`. Genuine exhaustion stays
+`200 {members:[],next:null}`; unavailable runtime/work stays `503`. Zone POST remains unchanged.
+[Continue GET](../../../../docs/library-continue.md#http-contract) starts no work; the members exception does not apply.
 
 Everything is the unique subjects with live explicit state, effective live label assignment, retained session/history
 or retained holding. Empty entry shells, trash, follows, curated occurrences, ratings and published-log snapshots
@@ -66,16 +74,18 @@ is not implemented.
 
 Built-ins have stable deterministic identities and private defaults. Empty logical Everything and owner state
 reference discovery need no stored header or write scope. Dynamic DTOs omit curated count, creation/update times,
-order epoch and occurrence fields; no fake zeros. First authorized materialization moves revision 0 to 1 atomically
-with native Collection resource grants and `shareAccount`, without a read-grant override. Denied writes create nothing.
+order epoch and occurrence fields; no fake zeros. Every account also has a stable private logical Liked, including
+empty `200`; that adopted meaning does not establish implemented identity or members runtime. First authorized
+materialization moves revision 0 to 1 atomically with native Collection resource grants and `shareAccount`, without a read-grant override. Denied writes create nothing.
 
 Library contains Continue, Everything, Liked, pins and All Collections; Following and History are separate
 destinations. State is a tile chip in the profile's wording and a filter; state Collections can be pinned, never
 mandatory navigation tabs. Continue is a bounded native read using active-session/profile-active-state eligibility,
 ranked by session activity, never full-library browser sorting. Liked uses current SUBJECT like/love reactions;
-unlike or another kind removes membership, and reaction alone never adds Everything. Content owns the indexed
-owner-scoped reaction adapter. There is no following feed or public follower total. An interim entry-only page is
-named tracked entries, never Everything.
+clearing or another kind removes membership. Thread/post reactions never qualify; reactions alone add neither
+Everything nor explicit state. Content owns the owner-scoped reaction adapter; complete Liked source-version,
+epoch/disclosure coverage and shared members integration remain missing. There is no following feed or public
+follower total. An interim entry-only page is named tracked entries, never Everything.
 
 Stored personal subject IDs and curated occurrences are immutable; new writes target the terminal. Canonical views
 select the live state with highest private `owner_write_seq` among merged originals, show conflicts, retain every
@@ -103,11 +113,22 @@ allocate nothing. Epoch maintenance consumes `owner_write_seq` and re-keys only 
 The counter is private ordering data, never permission, an account lifecycle generation, a membership witness store
 or a disclosed aggregate.
 
-The allocator/counter storage, live/archive columns and row adapters, native set/clear/restore writers, bounded
-migration/cutover and readiness, epoch consumer and terminal cleanup are remaining producers. Existing unsequenced
-values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero. Explicit bounded
+The delivered [`allocateOwnerWriteSeq` ABI and schema](owner-write-sequence.md) require a live native execute transaction,
+same-owner attribution and matching partition. Private `owner_write_counter` storage and nullable positive bigint
+`entry.owner_write_seq` / `entry_deleted.owner_write_seq` exist; null is legacy/unsequenced, with no default/backfill.
+Production row adapters and set/clear/Undo binding, bounded migration/cutover/readiness, epoch consumer and complete
+terminal cleanup remain missing producers. Existing unsequenced values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero. Explicit bounded
 migration/cutover must establish authoritative ordering before those values participate in ready canonical reads;
-fresh supported writers must set real sequences before advertising canonical readiness. No helper ABI is defined.
+fresh supported writers must set real sequences before advertising canonical readiness.
+
+The distinct delivered [`readOwnerFactVersion` ABI](owner-fact-version.md) reads one exact owner head in the caller's
+native snapshot. Its bigint result is private invalidation metadata; `null` means unbuilt, never zero or ready absence.
+It provides no authorization, bootstrap, identity-epoch or whole-query coverage proof. Full changed-row UPDATE hooks
+are integrated for entries, copies, sessions, label assignments and label parents. Each actual row change, including
+a separate sequence stamp, pays automatic trigger work; genuine no-change updates do not. Never disable coverage or
+add a manual duplicate head increment. Multiple row changes can advance the head repeatedly while the state-write
+allocator increments once per successful state write. Complete owner indexes/plans and canonical/source/Content
+version integration remain required under [owner predicates](../../../../docs/library-owner-queries.md).
 
 ### Required filtering, actions and cross-owner dependencies
 
@@ -125,8 +146,15 @@ Follow a readable unlisted Collection through the same abstraction. ItemList exp
 occurrence notes/order/multiplicity and emits unique dynamic subjects without private facts. Mount through Semantic's
 Collection source contract. Bulk preview/execution bind the same admitted filtered/selected population, reject stale
 selection, prevent replay effects and retain inspectable partial failures. Existing stub factories satisfy none of these
-runtime obligations; no new bulk/export ABI is defined here. Valid suspended bearers receive `403 account_suspended`;
-`401` is only missing/invalid/revoked credentials.
+runtime obligations; no new bulk/export ABI is defined here.
+
+Use the [native persona contract](../../../../docs/library-continue.md#native-authorization-boundary): no valid
+suspended bearer exists. Suspension advances the authentication floor/fences before Auth revokes sessions. The actual
+pre-suspension token receives `401`, JSON `invalid_credentials`, and
+`WWW-Authenticate: Bearer error="invalid_token"`. Correct-password sign-in receives `403 ACCOUNT_SUSPENDED` with no
+session. Kernel's defensive `403` is not a fixture scenario; never invent SQL/token personas. Preserve missing,
+invalid and revoked `401`, scope `403` with `insufficient_scope` challenge, and unknown/private concealment.
+Invalid credentials never downgrade to anonymous on public/unlisted reads.
 
 Capability acceptance uses the same scenarios across curated, Everything, state, public/unlisted/private and
 mounted Zone sources, varying definitions and fixtures. Include membership, bulk, ItemList export, unlisted follow,
@@ -223,7 +251,8 @@ The archive keeps the full pre-delete row: `route`, `account_id`, `subject_id`, 
 source `revision`, `created_at`, `updated_at`, original `transaction_id`, `activity_at`, `finished_at`, `type_id`,
 all `type_source_*` stamps, non-null `incarnation_id`, and the accepted `library_profile_pin` with its existing
 `library.library_profile_pin_valid` validation and the existing pin nullability rules. The required snapshot also
-retains the original `owner_write_seq`; this column is not yet present. Add `deletion_id`,
+retains the original `owner_write_seq`; its nullable positive bigint column exists, but writer binding is missing.
+The retained schema also has `deletion_id`,
 `deleted_revision`, `deleted_at`, `restore_until`, and generated
 `partition_no = route >> 4`. The due index is exactly
 `(partition_no, restore_until, route, account_id, deletion_id)`. The source revision remains `r`, the deletion
@@ -434,9 +463,9 @@ account-wide Library cascade. The current schema and the shelf/bulk contracts in
 logical stores; a planned name without an applied table or exact locator is an implementation gap, not covered by
 workflow history.
 
-The required private owner counter (`seq`) and live/archive `owner_write_seq` fields are also terminal inventory,
-not applied schema. T fences their state writers immediately. Bounded Library participant cleanup erases ordering
-metadata after dependent private facts; fenced late repair must not recreate it. This counter is neither an account
+The applied private `owner_write_counter` (`seq`) and live/archive `owner_write_seq` fields are also terminal
+inventory; their complete participant cleanup remains unimplemented. T fences their state writers immediately.
+Bounded Library participant cleanup erases ordering metadata after dependent private facts; fenced late repair must not recreate it. This counter is neither an account
 lifecycle generation nor a public activity total. Existing `fact_source_head` removal remains last after delete hooks.
 
 | Native data                                                                                                                                                                        | Required cleanup and current gap                                                                                                                                                                                                                                                                                                                   |
@@ -684,7 +713,10 @@ Where a named test does not call the operation, or does not grow the rows that o
   authorization, receipt, source hooks and outbox transaction; no global counter or owner-history scan.
 - Bound: constant native counter rows/statements per actual state write plus indexed depth, including initialization,
   bigint fields, rollback and contention. Serializes only that owner's state writes; no free ordering metadata or
-  hidden `noEffect` mutation. Existing Entry put/delete measurements below exclude this missing producer.
+  hidden `noEffect` mutation. The [delivered allocator's cost and primitive captures](owner-write-sequence.md#cost)
+  remain separate from production writer integration; existing Entry put/delete measurements below exclude it.
+  Every changed fact row also pays [automatic invalidation work](owner-fact-version.md#cost), including a separate
+  sequence-stamp UPDATE. One allocator increment is not a bound of one head increment.
 - Growth check: require native same-kernel-time writes across two merged originals, concurrent same/different owners,
   clear/Undo fresh order, denied/CAS/replay/overflow rollback and terminal no-resurrection, with three-scale
   owner/entry/history captures. No such runtime/growth test is executed or claimed by this document task.

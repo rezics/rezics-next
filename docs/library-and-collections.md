@@ -37,14 +37,24 @@ Grid/list/table layouts are presentation only and do not change membership or au
   Support is derived representation, never a second authority; digest ordering is not semantic chronology.
 - **Liked** derives from the owner's current SUBJECT `like` or `love` reaction. Switching between those preserves
   membership; clearing or another kind removes it. Thread/post reactions do not qualify. A reaction alone adds
-  nothing to Everything. Content owns the indexed, owner-scoped reaction adapter; copying into a curated Collection
-  creates independent occurrences.
+  nothing to Everything or explicit state. Every account has a stable private logical Liked, including a genuine
+  empty `200`. Content owns the owner-scoped reaction adapter; copying into a curated Collection creates independent
+  occurrences. Logical identity, shared members integration and complete Content source-version coverage remain
+  implementation requirements, not delivered Liked runtime.
 
 One derived owner-level subject candidate index may serve built-ins. It is discovery data, never permission or a
 new personal presence fact. Do not maintain per-built-in membership caches or copied exact-fact-witness stores.
 Every qualifying producer must cover insertion; incomplete coverage returns preparing/readiness, never false empty.
 Native current membership and disclosure reject stale positives immediately, including deleted label parents.
-Bounded durable maintenance may prepare indexes; GET never repairs, creates headers/grants or enqueues work.
+Bounded durable maintenance may prepare indexes. Logical Library/Collection list and detail reads stay pure;
+they never repair indexes or create headers, grants, receipts or domain events. The common members GET alone may
+start bounded idempotent derived preparation and its work intent under the adopted
+[dynamic members contract](dynamic-collections.md#model-and-identity), keyed by viewer, Collection, validated filter,
+sort and accepted release/meaning. It writes no domain state, header, grant, event or receipt. Retained preparation
+returns `202 application/json` with exactly `{preparing:true}`, `Retry-After` and owner-private `no-store` caching;
+retry the same validated URL and cursor. No members, next, operation ID or partial data accompanies `202`.
+Genuine exhaustion stays `200 {members:[],next:null}`; unavailable runtime/work stays `503`. Zone POST is unchanged.
+[Continue](library-continue.md#http-contract) GET starts no work; this exception does not extend to it.
 
 ## Logical identities and canonical browsing
 
@@ -90,8 +100,18 @@ counter; overflow explicitly fails and rolls back the write.
 Existing values without authoritative sequences require explicit bounded migration, cutover and readiness gates.
 Do not fabricate ordering from dates, transaction UUIDs, source-type positions or zero. Fresh supported writers must
 store real sequences before their canonical capability is advertised ready; unsequenced existing values cannot
-silently compete in a ready canonical view. Allocator, schema, writer integration and migration remain required
-native producers, not implemented helpers or columns established by this document.
+silently compete in a ready canonical view. The native
+[`allocateOwnerWriteSeq` and schema](../services/kernel/src/library/owner-write-sequence.md) are delivered: the live-execute,
+same-owner allocator returns bigint, with private nullable positive sequence columns on live/archive entries and
+an owner counter. Production set/clear/Undo binding, legacy NULL migration/cutover, epoch readiness and complete
+terminal erasure remain missing producers. The primitive establishes no canonical runtime readiness.
+
+The separate [`readOwnerFactVersion`](../services/kernel/src/library/owner-fact-version.md) reads one exact native owner
+head; full changed-row UPDATE hooks are integrated. Missing metadata is `null` (unbuilt), never zero or ready
+absence. It supplies neither authorization nor bootstrap, identity-epoch or whole-query coverage proof. Actual row
+changes, including a separate sequence-stamp UPDATE, each pay automatic trigger work; never disable coverage or
+manually duplicate head increments. This invalidation version is distinct from one allocator increment per
+successful state write. Complete indexed owner plans and canonical/source/Content version integration remain open.
 
 Canonical indexes are keyed by canonical ID. Serialized durable identity maintenance marks the shared identity
 epoch pending, completes bounded mapping/index work, then publishes the epoch. Canonical reads return preparing
@@ -139,8 +159,13 @@ expose no totals/facets over unchecked candidates. Dynamic Collections are priva
 disclose permitted subject membership, never the private facts or predicates that selected it. Only public membership
 contributes to public listing counts; private/unlisted membership never does. Public/unlisted reads still
 check each subject's current native authority; a follow or Zone mount grants nothing. Unknown and hidden private
-identities share not-found. A suspended account's valid bearer receives `403 account_suspended`; `401` is reserved
-for missing, invalid or revoked credentials.
+identities share not-found. Under the [native persona contract](library-continue.md#native-authorization-boundary),
+no valid suspended bearer exists: suspension advances the authentication floor/fences before Auth revokes sessions.
+The actual pre-suspension token receives `401`, JSON `invalid_credentials`, and
+`WWW-Authenticate: Bearer error="invalid_token"`. Correct-password sign-in returns `403 ACCOUNT_SUSPENDED` and creates
+no session. Kernel's defensive `403` is not a fixture scenario; do not invent SQL or token personas. Missing,
+invalid and revoked credentials retain `401`; insufficient scope retains `403` and its `insufficient_scope` challenge.
+Invalid credentials never downgrade to anonymous, including public/unlisted reads.
 
 ## Lifecycle and terminal erasure
 
