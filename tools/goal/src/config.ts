@@ -16,6 +16,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch } from './watchdog.ts';
+import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
@@ -513,7 +514,17 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           settings.mainCheckout,
           { stabilize: settings.stabilizeBranch, integration: settings.integrationBranch },
           settings.stateDirectory,
-          deliver,
+          (summary, managerId, kind) =>
+            inbox.deliver({
+              managerId: managerId ?? settings.integration.supermanager,
+              kind: kind ?? 'instruction',
+              summary,
+            }),
+          Date.now(),
+          undefined,
+          (task) =>
+            readRouting(settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>]
+              .maxMs,
         )
       );
     },

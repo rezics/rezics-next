@@ -4,6 +4,9 @@ import { join, sep } from 'node:path';
 import { sameProcess } from './process.ts';
 import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED } from './records.ts';
 import type { WorkerStore } from './store.ts';
+import type { Attempt, Task } from './types.ts';
+import type { ManagerEventKind } from './contracts.ts';
+import { checkWaitMs } from './launch.ts';
 
 // Each check is a state the control plane should never stay in. A violation that persists means work has silently
 // stopped, which nobody notices from the inside: on 2026-10-26 eight tasks sat in running without a worker for up to
@@ -15,6 +18,8 @@ const STABILIZE_BEHIND_MS = 30 * 60_000;
 const ALERT_EVERY_MS = 2 * 3_600_000;
 const FAILURE_WINDOW_MS = 30 * 60_000;
 const HOST_PROBE_EVERY_MS = 5 * 60_000;
+const DEFAULT_ATTEMPT_LIMIT_MS = 2 * 60 * 60_000;
+const RECENT_COMMANDS = 10;
 
 type CheckHost = { name: string; address: string; identity: string };
 export type CheckHostProbeResult = { status: number | null; stderr: string };
@@ -186,6 +191,108 @@ function failureIncidents(
   return found;
 }
 
+function recentCommands(attempt: Attempt): string[] {
+  const seen = new Set<string>();
+  const command = (id: unknown, value: unknown): string[] => {
+    if (typeof value !== 'string' || !value.trim()) return [];
+    if (typeof id === 'string') {
+      if (seen.has(id)) return [];
+      seen.add(id);
+    }
+    return [value.trim()];
+  };
+  try {
+    return readFileSync(attempt.logPath, 'utf8')
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        try {
+          const event = JSON.parse(line) as Record<string, any>;
+          const payload = event.payload ?? event;
+          const item = event.item ?? payload;
+          if (item.type === 'command_execution') return command(item.id, item.command);
+          if (event.type === 'assistant')
+            return (event.message?.content ?? []).flatMap((part: Record<string, any>) =>
+              part.type === 'tool_use' ? command(part.id, part.input?.command) : [],
+            );
+          if (payload.type === 'function_call') {
+            const input = payload.arguments ?? payload.input;
+            const args = typeof input === 'string' ? JSON.parse(input) : input;
+            return command(payload.call_id ?? payload.id, args?.cmd ?? args?.command);
+          }
+          return [];
+        } catch {
+          return [];
+        }
+      })
+      .filter(Boolean)
+      .slice(-RECENT_COMMANDS);
+  } catch {
+    return [];
+  }
+}
+
+function elapsedText(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  const hours = Math.floor(minutes / 60);
+  return hours ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+function inspectsProcesses(command: string): boolean {
+  // Codex command_execution records include the shell launcher around the requested script.
+  const shell = /^(?:\S*\/)?(?:ba|z)?sh\s+-[a-z]*c\s+(['"])([\s\S]*)\1$/.exec(command);
+  const script = shell?.[2] ?? command;
+  return /(?:^|[;&|\n])\s*(?:\S*\/)?(?:ps|pgrep)(?:\s|$)/.test(script);
+}
+
+function commitCount(task: Task): number {
+  const result = spawnSync('git', ['-C', task.worktree, 'rev-list', '--count', `${task.base}..HEAD`], {
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
+  const count = Number(result.stdout?.trim());
+  return result.status === 0 && Number.isSafeInteger(count) && count >= 0 ? count : 0;
+}
+
+function longAttemptIncidents(
+  store: Pick<WorkerStore, 'attempt'>,
+  tasks: Task[],
+  now: number,
+  limitFor: (task: Task) => number,
+): { key: string; managerId: string; kind: ManagerEventKind; summary: string }[] {
+  const found: { key: string; managerId: string; kind: ManagerEventKind; summary: string }[] = [];
+  for (const task of tasks) {
+    if (task.state !== 'running' || task.currentAttempt < 1) continue;
+    let attempt: Attempt;
+    try {
+      attempt = store.attempt({ taskId: task.id, attempt: task.currentAttempt });
+    } catch {
+      continue;
+    }
+    if (!attempt || attempt.state !== 'running') continue;
+    const elapsed = now - Date.parse(attempt.startedAt);
+    if (!Number.isFinite(elapsed)) continue;
+    const commands = recentCommands(attempt);
+    const waitsForCheck = commands.some((command) => /(?:^|[\s/])worker-check\.ts\b/.test(command));
+    const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commitCount(task)} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
+    if (elapsed >= Math.max(1, limitFor(task)))
+      found.push({
+        key: `long-attempt:${task.id}:${attempt.attempt}`,
+        managerId: task.brief.manager,
+        kind: 'stalled',
+        summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
+      });
+    const processCommands = commands.filter(inspectsProcesses);
+    if (!waitsForCheck && processCommands.length >= 2)
+      found.push({
+        key: `attempt-polling:${task.id}:${attempt.attempt}`,
+        managerId: task.brief.manager,
+        kind: 'stalled',
+        summary: `Polling: ${common}; recent commands repeatedly inspect processes (${processCommands.join(' | ')}) instead of waiting through scripts/worker-check.ts`,
+      });
+  }
+  return found;
+}
+
 function savedProbeResult(path: string, sweepAt: string): CheckHostProbeResult | undefined {
   try {
     const result = JSON.parse(readFileSync(path, 'utf8')) as Partial<CheckHostProbeResult> & { sweepAt?: unknown };
@@ -329,9 +436,10 @@ export function watch(
   checkout: string,
   branches: { stabilize: string; integration: string },
   stateDirectory: string,
-  deliver: (summary: string) => void,
+  deliver: (summary: string, managerId?: string, kind?: ManagerEventKind) => void,
   now = Date.now(),
   probe: CheckHostProbe = sshProbe,
+  limitFor: (task: Task) => number = () => DEFAULT_ATTEMPT_LIMIT_MS,
 ): number {
   const path = join(stateDirectory, 'watchdog.json');
   let state: State = { alerts: {} };
@@ -344,7 +452,8 @@ export function watch(
     /* Alert again rather than never. */
   }
   const tasks = store.tasks();
-  const found = [...violations(store, now, tasks), ...failureIncidents(store, tasks, now)];
+  const longAttempts = longAttemptIncidents(store, tasks, now, limitFor);
+  const found = [...violations(store, now, tasks), ...failureIncidents(store, tasks, now), ...longAttempts];
   const hostIncidents = probeCheckHosts(state, stateDirectory, now, probe);
   const stabilize = head(checkout, branches.stabilize);
   const dev = head(checkout, branches.integration);
@@ -362,9 +471,18 @@ export function watch(
   } else delete state.stabilizeBehindSince;
   let count = 0;
   for (const violation of found) {
+    const attemptAlert = longAttempts.find((alert) => alert.key === violation.key);
     const last = state.alerts[violation.key] ? Date.parse(state.alerts[violation.key]!) : 0;
-    if (now - last < ALERT_EVERY_MS) continue;
-    deliver(violation.key.startsWith('failure-signature:') ? violation.summary : `Watchdog: ${violation.summary}`);
+    if (attemptAlert ? state.alerts[violation.key] !== undefined : now - last < ALERT_EVERY_MS) continue;
+    deliver(
+      attemptAlert
+        ? violation.summary
+        : violation.key.startsWith('failure-signature:')
+          ? violation.summary
+          : `Watchdog: ${violation.summary}`,
+      attemptAlert?.managerId,
+      attemptAlert?.kind,
+    );
     state.alerts[violation.key] = new Date(now).toISOString();
     count++;
   }
@@ -374,7 +492,15 @@ export function watch(
   }
   // Forget alerts for violations that ended.
   const live = new Set(found.map((violation) => violation.key));
-  for (const key of Object.keys(state.alerts)) if (!live.has(key)) delete state.alerts[key];
+  const activeAttempts = new Set(
+    tasks
+      .filter((task) => task.state === 'running' && task.currentAttempt > 0)
+      .map((task) => `${task.id}:${task.currentAttempt}`),
+  );
+  for (const key of Object.keys(state.alerts)) {
+    const activeAlert = /^(?:long-attempt|attempt-polling):(.+)$/.exec(key);
+    if (!live.has(key) && (!activeAlert || !activeAttempts.has(activeAlert[1]!))) delete state.alerts[key];
+  }
   writeFileSync(`${path}.tmp`, JSON.stringify(state, null, 2));
   renameSync(`${path}.tmp`, path);
   return count;
