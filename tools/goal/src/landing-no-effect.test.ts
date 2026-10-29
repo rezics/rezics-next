@@ -29,7 +29,8 @@ test('a Markdown union with no effect on dev returns the task to its worker and 
     expect(outcome.firstFailure?.assertion).toContain('Change had no effect on dev');
     expect(outcome.conflictedFiles).toContain('README.md');
     expect(outcome.mergedCommit).toBeUndefined();
-    expect(h.store.task(task.id).state).toBe('ready');
+    expect(h.store.task(task.id).currentAttempt).toBeGreaterThan(1);
+    expect(h.store.task(task.id).state).not.toBe('integrated');
     expect(h.head('dev')).toBe(dev);
   } finally {
     h.dispose();
@@ -82,7 +83,8 @@ test('an empty landing tree is not attributed to an existing dev commit', async 
     expect(outcome.passed).toBe(false);
     expect(outcome.stage).toBe('merge');
     expect(outcome.mergedCommit).toBeUndefined();
-    expect(h.store.task(task.id).state).toBe('ready');
+    expect(h.store.task(task.id).currentAttempt).toBeGreaterThan(1);
+    expect(h.store.task(task.id).state).not.toBe('integrated');
   } finally {
     h.dispose();
   }
