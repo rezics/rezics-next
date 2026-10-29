@@ -19,6 +19,9 @@
  * rows, events, workflows, public projections, Search documents and actual measured PostgreSQL work; it never implements
  * membership, query, cursor, disclosure, or authorization rules and never substitutes a model backend, fake count, or
  * policy map.
+ * No retained-plan native cache-fill fixture is delivered. Conditional 202 assertions and the static contract
+ * verifier are not native cache-fill proof. A future actual retained-plan case must prove same-basis dedupe/quota,
+ * malformed/unauthorized denial before cache write, and source/epoch/permission revalidation with its native producer.
  */
 import type { Capture, Cost } from '../services/kernel/test/support/growth';
 import type { LibraryProfilePin } from '@rezics/definitions';
@@ -240,7 +243,11 @@ export interface DynamicCollectionsDriver {
   /** Run actual default durable work through finite preparation/catch-up at fixed input, capturing each list
    * preparation step separately (these list budgets do not apply to unrelated projection or command writes).
    * No test-side enumeration/filtering, synthetic readiness, alternate executor or permanent preparing. Completion
-   * means settled native work, not merely a drained relay. GET never enqueues/repairs. Return [] if no steps ran.
+   * means settled native work, not merely a drained relay. Only members GET may idempotently fill the derived
+   * preparation record/work intent for (viewer, Collection, validated filter, sort, accepted release/meaning),
+   * under existing quotas and page/step budgets. It never writes resource headers, user state, domain events,
+   * grants or receipts. List/detail/logical discovery stay pure; Continue GET remains no-work and Zone POST
+   * readPage is unchanged. Return [] if no steps ran.
    */
   resumeAndSettle(): Promise<readonly PreparationMeasurement[]>;
   /** Redeliver the captured production projection events through the real consumer in the selected order. */

@@ -192,3 +192,69 @@ test('native growth acceptance measures first and deep pages with hidden candida
   expect(driver).toContain('candidateIds: readonly string[]');
   expect(driver).toContain('allCost: Cost');
 });
+
+test('members GET cache fill is a bounded derived exception to domain-read purity', () => {
+  const reads = specification.slice(
+    specification.indexOf('Built-ins are logical on reads'),
+    specification.indexOf('### Logical identity'),
+  );
+  expect(reads).toContain('list, detail, and logical built-in discovery reads are pure');
+  expect(reads).toContain('common members GET is the sole read exception');
+  expect(reads).toContain('idempotent cache fill under the existing quotas and budgets');
+  expect(reads).toContain('actual viewer, Collection, validated filter and sort, and accepted release/meaning');
+  expect(reads).toContain('Only the derived preparation');
+  expect(reads).toContain('record and its work intent may be written');
+  expect(reads).toContain('preparation is never cached authority');
+  expect(driver).not.toContain('GET never enqueues/repairs');
+  expect(driver).toContain('Only members GET may idempotently fill the derived');
+  expect(driver).toContain('preparation record/work intent for (viewer, Collection, validated filter, sort, accepted release/meaning)');
+  expect(driver).toContain('never writes resource headers, user state, domain events,');
+  expect(driver).toContain('grants or receipts');
+  expect(driver).toContain('Continue GET remains no-work and Zone POST');
+  expect(driver).toContain('readPage is unchanged');
+});
+
+test('useful pages preserve the closed raw preparing wire and retry the captured members URL before requiring 200', () => {
+  const wire = outcomes.slice(outcomes.indexOf('async function preparing('), outcomes.indexOf('function pageGrowth('));
+  expect(specification).toContain('closed `application/json` body `{preparing:true}`');
+  expect(specification).toContain('client retries the same validated URL and cursor');
+  expect(specification).toContain('unavailable work remains 503');
+  expect(wire).toContain("expect(response.status).toBe(202)");
+  expect(wire).toContain("expect(response.headers.get('content-type')).toBe('application/json')");
+  expect(wire).toContain("expect(response.headers.get('retry-after')).toMatch(/^\\d+$/)");
+  expect(wire).toContain("expect(response.headers.get('cache-control')).toBe('private, no-store')");
+  expect(wire).toContain(`expect(await response.clone().text()).toBe('{"preparing":true}')`);
+  expect(wire).toContain('const path = queryPath(collectionId, input)');
+  expect(wire.match(/queryPath\(collectionId, input\)/g)).toHaveLength(1);
+  expect(wire.match(/driver\.measure\(\(\) => get\(as, path\)\)/g)).toHaveLength(3);
+  expect(wire.indexOf('await preparing(measured.value)')).toBeLessThan(wire.indexOf('preparation = await settle()'));
+  expect(wire).toContain("else expect(repeated.value.status).toBe(200)");
+  expect(wire).toContain('const page = await json<CollectionMembersPage>(measured.value.clone())');
+  expect(wire).toContain("if (as === 'owner') expect(measured.value.headers.get('cache-control')).toBe('private, no-store')");
+  expect(outcomes).toContain('expect(empty.page).toEqual({ members: [], next: null })');
+  expect(outcomes).toContain('expect(first.page.members).toHaveLength(2)');
+  expect(outcomes).toContain('expect(final.page.members).toHaveLength(1)');
+  expect(outcomes).toContain('expect(final.page.next).toBeNull()');
+});
+
+test('cache fill retains separate native cost charges and observable domain idempotence without claiming native proof', () => {
+  const useful = outcomes.slice(outcomes.indexOf('async function usefulPage('), outcomes.indexOf('function pageGrowth('));
+  expect(useful.match(/pageCost\(measured, input\?\.limit \?\? 100\)/g)).toHaveLength(2);
+  expect(useful).toContain('pageCost(repeated, input?.limit ?? 100)');
+  expect(useful).toContain('preparation = await settle()');
+  expect(useful).toContain('const before = await driver.inspect()');
+  expect(useful.match(/expect\(await driver\.inspect\(\)\)\.toEqual\(before\)/g)).toHaveLength(2);
+  expect(useful).toContain('expect(measured.outputSlots).toBe(0)');
+  expect(useful).toContain('expect(repeated.outputSlots).toBe(0)');
+  expect(useful).toContain('} else if (measured.value.status === 503)');
+  expect(useful).toContain('application\\/problem\\+json');
+  expect(useful).toContain("['dependency_unavailable', 'index_not_ready', 'semantic_not_ready']");
+  expect(useful).toContain('expect(readiness).toMatchObject({ status: 503, retryable: true })');
+  expect(driver).toContain('No retained-plan native cache-fill fixture is delivered');
+  expect(driver).toContain('verifier are not native cache-fill proof');
+  expect(driver).toContain('same-basis dedupe/quota');
+  expect(driver).toContain('malformed/unauthorized denial before cache write');
+  expect(driver).toContain('source/epoch/permission revalidation with its native producer');
+  expect(outcomes).toContain("if (!location) throw new Error('Dynamic Collection outcome driver is required')");
+  expect(outcomes).not.toMatch(/\btest\.(skip|todo)\s*\(/);
+});

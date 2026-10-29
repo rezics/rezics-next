@@ -179,21 +179,48 @@ async function settle() {
   return steps;
 }
 
+async function preparing(response: Response) {
+  expect(response.status).toBe(202);
+  expect(response.headers.get('content-type')).toBe('application/json');
+  expect(response.headers.get('retry-after')).toMatch(/^\d+$/);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  // Check the closed raw wire: no members, next, operation ID, partial data or receipt, and no empty-200 rewrite.
+  expect(await response.clone().text()).toBe('{"preparing":true}');
+}
+
 async function usefulPage(collectionId: string, as: Persona, input: Parameters<typeof queryPath>[1]) {
   let preparation: readonly PreparationMeasurement[] = [];
-  let measured = await driver.measure(() => get(as, queryPath(collectionId, input)));
+  const path = queryPath(collectionId, input); // Retain this exact validated URL, including the original cursor.
+  const before = await driver.inspect();
+  let measured = await driver.measure(() => get(as, path));
   pageCost(measured, input?.limit ?? 100);
-  if (measured.value.status === 503) {
+  if (measured.value.status === 202) {
+    await preparing(measured.value);
+    expect(measured.outputSlots).toBe(0);
+    // inspect exposes domain facts/Collections/events/projections, not disposable derived preparation records.
+    expect(await driver.inspect()).toEqual(before);
+    const repeated = await driver.measure(() => get(as, path));
+    pageCost(repeated, input?.limit ?? 100);
+    if (repeated.value.status === 202) {
+      await preparing(repeated.value);
+      expect(repeated.outputSlots).toBe(0);
+    } else expect(repeated.value.status).toBe(200); // Real work may already have completed; do not force 202.
+    expect(await driver.inspect()).toEqual(before); // Observable domain idempotence, not physical dedupe proof.
+  } else if (measured.value.status === 503) {
     expect(measured.value.headers.get('retry-after')).toMatch(/^\d+$/);
     expect(measured.value.headers.get('content-type')).toMatch(/^application\/problem\+json\b/);
     const readiness = await json<{ code: string; status: number; retryable: boolean }>(measured.value.clone(), 503);
     expect(['dependency_unavailable', 'index_not_ready', 'semantic_not_ready']).toContain(readiness.code);
     expect(readiness).toMatchObject({ status: 503, retryable: true });
-    preparation = await settle(); // Actual default work, not a client enumeration loop; permanent 503 fails the next assertion.
-    measured = await driver.measure(() => get(as, queryPath(collectionId, input)));
+  }
+  if (measured.value.status === 202 || measured.value.status === 503) {
+    // Actual finite default work, not a client enumeration/filter loop. Permanent 202/503 fails the final 200.
+    preparation = await settle();
+    measured = await driver.measure(() => get(as, path));
     pageCost(measured, input?.limit ?? 100);
   }
   const page = await json<CollectionMembersPage>(measured.value.clone());
+  if (as === 'owner') expect(measured.value.headers.get('cache-control')).toBe('private, no-store');
   expect(measured.outputSlots).toBe(page.members.length);
   if (page.next !== null) expect(page.members).toHaveLength(input?.limit ?? 100);
   expect(new Set(subjectIds(page)).size).toBe(page.members.length);
