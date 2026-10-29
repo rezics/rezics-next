@@ -32,11 +32,11 @@ backs both mutations. Use the existing own-account admission pattern, with no ne
 formula. Read-only tokens for the same account have list scope and no update scope; Collection read scope controls
 their target projection separately.
 
-| Request                                                             | Success                                            |
-| ------------------------------------------------------------------- | -------------------------------------------------- |
-| `GET /v1/libraryPins?limit&cursor`                                  | `200 {pins:[{collectionId,target}],revision,next}` |
-| `PUT /v1/libraryPins/:collectionId` with closed `{revision,after?}` | `200 {revision}`                                   |
-| `DELETE /v1/libraryPins/:collectionId?revision=...`                 | `200 {revision}`                                   |
+| Request                                                             | Operation ID         | Success                                            |
+| ------------------------------------------------------------------- | -------------------- | -------------------------------------------------- |
+| `GET /v1/libraryPins?limit&cursor`                                  | `library_pin.list`   | `200 {pins:[{collectionId,target}],revision,next}` |
+| `PUT /v1/libraryPins/:collectionId` with closed `{revision,after?}` | `library_pin.put`    | `200 {revision}`                                   |
+| `DELETE /v1/libraryPins/:collectionId?revision=...`                 | `library_pin.delete` | `200 {revision}`                                   |
 
 GET defaults to 20 and accepts integer limits 1–100. `next` is a shared signed keyset cursor or null. Bind the cursor
 to the owner, limit, list revision and ordinal, using the shared codec, never custom crypto or a raw offset token.

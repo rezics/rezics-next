@@ -31,9 +31,10 @@ entitlement grant, receipt, source-index repair, header/grant materialization or
 ## Canonical meaning, activity and sessions
 
 Preserve every original subject reference, fact ID and accepted pin. New writes target the current terminal;
-canonical browsing emits one subject. Use the shared maintained canonical-ID indexes and published identity epoch.
-While identity maintenance is pending, return readiness. A published epoch change invalidates the continuation and
-requires restart. Never rewrite originals or canonicalize a stored-ID page after paging.
+canonical browsing emits one subject. Use maintained canonical-ID indexes and shared source-scoped identity
+currentness. Relevant pending identity work returns readiness; changed relevant basis requires cursor restart.
+Disjoint jobs cannot stall a finite unchanged owner source. Never rewrite originals or canonicalize a stored-ID
+page after paging.
 
 For `state`, use the current canonical own effective explicit state selected by the shared native
 `owner_write_seq` rule, or null when absent. Evaluate that chosen state's active role using its accepted pin;
@@ -58,7 +59,7 @@ unknown and requires explicit migration/readiness, never a fabricated timestamp.
 
 ## HTTP contract
 
-`GET /v1/libraryContinue?limit&cursor` has a closed query. Only `limit` and `cursor` are accepted. The shared paging
+`GET /v1/libraryContinue?limit&cursor` has operation ID `library_continue.list` and a closed query. Only `limit` and `cursor` are accepted. The shared paging
 default is 20 and maximum 100, with integer minimum 1. Unknown `accountId`, state/status/type selectors, `filter`,
 `orderBy`, direction, search, view and every other parameter return `400 invalid_request`. Continue does not reuse
 the fixed status-tab shelf query or require status tabs as product navigation.
@@ -88,15 +89,16 @@ metadata, sparse-unit sets, progress changes or private history. Use private, no
 Order is fixed: activity descending, canonical subject ID ascending. The server keeps the exact SQL timestamp text
 in the opaque keyset position, preserving submillisecond distinctions; JavaScript `Date` is not a seek-key codec.
 Use the existing shared authenticated opaque list cursor and key ring, not Library-local signing or encryption.
-Bind method/path, viewer, effective limit, source/query identity, partition epoch and published canonical identity
-epoch. A cursor grants nothing: authenticate and authorize every continuation and recheck current native sources
+Bind method/path, viewer, effective limit, source/query identity, partition epoch and canonical identity
+currentness scoped to the actual source and complete query dependencies, including excluded and order originals.
+A cursor grants nothing: authenticate and authorize every continuation and recheck current native sources
 and subject disclosure. Malformed, tampered, foreign-viewer, foreign-query and changed-limit cursors return
-`400 invalid_cursor`; changed published epochs return `409 stale_cursor`, requiring a fresh first page. Shared
+`400 invalid_cursor`; changed relevant identity bases return `409 stale_cursor`, requiring a fresh first page. Shared
 cursor expiration/key retirement retain their native invalid/stale outcomes. Pagination is live across requests;
 moving activity can require refresh, and no historical account snapshot is promised.
 
-An empty success means genuinely exhausted eligible input. A successful nonfinal page is filled. Pending canonical
-epoch, missing meaning, unready candidates or incomplete disclosure return explicit shared preparing/readiness,
+An empty success means genuinely exhausted eligible input. A successful nonfinal page is filled. Relevant pending
+identity work, missing meaning, unready candidates or incomplete disclosure return explicit shared preparing/readiness,
 never a chain of short or empty successes. Use the owning shared preparation transport; this document invents no
 new progress token/status protocol. Retain settled progress and finish on fixed finite input under fair durable
 work and eventually successful I/O. GET never starts that work. Unavailable dependencies retain their real errors.

@@ -150,7 +150,8 @@ exclusions or ordering. Complete generations, index revisions, published identit
 
 Use the shared native privacy-reduction observation and repair/acknowledgement contract before execution and again
 before disclosure, including relevant excluded subjects and foreign dependencies. Missing, changed or unsafe evidence
-and a pending identity epoch return readiness. Owner writes appear on the owner's next read; private preparation
+and pending identity work relevant to the complete source/query dependencies return readiness. Owner writes appear
+on the owner's next read; private preparation
 cannot hide a committed change behind catalogue lag. Public fields and cursor bases do not change when curator-private
 facts change without changing completed published output. Reauthorize every continuation and retain existing opaque
 cursor binding/restart behavior; cursor content must not reveal private query facts or cached permission.
@@ -276,8 +277,9 @@ Its executor and frozen contract are now present in inspected source; Library co
 transactions and their full custody proof remain REQUIRED pending implementation. This does not activate Members.
 
 The ONE existing Library identity participant `library-private-follow-counts` covers EVERY Library canonical
-record, including OWNER candidate/support directories and concurrent first-apply rekey custody. Preserve that
-identifier; no third participant or independent ACK shortcut. Follow-count completion alone is incomplete.
+record, including OWNER candidate/support directories, follows, support, totals and concurrent first-apply rekey
+custody. Preserve that identifier; no third participant or independent ACK shortcut. Follow-count completion alone
+is incomplete.
 The [shared native epoch contract](../services/kernel/src/semantic/identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant)
 owns the receipt ABI: ACK covers every prior OLD removal, NEW addition, candidate/support change, pending/published
 fence and first-apply obligation, bound to exact native transactionId AND component/job/epoch/version/scope.
@@ -286,13 +288,27 @@ First apply before the gate must enter retained rekey custody; after it, reject/
 retain responsibility. Source commit before registration cannot fall between enumeration and publication.
 Local effects ACK only after durable receiving-control custody; final native barrier/deferred guard is at real handoff.
 
-Consume the SAME STORE primitive in pending/cap admission, then real birth/import/structural writers and all four
-tails. Immutable complete group refs plus constant transform and atomic work index replace request-sized vectors.
-`readMapping(existing Pool)` releases source before fixed control pending observation and coherent epoch validation.
-“Stays local” means no list/preparation/publication WAIT, with AT MOST ONE bounded indexed current-control observation
-charged/named CONTROL read, never local-only. Births stay source-local. Native SPEC must freeze derived costs,
-explicit reclamation and Accounts intent/redrive/erasure inventory before costly runtime. An unfinished STORE
-candidate or four throwing tails is not delivered mapping. Current types/contracts supply no runtime readiness.
+Consume source-scoped concurrent identity currentness: no global active marker or universal list/page gate.
+Observation, publication and cursor currentness cover the ACTUAL source and COMPLETE query dependencies, including
+excluded and order originals. A finite unchanged owner source must progress under continuous disjoint identity jobs;
+a genuinely all-group catalogue may wait on its broad dependencies without stalling unrelated sources. Changed
+relevant basis restarts the existing signed cursor; no guessed vector, new crypto or caller certificate.
+
+The [semantic owner specification](../services/kernel/src/semantic/identity-epoch-contract.md) owns the exact
+partitioned changed-group capacity/job/epoch protocol: disjoint jobs run concurrently, busy only on overlap, with
+symbolic P and independently progressing partition reclamation. Its scoped concurrent closure, Performance cost
+confirmation and coowner review remain required before new types/runtime; existing serialized types are superseded.
+Library adds no schema/ABI or duplicate protocol. Births stay source-local; immutable complete group inputs and
+native custody remain required, never an inferred readiness or ACK.
+
+Inside a filtered page, mapping joins existing batched owner/epoch/control observations and source candidate points:
+TWO probes per page, never per ID, with no extra RR/client/control statement. Existing 12 statements/backend or
+8+4R composed ceilings still govern. Standalone same-backend mapping uses one coherent RR/eight statements unless
+actual wrong-single-snapshot evidence requires otherwise; remote classification stays with Semantic/Performance.
+[Kernel bounded job steps](../services/kernel/README.md#bounded-job-steps) govern durable steps only, never a universal
+100-raw public probe cap. Public pages keep actual per-plan raw budgets and useful full/final output.
+Accounts owns shared-history operational DBOS intents; Library owns derived preparation/canonical rows. CoreOP adds
+no intent table/relay/receipt/event; Access verification/reversal intent remains its own table, outside that rule.
 
 Whole-query original/terminal/public/foreign disclosure remains the separate Source2a prerequisite. Actual point
 Access, `subjectSource`, shared public-filter types and projection checkpoints cannot supply complete population,
@@ -350,8 +366,8 @@ numeric allowance authority or per-page 4096 sweep. This prose acceptance runs n
 
 ## Required Recipe query and controlled outcome
 
-The query uses the existing Collection members encoding: `filter=JSON.stringify(filter)`, URL-encoded as a query
-parameter, with `sort=id` and `limit=2`. The target is Alice's Everything through the existing
+The query uses the [common Collection members filter transport](dynamic-collections.md#one-collection-page),
+with `sort=id` and `limit=2`. The target is Alice's Everything through the existing
 `GET /v1/collections/{collectionId}/members` surface. Presence is redundant there but deliberately explicit.
 The same filter restricts a broader catalogue, curated, TypeList or Zone source only where that authenticated
 personalized plan is admitted; it does not make public personalization universally available.

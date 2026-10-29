@@ -123,10 +123,12 @@ changes, including a separate sequence-stamp UPDATE, each pay automatic trigger 
 manually duplicate head increments. This invalidation version is distinct from one allocator increment per
 successful state write. Complete indexed owner plans and canonical/source/Content version integration remain open.
 
-Canonical indexes are keyed by canonical ID. Serialized durable identity maintenance marks the shared identity
-epoch pending, completes bounded mapping/index work, then publishes the epoch. Canonical reads return preparing
-while pending, and cursors restart on epoch change. No per-page sweep of identity homes or identity-basis protocol
-is required. The SAME existing `library-private-follow-counts` participant covers EVERY Library canonical record,
+Canonical indexes are keyed by canonical ID. Source-scoped concurrent identity observation, publication and cursor
+currentness cover the actual source and complete query dependencies, including excluded and order originals.
+Relevant pending work yields preparing; changed relevant basis restarts the signed cursor. Disjoint jobs cannot
+keep a finite unchanged owner source preparing. No global active marker, universal page gate, per-page identity-home
+sweep or identity-basis protocol is required. The SAME existing `library-private-follow-counts` participant covers
+EVERY Library canonical record,
 including the OWNER candidate/support directory and concurrent first-apply rekey custody. Its ACK must cover every
 prior removal/addition/fence and exact native transactionId/component/job/epoch/version/scope, current terminal/
 account/source fences and stale destination rejection; follow-only completion is insufficient. No third participant

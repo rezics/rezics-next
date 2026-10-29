@@ -9,7 +9,7 @@ required behavior and inventories native code; requirements below do not establi
 [dynamic](../../../../docs/dynamic-collections.md), [Collection source](../../../../docs/collection-source.md),
 [filtered-list](../../../../docs/filtered-lists.md), [label](../../../../docs/library-labels.md) and
 [profile-consumer](../../../../docs/library-profile-consumers.md) contracts own their respective seams. Indexed
-observations and the shared pending/published identity epoch supersede their older per-page proof/replay,
+observations and shared source-scoped concurrent identity currentness supersede their older per-page proof/replay,
 whole-selected-slot, universal-key-budget and identity-basis protocols. Shared owners revise their ABIs; Library
 adds no alternate mode or budget. User-saved dynamic queries and holding-derived game-platform filters remain deferred.
 
@@ -111,9 +111,11 @@ follower total. An interim entry-only page is named tracked entries, never Every
 Stored personal subject IDs and curated occurrences are immutable; new writes target the terminal. Canonical views
 select the live state with highest private `owner_write_seq` among merged originals, show conflicts, retain every
 original fact/reference/pin, union labels and preserve separate copies/sessions. Browsing emits
-one canonical card; the editor retains every occurrence/note/order. Canonical-ID indexes and shared serialized
-pending/published identity epochs establish browsing order and uniqueness. Pending returns preparing; cursors restart
-on epoch change. No per-page identity-home sweep or identity-basis protocol. Original withheld support never becomes
+one canonical card; the editor retains every occurrence/note/order. Canonical-ID indexes establish browsing order
+and uniqueness. Identity observation, publication and cursor currentness cover the actual source and complete query
+dependencies, including excluded and order originals. Relevant pending work prepares; changed relevant basis restarts
+the signed cursor. Continuous disjoint jobs cannot stall a finite unchanged owner source. No global active marker,
+universal page gate, per-page identity-home sweep or identity-basis protocol. Original withheld support never becomes
 public through terminal visibility; current original/terminal authorization remains required.
 The SAME fixed `library-private-follow-counts` epoch participant covers EVERY Library canonical record, including
 OWNER candidate/support directory and concurrent first-apply rekey custody. Its ACK binds exact native
@@ -301,7 +303,8 @@ or unavailable non-null pinned release fails closed rather than guessing.
 DELETE keeps status `204` and an empty body. Its minimal native command outcome supplies
 `Library-Entry-Deletion-Id` and `Library-Entry-Deletion-Revision`; the latter is `r + 1`. Do not add an expiry
 header unless its owner explicitly requires and documents it. A new
-`POST /v1/libraryEntries/{subjectId}:restore` accepts only the closed body `{ deletionId, revision }`, uses its own
+`POST /v1/libraryEntries/:subjectId:restore` has operation ID `library_entry.restore`, accepts only the closed
+body `{ deletionId, revision }`, uses its own
 `Idempotency-Key`, and returns the normal entry response. `revision` binds the deletion revision in the header.
 Register it with `customMethod` as required by the [HTTP contract](../../README.md#http-contract).
 Restore uses the exact stored `subject_id` and current source-read eligibility; redirects affect eligibility only and

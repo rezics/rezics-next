@@ -18,7 +18,7 @@ A Collection keeps one identity, curator, title, description, visibility, follow
 - **Dynamic:** a saved predicate evaluated against the curator's personal library facts and admitted indexed catalogue properties. A
   subject appears at most once, regardless of how many matching facts it has.
 
-**DECIDED DTO:** `membershipKind` discriminates a union, never a bag of optional fields. Curated Collections retain required `createdAt`, `updatedAt`, `memberCount` and `orderEpoch`. Dynamic Collections omit all four; Web displays no count/time, never zero. An unrenamed dynamic `title` is null or absent; an explicit owner rename wins. Both owner and public dynamic DTOs include `builtinKind: 'everything' | 'state'`. State `builtinLabels` is the actual accepted state's standard BCP47 locale map (`zh-Hans`/`zh-Hant`, never `zh`), or `{}` when absent; Web uses its neutral Other fallback. Everything uses Web's normal localized message. Only owner discovery may include the private `builtin` tuple; public DTOs never disclose profile/state IDs, predicates, pins or release digests. No fixed vertical vocabulary is added. A dynamic member item contains `kind: "dynamic"`, its `subjectId`, and the same optional subject summary as a curated item. It has no occurrence ID, note, or added time. No route creates a pretend occurrence for a dynamic result.
+**DECIDED DTO:** `membershipKind` discriminates a union, never a bag of optional fields. Curated Collections retain required `createdAt`, `updatedAt`, `memberCount` and `orderEpoch`. Dynamic Collections omit all four; Web displays no count/time, never zero. An unrenamed dynamic `title` is null or absent; an explicit owner rename wins. Dynamic DTOs include `builtinKind: 'everything' | 'state' | 'liked'`. State `builtinLabels` is the actual accepted state's standard BCP47 locale map (`zh-Hans`/`zh-Hant`, never `zh`), or `{}` when absent; Web uses its neutral Other fallback. Liked and Everything use Web's normal localized messages. Liked is always private with owner tuple `{kind:'liked'}`; it exposes no public profile/predicate/pin fields or curated count/time/order. Only owner discovery may include the private `builtin` tuple; public DTOs never disclose profile/state IDs, predicates, pins or release digests. No fixed vertical vocabulary is added. A dynamic member item contains `kind: "dynamic"`, its `subjectId`, and the same optional subject summary as a curated item. It has no occurrence ID, note, or added time. No route creates a pretend occurrence for a dynamic result.
 
 The first-scope built-ins are:
 
@@ -114,8 +114,12 @@ The page size is `P`, `1 <= P <= 100`. Success fills the requested page or estab
 final page. If admitted work cannot establish either, return explicit preparation/readiness with retained progress.
 Never expose successful short/empty raw-candidate windows as pages. Dynamic results expose no global count.
 
-The common filter is the existing closed shared Search/semantic filter document. Admission covers filter + source +
-order, with shared release/datatype/unit and same-statement qualifier semantics. Unknown stays unknown under NOT.
+The common members HTTP filter is URL-encoded `JSON.stringify` of an admitted shared `@rezics/filter`
+`FilterDocument` in the `filter` query parameter. Source, filter and sort are admitted together under the existing
+`collection_member.list` operation, with shared release/datatype/unit and same-statement qualifier semantics.
+This approved pending input contract is not today's paging-only route, which cannot yet accept `filter`.
+Clients require advertised filter input support before enabling controls; the visible operation name alone is
+insufficient. No second grammar/property whitelist or browser-side membership filtering. Unknown stays unknown under NOT.
 Commerce owns direct owner index and prepared owner result plans; Search owns catalogue compilation, preparation
 and freshness. These prose plan names introduce no executable discriminants. A direct plan needs a page-derived
 bound including engine work; otherwise prepare an indexed result in bounded steps retaining settled work, or reject
@@ -218,16 +222,18 @@ a completion guarantee or a replacement numeric budget. Performance supplies per
 no chain of short/empty successful pages over raw nonmatches. Fixed finite ready inputs must reach useful output
 after finite preparation, including crash/replay. No whole-account synchronous fanout or new scheduler/service.
 
-Canonical browsing uses maintained canonical-ID indexes and unique prepared result rows. The shared catalogue
-identity epoch remains pending throughout serialized durable merge/unmerge/repoint maintenance; lists prepare
-while pending and cursors restart after changes. At most 4,096 originals per group are admitted before effects;
+Canonical browsing uses maintained canonical-ID indexes and unique prepared result rows. Identity observation,
+publication and cursor currentness cover the actual source and complete query dependencies, including excluded and
+order originals. Only relevant pending work prepares; changed relevant basis restarts cursors. Continuous disjoint
+jobs cannot stall a finite unchanged owner source; no global active marker or universal page gate.
+At most 4,096 originals per group are admitted before effects;
 published redirects are direct to active terminals. No request-time exhaustive alias walking or all-home sweeps.
 The SAME `library-private-follow-counts` participant covers EVERY Library canonical record, including OWNER
 candidate/support directories and concurrent first-apply rekey custody. No third participant/independent ACK;
 follow-only completion is insufficient. Exact native transactionId/component/job/epoch/version/scope and every
 prior removal/addition/fence use the shared native receipt contract, with terminal/account/source fences and stale
 destination rejection. The [owner plan](library-owner-queries.md#shared-operational-identity-and-disclosure-producers)
-links the fixed STORE/control cutover ruling and separate still-required Source2a observation producer.
+links the semantic scoped concurrent protocol authority and separate still-required Source2a observation producer.
 Stored originals and occurrence notes/multiplicity remain; editing preserves occurrences. Canonical owner views
 select latest state with conflict visible, union labels, keep copies/sessions separate and address new writes to
 current terminals. Current original and terminal disclosure remains required.
