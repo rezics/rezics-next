@@ -89,6 +89,7 @@ test('ordinary Filter outcomes keep stable one-level order own-data access and m
 test('raw mutable FilterRelease calls refresh patterns qualifiers typed facets and the untyped facet union', () => {
   const release = constructionFixture(0, 8);
   const qualifier = 'grow:code';
+  release.properties['grow:code']!.qualifiers = [qualifier];
   const withQualifier = {
     statement: {
       property: 'grow:code',
