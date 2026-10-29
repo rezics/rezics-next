@@ -537,6 +537,12 @@ test.serial(
     // Grow grants, memberships, Realms, boards, and threads on other resources at 500 × scale; keep the requested board and page fixed.
     const report = await checkGrowth(db, {
       name: 'Hot board page',
+      rule: 'series',
+      // Content Cost: three board seeks before/after the page, one hot-rank range,
+      // and two disclosures of the fixed thread. Each disclosure makes 18
+      // read-chain seeks plus four thread/board association seeks; anonymous
+      // Access has no subject-key descents into the growing grant relations.
+      indexProbes: 3 + 1 + 2 * (18 + 4) + 3,
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 1,

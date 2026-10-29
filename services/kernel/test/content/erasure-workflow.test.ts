@@ -934,6 +934,13 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
     measuredPool = db.pool;
     const report = await checkGrowth(db, {
       name: 'native logical author page',
+      rule: 'series',
+      // Native author erasure Cost: operation source/restoration, page seek and
+      // anchor validation; 100 post validations, revision-prefix counts and
+      // tombstones; Access P/Q adds account/inverse preparation and, per post,
+      // direct/active-account grants, active-account roles and identity denial,
+      // plus seven Global formula descents shared by the page.
+      indexProbes: 2 + 1 + 1 + 100 * (1 + 1 + 1 + 5) + 7 + 3,
       scales: [256, 1024, 4096],
       repetitions: 1,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },

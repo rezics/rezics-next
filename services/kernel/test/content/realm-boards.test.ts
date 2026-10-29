@@ -772,6 +772,11 @@ test.serial('a settled protected Realm member reads its boards, threads and post
   // Growth model: grow grants, memberships, other Realms and their boards, and threads on other boards at 500 × scale; keep the protected Realm, board, and read fixed.
   const report = await checkGrowth(db, {
     name: 'Protected Realm member thread read',
+    rule: 'series',
+    // Content/Access Cost: 32 exact content, account/inverse and Realm/head
+    // descents, plus 32 temporal role-grant descents for the fixed member and
+    // active-accounts keys across preparation and final permission checks.
+    indexProbes: 32 + 32,
     scales: [8, 32, 128],
     repetitions: 3,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },

@@ -23,6 +23,7 @@ import {
   costOf,
   openGrowthDatabase,
   seed,
+  settle,
   type GrowthSample,
   type Population,
 } from '../support/growth.ts';
@@ -531,6 +532,11 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
   const bounds = { rows: 'constant', statements: 'constant', blocks: 'logarithmic' } as const;
   const report = await checkGrowth(db, {
     name: 'Author post delete',
+    rule: 'series',
+    // Content Cost: two scope seeks and two tombstone/parent seeks; Access P/Q:
+    // two account observations, account/inverse preparation and 13 local/Global formula probes;
+    // command C: receipt, basis, outbox and receipt write; one write-rate counter.
+    indexProbes: 4 + 2 + 2 + 13 + 4 + 1,
     scales: [256, 1024, 4096],
     bounds,
     repetitions: 1,
@@ -540,7 +546,7 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
       warmupProbe = await fixture(author, 205, neighbour);
       const erased = await fixture(author, 205, neighbour);
       expect((await request(`/posts/${erased.post}`, 'DELETE', author)).status).toBe(204);
-      await db.admin.query('VACUUM (ANALYZE) content.post, content.revision');
+      await settle(db, { analyze: true });
       const page = await capture(db, () => cleanup(erased.post));
       expect(page.value).toHaveLength(100);
       pages.push({ scale, cost: costOf(page.capture) });

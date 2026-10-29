@@ -269,19 +269,18 @@ test('a cover batch deduplicates ids, preserves single-read answers and uses one
 
 test('cover batches touch one statement per partition and rows grow linearly with ids', async () => {
   const routes = [42000, 42016, 42032, 42048] as const;
-  const ids: string[] = [];
+  // Fix stored M/V before the first sample; only the requested batch N grows.
+  const ids = Array.from({ length: 256 }, (_, index) => newId(routes[index % routes.length]!));
+  await insertUnrelatedMedia(8192, routes);
+  await insertGrowthCovers(ids);
   const report = await checkGrowth(db, {
     name: 'batched cover reference',
+    rule: 'series',
     scales: [16, 64, 256],
     bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
-    grow: async (_database, scale, previous) => {
-      const additions = Array.from({ length: scale - previous }, (_, index) =>
-        newId(routes[(previous + index) % routes.length]!),
-      );
-      await insertUnrelatedMedia(previous === 0 ? 8192 : scale - previous, routes);
-      await insertGrowthCovers(additions);
-      ids.push(...additions);
-    },
+    // read-cover-reference.sql descends into fixed media/variant indexes, so
+    // its two probes per requested id are linear without a growth staircase.
+    grow: async () => {},
     async operation(_database, scale) {
       const client = await db.pool.connect();
       try {
