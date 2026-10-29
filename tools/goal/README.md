@@ -198,6 +198,9 @@ share one integration check. Set it to `1` to keep one-at-a-time integration. A 
 once and fast-forwards dev through its members in queue order, recording each member's own integrated commit. If the
 combined check fails, the train retries the members individually so a passing member can still land. A member that
 cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
+Each member's acceptance command runs concurrently against the final batch candidate in its own detached worktree.
+`integration.batchAcceptanceConcurrency` defaults to `8` and caps these acceptance commands. If any command fails,
+times out, or changes its worktree, the train retries the members individually so the failure is attributed to its task.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
 ### Host-capacity admission
