@@ -539,14 +539,19 @@ describe('real migrated report HTTP and shared admission', () => {
 
   test('checkGrowth proves constant report HTTP work with unrelated and hot-partition growth at three scales', async () => {
     const report = await checkGrowth(db, {
+      // Verification itself uses no SQL. The stored HTTP create probes the board PK,
+      // inserts one report and adds C (receipt, partition, write basis and outbox).
+      // At fixed admitted input this is constant rows/statements and logarithmic indexed blocks.
       name: 'report HTTP admission and create',
       scales: [32, 256, 2048],
+      rule: 'series',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
+        // At 64 rows per scale unit, board/report/command indexes start with 2,048 rows.
         // Setup is unmeasured. Half the targets share the real target's route.
         const rows: ReportGrowthRow[] = [];
         const distractorBoards: ReportGrowthBoard[] = [];
-        for (let ordinal = previous; ordinal < scale; ordinal++) {
+        for (let ordinal = previous * 64; ordinal < scale * 64; ordinal++) {
           const route = ordinal % 2 ? routeOf(board)! : (ordinal * 31) % 65536;
           const id = newId(route);
           distractorBoards.push({ id, route, subjectId: newId(0x5678), transactionId: randomUUID() });

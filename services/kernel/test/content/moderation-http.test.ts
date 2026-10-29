@@ -11,7 +11,8 @@ import resourceRoles from '../../src/access/resource-roles.json';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
-import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { seedReportGrowth, type ReportGrowthRow } from './support/report-growth.ts';
 
 const routeKey = new Uint8Array(32).fill(17);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) };
@@ -454,61 +455,178 @@ describe('moderation HTTP with migrated storage and current Access', () => {
   test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
     const realm = await createRealmBoard('Growth measurement Realm');
     await grantRealmRole(realm.realmId, fixture.principal, 'community.realm.moderator');
+    // One warm-up and five measured commands per scale, all starting published at revision 1.
+    // Prepare every target before the first scale so target creation is not another growth axis.
     const thread = await create('Fixed measured content', realm.boardId);
+    const targets: { id: string; route: number }[] = [thread];
+    const templateThread = (
+      await db.admin.query('SELECT * FROM content.thread WHERE route=$1 AND thread_id=$2', [thread.route, thread.id])
+    ).rows[0]!;
+    const templatePost = (
+      await db.admin.query('SELECT * FROM content.post WHERE route=$1 AND post_id=$2', [
+        thread.route,
+        templateThread.first_post_id,
+      ])
+    ).rows[0]!;
+    const templateRevision = (
+      await db.admin.query('SELECT * FROM content.revision WHERE route=$1 AND revision_id=$2', [
+        thread.route,
+        templatePost.head_revision_id,
+      ])
+    ).rows[0]!;
+    const templateInitializations = (
+      await db.admin.query(
+        'SELECT * FROM access.resource_initialization WHERE route=$1 AND resource_id=ANY($2::uuid[])',
+        [thread.route, [thread.id, templatePost.post_id]],
+      )
+    ).rows;
+    const templateRoles = (
+      await db.admin.query('SELECT * FROM access.resource_role_grant WHERE route=$1 AND resource_id=ANY($2::uuid[])', [
+        thread.route,
+        [thread.id, templatePost.post_id],
+      ])
+    ).rows;
+    // Clone native fixture state administratively; preparing spare targets must not consume write admission.
+    await seed(
+      db,
+      {
+        name: 'moderation-http-spares',
+        hotPartition: thread.route >>> 4,
+        hotShare: 1,
+        rows() {
+          const threadId = newId(thread.route);
+          const postId = newId(thread.route);
+          const revisionId = newId(thread.route);
+          const transaction = randomUUID();
+          const ids = new Map([
+            [thread.id, threadId],
+            [templatePost.post_id, postId],
+          ]);
+          targets.push({ id: threadId, route: thread.route });
+          const identity = { thread_id: threadId, recorded_transaction_id: transaction };
+          return {
+            'content.thread': [{ ...templateThread, ...identity, first_post_id: postId }],
+            'content.post': [{ ...templatePost, ...identity, post_id: postId, head_revision_id: revisionId }],
+            'content.revision': [{ ...templateRevision, ...identity, post_id: postId, revision_id: revisionId }],
+            'access.resource_initialization': templateInitializations.map((row) => ({
+              ...row,
+              resource_id: ids.get(row.resource_id)!,
+            })),
+            'access.resource_role_grant': templateRoles.map((row) => ({
+              ...row,
+              resource_id: ids.get(row.resource_id)!,
+              transaction_id: transaction,
+            })),
+          };
+        },
+      },
+      { from: 0, to: 17 },
+    );
     const bytes = Buffer.from(JSON.stringify(snapshot('Unrelated distractor bytes')));
     const digest = createHash('sha256').update(bytes).digest();
     const report = await checkGrowth(db, {
       name: 'Realm-authorized moderation HTTP point command including current Access and same-partition history',
       scales: [32, 256, 2048],
+      rule: 'series',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
-        // The one grow method populates hot-partition content and ACL relations.
-        // Seeding and native statistics maintenance are outside measurement.
-        const client = await database.admin.connect();
-        try {
-          await client.query('BEGIN');
-          for (let ordinal = previous; ordinal < scale; ordinal++) {
-            const postId = newId(thread.route);
-            const revisionId = newId(thread.route);
-            const transaction = randomUUID();
-            await client.query(
-              `INSERT INTO content.post
-               (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
-               VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
-              [thread.route, thread.id, postId, fixture.actor, revisionId, transaction],
-            );
-            await client.query(
-              `INSERT INTO content.revision
-               (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-               VALUES ($1,$2,$3,$4,$5,$6,'Unrelated distractor bytes','MIT','{}',$7,'available',$8)`,
-              [thread.route, thread.id, postId, revisionId, bytes, digest, realm.boardId, transaction],
-            );
-            await client.query(
-              `INSERT INTO access.resource_grant
-               (route,resource_id,subject_id,action,valid,transaction_id)
-               VALUES ($1,$2,$3,'moderation:takedown','(,)',$4)`,
-              [thread.route, postId, fixture.principal, transaction],
-            );
-          }
-          await client.query('COMMIT');
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        } finally {
-          client.release();
-        }
-        await database.admin.query('VACUUM (ANALYZE) content.post, content.revision, access.resource_grant');
+        // Start content, ACL and command history at 2,048 rows. Otherwise the tiny receipt
+        // relation scans one more preceding command per run, confounding scale with write history.
+        const commandRows: ReportGrowthRow[] = [];
+        await seed(
+          database,
+          {
+            name: 'moderation-http-history',
+            hotPartition: thread.route >>> 4,
+            hotShare: 1,
+            rows({ ordinal }) {
+              const historyThread = targets[ordinal % targets.length]!;
+              const postId = newId(thread.route);
+              const revisionId = newId(thread.route);
+              const transaction = randomUUID();
+              commandRows.push({
+                reportId: newId(thread.route),
+                reportRoute: thread.route,
+                targetKind: 'post',
+                targetId: postId,
+                targetRoute: thread.route,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                transactionId: transaction,
+                idempotencyKey: randomUUID(),
+                reporterAccountId: fixture.principal,
+              });
+              const metadata = {
+                route: thread.route,
+                author_account_id: fixture.actor,
+                visibility: 'published',
+                security_revision: 1,
+                recorded_transaction_id: transaction,
+              };
+              return {
+                'content.thread': [
+                  {
+                    ...metadata,
+                    thread_id: newId(thread.route),
+                    board_id: realm.boardId,
+                    title: 'Unrelated thread',
+                    first_post_id: null,
+                  },
+                ],
+                'content.post': [
+                  {
+                    ...metadata,
+                    thread_id: historyThread.id,
+                    post_id: postId,
+                    head_revision_id: revisionId,
+                  },
+                ],
+                'content.revision': [
+                  {
+                    route: thread.route,
+                    thread_id: historyThread.id,
+                    post_id: postId,
+                    revision_id: revisionId,
+                    body: bytes,
+                    body_sha256: digest,
+                    search_text: 'Unrelated distractor bytes',
+                    licence: 'MIT',
+                    subject_ids: [],
+                    board_id: realm.boardId,
+                    availability: 'available',
+                    recorded_transaction_id: transaction,
+                  },
+                ],
+                'access.resource_grant': [
+                  {
+                    route: thread.route,
+                    resource_id: postId,
+                    subject_id: fixture.principal,
+                    action: 'moderation:takedown',
+                    valid: '(,)',
+                    transaction_id: transaction,
+                  },
+                ],
+              };
+            },
+          },
+          { from: previous * 64, to: scale * 64 },
+        );
+        await seedReportGrowth(database.admin, commandRows, [], {
+          projectTargets: false,
+          commandEvents: { principalId: fixture.principal, principalKind: 'account' },
+        });
       },
       async operation(_database, scale, repetition) {
         const result = await call(
           'POST',
-          `/v1/threads/${thread.id}:takeDown`,
+          `/v1/threads/${targets[repetition]!.id}:takeDown`,
           reason,
           `growth-${scale}-${repetition}`,
           fixture.principal,
         );
         expect(result.response.status).toBe(200);
         expect(result.body.securityRevision).toMatch(/^[1-9][0-9]*$/);
+        expect(result.body.securityRevision).toBe('2');
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);

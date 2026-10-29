@@ -354,60 +354,113 @@ test('checkGrowth rejects a hot-partition scan and passes exact bounded keyset p
     const grow = async (_db: typeof db, scale: number, previous: number) =>
       seed(db, population, { from: previous, to: scale });
     const sorted = Array.from({ length: 16 }, (_, ordinal) => id(`post-${ordinal}`)).sort();
+    async function probe(assertPlans = false) {
+      const query = async (sql: string, values: unknown[], index: string, keys: string[]) => {
+        if (assertPlans) {
+          const explained = await db.admin.query(`EXPLAIN (FORMAT JSON) ${sql}`, values);
+          type Plan = { 'Index Name'?: string; 'Index Cond'?: string; 'Node Type': string; Plans?: Plan[] };
+          const flatten = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(flatten)];
+          const nodes = flatten(explained.rows[0]['QUERY PLAN'][0].Plan);
+          expect(nodes.some((node) => node['Node Type'] === 'Sort' || node['Node Type'] === 'Seq Scan')).toBe(false);
+          const probe = nodes.find((node) => node['Index Name'] === index);
+          expect(probe).toBeDefined();
+          for (const key of keys) expect(probe!['Index Cond']).toContain(key);
+        }
+        return db.pool.query(sql, values);
+      };
+      for (const direction of ['ASC', 'DESC']) {
+        const endpoint = await query(
+          `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 AND author_account_id=$3 ORDER BY created_at ${direction},post_id ${direction} LIMIT 1`,
+          [route, thread, author],
+          'post_thread_author_page_idx',
+          ['route', 'thread_id', 'author_account_id'],
+        );
+        expect(endpoint.rows).toEqual([{ post_id: direction === 'ASC' ? sorted[0] : sorted.at(-1) }]);
+        expect(
+          (
+            await query(
+              `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 ORDER BY created_at ${direction},post_id ${direction} LIMIT 1`,
+              [route, thread],
+              'post_thread_page_idx',
+              ['route', 'thread_id'],
+            )
+          ).rows,
+        ).toHaveLength(1);
+      }
+      const page = await query(
+        `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 AND author_account_id=$3 AND (created_at,post_id)>($4,$5) ORDER BY created_at,post_id LIMIT 8`,
+        [route, thread, author, time, sorted[0]],
+        'post_thread_author_page_idx',
+        ['route', 'thread_id', 'author_account_id', 'created_at', 'post_id'],
+      );
+      expect(page.rows.map((row) => row.post_id)).toEqual(sorted.slice(1, 9));
+      expect(
+        (
+          await query(
+            `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 AND (created_at,post_id)>($3,$4) ORDER BY created_at,post_id LIMIT 8`,
+            [route, thread, time, id('post-0')],
+            'post_thread_page_idx',
+            ['route', 'thread_id', 'created_at', 'post_id'],
+          )
+        ).rows,
+      ).toHaveLength(8);
+      expect(
+        (
+          await query(
+            `SELECT revision_id FROM content.revision WHERE route=$1 AND post_id=$2 AND (recorded_at,revision_id)>($3,$4) ORDER BY recorded_at,revision_id LIMIT 8`,
+            [route, id('post-0'), time, '00000000-0000-0000-0000-000000000000'],
+            'revision_post_page_idx',
+            ['route', 'post_id', 'recorded_at', 'revision_id'],
+          )
+        ).rows,
+      ).toHaveLength(8);
+      for (const [table, column, key] of [
+        ['thread', 'thread_id', thread],
+        ['post', 'post_id', id('post-0')],
+        ['revision', 'revision_id', id('revision-0')],
+      ] as const) {
+        expect(
+          (
+            await query(
+              `SELECT * FROM content.${table} WHERE route=$1 AND ${column}=$2`,
+              [route, key],
+              `${table}_pkey`,
+              ['route', column],
+            )
+          ).rows,
+        ).toHaveLength(1);
+      }
+    }
     const report = await checkGrowth(db, {
       name: 'bounded neighbourhood probes',
       scales: [32, 256, 2048],
+      rule: 'series',
       bounds,
-      grow,
+      // Start with 2,048 same-shape rows, including thread identities for the PK probe.
+      // The original 16 author posts and their tied keyset remain fixed.
+      grow: (_database, scale, previous) =>
+        seed(
+          db,
+          {
+            ...population,
+            rows(placement) {
+              return {
+                ...population.rows!(placement),
+                'content.thread': [
+                  {
+                    ...threadRow,
+                    thread_id: placement.ordinal === 0 ? thread : id(`thread-${placement.ordinal}`),
+                    first_post_id: placement.ordinal === 0 ? id('post-0') : null,
+                  },
+                ],
+              };
+            },
+          },
+          { from: previous * 64, to: scale * 64 },
+        ),
       repetitions: 3,
-      operation: async () => {
-        const query = db.pool.query.bind(db.pool);
-        for (const direction of ['ASC', 'DESC']) {
-          const endpoint = await query(
-            `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 AND author_account_id=$3 ORDER BY created_at ${direction},post_id ${direction} LIMIT 1`,
-            [route, thread, author],
-          );
-          expect(endpoint.rows).toEqual([{ post_id: direction === 'ASC' ? sorted[0] : sorted.at(-1) }]);
-          expect(
-            (
-              await query(
-                `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 ORDER BY created_at ${direction},post_id ${direction} LIMIT 1`,
-                [route, thread],
-              )
-            ).rows,
-          ).toHaveLength(1);
-        }
-        const page = await query(
-          `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 AND author_account_id=$3 AND (created_at,post_id)>($4,$5) ORDER BY created_at,post_id LIMIT 8`,
-          [route, thread, author, time, sorted[0]],
-        );
-        expect(page.rows.map((row) => row.post_id)).toEqual(sorted.slice(1, 9));
-        expect(
-          (
-            await query(
-              `SELECT post_id FROM content.post WHERE route=$1 AND thread_id=$2 AND (created_at,post_id)>($3,$4) ORDER BY created_at,post_id LIMIT 8`,
-              [route, thread, time, id('post-0')],
-            )
-          ).rows,
-        ).toHaveLength(8);
-        expect(
-          (
-            await query(
-              `SELECT revision_id FROM content.revision WHERE route=$1 AND post_id=$2 AND (recorded_at,revision_id)>($3,$4) ORDER BY recorded_at,revision_id LIMIT 8`,
-              [route, id('post-0'), time, '00000000-0000-0000-0000-000000000000'],
-            )
-          ).rows,
-        ).toHaveLength(8);
-        for (const [table, column, key] of [
-          ['thread', 'thread_id', thread],
-          ['post', 'post_id', id('post-0')],
-          ['revision', 'revision_id', id('revision-0')],
-        ]) {
-          expect(
-            (await query(`SELECT * FROM content.${table} WHERE route=$1 AND ${column}=$2`, [route, key])).rows,
-          ).toHaveLength(1);
-        }
-      },
+      warmup: () => probe(true),
+      operation: () => probe(),
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([32, 256, 2048]);
     expect(report.samples.every((sample) => sample.cost.statements === 10)).toBe(true);
