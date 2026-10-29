@@ -1,0 +1,115 @@
+import { CoverGrid, CoverCard } from '@rezics/ui/cover-card';
+import { Link } from '@tanstack/react-router';
+import { useEffect, useState } from 'react';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { coverSrc } from '../media/cover-src';
+import { PageHeading } from '../shell/page-heading';
+import { subjectHref } from '../subject/subject-href';
+import { readDynamicCollectionMembers } from './collection';
+import { rowRatio } from './subject-row';
+import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
+
+export function DynamicCollectionPage({ page }: { page: DynamicCollectionPageData }) {
+  const [current, setCurrent] = useState(page);
+  const [retries, setRetries] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  useEffect(() => {
+    setCurrent(page);
+    setRetries(0);
+    setRetrying(false);
+  }, [page]);
+  useEffect(() => {
+    if (!current.preparing || retries >= 3 || retrying) return;
+    const timer = setTimeout(
+      () => {
+        setRetrying(true);
+        void readDynamicCollectionMembers({
+          data: { id: current.id, ...(current.cursor ? { cursor: current.cursor } : {}) },
+        })
+          .then(
+            (result) => {
+              setCurrent((value) => ({ ...value, ...result }));
+            },
+            () => {
+              setCurrent((value) => ({ ...value, preparing: false, unavailable: true }));
+            },
+          )
+          .finally(() => {
+            setRetries((count) => count + 1);
+            setRetrying(false);
+          });
+      },
+      Math.max(1000, Math.min(30_000, current.retryAfterMs)),
+    );
+    return () => clearTimeout(timer);
+  }, [current, retries, retrying]);
+  const ratio = rowRatio(current.members.map((member) => member.subject));
+  const empty =
+    current.builtinKind === 'everything'
+      ? m.library_dynamic_empty_everything()
+      : current.builtinKind === 'liked'
+        ? m.library_dynamic_empty_liked()
+        : m.library_collection_empty();
+  return (
+    <article className="max-w-4xl space-y-8 text-foreground">
+      <header>
+        <PageHeading>{current.title}</PageHeading>
+        {current.description ? <p className="mt-3 whitespace-pre-wrap">{current.description}</p> : null}
+      </header>
+      {current.preparing ? (
+        <p role="status">{m.library_dynamic_preparing()}</p>
+      ) : current.unavailable ? (
+        <p role="alert">{m.library_dynamic_unavailable()}</p>
+      ) : current.members.length ? (
+        <CoverGrid ratio={ratio}>
+          {current.members.map(({ subject }, index) => {
+            const href = subject ? subjectHref({ id: subject.id, label: subject.label }, getLocale()) : null;
+            const title = subject?.label ?? m.library_subject_unavailable();
+            return (
+              <CoverCard
+                key={subject?.id ?? index}
+                {...(href ? { href: href.href } : {})}
+                title={title}
+                cover={{
+                  subject: { id: subject?.id ?? 'unavailable', title, types: subject?.types ?? [] },
+                  cover: subject?.cover ?? null,
+                  src: coverSrc,
+                }}
+              />
+            );
+          })}
+        </CoverGrid>
+      ) : current.preparing || current.unavailable ? null : (
+        <p className="text-muted-foreground">{empty}</p>
+      )}
+      {current.preparing && retries >= 3 ? (
+        <div>
+          <p>{m.library_dynamic_try_later()}</p>
+          <button
+            className="underline"
+            type="button"
+            onClick={() => {
+              setRetries(0);
+              setRetrying(false);
+            }}
+          >
+            {m.library_collection_reload()}
+          </button>
+        </div>
+      ) : null}
+      {current.next ? (
+        <nav aria-label={m.library_collection_members()}>
+          <Link
+            to="/collections/$id"
+            params={{ id: current.id }}
+            search={{ cursor: current.next }}
+            className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+          >
+            {m.library_collection_more()}
+          </Link>
+        </nav>
+      ) : null}
+    </article>
+  );
+}

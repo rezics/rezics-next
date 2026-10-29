@@ -644,6 +644,12 @@ language through the client's `accept-language`.
 - **Bound:** 1 D, 2 K, 0 R and 0 A. The members read is one page of at most 100 entries. No per-member reads.
 - **Growth check:** `tests/library-collection-cost.test.ts`: `collection page stays within its bound as its member page grows`
 
+### Dynamic Collection page
+
+- **Touches:** One Collection read and one members page read per document for dynamic and curated Collections with 0, 20 and 100 members; a preparing answer adds at most 3 rereads.
+- **Bound:** Two kernel requests per document plus at most 3 rereads, at most the page size of members, whatever the Collection's size.
+- **Growth check:** `collection-dynamic.test.ts`, "one Collection read and one members read per document for dynamic and curated Collections with 0, 20 and 100 members; a preparing answer adds at most 3 rereads", counting fake kernel requests.
+
 ### Library type names
 
 - **Touches:** After a collection, personal library, copies, reading progress, published log or following page is read,

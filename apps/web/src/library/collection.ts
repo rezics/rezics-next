@@ -8,7 +8,8 @@ import { kernelClient } from '../kernel/client';
 import { publicRead, readQueryKey } from '../kernel/query';
 import type { ReadCredentialMode } from '../kernel/credential';
 import type { SessionEnv } from '../session/client';
-import { loadEditableCollectionPage, type EditableCollectionPage } from './collection-load';
+import { loadEditableCollectionPage, loadDynamicMembers, type CollectionPageResult } from './collection-load';
+import { prepareSession, viewerCredential } from '../session/request';
 
 function validatePageInput(input: unknown): { id: string; cursor?: string; credentialMode: ReadCredentialMode } {
   if (
@@ -34,7 +35,7 @@ function validatePageInput(input: unknown): { id: string; cursor?: string; crede
 
 export const readCollectionPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(async ({ data }): Promise<EditableCollectionPage> => {
+  .handler(async ({ data }): Promise<CollectionPageResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const page = await loadEditableCollectionPage(
       kernelClient(),
@@ -45,6 +46,38 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
     );
     await nameSubjectTypes(page.members.map((member) => member.subject));
     return page;
+  });
+
+export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('id' in input) ||
+      typeof input.id !== 'string' ||
+      !input.id ||
+      ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string')
+    )
+      throw notFound();
+    return {
+      id: input.id,
+      ...('cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
+    };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    const signedOut = await prepareSession(request, env as Partial<SessionEnv>).then(
+      (stale) => stale,
+      () => true,
+    );
+    const authorization = signedOut ? null : viewerCredential(request);
+    return loadDynamicMembers(
+      kernelClient(),
+      data.id,
+      data.cursor,
+      authorization ? { headers: { authorization } } : {},
+    );
   });
 
 export function collectionPageQuery(id: string, cursor: string | undefined, credentialMode: ReadCredentialMode) {
