@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import membersRecording from '../src/kernel/recorded/library-collection-members.json';
+import { answerFakeRoute } from '../src/kernel/fake-modules.ts';
 
 const page = await readFile(new URL('../src/library/collection-page.tsx', import.meta.url), 'utf8');
 const row = await readFile(new URL('../src/library/subject-row.tsx', import.meta.url), 'utf8');
@@ -28,4 +30,18 @@ test('member subject titles use localized page title helpers', () => {
   expect(page).toMatch(/subjectPageTitle|pageText/);
   expect(row).toContain('pageText(');
   expect(reads).toContain('labelLanguage:');
+});
+
+test('the Collection story gives each covered subject its own media and preserves uncovered members', async () => {
+  const result = await answerFakeRoute(
+    'story',
+    new Request('https://rezics.local/v1/collections/01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2/members'),
+    { 'library-collection-members': membersRecording },
+  );
+  const members = result?.members as typeof membersRecording.members | undefined;
+  const genji = members?.find((member) => member.subject?.label === 'The Tale of Genji')?.subject?.cover;
+  const kokoro = members?.find((member) => member.subject?.label === 'Kokoro')?.subject?.cover;
+  const prince = members?.find((member) => member.subject?.label === 'The Little Prince')?.subject?.cover;
+  expect(genji?.media).not.toBe(kokoro?.media);
+  expect(prince).toBeNull();
 });
