@@ -170,6 +170,7 @@ fi
         expect(git(task.worktree, 'status', '--porcelain')).toBe('');
         expect(git(task.worktree, 'merge-base', '--is-ancestor', h.head(), 'HEAD')).toBe('');
       } else {
+        h.settings.integrationChecks = [{ paths: ['bun.lock'], command: ['true'] }];
         let gated = false;
         await h.train(async (_command, cwd) => {
           expect(readFileSync(join(cwd, 'bun.lock'), 'utf8')).toBe('regenerated lock\n');
