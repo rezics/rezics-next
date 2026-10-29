@@ -177,3 +177,20 @@ execution or check-ID creation. The initial attempt and two retries are exhauste
 No assertion, helper, product, runner or outside-path file changed. No new native results are claimed;
 the historical 595-assertion pass remains separately attributed above. Current validation is blocked by
 the check submission tool, including the artifact command itself.
+
+### Revalidation from revision 0fb1a295
+
+The retry started clean on the assigned worker branch at `0fb1a295d1ff1469ae149356919836a85295766b`.
+The composed case, old recovery test, recovery factory, distinct-input test and current boundary API were
+read again. Preserve the frozen case: its source overrides and real ACK/reopen/selection journey still match
+the contract; no helper or product change is justified. No outside-path file changes are needed.
+
+The required artifact launch was retried before relying on the manifest's failure:
+
+```sh
+bun scripts/worker-check.ts --run -- test -s docs/research/imports-audit/cover-recovery-pixels.md
+```
+
+It exited 1 with `Invalid check id: --` before creating a check ID or running the command.
+The current CLI still interprets the separator as an existing record ID in its `--run` branch.
+This is a fresh submission-tool failure; historical native evidence above is not a current execution.
