@@ -76,12 +76,24 @@ for (const person of ['other people', 'same person history'] as const) {
           async grow(db, scale, previous) {
             if (scale === 1) {
               const ids = Array.from({ length: 512 }, () => newId(f.operation.route));
+              // Keep the immutable-operation and receipt relations large enough
+              // for the point lookups to use their representative plans on
+              // every growing axis, including consent and delegation history.
+              await db.admin.query(
+                `INSERT INTO durable_test.operation SELECT $1,id,jsonb_build_object('initiatorAccountId',CASE WHEN $4 THEN $3::uuid ELSE id END) FROM unnest($2::uuid[]) id`,
+                [f.operation.route, ids, f.id, person === 'same person history'],
+              );
+              await db.admin.query(
+                `INSERT INTO durable_test.source SELECT $1,id,id,repeat('0',64),id FROM unnest($2::uuid[]) id`,
+                [f.operation.route, ids],
+              );
               await db.admin.query(
                 `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-                 SELECT $1,'account',$2,'durable-test.history',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}' FROM unnest($3::uuid[]) id`,
-                [partitionOf(f.operation.route), f.id, ids],
+                 SELECT $1,'account',CASE WHEN $4 THEN $2 ELSE id END,command_kind,id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+                 FROM unnest($3::uuid[]) id CROSS JOIN unnest(ARRAY['durable-test.create','durable-test.step']::text[]) AS commands(command_kind)`,
+                [partitionOf(f.operation.route), f.id, ids, person === 'same person history'],
               );
-              const targetIds = exerciseTargets.slice(0, 12);
+              const targetIds = exerciseTargets;
               await db.admin.query(
                 `INSERT INTO durable_test.authority(route,id,active) SELECT $1,id,true FROM unnest($2::uuid[]) id`,
                 [f.target.route, targetIds],
