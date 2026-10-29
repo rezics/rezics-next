@@ -1,5 +1,10 @@
 # goal
 
+The Goal control plane and the REZICS workflow—managers, workers, briefs, checks, landing, verification and
+promotion—are a REZICS product, developed and measured like the others. The
+[agent work systems research](research/agent-work-systems.md) compares established systems and ranks improvements
+by expected gain in landed useful work per allowance.
+
 One Bun control plane owns worker dispatch, attempt records, the landing train and manager sessions. Every module uses
 one local SQLite file, independent of the product database. `config.ts` composes the real worker fence, outcome sink,
 landing queue, manager inbox, train and completion checker. Production commands need no runtime module or plugin.
