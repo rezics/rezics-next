@@ -46,30 +46,52 @@ for (const person of ['other people', 'same person history'] as const) {
         );
         const replayKey = Bun.randomUUIDv7();
         expect((await h.step(f, { key: replayKey })).effects).toBe(1);
+        // Keep immutable creation and command receipt lookups representative
+        // before the first scale, regardless of which neighbourhood grows.
+        const exerciseTargets = Array.from({ length: 13 }, () => newId(f.target.route));
         if (mode === 'revoked replay') {
           // Native Auth owns and publishes the pending restriction before its
           // unavailable Access acknowledgement. Access floor remains unchanged.
           expect((await h.request('/consent', { client_id: f.clientId, scope: [] }, f.cookie)).status).toBe(503);
         }
-        async function operation() {
+        async function operation(runFixture = f) {
           if (mode === 'revoked replay') {
-            await expect(h.step(f, { key: replayKey })).rejects.toThrow();
+            await expect(h.step(runFixture, { key: replayKey })).rejects.toThrow();
             return;
           }
           const key = Bun.randomUUIDv7();
-          const retried = await h.step(f, { key, retry: true });
+          const retried = await h.step(runFixture, { key, retry: true });
           expect(retried.attempts).toBe(2);
           expect(retried.effects).toBe(1);
-          const replay = await h.step(f, { key });
+          const replay = await h.step(runFixture, { key });
           expect(replay.outcome.replayed).toBe(true);
           expect(replay.effects).toBe(0);
         }
         const report = await checkGrowth(h.db, {
           name: `${mode}: ${person} ${relation}`,
           bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+          ...(mode === 'retry and replay' && relation !== 'operations' ? { rule: 'series' as const } : {}),
           repetitions: 3,
           warmups: 1,
           async grow(db, scale, previous) {
+            if (scale === 1) {
+              const ids = Array.from({ length: 512 }, () => newId(f.operation.route));
+              await db.admin.query(
+                `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+                 SELECT $1,'account',$2,'durable-test.history',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}' FROM unnest($3::uuid[]) id`,
+                [partitionOf(f.operation.route), f.id, ids],
+              );
+              const targetIds = exerciseTargets.slice(0, 12);
+              await db.admin.query(
+                `INSERT INTO durable_test.authority(route,id,active) SELECT $1,id,true FROM unnest($2::uuid[]) id`,
+                [f.target.route, targetIds],
+              );
+              await db.admin.query(
+                `INSERT INTO access.resource_grant(route,resource_id,subject_id,subject_role,action,valid,transaction_id)
+                 SELECT $1,id,$2,'member','subject:write','(,)',$3 FROM unnest($4::uuid[]) id`,
+                [f.target.route, group, f.id, targetIds],
+              );
+            }
             const count = (scale - previous) * 500;
             const ids = Array.from({ length: count }, () =>
               newId(relation === 'operations' ? f.operation.route : 0x2345),
@@ -131,10 +153,16 @@ for (const person of ['other people', 'same person history'] as const) {
             ])
               await db.admin.query(`VACUUM (ANALYZE) ${table}`);
           },
-          operation,
+          operation: async (_db, _scale, repetition) =>
+            operation({
+              ...f,
+              target: { ...f.target, id: exerciseTargets[repetition]! },
+            }),
         });
         expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
-        const observed = await capture(h.db, operation);
+        const observed = await capture(h.db, () =>
+          operation({ ...f, target: { ...f.target, id: exerciseTargets[12]! } }),
+        );
         const statements = observed.capture.statements;
         for (const pattern of [
           /FROM durable_test.operation/,
