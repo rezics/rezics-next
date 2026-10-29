@@ -33,10 +33,15 @@ acceptance/adoption heads and the HTTP/bundled release pin are authoritative. Co
 not claims about source coverage. Missing producer/schema groups remain exact prerequisites in that contract.
 
 Every applicable cell includes anonymous public reader, editor with the same public projection, owner Alice,
-other owner Bob, acceptor/steward as needed, outsider, unscoped, delegated, valid suspended, revoked/invalid and
+other owner Bob, acceptor/steward as needed, outsider, unscoped, delegated, suspended with a pre-suspension bearer, revoked/invalid and
 hidden-resource controls. Public output cannot borrow a curator/editor's private authority. Bans beat independent
-read grants. Valid suspended bearer is 403 account_suspended everywhere; required missing/invalid/revoked credentials
-are distinct401. Existing frozen suites with older expectations require their owner's reconciliation.
+read grants. Native suspension advances the authentication floor before Auth session revocation: the bearer held
+from before suspension receives HTTP401, JSON `invalid_credentials` and exactly
+`WWW-Authenticate: Bearer error="invalid_token"` on every authenticated surface, including unknown operation polling.
+Required missing credentials remain distinct from invalid/revoked401. Correct-password sign-in is Accounts' own
+native403 `ACCOUNT_SUSPENDED` with no session, cookie or token; wrong password remains ordinary401.
+The kernel's verified-suspended403 `account_suspended` is a defensive branch, not a native persona.
+Existing frozen suites with older expectations require their owner's reconciliation.
 
 Each applicable list cell additionally needs unknown evidence (including NOT), hidden source/target/withheld harem,
 source revocation/consent withdrawal, original plus terminal eligibility, duplicates/aliases, deep and sparse paging,
@@ -589,8 +594,11 @@ is intentionally required of the actual bundle. Character measurement associatio
 explicit producer prerequisites; the partial fact tests do not certify those unproduced assertions. Consumer
 scenario names above are proposed acceptance names, not claims that files or mounted APIs already exist.
 The existing native suspension command fences and advances the authentication floor: its driver's old bearer is
-a revoked401 control. Accounts must supply a current verified suspended bearer before TO-FREEZE
-valid-suspended-every-route can prove 403 account_suspended. Revoked credentials cannot stand in for that persona.
+a revoked401 control with JSON `invalid_credentials` and the exact `Bearer error="invalid_token"` challenge.
+The ninth title above records the existing suite's stale expectation; it does not establish a valid suspended403
+native persona. Its executable reconciliation remains with its owner. Accounts' native suspended-sign-in suite owns
+correct-password refusal/no-session and wrong-password ordinary401 evidence. The defensive kernel403 branch does
+not require Accounts to supply a new persona. These corrections do not freeze the missing cross-surface scenarios.
 
 Original bound suites are reused: `test/semantic/outcomes.test.ts` imports the original semantic driver through its
 native wrapper; `test/search/outcomes.test.ts` and `test/presentation/outcomes.test.ts` bind their original suites.
@@ -600,15 +608,15 @@ owner; do not change its assertions or use them to bless new raw-window behavior
 
 ## Collaborating owner closure
 
-| Owner       | Required evidence retained                                                                                                                                                                                                                                                                                              |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Search      | Catalogue/facets, same-statement/unknown grammar, complete selected-public projection, actual default indexing, current query-level privacy, canonical ordered lists and retained preparation. Existing Global rating cases are reused; private Realm isolation needs the native private producer.                      |
-| Commerce    | Common Collection members over curated/dynamic/Everything/state, support union, profile accepting pins, completed cooking wire, occurrence notes, public output publication/freeze and personal erasure. Bind original profile/label/dynamic/source/freshness suites.                                                   |
-| Accounts    | Real Auth/Access, bans over independent grants, valid suspended403, missing/invalid/revoked401, delegated actor/principal/consent reauthorization and terminal account fence. Helpers do not substitute for actual account routes.                                                                                      |
-| Content     | Authored Recipe documents/rights, real fences/consent/moderation, reviews from actual vote, Realm local population, SourceRecord attribution and document erasure/custody.                                                                                                                                              |
-| Imports     | Actual four-provider native input-to-adopted-fact-to-discovery, reviewed source bindings and preserved/rejected measurement qualifiers; no invented coverage, personal tag promotion or recipe method scraping.                                                                                                         |
-| Web         | Served routed pages, configured TypeList, eight locales, canonical identity, JSON-LD/diet/cookTime PT25M, public cache isolation and current private hydration. Native crawler feeds alone do not prove publication.                                                                                                    |
-| Performance | Actual direct catalogue/owner and prepared public/owner plans; three-scale rows/blocks/statements/bytes/engine work, sparse finite liveness and 16-read/128-slot composition. Rising privacy-reduction rate must not reduce served share. Two-statement start/final safety and foreign repair coverage remain required. |
+| Owner       | Required evidence retained                                                                                                                                                                                                                                                                                                              |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Search      | Catalogue/facets, same-statement/unknown grammar, complete selected-public projection, actual default indexing, current query-level privacy, canonical ordered lists and retained preparation. Existing Global rating cases are reused; private Realm isolation needs the native private producer.                                      |
+| Commerce    | Common Collection members over curated/dynamic/Everything/state, support union, profile accepting pins, completed cooking wire, occurrence notes, public output publication/freeze and personal erasure. Bind original profile/label/dynamic/source/freshness suites.                                                                   |
+| Accounts    | Real Auth/Access, bans over independent grants, pre-suspension bearer401 invalid_credentials with exact invalid_token challenge, native suspended sign-in403/no-session, missing/invalid/revoked401, delegated actor/principal/consent reauthorization and terminal account fence. Helpers do not substitute for actual account routes. |
+| Content     | Authored Recipe documents/rights, real fences/consent/moderation, reviews from actual vote, Realm local population, SourceRecord attribution and document erasure/custody.                                                                                                                                                              |
+| Imports     | Actual four-provider native input-to-adopted-fact-to-discovery, reviewed source bindings and preserved/rejected measurement qualifiers; no invented coverage, personal tag promotion or recipe method scraping.                                                                                                                         |
+| Web         | Served routed pages, configured TypeList, eight locales, canonical identity, JSON-LD/diet/cookTime PT25M, public cache isolation and current private hydration. Native crawler feeds alone do not prove publication.                                                                                                                    |
+| Performance | Actual direct catalogue/owner and prepared public/owner plans; three-scale rows/blocks/statements/bytes/engine work, sparse finite liveness and 16-read/128-slot composition. Rising privacy-reduction rate must not reduce served share. Two-statement start/final safety and foreign repair coverage remain required.                 |
 
 ## Cost
 

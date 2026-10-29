@@ -170,7 +170,7 @@ test(
 );
 
 test(
-  'a valid natively suspended bearer receives403 rather than an authentication or anonymous response',
+  'the pre-suspension revoked bearer receives401 invalid_credentials on merge admission',
   () =>
     withIdentityHttp(async (d) => {
       const subjects = [await createOriginal(d), await createOriginal(d)];
@@ -184,23 +184,25 @@ test(
         { subjects },
         { 'Idempotency-Key': quotedKey() },
       );
-      expect(suspended.status, JSON.stringify(suspended.body)).toBe(403);
-      expect(suspended.body.code).toBe('account_suspended');
+      expect(suspended.status, JSON.stringify(suspended.body)).toBe(401);
+      expect(suspended.body.code).toBe('invalid_credentials');
+      expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
       expect(await effectSnapshot(d)).toEqual(before);
     }),
   180_000,
 );
 
 test(
-  'unknown operation GET is concealed and valid suspended polling receives403',
+  'unknown operation GET is concealed and pre-suspension revoked bearer polling receives401 invalid_credentials',
   () =>
     withIdentityHttp(async (d) => {
       const location = `/v1/subjectIdentityOperations/${randomUUID()}`;
       // Exercise the actual GET boundary even while POST still exposes the absent async binding.
       concealed(await d.request('acceptor', 'GET', location));
       const suspended = await d.request('suspended', 'GET', location);
-      expect(suspended.status, JSON.stringify(suspended.body)).toBe(403);
-      expect(suspended.body.code).toBe('account_suspended');
+      expect(suspended.status, JSON.stringify(suspended.body)).toBe(401);
+      expect(suspended.body.code).toBe('invalid_credentials');
+      expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
     }),
   180_000,
 );
