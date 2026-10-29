@@ -10,7 +10,7 @@ export const routes: FakeRoute[] = [
     story: ({ recordings }) => {
       const recording = recordings['board-threads'];
       const threads = recording?.threads;
-      if (!Array.isArray(threads) || !threads[0]) return undefined;
+      if (!recording || !Array.isArray(threads) || !threads[0]) return undefined;
       const original = threads[0] as Record<string, unknown>;
       const firstPost = original.firstPost as Record<string, unknown>;
       const longTitle = {
@@ -49,7 +49,7 @@ export const routes: FakeRoute[] = [
     story: ({ recordings }) => {
       const recording = recordings['thread-posts'];
       const posts = recording?.posts;
-      if (!Array.isArray(posts)) return undefined;
+      if (!recording || !Array.isArray(posts)) return undefined;
       const revisedPosts = posts.map((post, index) => {
         if (!post || typeof post !== 'object') return post;
         const copy = { ...(post as Record<string, unknown>) };
