@@ -1,19 +1,27 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
 
 const stacks: Awaited<ReturnType<typeof startNativeWebStack>>[] = [];
 const authStacks: Awaited<ReturnType<typeof startAuthStack>>[] = [];
 
+// Kernel creation and the first Worker compilation are suite fixtures. Reuse
+// their owned stack while each Auth app/browser gets fresh cookies and cleanup.
+beforeAll(async () => {
+  stacks.push(await startNativeWebStack());
+}, 180_000);
+
 afterEach(async () => {
   for (const auth of authStacks.splice(0).reverse()) await auth.stop();
+}, 180_000);
+
+afterAll(async () => {
   for (const stack of stacks.splice(0).reverse()) await stack.stop();
 }, 180_000);
 
 describe('native Auth and web stack', () => {
   test('serves production Auth and signs native personas into the Worker session store', async () => {
-    const stack = await startNativeWebStack();
-    stacks.push(stack);
+    const stack = stacks[0]!;
     const auth = await startAuthStack(stack);
     authStacks.push(auth);
 
@@ -53,8 +61,7 @@ describe('native Auth and web stack', () => {
   }, 180_000);
 
   test('signs up a newcomer through the served sign-up form and preserves a web destination', async () => {
-    const stack = await startNativeWebStack();
-    stacks.push(stack);
+    const stack = stacks[0]!;
     const auth = await startAuthStack(stack);
     authStacks.push(auth);
 
@@ -70,8 +77,7 @@ describe('native Auth and web stack', () => {
   }, 180_000);
 
   test('uses only browser cookies and refuses the suspended native persona without a session', async () => {
-    const stack = await startNativeWebStack();
-    stacks.push(stack);
+    const stack = stacks[0]!;
     const auth = await startAuthStack(stack);
     authStacks.push(auth);
 
@@ -101,8 +107,7 @@ describe('native Auth and web stack', () => {
   }, 180_000);
 
   test('stop closes contexts and Auth while leaving the native stack available to stop itself', async () => {
-    const stack = await startNativeWebStack();
-    stacks.push(stack);
+    const stack = stacks[0]!;
     const nativeLogin = await fetch(`${stack.issuerOrigin}/login`);
     const nativeLoginBody = await nativeLogin.text();
     const auth = await startAuthStack(stack);
@@ -127,8 +132,7 @@ describe('native Auth and web stack', () => {
 
 // The routing addition remains opt-in and never replaces issuer responses.
 test('routes Auth pages and assets at the issuer and restores the original listener', async () => {
-  const stack = await startNativeWebStack();
-  stacks.push(stack);
+  const stack = stacks[0]!;
   const issuer = stack.issuerOrigin;
   const original = await fetch(`${issuer}/login`);
   expect(original.status).toBe(200);
