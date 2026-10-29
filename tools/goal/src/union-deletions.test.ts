@@ -146,3 +146,18 @@ test('a task line deleted and also added elsewhere is allowed even when its coun
     h.dispose();
   }
 });
+
+test('a retained deletion is named even when the union otherwise equals dev', () => {
+  const h = integrationHarness();
+  try {
+    const file = '.temp/deleted-only.md';
+    // Rebase index order: base, dev, task.
+    conflictStages(h.root, file, 'before\nold permission\nafter\n', 'before\nafter\n', 'before\nold permission\ndev note\nafter\n');
+
+    expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union', 3)).toThrow(
+      `Worker change conflicts with dev in ${file}: task-deleted lines remain: "old permission"`,
+    );
+  } finally {
+    h.dispose();
+  }
+});

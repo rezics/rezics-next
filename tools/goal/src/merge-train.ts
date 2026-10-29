@@ -568,9 +568,9 @@ export function resolveMechanicalConflicts(
         if (merged.status === null || merged.status > 1) return false;
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+        if (markdown === 'union') assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text);
         if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
           throw new WorkerConflictError(file);
-        if (markdown === 'union') assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text);
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -587,6 +587,8 @@ export function resolveMechanicalConflicts(
       const ours = parseFlatJsonObject(stages[1]!);
       const theirs = parseFlatJsonObject(stages[2]!);
       const base = parseFlatJsonObject(stages[0]!);
+      text = `${JSON.stringify(merged.value, null, 2)}\n`;
+      assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text);
       if (
         ours &&
         theirs &&
@@ -596,8 +598,6 @@ export function resolveMechanicalConflicts(
         comparableJson(theirs) !== comparableJson(base)
       )
         throw new WorkerConflictError(file);
-      text = `${JSON.stringify(merged.value, null, 2)}\n`;
-      assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text);
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
     resolved.set(path, text);
