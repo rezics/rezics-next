@@ -510,9 +510,7 @@ export class WorkerTasks {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
     if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId);
-    let lease = leased
-      ? undefined
-      : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    let lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
