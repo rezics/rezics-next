@@ -28,11 +28,18 @@ test('decision page reads its decision and the applicable existing record once e
     },
     post: async (id) => {
       calls.push(`post:${id}`);
-      return { id, threadId: 'thread-1', createdAt: decidedAt, authorId: 'author-1', title: 'The affected post' };
+      return {
+        id,
+        threadId: 'thread-1',
+        createdAt: decidedAt,
+        authorId: 'author-1',
+        text: 'The affected post',
+        href: '/threads/thread-1#post-1',
+      };
     },
     thread: async (id) => {
       calls.push(`thread:${id}`);
-      return { id, createdAt: decidedAt, authorId: 'author-1', title: 'The affected thread' };
+      return { id, createdAt: decidedAt, authorId: 'author-1', text: 'The affected thread', href: `/threads/${id}` };
     },
   });
 

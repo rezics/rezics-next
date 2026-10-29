@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { getLocale } from '../paraglide/runtime.js';
@@ -88,9 +87,9 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
           {m.decision_applies_heading()}
         </h2>
         <p className="mt-3 leading-7">
-          <Link to={page.target.href as never} className="underline underline-offset-4">
+          <a href={page.target.href} className="underline underline-offset-4">
             {page.target.text || m.decision_target_fallback({ kind: decision.targetKind })}
-          </Link>
+          </a>
         </p>
       </section>
       <section className="mt-8 border-t border-border pt-6" aria-labelledby="decision-appeal">
