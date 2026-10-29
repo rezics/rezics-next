@@ -71,6 +71,12 @@ failed check host also wakes the session with that fact. Waiting time remains pa
 avoids the measured polling cost: in 342 attempts, 3,001 of 18,639 tool calls were waits, rereading about 230k tokens
 each, or roughly 690M input tokens; waiting workers also held slots while only two or three of 44 workers did work.
 
+Each launch records the byte offset where its output starts in the appended attempt log. Exit-result parsing uses only
+the current run from that offset, so a resumed CLI that fails before writing a new exit object cannot reuse the
+previous turn's `waiting` result. Attempt measurements still include the available log history. A waiting attempt gets
+up to three resume launch attempts; if all fail before opening a session, Goal stops the attempt and sends one
+environment notice with the launch error line to the supermanager.
+
 ## Shared module workspaces (opt in)
 
 Isolated worktrees remain the default. Local settings can name modules as path globs:
