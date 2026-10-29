@@ -46,6 +46,14 @@ export function createNativeContentSystem(options: ContentSystemOptions): Promis
   return createNativeContentSystemWithWriteRateOverrides(options, '{}');
 }
 
+/** Request suite-specific ordinary scopes through Auth, preserving default fixture credentials. */
+export function createNativeContentSystemWithOrdinaryScopes(
+  options: ContentSystemOptions,
+  ordinaryScopes?: readonly string[],
+): Promise<NativeContentSystem> {
+  return createNativeContentSystemWithOptions(options, '{}', ordinaryScopes);
+}
+
 /** Build a native system with a suite-specific limiter budget while preserving the public fixture options shape. */
 export function createNativeContentSystemWithWriteRateOverrides(
   options: ContentSystemOptions,
@@ -57,6 +65,7 @@ export function createNativeContentSystemWithWriteRateOverrides(
 async function createNativeContentSystemWithOptions(
   options: ContentSystemOptions,
   writeRateOverrides: string,
+  ordinaryScopes?: readonly string[],
 ): Promise<NativeContentSystem> {
   const source = new URL(options.databaseUrl);
   const template = decodeURIComponent(source.pathname.slice(1));
@@ -218,7 +227,7 @@ async function createNativeContentSystemWithOptions(
     nativeAuth = host.service;
     const ordinaryClient = { id: `${namespace}_ordinary`, kind: 'first-party' as const };
     const registeredScopes = [...actions.keys()].filter((action) => action !== 'media:complete').sort();
-    const scopes = options.ordinaryScopes ?? registeredScopes;
+    const scopes = ordinaryScopes ?? registeredScopes;
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
       firstParty: true,

@@ -6,7 +6,7 @@ import type { Pool } from 'pg';
 import type { Access, AccountActor, ActionCatalogue } from '../../../src/request/access.ts';
 import type { Kernel } from '../../../src/http/kernel.ts';
 import type { KeyRing } from '../../../src/tokens/seal.ts';
-import { createNativeContentSystem } from './native-system.ts';
+import { createNativeContentSystemWithOrdinaryScopes } from './native-system.ts';
 
 export type ContentAccountState = 'active' | 'suspended';
 
@@ -36,8 +36,6 @@ export interface ContentSystemOptions {
   readonly databaseUrl: string;
   /** Optional isolated database namespace for deterministic fixture assertions. */
   readonly namespace?: string;
-  /** Requested scopes for ordinary fixture credentials; omitted to request all ordinary actions. */
-  readonly ordinaryScopes?: readonly string[];
 }
 
 export interface ContentSystem {
@@ -112,7 +110,15 @@ function cookieHeader(response: Response): string {
  * real `rezics-website` client against those same services.
  */
 export async function createContentSystem(options: ContentSystemOptions): Promise<ContentSystem> {
-  const native = await createNativeContentSystem(options);
+  return createContentSystemWithOrdinaryScopes(options);
+}
+
+/** Select ordinary product scopes without changing the shared fixture's frozen options contract. */
+export async function createContentSystemWithOrdinaryScopes(
+  options: ContentSystemOptions,
+  ordinaryScopes?: readonly string[],
+): Promise<ContentSystem> {
+  const native = await createNativeContentSystemWithOrdinaryScopes(options, ordinaryScopes);
   try {
     const issuer = native.nativeAuth.verifier.issuer;
     const audience = native.nativeAuth.verifier.audience;

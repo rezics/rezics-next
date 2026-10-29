@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { readErasureStatus } from '../access/erasure.ts';
 import { authoritativeTimeValue, mintReadTime, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -72,7 +72,7 @@ async function obligation(pool: Pool, accountId: string, erasedAt?: string) {
     throw new Error('Community record erasure requires the committed account erasure obligation');
   return { route, account_id: accountId, erased_at: status.at };
 }
-async function readKeys<T>(pool: Pool, route: number, read: (client: Parameters<typeof page.run>[0]) => Promise<T>) {
+async function readKeys<T>(pool: Pool, route: number, read: (client: PoolClient) => Promise<T>) {
   return withConnection(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     if (!partition || partition.writeState === 'moved') throw new Error('Community account partition is unavailable');
@@ -104,7 +104,11 @@ async function erasableOperation(pool: Pool, row: Locator, at: number): Promise<
     // All membership producers commit the exact workflow ID as their command key.
     // It also survives minimization of another party on the same operation.
     const workflow = await readWorkflow.run(client, { id: operation.creation_idempotency_key });
-    if (!workflow) return Date.parse(operation.requested_at) < at - MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS;
+    if (!workflow)
+      return (
+        operation.requested_at !== null &&
+        Date.parse(operation.requested_at) < at - MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS
+      );
     return (TERMINAL_WORKFLOW_STATUSES as readonly string[]).includes(workflow.status);
   });
 }

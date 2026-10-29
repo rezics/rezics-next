@@ -23,7 +23,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import {
   contentGovernanceCredential,
-  createContentSystem,
+  createContentSystemWithOrdinaryScopes,
   type ContentCredential,
   type ContentSystem,
 } from '../content/support/system.ts';
@@ -200,7 +200,7 @@ async function buildShared(databaseUrl = process.env.DATABASE_URL): Promise<Shar
       action,
     ),
   );
-  const system = await createContentSystem({ databaseUrl, ordinaryScopes });
+  const system = await createContentSystemWithOrdinaryScopes({ databaseUrl }, ordinaryScopes);
   let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
   let work: WorkClient | undefined;
   let observer: SqlObserver | undefined;
@@ -369,7 +369,14 @@ function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDr
 
   async function settle(): Promise<void> {
     if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
-    for (const id of pending) await work.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
+    const result = async (id: string) => {
+      try {
+        await work.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
+      } catch (cause) {
+        throw new Error(`Production community workflow ${id} failed:\n${worker.output()}`, { cause });
+      }
+    };
+    for (const id of pending) await result(id);
     pending.clear();
     const deadline = Date.now() + settleTimeoutMs;
     for (;;) {
@@ -377,8 +384,7 @@ function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDr
       const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
         (row) => row.status !== 'SUCCESS' && row.status !== 'DELAYED',
       );
-      for (const workflow of workflows)
-        await work.retrieveWorkflow(workflow.workflowID).getResult({ pollingIntervalMs: 10 });
+      for (const workflow of workflows) await result(workflow.workflowID);
       const behind = await system.database.pool.query(`
         SELECT partition.partition_no, partition.position, consumers.name, checkpoint.position AS checkpoint
           FROM core.partition AS partition
