@@ -100,6 +100,8 @@ test('settle times out with an infrastructure error that identifies the holding 
   await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
   await holder.query(`SELECT count(*) FROM ${table}`);
   try {
+    // Advance the next transaction ID past the held snapshot, making it a blocking horizon.
+    await db.admin.query(`DELETE FROM ${table} WHERE id=3000`);
     await expect(settle(db, { relations: [table], timeoutMs: 30, pollMs: 5 })).rejects.toMatchObject({
       name: 'GrowthSettleInfrastructureError',
       message: expect.stringMatching(
