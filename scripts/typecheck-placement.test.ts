@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runKernelTypecheck } from '../services/kernel/scripts/typecheck.ts';
+import { runAuthTypecheck } from '../services/auth/scripts/typecheck.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const temporaryDirectories: string[] = [];
@@ -128,4 +129,119 @@ test('construct failure is returned after a successful tsc', () => {
 
   expect(result.status).toBe(19);
   expect(readFileSync(join(directory, 'bun.log'), 'utf8')).toBe('run construct\n');
+});
+
+test('without DATABASE_URL, auth uses kernel placement and the host owns its migrated Auth database', async () => {
+  const events: string[] = [];
+  const env = { PATH: process.env.PATH };
+  const status = await runAuthTypecheck(env, {
+    place: async (run, receivedEnv) => {
+      expect(run).toEqual({
+        label: 'auth typecheck',
+        root: repository,
+        cwd: join(repository, 'services/auth'),
+        command: ['bun', 'scripts/typecheck.ts'],
+      });
+      expect(receivedEnv).toBe(env);
+      return runAuthTypecheck(env, {
+        place: async () => null, // The shared helper recognizes the host's run directory.
+        ownDatabase: () => {
+          events.push('host database');
+          return { url: 'postgres://host.test/auth', container: 'host', close: () => events.push('close') };
+        },
+        typecheck: async (databaseEnv) => {
+          expect(databaseEnv.DATABASE_URL).toBe('postgres://host.test/auth');
+          events.push('host tsc');
+          return 23;
+        },
+      });
+    },
+    ownDatabase: () => {
+      throw new Error('must not start a database on the worker');
+    },
+  });
+
+  expect(status).toBe(23);
+  expect(events).toEqual(['host database', 'host tsc', 'close']);
+});
+
+test('without DATABASE_URL and no answering host, auth uses and closes its local throwaway database', async () => {
+  const events: string[] = [];
+  const status = await runAuthTypecheck(
+    { PATH: process.env.PATH },
+    {
+      place: async () => null,
+      ownDatabase: () => {
+        events.push('database');
+        return { url: 'postgres://local.test/auth', container: 'local', close: () => events.push('close') };
+      },
+      typecheck: async (env) => {
+        expect(env.DATABASE_URL).toBe('postgres://local.test/auth');
+        expect(env.PATH).toBe(process.env.PATH);
+        events.push('tsc');
+        return 0;
+      },
+    },
+  );
+
+  expect(status).toBe(0);
+  expect(events).toEqual(['database', 'tsc', 'close']);
+});
+
+test('with DATABASE_URL, auth runs here against that database without placement or provisioning', async () => {
+  const env = { DATABASE_URL: 'postgres://developer.test/auth' };
+  const status = await runAuthTypecheck(env, {
+    place: async () => {
+      throw new Error('must not place an existing database remotely');
+    },
+    ownDatabase: () => {
+      throw new Error('must not start a database');
+    },
+    typecheck: async (receivedEnv) => {
+      expect(receivedEnv).toBe(env);
+      return 0;
+    },
+  });
+
+  expect(status).toBe(0);
+});
+
+test('auth preserves tsc failure status and diagnostic lines with an existing, local or host database', () => {
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(repository, '.temp/auth-typecheck-'));
+  temporaryDirectories.push(directory);
+  const tsc = join(directory, 'tsc');
+  const diagnostic = 'src/example.ts(2,3): error TS2322: diagnostic stays exact\n';
+  writeFileSync(
+    tsc,
+    `#!/bin/sh\nprintf '%s\\n' '${diagnostic.trimEnd()}'\nprintf '%s\\n' 'compiler stderr' >&2\nexit 23\n`,
+  );
+  chmodSync(tsc, 0o755);
+  const fixture = join(directory, 'run.ts');
+  writeFileSync(
+    fixture,
+    `import { runAuthTypecheck } from ${JSON.stringify(join(repository, 'services/auth/scripts/typecheck.ts'))};
+const ownDatabase = () => ({ url: 'postgres://fixture.test/auth', container: 'fixture', close() {} });
+process.exitCode = await runAuthTypecheck(process.env, {
+  ownDatabase,
+  place: async (_run, env) => process.argv[2] === 'host'
+    ? runAuthTypecheck(env, { ownDatabase, place: async () => null })
+    : null,
+});
+`,
+  );
+  for (const placement of ['existing', 'local', 'host']) {
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${directory}:${process.env.PATH}` };
+    delete env.DATABASE_URL;
+    if (placement === 'existing') env.DATABASE_URL = 'postgres://existing.test/auth';
+    const result = spawnSync(
+      process.execPath,
+      placement === 'existing' ? [join(repository, 'services/auth/scripts/typecheck.ts')] : [fixture, placement],
+      { cwd: repository, encoding: 'utf8', env },
+    );
+
+    expect(result.status).toBe(23);
+    expect(result.stdout).toBe(diagnostic);
+    expect(result.stderr).toBe('compiler stderr\n');
+  }
 });

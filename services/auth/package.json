@@ -11,7 +11,7 @@
   },
   "scripts": {
     "check": "bun scripts/check.ts",
-    "typecheck": "tsc --noEmit --runExternalCode -p tsconfig.json",
+    "typecheck": "bun scripts/typecheck.ts",
     "db": "bun scripts/database.ts"
   },
   "dependencies": {
