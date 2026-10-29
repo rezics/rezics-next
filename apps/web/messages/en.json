@@ -655,5 +655,8 @@
   "search_sort_label": "Sort by",
   "search_sort_rating": "Top rated",
   "search_sort_relevance": "Relevance",
-  "search_stale_cursor_restarted": "Results changed. Showing the first page."
+  "search_stale_cursor_restarted": "Results changed. Showing the first page.",
+  "library_copy_kind": "Kind",
+  "library_copy_unsupported": "This item’s library profile does not support that copy type and status.",
+  "library_copy_no_longer_offered": "This copy’s type is no longer offered for this item."
 }

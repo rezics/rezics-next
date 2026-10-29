@@ -13,13 +13,14 @@ import {
   type LibrarySubject,
 } from './reads';
 
-export type CopyStatusWrite = 'ordered' | 'owned' | 'lent' | 'disposed';
+export type CopyStatusWrite = string;
 export type CopyStatusRead = string;
 
 /** A copy the page can render. Subject ids stay off this object so a hidden subject is never serialized. */
 export type CopyItem = {
   id: string;
   status: CopyStatusRead;
+  kind: string | null;
   revision: number;
   location: string | null;
   source: string | null;
@@ -41,6 +42,7 @@ export type CopiesPageData = {
 export type SavedCopy = {
   id: string;
   status: CopyStatusRead;
+  kind?: string | null;
   revision: number;
   location: string | null;
   source: string | null;
@@ -51,14 +53,13 @@ export type SavedCopy = {
 
 export type CopyWriteFailure = {
   ok: false;
-  reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable';
+  reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' | 'unsupported';
 };
 export type CopySaved = { ok: true; copy: SavedCopy };
 export type CopyRemoved = { ok: true };
 export type CopyWriteResult = CopySaved | CopyWriteFailure;
 export type CopyRemoveResult = CopyRemoved | CopyWriteFailure;
 
-const writableCopyStatuses = new Set<CopyStatusWrite>(['ordered', 'owned', 'lent', 'disposed']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const textLimit = { location: 200, source: 200, note: 1000 } as const;
 
@@ -73,6 +74,7 @@ type RawCopy = {
   id: string;
   subjectId: string;
   status: CopyStatusRead;
+  kind?: string | null;
   revision: number;
   location: string | null;
   source: string | null;
@@ -89,7 +91,7 @@ type CopyFields = {
   disposedOn: string | null;
   note: string | null;
 };
-type CreateInput = CopyFields & { subjectId: string; idempotencyKey: string };
+type CreateInput = CopyFields & { subjectId: string; kind?: string; idempotencyKey: string };
 type UpdateInput = CopyFields & { id: string; revision: number; idempotencyKey: string };
 type RemoveInput = { id: string; revision: number; idempotencyKey: string };
 
@@ -128,9 +130,7 @@ function keyOf(value: unknown): string | undefined {
 }
 
 function statusWriteOf(value: unknown): CopyStatusWrite | undefined {
-  return typeof value === 'string' && writableCopyStatuses.has(value as CopyStatusWrite)
-    ? (value as CopyStatusWrite)
-    : undefined;
+  return identifier(value);
 }
 
 export function copyStatusLabel(status: CopyStatusRead): string {
@@ -181,10 +181,11 @@ function fieldsOf(record: Record<string, unknown>): CopyFields | undefined {
 function parseCreate(input: unknown): CreateInput | undefined {
   if (!isRecord(input)) return undefined;
   const subjectId = identifier(input.subjectId);
+  const kind = identifier(input.kind);
   const idempotencyKey = keyOf(input.idempotencyKey);
   const fields = fieldsOf(input);
   if (!subjectId || !idempotencyKey || !fields) return undefined;
-  return { subjectId, idempotencyKey, ...fields };
+  return { subjectId, ...(kind ? { kind } : {}), idempotencyKey, ...fields };
 }
 
 function parseUpdate(input: unknown): UpdateInput | undefined {
@@ -215,6 +216,7 @@ function present(copy: RawCopy): CopyItem {
   return {
     id: copy.id,
     status: copy.status,
+    kind: typeof copy.kind === 'string' ? copy.kind : null,
     revision: copy.revision,
     location: copy.location,
     source: copy.source,
@@ -243,10 +245,12 @@ function problemBody(error: unknown): unknown {
   return isRecord(error) && 'value' in error ? error.value : undefined;
 }
 
-function writeFailure(status: number | undefined, error: unknown): CopyWriteFailure {
+export function writeFailure(status: number | undefined, error: unknown): CopyWriteFailure {
   const body = problemBody(error);
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
   if (status === 409 && isRecord(body) && body.code === 'conflict') return { ok: false, reason: 'conflict' };
+  if (status === 422 && isRecord(body) && body.code === 'unsupported_library_profile')
+    return { ok: false, reason: 'unsupported' };
   if (status === 400 || status === 422) return { ok: false, reason: 'invalid' };
   if (status === 401 || status === 403) return { ok: false, reason: 'forbidden' };
   return { ok: false, reason: 'unavailable' };
@@ -312,6 +316,7 @@ export async function submitCopy(
     const result = await client.copies.post(
       {
         subjectId: draft.subjectId,
+        ...(draft.kind ? { kind: draft.kind } : {}),
         status: draft.status,
         location: draft.location,
         source: draft.source,

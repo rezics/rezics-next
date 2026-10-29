@@ -655,5 +655,8 @@
   "search_sort_label": "정렬 기준",
   "search_sort_rating": "평점 높은 순",
   "search_sort_relevance": "관련도순",
-  "search_stale_cursor_restarted": "결과가 업데이트되어 첫 페이지를 표시합니다."
+  "search_stale_cursor_restarted": "결과가 업데이트되어 첫 페이지를 표시합니다.",
+  "library_copy_kind": "종류",
+  "library_copy_unsupported": "이 항목의 라이브러리 프로필은 해당 복본 종류와 상태를 지원하지 않습니다.",
+  "library_copy_no_longer_offered": "이 항목에서는 이 종류의 복본을 더 이상 제공하지 않습니다."
 }

@@ -655,5 +655,8 @@
   "search_sort_label": "Sortieren nach",
   "search_sort_rating": "Am besten bewertet",
   "search_sort_relevance": "Relevanz",
-  "search_stale_cursor_restarted": "Die Ergebnisse wurden aktualisiert. Die erste Seite wird angezeigt."
+  "search_stale_cursor_restarted": "Die Ergebnisse wurden aktualisiert. Die erste Seite wird angezeigt.",
+  "library_copy_kind": "Art",
+  "library_copy_unsupported": "Das Bibliotheksprofil dieses Eintrags unterstützt diese Art und diesen Status nicht.",
+  "library_copy_no_longer_offered": "Diese Art von Exemplar wird für diesen Eintrag nicht mehr angeboten."
 }

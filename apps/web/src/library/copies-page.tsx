@@ -190,7 +190,13 @@ function CopyForm({
           headers: csrfHeaders(),
         });
         if (!result.ok) {
-          setFailure(result.reason === 'conflict' ? m.library_copy_conflict() : m.library_copy_failure());
+          setFailure(
+            result.reason === 'conflict'
+              ? m.library_copy_conflict()
+              : result.reason === 'unsupported'
+                ? m.library_copy_unsupported()
+                : m.library_copy_failure(),
+          );
           return;
         }
         onSaved({
@@ -210,7 +216,13 @@ function CopyForm({
           headers: csrfHeaders(),
         });
         if (!result.ok) {
-          setFailure(result.reason === 'conflict' ? m.library_copy_conflict() : m.library_copy_failure());
+          setFailure(
+            result.reason === 'conflict'
+              ? m.library_copy_conflict()
+              : result.reason === 'unsupported'
+                ? m.library_copy_unsupported()
+                : m.library_copy_failure(),
+          );
           return;
         }
         onCreated(result.copy);

@@ -655,5 +655,8 @@
   "search_sort_label": "Ordenar por",
   "search_sort_rating": "Mejor valorados",
   "search_sort_relevance": "Relevancia",
-  "search_stale_cursor_restarted": "Los resultados han cambiado. Se muestra la primera página."
+  "search_stale_cursor_restarted": "Los resultados han cambiado. Se muestra la primera página.",
+  "library_copy_kind": "Tipo",
+  "library_copy_unsupported": "El perfil de biblioteca de este elemento no admite ese tipo de ejemplar ni ese estado.",
+  "library_copy_no_longer_offered": "Este tipo de ejemplar ya no se ofrece para este elemento."
 }
