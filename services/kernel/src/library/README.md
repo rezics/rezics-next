@@ -771,12 +771,14 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Bound: constant native counter rows/statements per actual state write plus indexed depth, including initialization,
   bigint fields, rollback and contention. Serializes only that owner's state writes; no free ordering metadata or
   hidden `noEffect` mutation. The [delivered allocator's cost and primitive captures](owner-write-sequence.md#cost)
-  remain separate from production writer integration; existing Entry put/delete measurements below exclude it.
+  remain separate from whole-command evidence. Entry put, retained clear and Undo integrate the allocator;
+  their whole-command measurements below include it.
   Every changed fact row also pays [automatic invalidation work](owner-fact-version.md#cost), including a separate
   sequence-stamp UPDATE. One allocator increment is not a bound of one head increment.
 - Growth check: require native same-kernel-time writes across two merged originals, concurrent same/different owners,
   clear/Undo fresh order, denied/CAS/replay/overflow rollback and terminal no-resurrection, with three-scale
-  owner/entry/history captures. No such runtime/growth test is executed or claimed by this document task.
+  owner/entry/history captures. The entry lifecycle checks below cover clear/Undo fresh order, rejected/replayed
+  envelopes and live-slot contention. They do not establish every state writer or the terminal graph obligation.
   [Filtered lists](../../../../docs/filtered-lists.md) retains ownership of filter-plan numeric budgets.
 
 ### Command envelope
