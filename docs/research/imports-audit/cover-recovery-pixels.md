@@ -170,3 +170,10 @@ At committed revision `71818df6ab2a1525a91c743c19cf88c50112bf9f`, the mandated a
 retried before relying on the earlier failure. It exited 1 with `Invalid check id: --`; no check ID was
 created. Current `scripts/worker-check.ts` still dispatches `--run` to `runRecordedCheck(args[1])`,
 so the required separator is parsed as a record ID. The frozen native test remains untouched.
+
+At revision `c0f8d6d15d`, the focused native-file launch and affected kernel typecheck launch listed above
+were each retried using the mandated `--run --` protocol. Both exited 1 with the same exact error before
+execution or check-ID creation. The initial attempt and two retries are exhausted for this attempt.
+No assertion, helper, product, runner or outside-path file changed. No new native results are claimed;
+the historical 595-assertion pass remains separately attributed above. Current validation is blocked by
+the check submission tool, including the artifact command itself.
