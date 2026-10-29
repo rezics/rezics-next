@@ -299,3 +299,26 @@ test('a worktree on a shared store gets each workspace its own dependency links'
     h.close();
   }
 });
+
+test('pruning stores reads only each worktree top-level dependency link, not the worktrees trees', () => {
+  const h = fixture();
+  try {
+    const stores = join(h.root, 'stores');
+    const worktrees = join(h.root, 'worktrees');
+    const used = join(stores, 'a'.repeat(64));
+    const unused = join(stores, 'b'.repeat(64));
+    mkdirSync(join(used, 'node_modules', '.bun'), { recursive: true });
+    mkdirSync(join(unused, 'node_modules', '.bun'), { recursive: true });
+    mkdirSync(join(worktrees, 'task', 'node_modules'), { recursive: true });
+    symlinkSync(join(used, 'node_modules', '.bun'), join(worktrees, 'task', 'node_modules', '.bun'));
+    // A deep tree inside a worktree must not be walked: an unreadable directory there would throw if it were.
+    mkdirSync(join(worktrees, 'task', 'deep', 'sealed'), { recursive: true });
+    chmodSync(join(worktrees, 'task', 'deep', 'sealed'), 0o000);
+    const old = Date.now() + 48 * 3_600_000;
+    pruneStores(stores, worktrees, old);
+    chmodSync(join(worktrees, 'task', 'deep', 'sealed'), 0o755);
+    expect(existsSync(used)).toBe(true);
+  } finally {
+    h.close();
+  }
+});

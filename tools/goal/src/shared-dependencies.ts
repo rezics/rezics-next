@@ -245,19 +245,16 @@ export function pruneStores(storeRoot: string, worktreeRoot: string, now = Date.
     .filter((entry) => entry.isDirectory() && /^[a-f0-9]{64}$/.test(entry.name))
     .map((entry) => join(storeRoot, entry.name));
   const used = new Set<string>();
-  const scan = (dir: string) => {
-    if (!existsSync(dir)) return;
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) scan(path);
-      else if (entry.isSymbolicLink() && entry.name === '.bun') {
-        try {
-          used.add(resolve(dirname(path), readlinkSync(path)));
-        } catch {}
-      }
+  // Only a worktree's own node_modules/.bun links a store. Walking every worktree's whole tree (hundreds of private
+  // node_modules) on each host sweep blocked the manager host in directory reads for minutes on 10-29.
+  if (existsSync(worktreeRoot))
+    for (const entry of readdirSync(worktreeRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const link = join(worktreeRoot, entry.name, 'node_modules', '.bun');
+      try {
+        if (lstatSync(link).isSymbolicLink()) used.add(resolve(dirname(link), readlinkSync(link)));
+      } catch {}
     }
-  };
-  scan(worktreeRoot);
   const ordered = stores.sort((a, b) => lstatSync(b).mtimeMs - lstatSync(a).mtimeMs);
   const keep = new Set(ordered.slice(0, 3));
   for (const store of stores)
