@@ -18,35 +18,49 @@ const index = subjectIndexName(prefix, 1);
 const author = 'schema:author';
 const category = 'schema:category';
 const unrelated = 'schema:other';
+const documentId = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
 const fact = (property: string, value: string) => ({ property, value });
 const sampled = Array.from({ length: 128 }, (_, n) => fact(author, n === 0 ? 'alice' : `person-${n}`));
 const documents = [
-  { id: '01', group: 'exact', facts: [fact(author, 'alice'), fact(author, 'alice'), fact(category, 'wanted')] },
   {
-    id: '02',
+    id: documentId(1),
+    group: 'exact',
+    facts: [fact(author, 'alice'), fact(author, 'alice'), fact(category, 'wanted')],
+  },
+  {
+    id: documentId(2),
     group: 'exact',
     facts: [fact(author, 'bob'), fact(category, 'wanted')],
     relation_facet_overflow: [unrelated],
   },
-  { id: '03', group: 'overflow', facts: [fact(author, 'alice')] },
-  { id: '04', group: 'overflow', facts: [...sampled, fact(author, 'alice')], relation_facet_overflow: [author] },
-  { id: '05', group: 'overflow', facts: [], relation_facet_overflow: [author] },
+  { id: documentId(3), group: 'overflow', facts: [fact(author, 'alice')] },
   {
-    id: '06',
+    id: documentId(4),
+    group: 'overflow',
+    facts: [...sampled, fact(author, 'alice')],
+    relation_facet_overflow: [author],
+  },
+  { id: documentId(5), group: 'overflow', facts: [], relation_facet_overflow: [author] },
+  {
+    id: documentId(6),
     group: 'excluded',
     facts: [fact(author, 'poison')],
     relation_facet_overflow: [author, category],
   },
-  { id: '07', group: 'candidates', facts: [fact(author, 'alice'), fact(author, 'alice'), fact(category, 'wanted')] },
   {
-    id: '08',
+    id: documentId(7),
+    group: 'candidates',
+    facts: [fact(author, 'alice'), fact(author, 'alice'), fact(category, 'wanted')],
+  },
+  {
+    id: documentId(8),
     group: 'candidates',
     facts: [fact(author, 'alice'), fact(author, 'poison'), fact(category, 'different')],
     relation_facet_overflow: [category],
   },
-  { id: '09', group: 'candidates', facts: [], relation_facet_overflow: [category] },
+  { id: documentId(9), group: 'candidates', facts: [], relation_facet_overflow: [category] },
   {
-    id: '10',
+    id: documentId(10),
     group: 'candidates',
     facts: [fact(author, 'bob'), fact(category, 'wanted')],
     relation_facet_overflow: [unrelated],
@@ -130,16 +144,16 @@ async function oneRequest<T>(template: string, run: (client: OpenSearch) => Prom
 test('search reports whether matching candidates overflow a requested filter property', async () => {
   const plan = { filter: group('overflow'), sort: 'id' as const, size: 1, overflowProperties: [author] };
   const page = await oneRequest('subjects-search-v2', (client) => searchSubjects(client, prefix, plan));
-  expect(page.hits.map(({ id }) => id)).toEqual(['03']);
+  expect(page.hits.map(({ id }) => id)).toEqual([documentId(3)]);
   expect(page.total).toEqual({ value: 3, relation: 'exact' });
   expect(page.overflow).toBe(true); // The marker is beyond this page.
   const next = await oneRequest('subjects-search-v2', (client) =>
     searchSubjects(client, prefix, { ...plan, after: page.hits[0]!.sort }),
   );
-  expect(next.hits.map(({ id }) => id)).toEqual(['04']);
+  expect(next.hits.map(({ id }) => id)).toEqual([documentId(4)]);
   expect(next.overflow).toBe(true); // This hit has 128 sampled values and the marker.
   const exhausted = await oneRequest('subjects-search-v2', (client) =>
-    searchSubjects(client, prefix, { ...plan, after: ['05'] }),
+    searchSubjects(client, prefix, { ...plan, after: [documentId(5)] }),
   );
   expect(exhausted.hits).toEqual([]);
   expect(exhausted.overflow).toBe(true); // Metadata covers all candidates, even before search_after.
@@ -195,7 +209,7 @@ test('facet counts with truncation are honest lower bounds and exclude unresolve
     values: [{ value: 'schema:Book', count: 3 }],
   });
   const missing = await oneRequest('subjects-facets-v1', (client) =>
-    countFacets(client, prefix, { ...plan, query: { term: { id: '05' } } }),
+    countFacets(client, prefix, { ...plan, query: { term: { id: documentId(5) } } }),
   );
   expect(missing.total).toEqual({ value: 1, relation: 'exact' });
   expect(missing.facets[0]).toEqual({ property: author, relation: 'lower_bound', values: [] });
@@ -223,7 +237,7 @@ test('facet counts with truncation are honest lower bounds and exclude unresolve
   const onlyUnresolved = await oneRequest('subjects-facets-v1', (client) =>
     countFacets(client, prefix, {
       ...plan,
-      query: { term: { id: '08' } },
+      query: { term: { id: documentId(8) } },
       filter: candidateFilter,
       overflowProperties: [category],
     }),
