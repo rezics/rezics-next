@@ -152,6 +152,9 @@ Admission retries races against other callers. The default probe interval is fiv
    for the current base.
 3. Run `bun install --frozen-lockfile` at the copied checkout root, then the command in its requested directory.
    `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` shares downloaded packages across runs.
+   Pinned Bun runtimes are cached by version and build under `/srv/rezics-check/pinned-bun/<version>-<build>/package/bin/bun`.
+   The host verifies the cached binary's revision on every run and downloads a replacement when it is missing or stale.
+   Removing `/srv/rezics-check/pinned-bun` is always safe; the next run downloads the pinned runtime again.
    `BUN_RUNTIME_TRANSPILER_CACHE_PATH=<run-directory>/bun-runtime-transpiler-cache` isolates runtime transpilation.
    Chromium uses the shared `/srv/rezics-check/browsers` installation.
 4. Execute inside a transient `rezics-check-<run-id>.scope` in a nested per-run slice under `rezics-check.slice`.

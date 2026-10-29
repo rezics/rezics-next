@@ -71,25 +71,21 @@ export type RemoteCheck = {
 export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; code: number };
 
 export const ROOT = '/srv/rezics-check';
-const repositoryPackage = JSON.parse(readFileSync(join(import.meta.dir, '../package.json'), 'utf8')) as {
-  packageManager?: string;
-};
-const PINNED_BUN_VERSION = repositoryPackage.packageManager?.startsWith('bun@')
-  ? repositoryPackage.packageManager.slice(4)
-  : '';
-// Read when a remote run script is built, not at import: the train's derived regeneration imports this module (through
-// stack-run) in a worktree without node_modules, and the eager spawn failed every such landing with ENOENT (10-29).
-let pinnedBunRevision: string | undefined;
-function pinnedBunRevisionValue(): string {
-  if (pinnedBunRevision !== undefined) return pinnedBunRevision;
-  const pinnedBun = Bun.spawnSync([
-    join(import.meta.dir, '../node_modules/.bin/bun'),
-    '--eval',
-    'console.log(Bun.revision)',
-  ]);
-  if (pinnedBun.exitCode !== 0) throw new Error('Could not read pinned Bun revision');
-  pinnedBunRevision = pinnedBun.stdout.toString().trim();
-  return pinnedBunRevision;
+let pinnedBun: { version: string; revision: string } | undefined;
+
+/** Resolve the repository-pinned Bun only when a remote run is actually generated. */
+function getPinnedBun(): { version: string; revision: string } {
+  if (pinnedBun) return pinnedBun;
+  const repositoryPackage = JSON.parse(readFileSync(join(import.meta.dir, '../package.json'), 'utf8')) as {
+    packageManager?: string;
+  };
+  const version = repositoryPackage.packageManager?.startsWith('bun@') ? repositoryPackage.packageManager.slice(4) : '';
+  const binary = join(import.meta.dir, '../node_modules/.bin/bun');
+  if (!existsSync(binary)) throw new Error('Could not read pinned Bun revision; run bun install first');
+  const result = Bun.spawnSync([binary, '--eval', 'console.log(Bun.revision)']);
+  if (result.exitCode !== 0) throw new Error('Could not read pinned Bun revision; run bun install first');
+  pinnedBun = { version, revision: result.stdout.toString().trim() };
+  return pinnedBun;
 }
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
@@ -624,38 +620,54 @@ ${removeDirectory ? 'rm -rf -- "$run_directory"' : ''}`;
  * starts is the one that adds the slice, whatever the workspace is.
  */
 export function runScript(id: string, directory: string, cwd: string, command: string[], hostName: string): string {
+  const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
   const systemdScript = `host=$REMOTE_CHECK_HOST
     install_started=$(date +%s%N)
-    expected_bun=${quote(PINNED_BUN_VERSION)}
-    expected_revision=${quote(pinnedBunRevisionValue())}
+    expected_bun=${quote(pinnedBunVersion)}
+    expected_revision=${quote(pinnedBunRevision)}
     case "$(uname -m)" in
       x86_64) build=x64; grep -q avx2 /proc/cpuinfo || build=x64-baseline ;;
       aarch64) build=aarch64 ;;
       *) echo "remote-check: unsupported check-host architecture $(uname -m)" >&2; exit 1 ;;
     esac
-    # The verified pinned Bun is cached per host and version: downloading it on every run failed whole bursts of
-    # checks on TLS resets from the registry (curl 56, 10-29). A run downloads only on a cache miss, with retries.
+    # Cache the verified pinned runtime per host, version and build. Keep registry retries for transient TLS errors.
     pinned_cache=${ROOT}/pinned-bun/$expected_bun-$build
+    cache_matches() { [ -x "$pinned_cache/package/bin/bun" ] && "$pinned_cache/package/bin/bun" --eval 'process.exit(Bun["revision"] === process.argv[1] ? 0 : 1)' "$expected_revision"; }
     if [ -n "\${REMOTE_CHECK_PINNED_BUN_PATH:-}" ]; then
       bun="$REMOTE_CHECK_PINNED_BUN_PATH"
-    elif [ -x "$pinned_cache/package/bin/bun" ]; then
-      bun="$pinned_cache/package/bin/bun"
-    else
-      mkdir -p ${ROOT}/pinned-bun
-      pinned_download=$(mktemp -d ${ROOT}/pinned-bun/.download.XXXXXX)
-      curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C "$pinned_download"
-      if "$pinned_download/package/bin/bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
-        mv -T "$pinned_download" "$pinned_cache" 2>/dev/null || rm -rf "$pinned_download"
-        bun="$pinned_cache/package/bin/bun"
-      else
-        bun="$pinned_download/package/bin/bun"
+      if ! "$bun" --eval 'process.exit(Bun["revision"] === process.argv[1] ? 0 : 1)' "$expected_revision"; then
+        echo "remote-check: pinned Bun does not match packageManager $expected_bun" >&2
+        exit 1
       fi
-    fi
-    if ! "$bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
-      echo "remote-check: downloaded Bun does not match packageManager $expected_bun" >&2
-      exit 1
+    else
+      if ! cache_matches; then
+        mkdir -p ${ROOT}/pinned-bun
+        pinned_download=$(mktemp -d ${ROOT}/pinned-bun/.download.XXXXXX)
+        if ! curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C "$pinned_download"; then
+          rm -rf -- "$pinned_download"
+          exit 1
+        fi
+        if ! "$pinned_download/package/bin/bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
+          echo "remote-check: downloaded Bun does not match packageManager $expected_bun" >&2
+          rm -rf -- "$pinned_download"
+          exit 1
+        fi
+        if ! mv -T "$pinned_download" "$pinned_cache" 2>/dev/null; then
+          # A concurrent miss may have published first. Repair an invalid existing binary by atomic file rename;
+          # moving a directory cannot replace a populated cache entry atomically.
+          if ! cache_matches; then
+            if ! mv -T "$pinned_download/package/bin/bun" "$pinned_cache/package/bin/bun"; then
+              rm -rf -- "$pinned_download"
+              exit 1
+            fi
+          fi
+          rm -rf -- "$pinned_download"
+        fi
+        if ! cache_matches; then echo "remote-check: cached Bun does not match packageManager $expected_bun" >&2; exit 1; fi
+      fi
+      bun="$pinned_cache/package/bin/bun"
     fi
     "$bun" install --frozen-lockfile
     code=$?

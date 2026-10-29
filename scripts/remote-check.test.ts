@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   linkSync,
   mkdirSync,
@@ -26,6 +27,7 @@ import {
   returnsProbe,
   readHosts,
   selectSlotClass,
+  runScript,
   workspaceFiles,
 } from './remote-check.ts';
 
@@ -34,6 +36,75 @@ const kernel = join(repository, 'services/kernel');
 const remoteCheck = join(repository, 'scripts/remote-check.ts');
 const checkHost = join(repository, 'scripts/check-host');
 const kernelFiles = ['test/access-hook.test.ts', 'test/admission.test.ts'];
+
+function generatedHostRun(): string {
+  return runScript('cache-test', '/srv/rezics-check/runs/cache-test', '.', ['true'], 'check-a');
+}
+
+test('importing remote-check.ts in a checkout without node_modules starts no process and does not throw', () => {
+  const checkout = mkdtempSync(join(root, 'import-without-deps-'));
+  mkdirSync(join(checkout, 'scripts/check-host'), { recursive: true });
+  copyFileSync(remoteCheck, join(checkout, 'scripts/remote-check.ts'));
+  copyFileSync(join(repository, 'scripts/check-host/docker'), join(checkout, 'scripts/check-host/docker'));
+  copyFileSync(join(repository, 'package.json'), join(checkout, 'package.json'));
+  const result = spawnSync(
+    process.execPath,
+    ['--eval', `await import(${JSON.stringify(join(checkout, 'scripts/remote-check.ts'))})`],
+    {
+      cwd: checkout,
+      encoding: 'utf8',
+      timeout: 10_000,
+    },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stderr).toBe('');
+});
+
+test('a run on a host whose cache already holds the verified pinned Bun for this version and build does not download Bun', () => {
+  const script = generatedHostRun();
+  expect(script).toContain('runtime_root=/bun-runtime');
+  expect(script).toContain('cache_entry="$runtime_root/$expected_bun-$build"');
+  expect(script).toContain('cache_matches() { [ -x "$cache_entry/bin/bun" ]');
+  expect(script).toMatch(/if ! cache_matches; then[\s\S]*?curl -fsSL/);
+  expect(script).toContain('bun="$cache_entry/bin/bun"');
+  expect(script).toContain('REMOTE_CHECK_PINNED_BUN_PATH');
+  expect(script).not.toContain('.temp/pinned-bun');
+});
+
+test('a run on a host without a cached pinned Bun downloads it once, verifies its revision and places it in the host cache by an atomic rename', () => {
+  const script = generatedHostRun();
+  const download = script.indexOf('curl -fsSL');
+  const verify = script.indexOf('"$temp/package/bin/bun" --eval');
+  const publish = script.indexOf('mv -T -- "$temp/runtime" "$cache_entry"');
+  expect(download).toBeGreaterThan(-1);
+  expect(verify).toBeGreaterThan(download);
+  expect(publish).toBeGreaterThan(verify);
+  expect(script).toContain('mktemp -d "$runtime_root/.new-$expected_bun-$build.XXXXXX"');
+  expect(script.match(/curl -fsSL/g)).toHaveLength(1);
+});
+
+test('two runs that miss the cache at the same time leave one complete cached Bun and both use a verified binary', () => {
+  const script = generatedHostRun();
+  const lock = script.indexOf('flock 9');
+  const cacheCheck = script.indexOf('if ! cache_matches; then');
+  const download = script.indexOf('curl -fsSL');
+  const finalVerification = script.indexOf('if ! cache_matches; then echo "remote-check: cached Bun');
+  expect(lock).toBeGreaterThan(-1);
+  expect(lock).toBeLessThan(cacheCheck);
+  expect(cacheCheck).toBeLessThan(download);
+  expect(finalVerification).toBeGreaterThan(download);
+  expect(script).toContain('flock -u 9');
+});
+
+test('a cached Bun whose revision does not match is not used, and the run downloads and verifies a fresh one', () => {
+  const script = generatedHostRun();
+  expect(script).toContain('if ! cache_matches; then');
+  expect(script).toContain('rm -rf -- "$cache_entry"');
+  expect(script).toContain('"$temp/package/bin/bun"');
+  expect(script).toContain('Bun.revision === process.argv[1]');
+  expect(script).toContain('bun="$cache_entry/bin/bun"');
+  expect(script).toContain('if ! cache_matches; then echo "remote-check: cached Bun does not match packageManager');
+});
 
 // A fake ssh answers each kind of remote script by what it contains, so the tests see which host was chosen, what ran
 // there and what was released, without a network.
