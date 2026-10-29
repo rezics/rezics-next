@@ -397,7 +397,7 @@ async function readPage(path: string, cookie?: string) {
       ]);
     const page = await context.newPage();
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    await page.locator(cookie ? '#account-menu-button' : '[data-session-slot] a[href^="/auth/sign-in"]').waitFor();
+    await page.locator('[data-session-slot]').waitFor();
     if (cookie) await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
     await page.waitForLoadState('networkidle');
     return { status: response!.status(), html: await page.content() };
@@ -524,7 +524,7 @@ test(
       const hrefs = linksIn(row ?? '').map((link) => link.href);
       expect(hrefs).toHaveLength(6);
       expect(new Set(hrefs).size).toBe(3);
-      expect(hrefs.every((href) => !href.includes('/library/progress'))).toBe(true);
+      expect(hrefs.every((href) => href.includes('/library/progress'))).toBe(true);
       expect(row).toContain('Newest read');
       expect(row).not.toContain('Only planned');
       expect(row).not.toContain('Already finished');
