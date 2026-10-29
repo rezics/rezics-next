@@ -410,6 +410,37 @@ export function changedPathsBetween(cwd: string, base: string, head: string): st
   return changed.stdout.split('\0').filter(Boolean);
 }
 
+function pathsChangedByTaskButUnchangedOnDev(
+  cwd: string,
+  dev: string,
+  candidate: string,
+  taskTip: string,
+  taskPaths: readonly string[],
+): string[] {
+  const compare = (left: string, right: string, path: string): boolean => {
+    const result = spawnSync('git', ['diff', '--quiet', left, right, '--', path], { cwd });
+    if (result.status === null || result.status > 1)
+      throw new Error(result.stderr?.toString().trim() || result.error?.message || `Cannot compare ${path}`);
+    return result.status === 1;
+  };
+  return taskPaths.filter((path) => compare(dev, taskTip, path) && !compare(dev, candidate, path));
+}
+
+function refuseNoEffect(result: GateOutcome, paths: readonly string[], logPath: string): void {
+  result.stage = 'merge';
+  result.conflictedFiles = [...paths];
+  const reason = `Change had no effect on dev: ${paths.join(', ')}`;
+  result.firstFailure = firstFailure(reason);
+  appendFileSync(logPath, `${reason}\n`);
+}
+
+function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean {
+  const result = spawnSync('git', ['diff', '--quiet', base, candidate, '--'], { cwd });
+  if (result.status === null || result.status > 1)
+    throw new Error(result.stderr?.toString().trim() || result.error?.message || 'Cannot compare landing trees');
+  return result.status === 0;
+}
+
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
   return frozen
     .filter((file) => {
@@ -486,6 +517,7 @@ export function resolveMechanicalConflicts(
         if (merged.status === null || merged.status > 1) return false;
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+        if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base) return false;
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -499,6 +531,15 @@ export function resolveMechanicalConflicts(
       });
       const merged = mergeFlatJsonMessage(stages[0]!, stages[1]!, stages[2]!);
       if (!merged.ok) return false;
+      const ours = parseFlatJsonObject(stages[1]!);
+      const theirs = parseFlatJsonObject(stages[2]!);
+      const base = parseFlatJsonObject(stages[0]!);
+      if (
+        ours && theirs && base &&
+        comparableJson(merged.value) === comparableJson(ours) &&
+        comparableJson(theirs) !== comparableJson(ours) &&
+        comparableJson(theirs) !== comparableJson(base)
+      ) return false;
       text = `${JSON.stringify(merged.value, null, 2)}\n`;
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
@@ -1172,6 +1213,26 @@ export class MergeTrain {
           }
 
           const candidate = git(trainTree, 'rev-parse', 'HEAD');
+          const taskPaths = changedPathsBetween(o.mainCheckout, originalBase, tip);
+          if (treeDiffIsEmpty(trainTree, previous, candidate)) {
+            refuseNoEffect(result, taskPaths, logPath);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+          const noEffect = pathsChangedByTaskButUnchangedOnDev(
+            trainTree,
+            previous,
+            candidate,
+            tip,
+            taskPaths,
+          );
+          if (noEffect.length) {
+            refuseNoEffect(result, noEffect, logPath);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
           const commits = git(trainTree, 'rev-list', '--reverse', `${previous}..${candidate}`)
             .split('\n')
             .filter(Boolean);
@@ -1792,6 +1853,18 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
+        const taskPaths = workspace
+          ? taskChangedPaths(sharedStore!.task(request.taskId), tip)
+          : changedPathsBetween(o.mainCheckout, originalBase, tip);
+        if (treeDiffIsEmpty(trainTree, base, candidate)) {
+          refuseNoEffect(result, taskPaths, logPath);
+          return finish();
+        }
+        const noEffect = pathsChangedByTaskButUnchangedOnDev(trainTree, base, candidate, tip, taskPaths);
+        if (noEffect.length) {
+          refuseNoEffect(result, noEffect, logPath);
+          return finish();
+        }
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
