@@ -261,7 +261,14 @@ async function receivingReceipt(
   });
 }
 
-async function deliverHome(pool: Pool, ref: IdentityJobRef, scope: string, home: number, stage: 'acquired' | 'closed') {
+async function deliverHome(
+  pool: Pool,
+  ref: IdentityJobRef,
+  scope: string,
+  home: number,
+  stage: 'acquired' | 'closed',
+  measured?: Work,
+) {
   try {
     await runCommand(pool, { partition: home }, async (tx) => {
       await measuredQuery(tx, selectControl.sql, [home], measured);

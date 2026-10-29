@@ -96,6 +96,20 @@ async function requireCutover(_ids: string[]) {
 async function storeSnapshot(ids: string[]) {
   return {
     legacy: await f.snapshot(ids),
+    identity: await Promise.all(
+      (
+        await f.admin.query(
+          "SELECT tablename FROM pg_tables WHERE schemaname='semantic' AND left(tablename,15)='identity_epoch_' ORDER BY tablename",
+        )
+      ).rows.map(async ({ tablename }) => ({
+        table: tablename,
+        value: (
+          await f.admin.query(
+            `SELECT md5(coalesce(jsonb_agg(t ORDER BY to_jsonb(t)::text)::text,'null')) digest FROM semantic.${tablename} t`,
+          )
+        ).rows[0].digest,
+      })),
+    ),
     native: (
       await f.admin.query(`SELECT
       (SELECT jsonb_agg(c) FROM semantic.identity_epoch_control c) control,
@@ -106,6 +120,62 @@ async function storeSnapshot(ids: string[]) {
     ).rows[0],
   };
 }
+
+test('stale home effect and fabricated step receipt cannot publish identity epoch', async () => {
+  const original = (await f.create('Unhooked original', 0x6010)).subject.id;
+  const destination = (await f.create('Wrong destination', 0x6020)).subject.id;
+  const job: IdentityJobRef = { jobId: newId(routeOf(original)!), epoch: 1n };
+  const before = await storeSnapshot([original, destination]);
+  await expect(
+    runCommand(f.pool, { partition: home(destination) }, async (tx) => {
+      await store.admitHomeEffect(tx, { kind: 'follow-count', original, terminal: destination, epoch: 0n });
+      return noEffect(null);
+    }),
+  ).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  await expect(
+    runCommand(f.pool, { partition: home(original) }, async (tx) => {
+      await store.admitHomeEffect(tx, { kind: 'structural', original, job });
+      return noEffect(null);
+    }),
+  ).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  const noEffectOutcome = await runCommand(f.pool, { partition: home(original) }, async () => noEffect(null));
+  for (const native of [
+    noEffectOutcome,
+    { ...noEffectOutcome, transactionId: randomUUID() },
+    { ...noEffectOutcome, partition: home(destination) },
+  ]) {
+    await expect(
+      store.reconcileStepReceipt(f.pool, { job, step: 'search-canonical-index', version: 1, native }),
+    ).rejects.toMatchObject({ code: 'identity_step_receipt_invalid' });
+  }
+  await expect(
+    runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
+  ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
+  expect(await storeSnapshot([original, destination])).toEqual(before);
+  const missingHomeId = newId(0xfff0);
+  const missingOwner = (
+    await f.admin.query('DELETE FROM core.partition WHERE partition_no=$1 RETURNING *', [home(missingHomeId)])
+  ).rows[0];
+  try {
+    expect(await store.readMapping(f.pool, missingHomeId)).toEqual({ state: 'unavailable', reason: 'missing-owner' });
+  } finally {
+    await f.admin.query(
+      'INSERT INTO core.partition SELECT * FROM jsonb_populate_record(NULL::core.partition,$1::jsonb)',
+      [JSON.stringify(missingOwner)],
+    );
+  }
+  // A real native owner move must not become absence or ready self.
+  await f.admin.query("UPDATE core.partition SET write_state='moved', moved_to='other-node' WHERE partition_no=$1", [
+    home(original),
+  ]);
+  try {
+    expect(await store.readMapping(f.pool, original)).toEqual({ state: 'unavailable', reason: 'moved-owner' });
+  } finally {
+    await f.admin.query("UPDATE core.partition SET write_state='active', moved_to=NULL WHERE partition_no=$1", [
+      home(original),
+    ]);
+  }
+});
 
 test('bounded bootstrap never infers self or readiness from absent mapping', async () => {
   const original = await seedLegacyRoot(f, 0x5e10);
@@ -279,62 +349,6 @@ test('same native creation transaction initializes exact self and rolls back wit
     }),
   ).rejects.toThrow('same native creation transaction');
   await expect(store.initializeSubject(f.pool, original)).rejects.toThrow('No authorized live command');
-});
-
-test('stale home effect and fabricated step receipt cannot publish identity epoch', async () => {
-  const original = (await f.create('Unhooked original', 0x6010)).subject.id;
-  const destination = (await f.create('Wrong destination', 0x6020)).subject.id;
-  const job: IdentityJobRef = { jobId: newId(routeOf(original)!), epoch: 1n };
-  const before = await storeSnapshot([original, destination]);
-  await expect(
-    runCommand(f.pool, { partition: home(destination) }, async (tx) => {
-      await store.admitHomeEffect(tx, { kind: 'follow-count', original, terminal: destination, epoch: 0n });
-      return noEffect(null);
-    }),
-  ).rejects.toMatchObject({ code: 'identity_effect_stale' });
-  await expect(
-    runCommand(f.pool, { partition: home(original) }, async (tx) => {
-      await store.admitHomeEffect(tx, { kind: 'structural', original, job });
-      return noEffect(null);
-    }),
-  ).rejects.toMatchObject({ code: 'identity_effect_stale' });
-  const noEffectOutcome = await runCommand(f.pool, { partition: home(original) }, async () => noEffect(null));
-  for (const native of [
-    noEffectOutcome,
-    { ...noEffectOutcome, transactionId: randomUUID() },
-    { ...noEffectOutcome, partition: home(destination) },
-  ]) {
-    await expect(
-      store.reconcileStepReceipt(f.pool, { job, step: 'search-canonical-index', version: 1, native }),
-    ).rejects.toMatchObject({ code: 'identity_step_receipt_invalid' });
-  }
-  await expect(
-    runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
-  ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
-  expect(await storeSnapshot([original, destination])).toEqual(before);
-  const missingHomeId = newId(0xfff0);
-  const missingOwner = (
-    await f.admin.query('DELETE FROM core.partition WHERE partition_no=$1 RETURNING *', [home(missingHomeId)])
-  ).rows[0];
-  try {
-    expect(await store.readMapping(f.pool, missingHomeId)).toEqual({ state: 'unavailable', reason: 'missing-owner' });
-  } finally {
-    await f.admin.query(
-      'INSERT INTO core.partition SELECT * FROM jsonb_populate_record(NULL::core.partition,$1::jsonb)',
-      [JSON.stringify(missingOwner)],
-    );
-  }
-  // A real native owner move must not become absence or ready self.
-  await f.admin.query("UPDATE core.partition SET write_state='moved', moved_to='other-node' WHERE partition_no=$1", [
-    home(original),
-  ]);
-  try {
-    expect(await store.readMapping(f.pool, original)).toEqual({ state: 'unavailable', reason: 'moved-owner' });
-  } finally {
-    await f.admin.query("UPDATE core.partition SET write_state='active', moved_to=NULL WHERE partition_no=$1", [
-      home(original),
-    ]);
-  }
 });
 
 test('partition P=1 refuses a second local reservation without effects while disjoint Library members progress', async () => {
