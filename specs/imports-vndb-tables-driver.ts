@@ -49,7 +49,8 @@
  * indexes or INTEGER PRIMARY KEY with an equality/range prefix. No scan, automatic
  * index, temporary sort, OFFSET, whole-state enumeration or historical COUNT.
  * Returned rows count actual get/all/iterate consumption, not examined VM rows.
- * blocks:0 means SQLite buffer counters are unavailable, not zero physical IO.
+ * Actual returned-row/statement counts and bound EQP prove indexed access;
+ * SQLite buffers and physical IO are not measured.
  * Streaming the explicit archive once is O(input bytes), independently asserted.
  * Staging writes equal S, durable bytes <=8*input bytes+4096, buffered rows <=160.
  */

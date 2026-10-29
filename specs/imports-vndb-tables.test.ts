@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { checkBatchWrite } from '@rezics/definitions/bulk';
-import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
+import {
+  type CountedCheck,
+  countedSample,
+  countedViolations,
+} from '../services/kernel/test/support/growth-counters.ts';
 import {
   loadVndbTablesDriver,
   limits,
@@ -149,9 +153,16 @@ function boundedStage(cost: Cost, rows: number) {
   expect(cost.statements).toBeLessThanOrEqual(8 * rows + 16);
   expect(cost.rows).toBeLessThanOrEqual(8 * rows + 16);
 }
-function sample(scale: number, cost: Cost): GrowthSample {
-  // SQLite buffers are unavailable; blocks:0 does not claim zero physical IO.
-  return { scale, cost: { rows: cost.rows, blocks: 0, statements: cost.statements } };
+const sqliteCounts: CountedCheck<Cost> = {
+  read: (cost) => ({ 'sqlite returned rows': cost.rows, 'sqlite statements': cost.statements }),
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
+function sample(scale: number, cost: Cost) {
+  return { scale, counted: countedSample([sqliteCounts.read(cost, scale)]) };
 }
 async function rejected(d: VndbTablesDriver, entries: Entry[]) {
   const before = await Promise.all(['v123', 'v124'].map((key) => d.baseline(key)));
@@ -555,8 +566,8 @@ test('keyset enumeration enforces the fixed page cap and emits each VN exactly o
 });
 
 test('one grouped record uses indexed seeks and constant returned rows and statements at 32 128 and 512 unrelated keys', async () => {
-  const costs: GrowthSample[] = [];
-  const staging: GrowthSample[] = [];
+  const costs: ReturnType<typeof sample>[] = [];
+  const staging: ReturnType<typeof sample>[] = [];
   const storage: Array<{ rows: number; bytes: number }> = [];
   for (const scale of [32, 128, 512]) {
     const d = await loadVndbTablesDriver();
@@ -587,8 +598,8 @@ test('one grouped record uses indexed seeks and constant returned rows and state
   }
   expect(storage[1]).toEqual(storage[0]);
   expect(storage[2]).toEqual(storage[0]);
-  assertGrowth(costs, { rows: 'constant', blocks: 'constant', statements: 'constant' });
-  assertGrowth(staging, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+  expect(countedViolations(sqliteCounts, costs)).toEqual([]);
+  expect(countedViolations(sqliteCounts, staging)).toEqual([]);
 });
 
 test('supported child cardinality grows only with supplied rows through the hard cap and rejects above it', async () => {
