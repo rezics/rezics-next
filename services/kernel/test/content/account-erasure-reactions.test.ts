@@ -210,7 +210,11 @@ test("account erasure clears the account's reactions with their counts and proje
     const id = target.split('/')[1]!;
     if (target.startsWith('subjects/'))
       expect((await call('GET', `/v1/${target}/reaction`, people.bob)).kind).toBe('like');
-    else expect((await call('GET', `/v1/${target}`, people.bob)).post.viewerReaction).toBe('like');
+    else {
+      const fresh = await call('GET', `/v1/${target}`, people.bob);
+      expect(fresh.post.viewerReaction).toBe('like');
+      expect(fresh.post.reactions.like).toBe(1);
+    }
     expect(
       (
         await db.admin.query('SELECT count FROM content.reaction_total WHERE route=$1 AND target_id=$2 AND kind=$3', [
