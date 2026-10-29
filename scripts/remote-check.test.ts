@@ -280,18 +280,14 @@ const multiMarkerPrefix = hostKey + '.multi-marker.';
 const multiMarkerIndex = dir + '/' + hostKey + '.multi-markers-present';
 const landingMarkerPrefix = hostKey + '.landing-marker.';
 const landingMarkerIndex = dir + '/' + hostKey + '.landing-markers-present';
-const readMultiMarkers = () => existsSync(multiMarkerIndex)
-  ? readdirSync(dir)
-      .filter((name) => name.startsWith(multiMarkerPrefix))
-      .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; sequence: number })
-      .sort((left, right) => left.beganAt - right.beganAt || left.sequence - right.sequence)
-  : [];
-const readLandingMarkers = () => existsSync(landingMarkerIndex)
-  ? readdirSync(dir)
-      .filter((name) => name.startsWith(landingMarkerPrefix))
-      .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; arrivalOrder: string; sequence: number })
-      .sort((left, right) => BigInt(left.arrivalOrder) < BigInt(right.arrivalOrder) ? -1 : BigInt(left.arrivalOrder) > BigInt(right.arrivalOrder) ? 1 : left.sequence - right.sequence)
-  : [];
+const readMultiMarkers = () => readdirSync(dir)
+  .filter((name) => name.startsWith(multiMarkerPrefix))
+  .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; sequence: number })
+  .sort((left, right) => left.beganAt - right.beganAt || left.sequence - right.sequence);
+const readLandingMarkers = () => readdirSync(dir)
+  .filter((name) => name.startsWith(landingMarkerPrefix))
+  .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; arrivalOrder: string; sequence: number })
+  .sort((left, right) => Number(left.sequence) - Number(right.sequence));
 const count = (name: string) => {
   const file = dir + '/' + hostKey + '.' + name;
   const seen = existsSync(file) ? Number(readFileSync(file, 'utf8')) : 0;
