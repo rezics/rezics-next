@@ -399,7 +399,7 @@ export class WorkerTasks {
           integration,
           task.base,
           `${logPath}.rebase`,
-          undefined,
+          this.settings.derivedFiles,
           task.brief.paths,
         );
       } catch (error) {
@@ -706,7 +706,7 @@ export class WorkerTasks {
                 integration,
                 task.base,
                 rebaseLog,
-                undefined,
+                this.settings.derivedFiles,
                 task.brief.paths,
               );
             } catch (error) {

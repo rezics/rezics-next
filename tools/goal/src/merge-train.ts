@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
@@ -46,7 +46,6 @@ export type DerivedFile = {
 };
 export type IntegrationCheck = { paths: string[]; command: string[] };
 import { resolveImportConflicts } from './import-conflicts.ts';
-import { resolveInsertedSections } from './section-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
@@ -227,6 +226,20 @@ function derivedForPath(path: string, files: readonly DerivedFile[]): DerivedFil
   return files.filter((file) => matchesPath(path, [file.path]));
 }
 
+function markdownUnionFiles(logPath: string): string[] {
+  if (!existsSync(logPath)) return [];
+  return [
+    ...new Set(
+      readFileSync(logPath, 'utf8')
+        .split(/\r?\n/)
+        .flatMap(
+          (line) =>
+            line.match(/^Rebase resolved mechanical conflicts: .*; Markdown union: (.+)$/)?.[1]?.split(', ') ?? [],
+        ),
+    ),
+  ];
+}
+
 function changedWorkingFiles(cwd: string): string[] {
   const tracked = spawnSync('git', ['diff', '--name-only', '-z', 'HEAD', '--'], { cwd, encoding: 'utf8' });
   const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd, encoding: 'utf8' });
@@ -391,22 +404,69 @@ function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: 
 }
 
 /**
- * Resolve conflicts that have exactly one safe resolution: import-only hunks in code and insert-only hunks in Markdown.
+ * Resolve import-only hunks in code and union Markdown conflicts for review after the ordinary landing checks.
  * Returns false, leaving every file for a person, when any file holds another kind of conflict.
  */
 export function resolveMechanicalConflicts(
   cwd: string,
   paths: readonly string[],
   formatCommand?: readonly string[],
-): boolean {
+  markdown: 'insertions' | 'union' = 'insertions',
+): string[] | false {
   const resolved = new Map<string, string>();
+  const unionResolved: string[] = [];
   for (const file of paths) {
     const path = join(cwd, file);
     if (!existsSync(path)) return false;
     let text: string | undefined;
     if (file.endsWith('.md')) {
-      git(cwd, 'checkout', '--conflict=diff3', '--', file);
-      text = resolveInsertedSections(readFileSync(path, 'utf8'));
+      const stages = ([1, 2, 3] as const).map((stage) => {
+        const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
+        if (stage === 1 && result.status !== 0) return '';
+        if (result.status !== 0) throw new Error(`Cannot read conflict stage ${stage} for ${file}`);
+        return result.stdout;
+      });
+      mkdirSync(join(cwd, '.temp'), { recursive: true });
+      const scratch = mkdtempSync(join(cwd, '.temp', 'markdown-union-'));
+      try {
+        const [base, ours, theirs] = stages;
+        const basePath = join(scratch, 'base');
+        const oursPath = join(scratch, 'ours');
+        const theirsPath = join(scratch, 'theirs');
+        writeFileSync(basePath, base!);
+        writeFileSync(oursPath, ours!);
+        writeFileSync(theirsPath, theirs!);
+        // Stabilize-to-dev merges retain their existing insertion-only policy. Rebases explicitly request union.
+        if (markdown === 'insertions') {
+          const analysis = spawnSync('git', ['merge-file', '--diff3', '-p', oursPath, basePath, theirsPath], {
+            cwd,
+            encoding: 'utf8',
+          });
+          const bases = [...analysis.stdout.matchAll(/^\|{7} [^\n]*\n([\s\S]*?)^=======$/gm)];
+          const conflicts = [...analysis.stdout.matchAll(/^<{7} /gm)].length;
+          if (
+            analysis.status === null ||
+            analysis.status < 1 ||
+            analysis.status > 127 ||
+            !conflicts ||
+            bases.length !== conflicts ||
+            bases.some((match) => match[1]!.trim().length > 0)
+          )
+            return false;
+        }
+        const merged = spawnSync('git', ['merge-file', '--union', '-p', oursPath, basePath, theirsPath], {
+          cwd,
+          encoding: 'utf8',
+        });
+        // `--union` writes both sides' conflicting lines but still exits 1 to report that the inputs overlapped.
+        // Treat that expected conflict status as a successful resolution; higher statuses indicate a tool error.
+        if (merged.status === null || merged.status > 1) return false;
+        // Preserve Markdown heading separators until the landing's ordinary formatter runs.
+        text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+        unionResolved.push(file);
+      } finally {
+        rmSync(scratch, { recursive: true, force: true });
+      }
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
     resolved.set(path, text);
@@ -415,7 +475,7 @@ export function resolveMechanicalConflicts(
   const format = formatCommand ?? [join(cwd, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
   if (!format[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(format[0]!))
     spawnSync(format[0]!, [...format.slice(1), ...paths], { cwd, encoding: 'utf8' });
-  return true;
+  return unionResolved;
 }
 
 function rebaseWithDerivedFiles(
@@ -437,12 +497,12 @@ function rebaseWithDerivedFiles(
       // merged manifests, and commit that result as part of the rebased landing.
       const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files).length > 0);
       const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
-      // A generated-file regeneration is safe only when it accounts for every conflict. A mixed conflict
-      // must stay with the worker instead of silently choosing either side for part of the change.
-      if (derivedConflicts.length && textConflicts.length) return rebaseError;
+      // Validate all ordinary conflicts before choosing a generated side or running a generator.
       if (textConflicts.length) {
-        if (!resolveMechanicalConflicts(cwd, textConflicts)) return rebaseError;
-        appendFileSync(logPath, `Rebase resolved import-only and insert-only conflicts: ${textConflicts.join(', ')}\n`);
+        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union');
+        if (!unionResolved) return rebaseError;
+        const markdownUnion = unionResolved.length ? `; Markdown union: ${unionResolved.join(', ')}` : '';
+        appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${textConflicts.join(', ')}${markdownUnion}\n`);
         stagePaths(cwd, new Set(textConflicts));
       }
 
@@ -1991,12 +2051,18 @@ export class MergeTrain {
         result.mergedCommit = candidate;
         this.notifyOwnersOfOutsideChanges(
           request,
-          outsideScope(
-            (workspace ? taskChangedPaths(sharedStore!.task(request.taskId), tip) : (result.changedFiles ?? [])).filter(
-              (path) => !derivedForPath(path, derivedFiles).length,
-            ),
-            request.declaredPaths,
-          ),
+          [
+            ...new Set([
+              ...outsideScope(
+                (workspace
+                  ? taskChangedPaths(sharedStore!.task(request.taskId), tip)
+                  : (result.changedFiles ?? [])
+                ).filter((path) => !derivedForPath(path, derivedFiles).length),
+                request.declaredPaths,
+              ),
+              ...markdownUnionFiles(logPath),
+            ]),
+          ],
           candidate,
           targetBranch,
           logPath,
@@ -2417,13 +2483,27 @@ export class MergeTrain {
     branch: string,
     logPath: string,
   ): void {
-    if (!files.length) return;
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
     const owned = shared || !existsSync(path) ? undefined : openDb(path);
     const db = shared ?? owned;
     if (!db) return;
     try {
+      // A retry may have resolved the Markdown before the train saw it. Carry that evidence into the landing
+      // log so batch and single landings send the same notice, including to this task's own Goal.
+      const unionFiles = new Set(markdownUnionFiles(logPath));
+      for (const row of db
+        .query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt<=?')
+        .all(request.taskId, request.attempt) as { body: string }[]) {
+        const attempt = JSON.parse(row.body) as { logPath: string };
+        for (const file of markdownUnionFiles(`${attempt.logPath}.rebase`)) {
+          if (unionFiles.has(file)) continue;
+          unionFiles.add(file);
+          appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${file}; Markdown union: ${file}\n`);
+        }
+      }
+      const noticedFiles = [...new Set([...files, ...unionFiles])];
+      if (!noticedFiles.length) return;
       type Row = { id: string; state?: string; brief?: { goal?: string; manager?: string; paths?: string[] } };
       const tasks = (db.query('SELECT body FROM worker_tasks').all() as { body: string }[])
         .map((row) => JSON.parse(row.body) as Row)
@@ -2431,7 +2511,7 @@ export class MergeTrain {
       const own = tasks.find((task) => task.id === request.taskId)?.brief?.goal;
       const literal = (pattern: string) => pattern.split(/[*?[{]/, 1)[0]!.length;
       const byManager = new Map<string, string[]>();
-      for (const file of files) {
+      for (const file of noticedFiles) {
         let best = -1;
         let owners = new Set<string>();
         let goals = new Set<string>();
@@ -2450,7 +2530,7 @@ export class MergeTrain {
             }
           }
         }
-        if (own && goals.has(own)) continue;
+        if (own && goals.has(own) && !unionFiles.has(file)) continue;
         for (const manager of owners) byManager.set(manager, [...(byManager.get(manager) ?? []), file]);
       }
       if (!byManager.size) return;
@@ -2459,11 +2539,15 @@ export class MergeTrain {
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
       );
       for (const [manager, changed] of byManager) {
-        const summary =
-          `Task ${request.taskId}${own ? ` (${own})` : ''} changed files your tasks declare, outside its own paths, now on ${branch} ${commit}: ${changed.join(', ')}. Its landing ran only its own acceptance: check these against your tests.`.replace(
-            /[\r\n]+/g,
-            ' ',
-          );
+        const unions = changed.filter((file) => unionFiles.has(file));
+        const outside = changed.filter((file) => !unionFiles.has(file));
+        const summary = (
+          `Task ${request.taskId}${own ? ` (${own})` : ''} ` +
+          (outside.length
+            ? `changed files your tasks declare, outside its own paths, now on ${branch} ${commit}: ${outside.join(', ')}. Its landing ran only its own acceptance: check these against your tests.`
+            : `landed on ${branch} ${commit}.`) +
+          (unions.length ? ` Markdown union: ${unions.join(', ')}. Review section ordering.` : '')
+        ).replace(/[\r\n]+/g, ' ');
         inbox.deliver({ managerId: manager, taskId: request.taskId, kind: 'instruction', summary });
         appendFileSync(logPath, `Told ${manager} of changes to its files: ${changed.join(', ')}\n`);
       }
