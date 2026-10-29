@@ -19,7 +19,7 @@ const suggestions: unknown[] = [];
 const search: SearchService = {
   async search(_principal, request) {
     searches.push(request);
-    return { subjects: [], total: { value: 0, relation: 'exact' }, next: null, as_of: '2026-10-26T00:00:00Z' };
+    return { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };
   },
   async facets() {
     throw new Error('Unexpected facets call');
