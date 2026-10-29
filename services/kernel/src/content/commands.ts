@@ -52,7 +52,6 @@ import insertPost from './create-post.sql';
 import insertRevision from './create-revision.sql';
 import updateHead from './update-head.sql';
 import readReviewVote from './read-review-vote.sql';
-import liveReviewRead from './live-review-read.sql';
 
 export type { ReviewVoteCitation } from './model.ts';
 
@@ -126,7 +125,7 @@ export class RevisionPreconditionError extends Error {
   }
 }
 export class ReviewConflictError extends Error {
-  constructor(readonly existingThreadId?: string) {
+  constructor() {
     super('The author already has a live review of this subject on the board');
     this.name = 'ReviewConflictError';
   }
@@ -749,18 +748,7 @@ export async function createThread(
       },
     );
   } catch (error) {
-    if (postgresConstraint(error) === 'thread_one_live_review_idx') {
-      // runCommand has rolled back and released its connection before this point read.
-      const existing = await withConnection(dependencies.pool, (client) =>
-        liveReviewRead.run(client, {
-          route: target.route,
-          board_id: board.id,
-          author_id: author.accountId,
-          subject_id: body.subjectIds[0]!,
-        }),
-      );
-      throw new ReviewConflictError(existing?.thread_id);
-    }
+    if (postgresConstraint(error) === 'thread_one_live_review_idx') throw new ReviewConflictError();
     throw error;
   }
 }
