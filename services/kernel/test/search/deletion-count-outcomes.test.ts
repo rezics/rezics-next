@@ -100,6 +100,12 @@ function expectedFacetValues(author: Subject, visible: boolean): Record<string, 
   };
 }
 
+function requiredFacetValues(values: Record<string, FacetValue[]>, property: string): FacetValue[] {
+  const expected = values[property];
+  if (expected === undefined) throw new Error(`Unexpected facet property: ${property}`);
+  return expected;
+}
+
 async function views(driver: SearchDriver, persona: Persona, marker: string) {
   return [
     await driver.request(persona, 'POST', '/v1/subjects:search', { text: marker, filter: bookFilter, limit: 1 }),
@@ -134,15 +140,16 @@ function safe(responses: HttpResponse[], removed: Subject, visible: Subject[], a
       expect(facets.map(({ property }) => property).sort()).toEqual([...properties].sort());
       for (const facet of facets) {
         expect(facet).not.toHaveProperty('relation');
-        const expected = expectedFacetValues(author, true)[facet.property];
-        expect(expected).toBeDefined();
+        const expected = requiredFacetValues(expectedFacetValues(author, true), facet.property);
         expect(Array.isArray(facet.values)).toBe(true);
         expect(new Set(facet.values.map(({ value }) => value)).size).toBe(facet.values.length);
         if (visible.length === 0 || converged) {
           expect(facet.values).toEqual(visible.length > 0 ? expected : []);
         } else {
           expect(facet.values.length).toBeLessThanOrEqual(1);
-          for (const bucket of facet.values) expect(bucket).toEqual(expected[0]);
+          const expectedValue = expected[0];
+          if (expectedValue === undefined) throw new Error(`Expected a visible value for ${facet.property}`);
+          for (const bucket of facet.values) expect(bucket).toEqual(expectedValue);
         }
         for (const bucket of facet.values) expect(bucket).not.toHaveProperty('count');
       }
@@ -234,7 +241,7 @@ for (const mode of ['hidden', 'taken_down'] as const) {
           const originalValues = expectedFacetValues(author, true);
           for (const facet of facets) {
             expect(facet).not.toHaveProperty('relation');
-            expect(facet.values).toEqual(originalValues[facet.property]);
+            expect(facet.values).toEqual(requiredFacetValues(originalValues, facet.property));
             for (const value of facet.values) expect(value).not.toHaveProperty('count');
           }
           sessions.set(
