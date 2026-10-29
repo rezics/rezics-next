@@ -83,8 +83,12 @@ function changed(accountId: string) {
 }
 async function remove(pool: Pool, accountId: string, route: number, row: Locator) {
   await runCommand(pool, { partition: partitionOf(route), basis: COMMUNITY_PLATFORM_BASIS }, async (tx) => {
-    const result = await removeLocator.run(tx, { ...row, route, account_id: accountId });
-    return result ? { value: null, events: [changed(accountId)] } : noEffect(null);
+    const parameters = { ...row, route, account_id: accountId };
+    const result = await tx.query(
+      removeLocator.sql,
+      removeLocator.params.map((name) => parameters[name]),
+    );
+    return result.rowCount ? { value: null, events: [changed(accountId)] } : noEffect(null);
   });
 }
 /** Terminal workflows no longer need the initiator. Missing/nonterminal work keeps its source and locator.
@@ -138,12 +142,21 @@ export async function eraseAccountCommunityRecordsPage(
         let kept: string | null = null;
         let affected = 0;
         if (row.kind === 'ban_actor') {
-          const result = await eraseBan.run(tx, params);
-          affected = result.length;
-          kept = result[0]?.kept_until ?? null;
-        } else if (row.kind === 'ban_target') affected = (await eraseTarget.run(tx, params)).length;
-        else if (row.kind === 'verdict') affected = (await eraseVerdict.run(tx, params)).length;
-        else affected = (await eraseOperation.run(tx, params)).length;
+          const result = await tx.query<{ kept_until: string | null }>(
+            eraseBan.sql,
+            eraseBan.params.map((name) => params[name]),
+          );
+          affected = result.rowCount ?? 0;
+          kept = result.rows[0]?.kept_until ?? null;
+        } else {
+          const statement =
+            row.kind === 'ban_target' ? eraseTarget : row.kind === 'verdict' ? eraseVerdict : eraseOperation;
+          const result = await tx.query(
+            statement.sql,
+            statement.params.map((name) => params[name]),
+          );
+          affected = result.rowCount ?? 0;
+        }
         return affected ? { value: kept, events: [changed(accountId)] } : noEffect(kept);
       },
     );
@@ -167,8 +180,12 @@ export async function purgeAccountBanReasonsPage(
   );
   for (const row of rows) {
     await runCommand(pool, { partition: partitionOf(row.owner_route), basis: COMMUNITY_PLATFORM_BASIS }, async (tx) => {
-      const result = await eraseBan.run(tx, { ...key, ...row, purge: true });
-      return result.length ? { value: null, events: [changed(accountId)] } : noEffect(null);
+      const parameters = { ...key, ...row, purge: true };
+      const result = await tx.query(
+        eraseBan.sql,
+        eraseBan.params.map((name) => parameters[name]),
+      );
+      return result.rowCount ? { value: null, events: [changed(accountId)] } : noEffect(null);
     });
     await remove(pool, accountId, key.route, row);
   }

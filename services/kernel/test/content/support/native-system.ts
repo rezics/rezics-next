@@ -352,7 +352,6 @@ async function createNativeContentSystemWithOptions(
         refresh: async ({ refreshToken }) => credential(await requestAuth('/token', {}, refreshToken)),
       },
       nativeAuth,
-
       access,
       actions,
       clock: { setCommandTime: setTime, setCursorVerificationTime: setTime },

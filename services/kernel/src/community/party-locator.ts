@@ -62,8 +62,12 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
           pool,
           { partition: partitionOf(accountRoute), basis: COMMUNITY_PLATFORM_BASIS },
           async (tx) => {
-            const inserted = await upsert.run(tx, { ...row, route: accountRoute });
-            if (!inserted) return noEffect(null);
+            const parameters = { ...row, route: accountRoute };
+            const inserted = await tx.query(
+              upsert.sql,
+              upsert.params.map((name) => parameters[name]),
+            );
+            if (inserted.rowCount === 0) return noEffect(null);
             return {
               value: null,
               events: [
