@@ -205,11 +205,16 @@ test('effects relay discovery stays within its bound as outbox history grows', a
         }
       },
       prepare: async (db) => {
+        const head = await db.admin.query<{ position: string }>(
+          'SELECT position::text FROM core.partition WHERE partition_no = $1',
+          [hot],
+        );
+        const currentHead = BigInt(head.rows[0]!.position);
         await db.admin.query(
           `UPDATE core.consumer_checkpoint
            SET epoch = CASE WHEN $3::bigint = 0 THEN NULL ELSE epoch END, position = $3
            WHERE consumer = $1 AND partition_no = $2`,
-          [consumerName, hot, String(BigInt(hotHead!) - 1n)],
+          [consumerName, hot, String(currentHead - 1n)],
         );
         let measured;
         try {
@@ -220,7 +225,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
           await db.admin.query(
             `UPDATE core.consumer_checkpoint
              SET epoch = 1, position = $3 WHERE consumer = $1 AND partition_no = $2`,
-            [consumerName, hot, hotHead],
+            [consumerName, hot, currentHead.toString()],
           );
         }
         const nodes: Record<string, unknown>[] = [];
@@ -264,7 +269,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
             throw new Error(`expected only hot partition ${hot}, found ${discovered.map((row) => row.partition_no)}`);
           const result = await relay.run(hot);
           if (result.status !== 'read' || result.envelopes !== 1)
-            throw new Error(`expected one effects batch, received ${JSON.stringify(result)}`);
+            throw new Error(`expected one effects batch, received ${result.status}/${result.envelopes}`);
           return result;
         });
       },
