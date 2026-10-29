@@ -55,52 +55,93 @@ resolution, empty native observations are empty, without invented effect proof.
 
 ## Verification state
 
-Implementation was committed before submitting both managed checks at code
-revision `efc2a94c69`:
+The tested implementation revision is `329400add0`. Both managed checks returned
+terminal results; no checks remain pending:
 
-- Native acceptance: `bf8c1266-33e7-48c2-bf83-5d4bd3ae39fe`, command
-  `bun run --cwd services/kernel check test/imports/vndb-statistics-outcomes.test.ts test/imports/vndb-cli-native.test.ts`.
-  Log: `.temp/goal/checks/worker-check-2026-10-29T18-43-06.755Z-25b9cf8b.log`.
-- Required root typecheck: `54086601-21a1-4f38-bfa6-1421c7e2a89b`, command
-  `bun scripts/typecheck.ts`.
-  Log: `.temp/goal/checks/worker-check-2026-10-29T18-43-06.563Z-1891e585.log`.
+- Native acceptance `4c8e4de6-b32d-48af-bd67-2361e322247f`: exit 1.
+  Command: `bun run --cwd services/kernel check test/imports/vndb-statistics-outcomes.test.ts test/imports/vndb-cli-native.test.ts`.
+  Log: `.temp/goal/checks/worker-check-2026-10-29T21-53-06.635Z-d9e18c06.log`.
+- Root typecheck `63e5d497-4506-46d5-a45d-f8fae1a4cf5a`: exit 0, all 13 workspaces.
+  Command: `bun scripts/typecheck.ts`.
+  Log: `.temp/goal/checks/worker-check-2026-10-29T21-53-06.840Z-d3003901.log`.
 
-The completion handoff reported each as `exit status running; check failed without
-a summary`, while stating all checks had finished. Both supplied logs contain
-only admission queue/load messages, with no child suite output, terminal exit
-status, pass/fail count, typecheck diagnostic or first reached assertion.
-Admission waiting itself is queued work, not a test failure. The concrete tool
-blocker is a completion handoff without terminal results; the maintainer required
-finishing without another wait, poll or duplicate check submission.
+The wrapper and its unchanged child both used Bun
+`v1.4.4-canary.1 (a0cc096ce)`. Child output reports `4 pass`, `2 fail`,
+`67 expect() calls`, six tests, exit 1; no skip/todo is reported. The full six
+names above correspond to pass, fail, fail, pass, pass, pass respectively. The
+wrapper correctly fails its child-exit assertion (`Expected: 0`, `Received: 1`);
+it does not count these four passes as delivery. Both declared native files fail.
+Earlier compilation errors in source-literal typing, conversion type import and
+required archive progress callback were corrected before this tested revision.
 
-The authorized retry against committed revision `aae205b053` produced terminal
-results. Native check `fc7e0670-d77d-4c60-a1bd-1e92d0997eb4` and root typecheck
-`b3cc79ff-07fb-4d41-9a33-1abf7ea54a07` both exited 1. The first diagnostic was
-`test/imports/vndb-cli-native.test.ts(230,49): error TS2769: No overload matches this call.`
-The expected source literal widened to string. Root typecheck also found the
-kernel test's unavailable package alias and required archive progress callback.
-These are binding defects, before any child/native outcome assertion. The fixes
-retain the source literal type, use the existing relative conversion type import,
-and supply the required callback without inventing byte/growth observations.
-No assertion, source bytes, runtime policy or production path changed.
+The first top-level assertion is the CLI invocation's exit-code assertion at
+`services/kernel/test/imports/vndb-cli-native.test.ts:185`, called by the changed
+mean/lost-ACK invocation at line 246. It received code 1 instead of 0, with:
 
-Retry logs are `.temp/goal/checks/worker-check-2026-10-29T20-39-33.185Z-1e181978.log`
-and `.temp/goal/checks/worker-check-2026-10-29T20-39-48.939Z-6da7bc30.log`.
+```text
+Import failed; durable state is retained for resume.
+new=0 changed=0 unchanged=1 vanished=0 skipped=0
+```
 
-No native pass, reached product failure, receipt/state observation or root
-typecheck result is claimed. The source inspection pins catalogue version 1.0.0,
-converter `vndb@7`, source date 2026-10-25 and synthetic native entry revision 7;
-runtime bundle digest and actual native receipt/event/transaction evidence remain
-unobserved until the queued native caller executes. Its intended output records
-those values, without treating them as already observed.
+Initial CLI publication and its unchanged close/reopen assertions had already
+passed: actual seven-scope account-key Auth, bulk identity, one statistic PUT,
+anonymous GET, exact stored DTO, one anchored event/receipt, zero native votes,
+two-record maintained baseline and unchanged bulk receipts. The later CLI
+revocation assertions and final evidence logger were not reached. Consequently
+the runtime bundle digest and final CLI aggregate counters were not printed;
+source inspection pins catalogue version 1.0.0, converter `vndb@7`, source date
+2026-10-25 and synthetic native entry revision 7. No runtime digest is invented.
+
+The first child failure is at `specs/imports-vndb-statistics.test.ts:171`, before
+its committed-outcome assertion at line 172: changed mean 8.1 at unchanged entry
+revision produces `bulk-failed` / `Durable operations remain unresolved`.
+The capture records exactly one PUT with real status 200 and returned mean 8.1,
+count 20, source date/licence/attribution intact, and a persisted receipt:
+
+```json
+{"partition_no":1210,"principal_kind":"account","principal_id":"764ada75-62ac-8c41-a37c-58058c0cfe2a","command_kind":"rating.source_statistic.write","idempotency_key":"vndb:v123:d677da99d170a365b64452e4872ca72bcd3f46a0ba1878d157fcaf7c6bb788fd"}
+```
+
+The ordinary Importer's empty-plan branch at
+`services/importer/src/importer.ts:688-694` rejects a conversion with retained
+proposals and no other final plan, despite the preceding statistic write. This
+is the source-inspection explanation consistent with the capture; the Importer
+catches the inner exception, so the native log does not expose its inner stack.
+The changed case's subsequent transaction/event/baseline assertions were not
+reached and are not claimed.
+
+The second child failure is at `specs/imports-vndb-statistics.test.ts:192`, before
+its committed-outcome and retry-count assertions at lines 193-195. The boundary
+captured one actual status-200 statistic response with mean 7.35 and marked
+`responseLost: true` only after finding the persisted receipt:
+
+```json
+{"partition_no":3920,"principal_kind":"account","principal_id":"764ada75-62ac-8c41-a37c-44288c0cfe2a","command_kind":"rating.source_statistic.write","idempotency_key":"vndb:v123:c31277a492cb1976a61d6382473dfdb48d29a5dd8a41b9d3af1c5deabe330c57"}
+```
+
+No second PUT occurred; the run returned the same unresolved-work diagnostic.
+`services/importer/src/import-fetch.ts:45-47` admits GET/HEAD and keyed POST for
+retry and rejects PUT. This is incompatible with the frozen committed-response
+loss requirement, while this binding contract expressly forbids changing retry
+policy or correcting the production algorithm. No manual retry, fabricated
+success, fixture/assertion change or policy relaxation was used.
+
+The four passing frozen cases establish initial native statistic publication,
+zero-vote absence, real reduced-scope denial, same-bearer grant-revocation receipt
+denial, and acquisition/mass-loss baseline protection within their exact frozen
+assertions. The initial case checks real storage, current transaction, one
+historical event/receipt and zero native votes. Exact transaction/event IDs are
+not printed on its passing path, so this report does not invent them. The changed
+and uncertain-ACK requirements remain red. Their production behavior predates
+the binding; the missing tests cannot run on a base without this new driver, so
+no base-pass or base-fail result is claimed.
 
 An independent authorization/disclosure/rights review found no blocking defect in
-the binding. It confirmed the expected PUT retry-policy mismatch and clarified
-that the baseline port aliases a maintained generation pointer, not a content hash.
-
-Inspection identified that `createImportFetch.mayRetry` admits GET/HEAD and keyed
-POST, and returns false for PUT. The binding leaves this existing retry policy
-unchanged so the native lost-response assertion can expose the actual outcome.
+the binding. It identified the PUT retry-policy mismatch and clarified that the
+baseline port aliases a maintained generation pointer, not a content hash.
+The two frozen hashes above were verified unchanged after execution. This final
+report records reached native product conflicts, replacing the earlier missing
+terminal handoff and compile-only evidence; it does not request another check.
 
 ## Cost and limits
 
@@ -129,6 +170,8 @@ API runtime/identity support and native CLI Auth reference; production archive,
 VNDB table store, registration, Importer, RunStore, transport/credentials/CLI;
 rating routes/statistic SQL, receipt/key/outbox conventions; pinned fixtures,
 VNDB rights README and source inventory; both adopted measurement inventories.
-No external reference implementation was needed or used. No files outside the
-declared paths changed. No all-VNDB, all-source, discovery, privacy, metadata,
+No external reference implementation was needed or used. The implementation changes only declared paths. The inherited controller
+checkpoint also contains `apps/auth/project.inlang/.lix/README.md` and
+`apps/web/project.inlang/.lix/README.md`, generated localization README files;
+this implementation did not edit them or any other outside-path file. No all-VNDB, all-source, discovery, privacy, metadata,
 fourteen-case table binding, native growth or main promotion claim follows.
