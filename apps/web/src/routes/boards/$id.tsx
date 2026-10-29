@@ -35,8 +35,8 @@ function threadOpeningWords(body: unknown): string | undefined {
     if (!value || typeof value !== 'object') continue;
     const record = value as Record<string, unknown>;
     if (typeof record.text === 'string' && record.text.trim()) {
-      const words = record.text.trim().split(/\s+/u).slice(0, 8).join(' ');
-      return Array.from(words).slice(0, 64).join('');
+      const words = record.text.trim().split(/\s+/u).slice(0, 12).join(' ');
+      return Array.from(words).slice(0, 80).join('');
     }
     for (const child of Object.values(record).reverse()) {
       if (child && typeof child === 'object') pending.push(child);
