@@ -54,6 +54,26 @@ for (const person of ['other people', 'same person history'] as const) {
           // unavailable Access acknowledgement. Access floor remains unchanged.
           expect((await h.request('/consent', { client_id: f.clientId, scope: [] }, f.cookie)).status).toBe(503);
         }
+        function exerciseFixture(targetId: string) {
+          const target = { ...f.target, id: targetId };
+          return {
+            ...f,
+            target,
+            anchor: {
+              resource: target,
+              async validate(client: Parameters<NonNullable<typeof f.anchor.validate>>[0]) {
+                return (
+                  (
+                    await client.query('SELECT active FROM durable_test.authority WHERE route=$1 AND id=$2', [
+                      target.route,
+                      target.id,
+                    ])
+                  ).rows[0]?.active === true
+                );
+              },
+            },
+          };
+        }
         async function operation(runFixture = f) {
           if (mode === 'revoked replay') {
             await expect(h.step(runFixture, { key: replayKey })).rejects.toThrow();
@@ -166,15 +186,10 @@ for (const person of ['other people', 'same person history'] as const) {
               await db.admin.query(`VACUUM (ANALYZE) ${table}`);
           },
           operation: async (_db, _scale, repetition) =>
-            operation({
-              ...f,
-              target: { ...f.target, id: exerciseTargets[repetition]! },
-            }),
+            operation(exerciseFixture(exerciseTargets[repetition]!)),
         });
         expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
-        const observed = await capture(h.db, () =>
-          operation({ ...f, target: { ...f.target, id: exerciseTargets[12]! } }),
-        );
+        const observed = await capture(h.db, () => operation(exerciseFixture(exerciseTargets[12]!)));
         const statements = observed.capture.statements;
         for (const pattern of [
           /FROM durable_test.operation/,
