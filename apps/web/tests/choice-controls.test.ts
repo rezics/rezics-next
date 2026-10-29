@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 
-const root = join(import.meta.dir, '..', '..');
+const root = join(import.meta.dir, '..', '..', '..');
 
 async function sourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
