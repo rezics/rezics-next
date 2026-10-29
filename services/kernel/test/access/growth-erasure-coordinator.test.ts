@@ -284,6 +284,14 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
     const accountId = newId(route);
     const partition = partitionOf(route);
     const workflowId = `erasure-growth-held:${accountId}`;
+    const explainFrontier = async () => {
+      const input: Record<string, unknown> = { queue: LOCATOR_EFFECTS_QUEUE, route, account_id: accountId };
+      const { rows } = await db.admin.query(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${frontierWork.sql}`,
+        frontierWork.params.map((name) => input[name]),
+      );
+      return JSON.stringify(rows[0]);
+    };
     const report = await checkGrowth(db, {
       name: `erasure completion ${phase}`,
       scales,
@@ -350,6 +358,10 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
       async operation(database) {
         expect((await advanceErasureCompletion({ pool: database.pool }, accountId)).value).toBe(false);
       },
+    }).catch(async (error: unknown) => {
+      // Preserve the real plan when the cost gate fails before the explicit index assertions below.
+      console.error(`Erasure frontier plan (${phase}): ${await explainFrontier()}`);
+      throw error;
     });
     expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
     expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
@@ -360,12 +372,7 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
     }
     if (phase === 'locator') {
       // Explain the exact product SQL with its real parameters; never force an index or a planner setting.
-      const input: Record<string, unknown> = { queue: LOCATOR_EFFECTS_QUEUE, route, account_id: accountId };
-      const { rows } = await db.admin.query(
-        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${frontierWork.sql}`,
-        frontierWork.params.map((name) => input[name]),
-      );
-      const plan = JSON.stringify(rows[0]);
+      const plan = await explainFrontier();
       expect(plan).toContain('idx_workflow_status_in_flight_v2');
       expect(plan).not.toContain('Seq Scan');
       const searches = Array.from(plan.matchAll(/"Index Searches":(\d+)/g), (match) => Number(match[1]));
