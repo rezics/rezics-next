@@ -128,5 +128,21 @@ across the red, recovered green and subsequent blue journey.
 
 Decision: preserve the already frozen case and revalidate it once, together with the affected kernel typecheck
 and the nonempty artifact delivery command. Only this report changes; no outside-path files change.
-Current check results will be recorded after manager-delivered completion. Historical evidence above remains
-attributed to its original execution and is not presented as a new run.
+Historical evidence above remains attributed to its original execution and is not presented as a new run.
+
+Current execution revision: `ee335bd9fe`. All three prescribed launches returned exit 1 immediately with
+`Invalid check id: --`, before creating a check ID or executing any compiler, test or artifact command:
+
+```sh
+bun scripts/worker-check.ts --run -- bun run --cwd services/kernel check test/imports/cover-recovery-pixels.test.ts
+bun scripts/worker-check.ts --run -- bun run --cwd services/kernel typecheck
+bun scripts/worker-check.ts --run -- test -s docs/research/imports-audit/cover-recovery-pixels.md
+```
+
+This is one initial tooling attempt and two further attempts of the mandated launch syntax; no further retry
+was made. Inspection of the actual CLI shows `--run` consumes its next argument as an existing check ID;
+command submission instead uses its default branch. Therefore the contract's required `--run -- <command...>`
+syntax cannot submit a check on this base. No checks were queued, no tests were rerun, and no new native
+command/result/receipt or assertion count was produced. The frozen test hash remains unchanged. Changing the
+runner or silently substituting another launch protocol is outside this witness-only contract. The tool failure
+blocks current revalidation; the historical passing combined witness remains preserved.
