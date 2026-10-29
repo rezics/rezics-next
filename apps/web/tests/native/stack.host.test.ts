@@ -5,7 +5,7 @@ import { startNativeWebStack } from './stack.ts';
 const stacks: Awaited<ReturnType<typeof startNativeWebStack>>[] = [];
 afterEach(async () => {
   for (const stack of stacks.splice(0)) await stack.stop();
-});
+}, 120_000);
 
 async function semanticDatabases(databaseUrl: string): Promise<string[]> {
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
@@ -31,20 +31,36 @@ describe('native web stack', () => {
 
     const active = await stack.kernel('/v1/definitions/active');
     expect(active.status).toBe(200);
-    const createdResponse = await stack.kernel('/v1/subjects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
-      body: JSON.stringify({ type: 'schema:Book', labels: { en: 'Native stack subject' } }),
-    }, 'editor');
+    const label = 'Native stack subject';
+    const createdResponse = await stack.kernel(
+      '/v1/subjects',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
+        body: JSON.stringify({ type: 'schema:Book', labels: { en: label } }),
+      },
+      'editor',
+    );
     expect(createdResponse.status).toBe(201);
-    const created = await createdResponse.json() as { id: string };
-    const canonicalUrl = `${stack.web}/en/subjects/${created.id}_native-stack-subject`;
+    const { subject } = (await createdResponse.json()) as { subject: { id: string } };
+    const { subjectHref } = await import('../../src/subject/subject-href.ts');
+    const canonicalPath = subjectHref({ id: subject.id, label }, 'en').href;
+    const canonicalUrl = `${stack.web}${canonicalPath}`;
 
     const pageStart = stack.kernelRequests().length;
     const page = await stack.request(canonicalUrl);
     const pageStatus = page.status;
     const pageHeaders = [...page.headers.entries()].sort(([a], [b]) => a.localeCompare(b));
     const pageBody = await page.text();
+    if (pageStatus !== 200)
+      console.error(
+        'Native subject page failed',
+        canonicalUrl,
+        stack
+          .kernelRequests()
+          .slice(pageStart)
+          .map(({ method, url, failure }) => ({ method, url, failure })),
+      );
     expect(pageStatus).toBe(200);
     expect(pageHeaders.find(([name]) => name === 'content-type')?.[1]).toContain('text/html');
     expect(pageBody).toContain('<title>Native stack subject');
@@ -54,27 +70,50 @@ describe('native web stack', () => {
     const peakMemoryBytes = stack.peakMemoryBytes();
     expect(peakMemoryBytes).toBeGreaterThan(0);
 
-    const stale = await stack.request(`${stack.web}/en/subjects/${created.id}_old-title`);
-    expect(stale.status).toBe(308);
-    expect(stale.headers.get('location')).toContain(`${created.id}_native-stack-subject`);
+    const stale = await stack.request(`${stack.web}/en/subjects/${subject.id}/old-title`);
+    expect(stale.status).toBe(301);
+    expect(new URL(stale.headers.get('location')!, stack.web).pathname).toBe(canonicalPath);
 
+    const openedLibrary = await stack.kernel(
+      '/v1/platform/exposure/personal_library:open',
+      { method: 'POST', headers: { 'idempotency-key': `"${crypto.randomUUID()}"` } },
+      'governor',
+    );
+    expect(openedLibrary.status).toBe(200);
     const credentials = await stack.credentials('editor');
     expect(credentials.authorization).toMatch(/^Bearer [^ ]+$/);
     const personalStart = stack.kernelRequests().length;
     const personalPage = await stack.request(`${stack.web}/en/library`, 'editor');
+    if (personalPage.status !== 200)
+      console.error(
+        'Native personal page failed',
+        stack
+          .kernelRequests()
+          .slice(personalStart)
+          .map(({ method, url, failure }) => ({ method, url, failure })),
+      );
     expect(personalPage.status).toBe(200);
-    const personalReads = stack.kernelRequests().slice(personalStart).filter(({ url }) => url.startsWith('/v1/libraryEntries'));
+    const personalReads = stack
+      .kernelRequests()
+      .slice(personalStart)
+      .filter(({ url }) => url.startsWith('/v1/libraryEntries'));
     expect(personalReads.length).toBeGreaterThan(0);
     expect(personalReads.every(({ authorization }) => authorization === credentials.authorization)).toBe(true);
 
     const anonymousStart = stack.kernelRequests().length;
     const anonymousLibrary = await stack.request(`${stack.web}/en/library`);
-    expect(anonymousLibrary.status).toBe(200);
-    const anonymousReads = stack.kernelRequests().slice(anonymousStart).filter(({ url }) => url.startsWith('/v1/libraryEntries'));
+    expect(anonymousLibrary.status).toBe(302);
+    const signIn = new URL(anonymousLibrary.headers.get('location')!, stack.web);
+    expect(signIn.pathname).toBe('/auth/sign-in');
+    expect(signIn.searchParams.get('return_to')).toBe('/en/library');
+    const anonymousReads = stack
+      .kernelRequests()
+      .slice(anonymousStart)
+      .filter(({ url }) => url.startsWith('/v1/libraryEntries'));
     expect(anonymousReads).toHaveLength(0);
 
     await stack.restartWeb({ publicOrigin: 'https://second.example.test' });
-    const restarted = await stack.request(`https://second.example.test/en/subjects/${created.id}_native-stack-subject`);
+    const restarted = await stack.request(`https://second.example.test${canonicalPath}`);
     expect(restarted.status).toBe(200);
     expect(await restarted.text()).toContain('Native stack subject');
     expect(stack.kernelRequests().every(({ url }) => url.startsWith('/v1/'))).toBe(true);
@@ -88,7 +127,8 @@ describe('native web stack', () => {
     await expect(fetch(canonicalUrl, { signal: AbortSignal.timeout(2000) })).rejects.toThrow();
     await expect(fetch(stack.kernelOrigin, { signal: AbortSignal.timeout(2000) })).rejects.toThrow();
     console.info(
-      `native-web-growth: start=${startedInMs}ms stop=${stoppedInMs}ms peak-memory=${peakMemoryBytes}bytes subject-page-kernel-requests=${subjectPageRequests.length} owned-databases-after-stop=0`,
+      `native-web-growth: start=${startedInMs}ms stop=${stoppedInMs}ms peak-memory=${stack.peakMemoryBytes()}bytes subject-page-kernel-requests=${subjectPageRequests.length} owned-databases-after-stop=0`,
+      subjectPageRequests.map(({ method, url }) => ({ method, url })),
     );
   }, 300_000);
 
