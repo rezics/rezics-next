@@ -117,7 +117,7 @@ test('the follower still settles that worker with its real exit code read after 
     await settled;
     expect(h.store.attempt(worker.attempt).exitCode).toBe(7);
     expect(requests).toHaveLength(1);
-    expect(requests[0]!.attempt.attempt).toBe(worker.attempt);
+    expect(requests[0]!.attempt.attempt).toBe(worker.attempt.attempt);
   } finally {
     h.dispose();
   }
