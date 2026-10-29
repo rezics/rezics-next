@@ -1391,7 +1391,18 @@ async function acquireOnce(
   gate = false,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
 ): Promise<Lease | null> {
-  const ranked = await rankedHosts(hosts, signal, requestedSlots, estimateMs, gate, false, undefined, new Map(), new Set(), memoryReservationBytes);
+  const ranked = await rankedHosts(
+    hosts,
+    signal,
+    requestedSlots,
+    estimateMs,
+    gate,
+    false,
+    undefined,
+    new Map(),
+    new Set(),
+    memoryReservationBytes,
+  );
   let slots = requestedSlots;
   if (ranked.length > 0) {
     if (gate) {
@@ -1467,7 +1478,12 @@ async function acquire(
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   const printWaiting = (): void => {
     const state = waitingHosts.length
-      ? waitingHosts.map(({ host, freeSlots, slotLimit, memoryReserved }) => `${host.name} ${freeSlots}/${slotLimit} free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${slots * memoryReservationBytes / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB`).join(', ')
+      ? waitingHosts
+          .map(
+            ({ host, freeSlots, slotLimit, memoryReserved }) =>
+              `${host.name} ${freeSlots}/${slotLimit} free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${(slots * memoryReservationBytes) / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB`,
+          )
+          .join(', ')
       : 'no responding hosts';
     const reasons = [...skippedHosts.values()];
     console.error(
@@ -1914,7 +1930,8 @@ async function runWithTransportRetries(
 ): Promise<number | null> {
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
-  const memoryReservationBytes = options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
+  const memoryReservationBytes =
+    options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
   const failedHosts = new Set<string>();
   let lastFailure: RemoteTransportError | undefined;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1940,7 +1957,14 @@ async function runWithTransportRetries(
         memoryReservationBytes,
       );
     } else {
-      lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false, memoryReservationBytes);
+      lease = await acquireOnce(
+        retryHosts,
+        slots,
+        options.estimateMs,
+        signal,
+        options.gate ?? false,
+        memoryReservationBytes,
+      );
       if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
         lease = await acquire(
           hosts,
@@ -1989,7 +2013,8 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
   validateEstimateMs(options.estimateMs);
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
-  const memoryReservationBytes = options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
+  const memoryReservationBytes =
+    options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
   const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
@@ -2063,15 +2088,15 @@ function parse(argv: string[]): RemoteCheck {
       validateEstimateMs(estimateMs);
       continue;
     }
-    if ((flag !== '--cwd' && flag !== '--slots' && flag !== '--memory-gib') || rest.length === 0) throw new Error(`Unknown option: ${flag}`);
+    if ((flag !== '--cwd' && flag !== '--slots' && flag !== '--memory-gib') || rest.length === 0)
+      throw new Error(`Unknown option: ${flag}`);
     const value = rest.shift()!;
     if (flag === '--cwd') cwd = value;
     else if (flag === '--slots') {
       slots = Number(value);
       if (!Number.isSafeInteger(slots) || slots < 1)
         throw new Error(`--slots must be a positive integer, received ${value}`);
-    }
-    else if (flag === '--memory-gib') {
+    } else if (flag === '--memory-gib') {
       memoryGiB = Number(value);
       validateMemoryGiB(memoryGiB);
     }

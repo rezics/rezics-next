@@ -1223,7 +1223,14 @@ test('a host with 1.5 processors per slot and 11 slice processors offers 7 slots
 
 test('a processor-bounded host does not lose slots to its memoryMaxGiB', async () => {
   const { env, events } = scenario({
-    a: { available: 16 * 2 ** 30, memoryMax: 4 * 2 ** 30, memoryMaxGiB: 4, memoryHeadroom: 4 * 2 ** 30, sliceProcessors: 12, slots: 8 },
+    a: {
+      available: 16 * 2 ** 30,
+      memoryMax: 4 * 2 ** 30,
+      memoryMaxGiB: 4,
+      memoryHeadroom: 4 * 2 ** 30,
+      sliceProcessors: 12,
+      slots: 8,
+    },
   });
   const result = await remote(env, workspace(), ['true'], ['--slots', '3', '--memory-gib', '1']);
   expect(result.code).toBe(0);
@@ -1249,7 +1256,14 @@ test('memory reservations that exceed a host limit queue with the host and both 
 
 test('a request fits beside held reservations when their total equals the host memory limit', async () => {
   const { env, events } = scenario({
-    a: { slots: 3, memoryMax: 8 * 2 ** 30, memoryMaxGiB: 8, memoryHeadroom: 8 * 2 ** 30, ordinaryBusy: 1, busyMemoryGiB: 4 },
+    a: {
+      slots: 3,
+      memoryMax: 8 * 2 ** 30,
+      memoryMaxGiB: 8,
+      memoryHeadroom: 8 * 2 ** 30,
+      ordinaryBusy: 1,
+      busyMemoryGiB: 4,
+    },
   });
   const result = await remote(env, workspace(), ['true'], ['--memory-gib', '4']);
   expect(result.code).toBe(0);
@@ -1278,7 +1292,9 @@ test('a caller without a memory request keeps the 2.5 GiB reservation', async ()
   const { env, events } = scenario({ a: {} });
   const result = await remote(env, workspace(), ['true']);
   expect(result.code).toBe(0);
-  expect(events().find((event) => event.kind === 'slot')?.script).toContain(`# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${CHECK_SLOT_MEMORY_BYTES}`);
+  expect(events().find((event) => event.kind === 'slot')?.script).toContain(
+    `# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${CHECK_SLOT_MEMORY_BYTES}`,
+  );
 });
 
 test('real slot locks enforce reservations, ignore stale files and free memory on release', async () => {
@@ -1327,14 +1343,26 @@ test('try-once callers apply their memory request when ranking and acquiring hos
     const { env, events } = scenario({
       a: { slots: 3, memoryMaxGiB: 8, memoryMax: 8 * 2 ** 30, ordinaryBusy: 1, busyMemoryGiB: 6 },
     });
-    const options = { hosts: readHosts(env.KERNEL_CHECK_REMOTE!), workspace: workspace(), command: ['true'], memoryGiB };
-    const child = Bun.spawn([
-      process.execPath,
-      '--eval',
-      `const { tryRemoteCheck } = await import(${JSON.stringify(remoteCheck)});
+    const options = {
+      hosts: readHosts(env.KERNEL_CHECK_REMOTE!),
+      workspace: workspace(),
+      command: ['true'],
+      memoryGiB,
+    };
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        '--eval',
+        `const { tryRemoteCheck } = await import(${JSON.stringify(remoteCheck)});
        console.log(JSON.stringify(await tryRemoteCheck(${JSON.stringify(options)}, new AbortController().signal)));`,
-    ], { env, stdout: 'pipe', stderr: 'pipe' });
-    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      ],
+      { env, stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
     expect(code, stderr).toBe(0);
     expect(JSON.parse(stdout).status).toBe(memoryGiB === 4 ? 'no-slot' : 'ran');
     const granted = events().find((event) => event.kind === 'slot' && event.granted);
@@ -2499,7 +2527,9 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
     for (let index = 0; index < 4; index += 1) {
       singles.push(startRemote(env, workspaceDirectory, ['sh', '-c', `echo single-${index}`]));
     }
-    await waitFor(() => events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script))).length === 4);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script))).length === 4,
+    );
     multi = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo multi-run'], ['--slots', '2']);
     await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
     const blockedSingle = startRemote(
@@ -2509,21 +2539,33 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
     );
     singles.push(blockedSingle);
     await waitFor(() => existsSync(join(env.FAKE_DIR!, 'blocked-single-wait-ms')));
-    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(false);
-    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(false);
+    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
+      false,
+    );
+    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(
+      false,
+    );
 
     singles[0]!.child.kill('SIGTERM');
     await singles[0]!.child.exited;
     singles[1]!.child.kill('SIGTERM');
     await singles[1]!.child.exited;
-    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
+    );
     expect(await multi.child.exited).toBe(0);
-    expect(events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script)))).toHaveLength(4);
-    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(false);
+    expect(events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script)))).toHaveLength(
+      4,
+    );
+    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
+      false,
+    );
   } finally {
     for (const run of [...singles, multi]) {
       if (!run) continue;
-      try { run.child.kill('SIGTERM'); } catch {}
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
     }
     for (const run of [...singles, multi]) {
       if (!run) continue;
@@ -2938,7 +2980,9 @@ test('while a gate waits for a host, single-slot runs prefer other hosts', async
   let gateRun: ReturnType<typeof startRemote> | undefined;
   let single: ReturnType<typeof startRemote> | undefined;
   try {
-    await waitFor(() => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 3);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 3,
+    );
     gateRun = startRemote(env, workspace(), ['true'], ['--gate', '--slots', '2']);
     await waitFor(() => events().some((event) => event.kind === 'gate-marker' && event.address === 'ops@b.test'));
     await waitFor(() =>
