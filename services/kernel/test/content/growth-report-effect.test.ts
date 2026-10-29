@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { normalizeCommandKey, principalCommandIdentity } from '../../src/command/command.ts';
 import { createReport, type ReportTarget } from '../../src/content/reports.ts';
 import { applyReportEffect } from '../../src/content/report-effect.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
@@ -24,7 +25,6 @@ let system: NativeContentSystem;
 let db: GrowthDatabase;
 let target: ReportTarget;
 let authorActor: AccountActor;
-let growOrdinal = 0;
 
 beforeAll(async () => {
   system = await createNativeContentSystem({ databaseUrl });
@@ -100,19 +100,8 @@ afterAll(async () => {
   await system?.close();
 });
 
-function growthRows(
-  population: Population,
-  placement: { ordinal: number; route: number; partition: number },
-  excludedPartition?: number,
-) {
+function growthRows(reportRoute: number, reverse: boolean) {
   const targetRoute = routeOf(target.id)!;
-  const reverse = population.name.endsWith('reverse');
-  let reportPartition = placement.partition;
-  if (reverse) {
-    reportPartition = (partitionOf(routeOf(target.id)!) + 1) % 4096;
-    if (reportPartition === excludedPartition) reportPartition = (reportPartition + 1) % 4096;
-  }
-  const reportRoute = reportPartition * 16 + (placement.ordinal % 16);
   const reportId = newId(reportRoute);
   const createdAt = new Date('2026-10-27T00:00:00.000Z');
   return {
@@ -147,28 +136,57 @@ function growthRows(
   };
 }
 
+function reportPopulation(sourceRoute: number, reverse = false): Population {
+  const sourcePartition = partitionOf(sourceRoute);
+  const targetPartition = partitionOf(routeOf(target.id)!);
+  let reversePartition = (targetPartition + 1) % 4096;
+  if (reversePartition === sourcePartition) reversePartition = (reversePartition + 1) % 4096;
+  return {
+    name: `report-effect-${sourceRoute}-${reverse ? 'reverse' : 'source'}`,
+    hotPartition: reverse ? targetPartition : sourcePartition,
+    hotShare: reverse ? 0 : 1,
+    rows: (place) => growthRows(reverse ? reversePartition * 16 + (place.ordinal % 16) : sourceRoute, reverse),
+  };
+}
+
 async function createReportEvents(
   db: GrowthDatabase,
-  requiredPartition?: number,
-): Promise<{ events: CloudEvent[]; partition: number }> {
+  requiredRoute?: number,
+): Promise<{ events: CloudEvent[]; route: number }> {
   const events: CloudEvent[] = [];
-  let attempts = 0;
-  let sourcePartition = requiredPartition;
-  while (events.length < runsPerScale && attempts < 4096) {
-    attempts++;
+  const keys: string[] = [];
+  const { principal } = principalCommandIdentity(authorActor);
+  const targetPartition = partitionOf(routeOf(target.id)!);
+  let sourceRoute = requiredRoute;
+  // Route candidates locally; only the fixed number of retained keys issue commands.
+  // Keeping one route also puts all N source rows in each measured report's key range.
+  while (keys.length < runsPerScale) {
+    const key = randomUUID();
+    const name = JSON.stringify([
+      principal.kind,
+      principal.id,
+      'content.report.create',
+      normalizeCommandKey(principal, key),
+    ]);
+    const route = anchorRoute(system.routeKey, name);
+    if (sourceRoute === undefined) {
+      if (partitionOf(route) === targetPartition) continue;
+      sourceRoute = route;
+    }
+    if (route === sourceRoute) keys.push(key);
+  }
+  const sourcePartition = partitionOf(sourceRoute!);
+  for (const key of keys) {
     const outcome = await createReport(
       { pool: db.pool, access: system.access, routeKey: system.routeKey },
       authorActor,
       { target, reason: 'other', evidence: 'Growth report evidence' },
-      { idempotencyKey: randomUUID(), requestId: randomUUID(), deadline: Date.now() + 30_000 },
+      { idempotencyKey: key, requestId: randomUUID(), deadline: Date.now() + 30_000 },
     );
     const reportId = outcome.value.reportId;
     const reportPartition = partitionOf(routeOf(reportId)!);
-    if (sourcePartition === undefined) {
-      if (reportPartition === partitionOf(routeOf(target.id)!)) continue;
-      sourcePartition = reportPartition;
-    }
-    if (reportPartition !== sourcePartition) continue;
+    expect(reportPartition).toBe(sourcePartition);
+    expect(routeOf(reportId)).toBe(sourceRoute);
     const partition = reportPartition;
     const consumer = `growth_report_effect_${partition}`;
     let found: CloudEvent | undefined;
@@ -190,26 +208,14 @@ async function createReportEvents(
   }
   if (events.length !== runsPerScale)
     throw new Error(`Could not create enough reports in partition ${sourcePartition}`);
-  return { events, partition: sourcePartition! };
+  return { events, route: sourceRoute! };
 }
 
 test('Report effect projection stays within its bound as source reports and target reverse-index history grow', async () => {
   const eventsByRun = new Map<number, CloudEvent>();
   const appliedReportIds: string[] = [];
   let runOffset = 0;
-  let sourcePartition: number | undefined;
-  const sourcePopulation = (partition: number): Population => ({
-    name: `report-effect-source-${partition}`,
-    hotPartition: partition,
-    hotShare: 1,
-    rows: (place) => growthRows(sourcePopulation(partition), place),
-  });
-  const reversePopulation = (partition: number): Population => ({
-    name: `report-effect-reverse-${partition}`,
-    hotPartition: partition,
-    hotShare: 0,
-    rows: (place) => growthRows(reversePopulation(partition), place, sourcePartition),
-  });
+  let sourceRoute: number | undefined;
   const report = await checkGrowth(db, {
     name: 'Report effect projection stays within its bound as source reports and target reverse-index history grow',
     scales,
@@ -217,19 +223,11 @@ test('Report effect projection stays within its bound as source reports and targ
     warmups,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(observed, scale, previous) {
-      if (sourcePartition === undefined) {
-        const created = await createReportEvents(observed);
-        sourcePartition = created.partition;
-        created.events.forEach((event) => eventsByRun.set(runOffset++, event));
-      } else {
-        const created = await createReportEvents(observed, sourcePartition);
-        created.events.forEach((event) => eventsByRun.set(runOffset++, event));
-      }
-      const amount = scale - previous;
-      await seed(observed, sourcePopulation(sourcePartition), { from: growOrdinal, to: growOrdinal + amount });
-      const targetPartition = partitionOf(routeOf(target.id)!);
-      await seed(observed, reversePopulation(targetPartition), { from: growOrdinal, to: growOrdinal + amount });
-      growOrdinal += amount;
+      const created = await createReportEvents(observed, sourceRoute);
+      sourceRoute = created.route;
+      created.events.forEach((event) => eventsByRun.set(runOffset++, event));
+      await seed(observed, reportPopulation(sourceRoute), { from: previous, to: scale });
+      await seed(observed, reportPopulation(sourceRoute, true), { from: previous, to: scale });
     },
     async operation(observed, _scale, repetition) {
       const event = eventsByRun.get(repetition);
@@ -276,8 +274,7 @@ test('Report effect replay stays within its bound and changes nothing as history
     after: { rows: number; events: number; position: string };
   }[] = [];
   let runOffset = 0;
-  let sourcePartition: number | undefined;
-  let ordinal = 0;
+  let sourceRoute: number | undefined;
   const report = await checkGrowth(db, {
     name: 'Report effect replay stays within its bound and changes nothing as history grows',
     scales,
@@ -285,21 +282,14 @@ test('Report effect replay stays within its bound and changes nothing as history
     warmups,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(observed, scale, previous) {
-      const created = await createReportEvents(observed, sourcePartition);
-      sourcePartition = created.partition;
+      const created = await createReportEvents(observed, sourceRoute);
+      sourceRoute = created.route;
       for (const event of created.events) {
         await applyReportEffect(observed.pool, event);
         eventsByRun.set(runOffset++, event);
       }
-      const amount = scale - previous;
-      const population: Population = {
-        name: `report-effect-replay-${sourcePartition}`,
-        hotPartition: sourcePartition,
-        hotShare: 1,
-        rows: (place) => growthRows(population, place),
-      };
-      await seed(observed, population, { from: ordinal, to: ordinal + amount });
-      ordinal += amount;
+      await seed(observed, reportPopulation(sourceRoute), { from: previous, to: scale });
+      await seed(observed, reportPopulation(sourceRoute, true), { from: previous, to: scale });
     },
     async operation(observed, _scale, repetition) {
       const event = eventsByRun.get(repetition);
