@@ -86,4 +86,6 @@ export declare function advanceErasureCompletion(deps: {
 }, accountId: string): Promise<import("../command/command.ts").CommandOutcome<boolean>>;
 /** The terminal workflow survives retries and completion is independent of retained DBOS history. */
 export declare const erasureWorkModule: WorkModule;
+/** Explicit platform resolution, after the owner has handled the copy. The caller emits its command event. */
+export declare function resolveLocatorWork(tx: CommandTransaction, workflowId: string): Promise<void>;
 export {};

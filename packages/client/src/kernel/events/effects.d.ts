@@ -15,7 +15,7 @@ type WorkOptions = {
     systemDatabasePool?: Pool;
 };
 export declare function effectWorkflowId(envelope: Envelope, eventSeq: number, name: string): string;
-export declare function registerEffects(effects: Effect[]): {
+export declare function registerEffects(effects: Effect[], pool?: Pool): {
     enqueue(envelopes: readonly Envelope[]): Promise<void>;
 };
 /** Compatibility for tests that register effects before launching the shared executor. */

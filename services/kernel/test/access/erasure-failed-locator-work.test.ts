@@ -117,7 +117,7 @@ afterAll(async () => {
   if (client) await within(client.close(), 'work client close');
   (ERASURE_LOCATOR_EFFECTS as Set<string>).delete(locator);
   if (db) await within(db.close(), 'database close');
-});
+}, 40_000);
 
 async function source(
   options: { fail?: boolean; held?: boolean; partition?: number; other?: boolean; clock?: () => Date } = {},
@@ -138,10 +138,15 @@ async function source(
   return { ...result, control, workflowId: effectWorkflowId(envelope, 0, options.other ? other : locator) };
 }
 async function relayAll() {
-  const heads = await db.admin.query('SELECT partition_no FROM core.partition WHERE position>0 ORDER BY partition_no');
+  const deadline = Date.now() + 10_000;
+  const heads = await within(
+    db.admin.query('SELECT partition_no FROM core.partition WHERE position>0 ORDER BY partition_no'),
+    'relay partition heads',
+  );
   for (const { partition_no } of heads.rows) {
     for (;;) {
-      const result = await relayEffects(db.pool, work.effects, partition_no);
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for effects relay drain');
+      const result = await within(relayEffects(db.pool, work.effects, partition_no), 'effects relay batch');
       if (result.status !== 'read') throw new Error(`Relay stopped: ${result.status}`);
       if (result.envelopes === 0) break;
     }
@@ -243,8 +248,8 @@ test('retention deletes failed DBOS history before the first tombstone without l
     failed.workflowId,
     old,
   ]);
-  expect(await runWorkflowRetentionSweep(30, client)).toBe(1);
-  expect(await client.getWorkflow(failed.workflowId)).toBeUndefined();
+  expect(await within(runWorkflowRetentionSweep(30, client), 'retention sweep')).toBe(1);
+  expect(await within(client.getWorkflow(failed.workflowId), 'retained workflow lookup')).toBeUndefined();
   const accountId = await tombstone();
   await expectHeld(accountId);
   const json = JSON.stringify(await status(accountId));
@@ -266,6 +271,7 @@ for (const ending of ['CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'] as const) {
     expect(await within(DBOS.getWorkflowStatus(queued.workflowId), 'workflow status')).toMatchObject({
       status: 'ENQUEUED',
     });
+    expect(await row(queued.workflowId)).toMatchObject({ state: 'open', effect: locator });
     await within(DBOS.cancelWorkflow(queued.workflowId), 'workflow cancellation');
     expect(queued.control.attempts).toBe(0);
     if (ending === 'MAX_RECOVERY_ATTEMPTS_EXCEEDED') {
