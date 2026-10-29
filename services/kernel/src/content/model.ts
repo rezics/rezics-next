@@ -90,7 +90,7 @@ export type ThreadView = Readonly<{
 }>;
 
 export function isErasedPlaceholder(
-  entry: Readonly<{ availability: Availability; revisionId?: RevisionId }>,
+  entry: Readonly<{ availability: Availability | 'withheld'; revisionId?: RevisionId }>,
 ): entry is ErasedPlaceholder {
   return entry.availability === 'erased' && 'removed' in entry && !('revisionId' in entry);
 }

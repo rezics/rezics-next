@@ -150,6 +150,13 @@ are skipped without returning their ids. A page scans at most four times its req
 when more candidates may remain. Subject counts stay with semantic.
 Reads of a Realm-owned board, thread or post require `realm:read` on its containing Realm at the read's authorization time. Active members of a protected Realm receive this through the `community.realm.member` group grant. Non-members and members whose leave has settled receive the same `404` as an unknown target. Public Realm reads retain their public eligibility.
 
+Thread-page post items have three forms: `available` carries the body and digest; `erased` is a tombstone with
+`removed: true`, `body: null` and `sha256: null` for both soft deletion and purge; `withheld` carries the same null
+payload while retaining the post's metadata after takedown. Replies retain their parent in every form. Only the
+post's author receives `restorableUntil` while restoration is possible, or `decisionId` on a withheld item. Exact
+reads of withheld posts and revisions still return 404. These fields come from the existing route-bound chain
+reads, including one indexed decision lookup within each post row read; page candidate and statement bounds stay unchanged.
+
 Threads and posts can be taken down with `moderation:takedown` on the target or on its containing Realm. Realm owners and moderators carry that action for content in their own Realm; neither a parent resource nor another Realm grants it. Authorization is checked before receipt lookup, so a denied replay remains denied. Board and media takedown authorization is unchanged.
 
 ## Deletion

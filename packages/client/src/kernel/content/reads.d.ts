@@ -19,19 +19,33 @@ export declare function currentRealmDisclosureScope(): RealmDisclosureScope | un
 export declare function withReplayedRevision<T>(revisionId: string, read: () => Promise<T>): Promise<T>;
 export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 /** Erased slots retain identity without disclosing bytes or a digest of erased text. */
-type ContentPayload = Readonly<{
+type AvailablePayload = Readonly<{
     availability: 'available';
     body: NonNullable<StoredItemView['body']>;
     sha256: string;
-}> | Readonly<{
+}>;
+type ErasedPayload = Readonly<{
     availability: 'erased';
     removed: true;
     body: null;
     sha256: null;
+    restorableUntil?: string;
 }>;
-export type ItemView = Omit<StoredItemView, 'availability' | 'body' | 'sha256'> & ContentPayload;
+type ContentPayload = AvailablePayload | ErasedPayload;
+type WithheldPayload = Readonly<{
+    availability: 'withheld';
+    removed: true;
+    body: null;
+    sha256: null;
+    decisionId?: string;
+}>;
+type ItemFields = Omit<StoredItemView, 'availability' | 'body' | 'sha256'>;
+export type ItemView = ItemFields & ContentPayload;
+export type WithheldPostEntry = ItemFields & WithheldPayload;
 export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 'sha256'> & ContentPayload;
-export type PostEntry = ItemView | ErasedPlaceholder;
+export type PostEntry = ItemView | (ErasedPlaceholder & {
+    readonly restorableUntil?: string;
+}) | WithheldPostEntry;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{
     firstPost: PostEntry;
 }>;

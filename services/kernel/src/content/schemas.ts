@@ -187,7 +187,14 @@ export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot & ReactionC
   t.Union([
     t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
     t.Object(
-      { ...item, availability: t.Literal('erased'), removed: t.Literal(true), body: t.Null(), sha256: t.Null() },
+      {
+        ...item,
+        availability: t.Literal('erased'),
+        removed: t.Literal(true),
+        body: t.Null(),
+        sha256: t.Null(),
+        restorableUntil: t.Optional(t.String({ format: 'date-time' })),
+      },
       closed,
     ),
   ]),
@@ -200,13 +207,28 @@ export const ErasedPlaceholderSchema = t.Object(
     parentId: nullableId,
     removed: t.Literal(true),
     availability: t.Literal('erased'),
+    restorableUntil: t.Optional(t.String({ format: 'date-time' })),
     body: t.Null(),
     sha256: t.Null(),
   },
   closed,
 );
 export const PostEntrySchema = t.Unsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>(
-  t.Union([ItemViewSchema, ErasedPlaceholderSchema]),
+  t.Union([
+    ItemViewSchema,
+    ErasedPlaceholderSchema,
+    t.Object(
+      {
+        ...item,
+        availability: t.Literal('withheld'),
+        removed: t.Literal(true),
+        body: t.Null(),
+        sha256: t.Null(),
+        decisionId: t.Optional(ContentIdSchema),
+      },
+      closed,
+    ),
+  ]),
 );
 export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & ReactionCountsSlot>(
   t.Object(

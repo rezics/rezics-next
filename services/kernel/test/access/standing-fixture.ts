@@ -8,7 +8,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
-import { registerTestClient, testAccess, testApp } from '../support/test-kernel.ts';
+import { registerTestClient, testAccess, testKernel } from '../support/test-kernel.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
@@ -92,7 +92,6 @@ export async function standingFixture(extraActions: readonly string[] = []) {
       },
     }),
   });
-  const app = testApp({ pool });
   for (const id of [actor, principal, recipient]) {
     await reader.query(
       `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
@@ -118,36 +117,30 @@ export async function standingFixture(extraActions: readonly string[] = []) {
     'thread:create': ['content.thread', 'content.post'],
     'post:create': ['content.post'],
   };
-  for (const [index, action] of actions.entries()) {
-    const detail = {
-      operationId: action.replace(':', '.'),
-      'x-action': action,
-      security: [{ bearerAuth: [] }],
+  const mountedActions = actionCatalogue(testKernel({ pool }));
+  const fixtureActions = new Map<string, { anonymous: boolean; 'x-resource-types'?: readonly string[] }>();
+  for (const action of actions) {
+    const mounted = mountedActions.get(action);
+    fixtureActions.set(action, {
+      anonymous: mounted?.anonymous ?? false,
       ...(declaredTypes[action] === undefined ? {} : { 'x-resource-types': declaredTypes[action] }),
-    };
-    app.get(
-      `/fixture/${index}`,
-      {
-        detail,
-      },
-      () => null,
-    );
+    });
   }
   await registerTestClient(auth, {
     clientId: 'web',
     firstParty: true,
-    actions: actionCatalogue(app),
+    actions: fixtureActions,
     scopes: ordinaryClientScopes,
   });
   await registerTestClient(auth, {
     clientId: 'other-client',
     firstParty: true,
-    actions: actionCatalogue(app),
+    actions: fixtureActions,
     scopes: ordinaryClientScopes,
   });
   const access = testAccess({
     pool,
-    actions: actionCatalogue(app),
+    actions: fixtureActions,
     resourceRoles: {
       roles: { 'fixture.owner': ['fixture:own'], 'fixture.unmounted': ['unmounted:action'] },
       types: {

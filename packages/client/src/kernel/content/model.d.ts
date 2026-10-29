@@ -104,7 +104,7 @@ export type ThreadView = Readonly<{
     firstPost: PostEntry;
 }>;
 export declare function isErasedPlaceholder(entry: Readonly<{
-    availability: Availability;
+    availability: Availability | 'withheld';
     revisionId?: RevisionId;
 }>): entry is ErasedPlaceholder;
 export type BoardView = Readonly<{

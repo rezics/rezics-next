@@ -9037,6 +9037,10 @@
                                         "const": true,
                                         "type": "boolean"
                                       },
+                                      "restorableUntil": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
                                       "revisedAt": {
                                         "format": "date-time",
                                         "type": [
@@ -9176,6 +9180,10 @@
                                     "const": true,
                                     "type": "boolean"
                                   },
+                                  "restorableUntil": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
                                   "route": {
                                     "maximum": 65535,
                                     "minimum": 0,
@@ -9198,6 +9206,208 @@
                                   "availability",
                                   "body",
                                   "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "authorId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "availability": {
+                                    "const": "withheld",
+                                    "type": "string"
+                                  },
+                                  "boardId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "body": {
+                                    "type": "null"
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "decisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "licence": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "mediaIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "parentId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "reactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "downvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "insightful": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "laugh": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "like": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "love": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "sad": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "upvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [],
+                                    "type": "object"
+                                  },
+                                  "removed": {
+                                    "const": true,
+                                    "type": "boolean"
+                                  },
+                                  "revisedAt": {
+                                    "format": "date-time",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "revisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "maximum": 65535,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "securityRevision": {
+                                    "pattern": "^[1-9][0-9]*$",
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "null"
+                                  },
+                                  "subjectIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 128,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "threadId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "viewerReaction": {
+                                    "enum": [
+                                      "upvote",
+                                      "downvote",
+                                      "like",
+                                      "love",
+                                      "laugh",
+                                      "insightful",
+                                      "sad"
+                                    ],
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "visibility": {
+                                    "enum": [
+                                      "published",
+                                      "draft",
+                                      "protected",
+                                      "taken_down"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "voteCitation": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "maximum": 2147483647,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "units": {
+                                        "maximum": 20,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "questionId",
+                                      "units",
+                                      "revision"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "route",
+                                  "visibility",
+                                  "securityRevision",
+                                  "createdAt",
+                                  "licence",
+                                  "subjectIds",
+                                  "boardId",
+                                  "threadId",
+                                  "authorId",
+                                  "parentId",
+                                  "revisionId",
+                                  "sha256",
+                                  "mediaIds",
+                                  "voteCitation",
+                                  "revisedAt",
+                                  "availability",
+                                  "removed",
+                                  "body"
                                 ],
                                 "type": "object"
                               }
@@ -19948,6 +20158,10 @@
                                         "const": true,
                                         "type": "boolean"
                                       },
+                                      "restorableUntil": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
                                       "revisedAt": {
                                         "format": "date-time",
                                         "type": [
@@ -20087,6 +20301,10 @@
                                     "const": true,
                                     "type": "boolean"
                                   },
+                                  "restorableUntil": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
                                   "route": {
                                     "maximum": 65535,
                                     "minimum": 0,
@@ -20109,6 +20327,208 @@
                                   "availability",
                                   "body",
                                   "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "authorId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "availability": {
+                                    "const": "withheld",
+                                    "type": "string"
+                                  },
+                                  "boardId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "body": {
+                                    "type": "null"
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "decisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "licence": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "mediaIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "parentId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "reactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "downvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "insightful": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "laugh": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "like": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "love": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "sad": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "upvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [],
+                                    "type": "object"
+                                  },
+                                  "removed": {
+                                    "const": true,
+                                    "type": "boolean"
+                                  },
+                                  "revisedAt": {
+                                    "format": "date-time",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "revisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "maximum": 65535,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "securityRevision": {
+                                    "pattern": "^[1-9][0-9]*$",
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "null"
+                                  },
+                                  "subjectIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 128,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "threadId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "viewerReaction": {
+                                    "enum": [
+                                      "upvote",
+                                      "downvote",
+                                      "like",
+                                      "love",
+                                      "laugh",
+                                      "insightful",
+                                      "sad"
+                                    ],
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "visibility": {
+                                    "enum": [
+                                      "published",
+                                      "draft",
+                                      "protected",
+                                      "taken_down"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "voteCitation": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "maximum": 2147483647,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "units": {
+                                        "maximum": 20,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "questionId",
+                                      "units",
+                                      "revision"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "route",
+                                  "visibility",
+                                  "securityRevision",
+                                  "createdAt",
+                                  "licence",
+                                  "subjectIds",
+                                  "boardId",
+                                  "threadId",
+                                  "authorId",
+                                  "parentId",
+                                  "revisionId",
+                                  "sha256",
+                                  "mediaIds",
+                                  "voteCitation",
+                                  "revisedAt",
+                                  "availability",
+                                  "removed",
+                                  "body"
                                 ],
                                 "type": "object"
                               }
@@ -77174,6 +77594,10 @@
                                   "const": true,
                                   "type": "boolean"
                                 },
+                                "restorableUntil": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
                                 "revisedAt": {
                                   "format": "date-time",
                                   "type": [
@@ -77313,6 +77737,10 @@
                               "const": true,
                               "type": "boolean"
                             },
+                            "restorableUntil": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
                             "route": {
                               "maximum": 65535,
                               "minimum": 0,
@@ -77335,6 +77763,208 @@
                             "availability",
                             "body",
                             "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "authorId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "availability": {
+                              "const": "withheld",
+                              "type": "string"
+                            },
+                            "boardId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "body": {
+                              "type": "null"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "decisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "id": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "licence": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "mediaIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 32,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "parentId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
+                            "removed": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "revisedAt": {
+                              "format": "date-time",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "route": {
+                              "maximum": 65535,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "securityRevision": {
+                              "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "type": "null"
+                            },
+                            "subjectIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 128,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "threadId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "viewerReaction": {
+                              "enum": [
+                                "upvote",
+                                "downvote",
+                                "like",
+                                "love",
+                                "laugh",
+                                "insightful",
+                                "sad"
+                              ],
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "visibility": {
+                              "enum": [
+                                "published",
+                                "draft",
+                                "protected",
+                                "taken_down"
+                              ],
+                              "type": "string"
+                            },
+                            "voteCitation": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "questionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "maximum": 2147483647,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "units": {
+                                  "maximum": 20,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "questionId",
+                                "units",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "route",
+                            "visibility",
+                            "securityRevision",
+                            "createdAt",
+                            "licence",
+                            "subjectIds",
+                            "boardId",
+                            "threadId",
+                            "authorId",
+                            "parentId",
+                            "revisionId",
+                            "sha256",
+                            "mediaIds",
+                            "voteCitation",
+                            "revisedAt",
+                            "availability",
+                            "removed",
+                            "body"
                           ],
                           "type": "object"
                         }
@@ -80707,6 +81337,10 @@
                                 "const": true,
                                 "type": "boolean"
                               },
+                              "restorableUntil": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
                               "revisedAt": {
                                 "format": "date-time",
                                 "type": [
@@ -81717,6 +82351,10 @@
                                   "const": true,
                                   "type": "boolean"
                                 },
+                                "restorableUntil": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
                                 "revisedAt": {
                                   "format": "date-time",
                                   "type": [
@@ -81856,6 +82494,10 @@
                               "const": true,
                               "type": "boolean"
                             },
+                            "restorableUntil": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
                             "route": {
                               "maximum": 65535,
                               "minimum": 0,
@@ -81878,6 +82520,208 @@
                             "availability",
                             "body",
                             "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "authorId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "availability": {
+                              "const": "withheld",
+                              "type": "string"
+                            },
+                            "boardId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "body": {
+                              "type": "null"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "decisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "id": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "licence": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "mediaIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 32,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "parentId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
+                            "removed": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "revisedAt": {
+                              "format": "date-time",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "route": {
+                              "maximum": 65535,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "securityRevision": {
+                              "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "type": "null"
+                            },
+                            "subjectIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 128,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "threadId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "viewerReaction": {
+                              "enum": [
+                                "upvote",
+                                "downvote",
+                                "like",
+                                "love",
+                                "laugh",
+                                "insightful",
+                                "sad"
+                              ],
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "visibility": {
+                              "enum": [
+                                "published",
+                                "draft",
+                                "protected",
+                                "taken_down"
+                              ],
+                              "type": "string"
+                            },
+                            "voteCitation": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "questionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "maximum": 2147483647,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "units": {
+                                  "maximum": 20,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "questionId",
+                                "units",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "route",
+                            "visibility",
+                            "securityRevision",
+                            "createdAt",
+                            "licence",
+                            "subjectIds",
+                            "boardId",
+                            "threadId",
+                            "authorId",
+                            "parentId",
+                            "revisionId",
+                            "sha256",
+                            "mediaIds",
+                            "voteCitation",
+                            "revisedAt",
+                            "availability",
+                            "removed",
+                            "body"
                           ],
                           "type": "object"
                         }
@@ -83220,6 +84064,10 @@
                                   "const": true,
                                   "type": "boolean"
                                 },
+                                "restorableUntil": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
                                 "revisedAt": {
                                   "format": "date-time",
                                   "type": [
@@ -83359,6 +84207,10 @@
                               "const": true,
                               "type": "boolean"
                             },
+                            "restorableUntil": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
                             "route": {
                               "maximum": 65535,
                               "minimum": 0,
@@ -83381,6 +84233,208 @@
                             "availability",
                             "body",
                             "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "authorId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "availability": {
+                              "const": "withheld",
+                              "type": "string"
+                            },
+                            "boardId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "body": {
+                              "type": "null"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "decisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "id": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "licence": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "mediaIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 32,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "parentId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
+                            "removed": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "revisedAt": {
+                              "format": "date-time",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "route": {
+                              "maximum": 65535,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "securityRevision": {
+                              "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "type": "null"
+                            },
+                            "subjectIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 128,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "threadId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "viewerReaction": {
+                              "enum": [
+                                "upvote",
+                                "downvote",
+                                "like",
+                                "love",
+                                "laugh",
+                                "insightful",
+                                "sad"
+                              ],
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "visibility": {
+                              "enum": [
+                                "published",
+                                "draft",
+                                "protected",
+                                "taken_down"
+                              ],
+                              "type": "string"
+                            },
+                            "voteCitation": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "questionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "maximum": 2147483647,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "units": {
+                                  "maximum": 20,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "questionId",
+                                "units",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "route",
+                            "visibility",
+                            "securityRevision",
+                            "createdAt",
+                            "licence",
+                            "subjectIds",
+                            "boardId",
+                            "threadId",
+                            "authorId",
+                            "parentId",
+                            "revisionId",
+                            "sha256",
+                            "mediaIds",
+                            "voteCitation",
+                            "revisedAt",
+                            "availability",
+                            "removed",
+                            "body"
                           ],
                           "type": "object"
                         }
@@ -150846,6 +151900,10 @@
                                         "const": true,
                                         "type": "boolean"
                                       },
+                                      "restorableUntil": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
                                       "revisedAt": {
                                         "format": "date-time",
                                         "type": [
@@ -150985,6 +152043,10 @@
                                     "const": true,
                                     "type": "boolean"
                                   },
+                                  "restorableUntil": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
                                   "route": {
                                     "maximum": 65535,
                                     "minimum": 0,
@@ -151007,6 +152069,208 @@
                                   "availability",
                                   "body",
                                   "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "authorId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "availability": {
+                                    "const": "withheld",
+                                    "type": "string"
+                                  },
+                                  "boardId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "body": {
+                                    "type": "null"
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "decisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "licence": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "mediaIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "parentId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "reactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "downvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "insightful": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "laugh": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "like": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "love": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "sad": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "upvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [],
+                                    "type": "object"
+                                  },
+                                  "removed": {
+                                    "const": true,
+                                    "type": "boolean"
+                                  },
+                                  "revisedAt": {
+                                    "format": "date-time",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "revisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "maximum": 65535,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "securityRevision": {
+                                    "pattern": "^[1-9][0-9]*$",
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "null"
+                                  },
+                                  "subjectIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 128,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "threadId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "viewerReaction": {
+                                    "enum": [
+                                      "upvote",
+                                      "downvote",
+                                      "like",
+                                      "love",
+                                      "laugh",
+                                      "insightful",
+                                      "sad"
+                                    ],
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "visibility": {
+                                    "enum": [
+                                      "published",
+                                      "draft",
+                                      "protected",
+                                      "taken_down"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "voteCitation": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "maximum": 2147483647,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "units": {
+                                        "maximum": 20,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "questionId",
+                                      "units",
+                                      "revision"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "route",
+                                  "visibility",
+                                  "securityRevision",
+                                  "createdAt",
+                                  "licence",
+                                  "subjectIds",
+                                  "boardId",
+                                  "threadId",
+                                  "authorId",
+                                  "parentId",
+                                  "revisionId",
+                                  "sha256",
+                                  "mediaIds",
+                                  "voteCitation",
+                                  "revisedAt",
+                                  "availability",
+                                  "removed",
+                                  "body"
                                 ],
                                 "type": "object"
                               }
@@ -158599,6 +159863,10 @@
                                       "const": true,
                                       "type": "boolean"
                                     },
+                                    "restorableUntil": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
                                     "revisedAt": {
                                       "format": "date-time",
                                       "type": [
@@ -158738,6 +160006,10 @@
                                   "const": true,
                                   "type": "boolean"
                                 },
+                                "restorableUntil": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
                                 "route": {
                                   "maximum": 65535,
                                   "minimum": 0,
@@ -158760,6 +160032,208 @@
                                 "availability",
                                 "body",
                                 "sha256"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "authorId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "availability": {
+                                  "const": "withheld",
+                                  "type": "string"
+                                },
+                                "boardId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "type": "null"
+                                },
+                                "createdAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "decisionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "licence": {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "mediaIds": {
+                                  "items": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                },
+                                "parentId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "reactions": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "downvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "insightful": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "laugh": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "like": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "love": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "sad": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "upvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
+                                },
+                                "removed": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
+                                "revisedAt": {
+                                  "format": "date-time",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "revisionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "route": {
+                                  "maximum": 65535,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "securityRevision": {
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "type": "string"
+                                },
+                                "sha256": {
+                                  "type": "null"
+                                },
+                                "subjectIds": {
+                                  "items": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "maxItems": 128,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                },
+                                "threadId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "viewerReaction": {
+                                  "enum": [
+                                    "upvote",
+                                    "downvote",
+                                    "like",
+                                    "love",
+                                    "laugh",
+                                    "insightful",
+                                    "sad"
+                                  ],
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "visibility": {
+                                  "enum": [
+                                    "published",
+                                    "draft",
+                                    "protected",
+                                    "taken_down"
+                                  ],
+                                  "type": "string"
+                                },
+                                "voteCitation": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "questionId": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "maximum": 2147483647,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "units": {
+                                      "maximum": 20,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "questionId",
+                                    "units",
+                                    "revision"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "route",
+                                "visibility",
+                                "securityRevision",
+                                "createdAt",
+                                "licence",
+                                "subjectIds",
+                                "boardId",
+                                "threadId",
+                                "authorId",
+                                "parentId",
+                                "revisionId",
+                                "sha256",
+                                "mediaIds",
+                                "voteCitation",
+                                "revisedAt",
+                                "availability",
+                                "removed",
+                                "body"
                               ],
                               "type": "object"
                             }
@@ -160194,6 +161668,10 @@
                                       "const": true,
                                       "type": "boolean"
                                     },
+                                    "restorableUntil": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
                                     "revisedAt": {
                                       "format": "date-time",
                                       "type": [
@@ -160333,6 +161811,10 @@
                                   "const": true,
                                   "type": "boolean"
                                 },
+                                "restorableUntil": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
                                 "route": {
                                   "maximum": 65535,
                                   "minimum": 0,
@@ -160355,6 +161837,208 @@
                                 "availability",
                                 "body",
                                 "sha256"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "authorId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "availability": {
+                                  "const": "withheld",
+                                  "type": "string"
+                                },
+                                "boardId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "type": "null"
+                                },
+                                "createdAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "decisionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "licence": {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "mediaIds": {
+                                  "items": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                },
+                                "parentId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "reactions": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "downvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "insightful": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "laugh": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "like": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "love": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "sad": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "upvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
+                                },
+                                "removed": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
+                                "revisedAt": {
+                                  "format": "date-time",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "revisionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "route": {
+                                  "maximum": 65535,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "securityRevision": {
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "type": "string"
+                                },
+                                "sha256": {
+                                  "type": "null"
+                                },
+                                "subjectIds": {
+                                  "items": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "maxItems": 128,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                },
+                                "threadId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "viewerReaction": {
+                                  "enum": [
+                                    "upvote",
+                                    "downvote",
+                                    "like",
+                                    "love",
+                                    "laugh",
+                                    "insightful",
+                                    "sad"
+                                  ],
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "visibility": {
+                                  "enum": [
+                                    "published",
+                                    "draft",
+                                    "protected",
+                                    "taken_down"
+                                  ],
+                                  "type": "string"
+                                },
+                                "voteCitation": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "questionId": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "maximum": 2147483647,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "units": {
+                                      "maximum": 20,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "questionId",
+                                    "units",
+                                    "revision"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "route",
+                                "visibility",
+                                "securityRevision",
+                                "createdAt",
+                                "licence",
+                                "subjectIds",
+                                "boardId",
+                                "threadId",
+                                "authorId",
+                                "parentId",
+                                "revisionId",
+                                "sha256",
+                                "mediaIds",
+                                "voteCitation",
+                                "revisedAt",
+                                "availability",
+                                "removed",
+                                "body"
                               ],
                               "type": "object"
                             }
@@ -161996,6 +163680,10 @@
                                     "const": true,
                                     "type": "boolean"
                                   },
+                                  "restorableUntil": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
                                   "revisedAt": {
                                     "format": "date-time",
                                     "type": [
@@ -162135,6 +163823,10 @@
                                 "const": true,
                                 "type": "boolean"
                               },
+                              "restorableUntil": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
                               "route": {
                                 "maximum": 65535,
                                 "minimum": 0,
@@ -162157,6 +163849,208 @@
                               "availability",
                               "body",
                               "sha256"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "availability": {
+                                "const": "withheld",
+                                "type": "string"
+                              },
+                              "boardId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "body": {
+                                "type": "null"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "decisionId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "id": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "licence": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "mediaIds": {
+                                "items": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "maxItems": 32,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "parentId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "reactions": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "downvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "insightful": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "laugh": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "like": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "love": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "sad": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "upvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [],
+                                "type": "object"
+                              },
+                              "removed": {
+                                "const": true,
+                                "type": "boolean"
+                              },
+                              "revisedAt": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "revisionId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "route": {
+                                "maximum": 65535,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "securityRevision": {
+                                "pattern": "^[1-9][0-9]*$",
+                                "type": "string"
+                              },
+                              "sha256": {
+                                "type": "null"
+                              },
+                              "subjectIds": {
+                                "items": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "maxItems": 128,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "threadId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "viewerReaction": {
+                                "enum": [
+                                  "upvote",
+                                  "downvote",
+                                  "like",
+                                  "love",
+                                  "laugh",
+                                  "insightful",
+                                  "sad"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "visibility": {
+                                "enum": [
+                                  "published",
+                                  "draft",
+                                  "protected",
+                                  "taken_down"
+                                ],
+                                "type": "string"
+                              },
+                              "voteCitation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "questionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "maximum": 2147483647,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "units": {
+                                    "maximum": 20,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "questionId",
+                                  "units",
+                                  "revision"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "route",
+                              "visibility",
+                              "securityRevision",
+                              "createdAt",
+                              "licence",
+                              "subjectIds",
+                              "boardId",
+                              "threadId",
+                              "authorId",
+                              "parentId",
+                              "revisionId",
+                              "sha256",
+                              "mediaIds",
+                              "voteCitation",
+                              "revisedAt",
+                              "availability",
+                              "removed",
+                              "body"
                             ],
                             "type": "object"
                           }
@@ -163054,6 +164948,10 @@
                                   "const": true,
                                   "type": "boolean"
                                 },
+                                "restorableUntil": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
                                 "revisedAt": {
                                   "format": "date-time",
                                   "type": [
@@ -163193,6 +165091,10 @@
                               "const": true,
                               "type": "boolean"
                             },
+                            "restorableUntil": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
                             "route": {
                               "maximum": 65535,
                               "minimum": 0,
@@ -163215,6 +165117,208 @@
                             "availability",
                             "body",
                             "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "authorId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "availability": {
+                              "const": "withheld",
+                              "type": "string"
+                            },
+                            "boardId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "body": {
+                              "type": "null"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "decisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "id": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "licence": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "mediaIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 32,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "parentId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
+                            "removed": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "revisedAt": {
+                              "format": "date-time",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "route": {
+                              "maximum": 65535,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "securityRevision": {
+                              "pattern": "^[1-9][0-9]*$",
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "type": "null"
+                            },
+                            "subjectIds": {
+                              "items": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "maxItems": 128,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "threadId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "viewerReaction": {
+                              "enum": [
+                                "upvote",
+                                "downvote",
+                                "like",
+                                "love",
+                                "laugh",
+                                "insightful",
+                                "sad"
+                              ],
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "visibility": {
+                              "enum": [
+                                "published",
+                                "draft",
+                                "protected",
+                                "taken_down"
+                              ],
+                              "type": "string"
+                            },
+                            "voteCitation": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "questionId": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "maximum": 2147483647,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "units": {
+                                  "maximum": 20,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "questionId",
+                                "units",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "route",
+                            "visibility",
+                            "securityRevision",
+                            "createdAt",
+                            "licence",
+                            "subjectIds",
+                            "boardId",
+                            "threadId",
+                            "authorId",
+                            "parentId",
+                            "revisionId",
+                            "sha256",
+                            "mediaIds",
+                            "voteCitation",
+                            "revisedAt",
+                            "availability",
+                            "removed",
+                            "body"
                           ],
                           "type": "object"
                         }

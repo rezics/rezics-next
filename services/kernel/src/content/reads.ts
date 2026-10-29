@@ -79,12 +79,31 @@ export function withReplayedRevision<T>(revisionId: string, read: () => Promise<
 export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 
 /** Erased slots retain identity without disclosing bytes or a digest of erased text. */
-type ContentPayload =
-  | Readonly<{ availability: 'available'; body: NonNullable<StoredItemView['body']>; sha256: string }>
-  | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>;
-export type ItemView = Omit<StoredItemView, 'availability' | 'body' | 'sha256'> & ContentPayload;
+type AvailablePayload = Readonly<{
+  availability: 'available';
+  body: NonNullable<StoredItemView['body']>;
+  sha256: string;
+}>;
+type ErasedPayload = Readonly<{
+  availability: 'erased';
+  removed: true;
+  body: null;
+  sha256: null;
+  restorableUntil?: string;
+}>;
+type ContentPayload = AvailablePayload | ErasedPayload;
+type WithheldPayload = Readonly<{
+  availability: 'withheld';
+  removed: true;
+  body: null;
+  sha256: null;
+  decisionId?: string;
+}>;
+type ItemFields = Omit<StoredItemView, 'availability' | 'body' | 'sha256'>;
+export type ItemView = ItemFields & ContentPayload;
+export type WithheldPostEntry = ItemFields & WithheldPayload;
 export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 'sha256'> & ContentPayload;
-export type PostEntry = ItemView | ErasedPlaceholder;
+export type PostEntry = ItemView | (ErasedPlaceholder & { readonly restorableUntil?: string }) | WithheldPostEntry;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
 export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
@@ -115,6 +134,9 @@ type Row = {
   body: Buffer | null;
   sha256: Buffer | null;
   realm_id: string | null;
+  deleted_at: Date | null;
+  restorable: boolean;
+  decision_id: string | null;
 };
 type Chain = { thread: Row; posts: Row[]; revision: Row | null };
 type Key = { at: string; id: string };
@@ -217,6 +239,9 @@ const signature = (row: Row) =>
     row.security_revision,
     row.availability,
     row.realm_id,
+    row.deleted_at,
+    row.restorable,
+    row.decision_id,
   ]);
 const fingerprint = (value: Chain | null) =>
   value &&
@@ -231,7 +256,13 @@ function admissible(row: Row, actor: Actor, tombstone: boolean): boolean {
 type ErasedReadProof = { explicit: boolean };
 
 /** Shared post-read resources: every domain operand uses the evaluator's principal. */
-function readResource(row: Row, evidence: object, tombstone = false, placeholder = false): Resource {
+function readResource(
+  row: Row,
+  evidence: object,
+  tombstone = false,
+  placeholder = false,
+  withheldReference = false,
+): Resource {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
   const resourceWithEligibility = {
@@ -268,7 +299,8 @@ function readResource(row: Row, evidence: object, tombstone = false, placeholder
         // Erased public slots still require the requested scope from account tokens.
         if (placeholder && actor.kind === 'account' && !actor.scopes.includes(action)) return false;
         return (
-          current.visibility === 'published' && ((!tombstone && current.availability === 'available') || placeholder)
+          (current.visibility === 'published' || (withheldReference && current.visibility === 'taken_down')) &&
+          ((!tombstone && current.availability === 'available') || placeholder)
         );
       },
     }),
@@ -285,9 +317,10 @@ async function prepare(
   tombstone = false,
   placeholder = false,
   erasedProof?: ErasedReadProof,
+  withheldReference = false,
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
-  const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder);
+  const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder, withheldReference);
   const accessContext = { pool: dependencies.pool, deadline: context.deadline };
   if (erasedProof) {
     const check = await accessExplicitCheck(
@@ -373,6 +406,7 @@ async function disclose(
   threadDetail = false,
   replayedRevisionId?: string,
   subjectScope?: { subjectId: string; placeId: string },
+  threadReference = threadDetail,
 ): Promise<Anchored<PostEntry | ThreadView | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
@@ -391,12 +425,18 @@ async function disclose(
   const rows = initial ? [initial.thread, ...initial.posts] : [];
   const checks: AccessCheck[] = [];
   const erasedProof = erased ? { explicit: false } : undefined;
+  const withheld = threadReference && !erased && initial?.posts[0]?.visibility === 'taken_down';
   if (board?.value) {
     for (const row of rows) {
+      const withheldReference = threadReference && row.kind === 'post' && row.visibility === 'taken_down';
       const erasureRead =
-        row.availability === 'erased' || (erased && (row === initial?.posts[0] || row.visibility === 'taken_down'));
+        withheldReference ||
+        row.availability === 'erased' ||
+        (erased && (row === initial?.posts[0] || row.visibility === 'taken_down'));
       const placeholder =
-        row.kind === 'post' && row.availability === 'erased' && !(revisionId && row === initial?.posts[0]);
+        row.kind === 'post' &&
+        (row.availability === 'erased' || withheldReference) &&
+        !(revisionId && row === initial?.posts[0]);
       checks.push(
         await prepare(
           dependencies,
@@ -406,6 +446,7 @@ async function disclose(
           erasureRead,
           placeholder,
           row === initial?.posts[0] ? erasedProof : undefined,
+          withheldReference,
         ),
       );
     }
@@ -427,7 +468,13 @@ async function disclose(
     }
     for (let index = 0; index < rows.length; index++) {
       if (
-        !admissible(rows[index]!, context.actor, erased || rows[index]!.availability === 'erased') ||
+        !admissible(
+          rows[index]!,
+          context.actor,
+          erased ||
+            rows[index]!.availability === 'erased' ||
+            (threadReference && rows[index]!.kind === 'post' && rows[index]!.visibility === 'taken_down'),
+        ) ||
         !(await checks[index]!(client))
       )
         return null;
@@ -443,18 +490,28 @@ async function disclose(
       erasedProof &&
       !erasedProof.explicit &&
       ((revisionId && !replayAuthorizes) ||
-        [current.thread, ...current.posts].some((row) => row.visibility === 'taken_down'))
+        [current.thread, ...current.posts].some(
+          (row) => row.visibility === 'taken_down' && !(threadReference && row.kind === 'post'),
+        ))
     )
       return null;
     // Logical erasure suppresses retained bytes for both head and exact reads.
     // Available bytes are loaded only after every container and Access check passes.
-    const revision = erased ? current.revision : await point(client, 'revision', current.revision.id, threadId, true);
+    const revision =
+      erased || withheld ? current.revision : await point(client, 'revision', current.revision.id, threadId, true);
     if (!revision || revision.parent_id !== current.posts[0].id) return null;
-    const item =
+    let item: PostEntry | null =
       erasedProof && !erasedProof.explicit && !replayAuthorizes
         ? erasedPlaceholder(current.posts[0])
-        : itemView(current.posts[0], revision, erased);
+        : itemView(current.posts[0], revision, erased, withheld);
     if (!item) return null;
+    const post = current.posts[0];
+    if (context.actor.kind === 'account' && context.actor.accountId === post.author_id) {
+      const until = post.deleted_at ? post.deleted_at.getTime() + 30 * 86400000 : 0;
+      if (item.availability === 'erased' && post.restorable && until > (dependencies.clock?.() ?? new Date()).getTime())
+        item = { ...item, restorableUntil: new Date(until).toISOString() };
+      if (item.availability === 'withheld' && post.decision_id) item = { ...item, decisionId: post.decision_id };
+    }
     if (!threadDetail) return item;
     const thread = current.thread;
     return {
@@ -493,7 +550,7 @@ function erasedPlaceholder(post: Row): ErasedPlaceholder {
   };
 }
 
-function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
+function itemView(post: Row, revision: Row, erased: boolean, withheld = false): ItemView | WithheldPostEntry | null {
   const metadata = {
     id: post.id,
     threadId: post.thread_id!,
@@ -512,6 +569,7 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
     revisionId: revision.id,
   };
   if (erased) return { ...metadata, removed: true, body: null, sha256: null, availability: 'erased' };
+  if (withheld) return { ...metadata, removed: true, body: null, sha256: null, availability: 'withheld' };
   if (revision.sha256 === null) throw new Error('Live revision is missing its body digest');
   if (revision.availability !== 'available' || !revision.body) return null;
   return {
@@ -523,7 +581,7 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
 }
 
 function isPlaceholder(target: { readonly id: string }): target is ErasedPlaceholder {
-  return isErasedPlaceholder(target as PostEntry);
+  return isErasedPlaceholder(target as StoredItemView | ErasedPlaceholder);
 }
 
 /** One partition seek for the account viewer's slots. Anonymous responses omit the field. */
@@ -854,10 +912,25 @@ async function list(
     for (const key of selected.value.candidates) {
       after = key;
       scanned++;
-      const result = await readPost(dependencies, threadId, postId ?? key.id, context, postId ? key.id : undefined);
+      const result = postId
+        ? await readPost(dependencies, threadId, postId, context, key.id)
+        : await withRealmDisclosureScope(
+            async () =>
+              (await disclose(
+                dependencies,
+                threadId,
+                context,
+                key.id,
+                undefined,
+                false,
+                undefined,
+                undefined,
+                true,
+              )) as Anchored<PostEntry | null>,
+          );
       if (!result.value) continue;
       if (postId) {
-        if (!('revisionId' in result.value)) continue;
+        if (!('revisionId' in result.value) || result.value.availability === 'withheld') continue;
         const {
           revisionId,
           id,

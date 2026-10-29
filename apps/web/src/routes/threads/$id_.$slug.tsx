@@ -289,7 +289,7 @@ function PostSlot({
     await onMutation();
   }
 
-  if (('removed' in post && post.removed) || post.availability === 'erased') {
+  if (post.availability !== 'available') {
     return (
       <li id={anchorId} className="scroll-mt-24 py-6 target:bg-muted/50">
         <p className="text-muted-foreground" role="note">

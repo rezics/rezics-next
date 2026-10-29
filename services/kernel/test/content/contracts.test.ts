@@ -44,6 +44,24 @@ type Command<I, V, D = commands.ContentCommandDependencies, C = model.RequestCon
 ) => Promise<CommandOutcome<V>>;
 type Ids = Readonly<{ threadId: string; itemId: string; revisionId: string }>;
 type ModerationValue = Readonly<{ targetId: string; securityRevision: string }>;
+type ReadItemFields = Omit<model.ItemView, 'availability' | 'body' | 'sha256'>;
+type AvailableReadPayload = Readonly<{ availability: 'available'; body: DocumentSnapshot; sha256: string }>;
+type ErasedReadPayload = Readonly<{
+  availability: 'erased';
+  removed: true;
+  body: null;
+  sha256: null;
+  restorableUntil?: string;
+}>;
+type WithheldReadPayload = Readonly<{
+  availability: 'withheld';
+  removed: true;
+  body: null;
+  sha256: null;
+  decisionId?: string;
+}>;
+type ErasedPagePlaceholder = model.ErasedPlaceholder & Readonly<{ restorableUntil?: string }>;
+type ReadRevisionFields = Omit<model.RevisionView, 'availability' | 'body' | 'sha256'>;
 
 // These consumers are intentionally uncalled: type checking must never execute a port.
 function publishedSignatures(): void {
@@ -478,16 +496,9 @@ function publishedModels(): void {
       }>
     >
   >();
-  same<
-    Equal<
-      reads.ItemView,
-      Omit<model.ItemView, 'availability' | 'body' | 'sha256'> &
-        (
-          | Readonly<{ availability: 'available'; body: DocumentSnapshot; sha256: string }>
-          | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>
-        )
-    >
-  >();
+  same<Equal<reads.ItemView, ReadItemFields & (AvailableReadPayload | ErasedReadPayload)>>();
+  same<Equal<reads.WithheldPostEntry, ReadItemFields & WithheldReadPayload>>();
+  same<Equal<reads.RevisionView, ReadRevisionFields & (AvailableReadPayload | ErasedReadPayload)>>();
   same<
     Equal<
       model.ErasedPlaceholder,
@@ -504,11 +515,13 @@ function publishedModels(): void {
     >
   >();
   same<Equal<model.PostEntry, model.ItemView | model.ErasedPlaceholder>>();
-  same<Equal<reads.PostEntry, reads.ItemView | model.ErasedPlaceholder>>();
+  same<Equal<reads.PostEntry, reads.ItemView | ErasedPagePlaceholder | reads.WithheldPostEntry>>();
   same<
     Equal<
       typeof model.isErasedPlaceholder,
-      (entry: Readonly<{ availability: model.Availability; revisionId?: string }>) => entry is model.ErasedPlaceholder
+      (
+        entry: Readonly<{ availability: model.Availability | 'withheld'; revisionId?: string }>,
+      ) => entry is model.ErasedPlaceholder
     >
   >();
   same<Equal<reads.ThreadView, Omit<model.ThreadView, 'firstPost'> & Readonly<{ firstPost: reads.PostEntry }>>>();
