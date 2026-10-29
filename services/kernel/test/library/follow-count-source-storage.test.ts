@@ -417,16 +417,19 @@ test('native source hook rows and statements stay constant with logarithmic bloc
         );
     } else if (error instanceof Error && error.name === 'GrowthEvidenceError') {
       const repetitions = runs.map(({ scale, repetition, target, plans }) => {
-        const cost = costOf({
-          statements: plans.map(() => 'captured auto_explain statement'),
-          plans,
-        });
+        const cost = costOf({ statements: [], plans });
         return {
           scale,
           repetition,
           phase: repetition % 6 === 0 ? 'warmup' : 'measured',
           target,
-          cost,
+          autoExplainStatements: plans.length,
+          cost: {
+            plans: cost.plans,
+            rows: cost.rows,
+            blocks: cost.blocks,
+            relations: cost.relations,
+          },
         };
       });
       await Bun.write(
