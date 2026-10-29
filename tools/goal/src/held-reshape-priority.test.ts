@@ -11,11 +11,11 @@ test('retry --brief on a held task replaces its brief and keeps it held until de
     const task = h.tasks.dispatch(h.briefFile);
     const worker = await h.tasks.retry(task.id);
     await worker.done;
-    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => { attempt.state = 'stopped'; });
     h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
       current.state = 'held';
       current.brief.after = [dependency.id];
     });
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => { attempt.state = 'stopped'; });
     const amended = join(h.root, '.temp/goal/amended.md');
     const amendedText = markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`).concat('\nAmended while held.\n');
     writeFileSync(amended, amendedText);
