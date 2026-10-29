@@ -392,7 +392,7 @@ test('current consent keeps one point statement and fixed rows at 16, 103 and 51
       INSERT INTO auth_client_coverage (client_id,ready) VALUES ('scope-bound',true);
       INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ('person','scope-bound',ARRAY['read'])`);
     const read = createCurrentConsentReader({ database: db.pool }).readCurrentConsent;
-    const costs = [];
+    const costs: [number, number][] = [];
     for (const count of [16, 103, MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPES + 1]) {
       const scopes = Array.from({ length: count }, (_, i) => `scope:${i}:`.padEnd(128, 'a'));
       await db.admin.query("UPDATE auth_client SET scopes=$1 WHERE client_id='scope-bound'", [scopes]);
@@ -411,7 +411,7 @@ test('current consent keeps one point statement and fixed rows at 16, 103 and 51
       costs.push([cost.statements, cost.rows]);
     }
     expect(costs[0]![0]).toBe(1);
-    expect(costs).toEqual([costs[0], costs[0], costs[0], costs[0]]);
+    expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!, costs[0]!]);
   } finally {
     await db.close();
     fixture.close();

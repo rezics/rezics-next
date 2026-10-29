@@ -60,7 +60,7 @@ for (const delegated of [false, true]) {
 }
 
 test('capture keeps constant statements and rows at 16, 103 and 512 consented scopes', async () => {
-  const costs = [];
+  const costs: [number, number][] = [];
   const complete = new Error('Measured before writes');
   for (const count of [16, 103, MAX_CONSENTED_SCOPES]) {
     const scopes = ['subject:write', ...Array.from({ length: count - 1 }, (_, i) => `scope:${i}`)];
@@ -73,5 +73,5 @@ test('capture keeps constant statements and rows at 16, 103 and 512 consented sc
       }),
     ).rejects.toBe(complete);
   }
-  expect(costs).toEqual([costs[0], costs[0], costs[0]]);
+  expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!]);
 });

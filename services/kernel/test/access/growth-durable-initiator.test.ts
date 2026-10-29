@@ -166,12 +166,12 @@ for (const person of ['other people', 'same person history'] as const) {
 }
 
 test('restoration keeps constant statements and rows at 16, 103 and 512 consented scopes', async () => {
-  const costs = [];
+  const costs: [number, number][] = [];
   for (const count of [16, 103, MAX_CONSENTED_SCOPES]) {
     const scopes = ['subject:write', 'account:delegate', ...Array.from({ length: count - 2 }, (_, i) => `scope:${i}`)];
     const f = await h.fixture(false, scopes);
     const sample = await measure(h.db, () => h.step(f));
     costs.push([sample.cost.statements, sample.cost.rows]);
   }
-  expect(costs).toEqual([costs[0], costs[0], costs[0]]);
+  expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!]);
 });
