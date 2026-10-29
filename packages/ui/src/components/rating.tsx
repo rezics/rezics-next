@@ -3,6 +3,7 @@ import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Slider } from '@rezics/ui/shadcn/slider';
 import { cn } from '../utils.ts';
+import { MetaLine } from './meta-line.tsx';
 
 /**
  * Rating display and input. shadcn has no rating pattern (its `chart` is a general plotting layer, and a vote
@@ -259,22 +260,22 @@ function Figure({
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <p className="flex min-w-0 items-baseline gap-x-2">
-        {mean === null ? null : (
-          <>
-            <span className={cn('shrink-0 font-semibold tabular-nums', large ? 'text-4xl' : 'text-base')}>
-              {number(locale, mean, [1, 1])}
-              <span className="sr-only"> {fill(labels.outOf, { max })}</span>
-            </span>
-            <span aria-hidden="true" className="shrink-0 text-muted-foreground">
-              ·
-            </span>
-          </>
-        )}
-        <span
-          className={cn('min-w-0 flex-1 text-muted-foreground text-sm [overflow-wrap:anywhere]', large && 'text-base')}
-        >
-          {countLine(locale, labels, aggregate)}
-        </span>
+        <MetaLine
+          className="min-w-0 flex-1"
+          items={[
+            mean === null ? null : (
+              <span className={cn('shrink-0 font-semibold tabular-nums', large ? 'text-4xl' : 'text-base')}>
+                {number(locale, mean, [1, 1])}
+                <span className="sr-only"> {fill(labels.outOf, { max })}</span>
+              </span>
+            ),
+            <span
+              className={cn('min-w-0 text-muted-foreground text-sm [overflow-wrap:anywhere]', large && 'text-base')}
+            >
+              {countLine(locale, labels, aggregate)}
+            </span>,
+          ]}
+        />
       </p>
       {state === 'withheld' ? <p className="text-sm">{moreLine(locale, labels, aggregate)}</p> : null}
     </div>

@@ -1,5 +1,6 @@
 import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
@@ -233,10 +234,14 @@ export function AccountPosts(props: Record<string, unknown>) {
           return (
             <li key={typeof post.id === 'string' ? post.id : index} className="space-y-1">
               <Quiet>
-                <span className={`${linkClass} ${linkColor} font-medium`}>
-                  <Link href={threadHref(value.locale, { id: post.threadId, title: thread?.title })}>{title}</Link>
-                </span>
-                {when && ` · ${when}`}
+                <MetaLine
+                  items={[
+                    <span className={`${linkClass} ${linkColor} font-medium`}>
+                      <Link href={threadHref(value.locale, { id: post.threadId, title: thread?.title })}>{title}</Link>
+                    </span>,
+                    when,
+                  ]}
+                />
               </Quiet>
               <Excerpt body={post.body} value={value} />
             </li>
@@ -303,25 +308,30 @@ export function AccountCollections(props: Record<string, unknown>) {
           return (
             <li key={typeof collection.id === 'string' ? collection.id : index} className="space-y-1">
               <p className="font-medium">
-                <span className={`${linkClass} ${linkColor} [&_a]:underline!`}>
-                  {readable ? (
-                    <Link
-                      href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
-                    >
-                      {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
-                    </Link>
-                  ) : typeof collection.title === 'string' && collection.title ? (
-                    collection.title
-                  ) : (
-                    value.unlabelled
-                  )}
-                </span>
-                {members !== undefined && (
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {' · '}
-                    {m.agent_collection_items({ count: members }, options)}
-                  </span>
-                )}
+                <MetaLine
+                  items={[
+                    <span className={`${linkClass} ${linkColor} [&_a]:underline!`}>
+                      {readable ? (
+                        <Link
+                          href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
+                        >
+                          {typeof collection.title === 'string' && collection.title
+                            ? collection.title
+                            : value.unlabelled}
+                        </Link>
+                      ) : typeof collection.title === 'string' && collection.title ? (
+                        collection.title
+                      ) : (
+                        value.unlabelled
+                      )}
+                    </span>,
+                    members !== undefined ? (
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {m.agent_collection_items({ count: members }, options)}
+                      </span>
+                    ) : null,
+                  ]}
+                />
               </p>
               {typeof collection.description === 'string' && collection.description && (
                 <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{collection.description}</p>

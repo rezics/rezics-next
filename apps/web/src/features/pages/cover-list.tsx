@@ -1,4 +1,5 @@
 import { sharedRatio } from '@rezics/ui/cover';
+import { metaText } from '@rezics/ui/meta-line';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
@@ -22,7 +23,7 @@ function ItemCard({ item, value }: { item: Item; value: RowValue }) {
         suitability: value.reader.suitability,
         labels: value.labels.cover,
       }}
-      {...(item.notes.length > 0 ? { secondary: item.notes.join(' · ') } : {})}
+      {...(item.notes.length > 0 ? { secondary: metaText(item.notes) } : {})}
     />
   );
   return item.gated ? <SpoilerGate label={value.spoilerShow}>{card}</SpoilerGate> : card;

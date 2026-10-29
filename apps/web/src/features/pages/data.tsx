@@ -7,6 +7,7 @@ import {
   type CompositionDocument,
 } from '@rezics/composition';
 import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { SectionHeading } from '../../library/section-heading';
 import { createContext, useContext, type ReactNode } from 'react';
@@ -304,7 +305,11 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
                 {quiet.text}
               </p>
             )}
-            {facts.length > 0 && <p className="text-sm text-muted-foreground">{facts.join(' · ')}</p>}
+            {facts.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                <MetaLine items={facts} />
+              </p>
+            )}
             {creators.length > 0 && (
               <p data-slot="subject-creators" className="text-sm font-medium">
                 {creators.map((creator, index) => (
@@ -322,15 +327,16 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
               >
                 <dt className="font-semibold text-muted-foreground">{options.messages.aliases}</dt>
                 <dd className="min-w-0 break-words">
-                  {aliases.map((alias, index) => {
-                    const text = pageText({ [aliasLanguage!]: alias }, options.locale);
-                    return (
-                      <span key={index} lang={text.lang}>
-                        {index > 0 ? ' · ' : ''}
-                        {text.text}
-                      </span>
-                    );
-                  })}
+                  <MetaLine
+                    items={aliases.map((alias, index) => {
+                      const text = pageText({ [aliasLanguage!]: alias }, options.locale);
+                      return (
+                        <span key={index} lang={text.lang}>
+                          {text.text}
+                        </span>
+                      );
+                    })}
+                  />
                 </dd>
               </dl>
             )}

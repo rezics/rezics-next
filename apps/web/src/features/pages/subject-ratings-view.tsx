@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { m } from '../../paraglide/messages.js';
 import { GLOBAL, type Figure, type Ratings } from './subject-ratings';
 
@@ -78,7 +79,7 @@ export function RatingsView({
     if (!item || item.count === 0)
       return (
         <p>
-          <span className="font-medium">{label}</span> · {m.subject_ratings_empty({}, options)}
+          <MetaLine items={[<span className="font-medium">{label}</span>, m.subject_ratings_empty({}, options)]} />
         </p>
       );
 
@@ -93,8 +94,12 @@ export function RatingsView({
     return (
       <div>
         <p>
-          {mean !== undefined && <strong className="text-xl tabular-nums">{number(mean / 2, 1)} · </strong>}
-          {countLabel}
+          <MetaLine
+            items={[
+              mean !== undefined ? <strong className="text-xl tabular-nums">{number(mean / 2, 1)}</strong> : null,
+              countLabel,
+            ]}
+          />
         </p>
         {item.remaining !== undefined && (
           <p className="text-sm text-muted-foreground">
@@ -150,11 +155,15 @@ export function RatingsView({
         )}
         {data.statistics.map((item) => (
           <p key={item.source} data-slot="imported-score">
-            <span className="font-medium">{item.source === 'vndb' ? 'VNDB' : item.source}</span> ·{' '}
-            <strong className="tabular-nums">
-              {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
-            </strong>{' '}
-            · {m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options)}
+            <MetaLine
+              items={[
+                <span className="font-medium">{item.source === 'vndb' ? 'VNDB' : item.source}</span>,
+                <strong className="tabular-nums">
+                  {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
+                </strong>,
+                m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
+              ]}
+            />
           </p>
         ))}
       </div>

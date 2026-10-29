@@ -2,6 +2,7 @@ import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
 import { pickLanguage, type PageRead } from '@rezics/composition';
 import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { createContext, useContext, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
@@ -580,28 +581,31 @@ export function CollectionList(props: Record<string, unknown>) {
           const options = { locale: value.locale as never };
           return (
             <li key={typeof collection.id === 'string' ? collection.id : index}>
-              <span className={`${linkClass} ${linkColor} font-medium`}>
-                {readable ? (
-                  <Link
-                    href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
-                  >
-                    {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
-                  </Link>
-                ) : typeof collection.title === 'string' && collection.title ? (
-                  collection.title
-                ) : (
-                  value.unlabelled
-                )}
-              </span>
-              {name && (
-                <span className="text-sm text-muted-foreground"> · {m.subject_collection_by({ name }, options)}</span>
-              )}
-              {typeof collection.multiplicity === 'number' && collection.multiplicity > 1 && (
-                <span className="text-sm text-muted-foreground">
-                  {' · '}
-                  {m.library_subject_multiplicity({ count: collection.multiplicity }, options)}
-                </span>
-              )}
+              <MetaLine
+                items={[
+                  <span className={`${linkClass} ${linkColor} font-medium`}>
+                    {readable ? (
+                      <Link
+                        href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
+                      >
+                        {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
+                      </Link>
+                    ) : typeof collection.title === 'string' && collection.title ? (
+                      collection.title
+                    ) : (
+                      value.unlabelled
+                    )}
+                  </span>,
+                  name ? (
+                    <span className="text-sm text-muted-foreground">{m.subject_collection_by({ name }, options)}</span>
+                  ) : null,
+                  typeof collection.multiplicity === 'number' && collection.multiplicity > 1 ? (
+                    <span className="text-sm text-muted-foreground">
+                      {m.library_subject_multiplicity({ count: collection.multiplicity }, options)}
+                    </span>
+                  ) : null,
+                ]}
+              />
             </li>
           );
         })}
@@ -811,21 +815,26 @@ export function SourcesSection({
       <ul className="space-y-1 text-sm break-words">
         {credit && (
           <li>
-            <span className="me-2 font-medium text-muted-foreground">{value.cover}</span>© {credit.rightsHolder}
-            {credit.via && (
-              <>
-                {' · '}
-                {value.coverVia}{' '}
-                {webUrl(credit.via.url) ? (
-                  <a className={`${linkClass} ${linkColor}`} href={credit.via.url}>
-                    {credit.via.name}
-                  </a>
-                ) : (
-                  credit.via.name
-                )}
-              </>
-            )}
-            {credit.license ? ` · ${credit.license}` : null}
+            <MetaLine
+              items={[
+                <>
+                  <span className="me-2 font-medium text-muted-foreground">{value.cover}</span>© {credit.rightsHolder}
+                </>,
+                credit.via ? (
+                  <>
+                    {value.coverVia}{' '}
+                    {webUrl(credit.via.url) ? (
+                      <a className={`${linkClass} ${linkColor}`} href={credit.via.url}>
+                        {credit.via.name}
+                      </a>
+                    ) : (
+                      credit.via.name
+                    )}
+                  </>
+                ) : null,
+                credit.license,
+              ]}
+            />
           </li>
         )}
         {sources.urls.map((url) => (

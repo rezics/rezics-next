@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, VIEWS, type CompositionDocument, type View } from '@rezics/composition';
 import type { ComponentProps, ReactNode } from 'react';
 import { Cover, type CoverLabels, type CoverRatio } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { originalLanguage, originalTitle } from '../../subject/language';
@@ -164,7 +165,11 @@ export function SubjectFrame({
               </span>
             )}
           </p>
-          {facts.length > 0 && <p className="text-sm text-muted-foreground">{facts.join(' · ')}</p>}
+          {facts.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              <MetaLine items={facts} />
+            </p>
+          )}
         </div>
       </header>
       <ViewTabs

@@ -310,12 +310,9 @@ function PostSlot({
           className="min-h-8 flex-1"
         >
           {post.revisedAt && new Date(post.revisedAt).getTime() > new Date(post.createdAt).getTime() ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <time dateTime={post.revisedAt} title={fullDateTime(post.revisedAt)}>
-                {m.thread_post_edited()}
-              </time>
-            </>
+            <time dateTime={post.revisedAt} title={fullDateTime(post.revisedAt)}>
+              {m.thread_post_edited()}
+            </time>
           ) : null}
         </Byline>
         <div className="flex shrink-0 items-center gap-1">

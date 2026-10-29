@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@rezics/ui/shadcn/combobox';
 import { Spinner } from '@rezics/ui/shadcn/spinner';
+import { MetaLine } from './meta-line.tsx';
 import { uiCopyLocale } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { entityPickerMessages } from './entity-picker-messages.ts';
@@ -73,11 +74,15 @@ function ResultCover({ subject, src, ratio }: { subject: EntityPickerSubject; sr
 }
 
 function ResultText({ subject }: { subject: EntityPickerSubject }) {
-  const details = [subject.typeLabel, subject.year == null ? '' : String(subject.year)].filter(Boolean).join(' · ');
+  const details = [subject.typeLabel, subject.year == null ? '' : String(subject.year)];
   return (
     <span className="grid min-w-0 flex-1 gap-0.5 text-start">
       <span className="line-clamp-2 font-medium [overflow-wrap:anywhere]">{subject.title}</span>
-      {details ? <span className="truncate text-xs text-muted-foreground">{details}</span> : null}
+      {details.some(Boolean) ? (
+        <span className="truncate text-xs text-muted-foreground">
+          <MetaLine items={details} />
+        </span>
+      ) : null}
     </span>
   );
 }

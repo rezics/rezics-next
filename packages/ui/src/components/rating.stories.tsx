@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
+import { metaText } from './meta-line.tsx';
 import {
   RatingInput,
   RatingSummary,
@@ -173,9 +174,9 @@ export const ImportedScoresLabelled: Story = {
     const rows = within(within(imported).getByRole('list', { name: 'Imported scores' })).getAllByRole('listitem');
     await expect(rows).toHaveLength(2);
     await expect(rows[0]!).toHaveTextContent('VNDB');
-    await expect(rows[0]!).toHaveTextContent('7.94 out of 10 · 4,512 ratings · as of Oct 1, 2026');
+    await expect(rows[0]!).toHaveTextContent(metaText(['7.94 out of 10', '4,512 ratings', 'as of Oct 1, 2026']));
     await expect(rows[1]!).toHaveTextContent('Bangumi');
-    await expect(rows[1]!).toHaveTextContent('8.1 out of 10 · 25,883 ratings');
+    await expect(rows[1]!).toHaveTextContent(metaText(['8.1 out of 10', '25,883 ratings']));
     // Imported figures stay out of the native list and the native headline.
     const native = region.querySelector('[data-slot="rating-populations"]') as HTMLElement;
     await expect(native).not.toHaveTextContent('VNDB');

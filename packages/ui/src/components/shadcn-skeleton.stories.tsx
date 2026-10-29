@@ -3,6 +3,7 @@ import { expect, waitFor, within } from 'storybook/test';
 import { useEffect, useState } from 'react';
 import { Skeleton } from '@rezics/ui/shadcn/skeleton';
 import { withSurface } from '../stories/support.tsx';
+import { MetaLine } from './meta-line.tsx';
 
 const meta = {
   title: 'shadcn/Skeleton',
@@ -53,7 +54,9 @@ const Loaded = () => {
   return ready ? (
     <article className="max-w-sm text-sm">
       <h3 className="font-medium">《三体》第三部：死神永生与更多的长标题作品</h3>
-      <p className="text-muted-foreground">刘慈欣 · 科幻小说</p>
+      <p className="text-muted-foreground">
+        <MetaLine items={['刘慈欣', '科幻小说']} />
+      </p>
     </article>
   ) : (
     <WorkCardSkeleton />

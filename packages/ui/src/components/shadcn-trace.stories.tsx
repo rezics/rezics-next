@@ -12,6 +12,7 @@ import {
   TraceTitle,
 } from '@rezics/ui/shadcn/trace';
 import { withSurface } from '../stories/support.tsx';
+import { MetaLine } from './meta-line.tsx';
 
 const meta = {
   title: 'shadcn/Trace',
@@ -108,7 +109,9 @@ export const ExpandedByDefault: Story = {
         <TraceCollapsibleTrigger>
           <TraceTitle>Sources</TraceTitle>
         </TraceCollapsibleTrigger>
-        <TraceCollapsibleContent>Open Library · Wikipedia</TraceCollapsibleContent>
+        <TraceCollapsibleContent>
+          <MetaLine items={['Open Library', 'Wikipedia']} />
+        </TraceCollapsibleContent>
       </TraceCollapsible>
     </Trace>
   ),

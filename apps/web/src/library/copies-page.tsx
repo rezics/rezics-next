@@ -1,4 +1,5 @@
 import type { CoverRatio } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Calendar } from '@rezics/ui/shadcn/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -486,9 +487,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
           {title}
         </p>
         <p className="text-sm text-muted-foreground">
-          {kind}
-          {kind ? ' · ' : ''}
-          {copy.kindLabel ?? m.library_other()} · {copy.statusLabel ?? m.library_other()}
+          <MetaLine items={[kind, copy.kindLabel ?? m.library_other(), copy.statusLabel ?? m.library_other()]} />
         </p>
         {copy.acquiredOn ? (
           <p className="text-sm text-muted-foreground">

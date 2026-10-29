@@ -3,6 +3,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { coverSrc, coverSummary } from '../stories/media-fixtures.ts';
 import { withSurface } from '../stories/support.tsx';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from './entity-picker.tsx';
+import { metaText } from './meta-line.tsx';
 
 const subject = (id: string, title: string, typeLabel: string, year: number | undefined, cover = true) =>
   ({
@@ -120,7 +121,7 @@ export const SearchAsYouType: Story = {
     // One search for the finished word, not one per keystroke.
     await expect(typed).toHaveBeenCalledTimes(1);
     await expect(typed.mock.calls[0]![0]).toBe('three');
-    await expect(option).toHaveTextContent('Novel · 2008');
+    await expect(option).toHaveTextContent(metaText(['Novel', '2008']));
     await expect(option.querySelector('picture img')).not.toBeNull();
     await expect(await options()).toHaveLength(3);
     await expect(screen.queryByRole('option', { name: /Thursday/ })).toBeNull();
@@ -254,9 +255,11 @@ export const LongTitlesAndMissingData: Story = {
     for (const row of rows) {
       await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
     }
-    // A missing cover has no avatar initials; missing year or type labels add no text.
-    await expect(screen.getByRole('option', { name: /Untitled/ })).toHaveTextContent(/^Untitled$/);
-    await expect(screen.getByRole('option', { name: /無題の物語/ })).toHaveTextContent('Visual novel · 2011');
+    // A subject with no cover shows its initials, one with no year or type label shows only what it has.
+    await expect(screen.getByRole('option', { name: /Untitled/ })).toHaveTextContent(/^U\s*Untitled$/);
+    await expect(screen.getByRole('option', { name: /無題の物語/ })).toHaveTextContent(
+      metaText(['Visual novel', '2011']),
+    );
   },
 };
 

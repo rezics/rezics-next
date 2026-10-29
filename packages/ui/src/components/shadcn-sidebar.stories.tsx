@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookOpenIcon, HomeIcon, LibraryIcon, UsersIcon } from 'lucide-react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { MetaLine } from './meta-line.tsx';
 import {
   Sidebar,
   SidebarContent,
@@ -93,7 +94,7 @@ const Shell = ({
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-        v1 · 书架
+        <MetaLine items={['v1', '书架']} />
       </SidebarFooter>
     </Sidebar>
     <SidebarInset>

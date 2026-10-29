@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { initials } from './initials';
 import { cn } from '@rezics/ui/utils';
 import type { ReactNode } from 'react';
@@ -58,7 +59,6 @@ export function Byline({
   // A deleted account is known by `state` and `kind` alone; whatever else the read carries is not shown.
   const deleted = author?.state === 'deleted';
   const unknown = showAuthor && !deleted && (!author || (!author.displayName && !author.handle));
-  const hasAuthor = showAuthor && (deleted || unknown || Boolean(author?.displayName || author?.handle));
   const person = deleted || !author?.handle ? null : `/${locale}/@${encodeURIComponent(author.handle)}`;
 
   return (
@@ -71,44 +71,49 @@ export function Byline({
         </Avatar>
       ) : null}
       <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-        {showAuthor ? (
-          deleted ? (
-            <span>
-              {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
-            </span>
-          ) : unknown ? (
-            <span>{m.thread_author_unknown()}</span>
-          ) : (
-            <>
-              {author?.displayName ? (
-                person ? (
-                  <a className={cn('font-medium text-foreground', personLink)} href={person}>
-                    {author.displayName}
-                  </a>
-                ) : (
-                  <span className="font-medium text-foreground">{author.displayName}</span>
-                )
-              ) : null}
-              {author?.handle ? (
-                !author.displayName && person ? (
-                  <a
-                    className={cn('max-w-full min-w-0 truncate font-medium text-foreground', personLink)}
-                    href={person}
-                  >
-                    @{author.handle}
-                  </a>
-                ) : (
-                  <span className="max-w-full min-w-0 truncate">@{author.handle}</span>
-                )
-              ) : null}
-            </>
-          )
-        ) : null}
-        {hasAuthor ? <span aria-hidden="true">·</span> : null}
-        <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
-          {timeText(createdAt, now, locale)}
-        </time>
-        {children}
+        <MetaLine
+          className="min-w-0 flex-1"
+          items={[
+            showAuthor ? (
+              deleted ? (
+                <span>
+                  {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
+                </span>
+              ) : unknown ? (
+                <span>{m.thread_author_unknown()}</span>
+              ) : (
+                <>
+                  {author?.displayName ? (
+                    person ? (
+                      <a className={cn('font-medium text-foreground', personLink)} href={person}>
+                        {author.displayName}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-foreground">{author.displayName}</span>
+                    )
+                  ) : null}
+                  {author?.displayName && author.handle ? ' ' : null}
+                  {author?.handle ? (
+                    !author.displayName && person ? (
+                      <a
+                        className={cn('max-w-full min-w-0 truncate font-medium text-foreground', personLink)}
+                        href={person}
+                      >
+                        @{author.handle}
+                      </a>
+                    ) : (
+                      <span className="max-w-full min-w-0 truncate">@{author.handle}</span>
+                    )
+                  ) : null}
+                </>
+              )
+            ) : null,
+            <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
+              {timeText(createdAt, now, locale)}
+            </time>,
+            children,
+          ]}
+        />
       </p>
     </div>
   );

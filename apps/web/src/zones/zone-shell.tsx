@@ -29,6 +29,7 @@ import {
 import { zoneAppearanceAttributes, zonePageDocument } from './appearance';
 import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
+import { metaText } from '@rezics/ui/meta-line';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 
@@ -362,7 +363,7 @@ export function zoneSubjectHead(data: ZoneSubjectRouteData | undefined, view: Vi
   const page = data?.outcome.kind === 'page' ? data.outcome.common?.overview : undefined;
   const title = page ? subjectPageTitle(page, locale) : m.not_found_heading();
   const label = view === 'overview' ? '' : viewTabLabels().names[view];
-  return { meta: [{ title: [title, label].filter(Boolean).join(' · ') }] };
+  return { meta: [{ title: metaText([title, label]) }] };
 }
 
 export function ZoneSubjectRoute({

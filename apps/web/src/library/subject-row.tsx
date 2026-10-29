@@ -1,4 +1,5 @@
 import { Cover, sharedRatio, type CoverRatio, type CoverSize, type CoverSubject } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
@@ -90,9 +91,7 @@ export function SubjectIdentity({
         </p>
         {subject?.typeLabel || children ? (
           <p className="text-sm text-muted-foreground">
-            {subject?.typeLabel}
-            {subject?.typeLabel && children ? ' · ' : null}
-            {children}
+            <MetaLine items={[subject?.typeLabel, children]} />
           </p>
         ) : null}
       </div>

@@ -1,6 +1,7 @@
 import { pickText } from '@rezics/composition';
 import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { ItemDescription, ItemTitle } from '@rezics/ui/shadcn/item';
 import { m } from '../paraglide/messages.js';
 import { coverSrc } from '../media/cover-src';
@@ -67,9 +68,12 @@ export function SubjectMeta({
   if (!type.text && year === undefined) return null;
   return (
     <span className={className}>
-      {type.text && <span lang={type.lang}>{type.text}</span>}
-      {type.text && year !== undefined && ' · '}
-      {year !== undefined && <span data-slot="year">{yearText(year, locale)}</span>}
+      <MetaLine
+        items={[
+          type.text ? <span lang={type.lang}>{type.text}</span> : null,
+          year !== undefined ? <span data-slot="year">{yearText(year, locale)}</span> : null,
+        ]}
+      />
     </span>
   );
 }
@@ -113,7 +117,9 @@ export function ResultList({
             {...(hit.storyOverlay ? { forceOverlay: true } : {})}
             className="flex min-w-0 items-start gap-4 py-2"
           >
-            <ListRowLink href={subjectLink.href}>{label.text}</ListRowLink>
+            <ListRowLink href={subjectLink.href} lang={label.lang}>
+              {label.text}
+            </ListRowLink>
             <div className="w-[72px] shrink-0 sm:w-24">
               <Cover
                 subject={coverSubject(hit.id, label.text, hit.summary, hit.type)}
@@ -131,12 +137,13 @@ export function ResultList({
                 <SubjectMeta type={typeName} year={year} locale={locale} className="text-sm text-muted-foreground" />
                 {facts.length > 0 && (
                   <p className="text-sm">
-                    {facts.map((fact, index) => (
-                      <span key={index}>
-                        {index > 0 && ' · '}
-                        <span lang={fact.lang}>{fact.text}</span>
-                      </span>
-                    ))}
+                    <MetaLine
+                      items={facts.map((fact, index) => (
+                        <span key={index} lang={fact.lang}>
+                          {fact.text}
+                        </span>
+                      ))}
+                    />
                   </p>
                 )}
                 {description.text && <ItemDescription lang={description.lang}>{description.text}</ItemDescription>}

@@ -189,6 +189,10 @@ Checkboxes and radio buttons use the shadcn `Checkbox` and `RadioGroup` inside a
 
 Import `ListRow`, `ListRowLink` and `ListRowControl` from `@rezics/ui/list-row` for item lists. Rows have no fixed height, dividers, borders or card background at rest. The rounded overlay is the only hover, keyboard-focus and press state. Stretch the title link over the row, and put controls or secondary links above it in `ListRowControl`. Prefer a larger vertical cover over denser rows: covers are at least 72 px wide on a phone and 96 px from `sm` up, at the subject's own ratio. Grids of cover cards are not lists.
 
+## Metadata lines
+
+Use `MetaLine` (or `metaText` for string props) for metadata separators; each separator stays with the following item so a wrapped line never ends with one, and separators are decorative to screen readers.
+
 ## Progress
 
 Import `ProgressRow` from `@rezics/ui/progress-row`.

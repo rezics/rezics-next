@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { LocaleProvider, useLocale } from './locale.tsx';
+import { MetaLine } from './meta-line.tsx';
 
 const meta = {
   title: 'UI/Locale',
@@ -38,7 +39,7 @@ const LocaleSummary = ({ dark = false }: { dark?: boolean }) => {
       <p className="text-sm text-muted-foreground">Current catalogue locale</p>
       <p className="mt-1 font-mono font-semibold text-foreground">{locale}</p>
       <p className="mt-3 text-lg text-foreground" lang={locale}>
-        《三体》 · Reading notes and editions
+        <MetaLine items={['《三体》', 'Reading notes and editions']} />
       </p>
     </div>
   );
@@ -61,7 +62,7 @@ export const SimplifiedChinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('zh-CN')).toBeVisible();
-    await expect(canvas.getByText('《三体》 · Reading notes and editions')).toHaveAttribute('lang', 'zh-CN');
+    await expect(canvas.getByText('《三体》')).toHaveAttribute('lang', 'zh-CN');
   },
 };
 

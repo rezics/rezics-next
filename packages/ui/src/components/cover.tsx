@@ -4,6 +4,8 @@ import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
 import { cn } from '../utils.ts';
+import { MetaLine } from './meta-line.tsx';
+import { initials } from './avatar-initials.tsx';
 import {
   coverFallback,
   coverFit,
@@ -335,19 +337,20 @@ type Credit = NonNullable<CoverSummary['credit']>;
 
 function CreditText({ credit, text }: { credit: Credit; text: CoverLabels }) {
   return (
-    <>
-      <span>© {credit.rightsHolder}</span>
-      {credit.via ? (
-        <>
-          {' · '}
-          {text.via}{' '}
-          <a className="text-primary underline underline-offset-2" href={credit.via.url} rel="noreferrer noopener">
-            {credit.via.name}
-          </a>
-        </>
-      ) : null}
-      {credit.license ? ` · ${credit.license}` : null}
-    </>
+    <MetaLine
+      items={[
+        <span>© {credit.rightsHolder}</span>,
+        credit.via ? (
+          <>
+            {text.via}{' '}
+            <a className="text-primary underline underline-offset-2" href={credit.via.url} rel="noreferrer noopener">
+              {credit.via.name}
+            </a>
+          </>
+        ) : null,
+        credit.license,
+      ]}
+    />
   );
 }
 

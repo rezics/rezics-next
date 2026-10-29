@@ -15,6 +15,7 @@ import {
   ItemTitle,
 } from '@rezics/ui/shadcn/item';
 import { withSurface } from '../stories/support.tsx';
+import { MetaLine } from './meta-line.tsx';
 
 const meta = {
   title: 'shadcn/Item',
@@ -124,7 +125,9 @@ export const LongAndCjkText: Story = {
       <Item variant="outline" role="listitem">
         <ItemContent>
           <ItemTitle>三体Ⅲ：死神永生（完整版，含外傳與作者後記）</ItemTitle>
-          <ItemDescription>劉慈欣 · 重慶出版社 · 2010年</ItemDescription>
+          <ItemDescription>
+            <MetaLine items={['劉慈欣', '重慶出版社', '2010年']} />
+          </ItemDescription>
         </ItemContent>
       </Item>
       <Item variant="outline" role="listitem">

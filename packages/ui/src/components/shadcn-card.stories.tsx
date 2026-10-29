@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from '@rezics/ui/shadcn/card';
 import { withSurface } from '../stories/support.tsx';
+import { metaText } from './meta-line.tsx';
 
 const meta = {
   title: 'shadcn/Card',
@@ -45,7 +46,7 @@ export const Default: Story = {
   render: () => (
     <Shelf
       title="Hard science fiction"
-      description="24 Works · updated yesterday"
+      description={metaText(['24 Works', 'updated yesterday'])}
       body="Books I want to finish this year."
     />
   ),

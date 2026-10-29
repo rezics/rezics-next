@@ -4,6 +4,7 @@ import { expect, screen, userEvent, within } from 'storybook/test';
 import { settled, withSurface } from '../stories/support.tsx';
 import { ShelfList, ShelfListRow } from './shelf-list.tsx';
 import { RelativeTime } from './relative-time.tsx';
+import { metaText } from './meta-line.tsx';
 
 const subject = {
   id: 'book',
@@ -58,7 +59,7 @@ function Example() {
             cover={{ subject: rowSubject, cover: null, src: () => '', ratio: entry.ratio }}
             title={entry.title}
             titleLang={index === 0 ? 'en' : 'ja'}
-            meta={index === 0 ? 'A. Author · Book' : 'Studio · Video game'}
+            meta={index === 0 ? metaText(['A. Author', 'Book']) : metaText(['Studio', 'Video game'])}
             status={index === 0 ? 'Reading' : 'Playing'}
             statusMenuEntries={[
               {

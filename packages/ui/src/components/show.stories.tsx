@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { Show } from './show.tsx';
+import { MetaLine } from './meta-line.tsx';
 
 const meta = {
   title: 'UI/Show',
   component: Show,
   tags: ['autodocs'],
-  args: { children: '4.6 out of 5 · 287 member ratings', when: true },
+  args: { children: <MetaLine items={['4.6 out of 5', '287 member ratings']} />, when: true },
   parameters: {
     docs: {
       description: {
@@ -40,7 +41,9 @@ const RatingSummary = ({ dark = false, hasRatings = true }: { dark?: boolean; ha
       }
       when={hasRatings}
     >
-      <p className="mt-2 text-sm text-foreground">4.6 out of 5 · 287 member ratings</p>
+      <p className="mt-2 text-sm text-foreground">
+        <MetaLine items={['4.6 out of 5', '287 member ratings']} />
+      </p>
     </Show>
   </section>
 );
