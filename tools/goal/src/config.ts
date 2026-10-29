@@ -5,6 +5,7 @@ import defaults from '../defaults.json';
 import type { DerivedFile, Pool, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
 import { readWebModules } from './workspace.ts';
+import { readPoolPolicies } from './pools.ts';
 
 import type { Database } from 'bun:sqlite';
 import { openDb } from './db.ts';
@@ -196,52 +197,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
   keys(compact, ['sol', 'luna'], 'compactTokens');
-  const poolValues = local.pools ?? [];
-  if (!Array.isArray(poolValues)) throw new Error('pools must be an array');
-  const pools: Pool[] = poolValues.map((raw: unknown) => {
-    const pool = object(raw, 'pool');
-    keys(
-      pool,
-      ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy', 'note'],
-      'pool',
-    );
-    if (pool.note !== undefined && typeof pool.note !== 'string') throw new Error('pool note must be text');
-    if (!['codex', 'grok', 'cursor', 'claude'].includes(String(pool.cli))) throw new Error('unsupported pool CLI');
-    if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
-      throw new Error('pool classes required');
-    const policy = object(pool.policy, 'pool policy');
-    keys(
-      policy,
-      ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'],
-      'pool policy',
-    );
-    if (typeof policy.allowUnknown !== 'boolean') throw new Error('allowUnknown must be explicit');
-    const reservePercent = positive(policy.reservePercent, 'reservePercent', true);
-    if (reservePercent >= 100) throw new Error('reservePercent must be less than 100');
-    const command = text(pool.command, 'pool command');
-    return {
-      name: text(pool.name, 'pool name'),
-      cli: pool.cli as Pool['cli'],
-      classes: pool.classes as string[],
-      configDirectory: resolve(dirname(localFile), text(pool.configDirectory, 'configDirectory')),
-      command: command.includes('/') ? resolve(dirname(localFile), command) : command,
-      allowanceKey: text(pool.allowanceKey, 'allowanceKey'),
-      ...(pool.usageFile === undefined
-        ? {}
-        : { usageFile: resolve(dirname(localFile), text(pool.usageFile, 'usageFile')) }),
-      policy: {
-        weight: positive(policy.weight, 'weight'),
-        reservePercent,
-        allowUnknown: policy.allowUnknown,
-        maxAgeMs: positive(policy.maxAgeMs, 'maxAgeMs'),
-        ...(policy.reservePerHour === undefined
-          ? {}
-          : { reservePerHour: positive(policy.reservePerHour, 'reservePerHour') }),
-        ...(policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: burnCeiling(policy.maxBurnPerHour) }),
-      },
-    };
-  });
-  if (new Set(pools.map((p) => p.name)).size !== pools.length) throw new Error('duplicate pool name');
+  const pools: Pool[] = readPoolPolicies(local.pools ?? [], localFile);
   return {
     version: 1,
     mainCheckout: main,
