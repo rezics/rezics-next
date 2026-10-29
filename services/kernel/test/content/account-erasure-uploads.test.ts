@@ -376,6 +376,7 @@ test("account erasure erases the account's avatar, standalone and unclaimed medi
 test("account erasure keeps the account's authored fields an anonymous reader is served and erases its other authored fields", async () => {
   const kept = await field(personas.bob, 'Public field');
   const hidden = await field(personas.bob, 'Hidden candidate');
+  const unreadable = await field(personas.bob, 'Hidden subject');
   await ok(
     personas.staff,
     'POST',
@@ -384,6 +385,9 @@ test("account erasure keeps the account's authored fields an anonymous reader is
     200,
   );
   expect((await call(null, 'GET', `/v1/documents/${hidden.id}`)).status).toBe(404);
+  await ok(personas.staff, 'POST', `/v1/subjects/${unreadable.subject}:hide`, { reason: 'Unreadable subject' }, 200);
+  expect((await call(null, 'GET', `/v1/subjects/${unreadable.subject}`)).status).toBe(404);
+  expect((await call(null, 'GET', `/v1/documents/${unreadable.id}`)).status).toBe(404);
   await eraseAll(personas.bob);
   expect((await ok(null, 'GET', `/v1/documents/${kept.id}`, undefined, 200)).document.author).toBe(
     personas.bob.accountId,
@@ -393,6 +397,14 @@ test("account erasure keeps the account's authored fields an anonymous reader is
       await db.admin.query(
         'SELECT availability,body,author_account_id FROM content.authored_field WHERE route=$1 AND id=$2',
         [routeOf(hidden.id), hidden.id],
+      )
+    ).rows[0],
+  ).toEqual({ availability: 'erased', body: null, author_account_id: personas.bob.accountId });
+  expect(
+    (
+      await db.admin.query(
+        'SELECT availability,body,author_account_id FROM content.authored_field WHERE route=$1 AND id=$2',
+        [routeOf(unreadable.id), unreadable.id],
       )
     ).rows[0],
   ).toEqual({ availability: 'erased', body: null, author_account_id: personas.bob.accountId });
