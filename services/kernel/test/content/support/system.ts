@@ -65,6 +65,10 @@ export interface ContentSystem {
     /** Refresh through the real Auth service while retaining the registered client identity. */
     refresh(input: { readonly refreshToken: string }): Promise<ContentCredential>;
   };
+  readonly deletion: {
+    readonly auth: Parameters<typeof import('../../support/account-deletion.ts').deletePersona>[0]['auth'];
+    person(): Promise<{ accountId: string; bearer: string }>;
+  };
   readonly access: Access;
   /** Catalogue derived from the routes mounted on this real Kernel. */
   readonly actions: ActionCatalogue;
@@ -284,6 +288,7 @@ export async function createContentSystem(options: ContentSystemOptions): Promis
 
     const system: ContentSystem = {
       database: native.database,
+      deletion: native.deletion,
       kernel: native.kernel,
       routeKey: native.routeKey,
       tokenKeys: native.tokenKeys,

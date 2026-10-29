@@ -7,6 +7,7 @@ import {
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
+import { createWorkflowApprovals } from '../../../src/access/workflow-approvals.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { createNativeAccountBindings } from '../../../src/access/native-account-bindings.ts';
@@ -191,6 +192,22 @@ async function createNativeContentSystemWithOptions(
       signing: { activeKid: privateKey.kid, privateKeys: [privateKey] },
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
+      accountOperations: (() => {
+        const approvals = createWorkflowApprovals({
+          pool,
+          access,
+          actions,
+          referenceKeys,
+          creationBinding: (input) => proofs.creationBinding(input),
+        });
+        return {
+          context: () => ({ pool, deadline: Date.now() + 10000 }),
+          approve: (token, input, context) => approvals.approve(token, input as never, context as never),
+          resolveForCaller: (token, reference, operation, context) =>
+            approvals.resolveForCaller(token, reference, operation as never, context as never),
+          admitGroup: async () => false,
+        };
+      })(),
       stagingKey: crypto.getRandomValues(new Uint8Array(32)),
       maintenanceSchedule: '0 0 1 1 *',
       executorId: namespace,
@@ -301,6 +318,34 @@ async function createNativeContentSystemWithOptions(
         refresh: async ({ refreshToken }) => credential(await requestAuth('/token', {}, refreshToken)),
       },
       nativeAuth,
+      deletion: {
+        auth: {
+          authPool,
+          host,
+          request: (path, body, headers) => requestAuth(path, body, headers?.get('cookie') ?? ''),
+        },
+        async person() {
+          const name = `erase_${crypto.randomUUID().replaceAll('-', '')}`;
+          const { accountId } = await host!.workflows.register({
+            key: name,
+            handle: name,
+            email: `${name}@content.test`,
+            password: 'ordinary native registration password',
+          });
+          const signed = await requestAuth('/signin', {
+            account_id: accountId,
+            password: 'ordinary native registration password',
+            client_id: ordinaryClient.id,
+            scope: scopes,
+          });
+          const cookie = signed.headers
+            .getSetCookie()
+            .map((value) => value.split(';')[0])
+            .join('; ');
+          const token = await credential(await requestAuth('/token', {}, cookie));
+          return { accountId, bearer: token.bearer };
+        },
+      },
       access,
       actions,
       clock: { setCommandTime: setTime, setCursorVerificationTime: setTime },
