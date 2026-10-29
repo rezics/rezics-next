@@ -397,7 +397,7 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   freezes three separate native cases: `Bangumi account-key CLI imports refreshes reopens and safely stops the native scalar feed`,
   `Open Library account-key CLI imports refreshes reopens and safely stops the native scalar feed`, and
   `Wikidata account-key CLI imports refreshes reopens and safely stops the synthetic native scalar feed`.
-  Frozen initially at `637f28a6d1`, all three cases passed at `02fa3231fc` with 3,392 assertions
+  Frozen initially at `637f28a6d1`, all three cases passed on the original `wikidata-3` base at `02fa3231fc` with 3,392 assertions
   (check `db222e74-09b0-47e4-83f6-025e202ba014`); root typecheck also passed
   (check `15bbed60-7e96-4489-9965-ba862c069b0c`). The caller corrected the edition expectation from
   `schema:BookEdition` to native `bf:Instance`, and URL/sameAs properties from command-input `{ id }` to public
@@ -405,14 +405,21 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   order; acquisition stops require zero Auth requests, matching lazy renewal on public requests. Converter
   observations use exact repository paths. The exact acceptance is
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts`,
-  with `bun scripts/worker-check.ts -- bun scripts/typecheck.ts` for the root typecheck.
+  with root and regression checks owned by landing for the current reconciliation.
   These call production `runImportCli`, native key stage/approve/apply and native Auth/Access/public writes.
   Inputs use `bangumi@3` without a native revision (types 1/2/4 imported, 3/6 present and skipped),
-  `open-library@3` edition revision 11 → 12 and `wikidata-3` synthetic Q571 revision 24681012 → 24681013.
+  `open-library@3` edition revision 11 → 12 and the actual exported Wikidata converter revision, currently
+  `wikidata-4` from producer dependency `17183ec750d8f577bd7e86c570b9638c34b986da`. Synthetic Q571 retains
+  source revision 24681012 → 24681013 and identical fixture bytes. Only the converter-revision binding changed;
+  all business assertions remain. Current-producer native acceptance is pending; the earlier receipt remains
+  qualified to its original base.
+  Local formatting, direct conversion/importer compilers, caller TypeScript parsing and production module/registration
+  resolution passed. The direct kernel compiler needs a native database for Reylo SQL analysis, unavailable locally;
+  its validation remains part of the named native check.
   Cases assert actual tuple claims, retrieved cited candidates, unchanged reopen, supported refresh, independent
   community adoption, immutable bootstrap bytes/keys/receipts and malformed/truncated/mass-disappearance stops
   preserving the completed baseline with zero public writes. Their exact byte/seal/effect observations are
-  emitted by the caller: first-input bytes 1,263 / 762 / 3,105, subjects 3 / 2 / 2 and post-refresh importer
+  emitted by the caller; on the original base: first-input bytes 1,263 / 762 / 3,105, subjects 3 / 2 / 2 and post-refresh importer
   receipts 17 / 22 / 21 for Bangumi / Open Library / Wikidata. All nine unsafe-input stops produced zero public
   writes and preserved completed baselines. Covers and unknown-licensed prose remain separate; no general metadata, words,
   classification, VNDB archive/statistics or discovery-matrix closure is claimed.

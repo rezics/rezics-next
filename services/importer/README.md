@@ -407,27 +407,36 @@ The three independently named cases are:
 - `Open Library account-key CLI imports refreshes reopens and safely stops the native scalar feed`
 - `Wikidata account-key CLI imports refreshes reopens and safely stops the synthetic native scalar feed`
 
-They pin `bangumi@3` (unversioned), `open-library@3` (edition revision 11 → 12) and `wikidata-3` (synthetic Q571
-revision 24681012 → 24681013). Bangumi retains types 1/2/4 and complete skipped membership for 3/6. Open Library
+They pin `bangumi@3` (unversioned) and `open-library@3` (edition revision 11 → 12). Wikidata uses the actual
+exported converter revision, currently `wikidata-4`, with synthetic Q571 revision 24681012 → 24681013.
+Bangumi retains types 1/2/4 and complete skipped membership for 3/6. Open Library
 uses five-column TSV, an independent work and the pinned edition with unresolved native author/work keys. Each
 case checks actual tuple claims, retrieved cited candidates, immutable bootstrap bytes/keys/receipts, unchanged
 new invocations, a supported-value refresh, independent community adoption and preservation of the last completed
 baseline with zero public writes after malformed/truncated input and mass disappearance. Owned key/state files
 are mode 0600 on tmpfs; each CLI invocation and all fixture resources are closed.
 
-Run the native acceptance and root typecheck through the worker check queue:
+Run the native acceptance through the worker check queue; landing owns regression and root checks:
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts
-bun scripts/worker-check.ts -- bun scripts/typecheck.ts
 ```
 
-The source cases were frozen at `637f28a6d1`. At tested revision `02fa3231fc`, the native command passed all
+The source cases were frozen at `637f28a6d1`. On the original base with `wikidata-3`, at tested revision
+`02fa3231fc`, the native command passed all
 three cases with 3,392 assertions (check `db222e74-09b0-47e4-83f6-025e202ba014`), and root typecheck passed
 (check `15bbed60-7e96-4489-9965-ba862c069b0c`). Captured first-input bytes were 1,263 / 762 / 3,105 for
 Bangumi / Open Library / Wikidata, with 3 / 2 / 2 subjects and 17 / 22 / 21 immutable importer receipts after
 refresh. Each source's malformed, truncated and mass-disappearance inputs produced zero public writes and
 preserved its completed baseline. Exact consumed-byte and seal counters are emitted in the native check log.
+
+The current producer dependency `17183ec750d8f577bd7e86c570b9638c34b986da` ships `wikidata-4`. The caller
+imports its actual `converter_revision` instead of asserting the historical `wikidata-3`; source `lastrevid`,
+fixture bytes and business assertions are unchanged. Current-producer native acceptance is pending; the original
+receipt above remains evidence only for its original base.
+Local reconciliation preflight passed formatting, direct conversion/importer package compilers, caller TypeScript
+parsing and production module/registration resolution to `wikidata-4`. The direct kernel compiler requires a
+native database for Reylo SQL analysis (`No database URL` locally); native acceptance supplies that prerequisite.
 
 Caller corrections retain exact values and public contracts: the edition type expectation changed from
 `schema:BookEdition` to the existing native observation `bf:Instance`; native URL/sameAs property expectations

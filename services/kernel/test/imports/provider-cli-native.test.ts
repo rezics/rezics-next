@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { isDeepStrictEqual } from 'node:util';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
+import { converter_revision as wikidataConverterRevision } from '../../../../packages/conversion/src/wikidata.ts';
 import bangumi from '../../../../specs/fixtures/imports/bangumi/subject.json';
 import edition from '../../../../specs/fixtures/imports/open-library/edition.json';
 import entity from '../../../../specs/fixtures/imports/wikidata/entity.json';
@@ -464,7 +465,7 @@ test('Wikidata account-key CLI imports refreshes reopens and safely stops the sy
     refresh = lines([revised, second]);
   const feed: Feed = {
     source: 'wikidata',
-    converter: 'wikidata-3',
+    converter: wikidataConverterRevision,
     first: bytes,
     refreshed: refresh,
     malformed: lines([unsealed]) + '{"type":"item",',
