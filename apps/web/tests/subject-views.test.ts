@@ -20,6 +20,7 @@ import fixtures from '../src/kernel/fixtures.json';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
+import { loadViewPages } from '../src/features/pages/subject-frame.tsx';
 import type { ViewTabLabels } from '../src/features/pages/view-tabs.tsx';
 
 const platform = platformJson as unknown as PresentationProfile;
@@ -82,11 +83,13 @@ test("each subject view is its own server-rendered URL under the subject's addre
     join(import.meta.dir, '..', 'src', 'routes', 'subjects', '$id_.$slug_.$view.tsx'),
   ).text();
   expect(route).toContain("createFileRoute('/subjects/$id_/$slug_/$view')");
-  expect(route).toContain('loadViewPages(client, data.id, data.view)');
+  expect(route).toContain('loadViewPages(client, data.id, data.view, data.locale)');
 
   sent.length = 0;
   const details = await loaded(kokoro, 'details');
-  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro, view: 'details' } })}`]);
+  expect(sent).toEqual([
+    `POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro, view: 'details' }, languages: ['en'] })}`,
+  ]);
   const work = platform.bases.find(({ base }) => base === 'schema:CreativeWork')!;
   expect(details.template).toEqual({
     scope: 'base',
@@ -99,6 +102,14 @@ test("each subject view is its own server-rendered URL under the subject's addre
       bases: ['schema:CreativeWork', 'schema:Thing'],
     }),
   );
+
+  // Both documents used by the view route ask for the page's language chain.
+  sent.length = 0;
+  expect((await loadViewPages(client, kokoro, 'details', 'zh-Hans')).kind).toBe('page');
+  expect(sent).toEqual([
+    `POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro, view: 'details' }, languages: ['zh-Hans', 'zh', 'zh-Hant'] })}`,
+    `POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro }, languages: ['zh-Hans', 'zh', 'zh-Hant'] })}`,
+  ]);
 
   // A template that lacks the view yields to the next in the order, then to the generic view.
   const generic = resolveView(platform, { type: 'schema:Recipe' }, 'relations');
@@ -303,7 +314,8 @@ test('the host renders a tab bar of the views that have data in the documented o
     value: 9,
     exact: true,
   });
-  expect(tabs.find(({ view }) => view === 'reviews')!.count).toBeUndefined();
+  expect(tabs.find(({ view }) => view === 'reviews')).toBeUndefined();
+  expect(tabs.find(({ view }) => view === 'discussion')).toBeUndefined();
 
   const html = renderOverview(page);
   const bar = /<nav[^>]*data-slot="view-tabs"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
@@ -339,7 +351,7 @@ test('the host renders a tab bar of the views that have data in the documented o
     ...workPage(),
     views: ['overview', 'works', 'discussion', 'details'],
   });
-  expect(person.map(({ view }) => view)).toEqual(['overview', 'discussion', 'details']);
+  expect(person.map(({ view }) => view)).toEqual(['overview', 'details']);
 });
 
 test('the platform overview follows the documented section order, ends with Sources and a Details link, and Details holds the remaining facts', async () => {
@@ -370,14 +382,15 @@ test('the platform overview follows the documented section order, ends with Sour
     'subject-list',
     'relation-groups',
     'appearances',
-    'rating-summary',
-    'review-list',
-    'thread-list',
     'collection-list',
     'subject-sources',
   ].map((slot) => html.indexOf(`data-slot="${slot}"`));
   expect(slots).not.toContain(-1);
   expect(slots).toEqual([...slots].sort((a, b) => a - b));
+  // The platform has no Reviews or Discussion read yet; this fixture cannot open those sections.
+  // Ratings likewise need route data, which this composition-only fixture does not provide.
+  for (const slot of ['rating-summary', 'review-list', 'thread-list'])
+    expect(html).not.toContain(`data-slot="${slot}"`);
   const sources = section(html, 'subject-sources');
   expect(sources).toContain(`href="${path(kokoro, 'The Little Prince', 'details')}"`);
   expect(html.lastIndexOf('<section')).toBe(html.indexOf(sources));

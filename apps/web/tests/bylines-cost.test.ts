@@ -190,8 +190,10 @@ test('a thread or board page reads its authors in one request at every size', as
         expect(Object.keys(page.authors ?? {})).toHaveLength(authorCount);
         expect(identity).toHaveLength(1);
         expect(identity[0]?.searchParams.get('ids')?.split(',')).toEqual(recorded.data.authors);
-        expect(calls.filter((url) => url.pathname !== '/v1/accounts')).toHaveLength(2);
-        expect(metrics).toEqual({ K: 3, D: 1, R: 0, A: 0 });
+        // Thread context brief (8dd1eb27ce), Cost: "One added read per page view, independent of the number of posts."
+        expect(calls.filter((url) => url.pathname !== '/v1/accounts')).toHaveLength(3);
+        expect(calls.filter((url) => url.pathname === `/v1/boards/${boardId}`)).toHaveLength(1);
+        expect(metrics).toEqual({ K: 4, D: 1, R: 0, A: 0 });
       }
     }
   }
@@ -226,7 +228,8 @@ test('a later thread page includes its starter and skips erased post identities'
   const identity = calls.filter((url) => url.pathname === '/v1/accounts');
   expect(identity).toHaveLength(1);
   expect(identity[0]?.searchParams.get('ids')?.split(',')).toEqual(expected);
-  expect(metrics).toEqual({ K: 3, D: 1, R: 0, A: 0 });
+  // Thread context brief (8dd1eb27ce), Cost: "One added read per page view, independent of the number of posts."
+  expect(metrics).toEqual({ K: 4, D: 1, R: 0, A: 0 });
 });
 
 test('failed optional identities leave both page reads intact without retries', async () => {
@@ -249,7 +252,8 @@ test('failed optional identities leave both page reads intact without retries', 
       expect('posts' in page ? page.posts.posts : page.threads.threads).toHaveLength(10);
       expect(Number.isNaN(Date.parse(page.now))).toBe(false);
       expect(calls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(1);
-      expect(metrics).toEqual({ K: 3, D: kind === 'thread' ? 1 : 0, R: 0, A: 0 });
+      // Thread context brief (8dd1eb27ce), Cost: "One added read per page view, independent of the number of posts."
+      expect(metrics).toEqual({ K: kind === 'thread' ? 4 : 3, D: kind === 'thread' ? 1 : 0, R: 0, A: 0 });
     }
   }
 });

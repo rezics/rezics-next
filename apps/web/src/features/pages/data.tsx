@@ -76,7 +76,7 @@ const subjectMessages: SubjectMessages = {
   details: 'Details',
   documentSpoiler: 'Reveal spoiler',
   source: 'Source',
-  spoilerShow: 'Show spoiler',
+  spoilerShow: 'Show or hide spoilers',
 };
 
 export { pageText };

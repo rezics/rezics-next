@@ -299,8 +299,14 @@ test('a spoiler-hidden item keeps its reveal control on the card', () => {
   const characters = section(html, 'appearances');
   expect(characters).toContain('The Fox');
   expect(characters).not.toContain('The Snake');
-  for (const part of Object.values(layouts(characters)))
-    expect(part.match(/<button\b[^>]*data-slot="collapsible-trigger"[^>]*>Show spoiler<\/button>/g)).toHaveLength(1);
+  for (const part of Object.values(layouts(characters))) {
+    // The hero polish keeps the reveal text and adds a decorative icon inside the button.
+    const controls = part.match(/<button\b[^>]*data-slot="collapsible-trigger"[^>]*>[\s\S]*?<\/button>/g) ?? [];
+    expect(controls).toHaveLength(1);
+    expect(controls[0]).toContain('aria-expanded="false"');
+    expect(controls[0]).toMatch(/<svg[^>]*aria-hidden="true"/);
+    expect(text(controls[0]!).trim()).toBe('Show or hide spoilers');
+  }
 });
 
 test('the full relations view uses the responsive cover grid and keeps its continuation link', () => {
