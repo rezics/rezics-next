@@ -115,12 +115,17 @@ async function hide(hidden: boolean) {
 async function fence(takenDown: boolean) {
   if (takenDown)
     await db.admin.query(
-      `INSERT INTO content.source_fences(route,source,external_id,field_group,taken_down,security_revision) VALUES ($1,$2,$3,'summary',true,1) ON CONFLICT (route,source,external_id,field_group) DO UPDATE SET taken_down=true,security_revision=content.source_fences.security_revision+1`,
+      `INSERT INTO content.source_fences(route,source,external_id,field_group,taken_down,security_revision,taken_down_at,takedown_id)
+       VALUES ($1,$2,$3,'summary',true,1,now(),gen_random_uuid())
+       ON CONFLICT (route,source,external_id,field_group) DO UPDATE SET
+         taken_down=true,security_revision=content.source_fences.security_revision+1,
+         taken_down_at=CASE WHEN content.source_fences.taken_down THEN content.source_fences.taken_down_at ELSE now() END,
+         takedown_id=CASE WHEN content.source_fences.taken_down THEN content.source_fences.takedown_id ELSE gen_random_uuid() END`,
       [home, source.source, source.external_id],
     );
   else
     await db.admin.query(
-      'UPDATE content.source_fences SET taken_down=false,security_revision=security_revision+1 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4',
+      'UPDATE content.source_fences SET taken_down=false,taken_down_at=NULL,takedown_id=NULL,security_revision=security_revision+1 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4',
       [home, source.source, source.external_id, 'summary'],
     );
 }
