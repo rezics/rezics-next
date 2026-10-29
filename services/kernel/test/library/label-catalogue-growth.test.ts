@@ -219,6 +219,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     otherDeleted: await template(other, 'Growth neighbour deleted template', true),
   };
   const names = ['owner-live', 'owner-deleted', 'neighbour-deleted'] as const;
+  const seedNamespace = `Background ${crypto.randomUUID()}`;
   const population: Population = {
     name: 'personal-label-catalogue-background',
     hotPartition: partition,
@@ -227,7 +228,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       const row = (templateRow: Record<string, unknown>, category: string) => ({
         ...templateRow,
         label_id: newId(routeOf(String(templateRow.account_id))!),
-        normalized_name: `Background ${category} ${placement.ordinal}`,
+        normalized_name: `${seedNamespace} ${category} ${placement.ordinal}`,
       });
       return {
         'library.personal_label': [
@@ -250,7 +251,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     for (const category of names) {
       const count = await database.admin.query<{ count: string }>(
         'SELECT count(*)::text AS count FROM library.personal_label WHERE normalized_name LIKE $1',
-        [`Background ${category} %`],
+        [`${seedNamespace} ${category} %`],
       );
       expect(Number(count.rows[0]!.count)).toBe(expectedPerCategory);
     }
@@ -521,7 +522,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   writeFileSync('.temp/label-catalogue/native-growth.json', JSON.stringify(evidence));
   appendFileSync(
     profilePath,
-    `${JSON.stringify({ check: 'personal-label-catalogue-population', multiplicity: 32, rowsPerOrdinal: 3, counts })}\n`,
+    `${JSON.stringify({ check: 'personal-label-catalogue-population', multiplicity: 32, rowsPerOrdinal: 3, seedNamespace, counts })}\n`,
   );
   if (priorProfile === undefined) delete process.env.GROWTH_PROFILE;
   else process.env.GROWTH_PROFILE = priorProfile;
