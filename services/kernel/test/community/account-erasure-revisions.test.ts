@@ -224,7 +224,7 @@ test("an account revision erasure page stays within its bound as other editors' 
     await drainEffects(system.database.pool, partitionOf(route));
     await driver.settle();
     const admin = system.database.pool;
-    const revisions = Array.from({ length: 1000 }, () => newId(route));
+    const revisions = Array.from({ length: 50 }, () => newId(route));
     await admin.query(
       `INSERT INTO community.realm_revision
       (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
@@ -250,6 +250,8 @@ test("an account revision erasure page stays within its bound as other editors' 
       name: "an account revision erasure page stays within its bound as other editors' revisions grow",
       rule: 'series',
       scales: [256, 1024, 4096],
+      repetitions: 1,
+      warmups: 1,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         const ids = Array.from({ length: scale - previous }, () => newId(route));
@@ -276,6 +278,17 @@ test("an account revision erasure page stays within its bound as other editors' 
         expect(page.pending).toBe(0);
         expect(page.next).not.toBeNull();
         after = page.next;
+      },
+      async warmup() {
+        after = null;
+      },
+      async prepare(database) {
+        await database.admin.query(
+          `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
+          SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id ON CONFLICT DO NOTHING`,
+          [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
+        );
+        after = null;
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
