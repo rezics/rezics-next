@@ -250,7 +250,7 @@ test('Report effect projection stays within its bound as source reports and targ
   );
   const projection = await db.admin.query<{ rows: number; events: number; created_at: string }>(
     `SELECT (SELECT count(*)::int FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS rows,
-            (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5) AS events,
+            (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5::text) AS events,
             (SELECT created_at::text FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS created_at`,
     [
       routeOf(target.id),
@@ -299,14 +299,14 @@ test('Report effect replay stays within its bound and changes nothing as history
       const targetPartition = partitionOf(routeOf(target.id)!);
       const before = await observed.admin.query<{ rows: number; events: number; position: string }>(
         `SELECT (SELECT count(*)::int FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS rows,
-                (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5) AS events,
+                (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5::text) AS events,
                 (SELECT position::text FROM core.partition WHERE partition_no=$6) AS position`,
         [routeOf(target.id), target.kind, target.id, routeOf(reportId), reportId, targetPartition, projectedType],
       );
       await applyReportEffect(observed.pool, event);
       const after = await observed.admin.query<{ rows: number; events: number; position: string }>(
         `SELECT (SELECT count(*)::int FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS rows,
-                (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5) AS events,
+                (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5::text) AS events,
                 (SELECT position::text FROM core.partition WHERE partition_no=$6) AS position`,
         [routeOf(target.id), target.kind, target.id, routeOf(reportId), reportId, targetPartition, projectedType],
       );
