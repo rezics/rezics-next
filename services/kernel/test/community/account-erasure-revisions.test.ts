@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import type { Pool, QueryResultRow } from 'pg';
 import type { Account, CommunityDriver } from '../../../../specs/community-driver.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { eraseAccountRevisionsPage } from '../../src/community/account-erasure-revisions.ts';
@@ -8,6 +9,127 @@ import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver, worker } from './community-driver.ts';
 
 afterAll(closeCommunityDrivers);
+
+type NativePool = Pick<Pool, 'connect'>;
+
+function stageMarker(stage: string, event: string, detail?: unknown) {
+  console.error(
+    JSON.stringify({
+      marker: 'account-erasure-revisions',
+      stage,
+      event,
+      at: new Date().toISOString(),
+      ...(detail === undefined ? {} : { detail }),
+    }),
+  );
+}
+
+async function nativeWaitEvidence(pool: NativePool, stage: string): Promise<void> {
+  let client: Awaited<ReturnType<NativePool['connect']>> | undefined;
+  try {
+    client = await pool.connect();
+    await client.query("SET application_name = 'account-erasure-revisions-diagnostic'");
+    await client.query("SET statement_timeout = '2s'");
+    const result = await client.query(`
+      SELECT activity.pid,
+             activity.application_name,
+             activity.state,
+             activity.wait_event_type,
+             activity.wait_event,
+             activity.query_start,
+             activity.query,
+             pg_blocking_pids(activity.pid) AS blocking_pids,
+             COALESCE((
+               SELECT json_agg(json_build_object(
+                 'locktype', locks.locktype,
+                 'mode', locks.mode,
+                 'granted', locks.granted,
+                 'relation', locks.relation,
+                 'transactionid', locks.transactionid
+               ))
+                 FROM pg_locks AS locks
+                WHERE locks.pid = activity.pid
+             ), '[]'::json) AS locks
+        FROM pg_stat_activity AS activity
+       WHERE activity.datname = current_database()
+         AND activity.pid <> pg_backend_pid()
+         AND activity.application_name <> 'account-erasure-revisions-diagnostic'
+         AND (activity.state <> 'idle' OR activity.wait_event_type IS NOT NULL)
+       ORDER BY activity.query_start`);
+    stageMarker(stage, 'native-wait-evidence', result.rows);
+  } catch (error) {
+    stageMarker(stage, 'native-wait-evidence-failed', error instanceof Error ? error.message : String(error));
+  } finally {
+    if (client) {
+      try {
+        await client.query('RESET statement_timeout');
+        await client.query('RESET application_name');
+      } catch {
+        // A failed diagnostic connection is released below; its error is already in the stage trace.
+      } finally {
+        client.release();
+      }
+    }
+  }
+}
+
+async function nativeStage<T>(
+  enabled: boolean,
+  stage: string,
+  action: () => Promise<T>,
+  pool?: NativePool,
+): Promise<T> {
+  if (!enabled) return action();
+  stageMarker(stage, 'start');
+  let diagnostic: Promise<void> | undefined;
+  const timer = pool
+    ? setInterval(() => {
+        if (diagnostic) return;
+        diagnostic = nativeWaitEvidence(pool, stage).finally(() => {
+          diagnostic = undefined;
+        });
+      }, 5_000)
+    : undefined;
+  try {
+    const result = await action();
+    stageMarker(stage, 'done');
+    return result;
+  } catch (error) {
+    stageMarker(stage, 'failed', error instanceof Error ? error.message : String(error));
+    if (pool) await nativeWaitEvidence(pool, stage);
+    throw error;
+  } finally {
+    if (timer) clearInterval(timer);
+    await diagnostic;
+  }
+}
+
+async function boundedFixtureQuery<T extends QueryResultRow = QueryResultRow>(
+  pool: NativePool,
+  label: string,
+  statement: string,
+  values: unknown[] = [],
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("SET statement_timeout = '30s'");
+    return await client.query<T>(statement, values);
+  } catch (error) {
+    stageMarker(label, 'fixture-query-failed', {
+      statement,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await nativeWaitEvidence(pool, label);
+    throw error;
+  } finally {
+    try {
+      await client.query('RESET statement_timeout');
+    } catch {
+      // Release the timed-out connection after preserving the original query failure.
+    }
+    client.release();
+  }
+}
 
 async function call(
   driver: CommunityDriver,
@@ -29,30 +151,40 @@ async function call(
   return response.json();
 }
 
-async function setup() {
-  const driver = await createCommunityDriver();
-  const fixture = await driver.provision();
+async function setup(trace = false) {
+  const driver = await nativeStage(trace, 'create community driver', () => createCommunityDriver());
   const { system } = communityFixtureRuntime();
+  const fixture = await nativeStage(trace, 'provision community fixture', () => driver.provision(), system.database.pool);
   const deletion = accountDeletionRuntime(system);
-  const persona = await deletion.person();
+  const persona = await nativeStage(trace, 'create deletable person', () => deletion.person(), system.database.pool);
   const owner = { id: persona.accountId, bearer: persona.bearer };
-  await system.database.pool.query(
-    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
-     SELECT $1, $2, $3, action, '(,)'::tstzrange, $3 FROM unnest($4::text[]) AS action
-     ON CONFLICT DO NOTHING`,
-    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, owner.id, ['space:create', 'realm:create']],
+  const { space, realm } = await nativeStage(
+    trace,
+    'resource setup',
+    async () => {
+      await boundedFixtureQuery(
+        system.database.pool,
+        'grant create resource permissions',
+        `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+         SELECT $1, $2, $3, action, '(,)'::tstzrange, $3 FROM unnest($4::text[]) AS action
+         ON CONFLICT DO NOTHING`,
+        [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, owner.id, ['space:create', 'realm:create']],
+      );
+      const { space } = await call(driver, owner, 'POST', '/v1/spaces', {
+        title: 'Original Space',
+        summary: 'Space archive',
+      });
+      const { realm } = await call(driver, owner, 'POST', '/v1/realms', {
+        spaceId: space.spaceId,
+        contextId: fixture.contextId,
+        visibility: 'public',
+        title: 'Original Realm',
+        summary: 'Realm archive',
+      });
+      return { space, realm };
+    },
+    system.database.pool,
   );
-  const { space } = await call(driver, owner, 'POST', '/v1/spaces', {
-    title: 'Original Space',
-    summary: 'Space archive',
-  });
-  const { realm } = await call(driver, owner, 'POST', '/v1/realms', {
-    spaceId: space.spaceId,
-    contextId: fixture.contextId,
-    visibility: 'public',
-    title: 'Original Realm',
-    summary: 'Realm archive',
-  });
   return { driver, fixture, system, owner, space, realm };
 }
 
@@ -217,44 +349,87 @@ test("account erasure keeps each Realm's and Space's current revision with its a
 }, 360000);
 
 test("an account revision erasure page stays within its bound as other editors' revisions grow", async () => {
-  const { driver, fixture, system, owner, space, realm } = await setup();
+  const { driver, fixture, system, owner, space, realm } = await setup(true);
   const route = routeOf(realm.realmId)!;
   let db: Awaited<ReturnType<typeof openGrowthDatabase>> | undefined;
   try {
-    await drainEffects(system.database.pool, partitionOf(route));
-    await driver.settle();
+    await nativeStage(true, 'pre-deletion drain effects', () => drainEffects(system.database.pool, partitionOf(route)), system.database.pool);
+    await nativeStage(true, 'pre-deletion settle', () => driver.settle(), system.database.pool);
     const admin = system.database.pool;
-    const revisions = Array.from({ length: 5 }, () => newId(route));
-    await admin.query(
-      `INSERT INTO community.realm_revision
-      (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
-      SELECT $1,$2,id,$3,'Archived','Private prose','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
-      [route, realm.realmId, realm.headRevisionId, fixture.contextId, owner.id, revisions],
+    const revisions = Array.from({ length: 50 }, () => newId(route));
+    await nativeStage(
+      true,
+      'revision and locator fixture inserts',
+      async () => {
+        await boundedFixtureQuery(
+          admin,
+          'insert archived revision fixtures',
+          `INSERT INTO community.realm_revision
+          (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+          SELECT $1,$2,id,$3,'Archived','Private prose','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
+          [route, realm.realmId, realm.headRevisionId, fixture.contextId, owner.id, revisions],
+        );
+        await boundedFixtureQuery(
+          admin,
+          'insert archived revision locators',
+          `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
+          SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
+          [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
+        );
+      },
+      system.database.pool,
     );
-    await admin.query(
-      `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
-      SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
-      [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
-    );
+    const baseLocators = (
+      await boundedFixtureQuery<{ n: number }>(
+        admin,
+        'count pre-existing owner revision locators',
+        'SELECT count(*)::integer AS n FROM community.revision_locator WHERE route=$1 AND account_id=$2',
+        [routeOf(owner.id), owner.id],
+      )
+    ).rows[0]!.n;
+    expect(baseLocators).toBeGreaterThan(0);
     const deletion = accountDeletionRuntime(system);
-    await deletePersona(
-      { pool: system.database.pool, auth: deletion.auth },
-      { accountId: owner.id, bearer: owner.bearer },
+    await nativeStage(
+      true,
+      'real deletePersona',
+      () => deletePersona(
+        { pool: system.database.pool, auth: deletion.auth },
+        { accountId: owner.id, bearer: owner.bearer },
+      ),
+      system.database.pool,
     );
-    await drainEffects(system.database.pool, partitionOf(routeOf(owner.id)!));
-    await driver.settle();
-    await worker.stop();
-    db = await openGrowthDatabase(system.database.pool.options.connectionString!);
+    await nativeStage(
+      true,
+      'deletion drain effects',
+      () => drainEffects(system.database.pool, partitionOf(routeOf(owner.id)!)),
+      system.database.pool,
+    );
+    await nativeStage(true, 'deletion settle', () => driver.settle(), system.database.pool);
+    await nativeStage(true, 'worker.stop', () => worker.stop(), system.database.pool);
+    db = await nativeStage(
+      true,
+      'openGrowthDatabase',
+      () => openGrowthDatabase(system.database.pool.options.connectionString!),
+      system.database.pool,
+    );
     let after: string | null = null;
     const resetPage = async (database: Awaited<ReturnType<typeof openGrowthDatabase>>) => {
-      await database.admin.query(
-        `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
-        SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id ON CONFLICT DO NOTHING`,
-        [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
+      await nativeStage(
+        true,
+        'reset revision erasure page fixtures',
+        () =>
+          boundedFixtureQuery(
+            database.admin,
+            'reinsert account revision locators',
+            `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
+            SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id ON CONFLICT DO NOTHING`,
+            [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
+          ),
+        system.database.pool,
       );
       after = null;
     };
-    const report = await checkGrowth(db, {
+    const report = await nativeStage(true, 'checkGrowth entry', () => checkGrowth(db!, {
       name: "an account revision erasure page stays within its bound as other editors' revisions grow",
       rule: 'series',
       scales: [256, 1024, 4096],
@@ -262,46 +437,80 @@ test("an account revision erasure page stays within its bound as other editors' 
       warmups: 1,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
+        stageMarker(`grow scale ${scale}`, 'start', { previous });
         const ids = Array.from({ length: scale - previous }, () => newId(route));
         for (let offset = 0; offset < ids.length; offset += 256) {
           const batch = ids.slice(offset, offset + 256);
-          await database.admin.query(
-            `INSERT INTO community.realm_revision
-            (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
-            SELECT $1,$2,id,$3,'Other editor','Keep','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
-            [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.member.id, batch],
+          await nativeStage(
+            true,
+            `grow scale ${scale}: revision rows ${offset + batch.length}/${ids.length}`,
+            () =>
+              boundedFixtureQuery(
+                database.admin,
+                `insert other editor revisions at ${scale} (${offset + batch.length}/${ids.length})`,
+                `INSERT INTO community.realm_revision
+                (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+                SELECT $1,$2,id,$3,'Other editor','Keep','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
+                [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.member.id, batch],
+              ),
+            system.database.pool,
           );
-          await database.admin.query(
-            `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
-            SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
-            [routeOf(fixture.member.id), fixture.member.id, route, realm.realmId, batch],
+          await nativeStage(
+            true,
+            `grow scale ${scale}: revision locators ${offset + batch.length}/${ids.length}`,
+            () =>
+              boundedFixtureQuery(
+                database.admin,
+                `insert other editor revision locators at ${scale} (${offset + batch.length}/${ids.length})`,
+                `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
+                SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
+                [routeOf(fixture.member.id), fixture.member.id, route, realm.realmId, batch],
+              ),
+            system.database.pool,
           );
         }
-        const population = await database.admin.query(
-          'SELECT count(*)::integer AS n FROM community.realm_revision WHERE route=$1 AND realm_id=$2 AND author=$3',
-          [route, realm.realmId, fixture.member.id],
+        const population = await nativeStage(
+          true,
+          `grow scale ${scale}: verify other editor revisions`,
+          () =>
+            boundedFixtureQuery<{ n: number }>(
+              database.admin,
+              `count other editor revisions at ${scale}`,
+              'SELECT count(*)::integer AS n FROM community.realm_revision WHERE route=$1 AND realm_id=$2 AND author=$3',
+              [route, realm.realmId, fixture.member.id],
+            ),
+          system.database.pool,
         );
         expect(population.rows[0].n).toBe(scale);
+        stageMarker(`grow scale ${scale}`, 'done');
       },
       async operation(database) {
         const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
-        expect(page.found).toBe(5);
+        expect(page.found).toBe(50);
         expect(page.pending).toBe(0);
-        expect(page.next).toBeNull();
+        expect(page.next).not.toBeNull();
         after = page.next;
       },
       async warmup(database) {
         await resetPage(database);
         const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
-        expect(page.found).toBe(5);
+        expect(page.found).toBe(50);
         after = page.next;
       },
       async prepare(database) {
         await resetPage(database);
       },
-    });
+    }), system.database.pool);
     expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
+    expect(after).not.toBeNull();
+    const continuation = await eraseAccountRevisionsPage({ pool: db.pool }, owner.id, after);
+    expect(continuation).toEqual({ found: baseLocators, pending: 0, next: null });
+    expect(await eraseAccountRevisionsPage({ pool: db.pool }, owner.id, continuation.next)).toEqual({
+      found: 0,
+      pending: 0,
+      next: null,
+    });
     expect(
       (
         await db.admin.query('SELECT head_revision_id FROM community.space WHERE route=$1 AND space_id=$2', [
