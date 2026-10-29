@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { readErasureStatus } from '../access/erasure.ts';
 import { noEffect, runCommand } from '../command/command.ts';
@@ -100,15 +99,9 @@ async function terminal(pool: Pool, row: Locator): Promise<boolean> {
     if (!partition || partition.writeState === 'moved') throw new Error('Community owner partition is unavailable');
     const operation = await readOperation.run(client, row);
     if (!operation || operation.actor_client_id === null) return true;
-    const parts =
-      operation.kind === 'removal'
-        ? [operation.realm_id, operation.member_account_id, operation.ban_id]
-        : operation.kind === 'leave'
-          ? [operation.initiator_account_id, operation.realm_id, operation.reservation_id]
-          : [operation.initiator_account_id, operation.realm_id, operation.creation_idempotency_key];
-    const prefix = operation.kind === 'removal' ? 'realm:ban' : `community.${operation.kind}`;
-    const id = `${prefix}:${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`;
-    const workflow = await readWorkflow.run(client, { id });
+    // All membership producers commit the exact workflow ID as their command key.
+    // It also survives minimization of another party on the same operation.
+    const workflow = await readWorkflow.run(client, { id: operation.creation_idempotency_key });
     return !!workflow && ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(workflow.status);
   });
 }
