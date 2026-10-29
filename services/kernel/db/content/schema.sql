@@ -216,13 +216,32 @@ BEGIN
         NEW.source_position, NEW.source_event_index) <> 0 THEN
       RAISE EXCEPTION 'Operation source is bound only after recording' USING ERRCODE = '23514';
     END IF;
-  ELSIF (to_jsonb(NEW) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index'])
-      IS DISTINCT FROM
-      (to_jsonb(OLD) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index'])
-    OR (OLD.native_workflow_id IS NOT NULL AND ROW(NEW.native_workflow_id, NEW.source_epoch,
+  ELSE
+    IF (to_jsonb(NEW) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index'])
+        IS DISTINCT FROM
+        (to_jsonb(OLD) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index']) THEN
+      IF (to_jsonb(NEW) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index',
+          'initiator_account_id','author_account_id','actor_account_id','original_operator_account_id','actor_client_id','actor_requested_by'])
+          IS DISTINCT FROM
+          (to_jsonb(OLD) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index',
+          'initiator_account_id','author_account_id','actor_account_id','original_operator_account_id','actor_client_id','actor_requested_by'])
+        OR (NEW.initiator_account_id IS NOT NULL AND NEW.initiator_account_id IS DISTINCT FROM OLD.initiator_account_id)
+        OR (NEW.author_account_id IS NOT NULL AND NEW.author_account_id IS DISTINCT FROM OLD.author_account_id)
+        OR (NEW.actor_account_id IS NOT NULL AND NEW.actor_account_id IS DISTINCT FROM OLD.actor_account_id)
+        OR (NEW.original_operator_account_id IS NOT NULL AND NEW.original_operator_account_id IS DISTINCT FROM OLD.original_operator_account_id)
+        OR (NEW.actor_client_id IS NOT NULL AND NEW.actor_client_id IS DISTINCT FROM OLD.actor_client_id)
+        OR (NEW.actor_requested_by IS NOT NULL AND NEW.actor_requested_by IS DISTINCT FROM OLD.actor_requested_by)
+        OR OLD.native_workflow_id IS NULL
+        OR NOT EXISTS (SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid=OLD.native_workflow_id
+          AND status IN ('SUCCESS','ERROR','CANCELLED','MAX_RECOVERY_ATTEMPTS_EXCEEDED')) THEN
+        RAISE EXCEPTION 'Operation identity and source binding are immutable' USING ERRCODE = '23514';
+      END IF;
+    END IF;
+    IF OLD.native_workflow_id IS NOT NULL AND ROW(NEW.native_workflow_id, NEW.source_epoch,
         NEW.source_partition, NEW.source_position, NEW.source_event_index) IS DISTINCT FROM
-      ROW(OLD.native_workflow_id, OLD.source_epoch, OLD.source_partition, OLD.source_position, OLD.source_event_index)) THEN
-    RAISE EXCEPTION 'Operation identity and source binding are immutable' USING ERRCODE = '23514';
+        ROW(OLD.native_workflow_id, OLD.source_epoch, OLD.source_partition, OLD.source_position, OLD.source_event_index) THEN
+      RAISE EXCEPTION 'Operation identity and source binding are immutable' USING ERRCODE = '23514';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -803,7 +822,7 @@ CREATE TABLE content.moderation_decision (
     target_id uuid NOT NULL,
     action text NOT NULL,
     statement text NOT NULL,
-    decider_account_id uuid NOT NULL,
+    decider_account_id uuid,
     decided_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     security_revision bigint NOT NULL,
     CONSTRAINT moderation_decision_action_check CHECK ((action = 'takedown'::text)),
@@ -811,7 +830,7 @@ CREATE TABLE content.moderation_decision (
     CONSTRAINT moderation_decision_check1 CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
     CONSTRAINT moderation_decision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_decision_security_revision_check CHECK ((security_revision > 0)),
-    CONSTRAINT moderation_decision_statement_check CHECK (((char_length(statement) >= 1) AND (char_length(statement) <= 1024))),
+    CONSTRAINT moderation_decision_statement_check CHECK (((char_length(statement) >= 0) AND (char_length(statement) <= 1024))),
     CONSTRAINT moderation_decision_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
 );
 
@@ -861,12 +880,12 @@ CREATE TABLE content.notice_seen (
 CREATE TABLE content.operation (
     route integer NOT NULL,
     operation_id uuid NOT NULL,
-    initiator_account_id uuid NOT NULL,
-    author_account_id uuid NOT NULL,
+    initiator_account_id uuid,
+    author_account_id uuid,
     thread_id uuid NOT NULL,
     actor_kind text NOT NULL,
-    actor_account_id uuid NOT NULL,
-    actor_client_id text NOT NULL,
+    actor_account_id uuid,
+    actor_client_id text,
     actor_scopes text[] NOT NULL,
     actor_requested_by text,
     actor_authn_epoch bigint NOT NULL,
@@ -917,6 +936,26 @@ CREATE TABLE content.operation (
     CONSTRAINT operation_requested_at_check CHECK (isfinite(requested_at)),
     CONSTRAINT operation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT operation_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: party_locator; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.party_locator (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    kind text NOT NULL,
+    due_at timestamp with time zone NOT NULL,
+    owner_route integer NOT NULL,
+    owner_id uuid NOT NULL,
+    CONSTRAINT party_locator_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT party_locator_check1 CHECK ((owner_route = ((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)))),
+    CONSTRAINT party_locator_due_at_check CHECK (isfinite(due_at)),
+    CONSTRAINT party_locator_kind_check CHECK ((kind = ANY (ARRAY['decision'::text, 'operation'::text]))),
+    CONSTRAINT party_locator_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT party_locator_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -1037,7 +1076,7 @@ CREATE TABLE content.report (
     CONSTRAINT report_check1 CHECK (((octet_length(reason) + COALESCE(octet_length(evidence), 0)) <= 2097152)),
     CONSTRAINT report_check2 CHECK (((revision_id IS NULL) OR (target_kind <> 'board'::text))),
     CONSTRAINT report_evidence_check CHECK ((char_length(evidence) <= 4096)),
-    CONSTRAINT report_outcome_shape CHECK ((((outcome IS NULL) AND (resolved_at IS NULL) AND (resolved_by IS NULL) AND (decision_id IS NULL)) OR ((outcome IS NOT NULL) AND (outcome = ANY (ARRAY['actioned'::text, 'dismissed'::text])) AND (resolved_at IS NOT NULL) AND (resolved_by IS NOT NULL) AND (((outcome = 'actioned'::text) AND (decision_id IS NOT NULL)) OR ((outcome = 'dismissed'::text) AND (decision_id IS NULL)))))),
+    CONSTRAINT report_outcome_shape CHECK ((((outcome IS NULL) AND (resolved_at IS NULL) AND (resolved_by IS NULL) AND (decision_id IS NULL)) OR ((outcome IS NOT NULL) AND (outcome = ANY (ARRAY['actioned'::text, 'dismissed'::text])) AND (resolved_at IS NOT NULL) AND (((outcome = 'actioned'::text) AND (decision_id IS NOT NULL)) OR ((outcome = 'dismissed'::text) AND (decision_id IS NULL) AND (resolved_by IS NOT NULL)))))),
     CONSTRAINT report_reason_check CHECK ((reason = ANY (ARRAY['off_topic'::text, 'inappropriate'::text, 'spam'::text, 'illegal'::text, 'other'::text]))),
     CONSTRAINT report_reporter_account_id_check CHECK (((reporter_account_id IS NULL) OR (reporter_account_id <> '00000000-0000-0000-0000-000000000000'::uuid))),
     CONSTRAINT report_reporter_erased_shape CHECK (((NOT reporter_erased) OR ((reporter_account_id IS NULL) AND (evidence IS NULL)))),
@@ -1399,6 +1438,14 @@ ALTER TABLE ONLY content.notice_seen
 
 ALTER TABLE ONLY content.operation
     ADD CONSTRAINT operation_pkey PRIMARY KEY (route, operation_id);
+
+
+--
+-- Name: party_locator party_locator_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.party_locator
+    ADD CONSTRAINT party_locator_pkey PRIMARY KEY (route, account_id, kind, due_at, owner_id);
 
 
 --

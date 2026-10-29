@@ -281,7 +281,7 @@ export async function readOperation(
     }),
   );
   const row = rows;
-  if (!row || row.initiator_account_id !== actor.accountId) return null;
+  if (!row || row.initiator_account_id !== actor.accountId || row.author_account_id === null) return null;
   const anchorRoute = routeOf(row.anchor_post_id);
   if (anchorRoute !== route) return null;
   const accountCheck = await accessCheck(

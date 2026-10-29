@@ -29,6 +29,7 @@ import { createCollectionJob } from './collection-job.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
 import { createErasureJob } from './erasure-job.ts';
 import { createReactionCountEffect } from './reaction-projection.ts';
+import { createPartyLocatorEffect } from './party-locator.ts';
 import { createAuthorItemEffect } from './author-item-index.ts';
 import { createReportLocatorEffect } from './report-locator.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
@@ -404,6 +405,7 @@ async function registerWork(
     createSubjectThreadEffect(context.pool),
     createAuthorItemEffect(context.pool),
     createReportLocatorEffect(context.pool),
+    createPartyLocatorEffect(context.pool),
   ]);
 }
 
@@ -449,6 +451,7 @@ export function createContentOperationClient({
             });
             const receipt =
               row &&
+              row.initiator_account_id !== null &&
               (await readOperationEnqueueReceipt.run(tx, {
                 partition_no: partitionOf(route),
                 initiator_account_id: row.initiator_account_id,

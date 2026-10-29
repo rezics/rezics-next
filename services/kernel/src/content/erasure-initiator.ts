@@ -14,14 +14,27 @@ export async function readWorkflowErasureOperation(
 ) {
   const row = await readOperation.run(client, input);
   if (!row) return null;
+  const { initiator_account_id, author_account_id, actor_account_id, actor_client_id } = row;
+  // A minimized terminal operation can never supply an initiator again.
+  if (
+    initiator_account_id === null ||
+    author_account_id === null ||
+    actor_account_id === null ||
+    actor_client_id === null
+  )
+    return null;
   const receipt = await readReceipt.run(client, {
     partition_no: input.partition_no,
-    initiator_account_id: row.initiator_account_id,
+    initiator_account_id,
     creation_command_kind: row.creation_command_kind,
     creation_idempotency_key: row.creation_idempotency_key,
   });
   return {
     ...row,
+    initiator_account_id,
+    author_account_id,
+    actor_account_id,
+    actor_client_id,
     receipt_transaction_id: receipt?.receipt_transaction_id ?? null,
     receipt_request_digest: receipt?.receipt_request_digest ?? null,
     receipt_commitment: receipt?.receipt_commitment ?? null,
