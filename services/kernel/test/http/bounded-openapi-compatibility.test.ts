@@ -262,7 +262,7 @@ test('native ingress reservations refuse excess requests before reading and rele
         ),
       );
     const refused = await app.handle(excess());
-    expect(refused.status).toBe(503);
+    expect(refused.status, JSON.stringify(await refused.clone().json())).toBe(503);
     expect(refused.headers.get('retry-after')).toBe('1');
     expect(await refused.json()).toMatchObject({ code: 'overloaded' });
     expect(reads).toBe(0);
@@ -272,6 +272,12 @@ test('native ingress reservations refuse excess requests before reading and rele
       controller.close();
     }
     const responses = await Promise.all(pending);
+    const failures = await Promise.all(
+      responses
+        .filter((response) => response.status !== 200)
+        .map(async (response) => ({ status: response.status, body: await response.json() })),
+    );
+    expect(failures).toEqual([]);
     expect(responses.every((response) => response.status === 200)).toBe(true);
   }
   const next = await app.handle(
