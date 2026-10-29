@@ -34,17 +34,17 @@ Explicit `git show 49a51f6350:<path>` inspection covered the complete preserved 
 their contents match the preserved tree. Short Semantic paths below are under `services/kernel/src/semantic/`;
 other component paths are relative to `services/kernel/src/` unless qualified.
 
-| Seam | Delivered or preserved evidence | Consequence |
-| --- | --- | --- |
-| `subject.ts:writeSubject` | Delivered shared revision-1 writer; no epoch call | Hook creation here, not only HTTP. |
-| `identityEpochStore.initializeSubject` | Preserved checks actual creation TX/revision, inserts local self | Only manually invoked by its native test; actual creation remains uncovered. |
-| `stepIdentityEpochBootstrap(pool, partition)` | Preserved indexed pages, dirty capture and released-home custody | Useful primitive; caller must supply each home. No all-home scheduler. |
-| `readIdentityEpochCutover` | Preserved hardcoded five missing-writer names | Always blocked, not a delivered proof of installed writers. |
-| `admit` | Preserved checks some command authority, then always throws | No pending job, cap implementation, affected index or wakeup success. |
-| `admitHomeEffect` | Preserved even a matching locked fence ends in throw | Hooks do not supply successful home admission. |
-| `reconcileStepReceipt` | Preserved native identity/scope checks, then always throws | No successful complete custody path. |
-| `publish` | Preserved checks fixed ACK rows, then always throws | Missing ACKs and missing publication implementation are distinct defects. |
-| Mapping, fixed ACK producers, coordinator | Required exports are absent at this base | Cannot claim successful publication or Accounts compatibility. |
+| Seam                                          | Delivered or preserved evidence                                  | Consequence                                                                  |
+| --------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `subject.ts:writeSubject`                     | Delivered shared revision-1 writer; no epoch call                | Hook creation here, not only HTTP.                                           |
+| `identityEpochStore.initializeSubject`        | Preserved checks actual creation TX/revision, inserts local self | Only manually invoked by its native test; actual creation remains uncovered. |
+| `stepIdentityEpochBootstrap(pool, partition)` | Preserved indexed pages, dirty capture and released-home custody | Useful primitive; caller must supply each home. No all-home scheduler.       |
+| `readIdentityEpochCutover`                    | Preserved hardcoded five missing-writer names                    | Always blocked, not a delivered proof of installed writers.                  |
+| `admit`                                       | Preserved checks some command authority, then always throws      | No pending job, cap implementation, affected index or wakeup success.        |
+| `admitHomeEffect`                             | Preserved even a matching locked fence ends in throw             | Hooks do not supply successful home admission.                               |
+| `reconcileStepReceipt`                        | Preserved native identity/scope checks, then always throws       | No successful complete custody path.                                         |
+| `publish`                                     | Preserved checks fixed ACK rows, then always throws              | Missing ACKs and missing publication implementation are distinct defects.    |
+| Mapping, fixed ACK producers, coordinator     | Required exports are absent at this base                         | Cannot claim successful publication or Accounts compatibility.               |
 
 Supplied raw result, **not rerun here**: three passes, two failures, 437 assertions; root typecheck exit zero.
 Positive pending and cap cases fail at `readEpoch` unavailable before exercising admission. This establishes
@@ -60,17 +60,17 @@ The independent sibling cutover report was not read or coordinated.
 
 ## The actual writer boundary
 
-| Owned source seam | Required change in the same STORE writer ownership boundary |
-| --- | --- |
-| `subject.ts:writeSubject`, `createSubject` | Initialize exact self after subject and revision 1, before native commit; one TX with existing receipt/outbox. |
-| `bulk.ts:batchCommand` create/import | Its shared `writeSubject` hook covers actual claimed source-tuple creation; preserve `guardBatchAuthorization`, source fence, tuple claim and real Global/import authority. |
-| `account-agents.ts:ensureAccountAgent` | Named path calls `writeSubject`; `createUnlabeledAgent` directly inserts subject/revision and needs its own same-TX hook. Keep deterministic ID and platform source authority. |
-| `merges.ts:mergeSubjectsInCommand` | Stop unadmitted revision/redirect/count/event changes; perform only retained job-scoped structural effects after admission. Its callers include verification. |
-| `merge-moves.ts:register`, `moveMergePage` | Own survivor member registration, original repoints, recursive members, withdrawal/addition and member frontier. Every half-effect needs retained custody and a matching home fence. |
-| `account-agents.ts:verifyAccountAgent` | Bind persisted Accounts intent; include both reciprocal backlinks and merge effect, including already-verified replay. |
-| `account-agents.ts:unverifyAccountAgent` | Replace direct redirect/member deletion and backlink relocation with admitted split/reversal work; replay must wait for the same published job. |
-| `merge-moves.ts:reverseAccountAgentLinks` | Replace request-local exhaustion loop with durable bounded provenance pages and withdrawal/addition receipts; preserve Context/filter/source/statement identity. |
-| Direct SQL and relay entry | Guard `merges-insert-redirect.sql`, `merge-moves-insert-redirect.sql`, member insert/update/delete, and account backlink verify/unverify SQL. `links.ts:applyLinkBatch` can invoke moves from old `SUBJECT_MERGED`/`LINKS_MOVING` outbox events after HTTP returns. |
+| Owned source seam                          | Required change in the same STORE writer ownership boundary                                                                                                                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subject.ts:writeSubject`, `createSubject` | Initialize exact self after subject and revision 1, before native commit; one TX with existing receipt/outbox.                                                                                                                                                      |
+| `bulk.ts:batchCommand` create/import       | Its shared `writeSubject` hook covers actual claimed source-tuple creation; preserve `guardBatchAuthorization`, source fence, tuple claim and real Global/import authority.                                                                                         |
+| `account-agents.ts:ensureAccountAgent`     | Named path calls `writeSubject`; `createUnlabeledAgent` directly inserts subject/revision and needs its own same-TX hook. Keep deterministic ID and platform source authority.                                                                                      |
+| `merges.ts:mergeSubjectsInCommand`         | Stop unadmitted revision/redirect/count/event changes; perform only retained job-scoped structural effects after admission. Its callers include verification.                                                                                                       |
+| `merge-moves.ts:register`, `moveMergePage` | Own survivor member registration, original repoints, recursive members, withdrawal/addition and member frontier. Every half-effect needs retained custody and a matching home fence.                                                                                |
+| `account-agents.ts:verifyAccountAgent`     | Bind persisted Accounts intent; include both reciprocal backlinks and merge effect, including already-verified replay.                                                                                                                                              |
+| `account-agents.ts:unverifyAccountAgent`   | Replace direct redirect/member deletion and backlink relocation with admitted split/reversal work; replay must wait for the same published job.                                                                                                                     |
+| `merge-moves.ts:reverseAccountAgentLinks`  | Replace request-local exhaustion loop with durable bounded provenance pages and withdrawal/addition receipts; preserve Context/filter/source/statement identity.                                                                                                    |
+| Direct SQL and relay entry                 | Guard `merges-insert-redirect.sql`, `merge-moves-insert-redirect.sql`, member insert/update/delete, and account backlink verify/unverify SQL. `links.ts:applyLinkBatch` can invoke moves from old `SUBJECT_MERGED`/`LINKS_MOVING` outbox events after HTTP returns. |
 
 The five-name list therefore understates the concrete boundary. The unlabeled creation branch, reversal helper,
 cross-home backlink effects and old relay deliveries cannot be omitted just because another helper is hooked.
@@ -110,13 +110,13 @@ frontiers and effect custody belong in native SQL; a DBOS success value is not p
 These are design sketches, not assertions that the candidate migration implements them. Keep the existing
 native database, `runCommand`, outbox, DBOS and WorkModule; introduce no engine, library or service.
 
-* Local source: exact `(route, original)` mapping/self-creation receipt; a structural fence row; coalescing dirty
+- Local source: exact `(route, original)` mapping/self-creation receipt; a structural fence row; coalescing dirty
   heads keyed by original and by `(terminal, original)`; retained page/frontier/effect/native receipt rows.
-* Control: one locked epoch/pending row; immutable receipt-bound job/intent; versioned exact group catalogue;
+- Control: one locked epoch/pending row; immutable receipt-bound job/intent; versioned exact group catalogue;
   immutable affected-set references; unique source-page custody; fixed mapping/Search/Library ACK custody.
-* Bootstrap: durable topology enumeration frontier, one custody slot per physical home, and source owner epoch,
+- Bootstrap: durable topology enumeration frontier, one custody slot per physical home, and source owner epoch,
   capture installation and final drain receipts. Coverage is derived from those records, never caller supplied.
-* Indexes: subject `(route, subject_id)` and redirect `(route, subject_id, sequence DESC)`; member
+- Indexes: subject `(route, subject_id)` and redirect `(route, subject_id, sequence DESC)`; member
   `(route, subject_id, member_id)` plus pending phase index; dirty pending indexes where `head > captured`;
   control membership `(group_version, original)` and unique current original; page/effect/ACK exact locators;
   affected-set seek `(job_id, original)` or its immutable indexed membership view.
@@ -272,18 +272,18 @@ changing pending to published exactly once. Missing Search or Library means pend
 
 ## Required concurrent timelines
 
-| Schedule | Native outcome required |
-| --- | --- |
-| Bootstrap seeks past key K; creation inserts key < K | Creation commits self + dirty head/wakeup together. Dirty drain enrolls it; local self works while Search is absent. |
-| Capture h races update h+1 | Same dirty-row lock orders them; custody of h cannot clear h+1. Capture and custody are separately crash replayable. |
-| Old writer holds local barrier when cutover arrives | Cutover waits; old committed effect is captured and drained. If cutover wins, old effect rejects in its actual TX. A process-local FIFO is insufficient. |
-| Legacy merge register commits; worker pauses before repoint | Retained legacy work must be inventoried/drained or converted before final cut; no empty member page can certify completion. |
-| Reversal pauses after restoration, before survivor cleanup | Retain exact provenance and both receipts; retry does not restore unrelated facts, and publication waits for cleanup custody. |
-| Admissions A/B race | Control lock serializes them: authorized replay of A returns A; different intent gets busy; conflicting same receipt errors before effects. |
-| Follow apply starts before local pending fence | Same local lock lets it commit before the fence and enter retained repair input; if fence commits first, stale apply rejects. Cover old and new destinations. |
-| Owner fences/moves after page or permit read | Executor final native fence rolls back late effects, or source receipt reconciliation remains unavailable. Never interpret missing owner as empty. |
-| Crash after admission, before dispatch | Durable pending/intent/input roots/wakeup survive; worker resumes job identity, no second epoch. |
-| Crash after home effect, before custody or DBOS journal | Recover retained exact receipt/frontier; duplicate custody is no-op. Do not replay a stale positive from workflow arguments. |
+| Schedule                                                    | Native outcome required                                                                                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bootstrap seeks past key K; creation inserts key < K        | Creation commits self + dirty head/wakeup together. Dirty drain enrolls it; local self works while Search is absent.                                          |
+| Capture h races update h+1                                  | Same dirty-row lock orders them; custody of h cannot clear h+1. Capture and custody are separately crash replayable.                                          |
+| Old writer holds local barrier when cutover arrives         | Cutover waits; old committed effect is captured and drained. If cutover wins, old effect rejects in its actual TX. A process-local FIFO is insufficient.      |
+| Legacy merge register commits; worker pauses before repoint | Retained legacy work must be inventoried/drained or converted before final cut; no empty member page can certify completion.                                  |
+| Reversal pauses after restoration, before survivor cleanup  | Retain exact provenance and both receipts; retry does not restore unrelated facts, and publication waits for cleanup custody.                                 |
+| Admissions A/B race                                         | Control lock serializes them: authorized replay of A returns A; different intent gets busy; conflicting same receipt errors before effects.                   |
+| Follow apply starts before local pending fence              | Same local lock lets it commit before the fence and enter retained repair input; if fence commits first, stale apply rejects. Cover old and new destinations. |
+| Owner fences/moves after page or permit read                | Executor final native fence rolls back late effects, or source receipt reconciliation remains unavailable. Never interpret missing owner as empty.            |
+| Crash after admission, before dispatch                      | Durable pending/intent/input roots/wakeup survive; worker resumes job identity, no second epoch.                                                              |
+| Crash after home effect, before custody or DBOS journal     | Recover retained exact receipt/frontier; duplicate custody is no-op. Do not replay a stale positive from workflow arguments.                                  |
 
 `partition/partition.ts` exposes active/fenced/moved ownership and `command/fence.sql` atomically advances its
 component with receipt/outbox. `database/pool.ts` rejects nested checkout. The inspected base has no general
@@ -361,11 +361,11 @@ The manager must read both independent reports completely and compare them befor
 Existing reference clones were reused read-only; no code was installed, built, executed or copied from them.
 Reference index topic: `identity-store-cutover-deep`; source licences were inspected.
 
-* PostgreSQL: `.reference/library-shelf-maintenance/postgres`, release object
+- PostgreSQL: `.reference/library-shelf-maintenance/postgres`, release object
   `0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89` (`REL_19_RC1`, not the clone's 20-devel HEAD), PostgreSQL License,
   `COPYRIGHT`; inspected `src/backend/commands/trigger.c` and `indexcmds.c`. Native PostgreSQL 19 documentation
   supports the lock/isolation claims; these sources do not prove this application's capture implementation.
-* DBOS Transact TypeScript: `.reference/search-worker-outcome-harness/dbos-transact-ts`,
+- DBOS Transact TypeScript: `.reference/search-worker-outcome-harness/dbos-transact-ts`,
   `980dc55095f445b189aecb59e7f3334345179f65`, MIT, `LICENSE`; inspected `src/dbos-executor.ts:914-1138`.
   Repository native evidence is AGPL-3.0-only. Recommendations describe designs in the existing stack.
 
