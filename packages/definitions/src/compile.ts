@@ -1,5 +1,5 @@
 import { LinkML, type SchemaValidationReport } from '@neverblink/linkml';
-import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
+import { createFilterConstruction, type FilterDocument, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { posix } from 'node:path';
 import { safePattern } from './pattern-safety.ts';
@@ -958,6 +958,7 @@ export async function compileCatalogue(input: {
   stop();
 
   const savedEntries: { key: string; value: SavedFilter }[] = [];
+  const filterConstruction = createFilterConstruction(release);
   let filterCount = 0;
   for (const group of Object.keys(input.filters ?? {}).sort(compare)) {
     const file = `filters/${group}`;
@@ -1006,7 +1007,7 @@ export async function compileCatalogue(input: {
       const filterPointer = at(pointer, 'filter');
       if (!Object.hasOwn(raw, 'filter')) add({ file, pointer: filterPointer }, 'invalid', 'Filter is required');
       else {
-        for (const error of validateFilter(raw.filter, release, { saved: false }))
+        for (const error of filterConstruction.validateFilter(raw.filter, { saved: false }))
           add(
             { file, pointer: `${filterPointer}${error.pointer}` },
             savedFilterCode(error),
