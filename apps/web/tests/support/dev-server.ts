@@ -80,7 +80,10 @@ export async function startDevServer(
   child.stderr!.on('data', keep);
   const exited = new Promise<Error>((resolve) => {
     child.once('error', (error) => resolve(error));
-    child.once('close', (code, signal) => resolve(new Error(`dev server exited with ${code ?? signal}`)));
+    child.once('exit', (code, signal) => resolve(new Error(`dev server exited with ${code ?? signal}`)));
+  });
+  const closed = new Promise<void>((resolve) => {
+    child.once('close', () => resolve());
   });
   const exitFailure = exited.then((error) => {
     throw error;
@@ -117,7 +120,7 @@ export async function startDevServer(
         clearTimeout(timer);
         // A leader may exit while a descendant still owns a listener or ignores SIGTERM.
         signalGroup('SIGKILL');
-        await exited;
+        await closed;
       }
       if (browserError) throw browserError;
     })());
@@ -214,10 +217,10 @@ export async function startDevServer(
     return { origin, stop };
   } catch (error) {
     lastError = error;
-    const report = new Error(
-      `dev server ${phase} failed for ${path}; elapsed ${Date.now() - phaseStart} ms; last error: ${String(lastError)}\nCaptured output:\n${output}`,
-    );
+    const elapsed = Date.now() - phaseStart;
     await stop();
-    throw report;
+    throw new Error(
+      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(lastError)}\nCaptured output:\n${output}`,
+    );
   }
 }

@@ -3,6 +3,7 @@ Vite pre-bundles browser dependencies by scanning the site routes and their impo
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
+Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
 The settings page at `/settings` shows the signed-in person's spoiler level and cover suitability and saves each change
 when chosen, with the version it read; a stale version keeps the choice on screen and offers a reload. Its Privacy

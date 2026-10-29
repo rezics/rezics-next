@@ -243,3 +243,25 @@ test('a slow start cannot consume the warm-up budget either', async () => {
   });
   await server.stop();
 }, 15_000);
+
+test('a parent exit fails immediately even when its child keeps the output pipe open', async () => {
+  const options = fake({ ready: false, exit: true });
+  const command = options.command!;
+  const began = Date.now();
+  const error = await failure({
+    ...options,
+    budgets: { ...budgets, ready: 10_000 },
+    command: (context) =>
+      command(context).map((part) =>
+        part
+          .replace(
+            "'setInterval(() => {}, 1000)']);",
+            "'setInterval(() => {}, 1000)'], { stdout: 'inherit', stderr: 'inherit' });",
+          )
+          .replace('child.kill(); await child.exited; process.exit(23)', 'process.exit(23)'),
+      ),
+  });
+  expect(error).toContain('23');
+  expect(error).toContain('fixture output');
+  expect(Date.now() - began).toBeLessThan(2000);
+});
