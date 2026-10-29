@@ -245,6 +245,42 @@ test('a finite native workflow segment continues from its durable Collection loc
   expect(pairs.rows.map((row) => row.subject_id).sort()).toEqual([...subjects].sort());
 }, 180_000);
 
+test('a collapsed public-private-public cycle advances ordering without publishing a public change', async () => {
+  const s = await subject();
+  let c = await collection();
+  await add(c.id, s);
+  await publish(await notification(c.id));
+  const publicState = async () => ({
+    listing: (
+      await db.admin.query('SELECT * FROM library.subject_listing WHERE route=$1 AND subject_id=$2', [routeOf(s), s])
+    ).rows,
+    events: (
+      await db.admin.query(
+        "SELECT * FROM core.outbox WHERE partition_no=$1 AND subject=$2 AND type='com.rezics.library.subject.listed.v1' ORDER BY position,event_seq",
+        [routeOf(s)! >> 4, s],
+      )
+    ).rows,
+  });
+  const before = await publicState();
+  c = await flip(c, 'private');
+  const delayedPrivate = await observeListingSource(db.pool, { collectionId: c.id, subjectId: s });
+  c = await flip(c, 'public');
+  const current = await observeListingSource(db.pool, { collectionId: c.id, subjectId: s });
+  await publish(await notification(c.id));
+  expect(await publicState()).toEqual(before);
+  expect(
+    (
+      await db.admin.query(
+        'SELECT source_epoch,source_position FROM library.subject_collection_version WHERE route=$1 AND subject_id=$2 AND collection_id=$3',
+        [routeOf(s), s, c.id],
+      )
+    ).rows,
+  ).toEqual([{ source_epoch: current.stamp.epoch, source_position: current.stamp.position.toString() }]);
+  await applySubjectListing({ pool: db.pool, client }, delayedPrivate);
+  expect(await publicState()).toEqual(before);
+  await count(s, 1);
+}, 120_000);
+
 for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] as const) {
   test(`native visibility publication rows, blocks and statements ignore unrelated ${axis}`, async () => {
     const unrelatedSubject = await subject();
