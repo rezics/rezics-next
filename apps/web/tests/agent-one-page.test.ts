@@ -40,7 +40,7 @@ test('a followed subject redirect uses the handle returned by the page read', as
               account: 'account-id',
               document: { root: { props: {} }, content: [{ type: 'AccountIdentity', props: { id: 'account' } }] },
               reads: {
-                account: { status: 200, body: { accounts: [{ id: 'account-id', state: 'active', handle: 'helper' }] } },
+                r0: { status: 200, body: { accounts: [{ id: 'account-id', state: 'active', handle: 'helper' }] } },
               },
             },
           };
