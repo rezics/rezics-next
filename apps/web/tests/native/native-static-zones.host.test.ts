@@ -82,6 +82,10 @@ async function pageProblem(response: Response) {
   return (await response.json()) as { code?: string; request_id?: string };
 }
 
+function commandHeaders(): HeadersInit {
+  return { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) };
+}
+
 test('anonymous readers use native static Zone pages, actual subject links, and localized canonical paths', async () => {
   const started = stack.kernelRequests().length;
   for (const locale of UI_LOCALES) {
@@ -280,9 +284,17 @@ test('current Zone takedown removes protected copy from page and metadata for th
 
   const bob = await auth.signIn('bob');
   const bobPage = bob.context.pages().at(-1)!;
-  await bobPage.goto(`${stack.web}/en/zones/${fixture.publicZoneId}`, { waitUntil: 'domcontentloaded' });
+  const bobResponse = await bobPage.goto(`${stack.web}/en/zones/${fixture.publicZoneId}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await bobPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  expect(bobResponse?.status()).toBe(200);
+  expect(bobResponse?.headers()['cache-control']).toMatch(/private.*no-store|no-store.*private/i);
+  expect(await bobResponse?.text()).not.toContain(fixture.protectedSentinel);
+  expect(await bobPage.locator('main').innerText()).not.toContain(fixture.protectedSentinel);
+  expect(await bobPage.locator('[data-zone-shell] > header').innerText()).not.toContain('Field Notes');
+  await bobPage.reload({ waitUntil: 'domcontentloaded' });
   await bobPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
   expect(await bobPage.locator('main').innerText()).not.toContain(fixture.protectedSentinel);
-  expect(await bobPage.locator('[data-zone-shell]').innerText()).not.toContain('Field Notes');
   if (!contexts.includes(bob.context)) contexts.push(bob.context);
 });
