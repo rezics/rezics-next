@@ -12,6 +12,8 @@ import {
 import * as D from '../shadcn/dropdown-menu.tsx';
 import { Drawer, DrawerContent, DrawerTitle } from '../shadcn/drawer.tsx';
 import { Button } from '../shadcn/button.tsx';
+import { Field, FieldLabel } from '../shadcn/field.tsx';
+import { RadioGroup, RadioGroupItem } from '../shadcn/radio-group.tsx';
 
 export type MenuEntry =
   | {
@@ -279,25 +281,28 @@ export function Menu({
                       if (entry.type === 'separator') return <hr key={index} className="my-2 border-border" />;
                       if (entry.type === 'radio')
                         return (
-                          <div key={index} role="radiogroup" aria-label={entry.label}>
+                          <RadioGroup
+                            key={index}
+                            aria-label={entry.label}
+                            value={entry.value}
+                            onValueChange={(value) => {
+                              entry.onValueChange(value);
+                              close();
+                            }}
+                            className="gap-0"
+                          >
                             {entry.options.map((option) => (
-                              <label
-                                key={option.value}
-                                className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 hover:bg-accent"
-                              >
-                                <input
-                                  type="radio"
-                                  name={`${radioName}-${index}`}
-                                  checked={entry.value === option.value}
-                                  onChange={() => {
-                                    entry.onValueChange(option.value);
-                                    close();
-                                  }}
-                                />
-                                {option.label}
-                              </label>
+                              <Field key={option.value} orientation="horizontal" className="min-h-11 items-center">
+                                <RadioGroupItem id={`${radioName}-${index}-${option.value}`} value={option.value} />
+                                <FieldLabel
+                                  htmlFor={`${radioName}-${index}-${option.value}`}
+                                  className="min-h-11 flex-1 items-center rounded-xl px-3 hover:bg-accent"
+                                >
+                                  {option.label}
+                                </FieldLabel>
+                              </Field>
                             ))}
-                          </div>
+                          </RadioGroup>
                         );
                       if (entry.type === 'submenu')
                         return (

@@ -12,6 +12,8 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { env } from 'cloudflare:workers';
 import { Label } from '@rezics/ui/shadcn/label';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { VoteCitation } from './post-writes';
@@ -147,22 +149,19 @@ export function ReviewFields({
         onValueChange={chooseSubject}
       />
       {vote ? (
-        <label className="flex min-h-10 items-start gap-3 rounded-lg border border-border/70 bg-background p-3 text-sm">
-          <input
-            aria-label={m.thread_review_cite_vote({
-              score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(vote.units / 2),
-            })}
-            className="mt-0.5 size-4 accent-primary"
-            type="checkbox"
-            checked={citingVote}
-            onChange={(event) => toggleCitation(event.currentTarget.checked)}
-          />
-          <span>
-            {m.thread_review_cite_vote({
-              score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(vote.units / 2),
-            })}
-          </span>
-        </label>
+        <Field
+          orientation="horizontal"
+          className="min-h-10 items-start gap-3 rounded-lg border border-border/70 bg-background p-3 text-sm"
+        >
+          <FieldLabel className="items-start">
+            <Checkbox checked={citingVote} onCheckedChange={(checked) => toggleCitation(checked === true)} />
+            <span>
+              {m.thread_review_cite_vote({
+                score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(vote.units / 2),
+              })}
+            </span>
+          </FieldLabel>
+        </Field>
       ) : null}
     </section>
   );

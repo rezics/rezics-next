@@ -2,6 +2,7 @@ import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type 
 import { createServerFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
 import { Cover, sharedRatio } from '@rezics/ui/cover';
+import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@rezics/ui/shadcn/drawer';
@@ -464,10 +465,9 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
                       return (
                         <li key={entry.value}>
                           <Label className="items-start gap-2 text-sm font-normal" htmlFor={id} lang={valueLabel.lang}>
-                            <input
+                            <NativeCheckbox
                               id={id}
                               form={`${surface}-filter-form`}
-                              type="checkbox"
                               name={`f.${group.property}`}
                               value={entry.value}
                               defaultChecked={selected.includes(entry.value)}

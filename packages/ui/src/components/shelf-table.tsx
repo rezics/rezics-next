@@ -3,6 +3,8 @@ import { Button } from '../shadcn/button.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shadcn/table.tsx';
 import { Cover, coverRatio, type CoverProps } from './cover.tsx';
 import type { ShelfSelectionProps } from './shelf-list.tsx';
+import { Checkbox } from '../shadcn/checkbox.tsx';
+import { Field } from '../shadcn/field.tsx';
 
 export type ShelfColumnId =
   | 'cover'
@@ -120,7 +122,11 @@ export function ShelfTable({
               onClick={
                 row.selectable
                   ? (event) => {
-                      if (!(event.target as Element).closest('a, button, input, select, textarea, [role="menuitem"]'))
+                      if (
+                        !(event.target as Element).closest(
+                          'a, button, input, select, textarea, [role="checkbox"], [role="menuitem"]',
+                        )
+                      )
                         select(event);
                     }
                   : undefined
@@ -129,14 +135,14 @@ export function ShelfTable({
               {hasSelection && (
                 <TableCell>
                   {row.selectable && (
-                    <input
-                      type="checkbox"
-                      aria-label={row.selectLabel}
-                      aria-checked={!!row.selected}
-                      checked={!!row.selected}
-                      onChange={() => row.onSelectedChange?.(!row.selected)}
-                      onClick={(event) => row.onSelect?.(event)}
-                    />
+                    <Field orientation="horizontal" className="w-auto">
+                      <Checkbox
+                        aria-label={row.selectLabel}
+                        checked={!!row.selected}
+                        onCheckedChange={(checked) => row.onSelectedChange?.(checked === true)}
+                        onClick={(event) => row.onSelect?.(event)}
+                      />
+                    </Field>
                   )}
                 </TableCell>
               )}

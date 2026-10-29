@@ -4,6 +4,7 @@ import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
 import { safeDocumentUrl } from './document-url.ts';
+import { NativeCheckbox } from './native-checkbox.tsx';
 
 const rel = 'noopener noreferrer nofollow ugc';
 
@@ -62,7 +63,7 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
         ),
         taskItem: ({ node, children }: any) => (
           <li>
-            <input type="checkbox" checked={node.attrs?.checked ?? false} disabled aria-label="Task status" />
+            <NativeCheckbox checked={node.attrs?.checked ?? false} disabled aria-label="Task status" />
             {children}
           </li>
         ),

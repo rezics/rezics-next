@@ -5,6 +5,8 @@ import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRatio, type CoverProps } from './cover.tsx';
 import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
 import { ProgressRow } from './progress-row.tsx';
+import { Checkbox } from '../shadcn/checkbox.tsx';
+import { Field } from '../shadcn/field.tsx';
 
 export interface ShelfSelectionProps {
   selectable?: boolean;
@@ -85,7 +87,7 @@ export function ShelfListRow({
           ? (event) => {
               if (
                 !(event.target as Element).closest(
-                  '[data-slot="list-row-control"], a, button, input, [role="menuitem"]',
+                  '[data-slot="list-row-control"], a, button, input, [role="checkbox"], [role="menuitem"]',
                 )
               )
                 select(event);
@@ -95,14 +97,14 @@ export function ShelfListRow({
     >
       {selectable && (
         <ListRowControl>
-          <input
-            type="checkbox"
-            aria-label={labels.select}
-            aria-checked={selected}
-            checked={selected}
-            onChange={() => onSelectedChange?.(!selected)}
-            onClick={(event) => onSelect?.(event)}
-          />
+          <Field orientation="horizontal" className="w-auto">
+            <Checkbox
+              aria-label={labels.select}
+              checked={selected}
+              onCheckedChange={(checked) => onSelectedChange?.(checked === true)}
+              onClick={(event) => onSelect?.(event)}
+            />
+          </Field>
         </ListRowControl>
       )}
       <div

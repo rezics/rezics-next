@@ -1,6 +1,9 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { ContentActions } from '@rezics/ui/content-actions';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { sharedRatio } from '@rezics/ui/cover';
@@ -70,24 +73,21 @@ export function VisibilityField({
   disabled?: boolean;
 }) {
   return (
-    <fieldset className="space-y-2" disabled={disabled}>
-      <legend>{m.library_collection_visibility()}</legend>
-      {visibilities.map((option) => (
-        <label className="flex items-start gap-2" key={option}>
-          <input
-            checked={value === option}
-            className="mt-1"
-            name="visibility"
-            onChange={() => onChange(option)}
-            type="radio"
-            value={option}
-          />
-          <span>
-            <strong className="font-medium">{visibilityLabel(option)}</strong> {visibilityNote(option)}
-          </span>
-        </label>
-      ))}
-    </fieldset>
+    <FieldSet className="gap-2" disabled={disabled}>
+      <FieldLegend variant="label">{m.library_collection_visibility()}</FieldLegend>
+      <RadioGroup value={value} onValueChange={(next) => onChange(next as CollectionVisibility)} className="gap-2">
+        {visibilities.map((option) => (
+          <Field key={option} orientation="horizontal" className="items-start">
+            <FieldLabel className="items-start">
+              <RadioGroupItem value={option} />
+              <span>
+                <strong className="font-medium">{visibilityLabel(option)}</strong> {visibilityNote(option)}
+              </span>
+            </FieldLabel>
+          </Field>
+        ))}
+      </RadioGroup>
+    </FieldSet>
   );
 }
 
@@ -550,15 +550,12 @@ function MemberRowControls({
           {m.library_member_note_save()}
         </button>
       </div>
-      <label className="flex items-center gap-2">
-        <input
-          checked={confirmed}
-          disabled={busy}
-          onChange={(event) => setConfirmed(event.target.checked)}
-          type="checkbox"
-        />
-        {m.library_member_remove_confirm()}
-      </label>
+      <Field orientation="horizontal" className="items-center">
+        <FieldLabel>
+          <Checkbox checked={confirmed} disabled={busy} onCheckedChange={(checked) => setConfirmed(checked === true)} />
+          {m.library_member_remove_confirm()}
+        </FieldLabel>
+      </Field>
       <button
         className={buttonClass}
         disabled={busy || !confirmed}
@@ -692,15 +689,16 @@ function MemberRow({
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2">
-              <input
-                checked={confirmed}
-                disabled={busy}
-                onChange={(event) => setConfirmed(event.target.checked)}
-                type="checkbox"
-              />
-              {m.library_member_remove_confirm()}
-            </label>
+            <Field orientation="horizontal" className="items-center">
+              <FieldLabel>
+                <Checkbox
+                  checked={confirmed}
+                  disabled={busy}
+                  onCheckedChange={(checked) => setConfirmed(checked === true)}
+                />
+                {m.library_member_remove_confirm()}
+              </FieldLabel>
+            </Field>
             <button
               className={buttonClass}
               disabled={busy || !confirmed}
