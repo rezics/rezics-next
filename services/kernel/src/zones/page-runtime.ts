@@ -1,5 +1,6 @@
 import { planReads, platformRegistry } from '@rezics/composition';
 import type { Pool } from 'pg';
+import { admitGroup } from '../access/gates/admission.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { activeProfile } from '../presentation/profiles.ts';
@@ -20,6 +21,7 @@ export async function readStaticZonePage(
     request: Request;
     dispatch: (request: Request) => Promise<Response>;
     deadline: number;
+    clientAction: string;
   },
 ) {
   const route = 'route' in input.body.target ? input.body.target.route : null;
@@ -29,13 +31,24 @@ export async function readStaticZonePage(
   requireAccessDeadline(input.deadline);
   // Authority, selected document, safe shell and observation share the Zone's RR snapshot at native T.
   const selected = await createZoneReads(dependencies).page(input.actor, input.id, route, input.deadline);
+  const plan = selected.document === null ? null : planReads(platformRegistry, selected.document, { subject: null });
+  if (selected.document === null || plan === null || Object.keys(plan.reads).length > 0) {
+    await admitGroup({
+      pool: dependencies.pool,
+      access: () => dependencies.access,
+      actor: input.actor,
+      group: 'zone_sources',
+      clientAction: input.clientAction,
+      deadline: input.deadline,
+      clock: dependencies.clock,
+    });
+    // Platform exposure supplies no membership or source permission, nor missing owner ports.
+    throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+  }
   // No owner connection remains checked out while reading the common profile on Global.
   const active = await activeProfile(dependencies.pool);
   requireAccessDeadline(input.deadline);
   if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-  const plan = planReads(platformRegistry, selected.document, { subject: null });
-  if (Object.keys(plan.reads).length > 0)
-    throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
   const page = await readPage({
     dispatch: input.dispatch,
     incoming: input.request,

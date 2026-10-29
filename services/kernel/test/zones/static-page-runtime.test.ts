@@ -143,21 +143,38 @@ test('a published configured static Zone route serves its exact common page and 
     epoch: partition.epoch,
     position: BigInt(partition.position),
   });
-  // Source-dependent pages remain truthful unavailable responses, never fabricated empty results.
+  // Source-dependent requests require explicit platform exposure before readiness.
   const unavailable = await f.call('anonymous', 'POST', `${path(zone.id)}:readPage`, {
     target: { subject: newId(0x7111) },
   });
-  expect(unavailable.status).toBe(503);
-  expect(unavailable.headers.get('retry-after')).toBe('1');
-  expect(unavailable.body.code).toBe('semantic_not_ready');
+  expect(unavailable.status).toBe(403);
+  expect(unavailable.headers.get('retry-after')).toBeNull();
+  expect(problem(unavailable.body)).toEqual({
+    type: 'https://rezics.com/problems/platform_closed',
+    title: 'Platform Closed',
+    status: 403,
+    code: 'platform_closed',
+    retryable: false,
+    effect_status: 'not_applicable',
+  });
+  expect(unavailable.body.request_id).toEqual(expect.any(String));
   expect(unavailable.body).not.toHaveProperty('document');
   expect(unavailable.body).not.toHaveProperty('next');
   const dynamic = createBody();
   dynamic.configuration.scope = [];
   const dynamicZone = await f.create(dynamic);
   const dataPage = await read(dynamicZone.id, 'owner');
-  expect(dataPage.status).toBe(503);
-  expect(dataPage.headers.get('retry-after')).toBe('1');
+  expect(dataPage.status).toBe(403);
+  expect(dataPage.headers.get('retry-after')).toBeNull();
+  expect(problem(dataPage.body)).toEqual({
+    type: 'https://rezics.com/problems/platform_closed',
+    title: 'Platform Closed',
+    status: 403,
+    code: 'platform_closed',
+    retryable: false,
+    effect_status: 'not_applicable',
+  });
+  expect(dataPage.body.request_id).toEqual(expect.any(String));
   expect(dataPage.body).not.toHaveProperty('document');
 }, 180_000);
 

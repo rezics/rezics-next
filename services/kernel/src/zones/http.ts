@@ -8,7 +8,7 @@ import type { Access } from '../request/access.ts';
 import { problemSchema } from '../http/problem.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
+import { actionForRequest, IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   ZoneCreateInputSchema,
@@ -51,7 +51,7 @@ function zoneSchema<S extends TSchema>(schema: S) {
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
+  403: problemSchema('forbidden', 'platform_closed'),
   404: problemSchema('not_found'),
   409: problemSchema('conflict', 'stale_cursor'),
   412: problemSchema('precondition_failed'),
@@ -186,7 +186,7 @@ export function zoneRoutes(
         },
         detail: detail('read_page', 'zone:read', true),
       },
-      async ({ params, body, actor, request, admission, job, session, set }) => {
+      async ({ params, body, actor, request, route, admission, job, session, set }) => {
         const result = await admission.run('normal', job, () =>
           readStaticZonePage(
             { ...dependencies, access: dependencies.access() },
@@ -195,6 +195,7 @@ export function zoneRoutes(
               id: params.id,
               body,
               request,
+              clientAction: actionForRequest(app, request, route),
               dispatch: (request) => Promise.resolve(app.handle(request)),
               deadline: job.deadline,
             },

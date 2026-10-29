@@ -2,6 +2,41 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Public exposure boundary
+
+Existing active/released definitions, common editor/profile data, subject creation, proposal, acceptance,
+adoption, reads and their native disclosure remain public through their current Auth, scopes and resource
+Access. Public exposure changes neither those authorities nor admitted command quotas.
+
+Custom definition publish/activate and Context extension publish/activate declare
+`gate:definition_publication`. Subject merge, the mounted identity mutation command, declares
+`gate:subject_identity`. Anonymous and ungranted accounts receive `403 platform_closed` before command
+receipts, revisions or domain effects. A native explicit platform grant admits development commands only;
+the existing action scopes and Global/Context resource authority still apply. Built-in active/release reads
+remain public. Native grant APIs, visible-operation filtering and served OpenAPI use the existing platform
+system; declarations alone prove no runtime, source or CPU outcome.
+
+Custom publication, advanced identity mutation, reviewed vocabulary seeds and measured-input expansion
+remain deferred until polished. Source metadata authority and reviewed vocabulary seeds retain their
+explicit platform authority and seed review requirements. Ordinary provider imports do not auto-seed them.
+
+### Definition publication admission cost
+
+- Touches: the existing keyed temporal exposure lookup for `definition_publication`, followed when closed by
+  exact `gate:definition_publication`/`gate:any` Global checks for the authenticated actor and any principal.
+- Bound: one native group admission, using the original request deadline and configured clock; constant keyed
+  work under the existing Access admitted-key cap, with logarithmic index probes and no semantic scan.
+- Growth check: reuses `test/access/gates/growth-admission.test.ts` for native keyed gate work; native refusal,
+  no-effect and granted publication evidence is in `test/semantic/public-slice-exposure.test.ts`.
+
+### Identity mutation admission cost
+
+- Touches: the existing exposure point for `subject_identity` and exact Global gate authority before merge work.
+- Bound: one native admission under the original deadline and clock; constant gate rows/statements and
+  logarithmic index probes. The existing bounded merge command retains its own resource and mutation costs.
+- Growth check: reuses `test/access/gates/growth-admission.test.ts`; native closure, zero receipt/revision/domain
+  effects and explicit granted identity execution are covered by `test/semantic/public-slice-exposure.test.ts`.
+
 ## Worker lifecycle
 
 `semanticWorkModule` in `work-module.ts` is registered once as `semantic` in `KERNEL_WORK_MODULES`, after

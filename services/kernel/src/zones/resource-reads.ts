@@ -271,16 +271,18 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
           }
           throw new ProblemError('not_found');
         }
-        // Direct subjects need the real source/membership ports; absence is never empty membership.
-        if (route === null) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+        // Direct targets prove Zone authority here; runtime admits source execution separately.
         const index = row.configuration.pages.findIndex((page) => page.route === route);
-        if (index < 0 || zoneWithheld(row, `/pages/${index}/route`) || zoneWithheld(row, `/pages/${index}/document`))
+        if (
+          route !== null &&
+          (index < 0 || zoneWithheld(row, `/pages/${index}/route`) || zoneWithheld(row, `/pages/${index}/document`))
+        )
           throw new ProblemError('not_found');
-        const document = publicDocument(row, index);
+        const document = route === null ? null : publicDocument(row, index);
         const zone = zonePublic(row);
         zone.appearance = {
           ...zone.appearance,
-          ...(document.root.props.appearance as ZonePublic['appearance'] | undefined),
+          ...(document?.root.props.appearance as ZonePublic['appearance'] | undefined),
         };
         const partition = await readPartition(client, partitionOf(identity.route));
         if (!partition) throw new ProblemError('partition_unavailable');

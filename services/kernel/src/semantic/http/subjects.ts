@@ -589,7 +589,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.merge',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:subject_identity',
           'x-action': 'subject:merge',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],

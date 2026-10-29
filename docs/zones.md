@@ -15,6 +15,36 @@ purge, account cleanup and scheduler work remain incomplete. Typed schemas, immu
 and helper setup do not establish those capabilities; the
 [integration audit](research/semantic-integration-audit-zone-composition.md) remains evidence, not a completion gate.
 
+## Public exposure boundary
+
+The public slice is configured static routed documents with no planned source reads, through current
+`zone:read` authority. The mounted `zone.read_page` operation remains public for this slice. Saved-scope
+and mounted-Collection unions, direct catalogue targets, source-dependent lists and retained preparation
+remain deferred behind `zone_sources` platform grants. A source-dependent request first proves current Zone
+readability, preserving identical unknown/private concealment and the safe public shell, then calls native
+`admitGroup` with the real Actor, mounted client action, original deadline and configured clock. Anonymous
+and ungranted accounts receive the standard `403 platform_closed` Problem. Zone ownership supplies no gate.
+
+An explicit `gate:zone_sources` (or covering platform grant) admits development exposure only. It supplies
+no membership or source permission and reveals no private mount metadata. Missing source/runtime owner
+ports still answer the truthful typed `503 semantic_not_ready`, with `Retry-After: 1`, after admission.
+That response is not supported dynamic behavior; the full native dynamic journey remains required before
+opening. Existing native grant administration handles the exact gate action; this internal branch is not a
+separate mounted operation in visibleOperations or OpenAPI. Static routes keep the ordinary platform
+filtering and original schemas. No public request switch or Source option selects a privilege.
+
+### Source-dependent page admission cost
+
+- Touches: the current Zone-read authority and exact Zone head/partition keys, bounded configured route/document
+  selection, then the native `zone_sources` exposure point and exact Global gate checks. No source is read.
+- Bound: one group admission with the original deadline and clock after Zone authority; constant keyed rows
+  and statements under the existing Access cap, logarithmic gate index probes, and no membership/source scan.
+  Static document selection retains the existing configuration limits and performs no extra gate lookup.
+- Growth check: reuses `test/access/gates/growth-admission.test.ts` for the keyed gate point. Native static 200,
+  ungranted 403, granted fail-closed readiness, concealment and clock evidence are in
+  `test/zones/public-slice-exposure.test.ts` and `test/zones/static-page-runtime.test.ts`; neither declarations
+  nor those readiness outcomes claim dynamic source execution or CPU proof.
+
 ## Routes and native declarations
 
 Browser paths are `/zones/{id}` (home), `/zones/{id}/{relativeRoute}` (configured page), and

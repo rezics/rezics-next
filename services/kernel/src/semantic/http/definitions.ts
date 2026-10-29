@@ -86,7 +86,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.publish',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:definition_publication',
           'x-action': 'definitions:publish',
           'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -204,7 +204,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.activate',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:definition_publication',
           'x-action': 'definitions:activate',
           'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -254,7 +254,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.publish_extension',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:definition_publication',
           'x-action': 'definitions:publish',
           'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -311,7 +311,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.activate_extension',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:definition_publication',
           'x-action': 'definitions:activate',
           'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
