@@ -58,6 +58,7 @@ test('read-only Library preparation uses native attempt T before owner checkout 
     context: { time: AuthoritativeTime },
     prepared: { problem: Error | null; value: string },
   ) => {
+    if (time === undefined) throw new Error('Expected preparation to capture the native attempt time');
     expect(context.time).toBe(time);
     if (prepared.problem) throw prepared.problem;
     bodies++;
