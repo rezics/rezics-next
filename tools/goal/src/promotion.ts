@@ -26,6 +26,10 @@ export type PromotionOptions = {
 // The root gate runs every workspace, and the kernel's check alone takes about 45 minutes; the runner's ten-minute
 // default stopped every full gate before it could pass.
 export const PROMOTION_GATE_TIMEOUT_MS = 2 * 60 * 60_000;
+const STABILIZE_QUICK_GATE = [
+  ['bun', 'scripts/typecheck.ts'],
+  ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
+] as const;
 const ref = (branch: string) => `refs/heads/${branch}`;
 function isAncestor(cwd: string, older: string, newer: string): boolean {
   try {
@@ -283,7 +287,7 @@ async function gateAt(
     results.length = 0;
     // A fresh worktree has no node_modules; only the root gate installs by itself, and a narrowed or acceptance
     // command would fail on every commit without this.
-    if (existsSync(join(tree, 'package.json'))) {
+    if (existsSync(join(tree, 'package.json')) && existsSync(join(tree, 'bun.lock'))) {
       const installed = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
       appendFileSync(
         logFor(0),
@@ -867,33 +871,38 @@ function controlPlaneOnly(checkout: string, main: string, snapshot: string): boo
   return changed.length > 0 && changed.every((path) => CONTROL_PLANE_PATHS.some((prefix) => path.startsWith(prefix)));
 }
 
-/** Merge a gated snapshot onto main's newer control-plane commits; undefined when they conflict. */
-function mergeIntoMain(options: PromotionOptions, main: string, snapshot: string): string | undefined {
+/** Merge main's newer control-plane commits into the gated candidate; undefined when they conflict. */
+function mergeMainIntoCandidate(
+  options: PromotionOptions,
+  main: string,
+  snapshot: string,
+  branch: string,
+): string | undefined {
   const settings = options.settings,
     checkout = settings.mainCheckout;
-  const tree = join(settings.worktreeRoot, `promotion-main-${randomUUID()}`);
+  const tree = join(settings.worktreeRoot, `promotion-candidate-${randomUUID()}`);
   mkdirSync(settings.worktreeRoot, { recursive: true });
-  git(checkout, 'worktree', 'add', '--detach', tree, main);
+  git(checkout, 'worktree', 'add', '--detach', tree, snapshot);
   try {
     const merged = spawnSync(
       'git',
-      [
-        'merge',
-        '--no-ff',
-        '--no-edit',
-        '-m',
-        `Merge promoted ${settings.stabilizeBranch} into ${settings.mainBranch}`,
-        snapshot,
-      ],
+      ['merge', '--no-ff', '--no-edit', '-m', `Merge ${settings.mainBranch} into ${settings.stabilizeBranch}`, main],
       { cwd: tree, encoding: 'utf8' },
     );
-    return merged.status === 0 ? git(tree, 'rev-parse', 'HEAD') : undefined;
+    if (merged.status !== 0) return undefined;
+    const candidate = git(tree, 'rev-parse', 'HEAD');
+    try {
+      git(checkout, 'update-ref', ref(branch), candidate, snapshot);
+      return candidate;
+    } catch {
+      return undefined;
+    }
   } finally {
     git(checkout, 'worktree', 'remove', '--force', tree);
   }
 }
 
-function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): boolean {
+async function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): Promise<boolean> {
   const settings = options.settings,
     checkout = settings.mainCheckout,
     target = run.promoteHead!;
@@ -908,6 +917,7 @@ function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionR
     );
     return true;
   }
+  if (!(await stabilizeQuickGate(options, dev))) return true;
   try {
     git(checkout, 'update-ref', ref(settings.stabilizeBranch), dev, target);
   } catch {
@@ -928,7 +938,9 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
   if (now !== target && !isAncestor(checkout, target, now) && !isAncestor(checkout, now, target)) {
     // Control-plane fixes land on main directly while a snapshot is gated; they do not touch what the gate checked, so
     // the snapshot is published merged with them. Any other commit on main drops the run for a fresh gate.
-    const merged = controlPlaneOnly(checkout, now, target) ? mergeIntoMain(options, now, target) : undefined;
+    const merged = controlPlaneOnly(checkout, now, target)
+      ? mergeMainIntoCandidate(options, now, target, settings.stabilizeBranch)
+      : undefined;
     if (!merged) {
       store.clearPromotion();
       return false;
@@ -957,7 +969,7 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
         `Published main at ${target}, but main does not merge into ${settings.stabilizeBranch}.`,
       );
   }
-  const stabilized = advanceStabilizeAfterPublish(options, run);
+  const stabilized = await advanceStabilizeAfterPublish(options, run);
   store.clearPromotion();
   return stabilized;
 }
@@ -965,6 +977,57 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
 // A local switch: while dev is known to be red, gating and bisecting it only spends the machine.
 function pausedAt(settings: Settings): boolean {
   return existsSync(join(settings.stateDirectory, 'promotion.paused'));
+}
+
+/** Create the next frozen candidate only from a dev snapshot that passes the short preflight. */
+async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promise<boolean> {
+  const { settings } = options;
+  const checkout = settings.mainCheckout;
+  const tree = join(settings.worktreeRoot, `promotion-quick-${randomUUID()}`);
+  mkdirSync(settings.worktreeRoot, { recursive: true });
+  git(checkout, 'worktree', 'add', '--detach', tree, dev);
+  try {
+    if (existsSync(join(tree, 'package.json'))) {
+      const installed = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
+      if (installed.status !== 0) return false;
+    }
+    for (const command of STABILIZE_QUICK_GATE) {
+      const result = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(
+        command,
+        tree,
+        join(settings.stateDirectory, `promotion-quick-${dev}-${command[command.length - 1]}.log`),
+      );
+      if (!result.passed || git(tree, 'rev-parse', 'HEAD') !== dev || git(tree, 'status', '--porcelain')) return false;
+    }
+    return head(checkout, settings.integrationBranch) === dev;
+  } finally {
+    git(checkout, 'worktree', 'remove', '--force', tree);
+  }
+}
+
+async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Promise<boolean> {
+  const { settings } = options;
+  const checkout = settings.mainCheckout;
+  const prepared = await regenerateDerivedHead(options, dev, settings.integrationBranch);
+  if (prepared.retry || optionalHead(checkout, settings.stabilizeBranch) !== undefined) return false;
+  if (
+    !(await stabilizeQuickGate(options, prepared.head)) ||
+    optionalHead(checkout, settings.stabilizeBranch) !== undefined
+  )
+    return false;
+  if (head(checkout, settings.integrationBranch) !== prepared.head) return false;
+  try {
+    git(
+      checkout,
+      'update-ref',
+      ref(settings.stabilizeBranch),
+      prepared.head,
+      '0000000000000000000000000000000000000000',
+    );
+    return true;
+  } catch {
+    return optionalHead(checkout, settings.stabilizeBranch) !== undefined;
+  }
 }
 
 /** Gate integrated work, publish passing commits on main, or isolate the first failing task on dev. */
@@ -992,6 +1055,24 @@ export async function promote(options: PromotionOptions): Promise<void> {
         return;
       }
       const stabilize = optionalHead(settings.mainCheckout, settings.stabilizeBranch);
+      if (stabilize === undefined) {
+        if (!(await cutStabilizeCandidate(options, dev))) return;
+        continue;
+      }
+      if (stabilize === main && dev !== stabilize) {
+        if (!(await stabilizeQuickGate(options, dev))) return;
+        if (
+          head(settings.mainCheckout, settings.integrationBranch) !== dev ||
+          optionalHead(settings.mainCheckout, settings.stabilizeBranch) !== stabilize
+        )
+          continue;
+        try {
+          git(settings.mainCheckout, 'update-ref', ref(settings.stabilizeBranch), dev, stabilize);
+        } catch {
+          // A concurrent stabilize update wins; re-read it under the same promotion lease.
+        }
+        continue;
+      }
       const stabilization = stabilize !== undefined;
       const candidateBranch = stabilization ? settings.stabilizeBranch : settings.integrationBranch;
       let candidate = stabilize ?? dev;
@@ -1023,7 +1104,12 @@ export async function promote(options: PromotionOptions): Promise<void> {
         run = undefined;
       }
       if (!run) {
-        if (main === candidate || !isAncestor(settings.mainCheckout, main, candidate)) return;
+        if (
+          main === candidate ||
+          (!isAncestor(settings.mainCheckout, main, candidate) &&
+            !controlPlaneOnly(settings.mainCheckout, main, candidate))
+        )
+          return;
         const prepared = await regenerateDerivedHead(options, candidate, candidateBranch);
         if (prepared.retry) continue;
         candidate = prepared.head;
@@ -1182,8 +1268,15 @@ export async function promote(options: PromotionOptions): Promise<void> {
         store.savePromotion(run);
       }
       if (run.phase === 'publish-main') {
-        if (await publishMain(options, run)) return;
-        // Another integration may have landed while this snapshot was gated. Continue under the same lease.
+        const published = await publishMain(options, run);
+        if (published) {
+          const currentMain = head(settings.mainCheckout, settings.mainBranch);
+          const currentCandidate = optionalHead(settings.mainCheckout, settings.stabilizeBranch);
+          // Promotion may have started on an older candidate while integrated tasks advanced dev. Gate those tasks
+          // before releasing the lease; a reconciliation merge with no tasks can wait for the next promotion window.
+          if (currentCandidate === undefined || !boundaryTasks(options, currentMain, currentCandidate).length) return;
+        }
+        // Another integration landed while this snapshot was gated. Continue under the same lease.
         continue;
       }
       if (!store.promotion()) continue;

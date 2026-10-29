@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { git } from './merge.ts';
+import { promote } from './promotion.ts';
 import { integrationHarness } from './test-support.ts';
 
 const failure = { passed: false, output: 'AssertionError: incompatible fixture', timedOut: false };
@@ -11,7 +12,7 @@ function createStabilize(h: ReturnType<typeof integrationHarness>, commit = h.he
   git(h.root, 'branch', 'stabilize', commit);
 }
 
-test('stabilize gates its head instead of the integration head and advances to dev after publishing', async () => {
+test('stabilize finishes its current gate, then gates the next green dev candidate', async () => {
   const h = integrationHarness();
   try {
     const stable = await h.seed('stable');
@@ -21,17 +22,17 @@ test('stabilize gates its head instead of the integration head and advances to d
     const dev = h.head();
     const gated: string[] = [];
 
-    await h.promote(async (_command, cwd) => {
-      gated.push(git(cwd, 'rev-parse', 'HEAD'));
+    await h.promote(async (command, cwd) => {
+      if (command[0] === 'true') gated.push(git(cwd, 'rev-parse', 'HEAD'));
       return success;
     });
 
     expect(gated).toContain(candidate);
-    expect(gated).not.toContain(dev);
-    expect(h.head('main')).toBe(candidate);
+    expect(gated).toContain(dev);
+    expect(h.head('main')).toBe(dev);
     expect(h.head('stabilize')).toBe(dev);
     expect(h.store.task(stable.id).state).toBe('merged');
-    expect(h.store.task(later.id).state).toBe('integrated');
+    expect(h.store.task(later.id).state).toBe('merged');
   } finally {
     h.dispose();
   }
@@ -74,7 +75,7 @@ test('a failing stabilize gate blocks that candidate without bisecting or revert
   }
 });
 
-test('a blocked stabilize candidate is gated again only after its head moves', async () => {
+test('a blocked stabilize candidate waits until its head moves, then gates the new head', async () => {
   const h = integrationHarness();
   try {
     await h.seed('stable');
@@ -168,7 +169,7 @@ test('a stabilize publish merges main into dev, keeping dev for derived files, a
   }
 });
 
-test('promotion without a stabilize branch keeps its existing failure behavior', async () => {
+test('promotion without a stabilize branch does not cut from a dev commit that fails its quick gate', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('first');
@@ -176,11 +177,17 @@ test('promotion without a stabilize branch keeps its existing failure behavior',
     const dev = h.head();
     await h.seed('last');
 
-    await h.promote(async (_command, cwd) => (existsSync(join(cwd, 'bad')) ? failure : success));
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      runGate: async (_command, cwd) => (existsSync(join(cwd, 'bad')) ? failure : success),
+    });
+    await h.job.drain();
 
-    expect(h.store.task(first.id).state).toBe('merged');
-    expect(h.store.task(bad.id).currentAttempt).toBe(2);
+    expect(h.store.task(first.id).state).toBe('integrated');
+    expect(h.store.task(bad.id).currentAttempt).toBe(1);
     expect(h.head('main')).not.toBe(dev);
+    expect(git(h.root, 'branch', '--list', 'stabilize')).toBe('');
   } finally {
     h.dispose();
   }
