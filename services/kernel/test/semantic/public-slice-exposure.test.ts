@@ -18,6 +18,7 @@ const global = { route: 0, id: GLOBAL_CONTEXT };
 const accounts = { operator: newId(0x7211), editor: newId(0x7212), reader: newId(0x7213) };
 const actions = [
   'access:grant',
+  'gate:any',
   'definitions:publish',
   'definitions:activate',
   'definitions:read',

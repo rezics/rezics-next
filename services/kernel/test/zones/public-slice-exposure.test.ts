@@ -7,7 +7,7 @@ import { createBody, page, problem, resourceFixture, type ResourceFixture } from
 
 let f: ResourceFixture;
 beforeAll(async () => {
-  f = await resourceFixture();
+  f = await resourceFixture({ scopes: ['gate:any'] });
   await f.available();
   // Native grant administration, without an exposure opening or a synthetic identity.
   await f.access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'operator', 'access:grant');

@@ -24,7 +24,7 @@ export const createBody = () => ({ configuration: starter(), mounts: [] as strin
 export const problem = ({ request_id: _request, ...body }: Record<string, any>) => body;
 
 /** Uses the shared migrated database and real Access. It never inserts Zone state or grants anonymous rights. */
-export async function resourceFixture() {
+export async function resourceFixture(options: { scopes?: readonly string[] } = {}) {
   const db = await openGrowthDatabase();
   try {
     const accounts = {
@@ -50,6 +50,7 @@ export async function resourceFixture() {
       'collection:create',
       'collection:read',
       'collection:update',
+      ...(options.scopes ?? []),
     ];
     const access = await createRealAccess(db.admin, accounts, actions);
     let now = Date.now();
