@@ -40,9 +40,9 @@ test('a long attempt is reported once when it crosses the threshold, then at mos
     const firstThreshold = now + 1;
     expect(value.run(firstThreshold)).toBe(1);
     expect(value.run(firstThreshold + 59 * 60_000)).toBe(0);
-    expect(value.run(firstThreshold + 60 * 60_000)).toBe(0);
-    expect(value.run(firstThreshold + 3 * 60 * 60_000)).toBe(0);
-    expect(value.delivered).toHaveLength(1);
+    expect(value.run(firstThreshold + 60 * 60_000)).toBe(1);
+    expect(value.run(firstThreshold + 3 * 60 * 60_000)).toBe(1);
+    expect(value.delivered).toHaveLength(3);
   } finally {
     value.repo.close();
   }
