@@ -802,6 +802,8 @@ function stableRecording(value: unknown, previous: unknown): unknown {
   if (!value || typeof value !== 'object' || !previous || typeof previous !== 'object') return previous;
   const current = value as Record<string, unknown>;
   const before = previous as Record<string, unknown>;
+  const sharedSubject =
+    typeof current.id === 'string' ? storySubjects.find((subject) => subject.id === current.id) : null;
   const oldIds = Object.keys(before).filter((key) => key.match(uuid));
   const newIds = Object.keys(current).filter((key) => key.match(uuid));
   return Object.fromEntries([
@@ -818,6 +820,7 @@ function stableRecording(value: unknown, previous: unknown): unknown {
         ],
       ];
     }),
+    ...(sharedSubject ? [['cover', sharedSubject.cover ?? null]] : []),
   ]);
 }
 
