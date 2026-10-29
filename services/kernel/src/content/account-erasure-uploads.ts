@@ -78,7 +78,11 @@ export async function eraseAccountUploadsPage(
         continue;
       }
       await runCommand(deps.pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
-        await erase.run(tx, { kind: 'media', route: sourceRoute, id: key.id });
+        const parameters = { kind: 'media', route: sourceRoute, id: key.id, deleted_at: null };
+        await tx.query(
+          erase.sql,
+          erase.params.map((name) => parameters[name as keyof typeof parameters]),
+        );
         return noEffect(null);
       });
       await purgeObject(deps.pool, deps.storage, key.id as MediaId);
