@@ -53,7 +53,9 @@ export async function membersPreparationRuntime() {
     );
   expect((await send(personas.staff, 'POST', '/v1/platform/exposure/collections:open', {})).status).toBe(200);
   const clientId = `members_${crypto.randomUUID()}`;
-  const scopes = [...new Set([...actionCatalogue(kernel).keys(), ...LIFECYCLE_ACTIONS.keys()])].sort();
+  const scopes = [...new Set([...actionCatalogue(kernel).keys(), ...LIFECYCLE_ACTIONS.keys()])]
+    .filter((scope) => scope !== 'media:complete')
+    .sort();
   await registerTestClient(service, { clientId, firstParty: true, scopes });
   const context = () => ({ pool: db.pool, deadline: Date.now() + 5000 });
   const actor = (persona: Persona | null, pool: Pool = db.pool) =>
