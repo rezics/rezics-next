@@ -903,27 +903,50 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 ### Session start
 
-- Touches: One account admit, then a subject resolve for the session subject and, when present, the version subject. The command inserts one `progress_session` in the account partition. The event subject is the account id. The payload carries only the session id.
-- Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the admit, one or two subject resolves, authorization and the envelope.
-- Growth check: `test/library/growth-sessions.test.ts`: `Session start has constant rows and statements as sessions grow` measures the whole command at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox, write basis and Access accounts grow to 500 x scale rows.
+- Touches: Per-attempt trusted preparation calls `readLibraryProfileSource` for the original and optional version
+  subject at native T, releasing each source/Global connection before owner checkout. It charges account admission,
+  subject resolution, native Access, anchored source/partition reads, primary type and active immutable release
+  lookup. Owner authorization and exact receipt lookup precede fresh capability validation. The body ensures the
+  exact owner/subject `progress_head`, inserts one pinned session, touches that head and raises an existing entry's
+  activity. Entry absence does not create an entry. The event subject is the account id.
+- Bound: Body `S` 4, `R` `O(1)`, `B` `O(L(N))`, plus preparation, authorization and the envelope. Session insertion
+  and a changed entry each pay their own `fact_source_head` trigger upsert (one fixed owner point per changed row).
+  All helper and nested trigger statements are charged; there is no owner/history walk or free metadata work.
+- Growth check: `test/library/session-shelf-activity.test.ts` measures the actual prepared start/record/complete/
+  start/abandon journey with `checkGrowth`, explicit `rule: series`, at 64/512/4096 unrelated same-owner sessions,
+  heads and history rows. The capture includes Core, Access, source/profile, helpers and nested trigger SQL.
 
 ### Session record
 
-- Touches: One `FOR UPDATE` of the session primary key, one session read, then optional unit removal and unit addition. Each of those is one statement over an array of at most 100 ids. Addition inserts with `ON CONFLICT DO NOTHING` after confirming the session exists. The session row is compare-and-swapped. A record always appends one `progress_change` whose `change_no` is the new revision. It is not a max scan. A completed-unit count above 20000 rolls the command back. The event subject is the account id.
-- Bound: A scalar or cursor record, with no unit writes, is library body `S` 4, `R` `O(1)`, `B` `O(L(N))`. A unit record adds one removal, one addition, or both. For `u` ids, `u` at most 100, those statements are `R` `O(u)` and `B` `O(u L(N))`. History length is not bounded by 20000. Add authorization and the envelope.
-- Growth check: `test/library/growth-sessions.test.ts`: `Session record has constant rows and statements as sessions and the session's own history grow` measures a scalar record with no unit writes at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox and write basis grow, and the measured session's own history and unit set reach 500 x scale rows.
+- Touches: Trusted preparation reads one owned session/pin in an owner snapshot, releases it, resolves the original
+  immutable release and observes current subject/profile admission at the attempt's T. The body point-reads the
+  immutable subject, ensures its head before the typed `(route, session_id)` `FOR UPDATE`, then rereads/CASes the
+  session. It validates only incoming values against both original meaning and current admission. Stored total,
+  start, units and history are never reinterpreted or repinned. NULL-pin rows retain the temporary explicit legacy
+  parser. Optional unit remove/add statements each name at most 100 exact keys combined. Every accepted intent,
+  including equal scalar/sparse no-net values, increments revision and appends one exact change row. Head/entry
+  activity follows the successful write/history in the same transaction. Errors roll it all back; replay skips it.
+- Bound: Scalar/cursor body `S` 8, `R` `O(1)`, `B` `O(L(N))`, plus preparation, authorization, envelope and one
+  `fact_source_head` upsert per changed session/entry. Unit writes add at most two statements, `R` `O(u)` and
+  `B` `O(u L(N))` for `u <= 100`. Neither sparse cardinality nor history is scanned. The 20000-key cap remains.
+- Growth check: the native journey above measures all actual statements at 64/512/4096 background rows, with
+  constant rows/statements and logarithmic indexed blocks. Existing legacy growth fixtures are not profile proof.
 
 ### Session complete
 
-- Touches: The same lock, primary-key read and compare-and-swap as a record. The state becomes completed and `completed_at` is set. There is no unit write and no change row.
-- Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus authorization and the envelope.
-- Growth check: `test/library/growth-sessions.test.ts`: `Session complete has constant rows and statements as sessions grow` measures a fresh open session per run at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox, write basis and Access accounts grow to 500 x scale rows.
+- Touches: One subject point read, head ensure, typed session lock, reread and CAS, then head touch and existing
+  entry raise. Completion alone sets `completed_at` and completion evidence. No new profile value is supplied,
+  so current profile absence does not prevent this lifecycle operation. No unit or history write occurs.
+- Bound: Body `S` 7, `R` `O(1)`, `B` `O(L(N))`, plus authorization, envelope and the changed session/entry's
+  fixed owner-head trigger upserts. Stored profile pin and user entry identity/revision/timestamps remain unchanged.
+- Growth check: the same actual native three-scale journey includes completion, with every trigger charged.
 
 ### Session abandon
 
-- Touches: The same lock, read and compare-and-swap. The state becomes abandoned and `completed_at` is cleared. There is no unit write and no change row.
-- Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus authorization and the envelope.
-- Growth check: `test/library/growth-sessions.test.ts`: `Session abandon has constant rows and statements as sessions grow` measures a fresh open session per run at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox, write basis and Access accounts grow to 500 x scale rows.
+- Touches: The same ordered point/head/lock/reread/CAS and activity work as completion, without adding completion
+  evidence. It preserves immutable session meaning and needs no current profile. No unit or history write occurs.
+- Bound: Body `S` 7, `R` `O(1)`, `B` `O(L(N))`, plus authorization, envelope and changed-row owner-head triggers.
+- Growth check: the same actual native three-scale journey includes abandonment, with every trigger charged.
 
 ### Session read
 

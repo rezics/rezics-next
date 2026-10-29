@@ -1,3 +1,5 @@
+import type { LibraryProgressUnitDescriptor } from './profile.ts';
+import { acceptsProfileDecimal } from './profile-decimal.ts';
 import { routeOf } from '../route/route.ts';
 
 /**
@@ -60,6 +62,10 @@ function invalid(field: string): ProgressInvalid {
 
 function isMode(value: unknown): value is ProgressMode {
   return typeof value === 'string' && MODES.has(value);
+}
+
+function isVocabularyId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/.exec(value)?.[0] === value;
 }
 
 function isUnit(value: unknown): value is string {
@@ -132,6 +138,18 @@ function boundedDecimal(value: unknown, percent: boolean): string | null {
   return parsed.text;
 }
 
+/** A descriptor is trusted compiled data; absence is the temporary legacy adapter only. */
+function numeric(
+  value: unknown,
+  legacyPercent: boolean,
+  descriptor?: LibraryProgressUnitDescriptor | 'syntax',
+): string | null {
+  if (descriptor === undefined) return boundedDecimal(value, legacyPercent);
+  return typeof value === 'string' && acceptsProfileDecimal(descriptor === 'syntax' ? {} : descriptor, value)
+    ? value
+    : null;
+}
+
 function isUnitId(value: unknown): value is string {
   if (typeof value !== 'string' || value.length < 1 || value.length > 128) return false;
   for (let index = 0; index < value.length; index += 1) {
@@ -187,27 +205,37 @@ function completedUnits(value: Record<string, unknown>): ProgressOutcome<Complet
   return invalid('add');
 }
 
-function scalar(value: Record<string, unknown>, unit: ProgressUnit): ProgressOutcome<ScalarRecord> {
+function scalar(
+  value: Record<string, unknown>,
+  unit: ProgressUnit,
+  descriptor?: LibraryProgressUnitDescriptor | 'syntax',
+): ProgressOutcome<ScalarRecord> {
   const foreign = firstUnexpected(value, ['amount']);
   if (foreign !== null) return invalid(foreign);
-  const amount = boundedDecimal(value.amount, unit === 'percent');
+  const amount = numeric(value.amount, unit === 'percent', descriptor);
   if (amount === null) return invalid('amount');
   return { ok: true, value: { amount } };
 }
 
-function cursor(value: Record<string, unknown>): ProgressOutcome<CursorRecord> {
+function cursor(
+  value: Record<string, unknown>,
+  descriptor?: LibraryProgressUnitDescriptor | 'syntax',
+): ProgressOutcome<CursorRecord> {
   const foreign = firstUnexpected(value, ['locator', 'position']);
   if (foreign !== null) return invalid(foreign);
   if (typeof value.locator !== 'string' || value.locator.length < 1 || value.locator.length > MAX_LOCATOR_LENGTH) {
     return invalid('locator');
   }
-  const position = boundedDecimal(value.position, false);
+  const position = numeric(value.position, false, descriptor);
   if (position === null) return invalid('position');
   return { ok: true, value: { locator: value.locator, position } };
 }
 
 /** Validate one new session. `total` belongs only to `scalar_amount` and is null when unknown. */
-export function parseSessionCreate(input: unknown): ProgressOutcome<ProgressSessionCreate> {
+export function parseSessionCreate(
+  input: unknown,
+  descriptor?: LibraryProgressUnitDescriptor | 'syntax',
+): ProgressOutcome<ProgressSessionCreate> {
   const value = plain(input);
   if (value === null) return invalid('session');
   const foreign = firstUnexpected(value, CREATE_FIELDS);
@@ -219,13 +247,18 @@ export function parseSessionCreate(input: unknown): ProgressOutcome<ProgressSess
     versionSubjectId = value.versionSubjectId;
   }
   if (!isMode(value.mode)) return invalid('mode');
-  if (!isUnit(value.unit)) return invalid('unit');
+  if (typeof value.unit !== 'string' || (descriptor === undefined ? !isUnit(value.unit) : !isVocabularyId(value.unit)))
+    return invalid('unit');
   let total: string | null = null;
   if (Object.hasOwn(value, 'total') && value.total !== null) {
     if (value.mode !== 'scalar_amount') return invalid('total');
-    const parsed = boundedDecimal(value.total, value.unit === 'percent');
+    const parsed = numeric(value.total, value.unit === 'percent', descriptor);
     if (parsed === null) return invalid('total');
     total = parsed;
+  }
+  if (descriptor !== undefined && descriptor !== 'syntax') {
+    if (descriptor.totalPolicy === 'required' && total === null) return invalid('total');
+    if (descriptor.totalPolicy === 'forbidden' && total !== null) return invalid('total');
   }
   return {
     ok: true,
@@ -235,21 +268,22 @@ export function parseSessionCreate(input: unknown): ProgressOutcome<ProgressSess
 
 /**
  * Validate one record for `mode`. Only an active session records.
- * Percent amounts stay within 0 to 100; no record changes the session state.
+ * Legacy percent amounts stay within 0 to 100; profiled amounts use only declared bounds.
  */
 export function parseRecord(
   mode: ProgressMode,
   input: unknown,
   context: ProgressRecordContext,
+  descriptor?: LibraryProgressUnitDescriptor | 'syntax',
 ): ProgressOutcome<ProgressRecord> {
   if (!isMode(mode)) return invalid('mode');
   if (typeof context !== 'object' || context === null || !isState(context.state)) return invalid('state');
   if (context.state !== 'active') return invalid('state');
-  if (!isUnit(context.unit)) return invalid('unit');
+  if (descriptor === undefined ? !isUnit(context.unit) : !isVocabularyId(context.unit)) return invalid('unit');
   const value = plain(input);
   if (value === null) return invalid('record');
-  if (mode === 'scalar_amount') return scalar(value, context.unit);
-  if (mode === 'cursor_position') return cursor(value);
+  if (mode === 'scalar_amount') return scalar(value, context.unit, descriptor);
+  if (mode === 'cursor_position') return cursor(value, descriptor);
   return completedUnits(value);
 }
 

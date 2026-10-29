@@ -1,3 +1,4 @@
+import type { LibraryProgressUnitDescriptor } from './profile.ts';
 /**
  * Pure rules for progress sessions. Commands own the account and the stored rows.
  * A reread is a new session; nothing here rewrites another one.
@@ -58,12 +59,12 @@ export type ProgressRecordContext = {
     state: ProgressState;
 };
 /** Validate one new session. `total` belongs only to `scalar_amount` and is null when unknown. */
-export declare function parseSessionCreate(input: unknown): ProgressOutcome<ProgressSessionCreate>;
+export declare function parseSessionCreate(input: unknown, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressSessionCreate>;
 /**
  * Validate one record for `mode`. Only an active session records.
- * Percent amounts stay within 0 to 100; no record changes the session state.
+ * Legacy percent amounts stay within 0 to 100; profiled amounts use only declared bounds.
  */
-export declare function parseRecord(mode: ProgressMode, input: unknown, context: ProgressRecordContext): ProgressOutcome<ProgressRecord>;
+export declare function parseRecord(mode: ProgressMode, input: unknown, context: ProgressRecordContext, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressRecord>;
 /** Complete or abandon an active session. An amount, position, or unit count is not an action. */
 export declare function transition(state: ProgressState, action: ProgressAction): ProgressOutcome<ProgressState>;
 /** The history row for a validated record. Unit ids stay the given ids, in code-unit order. */

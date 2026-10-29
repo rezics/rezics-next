@@ -91330,7 +91330,10 @@
                   "additionalProperties": false,
                   "properties": {
                     "code": {
-                      "const": "idempotency_conflict",
+                      "enum": [
+                        "idempotency_conflict",
+                        "unsupported_library_profile"
+                      ],
                       "type": "string"
                     },
                     "detail": {
@@ -91377,19 +91380,28 @@
                       "type": "string"
                     },
                     "retryable": {
-                      "const": false,
-                      "type": "boolean"
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
                     },
                     "status": {
                       "const": 422,
                       "type": "number"
                     },
                     "title": {
-                      "const": "Idempotency Key Reused",
+                      "enum": [
+                        "Idempotency Key Reused",
+                        "Unsupported Library Profile"
+                      ],
                       "type": "string"
                     },
                     "type": {
-                      "const": "https://rezics.com/problems/idempotency_conflict",
+                      "enum": [
+                        "https://rezics.com/problems/idempotency_conflict",
+                        "https://rezics.com/problems/unsupported_library_profile"
+                      ],
                       "type": "string"
                     }
                   },
@@ -91406,7 +91418,7 @@
                 }
               }
             },
-            "description": "Idempotency conflict"
+            "description": "Idempotency conflict; Unsupported library profile"
           },
           "503": {
             "content": {
@@ -95805,7 +95817,10 @@
                   "additionalProperties": false,
                   "properties": {
                     "code": {
-                      "const": "idempotency_conflict",
+                      "enum": [
+                        "idempotency_conflict",
+                        "unsupported_library_profile"
+                      ],
                       "type": "string"
                     },
                     "detail": {
@@ -95852,19 +95867,28 @@
                       "type": "string"
                     },
                     "retryable": {
-                      "const": false,
-                      "type": "boolean"
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
                     },
                     "status": {
                       "const": 422,
                       "type": "number"
                     },
                     "title": {
-                      "const": "Idempotency Key Reused",
+                      "enum": [
+                        "Idempotency Key Reused",
+                        "Unsupported Library Profile"
+                      ],
                       "type": "string"
                     },
                     "type": {
-                      "const": "https://rezics.com/problems/idempotency_conflict",
+                      "enum": [
+                        "https://rezics.com/problems/idempotency_conflict",
+                        "https://rezics.com/problems/unsupported_library_profile"
+                      ],
                       "type": "string"
                     }
                   },
@@ -95881,7 +95905,7 @@
                 }
               }
             },
-            "description": "Idempotency conflict"
+            "description": "Idempotency conflict; Unsupported library profile"
           },
           "503": {
             "content": {

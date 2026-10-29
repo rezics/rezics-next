@@ -82,6 +82,7 @@ const invalid = problemSchema('invalid_request', 'invalid_cursor');
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const conflict = problemSchema('conflict', 'stale_cursor');
 const idempotencyConflict = problemSchema('idempotency_conflict');
+const profileConflict = problemSchema('idempotency_conflict', 'unsupported_library_profile');
 const forbidden = problemSchema('forbidden');
 const notFound = problemSchema('not_found');
 const unavailable = problemSchema(
@@ -218,7 +219,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           401: unauthorized,
           403: forbidden,
           404: notFound,
-          422: idempotencyConflict,
+          422: profileConflict,
           503: unavailable,
         },
         detail: detail('progress_session.create', 'progress_session:create'),
@@ -306,7 +307,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           403: forbidden,
           404: notFound,
           409: problemSchema('conflict'),
-          422: idempotencyConflict,
+          422: profileConflict,
           503: unavailable,
         },
         detail: detail('progress_session.record', 'progress_session:update'),

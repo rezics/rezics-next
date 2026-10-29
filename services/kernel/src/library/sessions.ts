@@ -22,7 +22,13 @@ import {
 } from './progress.ts';
 import type { ProgressSession, ProgressSessionUpdate } from './progress-model.ts';
 import * as store from './progress-store.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { readLibraryProfileSource } from './profile-source.ts';
+import { progressUnit, resolveLibraryProfilePin, type LibraryProfileDescriptor } from './profile.ts';
+import { readRelease } from '../semantic/definitions.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
+import sessionLock from './session-lock.sql';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string };
@@ -76,6 +82,20 @@ export function createSessionCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
 
+  const heads = createShelfHeads();
+  const activity = createProgressActivity();
+
+  function descriptor(profile: LibraryProfileDescriptor, session: Pick<ProgressSession, 'mode' | 'unit'>) {
+    const unit = progressUnit(profile, session.mode, session.unit);
+    if (
+      !unit ||
+      unit.structure.kind !== 'none' ||
+      unit.identity.kind !== (session.mode === 'completed_units' ? 'session_local' : 'none')
+    )
+      throw new ProblemError('unsupported_library_profile');
+    return unit;
+  }
+
   async function admit(client: Client, owner: AccountActor): Promise<void> {
     const current = await readAccount(client, requireRoute(owner.accountId), owner.accountId);
     if (
@@ -100,34 +120,56 @@ export function createSessionCommands(config: Dependencies) {
 
   async function startSession(actor: Actor, input: unknown, requestKey: string) {
     const owner = account(actor, 'progress_session:create');
-    const parsed = valid(parseSessionCreate(input));
-    await withConnection(pool, (client) => admit(client, owner));
-    const resolvedIds = new Map<string, string>();
-    for (const subjectId of new Set([parsed.subjectId, parsed.versionSubjectId])) {
-      if (subjectId === null) continue;
-      const resolved = await resolveSubject({ pool, access }, owner, subjectId);
-      if (!resolved) throw new LibraryNotFoundError();
-      resolvedIds.set(subjectId, resolved.subjectId);
-    }
-    const stored = {
-      ...parsed,
-      subjectId: resolvedIds.get(parsed.subjectId)!,
-      versionSubjectId: parsed.versionSubjectId === null ? null : resolvedIds.get(parsed.versionSubjectId)!,
-    };
-    return runner.ownAccount(
+    // Syntax normalization is the existing receipt input; trusted metadata never enters its digest.
+    const parsed = valid(parseSessionCreate(input, 'syntax'));
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return runner.ownAccountPrepared(
       actor,
-      { action: 'progress_session:create', kind: 'progress_session.start', requestKey, input: parsed },
-      async (tx, command) => {
+      {
+        action: 'progress_session:create',
+        kind: 'progress_session.start',
+        requestKey,
+        input: parsed,
+        async prepare(attempt) {
+          try {
+            const deps = { pool, access, actor: owner, at: attempt.time, deadline };
+            const source = await readLibraryProfileSource(deps, parsed.subjectId);
+            const version =
+              parsed.versionSubjectId === null
+                ? null
+                : parsed.versionSubjectId === parsed.subjectId
+                  ? source
+                  : await readLibraryProfileSource(deps, parsed.versionSubjectId);
+            return { source, version };
+          } catch (error) {
+            return { error };
+          }
+        },
+      },
+      async (tx, command, prepared) => {
+        if ('error' in prepared) throw prepared.error;
+        const { source, version } = prepared;
+        if (!source || (parsed.versionSubjectId !== null && !version)) throw new LibraryNotFoundError();
+        if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
+        valid(parseSessionCreate(parsed, descriptor(source.profile, parsed)));
         const route = requireRoute(owner.accountId);
+        const write = { client: tx, route, accountId: owner.accountId };
+        await heads.ensure(write, source.subjectId);
+        const time = authoritativeTimeValue(command.time);
         const session = await store.insertSession(
           tx,
           route,
-          { ...stored, id: newId(route), accountId: owner.accountId },
           {
-            transactionId: command.transactionId,
-            time: authoritativeTimeValue(command.time),
+            ...parsed,
+            subjectId: source.subjectId,
+            versionSubjectId: version?.subjectId ?? null,
+            id: newId(route),
+            accountId: owner.accountId,
           },
+          { transactionId: command.transactionId, time },
+          source.pin,
         );
+        await activity.touch(write, { subjectId: session.subjectId, time, completed: false });
         return { value: session, events: [event(session)] };
       },
     );
@@ -145,27 +187,78 @@ export function createSessionCommands(config: Dependencies) {
     const { revision, record } = revisionInput(input);
     if (action !== 'record' && Object.keys(record).length)
       throw new ProgressInvalidError(Object.keys(record).sort()[0]!);
-    return runner.ownAccount(
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return runner.ownAccountPrepared(
       actor,
       {
         action: 'progress_session:update',
         kind: `progress_session.${action}`,
         requestKey,
         input: { sessionId, revision, ...record },
+        async prepare(attempt) {
+          try {
+            if (action !== 'record') return { original: null, source: null, pin: null };
+            // Release the owner snapshot before any source or Global connection is acquired.
+            const fact = await withConnection(pool, async (client) => {
+              await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+              try {
+                await admit(client, owner);
+                const value = await store.readSessionFact(client, route, sessionId);
+                await client.query('COMMIT');
+                return value;
+              } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
+              }
+            });
+            if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
+            if (fact.pin === null) return { original: null, source: null, pin: null };
+            const release = await readRelease(pool, fact.pin.releaseDigest, { composed: false });
+            const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
+            if (!original) throw new ProblemError('unsupported_library_profile');
+            const source = await readLibraryProfileSource(
+              { pool, access, actor: owner, at: attempt.time, deadline },
+              fact.session.subjectId,
+            );
+            return { original, source, pin: fact.pin };
+          } catch (error) {
+            return { error };
+          }
+        },
       },
-      async (tx, command) => {
-        // Lock only this point before changing its sparse set; a stale writer never touches unit rows.
-        await tx.query(
-          'SELECT session_id FROM library.progress_session WHERE route = $1 AND session_id = $2 FOR UPDATE',
-          [route, sessionId],
-        );
-        const current = await load(tx, owner, sessionId);
+      async (tx, command, prepared) => {
+        if ('error' in prepared) throw prepared.error;
+        const observed = await load(tx, owner, sessionId);
+        const write = { client: tx, route, accountId: owner.accountId };
+        // Every session writer orders the shared subject head before the session point lock.
+        await heads.ensure(write, observed.subjectId);
+        await sessionLock.run(tx, { route, session_id: sessionId });
+        const fact = await store.readSessionFact(tx, route, sessionId);
+        if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
+        const current = fact.session;
+        // A concurrent NULL-pin migration cannot let prepared legacy meaning admit a pinned value.
+        if (action === 'record' && JSON.stringify(fact.pin) !== JSON.stringify(prepared.pin))
+          throw new ProgressConflictError();
         if (current.revision !== revision) throw new ProgressConflictError();
         const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
         const changes: ProgressSessionUpdate = { ...current };
         let intent: unknown;
         if (action === 'record') {
-          const parsed = valid(parseRecord(current.mode, record, current));
+          const parsed = valid(
+            parseRecord(
+              current.mode,
+              record,
+              current,
+              prepared.original ? descriptor(prepared.original, current) : undefined,
+            ),
+          );
+          if (prepared.original) {
+            const source = prepared.source;
+            if (!source) throw new LibraryNotFoundError();
+            if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
+            const admitted = parseRecord(current.mode, record, current, descriptor(source.profile, current));
+            if (!admitted.ok) throw new ProblemError('unsupported_library_profile');
+          }
           intent = changeIntent(parsed);
           if ('amount' in parsed) changes.amount = parsed.amount;
           else if ('locator' in parsed) {
@@ -183,6 +276,11 @@ export function createSessionCommands(config: Dependencies) {
         const session = await store.updateSession(tx, route, sessionId, revision, changes, context);
         if (!session) throw new ProgressConflictError();
         if (action === 'record') await store.appendChange(tx, route, sessionId, session.revision, intent, context);
+        await activity.touch(write, {
+          subjectId: session.subjectId,
+          time: context.time,
+          completed: action === 'complete',
+        });
         return { value: session, events: [event(session)] };
       },
     );
