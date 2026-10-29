@@ -176,6 +176,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         .replace('waiting: []', `waiting: []\nafter: ${JSON.stringify(after)}`),
     );
     const task = h.tasks.dispatch(briefFile);
+    mkdirSync(dirname(join(task.worktree, file)), { recursive: true });
     mkdirSync(join(task.worktree, '.temp'), { recursive: true });
     writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file, content: file }));
     return task;
