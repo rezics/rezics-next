@@ -45,6 +45,10 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
     };
     await h.train(runner);
 
+    expect(h.outcomes.map(({ passed, stage, firstFailure }) => ({ passed, stage, firstFailure }))).toEqual([
+      { passed: true, stage: 'merge', firstFailure: undefined },
+      { passed: true, stage: 'merge', firstFailure: undefined },
+    ]);
     expect(checked.map(({ command }) => command)).toEqual([
       ['fixture-acceptance', 'first'],
       ['fixture-acceptance', 'second'],
