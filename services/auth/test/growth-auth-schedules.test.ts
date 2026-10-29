@@ -8,7 +8,7 @@ import { createAuthService } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { AUTH_MAINTENANCE_SCHEDULE, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
 import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
-import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, GrowthSettleInfrastructureError, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 if (process.argv.includes('--growth-child')) {
   void runGrowth();
@@ -77,6 +77,7 @@ async function runGrowth() {
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
   let seedHistory: () => Promise<number>;
+  let scheduleStart: number | undefined;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -93,7 +94,7 @@ async function runGrowth() {
   });
   try {
     await workflows.start();
-    const scheduleStart = Date.now();
+    scheduleStart = Date.now();
     await maintenance!.start('0 0 1 1 *');
     await DBOS.pauseSchedule(AUTH_MAINTENANCE_SCHEDULE);
     await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
@@ -252,6 +253,25 @@ async function runGrowth() {
         })),
       }),
     );
+  } catch (error) {
+    if (error instanceof GrowthSettleInfrastructureError && scheduleStart) {
+      const writers = await db.admin.query(
+        `SELECT name,workflow_uuid,status,queue_name,created_at
+        FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status
+        WHERE created_at >= $1 AND name <> 'growth.history' ORDER BY created_at,workflow_uuid`,
+        [scheduleStart],
+      );
+      const workflowIds = writers.rows.map((row) => row.workflow_uuid);
+      const operations = workflowIds.length
+        ? await db.admin.query(
+            `SELECT workflow_uuid,function_name FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs
+            WHERE workflow_uuid = ANY($1::text[]) ORDER BY workflow_uuid,function_id`,
+            [workflowIds],
+          )
+        : { rows: [] };
+      console.error(JSON.stringify({ writers: writers.rows, operationOutputs: operations.rows }));
+    }
+    throw error;
   } finally {
     await workflows.close();
     await db.close();
