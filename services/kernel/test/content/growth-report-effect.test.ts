@@ -41,7 +41,7 @@ beforeAll(async () => {
         headers: {
           authorization: `Bearer ${bearer}`,
           'content-type': 'application/json',
-          'idempotency-key': randomUUID(),
+          'idempotency-key': JSON.stringify(randomUUID()),
           ...extraHeaders,
         },
         body: JSON.stringify(body),
