@@ -1,0 +1,25 @@
+import { Canvas, Meta, Story } from '@storybook/addon-docs/blocks';
+import { BuildMetadata } from './BuildMetadata';
+import * as Library from '../library-entries.stories';
+
+<Meta title="Review/Start reviewing" />
+
+# Start reviewing
+
+This catalogue shows each page on recorded responses. It does not call a live application service. The fixtures let
+you review the interface without inferring backend authorization or lifecycle behavior.
+
+## This build
+
+<BuildMetadata />
+
+## Change the view
+
+Use the toolbar to switch locale and light or dark theme. Choose a story, then use the viewport toolbar to inspect
+phone or desktop widths. Copy the page URL to share a deep link to the selected story and its current view.
+
+## Begin with Library
+
+<Canvas of={Library.SignedIn} />
+
+Use [State coverage](?path=/docs/review-state-coverage--docs) to see how implemented and pending outcomes are tracked.

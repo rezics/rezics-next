@@ -1,0 +1,44 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import { LedgerLink } from './BuildMetadata';
+import * as Entries from '../library-entries.stories';
+import * as Collections from '../library-collections.stories';
+import * as Collection from '../library-collection.stories';
+import * as Following from '../library-following.stories';
+import * as Progress from '../library-progress.stories';
+import * as History from '../library-log.stories';
+
+<Meta title="Review/Library and Collections" />
+
+# Library and Collections
+
+The Library stories show the major library areas and their current recorded page states.
+
+## Library pages
+
+- **Everything and layout choices:** the [Personal Library](?path=/story/pages-library-personal-library--signed-in) page story, with list and table variants.
+
+<Canvas of={Entries.SignedIn} />
+
+- **Progress:** the [Progress](?path=/story/pages-library-progress--signed-in) page story.
+
+<Canvas of={Progress.SignedIn} />
+
+- **Following:** the [Following](?path=/story/pages-library-following--signed-in) page story.
+
+<Canvas of={Following.SignedIn} />
+
+- **History:** the [Published Log](?path=/story/pages-library-published-log--signed-in) page story.
+
+<Canvas of={History.SignedIn} />
+
+## Collections
+
+- **Your Collections:** the [My Collections](?path=/story/pages-library-my-collections--signed-in) page story.
+
+<Canvas of={Collections.SignedIn} />
+
+- **Collection members:** the [Collection](?path=/story/pages-library-collection--signed-in) page story.
+
+<Canvas of={Collection.SignedIn} />
+
+Read the <LedgerLink /> for the full route and state ledger.

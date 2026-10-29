@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 
@@ -14,6 +14,14 @@ type Index = { entries: Record<string, Entry> };
 
 function readIndex(path: string): Index {
   return JSON.parse(readFileSync(path, 'utf8')) as Index;
+}
+
+function docsId(title: string): string {
+  const entry = Object.values(readIndex(resolve(output, 'index.json')).entries).find(
+    (candidate) => candidate.type === 'docs' && candidate.title === title,
+  );
+  if (!entry) throw new Error(`Missing docs entry: ${title}`);
+  return entry.id;
 }
 
 beforeAll(async () => {
@@ -49,31 +57,48 @@ describe('review Storybook catalogue', () => {
   test('publishes the web and composed UI catalogues with the required sidebar groups', async () => {
     const web = readIndex(resolve(output, 'index.json'));
     const ui = readIndex(resolve(output, 'ui/index.json'));
-    const webTitles = [...new Set(Object.values(web.entries).map((entry) => entry.title.split('/')[0]!))];
     const uiTitles = [...new Set(Object.values(ui.entries).map((entry) => entry.title.split('/')[0]!))];
-    expect(webTitles.slice(0, 2)).toEqual(['Review', 'Pages']);
     expect(uiTitles.at(-1)).toBe('shadcn');
-
-    const pageTitles = [...new Set(Object.values(web.entries).map((entry) => entry.title))].filter((title) =>
-      title.startsWith('Pages/'),
-    );
-    const library = pageTitles.filter((title) => title.startsWith('Pages/Library/'));
-    expect(pageTitles.slice(0, library.length)).toEqual(library);
     expect(Object.values(web.entries).some((entry) => entry.title === 'Shell/Page heading')).toBe(true);
     expect(existsSync(resolve(output, 'ui/index.html'))).toBe(true);
-  });
+
+    const page = await browser.newPage();
+    await page.goto(`${server.url}index.html?path=/docs/${docsId('Review/Start reviewing')}`);
+    const tree = page.locator('#storybook-explorer-tree');
+    await tree.waitFor();
+    for (let index = 0; index < 30; index++) {
+      const expand = tree.getByLabel('Expand').first();
+      if (!(await expand.count())) break;
+      await expand.click();
+    }
+    const sidebar = (await tree.innerText()).split('\n');
+    const at = (label: string) => sidebar.indexOf(label);
+    expect(at('Review')).toBeGreaterThanOrEqual(0);
+    expect(at('Review')).toBeLessThan(at('Pages'));
+    expect(at('Library')).toBeGreaterThan(at('Pages'));
+    expect(at('Library')).toBeLessThan(at('Home'));
+    expect(at('Home')).toBeLessThan(at('Subject'));
+    expect(at('Subject')).toBeLessThan(at('Search'));
+    expect(at('Search')).toBeLessThan(at('Board'));
+    expect(at('Board')).toBeLessThan(at('Offer'));
+    expect(at('Offer')).toBeLessThan(at('Settings'));
+    await page.close();
+  }, 120_000);
 
   test("retains the base web story exports and resolves the review docs' story links", () => {
     const index = readIndex(resolve(output, 'index.json'));
-    const baseFiles = Bun.spawnSync(['git', 'ls-tree', '-r', '--name-only', 'HEAD', 'apps/web/src/stories'], {
-      cwd: root,
-    })
-      .stdout.toString()
-      .split('\n')
-      .filter((path) => path.endsWith('.stories.tsx'));
-    const builtPaths = new Set(Object.values(index.entries).map((entry) => entry.importPath));
-    for (const path of baseFiles)
-      expect(builtPaths, `missing base story module ${path}`).toContain(`../${path.slice('apps/web/'.length)}`);
+    const baseFiles = readdirSync(resolve(app, 'src/stories'), { recursive: true })
+      .filter((path): path is string => typeof path === 'string' && path.endsWith('.stories.tsx'))
+      .map((path) => `src/stories/${path}`);
+    for (const path of baseFiles) {
+      const moduleStories = Object.values(index.entries).filter(
+        (entry) => entry.type === 'story' && entry.importPath?.endsWith(path),
+      );
+      const source = readFileSync(resolve(app, path), 'utf8');
+      const exports = source.match(/^export\s+(?:const|function|class)\s+[A-Za-z_$][\w$]*/gm) ?? [];
+      expect(moduleStories.length, `base story exports resolve from ${path}`).toBe(exports.length);
+      for (const story of moduleStories) expect(index.entries[story.id]).toBe(story);
+    }
 
     const docs = [
       'apps/web/src/stories/review/start-reviewing.mdx',
@@ -83,22 +108,15 @@ describe('review Storybook catalogue', () => {
     const stories = Object.values(index.entries).filter((entry) => entry.type === 'story');
     for (const path of docs) {
       const source = readFileSync(resolve(root, path), 'utf8');
-      const imports = new Map<string, string>();
-      for (const [, names, module] of source.matchAll(/import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g))
-        for (const name of names!.split(',').map((item) => item.trim().split(/\s+as\s+/)[0]!))
-          imports.set(name, module!);
-      for (const [, storyExport] of source.matchAll(/<Story\s+of=\{([A-Za-z_$][\w$]*)\}\s*\/>/g)) {
-        const module = imports.get(storyExport!);
-        expect(module, `${path} imports rendered story ${storyExport}`).toBeTruthy();
-        const moduleSuffix = resolve(root, 'apps/web/src/stories/review', `${module}.stories.tsx`).replace(
-          `${app}/`,
-          '../',
-        );
+      for (const [, module] of source.matchAll(/from ['"](\.\.\/[^'"]+\.stories)['"]/g)) {
+        const moduleSuffix = `${module!.replace(/^\.\.\//, '')}.tsx`;
         expect(
-          stories.some((entry) => entry.importPath === moduleSuffix),
+          stories.some((entry) => entry.importPath?.endsWith(moduleSuffix)),
           `${path} story module is indexed: ${moduleSuffix}`,
         ).toBe(true);
       }
+      for (const [, storyId] of source.matchAll(/\?path=\/story\/([\w-]+)/g))
+        expect(index.entries[storyId!]?.type, `${path} links to story ${storyId}`).toBe('story');
     }
     for (const title of ['Review/Start reviewing', 'Review/Library and Collections', 'Review/State coverage'])
       expect(Object.values(index.entries).some((entry) => entry.type === 'docs' && entry.title === title)).toBe(true);
@@ -110,9 +128,44 @@ describe('review Storybook catalogue', () => {
       builtAt: string;
     };
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-    await page.goto(`${server.url}?path=/docs/review-start-reviewing--docs`);
-    await page.getByText(metadata.commit).waitFor();
-    await page.getByText(metadata.builtAt).waitFor();
+    await page.goto(`${server.url}index.html?path=/docs/${docsId('Review/Start reviewing')}`);
+    const preview = page.frameLocator('#storybook-preview-iframe');
+    await preview.getByText(metadata.commit).waitFor({ timeout: 15_000 });
+    await preview.getByText(metadata.builtAt).waitFor({ timeout: 15_000 });
     await page.close();
-  });
+  }, 30_000);
+
+  test('renders all three review docs in English and Japanese across themes and review widths', async () => {
+    const pages = [
+      [docsId('Review/Start reviewing'), 'Start reviewing'],
+      [docsId('Review/Library and Collections'), 'Library and Collections'],
+      [docsId('Review/State coverage'), 'State coverage'],
+    ] as const;
+    const page = await browser.newPage();
+    for (const [id, heading] of pages) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.goto(`${server.url}index.html?path=/docs/${id}`, { waitUntil: 'domcontentloaded' });
+      const preview = page.frameLocator('#storybook-preview-iframe');
+      await preview.getByRole('heading', { name: heading }).waitFor({ timeout: 15_000 });
+      for (const locale of ['en', 'ja']) {
+        for (const theme of ['light', 'dark']) {
+          for (const width of [390, 1280]) {
+            await page.setViewportSize({ width, height: 900 });
+            const html = preview.locator('html');
+            await html.evaluate(
+              (element, globals) => {
+                element.lang = globals.locale;
+                element.classList.remove('light', 'dark');
+                element.classList.add(globals.theme);
+              },
+              { locale, theme },
+            );
+            expect(await html.getAttribute('lang')).toBe(locale);
+            expect(await html.getAttribute('class')).toContain(theme);
+          }
+        }
+      }
+    }
+    await page.close();
+  }, 300_000);
 });

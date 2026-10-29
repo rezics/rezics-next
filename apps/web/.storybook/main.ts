@@ -30,11 +30,41 @@ if (!existsSync(routeTree) || newestRouteChange(routes) > statSync(routeTree).mt
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
-  stories: ['../src/stories/**/*.stories.tsx'],
+  stories: ['../src/stories/**/*.stories.tsx', '../src/stories/**/*.mdx', '../src/shell/**/*.stories.tsx'],
+  storySorts: [
+    {
+      order: [
+        'Review',
+        'Pages',
+        [
+          'Library',
+          'Home',
+          'Shell',
+          'Agent',
+          'Missing Subject',
+          'Subject',
+          'Subject Relations',
+          'Search',
+          'Search Empty',
+          'Search Typed',
+          'Board',
+          'Realm Board',
+          'Realms',
+          'Inbox',
+          'Thread',
+          'Exposure',
+          'Offer',
+          'Order',
+          'Settings',
+        ],
+        '*',
+      ],
+    },
+  ],
   refs: {
     ui: { title: 'REZICS UI', url: process.env.STORYBOOK_UI_URL ?? 'http://localhost:6007' },
   },
-  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y'],
+  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-docs'],
   core: { disableTelemetry: true },
   // Generated cover images for the recorded summaries, served where the site's media route would be.
   staticDirs: [
