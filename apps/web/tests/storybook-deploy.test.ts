@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
-import { runDeployment } from '../scripts/storybook-deploy.ts';
+import { runDeployment, runStatus } from '../scripts/storybook-deploy.ts';
 import { smokeStorybook } from '../scripts/storybook-smoke.ts';
 
 const root = resolve(import.meta.dir, '../../../');
@@ -104,6 +104,98 @@ describe('storybook review build', () => {
 });
 
 describe('deployment sequencing', () => {
+  test('status prints live and local commits and exits 0 when they match without building or calling Wrangler', async () => {
+    const calls: string[] = [];
+    const outputLines: string[] = [];
+    const commit = 'a'.repeat(40);
+    const status = await runStatus({
+      localCommit: commit,
+      fetchBuild: async () => {
+        calls.push('fetch');
+        return { commit };
+      },
+      print: (line) => outputLines.push(line),
+    });
+    expect(status).toBe(0);
+    expect(calls).toEqual(['fetch']);
+    expect(outputLines.join('\n')).toContain(`Live commit: ${commit}`);
+    expect(outputLines.join('\n')).toContain(`Local commit: ${commit}`);
+  });
+
+  test('status exits 3 for a different live commit and 2 when the live build cannot be read', async () => {
+    const outputLines: string[] = [];
+    const localCommit = 'a'.repeat(40);
+    const behindStatus = await runStatus({
+      localCommit,
+      fetchBuild: async () => ({ commit: 'b'.repeat(40) }),
+      print: (line) => outputLines.push(line),
+    });
+    expect(behindStatus).toBe(3);
+    expect(outputLines.join('\n')).toContain(`Live commit: ${'b'.repeat(40)}`);
+
+    for (const fetchBuild of [async () => ({}), async () => { throw new Error('unavailable'); }]) {
+      const unavailableStatus = await runStatus({ localCommit, fetchBuild, print: (line) => outputLines.push(line) });
+      expect(unavailableStatus).toBe(2);
+    }
+  });
+
+  test('a real deployment skips a commit already published without building, uploading or routing', async () => {
+    const calls: string[] = [];
+    const outputLines: string[] = [];
+    const commit = 'a'.repeat(40);
+    await runDeployment({
+      dryRun: false,
+      commit,
+      build: async () => { calls.push('build'); },
+      smoke: async () => { calls.push('smoke'); },
+      wrangler: async () => { calls.push('wrangler'); return ''; },
+      fetchBuild: async () => { calls.push('fetch'); return { commit }; },
+      isTreeClean: async () => { calls.push('clean'); return []; },
+      print: (line) => outputLines.push(line),
+    });
+    expect(calls).toEqual(['clean', 'fetch']);
+    expect(outputLines.join('\n')).toContain(`Already published ${commit}`);
+  });
+
+  test('a forced deployment publishes when the commit is already live', async () => {
+    const calls: string[] = [];
+    const commit = 'a'.repeat(40);
+    await runDeployment({
+      dryRun: false,
+      force: true,
+      commit,
+      build: async () => { calls.push('build'); },
+      smoke: async () => { calls.push('smoke'); },
+      wrangler: async (args) => {
+        calls.push(args[1]!);
+        return args[1] === 'upload'
+          ? 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev'
+          : 'deployed';
+      },
+      fetchBuild: async () => { calls.push('fetch'); return { commit }; },
+      isTreeClean: async () => [],
+      print: () => {},
+    });
+    expect(calls).toEqual(['fetch', 'build', 'smoke', 'upload', 'deploy', 'deploy', 'fetch']);
+  });
+
+  test('a real deployment refuses a dirty tree before building and names changed paths', async () => {
+    const calls: string[] = [];
+    const outputLines: string[] = [];
+    await expect(runDeployment({
+      dryRun: false,
+      commit: 'a'.repeat(40),
+      build: async () => { calls.push('build'); },
+      smoke: async () => {},
+      wrangler: async () => { calls.push('wrangler'); return ''; },
+      isTreeClean: async () => ['apps/web/src/changed.ts', 'packages/ui/src/changed.tsx'],
+      print: (line) => outputLines.push(line),
+    })).rejects.toThrow(/apps\/web\/src\/changed\.ts.*packages\/ui\/src\/changed\.tsx/);
+    expect(calls).toEqual([]);
+    expect(outputLines.join('\n')).toContain('apps/web/src/changed.ts');
+    expect(outputLines.join('\n')).toContain('packages/ui/src/changed.tsx');
+  });
+
   test('removes leftover Cloudflare build output before Wrangler in real and dry-run deployments', async () => {
     mkdirSync(resolve(root, '.temp'), { recursive: true });
     for (const dryRun of [false, true]) {
