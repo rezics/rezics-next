@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
+import { withReadTransaction } from './read.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { readIdentityEpochCutover } from './identity-epoch-bootstrap.ts';
@@ -249,9 +250,9 @@ export const identityEpochStore: IdentityEpochStore = {
 
     // The source snapshot is released before touching control. Revisit the same source afterward so
     // an admission between snapshots, a moved owner, or a newer pending descriptor cannot look current.
-    const source = await withConnection(tx, observeSource);
+    const source = await withReadTransaction(tx, observeSource);
     if (source.result.state === 'unavailable' || source.result.state === 'absent') return source.result;
-    const controlObservation = await withConnection(tx, async (client) => {
+    const controlObservation = await withReadTransaction(tx, async (client) => {
       const owner = await readPartition(client, IDENTITY_EPOCH_CONTROL_PARTITION);
       if (!owner) return { unavailable: 'missing-owner' as const };
       if (owner.writeState !== 'active')
@@ -278,7 +279,7 @@ export const identityEpochStore: IdentityEpochStore = {
     });
     if (controlObservation.unavailable)
       return { state: 'unavailable', reason: controlObservation.unavailable };
-    const current = await withConnection(tx, observeSource);
+    const current = await withReadTransaction(tx, observeSource);
     if (current.result.state === 'unavailable' || current.result.state === 'absent') return current.result;
     if (current.basis?.map(String).join('\u0000') !== source.basis?.map(String).join('\u0000'))
       return current.result.state === 'pending' && controlObservation.job?.jobId === current.result.job.jobId
