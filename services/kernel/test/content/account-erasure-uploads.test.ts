@@ -165,7 +165,6 @@ async function eraseAll(persona: Persona) {
   return found;
 }
 async function field(persona: Persona, name: string) {
-  await grant(persona, GLOBAL_CONTEXT, ['subject:create', 'statement:propose']);
   const created = await ok(persona, 'POST', '/v1/subjects', {
     type: 'schema:Recipe',
     labels: { en: name },
@@ -284,6 +283,16 @@ beforeAll(async () => {
       [routeOf(GLOBAL_CONTEXT), GLOBAL_CONTEXT, personas.staff.accountId, action],
     );
   }
+  for (const persona of [personas.alice, personas.bob, personas.orgOwner]) {
+    await db.admin.query(
+      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+       VALUES ($1,$2,$2,'media:create','(,)'::tstzrange,$2) ON CONFLICT DO NOTHING`,
+      [routeOf(persona.accountId), persona.accountId],
+    );
+  }
+  for (const persona of [personas.bob, personas.orgOwner]) {
+    await grant(persona, GLOBAL_CONTEXT, ['subject:create', 'statement:propose']);
+  }
   websiteKey = await generateKeyPair('ES256', { extractable: true });
   const scopes = [...productionActions().keys()];
   await auth.host.service.internal.registerClient({
@@ -312,7 +321,6 @@ test("account erasure erases the account's avatar, standalone and unclaimed medi
   const owner = await website(personas.alice);
   const other = await website(personas.bob);
   const post = await thread(owner);
-  await grant(owner, post.id, ['media:create', 'post:create', 'post:revise']);
   const avatar = await media(owner, owner.accountId, 'avatar');
   const standalone = await media(owner, post.id);
   const reserved = await media(owner, post.id, 'post-image', false);
@@ -368,7 +376,6 @@ test("account erasure erases the account's avatar, standalone and unclaimed medi
 test("account erasure keeps the account's authored fields an anonymous reader is served and erases its other authored fields", async () => {
   const kept = await field(personas.bob, 'Public field');
   const hidden = await field(personas.bob, 'Hidden candidate');
-  await grant(personas.staff, hidden.subject, ['moderation:hide']);
   await ok(
     personas.staff,
     'POST',
