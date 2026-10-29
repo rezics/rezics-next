@@ -31,6 +31,7 @@ import {
   runScript,
   selectSlotClass,
   workspaceFiles,
+  parseCommandPhases,
 } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
@@ -40,6 +41,13 @@ const checkHost = join(repository, 'scripts/check-host');
 const kernelFiles = ['test/access-hook.test.ts', 'test/admission.test.ts'];
 
 setDefaultTimeout(60_000);
+
+test('ledger command phases pair monotonic markers and report malformed or unpaired lines', () => {
+  expect(parseCommandPhases('migrations\tstart\t1000000000\nmigrations\tend\t3500000000\nbad\ncompile\tstart\t4000000000')).toEqual({
+    durations: { migrations: 2.5 },
+    problems: ['line 3: malformed', 'unmatched start for compile'],
+  });
+});
 
 function generatedHostRun(): string {
   return runScript('cache-test', '/srv/rezics-check/runs/cache-test', '.', ['true'], 'check-a');

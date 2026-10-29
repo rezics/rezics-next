@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { checkWaitRecorder } from './remote-check.ts';
+import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   checkClass,
@@ -168,6 +169,8 @@ export async function runWorkerCheck(
   reportOutput = true,
   recordedLog?: string,
   leaseWaitRepeatMs = 60_000,
+  logicalCheckId?: string,
+  rerunNumber = 0,
 ): Promise<number> {
   if (argv.length === 0) throw new Error('A check command is required');
   const localOnly = argv[0] === '--local';
@@ -184,6 +187,21 @@ export async function runWorkerCheck(
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
   const commandClass = checkClass(argv, root);
+  const checkout = mainCheckout(root);
+  let ledger: CheckLedgerEntry | undefined;
+  const beginLedger = (host: string, slotWaitSeconds = 0): void => {
+    ledger = { runId: randomUUID(), ...(logicalCheckId ? { logicalCheckId } : {}), rerunNumber, host, argv: [...argv],
+      revision: (() => { try { return spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim(); } catch { return undefined; } })(),
+      start: new Date().toISOString(), terminalStatus: 'running', slotWaitSeconds };
+    writeLedger(ledger, checkout);
+  };
+  const endLedger = (code: number, cause?: string): void => {
+    if (!ledger) return;
+    ledger.end = new Date().toISOString(); ledger.exitStatus = code;
+    ledger.terminalStatus = cause ? 'infrastructure-failure' : code === 0 ? 'passed' : 'failed';
+    if (cause) ledger.infrastructureCause = cause;
+    writeLedger(ledger, checkout);
+  };
   const directory = memoryLeaseDirectory(env);
   const capacity = checkMemoryCapacity(env);
   const weight = checkMemoryWeight(readPeaks(directory)[commandClass] ?? [], capacity);
@@ -205,6 +223,7 @@ export async function runWorkerCheck(
     return code;
   };
   if (remoteEligible) {
+    beginLedger('remote', 0);
     let remoteOutput = '';
     const remote = spawn(
       resolveRepositoryBun(['bun'], root)[0]!,
@@ -248,6 +267,9 @@ export async function runWorkerCheck(
       ? remoteOutput.match(/remote-check: connection to .+ failed during .+ before a result/)?.[0]
       : undefined;
     if (remoteCode !== 75 || !transportReason || remoteSignal !== undefined) {
+      const commandPhases: Record<string, number> = {};
+      for (const match of remoteOutput.matchAll(/remote-check: command phase ([^\s]+) ([0-9.]+) s/g)) commandPhases[match[1]!] = Number(match[2]);
+      if (ledger && Object.keys(commandPhases).length) ledger.commandPhases = commandPhases;
       const peakMiB = remoteOutput.match(/peak memory (\d+) MiB on [^\r\n]+/)?.[1];
       if (peakMiB) {
         const peakBytes = Number(peakMiB) * 2 ** 20;
@@ -257,6 +279,7 @@ export async function runWorkerCheck(
         );
       }
       wait.stop();
+      endLedger(remoteSignal === undefined ? remoteCode : 128 + remoteSignal, transportReason);
       closeSync(descriptor);
       return report(remoteSignal === undefined ? remoteCode : 128 + remoteSignal);
     }
@@ -264,6 +287,8 @@ export async function runWorkerCheck(
     process.stderr.write(retry);
     writeSync(descriptor, retry);
     wait.stop();
+    endLedger(remoteCode, transportReason);
+    ledger = undefined;
   }
   const leaseEnv = { ...env };
   // The memory lease is independent of any stack lease held by the caller.
@@ -282,6 +307,7 @@ export async function runWorkerCheck(
     (line) => writeSync(descriptor, `${line}\n`),
     leaseWaitRepeatMs,
   );
+  beginLedger(hostname(), 0);
   env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
   let child: ReturnType<typeof spawn>;
   let scoped = false;
@@ -379,6 +405,7 @@ export async function runWorkerCheck(
   });
 
   let code: number;
+  const physicalStarted = performance.now();
   try {
     code = await new Promise<number>((resolveExit, reject) => {
       child.once('error', reject);
@@ -409,6 +436,8 @@ export async function runWorkerCheck(
     if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
     process.stdout.write(`check: log ${relativeLogPath}\n`);
   }
+  endLedger(signalNumber === undefined ? code : 128 + signalNumber);
+  if (ledger) { ledger.phases = { ...(ledger.phases ?? {}), command: (performance.now() - physicalStarted) / 1000 }; writeLedger(ledger, checkout); }
   return signalNumber === undefined ? code : 128 + signalNumber;
 }
 
@@ -654,7 +683,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number
     writeRecord(record);
   };
   try {
-    const exitCode = await runWorkerCheck(record.argv, root, false, join(root, record.log));
+    const exitCode = await runWorkerCheck(record.argv, root, false, join(root, record.log), 60_000, id, record.reruns ?? 0);
     finish(exitCode);
     return exitCode;
   } catch (error) {

@@ -2,6 +2,23 @@
 
 ## Check hosts
 
+### Check cost ledger
+
+Physical worker check runs are recorded as JSON under the main checkout's
+`.temp/check-ledger/<UTC date>/<run id>.json`. Entries contain the logical check and rerun number, host, argv,
+revision, start/end timestamps, exit and terminal status, and available slot wait, phase, memory, swap, pressure and
+CPU measurements. Entries are first written with `terminalStatus: "running"` and atomically replaced at completion;
+ledger write failures are warnings and do not change a check result.
+
+Commands may append phase markers to the file named by `REZICS_CHECK_PHASES`, one per line:
+`<phase name>\t<start|end>\t<CLOCK_MONOTONIC nanoseconds>`. Paired markers are returned as phase durations; malformed
+or unmatched markers are ignored and reported.
+
+Use `bun scripts/check-ledger.ts summary --since <ISO> [--until <ISO>]` to report check-hours, GiB-hours by command
+class and phase, and the infrastructure share of terminal runs. Window totals clip runs at both edges and count a
+running entry through the window end. Memory outside the run slice, including host-shared services, is not counted;
+memory integral sampling error is bounded by the recorded interval and sample count.
+
 A check host is a Linux machine reached over SSH. It runs a disposable copy of a checkout.
 It needs systemd, cgroup v2 accounting, Docker and an SSH account with permission to manage them.
 Checks share the capped `rezics-check.slice`. A loopback host uses this same protocol on the caller's machine.

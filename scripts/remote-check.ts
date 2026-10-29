@@ -75,6 +75,21 @@ export type RemoteCheck = {
 export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; code: number };
 
 export const ROOT = '/srv/rezics-check';
+export function parseCommandPhases(contents: string): { durations: Record<string, number>; problems: string[] } {
+  const open = new Map<string, number>(); const durations: Record<string, number> = {}; const problems: string[] = [];
+  for (const [index, line] of contents.split(/\r?\n/).entries()) {
+    if (!line) continue;
+    const match = line.match(/^([^\t\r\n]+)\t(start|end)\t(\d+)$/);
+    if (!match) { problems.push(`line ${index + 1}: malformed`); continue; }
+    const [, phase, edge, raw] = match; const value = Number(raw);
+    if (!Number.isSafeInteger(value)) { problems.push(`line ${index + 1}: malformed timestamp`); continue; }
+    if (edge === 'start') { if (open.has(phase!)) problems.push(`line ${index + 1}: duplicate start for ${phase}`); else open.set(phase!, value); }
+    else if (!open.has(phase!)) problems.push(`line ${index + 1}: unmatched end for ${phase}`);
+    else { const started = open.get(phase!)!; open.delete(phase!); if (value < started) problems.push(`line ${index + 1}: end precedes start for ${phase}`); else durations[phase!] = (durations[phase!] ?? 0) + (value - started) / 1e9; }
+  }
+  for (const phase of open.keys()) problems.push(`unmatched start for ${phase}`);
+  return { durations, problems };
+}
 let pinnedBun: { version: string; revision: string } | undefined;
 
 /** Resolve the repository-pinned Bun only when a remote run is actually generated. */
@@ -822,6 +837,13 @@ export function runScript(
       fi
     fi
     run_finished=$(date +%s%N)
+    if [ -r "$REZICS_CHECK_PHASES" ]; then
+      awk -F '\t' 'NF != 3 || $1 == "" || ($2 != "start" && $2 != "end") || $3 !~ /^[0-9]+$/ { printf "remote-check: malformed command phase line %d\\n", NR > "/dev/stderr"; next }
+        $2 == "start" { if ($1 in started) printf "remote-check: malformed command phase duplicate start %s\\n", $1 > "/dev/stderr"; else started[$1]=$3; next }
+        !($1 in started) { printf "remote-check: malformed command phase unmatched end %s\\n", $1 > "/dev/stderr"; next }
+        { printf "remote-check: command phase %s %.9f s\\n", $1, ($3-started[$1])/1000000000; delete started[$1] }
+        END { for (phase in started) printf "remote-check: malformed command phase unmatched start %s\\n", phase > "/dev/stderr" }' "$REZICS_CHECK_PHASES"
+    fi
     slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
     case "$slice_cgroup" in /*)
       usage=$(awk '$1 == "usage_usec" { print $2 }' "/sys/fs/cgroup$slice_cgroup/cpu.stat" 2>/dev/null)
@@ -837,6 +859,7 @@ export function runScript(
 mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
+export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 cd ${directory} || exit 1
 touch ${quote(`${directory}/.alive`)}
 # systemd 259 expands \${NAME} in --scope arguments by default, which broke the script's parameter expansions on c

@@ -83,6 +83,20 @@ test('nested worker checks start with default placement environment', () => {
   expect(environment.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
 });
 
+test('ledger records each physical worker execution with logical id and rerun number', async () => {
+  const root = mkdtempSync('/tmp/worker-check-ledger-'); dirs.push(root);
+  process.env.REZICS_CHECK_MEMORY = 'off'; process.env.REZICS_CHECK_SCOPE = 'off';
+  const result = await runWorkerCheck(['true'], root, false, undefined, 60_000, 'logical-1', 1);
+  expect(result).toBe(0);
+  const ledgerRoot = join(root, '.temp/check-ledger');
+  const day = readdirSync(ledgerRoot)[0]!;
+  const entry = JSON.parse(readFileSync(join(ledgerRoot, day, readdirSync(join(ledgerRoot, day))[0]!), 'utf8'));
+  expect(entry.logicalCheckId).toBe('logical-1');
+  expect(entry.rerunNumber).toBe(1);
+  expect(entry.terminalStatus).toBe('passed');
+  expect(entry.exitStatus).toBe(0);
+});
+
 function withQuietAdmission<T>(run: () => Promise<T>): Promise<T> {
   const old = { ...process.env };
   process.env.REZICS_CHECK_MEMORY = 'off';
