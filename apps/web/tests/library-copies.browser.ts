@@ -80,7 +80,7 @@ type Draft = {
   revision?: number;
 };
 
-export const zebra: Subject = { id: edition, label: 'Zebra story', type: 'schema:Book' };
+export const zebra: Subject = { id: edition, label: 'Zebra story', type: 'book/edition' };
 export const copies: StoredCopy[] = [];
 let serial = 100;
 export function setSerial(value: number) {

@@ -25,9 +25,9 @@ export const ManyCopies: Story = {
   async play(args) {
     await ready(args);
     const canvas = within(args.canvasElement);
-    const kokoro = canvas.getByRole('listitem').filter({ hasText: 'Kokoro' });
-    await expect(kokoro).toContainText('Digital');
-    await expect(kokoro).not.toContainText('Physical');
+    const kokoro = canvas.getByText('Kokoro').closest('li');
+    expect(kokoro?.textContent).toContain('Digital');
+    expect(kokoro?.textContent).not.toContain('Physical');
     await userEvent.hover(canvas.getByText('The Little Prince'));
   },
 };

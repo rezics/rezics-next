@@ -25,7 +25,7 @@ test(
       expect(await row.locator('[data-slot="list-row-control"] button').count()).toBe(1);
       expect(await row.innerText()).toContain('Physical');
       expect(await row.innerText()).toContain('Owned');
-      expect(await row.innerText()).toContain('Book');
+      expect(await row.innerText()).toContain('Physical · Owned');
       expect(await row.innerText()).toContain('Jan 1, 2030');
       expect(await row.innerText()).toContain('Study');
       expect(await row.innerText()).toContain('Bookshop');
