@@ -224,15 +224,16 @@ lifecycle, candidate audience, subject/links/session consistency, validation, ag
 Context A-to-B race. A suspended account uses its genuine pre-suspension bearer: 401 `invalid_credentials` with
 `Bearer error="invalid_token"`, never a manufactured bearer.
 
-| Surface                                        | Binding status                                                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Subject facts, links and current Context label | Request/response and native acceptance frozen here; production Realm wire still required         |
-| Sticky public statement audience               | Required Semantic producer; NOT YET FROZEN until its actual export is available to the aggregate |
-| Realm rating figures                           | NOT YET FROZEN: require Rating's actual question/population binding and current authority        |
-| Realm reviews                                  | NOT YET FROZEN: require Content's actual Context/population read export                          |
-| Realm discussion                               | NOT YET FROZEN: require Content's actual Context/population thread export                        |
-| Realm lists                                    | NOT YET FROZEN: require Library's explicit population binding                                    |
-| Global review/thread previews                  | Independent Content/Search acceptance; no duplicate fixture in this freeze                       |
+| Surface                                        | Binding status                                                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Subject facts, links and current Context label | Request/response and native acceptance frozen here; production Realm wire still required                               |
+| Native Context deletion lifecycle              | NOT YET FROZEN: existing lifecycle acceptance requires DELETE, but the composed Context routes expose only create/read |
+| Sticky public statement audience               | Required Semantic producer; NOT YET FROZEN until its actual export is available to the aggregate                       |
+| Realm rating figures                           | NOT YET FROZEN: require Rating's actual question/population binding and current authority                              |
+| Realm reviews                                  | NOT YET FROZEN: require Content's actual Context/population read export                                                |
+| Realm discussion                               | NOT YET FROZEN: require Content's actual Context/population thread export                                              |
+| Realm lists                                    | NOT YET FROZEN: require Library's explicit population binding                                                          |
+| Global review/thread previews                  | Independent Content/Search acceptance; no duplicate fixture in this freeze                                             |
 
 This specification adds no page, compiler, schema, client, Realm, Context, Source or figure implementation and no
 resolver export. It establishes no Source safety or identity acknowledgment, deployment default or main-branch
