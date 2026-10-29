@@ -226,3 +226,19 @@ At committed revision `192e368d00`, all three submissions returned check IDs suc
 
 These are queued/running submissions, not passing results. The manifest's submission failure
 did not recur with the current required syntax. Assertions remain frozen and unchanged.
+
+### Fresh validation on the assigned worker branch
+
+Starting revision: `6f7982dbe20087446fd761d729fbcfb41f2c8232`.
+The requested composed case already exists in this base. Read its complete assertions, the actual
+`openCoverRecovery` factory, the old native recovery cases and reports, the distinct-input witness,
+and the current `MediaBoundary.source(url, fault?, encodedBytes)` implementation before deciding
+that no additional case or assertion edit is needed. Its frozen SHA-256 remains
+`751500e9c56f1b840f5f149d56b511537638867388976bcb245f55bedd72d171`.
+The factory still registers defaults before returning and exposes the real ACK, same-file reopen,
+editor selection and bounded native job delivery required by this contract.
+
+Decision: preserve this existing frozen witness and revalidate it once, with the affected kernel
+typecheck and the delivery-only nonempty report command, using the current separator submission
+protocol. Prior queued IDs and historical results above are not results for this fresh validation.
+Only this report changes; no outside-path file, helper, product, dependency or frozen assertion changes.
