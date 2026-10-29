@@ -328,8 +328,12 @@ describe('deployment sequencing', () => {
     await runDeployment({
       dryRun: false,
       commit: 'a'.repeat(40),
-      build: async () => calls.push('build'),
-      smoke: async () => calls.push('smoke'),
+      build: async () => {
+        calls.push('build');
+      },
+      smoke: async () => {
+        calls.push('smoke');
+      },
       wrangler: async (args) => {
         calls.push(args[1]!);
         return args[1] === 'upload'
