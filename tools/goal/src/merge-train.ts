@@ -1384,6 +1384,32 @@ export class MergeTrain {
         throw new Error('The main checkout must already have main checked out');
       if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      if (workspace && sharedStore) {
+        sharedSource = tip;
+        const task = sharedStore.task(request.taskId);
+        const own = taskCommits(task, tip);
+        if (!own.length)
+          throw new Error('No Goal-Task trailer commits for this task: commit your own work before finishing');
+        if (own.every((commit) => workspaceAncestor(o.mainCheckout, commit, target()))) {
+          workspace.integrated(recorded.workspace!.module, target());
+          result.passed = true;
+          result.stage = 'merge';
+          result.mergedCommit = target();
+          await workspace.withLaunch(recorded.workspace!.module, () => workspace.syncIdle(recorded.workspace!.module));
+          return finish();
+        }
+        const attribution = workspaceCommits(task.worktree, workspace.workspace(recorded.workspace!.module).base, tip);
+        sharedTasks = sharedStore
+          .tasks()
+          .filter(
+            (candidate) =>
+              candidate.workspace?.module === recorded.workspace!.module &&
+              !['cancelled', 'merged'].includes(candidate.state) &&
+              attribution.has(candidate.id) &&
+              attribution.get(candidate.id)!.some((commit) => !workspaceAncestor(o.mainCheckout, commit, target())),
+          );
+      }
+
       // Control-plane branches start on main, so measure their work from their fork from main. The recorded base can
       // lag after retries, and measuring against dev would include unrelated dev-only commits in the control-plane
       // diff. Only the commits after the main fork are considered for the main landing.
