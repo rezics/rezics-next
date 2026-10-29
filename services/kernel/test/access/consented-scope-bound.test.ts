@@ -27,8 +27,8 @@ let site: NativeContentSystem;
 let client: WorkClient;
 
 beforeAll(async () => {
-  h = await nativeModule(maximum[0]!);
   site = await createNativeContentSystem({ databaseUrl: process.env.DATABASE_URL! });
+  h = await nativeModule(maximum[0]!);
   client = await createWorkClient(site.database.pool.options.connectionString!);
 }, 120_000);
 afterAll(async () => {
