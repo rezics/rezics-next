@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import sharp from 'sharp';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import type { PublicJwks } from '@rezics/auth';
 import { fromPlainText } from '@rezics/document';
 import { eraseAccountUploadsPage, type UploadErasureCursor } from '../../src/content/account-erasure-uploads.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
@@ -167,7 +168,7 @@ beforeAll(async () => {
   websiteKey = await generateKeyPair('ES256', { extractable: true });
   const scopes = [...productionActions().keys()];
   await auth.host.service.internal.registerClient({ clientId: 'uploads-login', firstParty: true, scopes: scopes.filter((a) => a !== 'media:complete') });
-  await auth.host.service.internal.registerWebsiteClient({ publicJwks: { keys: [{ ...(await exportJWK(websiteKey.publicKey)), kid: 'uploads-website', alg: 'ES256', use: 'sig' }] },
+  await auth.host.service.internal.registerWebsiteClient({ publicJwks: { keys: [{ ...(await exportJWK(websiteKey.publicKey)), kid: 'uploads-website', alg: 'ES256', use: 'sig' }] } as PublicJwks,
     redirectUris: [`${issuer}/uploads/callback`], postLogoutRedirectUris: [`${issuer}/`], scopes });
   png = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#123456' } }).png().toBuffer();
 });

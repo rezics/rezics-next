@@ -6,7 +6,7 @@ export async function eraseAccountUploadsPage(
   _accountId: string,
   _cursor: UploadErasureCursor | null,
 ): Promise<{ next: UploadErasureCursor | null; found: number; pending: number }> {
-  return { next: null, found: 0, pending: 0 };
+  throw new Error('Account upload erasure requires a bounded media claim ownership contract');
 }
 
 export function createAccountUploadIndexEffect(_pool: Pool) {
