@@ -34,8 +34,8 @@ function stepFailure(step: string, error: unknown, report: Reporter): Error {
   return new Error(`${step}: ${detail}`);
 }
 
-function checked(command: string, args: string[], cwd: string, timeout = 30_000): string {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8', timeout, maxBuffer: OUTPUT_LIMIT });
+function checked(command: string, args: string[], cwd: string, timeout = 30_000, env = process.env): string {
+  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout, maxBuffer: OUTPUT_LIMIT });
   if (result.status !== 0) {
     const detail = result.stderr?.trim() || result.stdout?.trim() || result.error?.message || `exit ${result.status}`;
     throw new Error(`${command} ${args[0] ?? ''}: ${detail}`);
@@ -88,9 +88,10 @@ export async function runLaunchSmoke(agent?: string, options: SmokeOptions = {})
 
 async function runFakeSmoke(agent: string, root: string, report: Reporter, suppliedEnv: NodeJS.ProcessEnv): Promise<void> {
   const directory = uuidPath(root, 'launch-smoke-test-');
-  let checkId = '01234567-89ab-4cde-8f01-23456789abcd';
+  let checkId = '';
   const session = 'launch-smoke-fake-session';
-  const resultPath = join(directory, 'result.json');
+  let resultPath = '';
+  const passed: string[] = [];
   const baseEnv = {
     ...process.env,
     ...suppliedEnv,
@@ -100,6 +101,15 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
   };
   try {
     try {
+      // Even the fake-agent protocol uses the real asynchronous check entry point and its durable result.
+      const started = checked(process.execPath, [join(root, 'scripts/worker-check.ts'), '--', '--local',
+        process.execPath, '-e', 'process.exit(Number(process.env.REZICS_SMOKE_CHECK_EXIT ?? 0))'], directory, 30_000, { ...process.env, ...suppliedEnv, REZICS_STACK_LEASE: 'off' });
+      checkId = /check: id ([0-9a-f-]{36})/.exec(started)?.[1] ?? '';
+      if (!CHECK_ID.test(checkId)) throw new Error('worker-check did not return a real check id');
+      const startedCheckId = checkId;
+      resultPath = join(directory, '.temp/goal/checks/results', `${checkId}.json`);
+      baseEnv.REZICS_SMOKE_CHECK_ID = checkId;
+      baseEnv.REZICS_SMOKE_RESULT = resultPath;
       const start = fakeStep(agent, 'start', baseEnv);
       if (start.error || start.status !== 0) throw new Error(start.stderr || start.error?.message || `exit ${start.status}`);
       let waiting: Record<string, unknown> | undefined;
@@ -118,23 +128,22 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
           throw new Error('expected one worker-check id');
         checkId = waiting.checks[0];
         baseEnv.REZICS_SMOKE_CHECK_ID = checkId;
-        if (!CHECK_ID.test(checkId)) throw new Error('fake worker-check id is not a UUID');
+        if (!CHECK_ID.test(checkId) || checkId !== startedCheckId) throw new Error('fake agent did not return the real worker-check id');
       } else if (!/^worker-check-[\w-]+$/.test(checkId)) {
         throw new Error('fake worker-check id has an invalid shape');
       }
-      report('start: passed');
+      passed.push('start: passed');
     } catch (error) {
       throw stepFailure('start', error, report);
     }
 
     try {
-      writeFileSync(resultPath, `${JSON.stringify({ status: 'finished', exitCode: 0, failureSummary: 'passed' })}\n`);
-      const result = JSON.parse(readFileSync(resultPath, 'utf8')) as { status?: string; exitCode?: number };
+      const result = await waitForCheck(resultPath, Date.now() + 10_000);
       if (result.status !== 'finished' || result.exitCode !== 0) throw new Error('worker-check result did not pass');
       const wake = fakeStep(agent, 'wake', baseEnv);
       if (wake.error || wake.status !== 0) throw new Error(wake.stderr || wake.error?.message || `exit ${wake.status}`);
       if (!wake.stdout.includes('result passed')) throw new Error('wake did not receive the passing check result');
-      report('wake: passed');
+      passed.push('wake: passed');
     } catch (error) {
       throw stepFailure('wake', error, report);
     }
@@ -149,7 +158,8 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
         status = success.stdout.trim();
       }
       if (status !== 'success') throw new Error('expected a success exit');
-      report('success: passed');
+      passed.push('success: passed');
+      for (const line of passed) report(line);
     } catch (error) {
       throw stepFailure('success', error, report);
     }
@@ -445,7 +455,7 @@ estimate:
 criticalPath: false
 waiting: []
 ---
-Run exactly this command once: \`bun ${JSON.stringify(workerCheckScript)} -- bun -e 'process.stdout.write("launch smoke check passed\\n")'\`.
+Use at most 2000 generated tokens for this task. Run exactly this command once: \`bun ${JSON.stringify(workerCheckScript)} -- bun -e 'process.stdout.write("launch smoke check passed\\n")'\`.
 Do not pass \`--wait\`, poll, or start another check. Return exactly the required result fields. For the wait, use \`{"status":"waiting","summary":"check started","blocker":null,"checks":["<id>"],"approaches":[]}\`, replacing <id> with the id printed by worker-check. When resumed with exit status 0, return \`{"status":"success","summary":"check passed","blocker":null,"checks":[],"approaches":[]}\`. Do not edit files.
 `;
     const brief = parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile));
