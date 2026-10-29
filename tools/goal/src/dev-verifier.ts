@@ -9,6 +9,7 @@ import { matchesPath } from './briefs.ts';
 import { gateRunner, git, type GateRunner } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { recordFlow } from './flow.ts';
+import type { Database } from 'bun:sqlite';
 
 const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
@@ -59,7 +60,8 @@ function taskLandings(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
         !skippedKinds.has(task.brief.kind),
     );
 }
-function recordVerified(settings: Settings, store: Pick<WorkerStore, 'tasks' | 'db'>, base: string, target: string): void {
+function recordVerified(settings: Settings, store: Pick<WorkerStore, 'tasks'> & { db?: Database }, base: string, target: string): void {
+  if (!store.db) return;
   const at = new Date().toISOString();
   for (const task of taskLandings(settings, store, base, target))
     recordFlow(store.db, {taskId:task.id,attempt:task.currentAttempt,stage:'verification',action:'verified',at});
@@ -104,7 +106,7 @@ function installDependencies(tree: string, stateDirectory: string): boolean {
 
 export type DevVerifierOptions = {
   settings: Settings;
-  store: Pick<WorkerStore, 'tasks' | 'task' | 'updateTask' | 'db'>;
+  store: Pick<WorkerStore, 'tasks' | 'task' | 'updateTask'> & { db?: Database };
   inbox: Pick<SqliteManagerInbox, 'deliver'>;
   runGate?: GateRunner;
 };
