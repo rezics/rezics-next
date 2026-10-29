@@ -1852,6 +1852,12 @@ export class MergeTrain {
             appendFileSync(logPath, 'dev already fails the integration check, with the same errors\n');
           }
         }
+        // A failed check may leave the train tree on the dev baseline for comparison. Acceptance must always run on
+        // the merged candidate, even when dev already has the same integration-check failure.
+        if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) {
+          git(trainTree, 'reset', '--hard', candidate);
+          git(trainTree, 'clean', '-fdx');
+        }
         if (workspace) {
           stage = 'gate';
           let failed = false;
@@ -1878,7 +1884,7 @@ export class MergeTrain {
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
             throw new Error('Acceptance changed the candidate commit');
         }
-        if (!controlPlane) {
+        if (!controlPlane && !workspace) {
           stage = 'gate';
           appendFileSync(
             logPath,
