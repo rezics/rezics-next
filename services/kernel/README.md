@@ -575,9 +575,9 @@ only for lists that have not yet moved.
 
 ## Cost
 
-| Operation       | Touches                  | Bound                                                                          | Growth check                      |
-| --------------- | ------------------------ | ------------------------------------------------------------------------------ | --------------------------------- |
-| HTTP ingress    | One request's wire bytes | O(limit) time and memory per request; reserved total at most the ingress budget | `test/http/body-limit.test.ts`    |
+| Operation    | Touches                  | Bound                                                                           | Growth check                   |
+| ------------ | ------------------------ | ------------------------------------------------------------------------------- | ------------------------------ |
+| HTTP ingress | One request's wire bytes | O(limit) time and memory per request; reserved total at most the ingress budget | `test/http/body-limit.test.ts` |
 
 ## HTTP ingress body bounds
 
@@ -590,17 +590,17 @@ The ingress reservation budget is derived as `(ADMISSION_LIMITS.permits + ADMISS
 2 * largest route limit`. Each request reserves its declared length capped at its route limit, or the route limit
 when no length is declared. Reservations release after the response.
 
-| Mounted body route / family                              | Wire limit                                      | Reader |
-| --------------------------------------------------------- | ----------------------------------------------- | ------ |
-| All body routes without `x-body-limit`                   | 1 MiB                                           | shared JSON |
-| `POST /v1/definitions/releases`                           | canonical release limit + 64 KiB               | shared JSON |
-| `POST /v1/boards`, `/v1/realms/:realmId/boards`           | existing bounded content parser                | route parser |
-| `POST /v1/threads`, `/v1/threads/:id/posts`               | existing bounded content parser                | route parser |
-| `POST /v1/posts/:id/revisions`                            | existing bounded content parser                | route parser |
-| `POST /v1/reports`                                        | existing bounded report parser                 | route parser |
-| `POST /v1/media/:id/$takeDown`                            | 8 KiB                                            | route parser |
-| `POST /v1/sourceFences/$takedown`                          | 16 KiB                                           | route parser |
-| `POST /v1/webhooks/stripe`                                 | 256 KiB                                          | route parser |
+| Mounted body route / family                     | Wire limit                       | Reader       |
+| ----------------------------------------------- | -------------------------------- | ------------ |
+| All body routes without `x-body-limit`          | 1 MiB                            | shared JSON  |
+| `POST /v1/definitions/releases`                 | canonical release limit + 64 KiB | shared JSON  |
+| `POST /v1/boards`, `/v1/realms/:realmId/boards` | existing bounded content parser  | route parser |
+| `POST /v1/threads`, `/v1/threads/:id/posts`     | existing bounded content parser  | route parser |
+| `POST /v1/posts/:id/revisions`                  | existing bounded content parser  | route parser |
+| `POST /v1/reports`                              | existing bounded report parser   | route parser |
+| `POST /v1/media/:id/$takeDown`                  | 8 KiB                            | route parser |
+| `POST /v1/sourceFences/$takedown`               | 16 KiB                           | route parser |
+| `POST /v1/webhooks/stripe`                      | 256 KiB                          | route parser |
 
 Every module README keeps one such table, checked by `test/support/growth-cost-table.ts`.
 Every read, write, check, authorization, projection and erasure must touch a bounded neighbourhood: an anchor plus bounded hops and results, costing roughly changes × log N, independent of engine speed or machine size.

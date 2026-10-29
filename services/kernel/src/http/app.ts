@@ -133,9 +133,10 @@ export function createApp({
       const detail = mounted.hooks?.detail as Record<string, unknown> | undefined;
       const limit = bodyLimitOf(detail);
       const declared = Number(request.headers.get('content-length'));
-      const reservation = request.headers.has('content-length') && Number.isSafeInteger(declared) && declared >= 0
-        ? Math.min(declared, limit)
-        : limit;
+      const reservation =
+        request.headers.has('content-length') && Number.isSafeInteger(declared) && declared >= 0
+          ? Math.min(declared, limit)
+          : limit;
       const largest = Math.max(
         DEFAULT_BODY_LIMIT,
         MAX_BODY_LIMIT,
