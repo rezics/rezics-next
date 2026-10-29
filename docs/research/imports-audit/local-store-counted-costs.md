@@ -77,8 +77,23 @@ unchanged. No product algorithm, native API case, grant or PostgreSQL witness is
 
 ## Verification and remaining migration
 
-The focused four-suite acceptance and root typecheck are recorded with their revision and
-log paths in the delivery summary. No whole-kernel or root gate is part of this evidence.
+Checked implementation revision: `98982d85db83744b27eb0f8e08de3db0747e1e59`.
+Both commands ran from the assigned worktree through `bun scripts/worker-check.ts --`:
+
+- `bun test services/importer/tests/bindings-growth.test.ts services/importer/tests/record-store-growth.test.ts services/importer/tests/record-caps-growth.test.ts services/importer/tests/run-store-empty-growth.test.ts`:
+  exit 0, 16 pass / 0 fail, 8844 assertions. Log:
+  `.temp/goal/checks/worker-check-2026-10-29T10-15-23.924Z-176eeb0c.log`.
+- `bun run typecheck`: exit 0 for all workspaces. Log:
+  `.temp/goal/checks/worker-check-2026-10-29T10-12-31.967Z-d5397fd2.log`.
+
+The first acceptance run and its first infrastructure retry each ended with seven
+file-backed failures because the check host could not create temporary directories
+(`ENOSPC: no space left on device`). Their nine in-memory tests passed. The final permitted
+retry passed without edits or timeout/bound changes; all checks have finished. Earlier logs:
+`.temp/goal/checks/worker-check-2026-10-29T10-11-39.294Z-6ed3a399.log` and
+`.temp/goal/checks/worker-check-2026-10-29T10-14-20.995Z-40fb6fe3.log`.
+No whole-kernel or root gate was run. No files outside the five assigned paths changed;
+no external reference project was required or read.
 
 Remaining direct legacy `.cost` callers in importer tests are `sqlite-growth.test.ts`,
 `run-store-growth.test.ts`, `run-store-native-keys-growth.test.ts`, `run-store-pages.test.ts`,
