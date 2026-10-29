@@ -360,7 +360,7 @@ test("an account reaction and report erasure page stays within its bound as othe
       const ids = actors.map(() => newId(reportRoute));
       await database.admin.query(
         "INSERT INTO content.reaction(route,actor_account_id,target_kind,target_route,target_id,kind,updated_at) SELECT $1,id,'post',$2,$3,'like',now() FROM unnest($4::uuid[]) id",
-        [home, reportRoute, target.firstPost.id, actors],
+        [home, routeOf(target.firstPost.id), target.firstPost.id, actors],
       );
       await database.admin.query(
         "INSERT INTO content.report(route,report_id,target_kind,target_id,reason,evidence,reporter_account_id,created_at,recorded_transaction_id) SELECT $1,id,'thread',$2,'spam','Other evidence',actor,now(),$3 FROM unnest($4::uuid[],$5::uuid[]) row(id,actor)",
