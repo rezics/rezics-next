@@ -463,13 +463,13 @@ describe('auth-journeys', () => {
     expect(again.page.signedInAccountId).toBe(fixture.accounts.alice);
   });
 
-  test('website client consent through the served Auth app returns to web with the consented session', async () => {
-    // Review the website client explicitly, preserving its standing first-party consent.
+  test('reviewing website standing consent in served Auth security settings returns to the web library with the consented session', async () => {
+    // Review standing first-party consent where Auth lists the website's product session.
     const result = await driver.auth('alice', 'consent', target('library'));
     authReturn(result, fixture.accounts.alice);
     expect(
       result.visitedUrls.some(
-        (url) => new URL(url).origin === driver.origins.auth && /consent/.test(new URL(url).pathname),
+        (url) => new URL(url).origin === driver.origins.auth && new URL(url).pathname === '/security',
       ),
     ).toBe(true);
     expect(result.session.websiteConsent).toBe(true);

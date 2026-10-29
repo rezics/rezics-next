@@ -144,8 +144,10 @@ export interface WebPersonalDriver {
   act(persona: Persona, action: Action): Promise<Visit>;
   /**
    * Real served forms: signup uses a previously unregistered newcomer; sign-in
-   * uses the fixture credentials; consent explicitly reviews/approves the website
-   * client (including its standing first-party consent); step-up confirms the
+   * uses the fixture credentials; the website is a first-party client with standing
+   * consent, so Auth shows it no consent page. The consent journey reviews that
+   * consent in Auth's security settings, where the website's product session is
+   * listed, and returns to the web target; step-up confirms the
    * stale session at Auth; sign-out ends both the website and Auth sessions.
    * Preserve the exact requested web return target through the redirect chain.
    * A refused sign-in still submits the correct fixture password through the served
