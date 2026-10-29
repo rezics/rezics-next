@@ -178,9 +178,10 @@ No assertion, helper, product, runner or outside-path file changed. No new nativ
 the historical 595-assertion pass remains separately attributed above. Current validation is blocked by
 the check submission tool, including the artifact command itself.
 
-### Revalidation from revision 0fb1a295
+### Revalidation after the supplied retry manifest
 
-The retry started clean on the assigned worker branch at `0fb1a295d1ff1469ae149356919836a85295766b`.
+The retry started clean on the assigned worker branch; pre-edit HEAD was
+`464bdea98344af60b797e1907043da7a9212eea8` (the manifest names the earlier `0fb1a295` revision).
 The composed case, old recovery test, recovery factory, distinct-input test and current boundary API were
 read again. Preserve the frozen case: its source overrides and real ACK/reopen/selection journey still match
 the contract; no helper or product change is justified. No outside-path file changes are needed.
