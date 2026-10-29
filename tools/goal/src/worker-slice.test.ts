@@ -118,7 +118,8 @@ function fakeSystemd(options: { systemctl?: string; systemdRun?: string; memoryM
   script(
     'systemctl',
     systemctlCalls,
-    options.systemctl ?? `if [ "$1" = show ]; then ${options.memoryMax === null ? 'echo unavailable >&2; exit 1' : `printf '%s\\n' '${options.memoryMax ?? `${24 * 1024 ** 3}`}'`}; else exit 0; fi`,
+    options.systemctl ??
+      `if [ "$1" = show ]; then ${options.memoryMax === null ? 'echo unavailable >&2; exit 1' : `printf '%s\\n' '${options.memoryMax ?? `${24 * 1024 ** 3}`}'`}; else exit 0; fi`,
   );
   script('systemd-run', systemdRunCalls, options.systemdRun ?? 'exit 0');
   return {
@@ -176,7 +177,12 @@ describe('worker systemd slice', () => {
 
     const small = fakeSystemd({ memoryMax: `${60 * 1024 ** 3}` });
     new WorkerSlice(spawnSync, () => 'MemTotal:       65011712 kB\n').launch(
-      'task', 1, 'true', [], { env: small.env }, () => false,
+      'task',
+      1,
+      'true',
+      [],
+      { env: small.env },
+      () => false,
     );
     expect(small.read(small.systemctlCalls).slice(-1)).toEqual(['MemoryHigh=16G']);
   });
@@ -184,13 +190,23 @@ describe('worker systemd slice', () => {
   test('subtracts only the reserve when the check slice is unavailable or has no MemoryMax', () => {
     const noLimit = fakeSystemd({ memoryMax: 'infinity' });
     new WorkerSlice(spawnSync, () => 'MemTotal:       65011712 kB\n').launch(
-      'task', 1, 'true', [], { env: noLimit.env }, () => false,
+      'task',
+      1,
+      'true',
+      [],
+      { env: noLimit.env },
+      () => false,
     );
     expect(noLimit.read(noLimit.systemctlCalls).slice(-1)).toEqual(['MemoryHigh=48G']);
 
     const failed = fakeSystemd({ memoryMax: null });
     new WorkerSlice(spawnSync, () => 'MemTotal:       65011712 kB\n').launch(
-      'task', 1, 'true', [], { env: failed.env }, () => false,
+      'task',
+      1,
+      'true',
+      [],
+      { env: failed.env },
+      () => false,
     );
     expect(failed.read(failed.systemctlCalls).slice(-1)).toEqual(['MemoryHigh=48G']);
   });
@@ -198,14 +214,24 @@ describe('worker systemd slice', () => {
   test('uses a positive integer memory override and rejects invalid values by naming the variable', () => {
     const override = fakeSystemd();
     new WorkerSlice(spawnSync, () => 'MemTotal:       65011712 kB\n').launch(
-      'task', 1, 'true', [], { env: { ...override.env, REZICS_WORKER_MEMORY_HIGH_GIB: '31' } }, () => false,
+      'task',
+      1,
+      'true',
+      [],
+      { env: { ...override.env, REZICS_WORKER_MEMORY_HIGH_GIB: '31' } },
+      () => false,
     );
     expect(override.read(override.systemctlCalls).slice(-1)).toEqual(['MemoryHigh=31G']);
 
     const invalid = fakeSystemd();
     const reports: string[] = [];
     new WorkerSlice(spawnSync, () => 'MemTotal:       65011712 kB\n').launch(
-      'task', 1, 'true', [], { env: { ...invalid.env, REZICS_WORKER_MEMORY_HIGH_GIB: '1.5' } }, () => false,
+      'task',
+      1,
+      'true',
+      [],
+      { env: { ...invalid.env, REZICS_WORKER_MEMORY_HIGH_GIB: '1.5' } },
+      () => false,
       (message) => reports.push(message),
     );
     expect(existsSync(invalid.systemctlCalls)).toBe(false);
@@ -213,7 +239,9 @@ describe('worker systemd slice', () => {
   });
 
   test('falls back when there is no user manager and reports the reason', () => {
-    const fake = fakeSystemd({ systemctl: 'if [ "$2" = set-property ]; then echo "No medium found" >&2; exit 1; fi; echo 0' });
+    const fake = fakeSystemd({
+      systemctl: 'if [ "$2" = set-property ]; then echo "No medium found" >&2; exit 1; fi; echo 0',
+    });
     const worker = new WorkerSlice();
     const reports: string[] = [];
     const result = worker.launch(
