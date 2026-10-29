@@ -29,6 +29,7 @@ import createRevision from './create-revision.sql';
 import { writeSubject } from './subject.ts';
 import { mergeSubjectsInCommand } from './merges.ts';
 import { reverseAccountAgentLinks } from './merge-moves.ts';
+import { identityEpochStore } from './identity-epoch-store.ts';
 
 type Queryable = Pick<PoolClient, 'query'>;
 type Account = string | Pick<AccountActor, 'accountId'>;
@@ -209,6 +210,7 @@ async function createUnlabeledAgent(
     current_release: release,
   });
   await createRevision.run(tx, { route, subject_id: id, release, transaction_id: transactionId, source: null });
+  await identityEpochStore.initializeSubject(tx, id);
   await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
   return {
     value: resolveItem(id, [], type, {}, { revision: 1, release, context: GLOBAL_CONTEXT }),
