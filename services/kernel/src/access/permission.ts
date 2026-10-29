@@ -483,7 +483,11 @@ export function createAccess(config: PermissionConfig): Access {
               throwAccessUnavailable(result.reason, deadline);
               throwEvidenceFailure(result.reason);
             }
-          if (results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
+          // A session page requires every proof. Standing returns decisions per
+          // id: unresolved roles keep their empty validity range, so the same
+          // SQL denies only targets that actually hit that role.
+          if (isSession(actor) && results.some((result) => result.status === 'rejected' || !result.value))
+            return evidence;
         }
       }
       // Short-lived account/assignment/membership observations never survive the
@@ -810,7 +814,7 @@ export function createAccess(config: PermissionConfig): Access {
         const evidence = await preparePermission(principal, action, resource, currentContext, page, account);
         return withConnection(currentContext.pool, async (client) => {
           const decision = await checkPreparedPermission(
-            client,
+            deadlineClient(client, deadline),
             principal,
             action,
             resource,

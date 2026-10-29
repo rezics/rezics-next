@@ -125,6 +125,17 @@ const cases: [string, boolean, (fixture: Fixture) => Promise<void>][] = [
   ['identity resource role', true, async ({ grant, f }) => grant(f.actorId, '', 'identity', true)],
   ['organization owner role', true, async ({ grant, f }) => grant(f.organizationId, 'owner')],
   ['organization member role', false, async ({ grant, f }) => grant(f.organizationId, 'member')],
+  [
+    'organization member grant',
+    true,
+    async ({ grant, f }) => {
+      await pool.query(
+        "INSERT INTO access.organization_member(route,organization_id,member_account_id,role,valid,transaction_id) VALUES($1,$2,$3,'member','(,)',$4)",
+        [routeOf(f.organizationId), f.organizationId, f.actorId, f.transactionId],
+      );
+      await grant(f.organizationId, 'member');
+    },
+  ],
   ['organization resource role', true, async ({ grant, f }) => grant(f.organizationId, 'owner', 'identity', true)],
   ['stale inverse role', false, async ({ grant, f }) => grant(f.staleId, 'owner')],
   ['organization identity is not its member', false, async ({ grant, f }) => grant(f.organizationId)],
@@ -227,6 +238,23 @@ cases.push([
     );
   },
 ]);
+cases.push([
+  'Realm role denial vetoes a direct grant',
+  false,
+  async ({ f, grant, page }) => {
+    const id = await realm(f);
+    await pool.query(
+      "INSERT INTO community.realm_member(route,realm_id,account_id,role,valid,reservation_id,transaction_id) VALUES($1,$2,$3,'member','(,)',$4,$5)",
+      [routeOf(id), id, f.actorId, newId(routeOf(id)!), f.transactionId],
+    );
+    await grant();
+    await pool.query(
+      `INSERT INTO access.resource_denial(route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+    SELECT $1,id,$3,'member',$4,'realm_ban','(,)',$5 FROM unnest($2::uuid[]) id`,
+      [page.route, page.ids, id, action, f.transactionId],
+    );
+  },
+]);
 for (const [name, allowed, setup] of cases) {
   test(`${name}: own standing equals the all-scopes first-party session on each resource and page`, async () => {
     const f = await fixture();
@@ -237,6 +265,34 @@ for (const [name, allowed, setup] of cases) {
     );
   });
 }
+
+test('an unresolved Realm role denies only the page targets that hit it', async () => {
+  const f = await fixture();
+  await f.grant();
+  const missingRealm = newId(f.page.route);
+  await f.f.admit(missingRealm, f.f.actorId, 'realm');
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,subject_role,action,valid,transaction_id)
+    VALUES($1,$2,$3,'member',$4,'(,)',$5)`,
+    [f.page.route, f.ids[1], missingRealm, action, f.f.transactionId],
+  );
+  // Whole-page session admission deliberately fails closed, but each standing
+  // answer must equal the independently prepared single-resource session check.
+  const ctx = context();
+  const actor = await authenticateAccount(f.access, ctx, {
+    accountId: f.f.actorId,
+    clientId: 'first-party',
+    scopes: [...actions.keys()],
+  });
+  const expected: Record<string, boolean> = {};
+  for (const id of f.ids) {
+    expected[id] = await (await accessCheck(f.access, actor, action, { route: f.page.route, id }, ctx))(pool);
+  }
+  expect(Object.values(expected)).toEqual([true, false, true, true]);
+  expect(
+    await accountStandingCheck(f.access, { accountId: actor.accountId, action, target: f.page, context: ctx }),
+  ).toEqual(expected);
+});
 
 test('a page retains separate allowed and denied answers and adapters resolve the installed port', async () => {
   const f = await fixture();
