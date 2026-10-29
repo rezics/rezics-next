@@ -376,7 +376,11 @@ export class WorkerTasks {
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const ref = { taskId, attempt: task.currentAttempt };
+    if (this.store.retryIntent(ref)?.status === 'pending') throw new Error('a retry is already pending');
     if (task.state === 'held') {
+      const attempt = this.store.attempt(ref);
+      if (!['pending', 'stopped', 'exited'].includes(attempt.state))
+        throw new Error(`task cannot be held for retry: ${taskId} attempt ${task.currentAttempt} (${attempt.state})`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (!reshaped) throw new Error('a held task can only be retried with --brief');
       if (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager)
