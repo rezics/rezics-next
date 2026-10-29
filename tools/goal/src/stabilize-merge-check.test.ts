@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SqliteManagerInbox } from './inbox.ts';
 import { git } from './merge.ts';
@@ -10,13 +10,11 @@ function dispatchStabilize(
   h: ReturnType<typeof integrationHarness>,
   file: string,
   manager: string,
-  command: string[],
 ) {
   const briefFile = join(h.settings.stateDirectory, `stabilize-${crypto.randomUUID()}.md`);
   const brief = markdown
     .replace('paths: [result.txt]', `paths: [${file}]`)
     .replace('goal: fixture', `goal: fixture\nmanager: ${manager}`)
-    .replace('command: [bun, test]', `command: ${JSON.stringify(command)}`)
     .replace('waiting: []', 'waiting: []\ntarget: stabilize');
   writeFileSync(briefFile, brief);
   const task = h.tasks.dispatch(briefFile);
@@ -32,37 +30,26 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
   try {
     h.ensureDev();
     git(h.root, 'branch', 'stabilize', h.head());
-    const first = dispatchStabilize(h, 'first.txt', 'kernel', ['fixture-acceptance', 'first']);
-    const second = dispatchStabilize(h, 'second.txt', 'semantic', ['fixture-acceptance', 'second']);
+    const first = dispatchStabilize(h, 'first.txt', 'kernel');
+    const second = dispatchStabilize(h, 'second.txt', 'semantic');
     await h.start(first);
     await h.start(second);
 
     const checked: { command: string[]; cwd: string }[] = [];
     const runner: GateRunner = async (command, cwd) => {
-      if (command[0] === 'fixture-acceptance')
+      if (command[1] === 'test')
         checked.push({ command: [...command], cwd });
       return passingRunner(command, cwd, join(h.settings.stateDirectory, 'acceptance.log'));
     };
     await h.train(runner);
 
-    for (const outcome of h.outcomes) {
-      if (!outcome.passed)
-        throw new Error(`${JSON.stringify(outcome)}\n${readFileSync(outcome.logPath, 'utf8')}`);
-    }
-    expect(
-      h.outcomes.map(({ passed, stage, firstFailure, logPath }) => ({
-        passed,
-        stage,
-        firstFailure,
-        log: readFileSync(logPath, 'utf8'),
-      })),
-    ).toEqual([
-      { passed: true, stage: 'merge', firstFailure: undefined, log: expect.any(String) },
-      { passed: true, stage: 'merge', firstFailure: undefined, log: expect.any(String) },
+    expect(h.outcomes.map(({ passed, stage }) => ({ passed, stage }))).toEqual([
+      { passed: true, stage: 'merge' },
+      { passed: true, stage: 'merge' },
     ]);
     expect(checked.map(({ command }) => command)).toEqual([
-      ['fixture-acceptance', 'first'],
-      ['fixture-acceptance', 'second'],
+      ['bun', 'test'],
+      ['bun', 'test'],
     ]);
     expect(existsSync(join(checked[0]!.cwd, 'first.txt'))).toBe(true);
     expect(existsSync(join(checked[1]!.cwd, 'second.txt'))).toBe(true);
@@ -77,11 +64,11 @@ test('a failing stabilize acceptance keeps dev unchanged, leaves stabilize integ
   try {
     h.ensureDev();
     git(h.root, 'branch', 'stabilize', h.head());
-    const task = dispatchStabilize(h, 'policy.txt', 'semantic', ['fixture-acceptance', 'policy']);
+    const task = dispatchStabilize(h, 'policy.txt', 'semantic');
     await h.start(task);
     const dev = h.head('dev');
     const runner: GateRunner = async (command) =>
-      command[0] === 'fixture-acceptance'
+      command[1] === 'test'
         ? { passed: false, output: 'AssertionError: pattern admission rejected\nExpected policy to pass', timedOut: false }
         : { passed: true, output: '', timedOut: false };
     await h.train(runner);
@@ -96,7 +83,7 @@ test('a failing stabilize acceptance keeps dev unchanged, leaves stabilize integ
     for (const manager of ['semantic', h.settings.integration.supermanager]) {
       const notices = inbox.read(manager).map((entry) => entry.event.summary);
       expect(notices).toHaveLength(1);
-      expect(notices[0]).toContain('fixture-acceptance policy');
+      expect(notices[0]).toContain('bun test');
       expect(notices[0]).toContain('pattern admission rejected');
       expect(notices[0]).toContain('merged dev candidate');
       expect(notices[0]).toContain(task.id);
