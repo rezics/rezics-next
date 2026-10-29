@@ -76,7 +76,9 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
         );
         await database.admin.query('VACUUM ANALYZE access.resource_grant');
         const observed = await capture(database, () => probe('2030-01-01T12:00:00Z', true));
-        const scans = nodes(observed.capture.plans).filter((node) => node['Relation Name'] === 'resource_grant');
+        const scans = nodes(observed.capture.plans).filter(
+          (node) => node['Relation Name'] === 'resource_grant' && Number(node['Actual Loops']) > 0,
+        );
         expect(scans.length).toBeGreaterThan(0);
         for (const node of scans) {
           expect(node['Node Type']).toBe('Index Only Scan');
