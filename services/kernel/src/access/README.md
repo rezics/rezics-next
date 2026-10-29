@@ -478,6 +478,16 @@ Mechanically completing an already committed platform decision—URL fetch, Shar
 
 `createMembershipWorkPorts` accepts an installed `RealmMembershipCommands` port from the owning Realm module. When the principal kind is `realm`, the enqueue check and the later publication step both call that port's `authorize`, and reserve, publication and terminalization call the port's commands. Organization creation and organization membership keep the supplied authorizer, or the native approval resolver when none was supplied. A Realm principal stays on the Realm port. With no Realm port installed, Realm membership work throws `RealmMembershipUnavailableError` before any inverse, coordination or publication write.
 
+An injected organization authorizer must return an identity authenticated by the same installed Access passed in
+`options.access`, using the publication pool. A hand-built actor or the low-level permission evaluator cannot supply
+command admission. Native concurrency fixtures use this same boundary so a refusal proves the membership guard,
+rather than a missing Access registration.
+
+Every contention retry admits the authenticated identity again and prepares permission evidence at its fresh command
+time, under the original request deadline. A retry alone is never a denial. Changed identity or permission can still
+deny; exhausted deadlines and unavailable evidence answer unavailable. The locked last-owner guard remains required
+on every attempt.
+
 ## Resource denials
 
 `recordResourceDenial` and `endResourceDenial` run inside the caller's command transaction. The transaction's own authorization must be execute mode for the same resource route and id, and `at` must be that attempt's authoritative time. Otherwise they throw `ResourceAccessWriteDeniedError` and write nothing. `reason` is `resource`, `suspension` or `realm_ban`. `action` matches the denial table's action pattern. `subjectRole` is empty, so the row is one direct identity denial. `record` opens `[T, infinity)` and leaves a key that is already open at T unchanged. `end` sets that open row's upper bound to T and leaves the table unchanged when no open row contains T. A row whose lower bound is already T cannot be closed to an empty range, so that call throws and writes nothing. One key — resource, subject, action and reason — is one row. Community records `realm_ban` on the Realm resource for `realm:join` and `realm:participate`. From T the formula denies exactly that action; ending the row restores the underlying grant from the closing T.
@@ -641,6 +651,12 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 `shareAccount` inside the owner's command. Enumeration confers no command authority and has no route or action.
 
 ## Cost
+
+### Lifecycle command admission on retry
+
+- Touches: The same admission and permission statements on each attempt; retry adds no statement to an attempt.
+- Bound: O(attempts) per request, with attempts bounded by the request deadline.
+- Growth check: `test/access/growth-commands.test.ts`, `Membership change stays within its bound as m grows`.
 
 ### Internal action composition
 

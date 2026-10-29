@@ -8,19 +8,27 @@ import { LIFECYCLE_ACTIONS, type LifecycleRequest } from '../../src/access/lifec
 import { routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
+import type { Access } from '../../src/request/access.ts';
 
-export async function authenticated(pool: ReturnType<typeof createPool>, id: string): Promise<LifecycleRequest> {
+export async function authenticated(
+  pool: ReturnType<typeof createPool>,
+  id: string,
+  access?: Access,
+  scopes: readonly string[] = [...LIFECYCLE_ACTIONS.keys()],
+): Promise<LifecycleRequest> {
+  const deadline = Date.now() + 30_000;
+  const claims = {
+    kind: 'account' as const,
+    accountId: id,
+    clientId: 'fixture',
+    scopes,
+    requestedBy: null,
+    authnEpoch: 1,
+  };
   return {
-    actor: {
-      kind: 'account',
-      accountId: id,
-      clientId: 'fixture',
-      scopes: [...LIFECYCLE_ACTIONS.keys()],
-      requestedBy: null,
-      authnEpoch: 1,
-    },
+    actor: access ? await authenticateAccount(access, { pool, deadline }, claims) : claims,
     account: await withConnection(pool, (connection) => readAccount(connection, routeOf(id)!, id)),
-    deadline: Date.now() + 30_000,
+    deadline,
   };
 }
 
