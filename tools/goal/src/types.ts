@@ -83,6 +83,7 @@ export type Settings = {
   };
   integration: {
     batchSize: number;
+    batchAcceptanceConcurrency: number;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;

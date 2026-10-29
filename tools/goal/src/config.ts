@@ -293,6 +293,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       managerDirectory: path(integration.managerDirectory, join(stateDirectory, 'managers')),
       inboxDirectory: path(integration.inboxDirectory, join(stateDirectory, 'inboxes')),
       batchSize: positiveInteger(integration.batchSize, 'batchSize'),
+      batchAcceptanceConcurrency: positiveInteger(integration.batchAcceptanceConcurrency, 'batchAcceptanceConcurrency'),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
       tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),

@@ -36,6 +36,7 @@ import {
 import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
+import { installShared } from './shared-dependencies.ts';
 
 export type DerivedFile = {
   path: string;
@@ -687,7 +688,7 @@ export type TrainOptions = {
   /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
   integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
   /** Batched dev landings; absent integration settings retain one-at-a-time behavior. */
-  integration?: { batchSize?: number };
+  integration?: { batchSize?: number; batchAcceptanceConcurrency?: number };
   queue: SqliteLandingQueue;
   fence: AttemptFence;
   sink: GateOutcomeSink;
@@ -995,6 +996,7 @@ export class MergeTrain {
         const outcome = outcomes.get(entry.id);
         return outcome ? [{ entry, outcome }] : [];
       });
+    const passedAcceptance = new Map<string, { output: string; command: readonly string[] }>();
 
     while (pending.length) {
       const trainTree = resolve(o.worktreeRoot, `train-batch-${randomUUID()}`);
@@ -1229,36 +1231,71 @@ export class MergeTrain {
           | { kind: 'acceptance' | 'integration'; output: string; timedOut: boolean; failedCommand?: readonly string[] }
           | undefined;
         let batchBaselineOutput = '';
-        // A batch is a sequence of cumulative candidates. Run each member's own acceptance command against the
-        // candidate at the point where that member would land; if one fails, single-land the batch so the failure is
-        // attributed to that task and the remaining members can still proceed.
-        for (const member of prepared) {
-          const command = member.entry.request.gate;
-          git(trainTree, 'reset', '--hard', member.candidate);
-          appendFileSync(
-            member.result.logPath,
-            `\nAcceptance on ${member.candidate}, dev ${base}: ${command.join(' ')}\n`,
-          );
-          const accepted = await (o.runGate ?? gateRunner())(command, trainTree, member.result.logPath);
-          for (const entry of pending) o.fence.assertCurrent(entry.request);
-          if (target() !== base) {
-            retry = true;
-            break;
+        // Every member validates the exact same final batch tree in its own detached worktree. Keep successful
+        // results across a dev-move restart when the batch still produces that tree.
+        const finalCandidate = prepared[prepared.length - 1]!.candidate;
+        const finalTree = git(trainTree, 'rev-parse', `${finalCandidate}^{tree}`);
+        const acceptanceJobs = prepared.map((member) => ({
+          member,
+          command: member.entry.request.gate,
+          key: `${JSON.stringify(member.entry.request.gate)}:${finalTree}`,
+        }));
+        const concurrency = Math.max(1, o.integration?.batchAcceptanceConcurrency ?? 8);
+        let nextAcceptance = 0;
+        const runAcceptance = async () => {
+          while (nextAcceptance < acceptanceJobs.length && !failedBatch && !retry) {
+            const job = acceptanceJobs[nextAcceptance++]!;
+            const { member, command, key } = job;
+            const cached = passedAcceptance.get(key);
+            const memberTree = resolve(o.worktreeRoot, `train-batch-acceptance-${randomUUID()}`);
+            let memberTreeAdded = false;
+            try {
+              git(o.mainCheckout, 'worktree', 'add', '--detach', memberTree, finalCandidate);
+              memberTreeAdded = true;
+              installShared(memberTree);
+              appendFileSync(
+                member.result.logPath,
+                `\nAcceptance ${cached ? 'reused' : 'on'} ${finalCandidate}, dev ${base}: ${command.join(' ')}\n`,
+              );
+              let accepted = cached
+                ? { passed: true, output: cached.output, timedOut: false }
+                : await (o.runGate ?? gateRunner())(command, memberTree, member.result.logPath);
+              const changed =
+                git(memberTree, 'rev-parse', 'HEAD') !== finalCandidate || changedWorkingFiles(memberTree).length > 0;
+              if (changed)
+                accepted = {
+                  ...accepted,
+                  passed: false,
+                  output: accepted.output || 'Acceptance command changed its worktree',
+                };
+              if (accepted.passed && !cached) passedAcceptance.set(key, { output: accepted.output, command });
+              for (const entry of pending) o.fence.assertCurrent(entry.request);
+              if (target() !== base) {
+                retry = true;
+                continue;
+              }
+              if (!accepted.passed) {
+                failedBatch = {
+                  kind: 'acceptance',
+                  output: accepted.output || 'Acceptance command failed',
+                  timedOut: accepted.timedOut,
+                  failedCommand: command,
+                };
+              }
+            } catch (error) {
+              if (error instanceof StaleAttemptError) throw error;
+              failedBatch = {
+                kind: 'acceptance',
+                output: String(error),
+                timedOut: false,
+                failedCommand: command,
+              };
+            } finally {
+              if (memberTreeAdded) git(o.mainCheckout, 'worktree', 'remove', '--force', memberTree);
+            }
           }
-          if (
-            !accepted.passed ||
-            git(trainTree, 'rev-parse', 'HEAD') !== member.candidate ||
-            spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0
-          ) {
-            failedBatch = {
-              kind: 'acceptance',
-              output: accepted.output || 'Acceptance command changed the candidate commit',
-              timedOut: accepted.timedOut,
-              failedCommand: command,
-            };
-            break;
-          }
-        }
+        };
+        await Promise.all(Array.from({ length: Math.min(concurrency, acceptanceJobs.length) }, runAcceptance));
         if (retry) continue;
         git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
         if (integrationChecks.length) {
