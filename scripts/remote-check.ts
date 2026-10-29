@@ -1680,6 +1680,8 @@ async function acquire(
   let warnedGateReduction = false;
   let marker: SessionLease | undefined;
   let markerHost: string | undefined;
+  let landingMarker: SessionLease | undefined;
+  let landingMarkerHost: string | undefined;
   const landingWaiterId = priority === 'landing' && !gate ? randomUUID() : undefined;
   const landingArrivalOrder = landingWaiterId
     ? String(Math.floor((performance.timeOrigin + performance.now()) * 1_000))
@@ -1719,6 +1721,11 @@ async function acquire(
         marker = undefined;
         markerHost = undefined;
       }
+      if (landingMarker && !landingMarker.isActive()) {
+        await landingMarker.release();
+        landingMarker = undefined;
+        landingMarkerHost = undefined;
+      }
       const ranked = await rankedHosts(
         hosts,
         signal,
@@ -1738,10 +1745,10 @@ async function acquire(
         marker = undefined;
         markerHost = undefined;
       }
-      if (landingWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
-        if (marker) await marker.release();
-        marker = undefined;
-        markerHost = undefined;
+      if (landingWaiterId && landingMarkerHost && !ranked.some(({ host }) => host.name === landingMarkerHost)) {
+        if (landingMarker) await landingMarker.release();
+        landingMarker = undefined;
+        landingMarkerHost = undefined;
       }
       if (ranked.length > 0) {
         answered = true;
@@ -1772,13 +1779,18 @@ async function acquire(
         marker = undefined;
         markerHost = undefined;
       }
-      if (landingWaiterId && markerHost && markedHost?.fallback && globallyStartable.some(({ host }) => !host.fallback)) {
-        if (marker) await marker.release();
-        marker = undefined;
-        markerHost = undefined;
+      const markedLandingHost = ranked.find(({ host }) => host.name === landingMarkerHost)?.host;
+      if (landingWaiterId && landingMarkerHost && markedLandingHost?.fallback && globallyStartable.some(({ host }) => !host.fallback)) {
+        if (landingMarker) await landingMarker.release();
+        landingMarker = undefined;
+        landingMarkerHost = undefined;
       }
       const acquisitionHosts =
-        (multiWaiterId || landingWaiterId) && markerHost ? ranked.filter(({ host }) => host.name === markerHost) : ranked;
+        landingWaiterId && landingMarkerHost
+          ? ranked.filter(({ host }) => host.name === landingMarkerHost)
+          : multiWaiterId && markerHost
+            ? ranked.filter(({ host }) => host.name === markerHost)
+            : ranked;
       const canStart = startableHosts(acquisitionHosts, slots, gate);
       for (const entry of canStart) {
         const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
@@ -1804,6 +1816,7 @@ async function acquire(
         }
         if (lease) {
           if (marker) await marker.release();
+          if (landingMarker) await landingMarker.release();
           return lease;
         }
       }
@@ -1828,13 +1841,15 @@ async function acquire(
             right.resourceSlots - left.resourceSlots ||
             right.memoryHeadroom - left.memoryHeadroom,
         );
-        const target = ranked.find(({ host }) => host.name === markerHost) ?? candidates[0];
-        if (target && target.host.name !== markerHost) {
-          if (marker) await marker.release();
-          markerHost = target.host.name;
-          marker = (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
-        } else if (target && !marker) {
-          marker = (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
+        const target = ranked.find(({ host }) => host.name === landingMarkerHost) ?? candidates[0];
+        if (target && target.host.name !== landingMarkerHost) {
+          if (landingMarker) await landingMarker.release();
+          landingMarkerHost = target.host.name;
+          landingMarker =
+            (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
+        } else if (target && !landingMarker) {
+          landingMarker =
+            (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
         }
       }
       if (multiWaiterId && ranked.length > 0) {
@@ -1865,6 +1880,7 @@ async function acquire(
   } finally {
     clearInterval(heartbeat);
     if (marker) await marker.release();
+    if (landingMarker) await landingMarker.release();
     wait.stop();
   }
 }
