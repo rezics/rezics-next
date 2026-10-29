@@ -74,7 +74,7 @@ SELECT DISTINCT get_byte(uuid_send(p.account_id), 10) * 256 + get_byte(uuid_send
   p.account_id, 'membership_operation', o.requested_at, o.route, o.operation_id, o.operation_id::text
 FROM community.realm_membership_operation o
 CROSS JOIN LATERAL unnest(ARRAY[o.member_account_id, o.initiator_account_id, o.original_operator_account_id,
-  split_part(o.actor_requested_by, ':', 4)::uuid, split_part(o.actor_requested_by, ':', 5)::uuid]) p(account_id)
+  split_part(o.actor_requested_by, ':', 4)::uuid]) p(account_id)
 WHERE p.account_id IS NOT NULL;
 
 -- migrate:down

@@ -87,7 +87,7 @@ async function remove(pool: Pool, accountId: string, route: number, row: Locator
     return result ? { value: null, events: [changed(accountId)] } : noEffect(null);
   });
 }
-/** A terminal DBOS status never resumes. Missing/nonterminal work keeps its source and locator.
+/** Terminal workflows no longer need the initiator. Missing/nonterminal work keeps its source and locator.
  * These runtime point reads finish before the owner-partition command starts.
  */
 async function terminal(pool: Pool, row: Locator): Promise<boolean> {
