@@ -5,6 +5,9 @@ import { runWebTestLanes } from '../apps/web/scripts/check.ts';
 import {
   classifyLoadInducedFailures,
   classifyLoadInducedOutput,
+  capture,
+  classifyGrowthFailures,
+  fileBounds,
   laneConcurrency,
   orderFiles,
   readLatest,
@@ -29,6 +32,43 @@ async function withDirectory(use: (directory: string) => Promise<void>): Promise
 }
 
 const timing = (wall: number): FileTiming => ({ wall, create: 0, drop: 0, outsideTests: 0, result: 'pass', tests: [] });
+
+test('test commands emit dots and file bounds follow recorded test, hook and wall times', () => {
+  expect(testCommand('test/a.test.ts', 'a.xml')).toContain('--dots');
+  expect(fileBounds()).toEqual({ silence: 1800, wall: 7200 });
+  expect(fileBounds({ ...timing(100), outsideTests: 250, tests: [{ name: 'slow', time: 400 }] })).toEqual({
+    silence: 1200,
+    wall: 1800,
+  });
+  expect(fileBounds({ ...timing(900), outsideTests: 1, tests: [] })).toEqual({ silence: 600, wall: 2700 });
+});
+
+test('a silent captured process fails with its bound, recorded times and output tail', async () => {
+  const result = await capture('/bin/sh', ['-c', 'echo started; sleep 5'], process.env, root, {
+    file: 'test/hung.test.ts', silence: 0.15, wall: 1, record: timing(7), progressInterval: 60,
+  });
+  expect(result.status).toBe(124);
+  expect(result.stopped).toContain('test/hung.test.ts printed nothing for 0.15 s');
+  expect(result.stopped).toContain('"wall":7');
+  expect(result.stopped).toContain('started');
+});
+
+test('a process that keeps printing is stopped at its wall bound', async () => {
+  const result = await capture('/bin/sh', ['-c', 'while :; do echo tick; sleep 0.03; done'], process.env, root, {
+    file: 'test/endless.test.ts', silence: 1, wall: 0.15, progressInterval: 60,
+  });
+  expect(result.status).toBe(124);
+  expect(result.stopped).toContain('test/endless.test.ts did not finish within 0.15 s');
+  expect(result.stopped).toContain('no record');
+});
+
+test('the load and growth classifiers accept Bun dot reporter failure output', () => {
+  const loadOutput = '.\n(fail) overload case [1.23ms]\nError: Command unavailable for partition 976: overloaded\n1 tests failed:\n';
+  expect(classifyLoadInducedOutput(loadOutput)?.map((item) => item.kind)).toEqual(['load']);
+  const growthOutput = '.\nGrowthBoundError: examined rows exceeded the bound\n(fail) bounded query [1.23ms]\n1 tests failed:\n';
+  expect(classifyGrowthFailures({ file: 'test/growth.test.ts', database: 'fixture', error: new Error(growthOutput) }, undefined))
+    .toEqual([{ title: 'bounded query', message: 'examined rows exceeded the bound' }]);
+});
 
 function laneEnvironment(directory: string, concurrency: number): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {

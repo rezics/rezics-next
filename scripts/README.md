@@ -21,6 +21,17 @@ Their adjacent tests exercise placement, admission, accounting and cleanup.
 | Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate.                                                                                                                                                                                                      |
 | Landing gate | Root `bun run check` splits all workspace checks into two duration-balanced remote groups when `KERNEL_CHECK_REMOTE` names a readable file. The lighter group also runs the control-plane gate.                                                                                                                                                                                                                   |
 
+### Test lanes
+
+Kernel, Auth and web test lanes run each test file in a separate `bun test` process and print its output when it
+finishes. The runner uses Bun's dot reporter so output arrives as tests complete. It prints a heartbeat every 60
+seconds with the file name, elapsed time, silence and wall bounds, and time since output. The silence bound is the
+larger of 10 minutes and three times the longest recorded test or hook time; files without a timing record get 30
+minutes. The wall bound is the larger of 30 minutes and three times the recorded wall time; files without a record
+get 2 hours. Reaching either bound stops the process group, drops its database, and fails that file as its own task
+failure with the bound, recorded times and last 40 output lines. Such a stopped file is not retried as a load or
+growth failure, and its prior timing record is retained.
+
 `bun scripts/worker-check.ts -- <command...>` prints `check: id <id>` as soon as its detached check starts.
 Use `bun scripts/worker-check.ts --wait <id>` to wait for up to 10 minutes. Exit status 75 with
 `check: still running` means resume with the same `--wait <id>`; never start the check again. The log path and its

@@ -164,7 +164,7 @@ export async function rerunGrowthFailures<T>(
   return { failed };
 }
 
-function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | undefined): GrowthFailure[] | null {
+export function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | undefined): GrowthFailure[] | null {
   if (!outcome.error || outcome.error.message.includes('Database cleanup failed:')) return null;
   if (report) {
     const failures = junitFailures(report);
@@ -596,19 +596,67 @@ export async function capture(
   args: string[],
   env: NodeJS.ProcessEnv,
   cwd: string,
-): Promise<{ status: number; output: string }> {
-  const child = Bun.spawn([program, ...args], { cwd, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
-  const [status, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { status, output: `${stdout}${stderr}` };
+  bounds?: { file: string; silence: number; wall: number; record?: FileTiming; progressInterval?: number },
+): Promise<{ status: number; output: string; stopped?: string }> {
+  const child = Bun.spawn([program, ...args], { cwd, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', detached: true });
+  let output = '';
+  let lastOutput = Date.now();
+  let stopped: string | undefined;
+  const started = Date.now();
+  const tail: string[] = [];
+  const add = (chunk: Uint8Array) => {
+    const text = new TextDecoder().decode(chunk);
+    output += text;
+    lastOutput = Date.now();
+    tail.push(...text.split(/\r?\n/));
+    if (tail.length > 40) tail.splice(0, tail.length - 40);
+  };
+  const readers = [child.stdout, child.stderr].map(async (stream) => {
+    const reader = stream.getReader();
+    try { while (true) { const { value, done } = await reader.read(); if (done) break; add(value); } }
+    finally { reader.releaseLock(); }
+  });
+  const stop = async () => {
+    try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+    const grace = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, 10_000);
+    await child.exited;
+    clearTimeout(grace);
+  };
+  if (!bounds) {
+    const status = await child.exited;
+    await Promise.all(readers);
+    return { status, output };
+  }
+  const interval = bounds.progressInterval ?? 60;
+  let heartbeat = Date.now() + interval * 1000;
+  while (true) {
+    const now = Date.now();
+    const elapsed = (now - started) / 1000;
+    if (now - lastOutput >= bounds.silence * 1000) { stopped = `printed nothing for ${bounds.silence} s`; break; }
+    if (elapsed >= bounds.wall) { stopped = `did not finish within ${bounds.wall} s`; break; }
+    if (now >= heartbeat) {
+      process.stderr.write(`test file ${bounds.file}: elapsed ${Math.floor(elapsed)} s; silence bound ${bounds.silence} s; wall bound ${bounds.wall} s; since output ${Math.floor((now-lastOutput)/1000)} s\n`);
+      heartbeat = now + interval * 1000;
+    }
+    const waitMs = Math.max(1, Math.min(250, heartbeat-now, bounds.silence*1000-(now-lastOutput), bounds.wall*1000-(now-started)));
+    const exited = await Promise.race([child.exited.then((status) => ({ status })), new Promise<{ status?: never }>((resolve) => setTimeout(() => resolve({}), waitMs))]);
+    if (exited.status !== undefined) { await Promise.all(readers); return { status: exited.status, output }; }
+  }
+  await stop();
+  await Promise.all(readers);
+  const record = bounds.record ? JSON.stringify({ wall: bounds.record.wall, outsideTests: bounds.record.outsideTests, tests: bounds.record.tests }) : 'no record';
+  return { status: 124, output, stopped: `test file ${bounds.file} ${stopped}; recorded times: ${record}\nLast output lines:\n${tail.filter(Boolean).slice(-40).join('\n')}` };
 }
 
 /** Tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
 export function testCommand(file: string, junitFile: string): string[] {
-  return ['test', '--timeout', '60000', '--reporter=junit', `--reporter-outfile=${junitFile}`, `./${file}`];
+  return ['test', '--timeout', '60000', '--reporter=junit', `--reporter-outfile=${junitFile}`, '--dots', `./${file}`];
+}
+
+export function fileBounds(record?: FileTiming): { silence: number; wall: number } {
+  if (!record) return { silence: 1800, wall: 7200 };
+  const longest = Math.max(record.outsideTests ?? 0, ...record.tests.map((test) => test.time));
+  return { silence: Math.max(600, 3 * longest), wall: Math.max(1800, 3 * record.wall) };
 }
 
 export type LaneSuite = {
@@ -637,6 +685,7 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
   const recorder = createRecorder();
   const slots = new Map<string, StackSlot>();
   const reportsByFile = new Map<string, string>();
+  const stoppedAtBound = new Set<string>();
   let timingsPath: string | null = null;
   try {
     timingsPath = timingsDirectory(suite.service, suite.directory, env);
@@ -665,12 +714,14 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
         testCommand(file, report),
         { ...suite.environment(database), ...slot?.env },
         suite.directory,
+        { file, ...fileBounds(latest[file]), record: latest[file] },
       );
       try {
         reportsByFile.set(file, readFileSync(report, 'utf8'));
       } catch {
         reportsByFile.delete(file);
       }
+      if (result.stopped) throw new Error(`${result.stopped}`);
       if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
       return result.output;
     },
@@ -700,6 +751,10 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
             process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
           if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
           const timing = recorder.timings()[outcome.file];
+          if (outcome.error?.message.startsWith('test file ')) {
+            stoppedAtBound.add(outcome.file);
+            delete recorder.timings()[outcome.file];
+          }
           if (timing && suite.onFileComplete) {
             try {
               suite.onFileComplete(outcome, timing);
@@ -726,7 +781,11 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
         return growthFailures ?? classifyLoadInducedFailures(outcome, report);
       },
     );
-    if (timingsPath) writeTimings(timingsPath, recorder.timings(), { partial: suite.partial });
+    if (timingsPath) {
+      const timings = { ...recorder.timings() };
+      for (const file of stoppedAtBound) if (latest[file]) timings[file] = latest[file]!;
+      writeTimings(timingsPath, timings, { partial: suite.partial });
+    }
     return { failed: failed.map((outcome) => outcome.file), concurrency };
   } finally {
     rmSync(reports, { recursive: true, force: true });
