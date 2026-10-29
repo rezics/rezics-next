@@ -350,8 +350,7 @@ for (const operation of ['search', 'suggest'] as const) {
       source,
       cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) },
     });
-    const pending =
-      operation === 'search' ? service.search('anonymous', { text: 'kokoro' }) : service.suggest('Koko');
+    const pending = operation === 'search' ? service.search('anonymous', { text: 'kokoro' }) : service.suggest('Koko');
     const outcome = await pending.then(
       (value) => ({ value }),
       (error: unknown) => ({ error }),
