@@ -64,23 +64,31 @@ No native margin is inferred here from those loaded-host measurements.
    statement qualifier count, leaf count and filter population multiply. A late missing qualifier still scans the
    entire declaration. An error-count or elapsed-time observation cannot establish any of these work bounds.
 
-Own duplicate detection must execute before dependency error enumeration. Proposed implementation is a single
-Set pass per relevant string array, retaining schema uniqueness and current invalid diagnostics. Record duplicate
-arrays, then ensure the schema error path cannot re-enter TypeBox's quadratic producer for those arrays. Merely
-adding an early error and still invoking Errors is insufficient. A compatibility approach is a validation-only
-owned view with duplicate arrays deduplicated after recording their current array-pointer error, then schema
-validation of that view; retain original indices for all child diagnostics and all unaffected fields. Alternatively
-use an upstream linear error producer after dependency review. This task selects neither product implementation.
-Malformed nonstring members must still retain their original schema child errors, including mixed duplicate and
-wrong-type cases. Do not silently replace all schema errors with one duplicate error. No validator copy becomes
-product code. The smallest required seam is inside validateRelease, between collection/JSON checks and
-`validator.Errors`: own list limits plus linear uniqueness error production with equivalent schema diagnostics.
+Own duplicate detection must execute before dependency error enumeration. The concrete proposal for review is
+one own Set pass over each applicable array, using the pinned producer's hash/equality identity for all JSON
+members, including malformed nonstrings. Record the same array-pointer `invalid` error. Compile a separate
+internal diagnostic schema once, derived from the unchanged frozen release schema with uniqueness disabled
+only at the array sites covered by this precheck. On shape failure enumerate its remaining schema errors over
+the ORIGINAL input. This retains every child diagnostic at its original index, including duplicate wrong-type
+members, while the own precheck supplies uniqueness. Merely adding an early error and still invoking the
+original quadratic Errors producer is insufficient. Do not deduplicate the submitted array: that would drop
+child errors or renumber their pointers. The derived diagnostic validator never becomes a release/schema format
+or a second validity authority; it is an error-production implementation requiring equivalence tests before
+adoption. Its covered sites must include every original uniqueness path that could re-enter the quadratic loop,
+not just the valid-string fixtures in this specification. An upstream linear error producer is another option
+after dependency review. This task selects neither product implementation. The smallest required seam is inside
+validateRelease, between collection/JSON checks and `validator.Errors`: own limits and linear uniqueness error
+production with equivalent remaining schema diagnostics. Hashing malformed object members must charge their
+actual nodes/string bytes and key sorting; no opaque constant-time hash assumption is granted.
 
 Build one-level type facet sets once per immutable owned release. Preserve own facets first, then each listed
 base's direct facets in list order; deduplicate in first-seen order. Do not recurse into grandparents, or conflate
 returnable type selection with all-release facets. Compile declaration membership Sets once per property alongside
 these sets; keep property existence, datatype, native string/item constraints and same-statement association.
-Definitions' relation order/filter/slot membership should share those declaration sets within validation.
+Definitions' relation order/filter/slot membership should share those declaration sets within validation. Admission should retain references to the selected
+facet sets and probe them per leaf (at most 32 leaves), rather than rebuild a growing union per saved filter.
+The untyped union is constructed once per owned release. Display enumeration through facetProperties charges
+its actual returned entries separately; immutable reuse does not make output construction free.
 The smallest reuse seam joins Definitions' saved-filter loop and Filter's admission preparation; all three current
 entry points (`admitFilter`, `validateFilter`, `facetProperties`) and real consumers need the same lifetime policy.
 No exported stub or guessed method signature is supplied here.
