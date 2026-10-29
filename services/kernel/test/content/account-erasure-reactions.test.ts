@@ -292,9 +292,11 @@ test("account erasure clears the account's reactions with their counts and proje
     if (target.startsWith('subjects/'))
       expect((await call('GET', `/v1/${target}/reaction`, people.bob)).kind).toBe('like');
     else {
-      const fresh = await call('GET', `/v1/${target}`, people.bob);
-      expect(fresh.post.viewerReaction).toBe('like');
-      expect(fresh.post.reactions.like).toBe(1);
+      const threadId = id === first.firstPost.id ? first.id : second.id;
+      const fresh = await call('GET', `/v1/threads/${threadId}/posts`, people.bob);
+      const post = fresh.posts.find((post: { id: string }) => post.id === id);
+      expect(post.viewerReaction).toBe('like');
+      expect(post.reactions.like).toBe(1);
     }
     expect(
       (
@@ -322,8 +324,8 @@ test("account erasure clears the account's reactions with their counts and proje
       ])
     ).rows,
   ).toEqual([{ actor_account_id: people.bob.accountId }]);
-  const post = await call('GET', `/v1/posts/${first.firstPost.id}`, people.bob);
-  expect(post.post.reactions.like).toBe(1);
+  const posts = await call('GET', `/v1/threads/${first.id}/posts`, people.bob);
+  expect(posts.posts[0].reactions.like).toBe(1);
   const subject = await call('GET', `/v1/subjects/${subjectId}/reactions`, people.bob);
   expect(subject.counts).toEqual([{ kind: 'like', count: 1 }]);
   expect(await eraseAccountReactionsPage(db, people.alice.accountId, null)).toEqual({
