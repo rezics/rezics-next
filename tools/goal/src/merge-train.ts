@@ -1790,7 +1790,7 @@ export class MergeTrain {
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const testDefaults = process.env.GOAL_TEST_ENVIRONMENT === '1';
-        const affectedChecks = landingAffectedChecks(result.changedFiles, workspace, o.affectedTests);
+        const affectedChecks = landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
         const priorAffectedResults: AffectedTestResult[] = workspace ? [] : [...(request.affectedTests ?? [])];
         const siblings = siblingTestCommand(
           siblingTestFiles(result.changedFiles, trainTree),
