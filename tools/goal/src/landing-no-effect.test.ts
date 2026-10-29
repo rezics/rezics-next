@@ -43,18 +43,12 @@ test('a Markdown union that keeps only dev’s changed hunk is left for the work
     const file = '.temp/union-conflict.md';
     mkdirSync(join(h.root, '.temp'), { recursive: true });
     writeFileSync(join(h.root, file), 'unmerged content\n');
-    const blobs = [
-      'before\nbase hunk\nafter\n',
-      'before\ndev hunk\nafter\n',
-      'before\nafter\n',
-    ].map((content) => {
+    const blobs = ['before\nbase hunk\nafter\n', 'before\ndev hunk\nafter\n', 'before\nafter\n'].map((content) => {
       const path = join(h.root, '.temp/blob');
       writeFileSync(path, content);
       return git(h.root, 'hash-object', '-w', path);
     });
-    const indexInfo = blobs
-      .map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`)
-      .join('\n');
+    const indexInfo = blobs.map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`).join('\n');
     const staged = spawnSync('git', ['update-index', '--index-info'], {
       cwd: h.root,
       encoding: 'utf8',
@@ -81,9 +75,7 @@ test('a JSON message deletion that conflicts with a dev edit is left unresolved 
       writeFileSync(path, content);
       return git(h.root, 'hash-object', '-w', path);
     });
-    const indexInfo = blobs
-      .map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`)
-      .join('\n');
+    const indexInfo = blobs.map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`).join('\n');
     const staged = spawnSync('git', ['update-index', '--index-info'], {
       cwd: h.root,
       encoding: 'utf8',

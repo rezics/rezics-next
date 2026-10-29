@@ -542,11 +542,14 @@ export function resolveMechanicalConflicts(
       const theirs = parseFlatJsonObject(stages[2]!);
       const base = parseFlatJsonObject(stages[0]!);
       if (
-        ours && theirs && base &&
+        ours &&
+        theirs &&
+        base &&
         comparableJson(merged.value) === comparableJson(ours) &&
         comparableJson(theirs) !== comparableJson(ours) &&
         comparableJson(theirs) !== comparableJson(base)
-      ) throw new WorkerConflictError(file);
+      )
+        throw new WorkerConflictError(file);
       text = `${JSON.stringify(merged.value, null, 2)}\n`;
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
@@ -1236,13 +1239,7 @@ export class MergeTrain {
             resetTo(trainTree, previous);
             continue;
           }
-          const noEffect = pathsChangedByTaskButUnchangedOnDev(
-            trainTree,
-            previous,
-            candidate,
-            tip,
-            taskPaths,
-          );
+          const noEffect = pathsChangedByTaskButUnchangedOnDev(trainTree, previous, candidate, tip, taskPaths);
           if (noEffect.length) {
             refuseNoEffect(result, noEffect, logPath);
             localOutcomes.set(entry.id, result);
@@ -1317,7 +1314,10 @@ export class MergeTrain {
         const devChecks = o.integration?.devLandingChecks !== false;
         if (!devChecks)
           for (const member of prepared)
-            appendFileSync(member.result.logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+            appendFileSync(
+              member.result.logPath,
+              `\nChecks are not run at dev landing; dev is verified after the merge\n`,
+            );
         const acceptanceJobs = (devChecks ? prepared : []).map((member) => ({
           member,
           command: member.entry.request.gate,
@@ -1895,7 +1895,8 @@ export class MergeTrain {
         // With devLandingChecks off, a dev landing is mechanical: dev is verified after the merge, not before it.
         const skipDevChecks =
           o.integration?.devLandingChecks === false && integratesIntoDev && !controlPlane && !stabilize;
-        if (skipDevChecks) appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+        if (skipDevChecks)
+          appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
         const affectedChecks = skipDevChecks
           ? []
           : landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
