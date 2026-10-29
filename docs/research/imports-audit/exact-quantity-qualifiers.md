@@ -23,7 +23,7 @@ Wikidata converter revision is `wikidata-3`; converter file SHA-256:
 
 The implementation advances only the converter's existing revision discipline:
 Wikidata is now `wikidata-4`, and the converter SHA-256 is
-`e6198bf88f0735f2e9d712a3502cde41b0df8f89cff6c8b1dd3ff3e61dc671f2`. The
+`c3f68292b2079fdaf6bdc3eb77f2e29249d358997dd16beee473446a03750eba`. The
 bundled release remains byte-identical. Exactness is detected from the mapped
 property's actual closed amount/unit value schema. Projection records loss for
 unknown qualifier keys without reading their values and for mapped qualifier
@@ -62,7 +62,10 @@ unqualified native proposal.
 ## Frozen native scenarios
 
 File: services/kernel/test/imports/exact-quantity-qualifiers.test.ts.
-SHA-256: `55e7cdfdd0c160b5064e94809aeb998406d367977f57c35987c1a5b035e5ad3c`.
+SHA-256: `2fa488a92eac954c63e32e63fc88695b9342385edea105181afb2a897c87b751`.
+The three case bodies are unchanged; the only amendment is the authorized
+`established()` helper that locates unresolved Wikidata authors by each actual
+P50 `schema:sameAs` IRI.
 
 1. `exact P6570 with mapped but unadmitted P1545 withholds the entire native measurement`
    uses the existing fixture's P1545 string position on a controlled +1450/unit1
@@ -200,7 +203,7 @@ nonmeasurement statement output. The frozen native file remains byte-for-byte
 unchanged at SHA-256
 `55e7cdfdd0c160b5064e94809aeb998406d367977f57c35987c1a5b035e5ad3c`.
 
-The latest focused native acceptance invocation was check
+The prior focused native acceptance invocation was check
 `1ece269b-28c1-45e0-9ac0-4bf73a810793`, exit **1**, log
 `.temp/goal/checks/worker-check-2026-10-29T18-36-44.302Z-10f2aff4.log`.
 All three frozen test bodies ran:
@@ -210,22 +213,27 @@ All three frozen test bodies ran:
 3. `native Book refresh rejects unsupported qualified exact count while preserving bootstrap receipt and changed established facts`
 
 Each passed the run completion checks and observed a `schema:Book` subject,
-then failed in `established()` because at least one expected ordinary
-`schema:name`, `schema:datePublished`, `schema:url` or `schema:author` proposal
-was absent. The helper does not include the property id in its assertion
-message. None reached its measurement-withholding assertions. The third case
-failed before capturing the bootstrap command key, returned ACK or complete
-native receipt row, so this attempt has **no returned receipt evidence** and
-does not establish receipt immutability. No frozen assertion was changed and no
-native pass is claimed.
+then failed in the old property-only author query. Unresolved author candidates
+are placed in a relation slot derived from their actual `schema:sameAs` IRI;
+the API observer's property-only query could not locate them. The authorized
+helper amendment now reads each supplied P50 target and checks its exact
+sameAs-filtered public candidate, unknown value, identity qualifier and
+references. That run predates the helper correction and did not reach the
+measurement-withholding assertions or bootstrap receipt capture. It supplies no
+receipt evidence and does not establish receipt immutability.
 
 The focused converter check initially exposed two test-only defects: its
 nonmeasurement comparison included digest-derived command keys, which correctly
 change when the accepted source projection changes, and its JSON fixture type
 did not admit the controlled `P6570` field. Both are corrected. The conversion
 and root typecheck reruns after correction are recorded by their returned check
-results; no native rerun was made because the single required frozen acceptance
-invocation had completed.
+results. A fixed-point control now serializes `normalizedRecord` and reconverts
+it with a subject binding, requiring the unknown-qualifier diagnosis and whole
+measurement withholding to persist. The normalized projection retains one
+actual unknown qualifier key with an empty value list, never its body; mapped
+unsupported qualifiers retain their bounded normalized snaks and are rejected
+again at emission. A native acceptance rerun is required after these final
+converter and authorized helper changes.
 
 ## Limits and decisions
 
@@ -233,7 +241,9 @@ The actual bundle is consumed unchanged; no source/native revision, runtime
 importer path, rights policy or definition was changed. The converter behavior
 uses its existing revision and the new focused pure tests exercise the shipped
 definitions without a synthetic release or guessed binding. The frozen native
-file remains unchanged at the hash above. All changed files are declared paths.
+case bodies remain unchanged; the only authorized amendment is the `established()`
+helper, and the current complete-file hash is recorded above. All changed files
+are declared paths.
 Current qualifiers[] promises no positive qualified measurement case. Original
 unqualified P6570 is not generated/genuine whole-holder evidence. Rejecting loss
 proves neither positive provider support, measurement coverage, complete indexing

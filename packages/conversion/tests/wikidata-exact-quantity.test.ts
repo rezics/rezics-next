@@ -98,6 +98,21 @@ test('unknown qualifier bodies are rejected without being read', () => {
   expect(output.diagnostics.some((diagnostic) => diagnostic.pointer === pointer)).toBe(true);
 });
 
+test('unknown qualifier rejection survives normalized-record serialization and reconversion', () => {
+  const first = convert(
+    entity({ P459: [{ snaktype: 'somevalue', property: 'P459', datatype: 'wikibase-item' }] }),
+  );
+  const roundTripped = JSON.parse(JSON.stringify(first.normalizedRecord)) as ReturnType<typeof entity>;
+  const second = convert(roundTripped);
+
+  expect(
+    second.proposals.filter(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:wordCount',
+    ),
+  ).toEqual([]);
+  expect(second.diagnostics.some((diagnostic) => diagnostic.pointer === pointer)).toBe(true);
+});
+
 test('established nonmeasurement output remains unchanged by exact qualifier rejection', () => {
   const plain = convert(entity());
   const withRejectedMeasurement = convert(

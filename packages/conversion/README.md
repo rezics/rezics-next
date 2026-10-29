@@ -65,8 +65,12 @@ subpath. The converter's `converter_revision` option is also trusted
 registration data, not a field read from the source body.
 
 Each result includes a `normalizedRecord` containing only the source fields the
-converter accepts. Unknown and private subtrees are not carried into it. Its
-`digest` is a deterministic SHA-256 digest of that sanitized source projection;
+converter accepts. Unknown and private subtrees are not carried into it. For an
+exact quantity, one unmapped qualifier's actual key may remain with an empty
+snak list so rejection survives importer serialization and reconversion; its
+unknown body is never read or retained. This is source-key evidence, not a
+serialized exactness or loss flag. Its `digest` is a deterministic SHA-256
+digest of that sanitized source projection;
 target bindings, source aliases, and converter registration are excluded. The
 digest changes when the sanitized source projection changes, but not when that
 same data is rebound to a target or registration. Converter revision is part
@@ -276,7 +280,9 @@ unmapped qualifier keys on exact quantities without reading their bodies. It
 also treats a mapped qualifier that cannot be normalized as qualification loss.
 If any qualifier was omitted or cannot be carried losslessly, the whole
 measurement is withheld with a diagnostic. Detection uses the admitted fixed
-value schema, not the source property name. Focused pure controls live in
+value schema, not the source property name. Rejection remains stable when the
+importer serializes `normalizedRecord` and converts it again after binding.
+Focused pure controls live in
 `tests/wikidata-exact-quantity.test.ts`; the frozen native scenario names, hash,
 latest attempt outcome and bootstrap receipt evidence boundary are recorded in
 the linked audit report.

@@ -206,7 +206,12 @@ export function convertWikidata(
     return result;
   }
 
-  function snak(entry: unknown, property: string, pointer: string): Snak | undefined {
+  function snak(
+    entry: unknown,
+    property: string,
+    pointer: string,
+    preserveUnsupportedMonolingual = false,
+  ): Snak | undefined {
     const body = object(entry, pointer);
     if (read(body, 'property', pointer) !== property) fail('Mismatched mainsnak property', pointer);
     const snaktype = read(body, 'snaktype', pointer);
@@ -278,9 +283,11 @@ export function convertWikidata(
       // No canonical tag writes no value. Leave the text unread so it cannot fail the record.
       if (lang === null) {
         diagnose('Monolingual text has no canonical language tag', pointer);
-        return undefined;
+        if (!preserveUnsupportedMonolingual) return undefined;
+        projection = { language: rawLanguage };
+      } else {
+        projection = { language: lang, text: text(read(term, 'text', pointer), pointer) };
       }
-      projection = { language: lang, text: text(read(term, 'text', pointer), pointer) };
     } else {
       if (kind !== 'string') fail('Invalid string datavalue', pointer);
       projection = datatype === 'url' ? url(value, pointer) : text(value, pointer);
@@ -298,7 +305,15 @@ export function convertWikidata(
     const supported = reference ? referenceProperties : mappings.keys();
     const supportedSet = new Set(supported);
     if (exact && !reference) {
-      for (const property of Object.keys(body)) if (!supportedSet.has(property)) omitted = true;
+      for (const property in body) {
+        if (!Object.hasOwn(body, property) || supportedSet.has(property)) continue;
+        omitted = true;
+        // Retain one actual unknown qualifier key, but never its body. This
+        // bounded marker survives normalization/serialization so a second
+        // conversion cannot publish the amount after losing its qualifier.
+        result[property] = [];
+        break;
+      }
     }
     for (const property of supportedSet) {
       const entries = read(body, property, pointer);
@@ -307,7 +322,7 @@ export function convertWikidata(
       count += items.length;
       if (count > wikidataLimits.snaks) fail('Source snak limit exceeded', pointer);
       result[property] = items.flatMap((item) => {
-        const parsed = snak(item, property, pointer);
+        const parsed = snak(item, property, pointer, exact && !reference);
         if (parsed === undefined) {
           if (exact && !reference) omitted = true;
           return [];
@@ -443,6 +458,14 @@ export function convertWikidata(
       )
         fail('Invalid source calendar date', pointer);
       content = { time: date.time, precision: date.precision, calendarmodel: date.calendarmodel };
+    } else if (definition.datatype === 'monolingualtext') {
+      const term = content as { language?: unknown; text?: unknown };
+      const language = typeof term.language === 'string' ? canonicalLanguageTag(term.language) : null;
+      if (language === null || typeof term.text !== 'string') {
+        diagnose('Unsupported monolingual qualifier value', pointer);
+        return;
+      }
+      content = { language, text: term.text };
     } else if (definition.datatype === 'quantity') {
       const quantity = content as { amount: string; unit: string; lowerBound?: string; upperBound?: string };
       if (quantity.lowerBound !== undefined || quantity.upperBound !== undefined) {
@@ -509,7 +532,12 @@ export function convertWikidata(
       if (!value) continue;
       const qualifiers: NonNullable<BatchStatement['qualifiers']> = [];
       for (const [key, snaks] of Object.entries(claim.qualifiers ?? {})) {
-        const qualifier = mappings.get(key)!;
+        const qualifier = mappings.get(key);
+        if (!qualifier) {
+          diagnose('Exact quantity has an unmapped qualifier', pointer);
+          if (exact) lostQualifier = true;
+          continue;
+        }
         if (!definition.qualifiers.includes(qualifier.id)) {
           diagnose('Qualifier is unsupported by the mapped property', pointer);
           if (exact) lostQualifier = true;
