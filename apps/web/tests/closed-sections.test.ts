@@ -56,7 +56,7 @@ test('closed subject features do not render not-yet-open bordered panels', async
   const { html } = await render();
   expect(html).not.toContain('data-state="unavailable"');
   expect(html).not.toContain('not open yet');
-  expect(html).not.toContain('border p-6');
+  expect(html).not.toContain('border-dashed');
 });
 
 test('open empty Reviews and Discussion reads retain their first-contribution invitations', () => {

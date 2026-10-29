@@ -508,6 +508,7 @@
   "subject_ratings_realm_count": "{population}有 {count} 个评分",
   "subject_ratings_remaining": "还需 {count} 个评分才能显示分数",
   "subject_ratings_reviews": "评论",
+  "subject_ratings_unavailable": "评分尚未开放。开放后，你可以成为第一个评分的人。",
   "subject_ratings_yours": "你的评分：{score}",
 
   "subject_reactions_unavailable": "暂时无法加载表态。",

@@ -763,7 +763,6 @@ function FeatureEmpty({
 }
 
 export function RatingSummary(props: Record<string, unknown>) {
-
   const value = useContext(OverviewContext);
   if (!value?.subject) return null;
   return (
@@ -771,7 +770,6 @@ export function RatingSummary(props: Record<string, unknown>) {
       id={typeof props.id === 'string' ? props.id : 'ratings'}
       subject={value.subject}
       locale={value.locale}
-
     />
   );
 }

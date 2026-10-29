@@ -216,7 +216,6 @@ test('RatingSummary keeps real reads while closed Reviews and Discussion section
   expect(section(html, 'review-list')).toBe('');
   expect(section(html, 'thread-list')).toBe('');
 });
-});
 
 test('a data component never renders an id, a media id or a property CURIE', () => {
   const html = render(pageOf());

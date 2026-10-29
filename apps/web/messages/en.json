@@ -508,6 +508,7 @@
   "subject_ratings_realm_count": "{count} ratings in {population}",
   "subject_ratings_remaining": "{count} more ratings to show a score",
   "subject_ratings_reviews": "Reviews",
+  "subject_ratings_unavailable": "Ratings are not open yet. When they open, you can be the first to rate this.",
   "subject_ratings_yours": "Your rating: {score}",
 
   "subject_reactions_unavailable": "Reactions could not be loaded.",

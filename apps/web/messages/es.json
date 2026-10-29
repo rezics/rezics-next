@@ -508,6 +508,7 @@
   "subject_ratings_realm_count": "{count} valoraciones en {population}",
   "subject_ratings_remaining": "Faltan {count} valoraciones para mostrar la puntuación",
   "subject_ratings_reviews": "Reseñas",
+  "subject_ratings_unavailable": "Las valoraciones aún no están abiertas. Cuando lo estén, podrás ser la primera persona en valorar.",
   "subject_ratings_yours": "Tu valoración: {score}",
 
   "subject_reactions_unavailable": "No se pudieron cargar las reacciones.",
