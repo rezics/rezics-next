@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { effectsRelay } from '../../src/events/effects.ts';
 import { importsWorkModule } from '../../src/imports/erasure.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -25,6 +26,10 @@ beforeAll(async () => {
   const kernel = testKernel({
     pool,
     auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+    writeRate: createWriteRateLimiter({
+      secret: 'imports-erasure-native-write-secret',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+    }),
   });
   const personas = await createPersonas(kernel, { version: 1, pool, auth });
   person = personas.alice;
