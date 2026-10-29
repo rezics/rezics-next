@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
+import { WorkerJob } from './job.ts';
 import { harness, markdown } from './test-support.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
@@ -72,6 +73,11 @@ test('retry --brief replaces a changed contract and records both brief hashes on
     });
 
     expect(status).toBe(0);
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })?.status).toBe('pending');
+    const host = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await host.recoverOrphans();
+    await host.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('superseded');
     expect(h.store.task(task.id).brief.markdown).toBe(changedText);
@@ -86,7 +92,7 @@ test('retry --brief replaces a changed contract and records both brief hashes on
   }
 }, 30_000);
 
-test('plain retry still starts the next attempt for a stopped task', async () => {
+test('plain retry records a stopped task for the host to start', async () => {
   const h = harness(controlledWorker);
   try {
     const task = h.tasks.dispatch(h.briefFile);
@@ -103,6 +109,11 @@ test('plain retry still starts the next attempt for a stopped task', async () =>
     });
 
     expect(status).toBe(0);
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })?.status).toBe('pending');
+    const host = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await host.recoverOrphans();
+    await host.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(h.store.attempt({ taskId: task.id, attempt: 2 }).state).not.toBe('pending');
   } finally {

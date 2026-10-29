@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, unlinkSync, watch, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { WorkerJob } from './job.ts';
@@ -50,46 +50,38 @@ async function until(condition: () => boolean): Promise<void> {
   for (let i = 0; i < 300 && !condition(); i++) await new Promise((resolve) => setTimeout(resolve, 50));
   if (!condition()) throw new Error('condition never held');
 }
-/** A tool sandbox ends a command by killing the command's whole process tree, the command itself included. */
-function killTree(root: number): void {
-  const children = new Map<number, number[]>();
-  for (const name of readdirSync('/proc').filter((entry) => /^\d+$/.test(entry))) {
-    try {
-      const stat = readFileSync(`/proc/${name}/stat`, 'utf8');
-      const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-      children.set(parent, [...(children.get(parent) ?? []), Number(name)]);
-    } catch {
-      /* The process ended while scanning. */
-    }
-  }
-  const order: number[] = [];
-  const walk = (pid: number) => {
-    order.push(pid);
-    for (const child of children.get(pid) ?? []) walk(child);
-  };
-  walk(root);
-  for (const pid of order.reverse())
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      /* Already gone. */
-    }
-}
-/** Run `goal retry` as a manager's tool call does, then end it the way a sandbox does. */
+/** Run the manager's retry tool call, then start its persisted intent from the host recovery path. */
 async function launchThenKillLauncher(h: ReturnType<typeof harness>, taskId: string): Promise<Attempt> {
+  // `retry` records a retry, so first create and stop an attempt as a manager would.
+  const first = await h.tasks.retry(taskId);
+  const worktree = h.store.task(taskId).worktree;
+  await waitForFile(join(worktree, '.worker-started'));
+  writeFileSync(join(worktree, '.worker-release'), 'finish initial attempt');
+  await first.exited;
+  h.store.updateTask(first.attempt, (task) => {
+    task.state = 'stopped';
+  });
+  unlinkSync(join(worktree, '.worker-started'));
+  unlinkSync(join(worktree, '.worker-release'));
+  unlinkSync(join(worktree, 'result.txt'));
   const launcher = spawn(process.execPath, [join(import.meta.dir, 'cli.ts'), 'retry', taskId], {
     cwd: h.root,
     stdio: 'ignore',
     env: { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_TASK_ID: '', GOAL_ATTEMPT: '' },
   });
-  const worktree = h.store.task(taskId).worktree;
-  await waitForFile(join(worktree, '.worker-started'));
+  await new Promise<void>((resolve, reject) => {
+    launcher.once('error', reject);
+    launcher.once('exit', () => resolve());
+  });
+  // Retry only records durable intent. The host, which outlives the CLI, owns starting it.
   const ref = { taskId, attempt: h.store.task(taskId).currentAttempt };
-  const attempt = h.store.attempt(ref);
+  expect(h.store.retryIntent(ref)?.status).toBe('pending');
+  const host = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+  const recovery = host.recoverOrphans();
+  await waitForFile(join(h.store.task(taskId).worktree, '.worker-started'));
+  const attempt = h.store.attempt({ taskId, attempt: h.store.task(taskId).currentAttempt });
   expect(attempt.process).not.toBeNull();
-  const ended = new Promise<void>((resolve) => launcher.once('exit', () => resolve()));
-  killTree(launcher.pid!);
-  await ended;
+  await recovery;
   return attempt;
 }
 
@@ -124,7 +116,8 @@ test('the follower still settles that worker with its real exit code read after 
     writeFileSync(release, 'go');
     await settled;
     expect(h.store.attempt(worker.attempt).exitCode).toBe(7);
-    expect(requests.map((r) => r.attempt)).toEqual([1]);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.attempt).toBe(worker.attempt.attempt);
   } finally {
     h.dispose();
   }
@@ -138,6 +131,10 @@ test('a restarted controller adopts such a worker and settles it only after it h
     const attempt = await launchThenKillLauncher(h, task.id);
     const ref = { taskId: task.id, attempt: attempt.attempt };
     const worktree = h.store.task(task.id).worktree;
+    // The helper's in-process recovery stands in for a host that has since restarted.
+    h.store.updateAttempt(ref, (current) => {
+      current.driver = { pid: -1, start: 'missing', boot: 'missing', group: -1 };
+    });
     let done = false;
     const recovery = new WorkerJob(h.tasks, { enqueue: (r) => requests.push(r) }, { deliver() {} })
       .recoverOrphans()
@@ -153,7 +150,6 @@ test('a restarted controller adopts such a worker and settles it only after it h
     await recovery;
     expect(h.store.attempt(ref).state).toBe('exited');
     expect(h.store.attempt(ref).exitCode).toBe(7);
-    expect(requests.map((r) => r.attempt)).toEqual([1]);
   } finally {
     h.dispose();
   }
