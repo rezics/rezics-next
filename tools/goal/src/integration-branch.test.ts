@@ -18,7 +18,7 @@ const requires = (file: string) => [
 const ancestor = (cwd: string, older: string, newer: string) =>
   expect(git(cwd, 'merge-base', older, newer)).toBe(older);
 
-test('a passing worker branch integrates into dev without running the gate and main does not move', async () => {
+test('a passing worker branch runs its acceptance before integrating into dev and main does not move', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -31,7 +31,7 @@ test('a passing worker branch integrates into dev without running the gate and m
       gates++;
       return { passed: true, output: '', timedOut: false };
     });
-    expect(gates).toBe(0);
+    expect(gates).toBe(1);
     expect(h.head('main')).toBe(main);
     expect(h.head()).toBe(worker);
     expect(h.store.task(task.id).state).toBe('integrated');

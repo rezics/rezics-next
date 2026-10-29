@@ -1,16 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -28,6 +18,7 @@ import type { WorkerStore } from './store.ts';
 import type { Attempt, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
+import { installShared } from './shared-dependencies.ts';
 
 type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
 function normalizedBriefText(markdown: string): string {
@@ -130,35 +121,7 @@ export function git(cwd: string, args: string[]): string {
   return result.stdout.trimEnd();
 }
 function installWorktreeDependencies(worktree: string): void {
-  if (!existsSync(join(worktree, 'package.json'))) return;
-  const result = spawnSync('bun', ['install', '--frozen-lockfile'], {
-    cwd: worktree,
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (result.status !== 0)
-    throw new Error(
-      `Dependency install failed in ${worktree}: ${result.stderr || result.error?.message || `bun exited ${result.status}`}`,
-    );
-  const manifest = JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')) as {
-    workspaces?: string[] | { packages?: string[] };
-  };
-  const patterns = Array.isArray(manifest.workspaces) ? manifest.workspaces : (manifest.workspaces?.packages ?? []);
-  for (const pattern of patterns) {
-    const wildcard = pattern.indexOf('*');
-    const parent = wildcard < 0 ? pattern : pattern.slice(0, wildcard).replace(/\/$/, '');
-    const candidates = wildcard < 0 ? [parent] : readdirSync(join(worktree, parent)).map((name) => join(parent, name));
-    for (const relative of candidates) {
-      const packageFile = join(worktree, relative, 'package.json');
-      if (!existsSync(packageFile)) continue;
-      const workspace = JSON.parse(readFileSync(packageFile, 'utf8')) as { name?: string };
-      if (!workspace.name) continue;
-      const link = join(worktree, 'node_modules', workspace.name);
-      if (existsSync(link)) continue;
-      mkdirSync(dirname(link), { recursive: true });
-      symlinkSync(join(worktree, relative), link, 'dir');
-    }
-  }
+  installShared(worktree);
 }
 export type RetryOptions = {
   brief?: string;
@@ -418,6 +381,7 @@ export class WorkerTasks {
     const integration = this.taskBaseHead(task.brief);
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
     const branch = git(task.worktree, ['branch', '--show-current']);
+    let regeneratedLockfile = false;
     if (branch !== task.branch)
       throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (commits > 0) {
@@ -430,7 +394,7 @@ export class WorkerTasks {
         currentAttempt?.logPath ?? join(this.settings.stateDirectory, 'runs', taskId, 'release-rebase.log');
       mkdirSync(dirname(logPath), { recursive: true });
       try {
-        rebaseOnto(
+        regeneratedLockfile = rebaseOnto(
           task.worktree,
           integration,
           task.base,
@@ -462,7 +426,7 @@ export class WorkerTasks {
         current.base = integration;
       });
     }
-    installWorktreeDependencies(task.worktree);
+    if (!regeneratedLockfile) installWorktreeDependencies(task.worktree);
     const worker = await this.retryTask(taskId, {}, true);
     if (!worker) throw new Error('released task was unexpectedly held again');
     return worker;
@@ -484,14 +448,12 @@ export class WorkerTasks {
       lease.release();
     }
   }
+  /** Whether a retry only records a held contract: it needs no worker, so it never waits for host capacity. */
   /** Whether a retry can skip the capacity wait (it only holds, or replaces a running worker) and whether it goes first. */
   private retryPlan(taskId: string, options: RetryOptions): { hold: boolean; first: boolean } {
     try {
       const task = this.store.task(taskId);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
-      // A held task's amendment must be committed under its lease before any capacity wait. The retry body
-      // distinguishes a still-held amendment from one that can start and queues the latter after recording it.
-      if (task.state === 'held' && reshaped) return { hold: true, first: startsFirst(task) };
       if (task.currentAttempt > 0 && reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
         return { hold: true, first: startsFirst(task) };
       const next = { ...task, brief: reshaped?.brief ?? task.brief, taskClass: reshaped?.taskClass ?? task.taskClass };
@@ -510,7 +472,9 @@ export class WorkerTasks {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
     if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId);
-    let lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = leased
+      ? undefined
+      : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
@@ -534,54 +498,24 @@ export class WorkerTasks {
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
       if (!nextBrief.acceptance.command.length)
         throw new Error('Imported attempts need a dispatchable contract before retry');
-      const heldAmendment = task.state === 'held' && reshaped !== undefined;
-      if (heldAmendment) {
+      const byId = new Map(this.store.tasks().map((candidate) => [candidate.id, candidate]));
+      // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
+      if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief }, [...byId.values()])) {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
-        task = this.store.updateHeldRetryTask(
+        this.store.updateHeldRetryTask(
           { taskId, attempt: task.currentAttempt },
           (current) => {
             current.brief = nextBrief;
             current.briefPath = briefPath;
             current.taskClass = nextTaskClass;
+            current.state = 'held';
             if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
           },
           { abandonPending: true },
         );
-      }
-      const byId = new Map(this.store.tasks().map((candidate) => [candidate.id, candidate]));
-      // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
-      if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief }, [...byId.values()])) {
-        if (!heldAmendment) {
-          const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
-          mkdirSync(dirname(briefPath), { recursive: true });
-          writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
-          this.store.updateHeldRetryTask(
-            { taskId, attempt: task.currentAttempt },
-            (current) => {
-              current.brief = nextBrief;
-              current.briefPath = briefPath;
-              current.taskClass = nextTaskClass;
-              current.state = 'held';
-              if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
-            },
-            { abandonPending: true },
-          );
-        }
         return null;
-      }
-      if (heldAmendment) {
-        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
-          current.state = 'ready';
-        });
-        // Capacity admission must leave the task available for further amendments and stop commands.
-        // Re-read the stored contract after admission, rather than reapplying this amendment over a newer one.
-        lease?.release();
-        lease = undefined;
-        const startOptions = { ...options };
-        delete startOptions.brief;
-        return this.retryTask(taskId, startOptions);
       }
       this.ensureWorktree(task);
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
@@ -760,12 +694,14 @@ export class WorkerTasks {
         mkdirSync(dirname(rebaseLog), { recursive: true });
         let files: string[] = [];
         let changedBase = false;
+        let regeneratedLockfile = false;
         if (task.base !== integration) {
           changedBase = true;
           const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`]));
           if (commits > 0) {
             try {
-              rebaseOnto(
+              // Integration derived files such as bun.lock are regenerated by rebaseOnto before the retry starts.
+              regeneratedLockfile = rebaseOnto(
                 task.worktree,
                 integration,
                 task.base,
@@ -782,7 +718,7 @@ export class WorkerTasks {
         task = this.store.updateTask(next, (current) => {
           current.base = integration;
         });
-        if (!files.length && (changedBase || options.escalation === 'rebase-conflict')) {
+        if (!files.length && (changedBase || options.escalation === 'rebase-conflict') && !regeneratedLockfile) {
           setupStep = 'installing worktree dependencies';
           installWorktreeDependencies(task.worktree);
         }
@@ -876,7 +812,26 @@ export class WorkerTasks {
     }
   }
   async cancel(taskId: string): Promise<void> {
-    return this.stop(taskId, true);
+    await this.stop(taskId, true);
+    const dependency = this.store.task(taskId);
+    const heldByManager = new Map<string, string[]>();
+    for (const task of this.store.tasks()) {
+      if (task.state !== 'held' || !task.brief.after.includes(taskId)) continue;
+      const held = heldByManager.get(task.brief.manager) ?? [];
+      held.push(task.id);
+      heldByManager.set(task.brief.manager, held);
+    }
+    const inbox = new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory);
+    for (const [managerId, heldTasks] of heldByManager) {
+      const event = {
+        managerId,
+        taskId,
+        kind: 'instruction' as const,
+        summary: `Cancelled dependency ${taskId} is holding tasks ${heldTasks.join(', ')}; decide whether the dependency is still needed.`,
+      };
+      this.store.event({ taskId, attempt: dependency.currentAttempt }, 'cancelled-dependency-notice', event);
+      inbox.deliver(event);
+    }
   }
   /** Later integration follows the stabilize branch. A running attempt is left alone. */
   retarget(taskId: string, target: string): Task {
