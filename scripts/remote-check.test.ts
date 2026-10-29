@@ -20,6 +20,8 @@ import { onCheckHost } from './stack-run.ts';
 import {
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_SLOT_PROCESSORS,
+  CHECK_HOST_MIN_TMP_BYTES,
+  CHECK_HOST_MIN_TMP_INODES,
   BASE_REFRESH_INTERVAL_SECONDS,
   BASE_RETENTION_SECONDS,
   controlSocketDirectoryPath,
@@ -318,6 +320,8 @@ if (script.includes('/proc/loadavg')) {
     processors,
     sliceProcessors,
     load,
+    tmpBytes: config.tmpBytes ?? 16 * 2 ** 30,
+    tmpInodes: config.tmpInodes ?? 1_000_000,
     memoryCurrent,
     memoryMaximum,
     memoryHeadroom,
@@ -336,6 +340,8 @@ if (script.includes('/proc/loadavg')) {
   console.log('SLICE_PROCESSORS ' + sliceProcessors);
   console.log('LOAD ' + load);
   console.log('AVAILABLE ' + available);
+  if (!config.omitTmpBytes) console.log('TMP_BYTES ' + (config.tmpBytes ?? 16 * 2 ** 30));
+  if (!config.omitTmpInodes) console.log('TMP_INODES ' + (config.tmpInodes ?? 1_000_000));
   console.log('ORDINARY_SLOTS_USED ' + ordinarySlotsUsed);
   console.log('EXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0));
   console.log('GATE_WAITING ' + (gateWaiting ? 1 : 0));
@@ -576,6 +582,10 @@ process.exit(99);
 type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
   available?: number;
+  tmpBytes?: number;
+  tmpInodes?: number;
+  omitTmpBytes?: boolean;
+  omitTmpInodes?: boolean;
   memoryCurrent?: number;
   memoryMax?: number;
   memoryHeadroom?: number;
@@ -938,7 +948,7 @@ test('--estimate-ms is a non-negative integer of milliseconds', async () => {
   expect(missing.events()).toEqual([]);
 });
 
-test("each remote run keeps Bun's transpiler cache inside its own run directory", async () => {
+test('compile cache: each remote run keeps Node compile cache inside its own run directory', async () => {
   const { env, events } = scenario({ a: { available: 8e9 } });
   const work = workspace();
 
@@ -957,6 +967,9 @@ test("each remote run keeps Bun's transpiler cache inside its own run directory"
   for (const [index, script] of scripts.entries()) {
     const cachePath = script.match(/(?:^|\s)BUN_RUNTIME_TRANSPILER_CACHE_PATH=([^\s]+)/)?.[1];
     expect(cachePath).toBe(`${runDirectories[index]}/bun-runtime-transpiler-cache`);
+    expect(script).toContain(`export NODE_COMPILE_CACHE='${runDirectories[index]}/.temp/node-compile-cache'`);
+    expect(script).not.toContain('/tmp/node-compile-cache');
+    expect(script.indexOf('export NODE_COMPILE_CACHE')).toBeLessThan(script.indexOf('"$bun" install --frozen-lockfile'));
   }
 });
 
@@ -1322,6 +1335,63 @@ test('a host with less than 4 GiB MemAvailable is skipped and logged with its av
   expect(result.code).toBe(0);
   expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
   expect(result.stderr).toContain(`skipped low: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
+});
+
+test('tmp floor: the probe reports free /tmp bytes and inodes, and missing values make it invalid', async () => {
+  const { env, events } = scenario({ a: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES, tmpInodes: CHECK_HOST_MIN_TMP_INODES } });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  const probe = events().find((event) => event.kind === 'probe')!.script as string;
+  expect(probe).toContain('df -P -B1 /tmp');
+  expect(probe).toContain('df -P -i /tmp');
+  expect(probe).toContain('TMP_BYTES');
+  expect(probe).toContain('TMP_INODES');
+
+  for (const missing of ['omitTmpBytes', 'omitTmpInodes'] as const) {
+    const invalid = scenario({ invalid: { available: 16 * 2 ** 30, [missing]: true }, ready: { available: 16 * 2 ** 30 } });
+    const admitted = await remote(invalid.env, workspace(), ['true']);
+    expect(admitted.code).toBe(0);
+    expect(invalid.events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+    expect(invalid.events().filter((event) => event.kind === 'slot').map((event) => event.address)).not.toContain('ops@invalid.test');
+  }
+});
+
+test('tmp floor: a host under the free byte floor is skipped for a ready host', async () => {
+  const freeBytes = CHECK_HOST_MIN_TMP_BYTES - 1;
+  const { env, events } = scenario({
+    low: { available: 16 * 2 ** 30, tmpBytes: freeBytes, tmpInodes: CHECK_HOST_MIN_TMP_INODES },
+    ready: { available: 16 * 2 ** 30 },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+  expect(result.stderr).toContain(`skipped low: /tmp ${freeBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`);
+  expect(events().filter((event) => event.kind === 'slot').map((event) => event.address)).not.toContain('ops@low.test');
+});
+
+test('tmp floor: a host under the free inode floor is skipped even with enough free bytes', async () => {
+  const freeInodes = CHECK_HOST_MIN_TMP_INODES - 1;
+  const { env, events } = scenario({
+    low: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES + 1, tmpInodes: freeInodes },
+    ready: { available: 16 * 2 ** 30 },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+  expect(result.stderr).toContain(`skipped low: /tmp ${freeInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`);
+  expect(events().filter((event) => event.kind === 'slot').map((event) => event.address)).not.toContain('ops@low.test');
+});
+
+test('tmp floor: a host at the byte and inode floors is admitted', async () => {
+  const { env, events } = scenario({ a: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES, tmpInodes: CHECK_HOST_MIN_TMP_INODES } });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@a.test');
+  expect(result.stderr).not.toContain('skipped a: /tmp');
 });
 
 test('when every host is skipped for load or memory the check waits and names both reasons', async () => {

@@ -115,9 +115,9 @@ G = max(0, O - 1)        gate capacity
 
 Slice processors are the quota divided by the period in `cpu.max`.
 Slice memory is `memory.max`; configured values supply the fallbacks above.
-Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute load exceeds 1.5 times its slice processors or its machine `MemAvailable` is below 4 GiB. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity.
+Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/tmp` has less than 4 GiB free, or `/tmp` has fewer than 65,536 free inodes. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity. Because check-host `/tmp` is tmpfs, the byte floor protects the same RAM needed by checks, while the inode floor catches exhaustion before the byte limit is reached.
 Headroom is `max(0, memory.max - memory.current)` in the shared slice.
-When slice memory cannot be read, it uses the machine's `MemAvailable` instead.
+When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
 Slots reserve admission capacity. They do not impose a separate CPU or memory cap on each run.
 
 One slot is express capacity. Only a non-gate, one-slot run with an explicit estimate of at most

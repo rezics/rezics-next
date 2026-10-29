@@ -98,6 +98,8 @@ const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
 export const CHECK_SLOT_PROCESSORS = 2;
 export const CHECK_HOST_MIN_AVAILABLE_BYTES = 4 * 2 ** 30;
+export const CHECK_HOST_MIN_TMP_BYTES = 4 * 2 ** 30;
+export const CHECK_HOST_MIN_TMP_INODES = 65_536;
 export const CHECK_HOST_MAX_LOAD_PER_PROCESSOR = 1.5;
 const MAX_WAIT_RECORD_MS = 60_000;
 export const BASE_REFRESH_INTERVAL_SECONDS = 30 * 60;
@@ -270,6 +272,10 @@ processors=$(nproc)
 load=$(awk 'NR == 1 { print $1; exit }' /proc/loadavg)
 available=$(awk 'BEGIN { while ((getline line < "/proc/meminfo") > 0) if (line ~ /^MemAvailable:/) { split(line, field, " "); printf "%.0f\\n", field[2] * 1024; exit } }' 2>/dev/null || true)
 case "$available" in ''|*[!0-9]*) available= ;; esac
+tmp_bytes=$(df -P -B1 /tmp 2>/dev/null | awk 'NR == 2 { print $4; exit }' || true)
+case "$tmp_bytes" in ''|*[!0-9]*) tmp_bytes= ;; esac
+tmp_inodes=$(df -P -i /tmp 2>/dev/null | awk 'NR == 2 { print $4; exit }' || true)
+case "$tmp_inodes" in ''|*[!0-9]*) tmp_inodes= ;; esac
 slice_cgroup=$(systemctl show --property=ControlGroup --value ${SLICE} 2>/dev/null || true)
 case "$slice_cgroup" in /*) ;; *) slice_cgroup= ;; esac
 current=
@@ -290,7 +296,7 @@ else
   [ -n "$available" ] || exit 1
   printf 'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM %s\\n' "$available"
 fi
-printf 'AVAILABLE %s\\n' "\${available:--}"
+printf 'AVAILABLE %s\\nTMP_BYTES %s\\nTMP_INODES %s\\n' "\${available:--}" "\${tmp_bytes:--}" "\${tmp_inodes:--}"
 slice_processors=
 set -- $cpu_max
 if [ "$#" -eq 2 ]; then
@@ -669,6 +675,8 @@ export function runScript(id: string, directory: string, cwd: string, command: s
       fi
       bun="$pinned_cache/package/bin/bun"
     fi
+    mkdir -p ${quote(`${directory}/.temp/node-compile-cache`)}
+    export NODE_COMPILE_CACHE=${quote(`${directory}/.temp/node-compile-cache`)}
     "$bun" install --frozen-lockfile
     code=$?
     if [ "$code" -eq 0 ]; then touch ${quote(`${directory}/.bun-install-complete`)}; fi
@@ -901,6 +909,8 @@ type HostProbe = {
   sliceProcessors: number;
   load: number;
   availableMemory: number;
+  tmpBytes: number;
+  tmpInodes: number;
   memoryHeadroom: number;
   memoryMaximum: number | null;
   ordinarySlotsUsed: number;
@@ -1029,11 +1039,15 @@ function parseProbe(output: string): HostProbe | null {
   const sliceProcessorValue = value('SLICE_PROCESSORS');
   const loadValue = value('LOAD');
   const availableValue = value('AVAILABLE');
+  const tmpBytesValue = value('TMP_BYTES');
+  const tmpInodesValue = value('TMP_INODES');
   const headroomValue = value('MEMORY_HEADROOM');
   const processors = Number(processorValue);
   const sliceProcessors = Number(sliceProcessorValue);
   const load = Number(loadValue);
   const availableMemory = Number(availableValue);
+  const tmpBytes = Number(tmpBytesValue);
+  const tmpInodes = Number(tmpInodesValue);
   const memoryHeadroom = Number(headroomValue);
   const ordinarySlotsUsedValue = value('ORDINARY_SLOTS_USED') ?? value('SLOTS_USED');
   const ordinarySlotsUsed = Number(ordinarySlotsUsedValue);
@@ -1054,6 +1068,8 @@ function parseProbe(output: string): HostProbe | null {
     sliceProcessorValue === null ||
     loadValue === null ||
     availableValue === null ||
+    tmpBytesValue === null ||
+    tmpInodesValue === null ||
     headroomValue === null ||
     !Number.isSafeInteger(processors) ||
     processors < 1 ||
@@ -1063,6 +1079,10 @@ function parseProbe(output: string): HostProbe | null {
     load < 0 ||
     !Number.isSafeInteger(availableMemory) ||
     availableMemory < 0 ||
+    !Number.isSafeInteger(tmpBytes) ||
+    tmpBytes < 0 ||
+    !Number.isSafeInteger(tmpInodes) ||
+    tmpInodes < 0 ||
     !Number.isSafeInteger(memoryHeadroom) ||
     memoryHeadroom < 0 ||
     ordinarySlotsUsedValue === null ||
@@ -1086,6 +1106,8 @@ function parseProbe(output: string): HostProbe | null {
     sliceProcessors,
     load,
     availableMemory,
+    tmpBytes,
+    tmpInodes,
     memoryHeadroom,
     memoryMaximum: sliceMemory ? Number(maximum) : null,
     ordinarySlotsUsed,
@@ -1260,7 +1282,11 @@ async function rankedHosts(
         ? `${entry.host.name}: load ${probe.load} exceeds limit ${limit}`
         : probe.availableMemory < CHECK_HOST_MIN_AVAILABLE_BYTES
           ? `${entry.host.name}: MemAvailable ${probe.availableMemory} bytes is under ${CHECK_HOST_MIN_AVAILABLE_BYTES} bytes`
-          : undefined;
+          : probe.tmpBytes < CHECK_HOST_MIN_TMP_BYTES
+            ? `${entry.host.name}: /tmp ${probe.tmpBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`
+            : probe.tmpInodes < CHECK_HOST_MIN_TMP_INODES
+              ? `${entry.host.name}: /tmp ${probe.tmpInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`
+              : undefined;
     if (!reason) continue;
     skipped.push({ host: entry.host, probe });
     loggedSkips.set(entry.host.name, reason);
