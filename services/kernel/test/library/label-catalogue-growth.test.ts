@@ -270,11 +270,10 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   const index = await db.admin.query<{ indexname: string; indexdef: string }>(
     "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='library' AND tablename='personal_label'",
   );
-  const primaryKeyIndex = index.rows.find((item) =>
-    item.indexdef.includes('PRIMARY KEY (route, account_id, label_id)'),
-  )?.indexname;
-  const liveNameIndex = index.rows.find((item) =>
-    item.indexdef.includes('(route, account_id, normalized_name) WHERE (deleted_at IS NULL)'),
+  const primaryKeyIndex = index.rows.find((item) => item.indexdef.includes('(route, account_id, label_id)'))?.indexname;
+  const liveNameIndex = index.rows.find(
+    (item) =>
+      item.indexdef.includes('(route, account_id, normalized_name)') && item.indexdef.includes('deleted_at IS NULL'),
   )?.indexname;
   if (!primaryKeyIndex || !liveNameIndex) throw new Error('Missing personal label primary or live-name index');
   const reader = db.openPool({ max: 1, options: '-c default_transaction_read_only=on' });
