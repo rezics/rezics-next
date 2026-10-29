@@ -192,7 +192,7 @@ test('one deep cleanup page stays bounded as current, history and unrelated memb
     // do not issue another execution or alter any statement in the capture.
     const client = await db.pool.connect();
     const plans: unknown[] = [];
-    const retainPlan = (notice: { message?: string }) => {
+    const retainPlan = (notice: { message?: string | undefined }) => {
       const marker = 'plan:\n';
       const start = notice.message?.indexOf(marker) ?? -1;
       if (start >= 0) plans.push(JSON.parse(notice.message!.slice(start + marker.length)));
