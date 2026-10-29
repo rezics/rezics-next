@@ -537,7 +537,11 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
             action={`/${locale}/search`}
             className="hidden lg:block lg:col-start-1 lg:row-start-1"
           >
-            <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen} className="rounded-xl border border-border/60 p-4">
+            <Collapsible
+              open={filtersOpen}
+              onOpenChange={setFiltersOpen}
+              className="rounded-xl border border-border/60 p-4"
+            >
               <CollapsibleTrigger className="hidden">{m.search_filters()}</CollapsibleTrigger>
               <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
             </Collapsible>
@@ -670,10 +674,20 @@ let sharedSearchText = '';
 export function ScopeChip({ scope, onRemove }: { scope: SearchScope; onRemove: () => void }) {
   return (
     <span className="inline-flex max-w-48 shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-1 text-xs">
-      {scope.image ? <img src={scope.image} alt="" className="size-5 rounded-full object-cover" /> :
-        <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-primary/10 font-semibold">{scope.name.slice(0, 1)}</span>}
+      {scope.image ? (
+        <img src={scope.image} alt="" className="size-5 rounded-full object-cover" />
+      ) : (
+        <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-primary/10 font-semibold">
+          {scope.name.slice(0, 1)}
+        </span>
+      )}
       <span className="truncate">{scope.name}</span>
-      <button type="button" aria-label={`Remove ${scope.name} scope`} className="grid size-5 shrink-0 place-items-center rounded-full hover:bg-background" onClick={onRemove}>
+      <button
+        type="button"
+        aria-label={`Remove ${scope.name} scope`}
+        className="grid size-5 shrink-0 place-items-center rounded-full hover:bg-background"
+        onClick={onRemove}
+      >
         <X aria-hidden="true" className="size-3" />
       </button>
     </span>
@@ -746,7 +760,7 @@ export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchSco
     if (inputValue.trim())
       void navigate({
         to: '/search',
-          search: { q: inputValue.trim(), type: undefined, cursor: undefined },
+        search: { q: inputValue.trim(), type: undefined, cursor: undefined },
       });
   };
   // One frame for the list, so covers of mixed types line up.
@@ -755,7 +769,11 @@ export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchSco
   );
   return (
     // Without JavaScript the box is a plain form to the search page.
-    <form method="get" action={`/${locale}/search`} className="flex w-full items-center gap-1 rounded-full border bg-background px-2">
+    <form
+      method="get"
+      action={`/${locale}/search`}
+      className="flex w-full items-center gap-1 rounded-full border bg-background px-2"
+    >
       {currentScope && <ScopeChip scope={currentScope} onRemove={() => setCurrentScope(undefined)} />}
       <Combobox
         items={items}
@@ -790,7 +808,12 @@ export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchSco
             }
           }}
         />
-        <button type="button" aria-label={`Filters (${activeConditions})`} className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-accent" onClick={() => window.dispatchEvent(new Event('rezics:open-search-filters'))}>
+        <button
+          type="button"
+          aria-label={`Filters (${activeConditions})`}
+          className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-accent"
+          onClick={() => window.dispatchEvent(new Event('rezics:open-search-filters'))}
+        >
           <SlidersHorizontal aria-hidden="true" className="size-4" />
           <span className="sr-only">{activeConditions}</span>
         </button>

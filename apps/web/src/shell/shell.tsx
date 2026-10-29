@@ -566,11 +566,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <Logo />
           <div className="pointer-events-none absolute inset-x-0 mx-auto hidden w-full max-w-[40rem] px-40 md:block">
-            <div className="pointer-events-auto"><ShellSearch /></div>
+            <div className="pointer-events-auto">
+              <ShellSearch />
+            </div>
           </div>
           <div className="ms-auto flex items-center gap-2">
             <Dialog open={phoneSearchOpen} onOpenChange={setPhoneSearchOpen}>
-              <DialogTrigger render={<Button className={cn('md:hidden', headerControlClass)} variant="ghost" size="icon-lg" aria-label={m.search_label()} />}>
+              <DialogTrigger
+                render={
+                  <Button
+                    className={cn('md:hidden', headerControlClass)}
+                    variant="ghost"
+                    size="icon-lg"
+                    aria-label={m.search_label()}
+                  />
+                }
+              >
                 <Search aria-hidden="true" />
               </DialogTrigger>
               <DialogContent className="inset-0 h-svh w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-4 md:hidden">
