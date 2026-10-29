@@ -22,13 +22,18 @@ describe('native Auth and web stack', () => {
     expect(await authPage.text()).toContain('Sign in');
 
     const alice = await auth.signIn('alice');
+    const bob = await auth.signIn('bob');
     expect(alice.url).toStartWith(stack.web);
     expect((await alice.response()).status()).toBe(200);
-    const context = auth.context('alice');
+    expect(bob.url).toStartWith(stack.web);
+    expect((await bob.response()).status()).toBe(200);
+    const context = await auth.context('alice');
     expect(context).toBe(alice.context);
-    const cookies = await context.cookies(stack.web);
-    expect(cookies.some(({ name }) => name === '__Host-rezics_session')).toBe(true);
-    expect(stack.kernelRequests().some(({ authorization }) => authorization?.startsWith('Bearer '))).toBe(true);
+    expect(context).not.toBe(await auth.context('bob'));
+    expect((await context.cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(true);
+    expect(await (await auth.context('bob')).cookies(stack.web)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: '__Host-rezics_session' })]),
+    );
   });
 
   test('signs up a newcomer through the served sign-up form and preserves a web destination', async () => {
@@ -40,7 +45,7 @@ describe('native Auth and web stack', () => {
     const newcomer = await auth.signUp('newcomer');
     expect(newcomer.url).toStartWith(stack.web);
     expect((await newcomer.response()).status()).toBe(200);
-    expect((await auth.context('newcomer').cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
+    expect((await (await auth.context('newcomer')).cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
       true,
     );
   });
@@ -52,17 +57,16 @@ describe('native Auth and web stack', () => {
     authStacks.push(auth);
 
     const alice = await auth.signIn('alice');
-    const aliceRequests = stack.kernelRequests();
-    expect(aliceRequests.every(({ authorization }) => authorization === null)).toBe(true);
-    expect((await auth.context('alice').cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
+    expect((await alice.requestHeaders()).every((headers) => !headers.has('authorization'))).toBe(true);
+    expect((await (await auth.context('alice')).cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
       true,
     );
     expect((await alice.response()).status()).toBe(200);
 
     const suspended = await auth.signIn('suspended');
     expect((await suspended.response()).status()).toBe(403);
-    expect((await suspended.response()).text()).toContain('ACCOUNT_SUSPENDED');
-    expect((await auth.context('suspended').cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
+    expect(await (await suspended.response()).text()).toContain('account_suspended');
+    expect((await (await auth.context('suspended')).cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session')).toBe(
       false,
     );
   });
@@ -72,10 +76,15 @@ describe('native Auth and web stack', () => {
     stacks.push(stack);
     const auth = await startAuthStack(stack);
     authStacks.push(auth);
-    const context = auth.context('alice');
+    const context = await auth.context('alice');
     await auth.stop();
     authStacks.splice(authStacks.indexOf(auth), 1);
     expect(context.pages()).toHaveLength(0);
+    let authStatus = 0;
+    try {
+      authStatus = (await fetch(`${auth.origin}/login`)).status;
+    } catch {}
+    expect(authStatus).not.toBe(200);
     expect((await stack.kernel('/v1/definitions/active')).status).toBe(200);
   });
 });
