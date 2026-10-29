@@ -8,7 +8,7 @@ import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
@@ -320,19 +320,22 @@ test('native source hook rows and statements stay constant with logarithmic bloc
        FROM generate_series($4::int+1,$5::int) n CROSS JOIN generate_series(0,1) population`,
           [routeOf(owner.accountId), owner.accountId, newId(routeOf(owner.accountId)!), previous, scale],
         );
-        // One warm-up plus five measured runs, all independent consumable pairs.
-        // Provision real subjects and the negative UPDATE baseline outside captures.
-        for (let slot = 0; slot < 6; slot++) {
-          const target = await fixture.createSubject('game');
-          await follows.follow(owner, target, entryKey());
-          await follows.unfollow(owner, target, entryKey());
-          slots.push({ target, followKey: entryKey(), unfollowKey: entryKey(), pendingSince: '' });
-        }
-        const prepared = await inspect();
-        for (const slot of slots.slice(-6)) {
-          const negative = source(prepared, slot.target);
-          expect(negative).toMatchObject({ revision: '2', source_following: false, desired_eligible: false });
-          slot.pendingSince = negative.pending_since;
+        // Provision all three scales' independent consumable pairs before measuring.
+        // Keep this fixed native subject neighbourhood constant across scales; only
+        // the declared unrelated source population and own negative history grow.
+        if (previous === 0) {
+          for (let slot = 0; slot < 18; slot++) {
+            const target = await fixture.createSubject('game');
+            await follows.follow(owner, target, entryKey());
+            await follows.unfollow(owner, target, entryKey());
+            slots.push({ target, followKey: entryKey(), unfollowKey: entryKey(), pendingSince: '' });
+          }
+          const prepared = await inspect();
+          for (const slot of slots) {
+            const negative = source(prepared, slot.target);
+            expect(negative).toMatchObject({ revision: '2', source_following: false, desired_eligible: false });
+            slot.pendingSince = negative.pending_since;
+          }
         }
         populations.push({ scale, ownNegativeHistory: scale, unrelatedOwnersAndTargets: scale, slots: slots.length });
       },
@@ -389,6 +392,21 @@ test('native source hook rows and statements stay constant with logarithmic bloc
       });
     for (const run of runs.filter(({ repetition }) => repetition % 6 !== 0))
       expect(run.plans.length).toBeGreaterThan(0);
+  } catch (error) {
+    if (error instanceof GrowthBoundError) {
+      await Bun.write(new URL('growth.json', evidence), JSON.stringify({ populations, samples: error.samples }, null, 2));
+      for (const sample of error.samples)
+        console.info(
+          'Native follow source rejected growth:',
+          JSON.stringify({
+            population: populations.find(({ scale }) => scale === sample.scale),
+            repetitions: sample.repetitions,
+            median: sample.cost,
+            relationSizes: sample.relationSizes,
+          }),
+        );
+    }
+    throw error;
   } finally {
     db.pool.off('acquire', listen);
     for (const [client, listener] of listeners) client.off('notice', listener);
