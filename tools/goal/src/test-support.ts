@@ -114,6 +114,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   git(root, ['config', 'user.email', 'fixture@example.invalid']);
   writeFileSync(join(root, '.gitignore'), '.temp/\n');
   writeFileSync(join(root, 'README.md'), 'Fixture\n');
+  writeFileSync(
+    join(root, 'fixture.test.ts'),
+    "import { expect, test } from 'bun:test';\ntest('fixture acceptance', () => expect(true).toBe(true));\n",
+  );
   git(root, ['add', '.']);
   git(root, ['commit', '-m', 'Initial fixture']);
   const state = join(root, '.temp/goal');
