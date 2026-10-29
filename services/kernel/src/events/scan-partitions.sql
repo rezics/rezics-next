@@ -1,5 +1,5 @@
 -- unbound: scans the fixed 4096-partition map to find relay work, oldest pending envelope first
-SELECT partition.partition_no
+SELECT partition.partition_no, min(pending.recorded_at) OVER () AS oldest_pending_at
 FROM core.partition AS partition
 LEFT JOIN core.consumer_checkpoint AS checkpoint
   ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = :consumer

@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import scanPartitions from './scan-partitions.sql';
+import upsertConsumerLag from './upsert-consumer-lag.sql';
 import type { BatchResult } from './log.ts';
 
 export type Relay = { consumer: string; run(partition: number): Promise<BatchResult> };
@@ -60,9 +61,15 @@ export function startRelays(pool: Pool, relays: Relay[], options: { intervalMs?:
     ticking = true;
     try {
       for (const relay of relays) {
-        const partitions = await withConnection(pool, (client) =>
-          scanPartitions.run(client, { consumer: relay.consumer }),
-        );
+        const partitions = await withConnection(pool, async (client) => {
+          const rows = await scanPartitions.run(client, { consumer: relay.consumer });
+          const oldestPendingAt = rows[0]?.oldest_pending_at;
+          await upsertConsumerLag.run(client, {
+            consumer: relay.consumer,
+            oldest_pending_at: oldestPendingAt ? new Date(oldestPendingAt).toISOString() : '',
+          });
+          return rows;
+        });
         for (const row of partitions) {
           if (stopped || paused) break;
           const partition = row.partition_no;

@@ -92,7 +92,8 @@ active authenticated followers can read it. Outgoing count and list need no targ
 Both proposed count reads require real bearer authentication, `follow:list`, `gate:personal_library` and normal read
 admission. Target management additionally evaluates its existing action scope in the ordinary formula. Missing
 `follow:list` is `403 forbidden`; a viewer with list scope but no management authority receives concealed 404.
-Anonymous is `401 authentication_required`; a suspended requester receives `403 account_suspended`;
+Anonymous is `401 authentication_required`; a suspended requester's bearer is below the authentication floor and
+receives `401 invalid_credentials`;
 stale/revoked authentication is `401 invalid_credentials`; closed exposure gate is `404 not_found`. Existing own
 outgoing requests retain their native authentication/gate checks.
 Never mount the route with optional authentication or substitute caller-asserted identity.
@@ -124,8 +125,15 @@ native target command. Acknowledgement clears pending work only if the acknowled
 otherwise newer work remains pending. A crash after target commit retries idempotently. SQL owns current work and
 acknowledgements, rather than a completed DBOS step's saved result. Native routing still rejects moved/fenced partitions.
 
-Every active/suspended/fenced/terminal account state change writes an account maintenance item in the **same native
-transaction** as the state/outbox change. Suspension/reactivation pages only that account's own follows in stable
+Every active/suspended/fenced/terminal account state change commits its outbox event in the transition's own
+transaction. Library does not install a trigger on Access account state. Its effect admits the account maintenance
+item through `Effect.admit`, using the event's `time` as the item's change time, before the workflow is enqueued and
+before the relay checkpoint advances. An event is acknowledged only once its item exists; queued, pending or failed
+workflows therefore leave an unprocessed item. The admission hook is owned by the accounts implementation and is
+not part of this work. Kernel records each relay consumer's oldest pending envelope time and observation time in
+`core.consumer_lag`; `readConsumerLag` reads that row and `consumerReady` reports false for missing, stale or old
+pending work. Readiness requires Library's oldest unprocessed item age and `consumerReady` for the `effects` consumer
+to each remain within five minutes of the change. Suspension/reactivation pages only that account's own follows in stable
 target-id order, at most 100 rows per page. Each source page reconciles pairs and advances its cursor in one source
 transaction under the account writer barrier; target delivery follows after release. Carry the account item's oldest
 uncompleted change time into pair work. Page completion never acknowledges target delivery. A new state transition
@@ -292,7 +300,7 @@ no erasure. Completion names outstanding shared custody and backup expiry and st
 payload remains. After exhaustion retain only payload-free terminal evidence, never a target directory or history.
 
 The general retained set follows [deletion](deletion.md): eligible public contributions remain de-identified;
-private facts whose skeleton is itself personal are erased wholly. Holds suspend purge for their records. Follow data is private and is not a retained public contribution.
+private facts whose skeleton is itself personal are erased wholly. Follow data is private and is not a retained public contribution.
 Individual record deletion retains its separate 30-day undo policy. Takedown withholds the least affected field/record
 and never triggers purge by itself; legal-order purge requires platform authority. Neither rule delays terminal
 account-private work or introduces restoration. Shared owners must reconcile replay promises with immediate

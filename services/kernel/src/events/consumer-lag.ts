@@ -1,0 +1,24 @@
+import type { PoolClient } from 'pg';
+import readConsumerLagQuery from './read-consumer-lag.sql';
+
+export type ConsumerLag = {
+  oldestPendingAt: Date | null;
+  observedAt: Date;
+};
+
+export async function readConsumerLag(client: PoolClient, consumer: string): Promise<ConsumerLag | null> {
+  const rows = await readConsumerLagQuery.run(client, { consumer });
+  const row = rows?.[0];
+  return row ? { oldestPendingAt: row.oldest_pending_at, observedAt: row.observed_at } : null;
+}
+
+export function consumerReady(lag: ConsumerLag | null, options: { maxLagMs: number; now: Date }): boolean {
+  const now = options.now.getTime();
+  if (!lag || !Number.isFinite(options.maxLagMs) || options.maxLagMs < 0 || !Number.isFinite(now)) return false;
+  const cutoff = now - options.maxLagMs;
+  const observedAt = lag.observedAt.getTime();
+  if (!Number.isFinite(observedAt) || observedAt < cutoff) return false;
+  if (lag.oldestPendingAt === null) return true;
+  const oldestPendingAt = lag.oldestPendingAt.getTime();
+  return Number.isFinite(oldestPendingAt) && oldestPendingAt >= cutoff;
+}

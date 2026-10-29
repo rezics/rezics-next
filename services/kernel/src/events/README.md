@@ -13,6 +13,17 @@ once at registration; the writer, log reader and effects share the same lookup.
 Validation takes O(total event data bytes) CPU for at most `MAX_COMMAND_EVENTS`,
 with no SQL or additional partition lock time.
 
+## Consumer lag
+
+`core.consumer_lag` stores one row per consumer with the oldest pending envelope time and the time the relay observed
+it. Each `startRelays` tick upserts the row using the minimum pending time returned by its existing partition scan;
+an empty scan records `oldest_pending_at = NULL`. This adds one row write per tick and does not add a scan.
+
+`readConsumerLag(client, consumer)` returns the consumer's `{ oldestPendingAt, observedAt }` with one primary-key
+read, or `null` if no tick has recorded the consumer. `consumerReady(lag, { maxLagMs, now })` is true only when the
+row was observed within the maximum age and either no envelope is pending or its oldest pending time is within that
+age. A stopped relay therefore becomes not ready when its observation expires.
+
 A task that emits a new event type registers its schema in that same task.
 Test-only types are registered by the kernel test preload; production code never
 imports those fixtures.

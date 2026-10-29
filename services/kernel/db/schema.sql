@@ -66,6 +66,18 @@ CREATE TABLE core.consumer_checkpoint (
 
 
 --
+-- Name: consumer_lag; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.consumer_lag (
+    consumer text NOT NULL,
+    oldest_pending_at timestamp with time zone,
+    observed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT consumer_lag_consumer_check CHECK ((consumer ~ '^[a-z][a-z0-9_]{0,62}$'::text))
+);
+
+
+--
 -- Name: outbox; Type: TABLE; Schema: core; Owner: -
 --
 
@@ -175,6 +187,14 @@ CREATE TABLE public.schema_migrations (
 
 ALTER TABLE ONLY core.consumer_checkpoint
     ADD CONSTRAINT consumer_checkpoint_pkey PRIMARY KEY (partition_no, consumer);
+
+
+--
+-- Name: consumer_lag consumer_lag_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.consumer_lag
+    ADD CONSTRAINT consumer_lag_pkey PRIMARY KEY (consumer);
 
 
 --
