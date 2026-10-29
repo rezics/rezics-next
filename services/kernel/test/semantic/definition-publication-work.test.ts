@@ -5,6 +5,8 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
 import {
   CHECKPOINT_WEIGHT,
+  digestContextDiagnostic,
+  PROPOSED_ANALYSIS_MAX,
   effectsSnapshot,
   publicationFixture,
   PROPOSED_WORK_MAX,
@@ -140,3 +142,35 @@ test('cold definition publication refuses deterministic excess work before effec
   expect(refused.headers.has('retry-after')).toBe(false);
   expect(excessAfter).toEqual(excessBefore);
 }, 180_000);
+
+// Additional diagnostics do not replace any frozen HTTP assertion above.
+test('checkpoint-only proposal retains the full catalogue at three changed-input sizes and bounds digest context bytes', () => {
+  const context = digestContextDiagnostic();
+  expect(context.clientUnits).toBe(1024);
+  expect(context.requestedByBytes).toBe(92);
+  expect(context.framingAndOperationBytes).toBe(68);
+  expect(context.contextMaxBytes).toBe(68 + 6 * 1024 + 92);
+  expect(context.contextMaxBytes).toBe(6304);
+  console.log('definition-publication-work context bound', JSON.stringify(context));
+  for (const added of [64, 512, RELEASE_LIMITS.properties - Object.keys(bundledRelease.properties).length]) {
+    const release = publicationFixture(added);
+    expect(validateRelease(release)).toEqual([]);
+    const diagnostic = workDiagnostic(release);
+    expect(diagnostic.fixedInitializationSteps).toBe(13_344);
+    expect(diagnostic.fixedSources).toBe(8);
+    expect(diagnostic.allSafe).toBe(true);
+    expect(diagnostic.fixedSafe).toBe(true);
+    expect(diagnostic.newSteps).toBe(967 + 14 * added);
+    expect(diagnostic.knownByteFloor).toBe(
+      4 * diagnostic.releaseBytes + 2 * diagnostic.envelopeBytes + 2 * diagnostic.valueCanonicalBytes,
+    );
+    expect(diagnostic.releaseBytes).toBeLessThanOrEqual(RELEASE_LIMITS.bytes);
+    const { proofs: _proofs, currentFloor: _oldCurrent, proposedReuseFloor: _oldReuse, ...counts } = diagnostic;
+    console.log(
+      'definition-publication-work A-only growth',
+      JSON.stringify({ added, analysisMax: PROPOSED_ANALYSIS_MAX, ...counts }),
+    );
+    if (added === 64 || added === 512) expect(diagnostic.newSteps).toBeLessThan(PROPOSED_ANALYSIS_MAX);
+    else expect(diagnostic.newSteps).toBeGreaterThan(PROPOSED_ANALYSIS_MAX);
+  }
+});

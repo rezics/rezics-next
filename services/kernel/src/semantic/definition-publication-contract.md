@@ -10,8 +10,8 @@ The [Semantic README](README.md#definition-publish) owns existing storage cost; 
 [Definitions README](../../../../packages/definitions/README.md) owns release validity and pattern policy.
 This document adds proposed work admission and its native schedules, not another schema/safety authority.
 The current paired adoption and Performance's candidate review supersede the earlier weighted-meter proposal:
-the proposed runtime meter is pattern checkpoints only; other work needs construction bounds. The HTTP
-precedence amendment, ingress integration and execution proofs below remain required before freeze.
+the proposed runtime meter is pattern checkpoints only; other work needs construction bounds. Root approved the HTTP
+precedence amendment below; ingress integration and execution proofs remain required before freeze.
 The two complete research reports, their paired adoption, Performance decision 30 and final wildcard union
 review were read. Their old P1114-refused bundle runs are not successful current-publication evidence.
 The historical twenty isolated samples and twelve HTTP failures used the old inline checker, not these counters.
@@ -39,7 +39,9 @@ This specification does not add that code to the production Problem catalogue.
 Collection-limit errors precede size, canonical-JSON rejection precedes schema, and existing pointer escaping,
 first-code deduplication, lexical ordering and 64-error cap remain. No arbitrary input-depth cap is added.
 Pattern unknown/refusal/exhaustion never becomes safe. New work admission must not silently change these errors.
-The proposed deterministic precedence amendment below needs explicit Root/Definitions adoption before runtime.
+Root approved cheap bounded 400 checks, sorted distinct analysis, then first-excess 422; see the
+[publication owner section](README.md#definition-publish). That storage section remains the owner link; its
+HTTP amendment must accompany the runtime handoff, without duplicating Definitions safety authority.
 
 ## Owned input, two digests, fresh command
 
@@ -56,6 +58,7 @@ No caller reference becomes retained authority.
 Finish all expensive guard, proof, schema, graph, canonicalization and hashing work before `runCommand`.
 Hold no Global/Source gate, command transaction or checked-out command connection during it. The job receives no
 Actor, Access, authoritative T, SQL client or permission result. Prepared data conveys no permission.
+Only the separate bounded digest context described below accompanies owned body bytes.
 `runCommand` mints native time BEFORE per-attempt `authorization.prepare`, then takes the gate/transaction,
 authorizes at T and only then reads the receipt. Each contention retry refreshes T and Access under the SAME
 original deadline. Preparation held longer than the 1,000 ms evidence TTL must finish before this fresh sequence.
@@ -101,8 +104,8 @@ envelope JCS E_r/hash E_r and actual/expected value JCS V each. It omits parse, 
 compiled-schema internals and graph traversal; it is neither a full byte count nor an admission certificate.
 Repeated traversals must remain visible in phase evidence, even though bytes do not enter the runtime meter.
 
-The unchanged test/helper retain their historical weighted diagnostic fields to preserve frozen acceptance.
-Their excess assertion also proves `A_new > 16,384` independently of bytes/weights. A low weighted floor does
+The test/helper retain historical weighted arithmetic fields only to preserve every frozen candidate assertion.
+The additional checkpoint-only growth case asserts `A_new > 16,384` independently of bytes/weights. A low weighted floor does
 not certify admission, and the historical exports do not set product constants or supply HTTP verdicts.
 
 ### Own input loops and required construction
@@ -138,19 +141,19 @@ fixed-source proofs succeeded. Host A: Linux/check host, Bun 1.4.4 revision
 These are loaded-host observations in call order, not isolated percentiles or safety/deadline oracles.
 No new worker pool, native HTTP, receipt hash, SQL or physical cleanup was measured by this probe.
 
-| Input                                             | B / envelope bytes    | Distinct / actual checkpoints A_all | A_new after proposed fixed reuse | Known byte floor | Current work floor | Reuse work floor / candidate W_max | Validation ms observation |
-| ------------------------------------------------- | --------------------- | ----------------------------------- | -------------------------------- | ---------------- | ------------------ | ---------------------------------- | ------------------------- |
-| Current full bundle                               | 140,822 / 140,950     | 15 / 14,311                         | 967                              | 874,424          | 15,528,888         | 1,864,632 / 16,777,216 = 0.11114   | 1,354.94                  |
-| Ordinary full bundle plus 3 types / 12 properties | 144,484 / 144,612     | 27 / 14,479                         | 1,135                            | 898,100          | 15,724,596         | 2,060,340 / 16,777,216 = 0.12281   | 615.36                    |
-| 64 changed properties                             | 157,432 / 157,560     | 79 / 15,207                         | 1,863                            | 983,172          | 16,555,140         | 2,890,884 / 16,777,216 = 0.17231   | 798.48                    |
-| 512 changed properties                            | 268,985 / 269,113     | 527 / 21,479                        | 8,135                            | 1,716,106        | 23,710,602         | 10,046,346 / 16,777,216 = 0.59881  | 867.18                    |
-| 3,993 changed / 4,096 total properties            | 1,135,755 / 1,135,883 | 4,008 / 70,213                      | 56,869                           | 7,411,028        | 79,309,140         | 65,644,884 / 16,777,216 = 3.91274  | 2,438.11                  |
+| Input                                             |         B |       E_r |  A_all |  A_new |       V | Exact byte floor | Validation ms observation |
+| ------------------------------------------------- | --------: | --------: | -----: | -----: | ------: | ---------------: | ------------------------: |
+| Current full bundle                               |   140,822 |   140,950 | 14,311 |    967 |  14,618 |          874,424 |                  1,354.94 |
+| Ordinary full bundle plus 3 types / 12 properties |   144,484 |   144,612 | 14,479 |  1,135 |  15,470 |          898,100 |                    615.36 |
+| 64 changed properties                             |   157,432 |   157,560 | 15,207 |  1,863 |  19,162 |          983,172 |                    798.48 |
+| 512 changed properties                            |   268,985 |   269,113 | 21,479 |  8,135 |  50,970 |        1,716,106 |                    867.18 |
+| 3,993 changed / 4,096 total properties            | 1,135,755 | 1,135,883 | 70,213 | 56,869 | 298,121 |        7,411,028 |                  2,438.11 |
 
-Fixed-source initialization actually costs 13,344 checkpoints, separately charged to readiness in the proposed
-reuse design. Every generated literal in the changed-input series costs 14 checkpoints under this actual
-checker, not the old reports' 11/17-step fixtures. The boundary fixture's new-pattern checkpoints alone cost
-58,233,856 candidate units, exceeding W_max without any assumed traversal counts. It retains the entire
-current catalogue and is below 4 MiB; schema/pattern invalidity cannot explain the intended HTTP red.
+All byte columns are UTF-8 bytes, all A columns are actual unchanged-checker checkpoints. Fixed-source
+initialization costs 13,344 checkpoints at readiness. Each generated new literal costs 14. The last fixture
+retains the entire current catalogue and is below 4 MiB; schema/pattern invalidity cannot explain its HTTP red.
+No weighted floor is an admission threshold. The checkpoint-only series is asserted by the added diagnostic
+case; these measurements do not implement reservation inside analysis.
 
 Value-schema canonical byte sums are 14,618 / 15,470 / 19,162 / 50,970 / 298,121 respectively. Observed process
 RSS after those validations is 164,241,408 / 197,287,936 / 244,936,704 / 249,573,376 / 292,106,240 bytes.
@@ -161,7 +164,7 @@ Under checkpoint-only admission the bundle is `967 / 16,384 = 0.05902` of A_max 
 three-type/twelve-property fixture is `1,135 / 16,384 = 0.06927`. The changed-input series is
 `1,863 / 16,384 = 0.11371`, `8,135 / 16,384 = 0.49652`, and `56,869 / 16,384 = 3.47101`.
 These are actual checkpoint counts with prospective fixed-table reuse, not implemented runtime admission.
-The table's weighted floors are historical arithmetic only. All eight fixed proofs succeeded; initialization
+All eight fixed proofs succeeded; initialization
 is 13,344 checkpoints. New literal sources each cost 14 checkpoints on the unchanged current checker.
 
 The cold bundle's observed 645.06 ms and ordinary body's 1,384.64 ms remaining against 2,000 ms exclude
@@ -210,15 +213,62 @@ mode alone does not remove the current parent parse. Do not detach a buffer stil
 mutable-buffer transfer ownership before delivered-code review. Both modes retain wire/reservation bounds;
 pre-admission bodies consume ingress reservations independently of original request permits.
 
-For idle job baseline H0 bytes, amplification c bytes/byte, wire maximum B_wire_max and actual ingress budget I,
-process accounted bytes are `K*(H0+c*B_wire_max) + I + bounded result bytes`, plus separately bounded runtime-read
-cache storage. Avoid double-counting transferred buffers; trace actual ownership/reservation transitions.
-Active AND retired allocations stay charged. Measure the job's heap after forced GC following parse/validation
-at all three changed-input sizes; record H0 once per pinned runtime and fit/qualify c. Whole-process RSS deltas,
-retained-heap samples or a fitted slope alone are not a peak-heap guarantee. Account transient parse/checker/JIT
-allocations and physical reclamation separately. Performance sets the process memory budget and selects K from
-permits, processors and measurements; no literal K/c/cleanup duration is shipped. No pool construction before
-this memory evidence and the A_max/native-margin observation.
+### Digest context and whole-process memory
+
+The main thread derives exactly `{operation,client_id,requested_by}` from the mounted route and verified Actor.
+Both identity fields are null for anonymous. Never use body principals, headers or arbitrary raw data as identity.
+This small canonical context is data, never permission. No Actor/Access/T/client/authorization crosses the boundary.
+No context is returned, logged or persisted. Discard parent references after transfer and job context after completion,
+cancellation or retirement; late results must not echo it.
+
+`http/request.ts` currently owns one `requestDigest(operation,actor,body)` implementation. The future shared
+extractor must split ONE pure core over context/body and use it from BOTH that wrapper and the job, keeping
+all real consumers/imports/tests byte-compatible. This SPEC exports no core/signature. The existing canonical
+envelope sorts `body`, `client_id`, `operation`, `requested_by`. Incremental hashing feeds `{"body":`, canonical
+BODY bytes, then the comma-prefixed canonical client/operation/requested-by members and `}` in that order.
+BODY here is `{params:{},body:{release}}`, not the release alone. This preserves the receipt digest domain exactly;
+never hash raw-wire spelling or invent a context-first domain. Release SHA-256 remains its separate JCS domain.
+Anonymous idempotency-key restrictions and the receipt-key codec remain unchanged.
+
+For this route, mounted `operationId` is `definitions.publish` (19 ASCII bytes). Actual Auth `text` in
+`services/auth/src/service.ts` and verified claims in `access/authenticate.ts` limit client id to 1,024 UTF-16
+units. The claim validator does not impose an ASCII-only rule. The worst allowed JSON string content is six
+UTF-8 bytes per unit (for example an escaped control); do not assume 1,024 bytes. `requestedByPattern` fixes
+`urn:rezics:request:` (19 bytes), two 36-byte UUIDs and one colon: 92 bytes. Empty-string fields with the mounted
+operation, punctuation and key names cost 68 JCS bytes including quotes. Thus `C_max = 68 + 6*1024 + 92 = 6,304`
+canonical bytes, also covering null/ordinary accounts. The added pure size-witness test asserts these numbers;
+it does not mint an Actor, claim that a control-character client has native consent, or prove a transfer.
+Native maximum-context identity issuance remains Accounts' boundary. A stricter proven Auth repertoire may
+reduce this conservative verified-claim bound only with Accounts/Performance approval.
+
+Never concatenate context and body into a second full buffer in the parent. Transfer the owned body ArrayBuffer
+with a transfer list, detaching every parent view; send context separately as small bounded canonical data.
+The actual ingress producer must settle transfer/release ownership; a borrowed accessor alone is insufficient.
+REQUIRED native maximum-wire-body plus maximum-context admission, detached parent bytes/no retained parent
+reference, and disposal/late-result-no-context-echo schedules. Hash equality against the existing wrapper must
+cover real account, delegated and anonymous requests; changing either client_id or requested_by must change
+its digest/conflict, while whitespace and escape variants remain JCS-equivalent. Future extractor scope includes
+`http/request.ts`, its actual consumers/tests and Accounts review. No copied digest implementation in test support.
+
+With idle JOB heap H0 bytes, working-set amplification c bytes/byte EXCLUDING the transferred input, and actual
+ingress reservation I, the whole publication/ingress process bound is
+`I + K*(H0 + c*B_wire_max + C_max) + bounded result bytes`, plus separate runtime-read cache storage.
+Here `B_wire_max = 4,259,840`, `C_max = 6,304`, and
+`I = (permits+queue)*1,048,576 + 2*4,259,840 = 50,462,720 bytes` (40 MiB plus two largest bodies).
+Ingress keeps its reservation UNTIL THE REQUEST ENDS, including while its buffer is transferred to the job;
+the input is already in I. Do not add another K*B or permits*B term. Count actual ingress assembly/framing
+buffers under I, context and message overhead separately, active AND retired allocations until disposal, and
+result allocations until consumed. This formula grants neither a new buffer allowance nor a pool size.
+
+Measure H0 and c from JOB heap after forced GC following parse/validation at all three changed-input sizes,
+excluding transferred input bytes. Record runtime/host/load and fit/qualify c; whole-process RSS is insufficient.
+Transient parse/checker/JIT/message allocations, framing and retained successful result serialization for the
+existing DB insertion need precise native measurement/binding. A verdict plus digests alone cannot insert a
+release body: no parent graph clone/reparse/JSONB serialization may hide as free. REQUIRED Semantic/Core bounded
+successful-result/DB binding and Performance byte review; no invented result DTO is selected here. Performance
+sets memory budget and K after those measurements and the idle-host A_max/max-body native margin observation.
+No literal K/c/cleanup duration or production pool is shipped before that evidence. Bun resourceLimits provides
+no heap cap, and post-GC slope is not a physical reclamation or peak allocation proof.
 
 The existing runtime-read cache is independently unbounded. Performance accepts a proposal to retain canonical
 bytes keyed by digest AND pool, at most eight entries AND 8 MiB, evicting oldest insertion until both limits hold;
@@ -241,6 +291,7 @@ must remain; do not swap another pool into its kernel to make measurement conven
 | CPU progress                    | Enter actual checker phase, hold its internal phase barrier outside command; complete unrelated ordinary GET and reserved Auth request before release; resume same actual proof; observe real active CPU separately from a parked barrier                                                                                       | REQUIRED Core/Definitions internal actual-job phase barrier and checker entry/exit producer; shared Semantic/Auth request producer already exists                                                                         |
 | Ownership and digest binding    | Hold after snapshot/before proof; mutate original nested body (including partially frozen ancestor); release and require original digest/body/receipt, changed input conflicts; repeat Unicode, -0, aliases, cycles, holes, getters/toJSON and wire/canonical-byte/collection/cap boundaries                                    | REQUIRED Performance owned-wire producer and Semantic binding before BOTH hashes; HTTP driver serializes immediately and cannot prove internal ownership                                                                  |
 | Publication authority           | Seed identical body in DB A; request in DB B must miss despite process cache; use different pool identities, composed-only body, restart and eviction; corrupt cold stored body must fail actual proof/digest before runtime                                                                                                    | Existing `readRelease(...,{composed:false})` and fixture pool; REQUIRED Semantic same-pool published-existence binding and separate runtime-read cache producer; independent two-driver schedule without retargeting Auth |
+| Digest context/transfer         | Use real account/delegated/anonymous Auth; maximum body/context fits; transfer detaches parent views; compare job digest byte-for-byte to existing requestDigest; change each identity field; hold/cancel and inspect no parent retention or late context echo                                                                  | REQUIRED Accounts native maximum/delegated fixtures, shared requestDigest core producer and Performance/Core ownership/disposal instrumentation; size-witness test only proves the bound                                  |
 | Capacity                        | Fill K jobs under original permits; fill at most permits-K CPU waiters; next admitted-capacity overflow uses existing overload; release one job, resume oldest admitted waiter without new permit/deadline                                                                                                                      | REQUIRED Core internal sub-lane accounting bound to actual Admission, not new public API or helper queue                                                                                                                  |
 | Deadline and cancellation       | Enter actual proof, expire original 2,000 ms deadline or abort; return typed refusal/no effects; observe retired slot; inject late result, observe discard; only actual exit permits replacement                                                                                                                                | REQUIRED Core actual running-thread cancel/exit and original-deadline notification producer; default deadline and JobContext already exist                                                                                |
 | Error/startup/exit not observed | Fail startup, worker error and repeated deadlines; hold exit acknowledgement beyond approved cleanup bound; assert active+retired<=K at each transition, NOTREADY, no replacement, no unbounded bytes                                                                                                                           | REQUIRED Core/Work runtime physical exit/reclamation evidence and readiness observation; timer/close notifications cannot supply it                                                                                       |
@@ -297,20 +348,21 @@ and shared Auth/DBOS library pools, preserving ownership. Catalogue statements u
 background statements remain outside request cost. Old permissive-Access growth tests at 1/4/16 are storage
 evidence only; no native 1/8/64 real-Auth statement counts are claimed here.
 
-## Deterministic precedence proposal and remaining owner boundaries
+## Adopted deterministic precedence and remaining owner boundaries
 
 Cheap bounded checks retain existing 400 precedence: collection limits, canonical size/JSON and schema shape.
 Then analyze distinct sources in sorted order. A defect reached before budget exhaustion retains its existing
 diagnostic; the first reservation exceeding A_max returns 422 `definition_work_exceeded`. Preserve first code per
 pointer, lexical error order and 64 cap for defects actually reached. Unsafe/unknown never becomes safe.
 This changes the mixed malformed/over-work case from running every proof to a deterministic bounded prefix;
-Performance supports it, but Root/Definitions must explicitly amend HTTP precedence before runtime or freeze.
+Root explicitly approved this HTTP amendment in the paired adoption. The
+[Semantic publication section](README.md#definition-publish) remains the owning document link for its runtime
+handoff; Definitions retains safety authority. This three-file SPEC does not change that README or runtime.
 Do not silently reinterpret a late unsafe pattern as safe or claim all old malformed outcomes survive unchanged.
 
-The earlier aggregate weighted-work assignment requires byte/node debits and unchanged complete error precedence;
-the mandatory updated owner adoption rejects those weights/debits and proposes this checkpoint-only construction
-and precedence amendment. The earlier assignment's <=4 MiB transfer condition also differs from the newly adopted wire declaration.
-Those are explicit specification alignment boundaries, not permission to implement a different HTTP contract.
+The mandatory owner closure supersedes the older weighted-work and publication-cache instructions. It also
+separates the 4 MiB canonical release limit from the 4,259,840-byte raw transport limit and charges context
+separately. Neither the historical floor fractions nor this document establish completed admission.
 
 Still REQUIRED before execution: actual bounded ingress producer and raw/parse-once binding; aggregate in-analysis
 checkpoint enforcement; deterministic own-loop counter evidence; real all-pools history capture; idle-host native

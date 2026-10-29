@@ -5,6 +5,26 @@ import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 
 // Diagnostics only. Nothing here supplies a verdict, digest or budget to HTTP.
+export const PROPOSED_ANALYSIS_MAX = 16_384;
+
+// authenticate.ts accepts at most 1024 UTF-16 client-id units; JSON control
+// escapes cost six bytes/unit. requestedByPattern fixes two 36-byte UUIDs.
+// These are size witnesses, not Actors or authorization fixtures.
+export function digestContextDiagnostic() {
+  const requestedBy = `urn:rezics:request:${'00000000-0000-0000-0000-000000000000'}:${'00000000-0000-0000-0000-000000000000'}`;
+  const maximum = { operation: 'definitions.publish', client_id: '\u0000'.repeat(1024), requested_by: requestedBy };
+  const empty = { ...maximum, client_id: '', requested_by: '' };
+  return {
+    clientUnits: maximum.client_id.length,
+    clientContentBytes: 6 * maximum.client_id.length,
+    requestedByBytes: Buffer.byteLength(requestedBy),
+    framingAndOperationBytes: canonicalBytes(empty),
+    contextMaxBytes: canonicalBytes(maximum),
+  };
+}
+
+// Frozen candidate acceptance still checks these historical arithmetic fields.
+// They are NOT the proposed meter: only PROPOSED_ANALYSIS_MAX governs A.
 export const PROPOSED_WORK_MAX = 16 * 1024 * 1024;
 export const CHECKPOINT_WEIGHT = 1024;
 export const canonicalBytes = (value: unknown) => Buffer.byteLength(canonicalize(value)!);
