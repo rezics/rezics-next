@@ -19,7 +19,7 @@ export type NativeWebStack = {
   authIssuer: string;
   web: string;
   /** Read fixture identity for form entry, without creating a website session. */
-  authPersona(persona: string): Promise<{ accountId: string; email: string }>;
+  authPersona(persona: string): Promise<{ accountId: string; email: string; authorization: string }>;
   /** Install the Auth page app on the issuer; undefined removes the page routing. */
   routeAuthPages(handler?: (request: Request) => Response | Promise<Response>): Promise<string>;
   kernel(path: string, init?: RequestInit, persona?: string): Promise<Response>;
@@ -533,12 +533,12 @@ async function startStack(): Promise<
       authIssuer: authServer.url.origin,
       web: webOrigin,
       async authPersona(persona) {
-        const { accountId } = await getAccount(persona);
+        const { accountId, bearer } = await getAccount(persona);
         const result = await auth.database.query<{ email: string }>('SELECT email FROM "user" WHERE id=$1', [
           accountId,
         ]);
         if (!result.rows[0]?.email) throw new Error(`Native ${persona} has no sign-in email`);
-        return { accountId, email: result.rows[0].email };
+        return { accountId, email: result.rows[0].email, authorization: `Bearer ${bearer}` };
       },
       async routeAuthPages(origin) {
         if (origin && !signupHandler) {
@@ -746,7 +746,8 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
       authIssuer,
       web,
       credentials,
-      authPersona: (persona) => call('authPersona', persona) as Promise<{ accountId: string; email: string }>,
+      authPersona: (persona) =>
+        call('authPersona', persona) as Promise<{ accountId: string; email: string; authorization: string }>,
       async routeAuthPages(handler) {
         await pageBridge?.stop(true);
         pageBridge = handler

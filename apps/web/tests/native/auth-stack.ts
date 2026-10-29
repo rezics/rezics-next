@@ -102,7 +102,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
   });
   for (const stream of [child.stdout, child.stderr])
     stream?.on('data', (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12_000)));
-  const contexts = new Map<AuthPersona, BrowserContext>();
+  const contexts = new Map<AuthPersona, Promise<BrowserContext>>();
   let browser: Browser | undefined;
   let stopping: Promise<void> | undefined;
   let browserPeakMemoryBytes = 0;
@@ -141,12 +141,12 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     };
     memorySampler = setInterval(() => void sampleMemory().catch(() => {}), 500);
     await sampleMemory();
-    await stack.restartWeb({ publicOrigin: stack.web });
+    // The Worker already uses this issuer; page routing needs no restart.
     console.info(`Native Auth app startup: ${Math.round(performance.now() - startupStarted)}ms`);
     const context = async (persona: AuthPersona) => {
       let value = contexts.get(persona);
       if (!value) {
-        value = await browser!.newContext({
+        value = browser!.newContext({
           viewport: { width: 1280, height: 860 },
           reducedMotion: 'reduce',
           locale: 'en',
@@ -163,11 +163,11 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       page.setDefaultTimeout(15_000);
       const authResponses: PlaywrightResponse[] = [];
       const visitedUrls: string[] = [];
-      page.on('framenavigated', (frame) => {
-        if (frame === page.mainFrame()) visitedUrls.push(frame.url());
-      });
       const pageRequests: import('playwright').Request[] = [];
-      page.on('request', (request) => pageRequests.push(request));
+      page.on('request', (request) => {
+        pageRequests.push(request);
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) visitedUrls.push(request.url());
+      });
       page.on('response', (response) => {
         if (new URL(response.url()).pathname === '/signin') authResponses.push(response);
       });
@@ -233,7 +233,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
           const errors: unknown[] = [];
           for (const item of contexts.values())
             try {
-              await item.close();
+              await (await item).close();
             } catch (error) {
               errors.push(error);
             }

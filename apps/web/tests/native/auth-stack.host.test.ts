@@ -82,7 +82,10 @@ describe('native Auth and web stack', () => {
     ).toBe(true);
     expect((await alice.response()).status()).toBe(200);
 
-    const revoked = await stack.kernel('/v1/libraryEntries', {}, 'suspended');
+    const suspendedIdentity = await stack.authPersona('suspended');
+    const revoked = await fetch(`${stack.kernelOrigin}/v1/libraryEntries`, {
+      headers: { authorization: suspendedIdentity.authorization },
+    });
     expect(revoked.status).toBe(401);
     expect(revoked.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
     expect(await revoked.text()).toContain('invalid_credentials');
@@ -102,10 +105,17 @@ describe('native Auth and web stack', () => {
     stacks.push(stack);
     const auth = await startAuthStack(stack);
     authStacks.push(auth);
-    const context = await auth.context('alice');
+    const [context, sameContext] = await Promise.all([auth.context('alice'), auth.context('alice')]);
+    expect(context).toBe(sameContext);
+    const alicePage = await context.newPage();
+    const bobContext = await auth.context('bob');
+    const bobPage = await bobContext.newPage();
     await auth.stop();
     authStacks.splice(authStacks.indexOf(auth), 1);
     expect(context.pages()).toHaveLength(0);
+    expect(bobContext.pages()).toHaveLength(0);
+    expect(alicePage.isClosed()).toBe(true);
+    expect(bobPage.isClosed()).toBe(true);
     let authStatus = 0;
     try {
       authStatus = (await fetch(`${auth.origin}/login`)).status;
