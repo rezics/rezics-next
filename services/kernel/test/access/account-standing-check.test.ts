@@ -131,8 +131,8 @@ const cases: [string, boolean, (fixture: Fixture) => Promise<void>][] = [
     true,
     async ({ grant, f }) => {
       await pool.query(
-        "INSERT INTO access.organization_member(route,organization_id,member_account_id,role,valid,transaction_id) VALUES($1,$2,$3,'member','(,)',$4)",
-        [routeOf(f.organizationId), f.organizationId, f.actorId, f.transactionId],
+        "UPDATE access.organization_member SET role='member' WHERE route=$1 AND organization_id=$2 AND member_account_id=$3",
+        [routeOf(f.organizationId), f.organizationId, f.actorId],
       );
       await grant(f.organizationId, 'member');
     },
@@ -179,11 +179,26 @@ const cases: [string, boolean, (fixture: Fixture) => Promise<void>][] = [
     false,
     async ({ grant, f }) => {
       await grant(f.organizationId, 'owner');
-      await pool.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
-        routeOf(f.actorId),
-        f.actorId,
-        f.principalId,
-      ]);
+      const automatedId = newId(routeOf(f.actorId)!);
+      await pool.query(
+        `INSERT INTO access.account(route,account_id,kind,state,operator_account_id,transaction_id)
+        VALUES($1,$2,'actor','active',$3,$4)`,
+        [routeOf(automatedId), automatedId, f.principalId, f.transactionId],
+      );
+      // Seed retained historical role data; automation must never consume it.
+      await pool.query(
+        `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+        SELECT route,$3,kind,group_id,reservation_id,transaction_id FROM access.membership_inverse
+        WHERE route=$1 AND account_id=$2`,
+        [routeOf(f.actorId), f.actorId, automatedId],
+      );
+      await pool.query(
+        `INSERT INTO access.organization_member(route,organization_id,member_account_id,role,valid,transaction_id)
+        SELECT route,organization_id,$3,role,valid,transaction_id FROM access.organization_member
+        WHERE route=$1 AND organization_id=$2 AND member_account_id=$4`,
+        [routeOf(f.organizationId), f.organizationId, automatedId, f.actorId],
+      );
+      f.actorId = automatedId;
     },
   ],
   [
@@ -309,20 +324,21 @@ test('a page retains separate allowed and denied answers and adapters resolve th
 for (const state of ['suspended', 'fenced', 'deleted', 'pending']) {
   test(`${state} account is denied every target, including a public floor`, async () => {
     const f = await fixture();
-    await f.grant();
-    await pool.query(`UPDATE access.account SET state=$3,authn_fenced=$4 WHERE route=$1 AND account_id=$2`, [
-      routeOf(f.f.actorId),
-      f.f.actorId,
-      state === 'fenced' ? 'active' : state,
-      state === 'fenced',
-    ]);
-    expect(
-      await accountStandingCheck(f.access, { accountId: f.f.actorId, action, target: f.page, context: context() }),
-    ).toEqual(Object.fromEntries(f.ids.map((id) => [id, false])));
+    const accountId = newId(routeOf(f.f.actorId)!);
+    // Seed a completed lifecycle state, with no outstanding membership duties.
+    await pool.query(
+      `INSERT INTO access.account(route,account_id,kind,state,authn_fenced,transaction_id)
+      VALUES($1,$2,'actor',$3,$4,$5)`,
+      [routeOf(accountId), accountId, state === 'fenced' ? 'active' : state, state === 'fenced', f.f.transactionId],
+    );
+    await f.grant(accountId);
+    expect(await accountStandingCheck(f.access, { accountId, action, target: f.page, context: context() })).toEqual(
+      Object.fromEntries(f.ids.map((id) => [id, false])),
+    );
     const target = publicResource(f.f.resource);
-    expect(
-      await accountStandingCheck(f.access, { accountId: f.f.actorId, action, target, context: context() }),
-    ).toEqual({ [target.id]: false });
+    expect(await accountStandingCheck(f.access, { accountId, action, target, context: context() })).toEqual({
+      [target.id]: false,
+    });
   });
 }
 

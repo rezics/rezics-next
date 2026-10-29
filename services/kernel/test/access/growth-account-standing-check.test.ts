@@ -1,21 +1,33 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accountStandingCheck } from '../../src/access/index.ts';
 import { newId } from '../../src/route/route.ts';
 import { admittedAccess } from '../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { resetGrowthTables } from './growth-reset.ts';
 import { actorFixture } from './actor-side-fixture.ts';
 
-const databases: GrowthDatabase[] = [];
-afterAll(async () => {
-  for (const database of databases) await database.close();
-});
+let db: GrowthDatabase;
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+  db.pool.options.max = 1;
+  await db.admin.query('CREATE TABLE public.standing_growth_resource(route integer,id uuid,PRIMARY KEY(route,id))');
+}, 30000);
+afterAll(async () => db?.close());
 
 for (const size of [1, 4]) {
   for (const outcome of ['allowed', 'denied', 'inactive'] as const) {
     test(`standing ${size === 1 ? 'resource' : 'route page'} ${outcome}: constant statements and logarithmic blocks as grants, accounts and resources grow`, async () => {
-      const db = await openGrowthDatabase();
-      databases.push(db);
-      db.pool.options.max = 1;
+      await resetGrowthTables(db.admin, [
+        'access.account',
+        'access.resource_grant',
+        'access.resource_role_grant',
+        'access.resource_denial',
+        'access.membership_inverse',
+        'access.organization_member',
+        'access.principal_assignment',
+        'access.lifecycle_coordination',
+        'public.standing_growth_resource',
+      ]);
       const f = await actorFixture(db.pool, db.admin);
       const access = admittedAccess({ actions: f.config.actions, resourceRoles: f.config.resourceRoles! });
       const ids = [f.resource.id, ...Array.from({ length: size - 1 }, () => newId(f.resource.route))];
@@ -26,7 +38,6 @@ for (const size of [1, 4]) {
           0x1234,
           f.actorId,
         ]);
-      await db.admin.query('CREATE TABLE public.standing_growth_resource(route integer,id uuid,PRIMARY KEY(route,id))');
       await db.admin.query('INSERT INTO public.standing_growth_resource SELECT $1,id FROM unnest($2::uuid[]) id', [
         f.resource.route,
         ids,
