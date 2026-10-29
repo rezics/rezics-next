@@ -78,8 +78,8 @@ export function VisibilityField({
       <RadioGroup value={value} onValueChange={(next) => onChange(next as CollectionVisibility)} className="gap-2">
         {visibilities.map((option) => (
           <Field key={option} orientation="horizontal" className="items-start">
-            <FieldLabel className="items-start">
-              <RadioGroupItem value={option} />
+            <RadioGroupItem id={`collection-visibility-${option}`} value={option} />
+            <FieldLabel htmlFor={`collection-visibility-${option}`} className="items-start">
               <span>
                 <strong className="font-medium">{visibilityLabel(option)}</strong> {visibilityNote(option)}
               </span>
@@ -551,10 +551,14 @@ function MemberRowControls({
         </button>
       </div>
       <Field orientation="horizontal" className="items-center">
-        <FieldLabel>
-          <Checkbox checked={confirmed} disabled={busy} onCheckedChange={(checked) => setConfirmed(checked === true)} />
-          {m.library_member_remove_confirm()}
-        </FieldLabel>
+        <Checkbox
+          id={`remove-member-${member.id}-controls`}
+          aria-label={m.library_member_remove_confirm()}
+          checked={confirmed}
+          disabled={busy}
+          onCheckedChange={(checked) => setConfirmed(checked === true)}
+        />
+        <FieldLabel htmlFor={`remove-member-${member.id}-controls`}>{m.library_member_remove_confirm()}</FieldLabel>
       </Field>
       <button
         className={buttonClass}
@@ -690,14 +694,14 @@ function MemberRow({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Field orientation="horizontal" className="items-center">
-              <FieldLabel>
-                <Checkbox
-                  checked={confirmed}
-                  disabled={busy}
-                  onCheckedChange={(checked) => setConfirmed(checked === true)}
-                />
-                {m.library_member_remove_confirm()}
-              </FieldLabel>
+              <Checkbox
+                id={`remove-member-${member.id}-row`}
+                aria-label={m.library_member_remove_confirm()}
+                checked={confirmed}
+                disabled={busy}
+                onCheckedChange={(checked) => setConfirmed(checked === true)}
+              />
+              <FieldLabel htmlFor={`remove-member-${member.id}-row`}>{m.library_member_remove_confirm()}</FieldLabel>
             </Field>
             <button
               className={buttonClass}

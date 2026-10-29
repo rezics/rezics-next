@@ -153,8 +153,12 @@ export function ReviewFields({
           orientation="horizontal"
           className="min-h-10 items-start gap-3 rounded-lg border border-border/70 bg-background p-3 text-sm"
         >
-          <FieldLabel className="items-start">
-            <Checkbox checked={citingVote} onCheckedChange={(checked) => toggleCitation(checked === true)} />
+          <FieldLabel htmlFor="review-cite-vote" className="items-start">
+            <Checkbox
+              id="review-cite-vote"
+              checked={citingVote}
+              onCheckedChange={(checked) => toggleCitation(checked === true)}
+            />
             <span>
               {m.thread_review_cite_vote({
                 score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(vote.units / 2),
