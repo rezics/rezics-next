@@ -38,6 +38,8 @@ Their adjacent tests exercise placement, admission, accounting and cleanup.
 | Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate.                                                                                                                                                                                                      |
 | Landing gate | Root `bun run check` splits all workspace checks into two duration-balanced remote groups when `KERNEL_CHECK_REMOTE` names a readable file. The lighter group also runs the control-plane gate.                                                                                                                                                                                                                   |
 
+Remote worker checks preserve any existing local `GROWTH_PROFILE` lines and append the returned profile when that variable names a file inside the worktree.
+
 ### Test lanes
 
 Kernel, Auth and web test lanes run each test file in a separate `bun test` process and print its output when it

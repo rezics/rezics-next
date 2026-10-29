@@ -11,6 +11,7 @@ import {
   readdirSync,
   readFileSync,
   readSync,
+  realpathSync,
   statSync,
   renameSync,
   rmSync,
@@ -239,10 +240,57 @@ export async function runWorkerCheck(
   };
   if (remoteEligible) {
     beginLedger('remote', 0);
+    const growthProfile = env.GROWTH_PROFILE;
+    let growthProfilePath: string | undefined;
+    let growthProfileRelative: string | undefined;
+    let previousGrowthProfile = '';
+    if (growthProfile !== undefined && growthProfile !== '') {
+      growthProfilePath = resolve(root, growthProfile);
+      const relativeProfile = relative(root, growthProfilePath);
+      let resolvedProfile = growthProfilePath;
+      try {
+        resolvedProfile = realpathSync(growthProfilePath);
+      } catch {
+        // A profile may be created by the check; the lexical path is still validated below.
+      }
+      const resolvedRoot = realpathSync(root);
+      const resolvedRelative = relative(resolvedRoot, resolvedProfile);
+      if (
+        relativeProfile === '..' ||
+        relativeProfile.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+        relativeProfile.startsWith('/') ||
+        resolvedRelative === '..' ||
+        resolvedRelative.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+        resolvedRelative.startsWith('/')
+      ) {
+        throw new Error(`GROWTH_PROFILE must be inside the worktree: ${growthProfilePath}`);
+      }
+      growthProfileRelative = relativeProfile.split('\\').join('/');
+      if (existsSync(growthProfilePath)) previousGrowthProfile = readFileSync(growthProfilePath, 'utf8');
+    }
     let remoteOutput = '';
+    const remoteCommand =
+      growthProfileRelative === undefined
+        ? [...argv]
+        : [
+            'sh',
+            '-c',
+            'export GROWTH_PROFILE="$PWD/$1"; shift; exec "$@"',
+            'sh',
+            growthProfileRelative,
+            ...argv,
+          ];
     const remote = spawn(
       resolveRepositoryBun(['bun'], root)[0]!,
-      [join(root, 'scripts/remote-check.ts'), '--memory-gib', String(weight), root, '--', ...argv],
+      [
+        join(root, 'scripts/remote-check.ts'),
+        '--memory-gib',
+        String(weight),
+        ...(growthProfileRelative === undefined ? [] : ['--returns', growthProfileRelative]),
+        root,
+        '--',
+        ...remoteCommand,
+      ],
       {
         cwd: root,
         env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
@@ -281,6 +329,13 @@ export async function runWorkerCheck(
     const transportReason = remoteOutput.includes('remote-check: transport failure marker')
       ? remoteOutput.match(/remote-check: connection to .+ failed during .+ before a result/)?.[0]
       : undefined;
+    if (growthProfilePath !== undefined && previousGrowthProfile !== '' && existsSync(growthProfilePath)) {
+      const returnedProfile = readFileSync(growthProfilePath, 'utf8');
+      if (returnedProfile !== previousGrowthProfile) {
+        const separator = previousGrowthProfile.endsWith('\n') || returnedProfile === '' ? '' : '\n';
+        writeFileSync(growthProfilePath, `${previousGrowthProfile}${separator}${returnedProfile}`);
+      }
+    }
     if (remoteCode !== 75 || !transportReason || remoteSignal !== undefined) {
       const commandPhases: Record<string, number> = {};
       for (const match of remoteOutput.matchAll(/remote-check: command phase ([^\s]+) ([0-9.]+) s/g))

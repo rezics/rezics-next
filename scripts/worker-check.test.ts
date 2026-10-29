@@ -377,19 +377,32 @@ test('an unrelated local pid and a runner recorded on another host are not treat
   }
 });
 
-function workerFixture(): { root: string; memory: string; remoteEvents: string; localMarker: string } {
+function workerFixture(): {
+  root: string;
+  memory: string;
+  remoteEvents: string;
+  remoteArgs: string;
+  localMarker: string;
+} {
   const root = mkdtempSync('/tmp/worker-check-remote-test-');
   dirs.push(root);
   const memory = join(root, 'memory');
   const scripts = join(root, 'scripts');
   mkdirSync(scripts);
   const remoteEvents = join(root, 'remote-events');
+  const remoteArgs = join(root, 'remote-args.json');
   const localMarker = join(root, 'local-marker');
   writeFileSync(
     join(scripts, 'remote-check.ts'),
-    `import { appendFileSync } from 'node:fs';
+    `import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 appendFileSync(process.env.WORKER_REMOTE_EVENTS!, 'remote\\n');
 appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.args', JSON.stringify(process.argv.slice(2)));
+writeFileSync(process.env.WORKER_REMOTE_ARGS!, JSON.stringify(Bun.argv.slice(2)));
+if (process.env.WORKER_REMOTE_PROFILE_OUTPUT) {
+  mkdirSync(dirname(process.env.WORKER_REMOTE_PROFILE_OUTPUT), { recursive: true });
+  writeFileSync(process.env.WORKER_REMOTE_PROFILE_OUTPUT, 'remote growth\\n');
+}
 if (process.env.WORKER_REMOTE_MODE === 'transport') {
   console.error('remote-check: connection to host failed during rsync before a result');
   console.error('remote-check: transport failure marker');
@@ -405,7 +418,7 @@ console.error('remote-check: run used 2.000 CPU seconds over 1.000 s (2.00 cores
 process.exit(0);
 `,
   );
-  return { root, memory, remoteEvents, localMarker };
+  return { root, memory, remoteEvents, remoteArgs, localMarker };
 }
 
 function workerEnv(fixture: ReturnType<typeof workerFixture>, hostsPath?: string): Record<string, string | undefined> {
@@ -414,6 +427,7 @@ function workerEnv(fixture: ReturnType<typeof workerFixture>, hostsPath?: string
   process.env.REZICS_CHECK_MEMORY_GIB = '4';
   process.env.REZICS_CHECK_SCOPE = 'off';
   process.env.WORKER_REMOTE_EVENTS = fixture.remoteEvents;
+  process.env.WORKER_REMOTE_ARGS = fixture.remoteArgs;
   process.env.WORKER_REMOTE_MODE = 'success';
   if (hostsPath === undefined) delete process.env.KERNEL_CHECK_REMOTE;
   else process.env.KERNEL_CHECK_REMOTE = hostsPath;
@@ -464,6 +478,141 @@ test('worker checks at least 2 GiB run remotely and record the remote peak under
       'WORKER_REMOTE_EVENTS',
       'WORKER_REMOTE_MODE',
       'KERNEL_CHECK_REMOTE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+  }
+});
+
+test('growth profile: a worker check sent to a remote host with GROWTH_PROFILE naming a file inside the worktree runs the remote command with GROWTH_PROFILE set to the same worktree-relative path and passes that path to remote-check as a returned output', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const profile = 'services/kernel/.temp/growth/profile.jsonl';
+  try {
+    workerEnv(fixture, join(fixture.root, 'hosts.json'));
+    writeFileSync(join(fixture.root, 'hosts.json'), JSON.stringify({ hosts: [] }));
+    process.env.GROWTH_PROFILE = profile;
+    process.env.WORKER_REMOTE_PROFILE_OUTPUT = join(fixture.root, profile);
+    const command = localCommand(fixture.localMarker);
+    const commandClass = checkClass(command, fixture.root);
+    for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
+    expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
+    const remoteArgs = JSON.parse(readFileSync(fixture.remoteArgs, 'utf8')) as string[];
+    expect(remoteArgs.slice(0, 3)).toEqual(['--returns', profile, fixture.root]);
+    expect(remoteArgs).toContain(profile);
+    expect(remoteArgs).toContain('export GROWTH_PROFILE="$PWD/$1"; shift; exec "$@"');
+  } finally {
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_ARGS',
+      'WORKER_REMOTE_PROFILE_OUTPUT',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+      'GROWTH_PROFILE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+  }
+});
+
+test('growth profile: lines already in the local profile file are kept when the returned file arrives', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const profile = 'growth-profile.jsonl';
+  try {
+    workerEnv(fixture, join(fixture.root, 'hosts.json'));
+    writeFileSync(join(fixture.root, 'hosts.json'), JSON.stringify({ hosts: [] }));
+    process.env.GROWTH_PROFILE = profile;
+    process.env.WORKER_REMOTE_PROFILE_OUTPUT = join(fixture.root, profile);
+    writeFileSync(join(fixture.root, profile), 'existing growth\n');
+    const command = localCommand(fixture.localMarker);
+    const commandClass = checkClass(command, fixture.root);
+    for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
+    expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
+    expect(readFileSync(join(fixture.root, profile), 'utf8')).toBe('existing growth\nremote growth\n');
+  } finally {
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_ARGS',
+      'WORKER_REMOTE_PROFILE_OUTPUT',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+      'GROWTH_PROFILE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+  }
+});
+
+test('growth profile: a GROWTH_PROFILE outside the worktree is a usage error naming the path', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const outside = join(fixture.root, '..', 'outside-growth-profile.jsonl');
+  try {
+    workerEnv(fixture, join(fixture.root, 'hosts.json'));
+    writeFileSync(join(fixture.root, 'hosts.json'), JSON.stringify({ hosts: [] }));
+    process.env.GROWTH_PROFILE = outside;
+    const command = localCommand(fixture.localMarker);
+    const commandClass = checkClass(command, fixture.root);
+    for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
+    await expect(runWorkerCheck(command, fixture.root, false)).rejects.toThrow(`GROWTH_PROFILE must be inside the worktree: ${outside}`);
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+  } finally {
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_ARGS',
+      'WORKER_REMOTE_PROFILE_OUTPUT',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+      'GROWTH_PROFILE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+  }
+});
+
+test('growth profile: a worker check without GROWTH_PROFILE passes no extra environment or returned output', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  try {
+    workerEnv(fixture, join(fixture.root, 'hosts.json'));
+    writeFileSync(join(fixture.root, 'hosts.json'), JSON.stringify({ hosts: [] }));
+    delete process.env.GROWTH_PROFILE;
+    const command = localCommand(fixture.localMarker);
+    const commandClass = checkClass(command, fixture.root);
+    for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
+    expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
+    const remoteArgs = JSON.parse(readFileSync(fixture.remoteArgs, 'utf8')) as string[];
+    expect(remoteArgs).toEqual([fixture.root, '--', ...command]);
+    expect(remoteArgs).not.toContain('--returns');
+  } finally {
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_ARGS',
+      'WORKER_REMOTE_PROFILE_OUTPUT',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+      'GROWTH_PROFILE',
     ]) {
       if (old[key] === undefined) delete process.env[key];
       else process.env[key] = old[key]!;
