@@ -17,13 +17,7 @@ import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readSubject } from '../semantic/subject.ts';
-import {
-  RealmConflictError,
-  RealmInputError,
-  type Realm,
-  type RealmDependencies,
-  type RealmContext,
-} from './realm.ts';
+import { RealmConflictError, RealmInputError, type Realm, type RealmDependencies, type RealmContext } from './realm.ts';
 import read from './board-scheme-read.sql';
 import append from './board-scheme-revision.sql';
 import moveHead from './board-scheme-head.sql';
