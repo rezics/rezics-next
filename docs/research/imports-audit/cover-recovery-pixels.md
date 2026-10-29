@@ -2,8 +2,7 @@
 
 The new case in `services/kernel/test/imports/cover-recovery-pixels.test.ts` combines actual imported red cover
 selection, interrupted green replacement, same-SQLite recovery, and subsequent blue replacement. Native execution
-and the exact frozen test digest/revision are recorded below after the focused run; this file's nonempty check
-is delivery evidence only.
+and the exact frozen test digest/revision are recorded below; this file's nonempty check is delivery evidence only.
 
 The factory registers defaults before returning. The case overrides those exact three allowed URLs through
 `runtime.mediaBoundary.source(url, undefined, bytes)` before any import. The inputs are small Sharp-encoded
@@ -41,4 +40,39 @@ Collections/Everything/state, Zone, TypeList or web-rendering evidence. No files
 
 ## Execution
 
-Pending focused native execution and root typecheck. Assertions will remain unchanged after focused execution.
+Frozen title: `actual interrupted cover replacement recovers exact acknowledged media and serves distinct recovered and subsequent replacement pixels`.
+Test revision: `cc227ce896776a230ba993707a9c422718ee64fb`.
+Test SHA-256: `751500e9c56f1b840f5f149d56b511537638867388976bcb245f55bedd72d171`.
+Assertions have not changed after native execution.
+
+Focused command, through `bun scripts/worker-check.ts --`:
+
+```sh
+bun run --cwd services/kernel check test/imports/cover-recovery-pixels.test.ts
+```
+
+Check `45811b5f-4b8e-45e9-9192-66df37c4c652` exited **1**: **0 pass, 1 fail, 6 expect() calls**,
+one test in one file, no skips/todos and no load reruns. Bun was `1.4.4-canary.1 (a0cc096ce)`.
+First actual failure at line 154: `expect((await f.run(0)).status).toBe('committed')`, expected
+`"committed"`, received `"bulk-failed"`. Scenario duration 60,727.51 ms; Bun duration 205.21 s.
+No interrupted command/result/receipt was reached, so none is claimed or fabricated. This execution does **not**
+prove the combined journey passes. The failure precedes editor selection, red disclosure and recovery; the
+runner log does not expose a transport cause, so host load alone is not treated as proof of its cause.
+The kernel compiler/format gates passed before scenario execution (669 Reylo analyses).
+Log: `.temp/goal/checks/worker-check-2026-10-29T11-45-43.997Z-96101402.log`.
+
+Earlier preparation: the initial check `0e60487c-d1bf-4df7-bc1c-2df1f227c33d` stopped producing output for
+ten minutes; its one automatic rerun exited 1 at the new file's format gate, with zero scenarios executed.
+Formatting was corrected and committed without changing assertions before the execution above. Its logs are
+`.temp/goal/checks/worker-check-2026-10-29T11-14-50.417Z-b7045f11.log` and
+`.temp/goal/checks/worker-check-2026-10-29T11-40-35.574Z-df5ff4aa.log`.
+
+Root typecheck (`bun scripts/typecheck.ts`, through worker-check) initially exited 1 during tool preparation:
+`LixError: Lix worker did not acknowledge request receipt within 30000ms`, followed by compiler database
+`CONNECT_TIMEOUT` errors. First retry exited 1 at web route generation with `LixError: Lix worker is closed`;
+its kernel and Auth compiler checks passed. The second and final infrastructure retry is pending.
+Logs: `.temp/goal/checks/worker-check-2026-10-29T11-14-59.264Z-69f54f98.log` and
+`.temp/goal/checks/worker-check-2026-10-29T11-35-18.673Z-c5760053.log`.
+
+The nonempty artifact command is delivery only; it must not be interpreted as native acceptance passing.
+No old recovery cases, whole media suite, full kernel/web check or root gate were run.
