@@ -1,8 +1,8 @@
 # Own-reference refresh verification
 
 Implementation revision: `0b648d744b3ed6f34bf435866606c102d1b0707d`. Current frozen installation:
-`e196a3759be4363182088f66515c9ce96e44800c`. Its SHA-256 is
-`720b74e64eb29d8a1a10403f16c9e9a329d01aab93255fe5c69bc46f97d1db51`, exactly matching the
+`fb7100272a22927635dae0b035857ac470b1be20`. Its SHA-256 is
+`f46b81a106c65ed6a37732845c89c94c239affa69105ba47d67fc2d94584dc89`, exactly matching the
 read-only controller registry, worker bytes and approved raw file. No worker formatting or amendment was applied.
 The controller committed the observation correction; this continuation preserves all frozen bytes.
 
@@ -22,7 +22,22 @@ The stored dependency signature is importer coordination metadata; it does not a
 
 ## Current verification
 
-The latest authorized correction adds only the erased generic argument
+The latest authorized amendment factors the existing proposal/native property conditional into
+`const property` immediately before the same generic `toContainEqual` call. The complete one-hunk
+diff adds that binding and replaces the inline conditional with its name; the compared objects,
+assertion order and business assertions are unchanged. The approved raw, installed canonical,
+worker and read-only controller registry hashes all match the SHA-256 above. No worker formatting
+or frozen edit was necessary.
+
+The mandated root typecheck will run once first. Focused native acceptance will run once only if
+that compiler exits zero. The earlier isolated compiler probe is not evidence for this full file.
+Runtime, storage and local regression bytes are identical to `c79e538dfd`, so the qualified local
+bootstrap/reopen **2 pass, 16 assertions** and post-retention adjacent **11 pass, 158 assertions**
+receipts below are reused. No production, shared-type, infrastructure or dependency change is made.
+
+## Previous erased matcher generic verification
+
+The preceding authorized correction added only the erased generic argument
 `<Statement['qualifiers'] | NonNullable<BatchStatement['qualifiers']>>` to the existing
 `toContainEqual` call. The one-hunk diff from `771aa0b7203c2285d03cca3d73548264db3b9450`
 changes no received value, expected object, matcher method or executable assertion. Native read datatype,

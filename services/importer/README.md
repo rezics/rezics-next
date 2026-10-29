@@ -112,17 +112,16 @@ default handoff and unchanged dependency refresh. Original implementation locato
 preserves proposal property objects and requires the native read datatype only on native
 responses; a busy partition relay consumes one of the same 16 calls and is never readiness.
 Its installed SHA-256 is
-`720b74e64eb29d8a1a10403f16c9e9a329d01aab93255fe5c69bc46f97d1db51`, matching the approved raw
-file and read-only frozen registry. The native `Statement` annotations and the latest erased matcher generic
-preserve every executable assertion. The root typecheck ran once first on
-`4c13e0fec1ab0a942f82eac938c2ac0803fb6602` and exited 1: the frozen helper at
-`known-reference-refresh.test.ts(73,53)` now reports TS2353, rejecting the native-only `data_type`
-property. All other 12 workspaces completed without errors. The required stop-on-compiler-error rule
-prevented starting native acceptance, so this continuation establishes no native transition. The
-frozen bytes and production schemas remain unchanged. All three adjacent recovery files passed
-(11 cases, 158 assertions), with the extra recovery file run separately after a filename correction.
-The local reopen regression passed (2 cases, 16 assertions); runtime, storage and local regression
-bytes remain unchanged, so those qualified results are reused.
+`f46b81a106c65ed6a37732845c89c94c239affa69105ba47d67fc2d94584dc89`, matching the approved raw
+file, canonical worker bytes and read-only frozen registry. The latest authorized amendment
+factors the existing property conditional into a local binding before the same generic matcher;
+the compared objects and business assertions are unchanged. The preceding root typecheck failed
+with frozen-helper TS2353 before native execution. Current-tree root typecheck is required first;
+focused native acceptance runs only after compiler success. This installation alone proves neither.
+All three adjacent recovery files passed (11 cases, 158 assertions), with the extra recovery file
+run separately after a filename correction. The local reopen regression passed (2 cases,
+16 assertions); runtime, storage and local regression bytes remain unchanged, so those qualified
+results are reused.
 See the [verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
 for revisions, receipts, reached transitions and evidence limits.
 
