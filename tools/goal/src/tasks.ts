@@ -369,8 +369,7 @@ export class WorkerTasks {
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
     }
-    this.store.write(ref, () => {
-      const current = this.store.task(taskId);
+    this.store.recordExplicitRetry(ref, (current) => {
       if (!['ready', 'running', 'landing', 'stopped'].includes(current.state)) throw new Error(`cannot retry ${current.state} task`);
       if (reshaped) {
         current.brief = reshaped.brief;
@@ -383,8 +382,7 @@ export class WorkerTasks {
         if (!this.dependenciesMet({ brief: current.brief })) current.state = 'held';
         else current.state = 'ready';
       } else if (current.state === 'stopped') current.state = 'ready';
-      this.store.saveRetryIntent(ref, options);
-    });
+    }, options);
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
     await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)), taskId);

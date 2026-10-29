@@ -299,6 +299,19 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
+  recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
+    this.db.transaction(() => {
+      this.assertCurrent(ref);
+      const task = this.task(ref.taskId);
+      update(task);
+      this.saveTask(task);
+      const existing = this.retryIntent(ref);
+      if (existing?.status === 'pending') throw new Error('a retry is already pending');
+      const intent: RetryIntent = { ...ref, options, status: 'pending' };
+      this.db.query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
+        .run(ref.taskId, ref.attempt, JSON.stringify(intent));
+    }).immediate();
+  }
   retryIntents(): RetryIntent[] {
     return this.db
       .query('SELECT body FROM worker_retry_intents ORDER BY task_id, attempt')
