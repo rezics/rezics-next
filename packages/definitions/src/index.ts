@@ -2,7 +2,7 @@
 import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { checkSync } from 'recheck/lib/browser.js';
+import { safePattern } from './pattern-safety.ts';
 import { Compile } from 'typebox/schema';
 import schema from '../schema/release.json';
 import {
@@ -330,15 +330,7 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
         if (key === 'pattern' && typeof child === 'string') {
           let safe = safety.get(child);
           if (safe === undefined) {
-            safe = false;
-            if (child.length <= 256) {
-              try {
-                new RegExp(child, 'u');
-                safe = checkSync(child, 'u', { timeout: 3000 }).status === 'safe';
-              } catch {
-                /* Checker failures are unsafe, too. */
-              }
-            }
+            safe = safePattern(child);
             safety.set(child, safe);
           }
           if (!safe) add(childPointer, 'unsafe_pattern');

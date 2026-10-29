@@ -2,7 +2,7 @@ import { LinkML, type SchemaValidationReport } from '@neverblink/linkml';
 import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { posix } from 'node:path';
-import { checkSync } from 'recheck/lib/browser.js';
+import { safePattern } from './pattern-safety.ts';
 import releaseSchema from '../schema/release.json';
 import { compileLibraryProfiles } from './compile-library-profiles.ts';
 import {
@@ -182,15 +182,7 @@ export async function compileCatalogue(input: {
     if (slot.pattern !== undefined) {
       let safe = safety.get(slot.pattern);
       if (safe === undefined) {
-        safe = false;
-        if (typeof slot.pattern === 'string' && slot.pattern.length <= 256) {
-          try {
-            new RegExp(slot.pattern, 'u');
-            safe = checkSync(slot.pattern, 'u', { timeout: 3000 }).status === 'safe';
-          } catch {
-            /* Inconclusive patterns are refused. */
-          }
-        }
+        safe = safePattern(slot.pattern);
         safety.set(slot.pattern, safe);
       }
       if (!safe)

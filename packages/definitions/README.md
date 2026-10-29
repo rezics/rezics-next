@@ -9,10 +9,24 @@ otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
 `limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
 Validation checks references, CURIE expansion, sorted unique lists, type bases,
 facets, relation metadata and cover ratios, datatype-specific members, fixed value
-schemas, context defaults, saved filters, and regular-expression safety. A facet is
-an item, a time, a quantity, or a code: a `string` whose release definition has a
-`pattern`. Pattern checks use recheck's in-process synchronous entry point, with a
-three-second timeout per distinct pattern; inconclusive results fail validation.
+schemas, context defaults, saved filters, and regular-expression safety. A facet is an item, a time, a quantity, or
+a code: a `string` whose release definition has a `pattern`. Pattern checks use
+one shared structural admission policy and recheck 4.5.0's in-process synchronous
+entry point in an isolated VM context. The pinned browser checker's `performance.now`
+is a private counter, with a budget of 8,192 native cancellation checkpoints
+per expression; it never reads or patches the host clock. This also bounds DFA
+construction, which has no native size cap. Safety verdicts have no wall-clock deadline. Admission permits at most
+256 source characters, 16 nested groups, repetition endpoints of 64, a sum of 128
+repetition endpoints, and 128 expanded structural units (including group and
+quantifier overhead). Nested repetitions multiply their costs before analysis.
+Backreferences, named groups, Unicode properties, lookbehind, and lookahead of
+more than one character atom are refused. All shipped value schemas fit this profile.
+The checker caps graph construction at 1,024 transitions and accepts only an
+`automaton` safe verdict. Its `auto` selection is used because the pinned version
+bypasses graph limits in explicit `automaton` mode; a synchronous diagnostic guard
+refuses limit failures and fuzz fallback before seeding or matching. Recall attack
+execution is disabled. Invalid, unsupported, over-budget, and inconclusive patterns
+fail validation. Proof results are cached only within each release/compiler call.
 
 Releases allow at most 1,024 types, 4,096 properties, 64 properties and 16 facets per
 type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per
