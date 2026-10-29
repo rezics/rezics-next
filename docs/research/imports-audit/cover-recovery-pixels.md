@@ -70,7 +70,12 @@ Formatting was corrected and committed without changing assertions before the ex
 Root typecheck (`bun scripts/typecheck.ts`, through worker-check) initially exited 1 during tool preparation:
 `LixError: Lix worker did not acknowledge request receipt within 30000ms`, followed by compiler database
 `CONNECT_TIMEOUT` errors. First retry exited 1 at web route generation with `LixError: Lix worker is closed`;
-its kernel and Auth compiler checks passed. The second and final infrastructure retry is pending.
+its kernel and Auth compiler checks passed. The second and final infrastructure retry also exited **1**:
+`LixError: Lix open did not settle within 30000ms`, then compiler database `CONNECT_TIMEOUT` at
+`127.0.0.1:45604/rezics`. Remote cleanup also reported `could not remove` its isolated run directory.
+Check `ca9e4add-00f8-439d-b260-98fa6f65dcc0` is finished, log
+`.temp/goal/checks/worker-check-2026-10-29T11-55-25.618Z-8cf5982e.log`. Both allowed manual
+infrastructure retries are exhausted; no root typecheck success is claimed. This required tool boundary is blocked.
 Logs: `.temp/goal/checks/worker-check-2026-10-29T11-14-59.264Z-69f54f98.log` and
 `.temp/goal/checks/worker-check-2026-10-29T11-35-18.673Z-c5760053.log`.
 
