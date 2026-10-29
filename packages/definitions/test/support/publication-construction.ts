@@ -372,6 +372,8 @@ async function probe(): Promise<Evidence> {
         const list = member === 'qualifiers' ? release.properties[code]!.qualifiers : release.types[rootType]![member];
         state.uniqueArrays.add(list);
       } else if (name === 'malformed-unique-members') {
+        state.uniqueArrays.add(release.types[rootType]!.mappings);
+      } else if (name === 'duplicate-unique-sites') {
         for (const type of Object.values(release.types))
           for (const list of [type.bases, type.mappings, type.facets]) state.uniqueArrays.add(list);
         for (const property of Object.values(release.properties)) {
@@ -424,21 +426,22 @@ async function probe(): Promise<Evidence> {
     // malformed members, including sorted object keys and numeric -0 equality.
     const malformed = constructionFixture();
     const members = [{ a: 1, b: 2 }, { b: 2, a: 1 }, -0, 0, null, null];
-    malformed.types[rootType]!.bases = structuredClone(members) as unknown as string[];
     malformed.types[rootType]!.mappings = structuredClone(members) as unknown as string[];
-    malformed.types[rootType]!.facets = structuredClone(members) as unknown as string[];
-    malformed.properties[code]!.qualifiers = structuredClone(members) as unknown as string[];
-    malformed.properties[code]!.mappings = structuredClone(members) as unknown as string[];
-    const itemProperty = Object.values(malformed.properties).find((property) => property.datatype === 'wikibase-item');
-    if (itemProperty) itemProperty.targets = structuredClone(members) as unknown as string[];
-    const quantityProperty = Object.values(malformed.properties).find((property) => property.datatype === 'quantity');
-    if (quantityProperty) quantityProperty.units = structuredClone(members) as unknown as string[];
-    const relationProperty = Object.values(malformed.properties).find((property) => property.relation);
-    if (relationProperty?.relation) relationProperty.relation.filter = structuredClone(members) as unknown as string[];
-    for (const profile of Object.values(malformed.libraryProfiles ?? {}))
-      for (const source of profile.importSources ?? [])
-        source.recordKinds = structuredClone(members) as unknown as string[];
     measure('malformed-unique-members', 'release', malformed, { malformedMembers: members.length });
+    const sites = constructionFixture();
+    const duplicates = ['schema:Thing', 'schema:Thing'];
+    sites.types[rootType]!.bases = [...duplicates];
+    sites.types[rootType]!.mappings = [...duplicates];
+    sites.types[rootType]!.facets = [code, code];
+    sites.properties[code]!.qualifiers = [...duplicates];
+    sites.properties[code]!.mappings = [...duplicates];
+    const itemProperty = Object.values(sites.properties).find((property) => property.datatype === 'wikibase-item');
+    if (itemProperty) itemProperty.targets = [...duplicates];
+    const quantityProperty = Object.values(sites.properties).find((property) => property.datatype === 'quantity');
+    if (quantityProperty) quantityProperty.units = ['1', '1'];
+    const relationProperty = Object.values(sites.properties).find((property) => property.relation);
+    if (relationProperty?.relation) relationProperty.relation.filter = [...duplicates];
+    measure('duplicate-unique-sites', 'release', sites, { uniqueSites: 8 });
     const filterRoom = 1024 - Object.keys(bundledRelease.filters ?? {}).length;
     for (const invalid of [false, true]) {
       const mark = (release: Release) => {

@@ -530,42 +530,25 @@ export function validateRelease(value: unknown): ReleaseViolation[] {
       for (const [id, profile] of Object.entries(value.libraryProfiles))
         libraryProgressSemantics(profile, (pointer) => add(at('/libraryProfiles', id) + pointer));
     const schemaValid = validator.Check(value);
-    const schemaPointers = new Set<string>();
     if (!schemaValid) {
       const [, errors] = validator.Errors(value);
       for (const error of errors) {
         if (error.keyword === 'required') {
           for (const member of error.params.requiredProperties) {
             const child = at(error.instancePath, member);
-            schemaPointers.add(child);
             add(child);
           }
         } else if (error.keyword === 'additionalProperties') {
           for (const member of error.params.additionalProperties) {
             const child = at(error.instancePath, member);
-            schemaPointers.add(child);
             add(child);
           }
         } else {
-          schemaPointers.add(error.instancePath);
           add(error.instancePath);
         }
       }
     }
-    const invalidSchemaAncestors = new Set<string>();
-    for (const child of schemaPointers) {
-      let separator = child.lastIndexOf('/');
-      while (separator >= 0) {
-        invalidSchemaAncestors.add(child.slice(0, separator));
-        separator = child.lastIndexOf('/', separator - 1);
-      }
-    }
-    constructionUniqueness(value, '', (pointer) => {
-      // TypeBox's check sequence short-circuits uniqueItems when an array's
-      // items fail their schema. Keep those child diagnostics without adding
-      // a uniqueness error the pinned validator would not emit.
-      if (!invalidSchemaAncestors.has(pointer)) add(pointer);
-    });
+    constructionUniqueness(value, '', add);
     if (violations.size || !schemaValid) {
       if (!violations.size) add('');
       return result();

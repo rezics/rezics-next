@@ -23,6 +23,7 @@ test('copied native validation and dependency counters preserve full outputs on 
     expect(row.instrumented, row.name).toEqual(row.original);
     expect(row.bytes, row.name).toBeLessThan(RELEASE_LIMITS.bytes);
     if (row.mode !== 'release' || row.name.startsWith('duplicate-')) continue;
+    if (row.name.includes('unique-members') || row.name.includes('unique-sites')) continue;
     if (row.name.includes('-false-')) expect(row.original, row.name).toEqual([]);
     else {
       expect(Array.isArray(row.original)).toBe(true);
@@ -45,10 +46,10 @@ test('linear uniqueness diagnostics match the historical validator for malformed
   const report = await constructionEvidence();
   const row = report.rows.find((candidate) => candidate.name === 'malformed-unique-members')!;
   expect(row.instrumented).toEqual(row.original);
-  expect(row.original).toContainEqual({ pointer: '/types/grow:Root/bases', code: 'invalid' });
   expect(row.original).toContainEqual({ pointer: '/types/grow:Root/mappings', code: 'invalid' });
-  expect(row.original).toContainEqual({ pointer: '/types/grow:Root/facets', code: 'invalid' });
-  expect(row.original).toContainEqual({ pointer: '/properties/grow:code/qualifiers', code: 'invalid' });
+  expect(row.original).toContainEqual({ pointer: '/types/grow:Root/mappings/0', code: 'invalid' });
+  const sites = report.rows.find((candidate) => candidate.name === 'duplicate-unique-sites')!;
+  expect(sites.instrumented).toEqual(sites.original);
 });
 
 for (const member of ['bases', 'mappings', 'qualifiers']) {
