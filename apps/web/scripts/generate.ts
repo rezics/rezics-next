@@ -1,4 +1,6 @@
-import options from '../project.inlang/paraglide.config';
+import { spawn } from 'node:child_process';
+import { text } from 'node:stream/consumers';
+import options from '../project.inlang/paraglide.config.ts';
 
 const compilerModule = process.env.REZICS_PARAGLIDE_COMPILER_MODULE ?? '@inlang/paraglide-js';
 const { compile } = await import(compilerModule);
@@ -19,15 +21,16 @@ if (process.env[workerEnvironment] === '1') {
 } else {
   const maximumAttempts = 3;
   for (let attempt = 1; attempt <= maximumAttempts; attempt++) {
-    const child = Bun.spawn([process.execPath, ...process.execArgv, import.meta.filename], {
+    const child = spawn(process.execPath, [...process.execArgv, import.meta.filename], {
       cwd: process.cwd(),
       env: { ...process.env, [workerEnvironment]: '1' },
-      stdout: 'pipe',
-      stderr: 'pipe',
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const stdoutPromise = new Response(child.stdout).text();
-    const stderrPromise = new Response(child.stderr).text();
-    const [exitCode, stdout, stderr] = await Promise.all([child.exited, stdoutPromise, stderrPromise]);
+    const exited = new Promise<number>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code) => resolve(code ?? 1));
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([exited, text(child.stdout), text(child.stderr)]);
     const markerIndex = stderr.lastIndexOf(errorMarker);
     const workerError =
       markerIndex < 0

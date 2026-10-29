@@ -1,13 +1,12 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const app = join(import.meta.dir, '..');
 const generator = join(app, 'scripts/generate.ts');
 
-async function runGeneration(failures: number, message: string, code?: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'web-generate-'));
+async function runGeneration(failures: number, message: string, code?: string, runtime: 'bun' | 'node' = 'bun') {
+  const directory = mkdtempSync(join(app, '../../.temp/web-generate-'));
   const attempts = join(directory, 'attempts');
   const output = join(directory, 'output');
   const fakeCompiler = join(directory, 'compiler.ts');
@@ -22,7 +21,7 @@ async function runGeneration(failures: number, message: string, code?: string) {
       `}\n`,
   );
 
-  const child = Bun.spawn(['bun', generator], {
+  const child = Bun.spawn([runtime, generator], {
     cwd: app,
     env: { ...process.env, REZICS_PARAGLIDE_COMPILER_MODULE: fakeCompiler },
     stdout: 'pipe',
@@ -41,6 +40,21 @@ async function runGeneration(failures: number, message: string, code?: string) {
     cleanup: () => rmSync(directory, { recursive: true, force: true }),
   };
 }
+
+test('retries Lix failures in new Node processes and succeeds', async () => {
+  const result = await runGeneration(1, 'Lix open did not settle within 30000ms', undefined, 'node');
+  try {
+    expect(result.code).toBe(0);
+    expect(result.attemptsMade).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain(
+      'Retrying Paraglide compilation (attempt 2/3): Lix open did not settle within 30000ms',
+    );
+    expect(result.generated).toBe(true);
+  } finally {
+    result.cleanup();
+  }
+}, 120_000);
 
 test('retries Lix timeouts in new processes and succeeds on a later compilation', async () => {
   const result = await runGeneration(1, 'Lix open did not settle within 30000ms');
