@@ -370,13 +370,7 @@ test('an inbound pending-member wait that stays behind cannot return an earlier 
   const [survivor, merged] = [first.id, second.id].sort() as [string, string];
   const owner = await actor('owner');
   const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
-  const check = await accessCheck(
-    access,
-    owner,
-    'subject:merge',
-    { route: 0, id: GLOBAL_CONTEXT },
-    { pool, deadline },
-  );
+  const check = await accessCheck(access, owner, 'subject:merge', { route: 0, id: GLOBAL_CONTEXT }, { pool, deadline });
   await mergeSubjects(pool, {
     subjects: [first.id, second.id],
     survivor,
@@ -419,9 +413,7 @@ test('an inbound pending-member wait that stays behind cannot return an earlier 
     const waits = observer.records.filter(({ statement }) => statement === readPending.sql);
     expect(waits.length).toBeGreaterThan(1);
     const lastWait = observer.records.findLastIndex(({ statement }) => statement === readPending.sql);
-    expect(
-      observer.records.slice(lastWait + 1).some(({ statement }) => statement === readVisibility.sql),
-    ).toBe(true);
+    expect(observer.records.slice(lastWait + 1).some(({ statement }) => statement === readVisibility.sql)).toBe(true);
   } finally {
     await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
     await observer.close();
