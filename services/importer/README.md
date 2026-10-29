@@ -38,6 +38,15 @@ The same pipeline works for the decompressed VNDB ustar archive. VNDB table path
 
 For the pinned VNDB dump, `c_average` and `c_votecount` replace the VNDB source statistic on each visual novel through `PUT /v1/subjects/{subjectId}/source-statistics/vndb`. The mean is `c_average / 100` on a 1 to 10 scale, as of the dump date, under ODbL-1.0 with attribution `VNDB`. The Bayesian `c_rating` is omitted, and no source statistic creates native votes. Bangumi's `score`, `score_details` and `rank` remain omitted because its licence covers entry information and not ratings.
 
+The native archive binding and real account-key CLI caller are exercised by
+`services/kernel/test/imports/vndb-statistics-outcomes.test.ts` and `vndb-cli-native.test.ts`.
+They use synthetic COPY rows with the pinned headers, retain the native revision and statistic fields,
+and observe public responses and exact native receipt/event anchors. The binding keeps its importer SQLite
+file across close/reopen in the same native server and Auth world. Its reported source baseline uses
+RunStore's maintained complete-generation pointer and present count; it is distinct from an entry revision
+and from a statistic transaction. See the [verification record](../../docs/research/imports-audit/vndb-statistics-native-verification.md)
+for check results and limits. This six-case binding is separate from the fourteen-case table/growth port.
+
 Keep the same SQLite state path when resuming. Prepared writes and receipts are durable, and a retry reuses their original command keys and request bodies. Do not replace or clear the state file after an interrupted or uncertain request. Exit codes are 0 for committed/help, 2 for invalid input, 3 for mass disappearance, 4 for authorization denial, 5 for a busy source, and 130 for interruption; other unresolved import failures exit 1. Diagnostics contain only bounded maintained counters.
 
 A complete source reduction exceeding the default 20% disappearance threshold exits 3 before public effects and
