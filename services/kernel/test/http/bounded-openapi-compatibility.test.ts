@@ -159,13 +159,14 @@ test('the mounted Definitions route enforces its larger wire cap before decoding
   }
 });
 
-
 test('a maximum canonical release in its compact envelope reaches native release validation', async () => {
   const release = {
     format: RELEASE_FORMAT,
     catalogue: { id: 'https://kernel.test/catalogue', version: '1' },
     generator: { name: '', version: '1' },
-    prefixes: {}, types: {}, properties: {},
+    prefixes: {},
+    types: {},
+    properties: {},
   };
   release.generator.name = 'x'.repeat(RELEASE_LIMITS.bytes - Buffer.byteLength(canonicalize(release)!));
   expect(Buffer.byteLength(canonicalize(release)!)).toBe(RELEASE_LIMITS.bytes);
@@ -173,23 +174,45 @@ test('a maximum canonical release in its compact envelope reaches native release
   // An equal-width invalid format produces a release-validation pointer, before any database effect.
   release.format = RELEASE_FORMAT.replace(/1$/, '0');
   const kernel = createKernel({
-    pool, routeKey: new Uint8Array(32),
+    pool,
+    routeKey: new Uint8Array(32),
     access: {
       async authenticate() {
-        return { kind: 'account', accountId: '019a1b2c-3d4e-7000-8000-000000000001',
-          clientId: 'body-limit', requestedBy: null, authnEpoch: 0, scopes: ['definitions:publish'] };
+        return {
+          kind: 'account',
+          accountId: '019a1b2c-3d4e-7000-8000-000000000001',
+          clientId: 'body-limit',
+          requestedBy: null,
+          authnEpoch: 0,
+          scopes: ['definitions:publish'],
+        };
       },
-      async authorize() { throw new Error('release validation must precede command authorization'); },
+      async authorize() {
+        throw new Error('release validation must precede command authorization');
+      },
     },
-    writeRate: { async spend() { return { allowed: true }; } },
+    writeRate: {
+      async spend() {
+        return { allowed: true };
+      },
+    },
   });
-  const response = await kernel.handle(new Request('http://kernel.test/v1/definitions/releases', {
-    method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer probe',
-      'idempotency-key': '"maximum-release"' }, body: JSON.stringify({ release }),
-  }));
+  const response = await kernel.handle(
+    new Request('http://kernel.test/v1/definitions/releases', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer probe',
+        'idempotency-key': '"maximum-release"',
+      },
+      body: JSON.stringify({ release }),
+    }),
+  );
   expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ code: 'invalid_request',
-    errors: [{ pointer: '/release/format', code: 'invalid_format' }] });
+  expect(await response.json()).toMatchObject({
+    code: 'invalid_request',
+    errors: [{ pointer: '/release/format', code: 'invalid_format' }],
+  });
 });
 
 test('native ingress reservations refuse excess requests before reading and release after responses', async () => {
@@ -198,23 +221,45 @@ test('native ingress reservations refuse excess requests before reading and rele
   const app = probe();
   const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
   const pending: Promise<Response>[] = [];
-  const request = (body: ReadableStream<Uint8Array>) => new Request('http://kernel.test/bounded-openapi', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body, duplex: 'half',
-  } as RequestInit);
+  const request = (body: ReadableStream<Uint8Array>) =>
+    new Request('http://kernel.test/bounded-openapi', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
   try {
     for (let index = 0; index < capacity; index++) {
       const reading = Promise.withResolvers<void>();
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) { controllers.push(controller); },
-        pull() { reading.resolve(); return new Promise<void>(() => {}); },
-      }, { highWaterMark: 0 });
+      const body = new ReadableStream<Uint8Array>(
+        {
+          start(controller) {
+            controllers.push(controller);
+          },
+          pull() {
+            reading.resolve();
+            return new Promise<void>(() => {});
+          },
+        },
+        { highWaterMark: 0 },
+      );
       pending.push(app.handle(request(body)));
       await reading.promise;
     }
     let reads = 0;
-    const excess = () => request(new ReadableStream<Uint8Array>({
-      pull(controller) { reads++; controller.enqueue(new TextEncoder().encode('{}')); controller.close(); },
-    }, { highWaterMark: 0 }));
+    const excess = () =>
+      request(
+        new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              reads++;
+              controller.enqueue(new TextEncoder().encode('{}'));
+              controller.close();
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+      );
     const refused = await app.handle(excess());
     expect(refused.status).toBe(503);
     expect(refused.headers.get('retry-after')).toBe('1');
@@ -228,17 +273,27 @@ test('native ingress reservations refuse excess requests before reading and rele
     const responses = await Promise.all(pending);
     expect(responses.every((response) => response.status === 200)).toBe(true);
   }
-  const next = await app.handle(new Request('http://kernel.test/bounded-openapi', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"count":2,"enabled":true}',
-  }));
+  const next = await app.handle(
+    new Request('http://kernel.test/bounded-openapi', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"count":2,"enabled":true}',
+    }),
+  );
   expect(next.status).toBe(200);
 });
 
 test('all mounted body routes use the shared cap or an explicitly listed bounded parser', async () => {
   const ownParsers = new Set([
-    'POST /v1/boards', 'POST /v1/realms/:realmId/boards', 'POST /v1/threads',
-    'POST /v1/threads/:id/posts', 'POST /v1/posts/:id/revisions', 'POST /v1/reports',
-    'POST /v1/sourceFences/$takedown', 'POST /v1/media/:id/$takeDown', 'POST /v1/webhooks/stripe',
+    'POST /v1/boards',
+    'POST /v1/realms/:realmId/boards',
+    'POST /v1/threads',
+    'POST /v1/threads/:id/posts',
+    'POST /v1/posts/:id/revisions',
+    'POST /v1/reports',
+    'POST /v1/sourceFences/$takedown',
+    'POST /v1/media/:id/$takeDown',
+    'POST /v1/webhooks/stripe',
   ]);
   const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
   const seenOwnParsers = new Set<string>();
@@ -256,13 +311,24 @@ test('all mounted body routes use the shared cap or an explicitly listed bounded
     const limit = typeof metadata?.['x-body-limit'] === 'number' ? metadata['x-body-limit'] : DEFAULT_BODY_LIMIT;
     largest = Math.max(largest, limit);
     let reads = 0;
-    const body = new ReadableStream<Uint8Array>({ pull(controller) { reads++; controller.close(); } },
-      { highWaterMark: 0 });
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          reads++;
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
     const path = route.path.replace(/:[^/]+/g, '019a1b2c-3d4e-7000-8000-000000000001');
-    const response = await kernel.handle(new Request(`http://kernel.test${path}`, {
-      method: route.method, headers: { 'content-type': 'application/json', 'content-length': String(limit + 1) },
-      body, duplex: 'half',
-    } as RequestInit));
+    const response = await kernel.handle(
+      new Request(`http://kernel.test${path}`, {
+        method: route.method,
+        headers: { 'content-type': 'application/json', 'content-length': String(limit + 1) },
+        body,
+        duplex: 'half',
+      } as RequestInit),
+    );
     expect(response.status, key).toBe(413);
     expect(await response.json(), key).toMatchObject({ code: 'content_too_large' });
     expect(reads, key).toBe(0);
