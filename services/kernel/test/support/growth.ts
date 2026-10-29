@@ -46,6 +46,7 @@ import {
 export * from './growth-counters.ts';
 
 export * from './growth-cost.ts';
+export * from './growth-access-path.ts';
 export * from './growth-bound.ts';
 export {
   openGrowthDatabase,

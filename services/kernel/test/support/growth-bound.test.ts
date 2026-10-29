@@ -137,7 +137,7 @@ test('names sequentially scanned relations in a bound error', () => {
 
   expect(error).toBeInstanceOf(GrowthBoundError);
   expect((error as Error).message).toContain(
-    "Sequential scans: small_relation (100 rows) (a sequential scan of a small relation is the planner's choice; seed every relation the operation reads to thousands of rows at the smallest scale)",
+    "Sequential scans: small_relation (100 rows) (a sequential scan may be a planner's choice for a small relation; use measured relation pages for the path guard; the growth bounds still apply)",
   );
 
   const withoutScans = samples.map((sample) => ({
@@ -170,7 +170,11 @@ test('an access-path rejection reports its exact measured relation, scale, pages
   const sample: AccessPathSample = {
     scale: 256,
     relationSizes: { [relation]: { reltuples: 520, relpages: 9 } },
-    repetitions: [repetition],
+    repetitions: [
+      { ...repetition, relations: { [relation]: { ...repetition.relations[relation]!, sequentialScans: 0 } } },
+      repetition,
+      { ...repetition, relations: { [relation]: { ...repetition.relations[relation]!, sequentialScans: 0 } } },
+    ],
   };
 
   let error: unknown;
@@ -184,9 +188,48 @@ test('an access-path rejection reports its exact measured relation, scale, pages
   expect(diagnostic).toContain('content reports');
   expect(diagnostic).toContain(relation);
   expect(diagnostic).toContain('scale 256');
-  expect(diagnostic).toContain('9 pages');
-  expect(diagnostic).toContain('repetition 1');
-  expect(diagnostic).toContain('1 sequential scan');
+  expect(diagnostic).toContain('actual pages 9');
+  expect(diagnostic).toContain('repetition 2');
+  expect(diagnostic).toContain('scan count 1');
+});
+
+test('an observed relation needs an explicit finite nonnegative scan count', () => {
+  const relation = 'content.report';
+  const measured: Omit<Cost, 'relations'> = {
+    rows: 68,
+    blocks: 2,
+    statements: 1,
+    controlStatements: 0,
+    catalogStatements: 0,
+    plans: 1,
+    sharedHit: 2,
+    sharedRead: 0,
+  };
+  const makeSample = (scans: number | undefined): AccessPathSample => ({
+    scale: 32,
+    relationSizes: { [relation]: { reltuples: 68, relpages: 2 } },
+    repetitions: [
+      {
+        ...measured,
+        relations: {
+          [relation]: {
+            rows: 68,
+            blocks: 2,
+            nodes: 1,
+            ...(scans === undefined ? {} : { sequentialScans: scans }),
+          },
+        },
+      } as unknown as Cost,
+    ],
+  });
+
+  expect(() => assertGrowthAccessPaths('missing scans', [makeSample(undefined)], [relation])).toThrow(
+    /scan count missing/,
+  );
+  for (const scans of [NaN, Infinity, -1])
+    expect(() => assertGrowthAccessPaths('invalid scans', [makeSample(scans)], [relation])).toThrow(
+      /invalid sequential scan count/,
+    );
 });
 
 test('settled PostgreSQL pages govern scans without changing measured costs or growth verdicts', async () => {
@@ -243,12 +286,8 @@ test('settled PostgreSQL pages govern scans without changing measured costs or g
     expect(largeSize).toBeDefined();
     expect(largeSize!.relpages).toBeGreaterThan(8);
 
-    const smallCapture = await capture(database, () =>
-      database.pool.query(`SELECT id FROM ${smallSql} WHERE id >= 0`),
-    );
-    const largeCapture = await capture(database, () =>
-      database.pool.query(`SELECT id FROM ${largeSql} WHERE id >= 0`),
-    );
+    const smallCapture = await capture(database, () => database.pool.query(`SELECT id FROM ${smallSql} WHERE id >= 0`));
+    const largeCapture = await capture(database, () => database.pool.query(`SELECT id FROM ${largeSql} WHERE id >= 0`));
     const smallCost = costOf(smallCapture.capture);
     const largeCost = costOf(largeCapture.capture);
     const smallScans = smallCost.relations[smallRelation]?.sequentialScans;
@@ -293,9 +332,9 @@ test('settled PostgreSQL pages govern scans without changing measured costs or g
     expect(diagnostic).toContain('large relation scan');
     expect(diagnostic).toContain(largeRelation);
     expect(diagnostic).toContain('scale 256');
-    expect(diagnostic).toContain(`${largeSize!.relpages} pages`);
+    expect(diagnostic).toContain(`actual pages ${largeSize!.relpages}`);
     expect(diagnostic).toContain('repetition 1');
-    expect(diagnostic).toContain(`${largeScans} sequential scan`);
+    expect(diagnostic).toContain(`scan count ${largeScans}`);
     expect(JSON.stringify([smallCost, largeCost])).toBe(measuredBefore);
     expect(growthViolations(growthSamples, allBounds('constant'))).toEqual(verdictBefore);
   } finally {

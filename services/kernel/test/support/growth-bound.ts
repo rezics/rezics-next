@@ -189,7 +189,7 @@ function formatRelations(samples: readonly GrowthSample[]): string[] {
     .toSorted((left, right) => right[1].rows - left[1].rows);
   if (sequentialScans.length > 0)
     lines.push(
-      `Sequential scans: ${sequentialScans.map(([name, cost]) => `${name} (${cost.rows} rows)`).join(', ')} (a sequential scan of a small relation is the planner's choice; seed every relation the operation reads to thousands of rows at the smallest scale)`,
+      `Sequential scans: ${sequentialScans.map(([name, cost]) => `${name} (${cost.rows} rows)`).join(', ')} (a sequential scan may be a planner's choice for a small relation; use measured relation pages for the path guard; the growth bounds still apply)`,
     );
   const firstSizes = samples[0]?.relationSizes;
   const lastSizes = samples.at(-1)?.relationSizes;

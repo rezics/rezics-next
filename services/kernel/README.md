@@ -410,14 +410,21 @@ Each report sample also carries `repetitions`, the cost of every measured run in
 `reltuples` and `relpages` of every relation the measured plans read at that scale.
 `seed` skips settling inside `grow`, since `checkGrowth` settles right after.
 
+Use `assertGrowthAccessPaths(checkName, report.samples, ['content.report', 'content.report_target'])` when checking
+those Content report paths. The helper evaluates every repetition against the measured PostgreSQL relation pages
+after settle. A sequential scan requires another path only when the observed relation footprint is strictly greater
+than eight pages; at eight pages or fewer, the existing growth series remains authoritative for rows, blocks and
+statements. This path rule does not discard repetitions, pin a fixed plan or exempt any measured cost. Keep the
+growth bounds and any retained-plan requirements independent of this helper.
+
 Declare the check's growth model: the relations, partitions and keys that grow with N in production (subjects,
 content, history, receipts, outbox, write basis and the Access rows its authorization reads). Seed each of them at
 every scale with the production row shape, key distribution and fan-out, from thousands of rows at the smallest
 scale; 500 x scale bulk rows is the usual choice. A relation whose production size does not grow with N, such as
-definitions, roles or configuration, may stay at fixture size, and a sequential scan of it is acceptable. Assert
-the access each growing relation needs, a named index or a single partition, rather than forbidding sequential
-scans everywhere. Injected planner statistics do not replace seeding: they change only a plan's estimates, while a
-growth check measures executed work (`docs/research/growth-check-plan-stability.md`).
+definitions, roles or configuration, may stay at fixture size. Use measured relation pages for the access-path rule;
+do not infer a footprint from rows, buffers or fixture width. Injected planner statistics do not replace seeding:
+they change only a plan's estimates, while a growth check measures executed work
+(`docs/research/growth-check-plan-stability.md`).
 
 Every scale is measured on backends already seen in a warm-up or earlier measured repetition; a repetition that
 reaches a new backend is discarded as a warm-up (up to four times per scale), because production backends are
