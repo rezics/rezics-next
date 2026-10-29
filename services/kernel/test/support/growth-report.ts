@@ -111,6 +111,8 @@ export type StatementOccurrence = {
   readonly backend: number | undefined;
   readonly error: { readonly code: string; readonly message: string } | null;
   readonly plans: readonly number[];
+  /** Native documents linked to this occurrence, retained after the capture is released. */
+  readonly planDocuments: readonly unknown[];
   readonly rows: number;
   readonly blocks: number;
 };
@@ -150,6 +152,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
         backend: backends?.[index],
         error: code === null ? null : { code, message: messages?.[index] ?? '' },
         plans: planIndices,
+        planDocuments: planIndices.map((planIndex) => plans[planIndex]),
         rows,
         blocks,
       };

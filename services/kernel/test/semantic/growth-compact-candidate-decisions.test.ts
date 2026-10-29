@@ -6,14 +6,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import readCompactCandidate from '../../src/semantic/candidates-read-compact-candidate.sql';
 import readDecisionCandidate from '../../src/semantic/candidates-read-decision-candidate.sql';
 import { itemFacts, isRelationProperty } from '../../src/semantic/item.ts';
-import {
-  capture,
-  checkGrowth,
-  openGrowthDatabase,
-  seed,
-  type GrowthDatabase,
-  type Population,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 let db: GrowthDatabase;
 const historyScales = [64, 512, 4096] as const;
@@ -159,31 +152,66 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
       });
       expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
       expect(report.samples.every(({ cost }) => cost.statements === 1)).toBe(true);
-      const compactStatement = (sample: (typeof report.samples)[number]) => {
-        const attributed = sample.statementRepetitions[0]!.find(({ statement }) =>
-          statement.includes('FROM semantic.fact f') && statement.includes('recorded_transaction_id'),
-        );
-        if (!attributed?.node) {
-          throw new Error(
-            `${property} compact statement has no retained native occurrence plan at scale ${sample.scale}: ${JSON.stringify(sample.occurrenceRepetitions[0]!.statements)}`,
-          );
+      console.info(
+        `COMPACT_DECISION_GROWTH ${JSON.stringify({
+          name: report.name,
+          samples: report.samples.map(({ scale, cost, repetitions }) => ({ scale, cost, repetitions })),
+          shadow: report.shadow,
+        })}`,
+      );
+      type PlanNode = Record<string, unknown> & { Plans?: PlanNode[] };
+      const shape = (node: PlanNode): unknown => ({
+        ...Object.fromEntries(
+          ['Node Type', 'Join Type', 'Relation Name', 'Alias', 'Index Name', 'Scan Direction']
+            .filter((key) => key in node)
+            .map((key) => [key, node[key]]),
+        ),
+        ...(node.Plans ? { Plans: node.Plans.map(shape) } : {}),
+      });
+      const nodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(nodes)];
+      let smallestShape: unknown;
+      for (const sample of [report.samples[0]!, report.samples.at(-1)!]) {
+        for (const [repetition, occurrences] of sample.occurrenceRepetitions.entries()) {
+          expect(occurrences.statements).toHaveLength(1);
+          const occurrence = occurrences.statements[0]!;
+          if (repetition === 0)
+            console.info(
+              `COMPACT_DECISION_PLAN ${JSON.stringify({ property, axis, scale: sample.scale, occurrence })}`,
+            );
+          const label = `${property} compact statement at ${axis} scale ${sample.scale}, repetition ${repetition}: ${occurrence.statement}`;
+          expect(occurrence.statement, label).toContain('SELECT latest.revision, r.release');
+          expect(occurrence.planDocuments, `${label}: retained native occurrence plan`).toHaveLength(1);
+          const document = occurrence.planDocuments[0] as { Plan: PlanNode };
+          const planNodes = nodes(document.Plan);
+          // The unrelated axis starts past the observed small-relation crossover. History retains its 64-row start.
+          if (axis === 'unrelated') {
+            const subjectNode = planNodes.find((node) => node.Alias === 's');
+            expect(subjectNode, `${label}: subject node must remain Index Scan on subject_pkey`).toMatchObject({
+              'Node Type': 'Index Scan',
+              'Index Name': 'subject_pkey',
+            });
+            const actualShape = shape(document.Plan);
+            smallestShape ??= actualShape;
+            expect(actualShape, `${label}: full plan shape differs from scale ${scales[0]}`).toEqual(smallestShape);
+          }
+          if (axis === 'unrelated' || sample.scale === scales.at(-1)) {
+            expect(planNodes, `${label}: indexed origin release lookup`).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({ 'Node Type': 'Index Scan', 'Index Name': 'revision_transaction' }),
+              ]),
+            );
+            expect(planNodes, `${label}: descending indexed latest head lookup`).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  'Node Type': 'Index Only Scan',
+                  'Index Name': 'revision_pkey',
+                  'Scan Direction': 'Backward',
+                }),
+              ]),
+            );
+          }
         }
-        return { statement: attributed.statement, node: attributed.node.split(' ')[0]! };
-      };
-      const smallestPlan = compactStatement(report.samples[0]!);
-      const largestPlan = compactStatement(report.samples.at(-1)!);
-      expect(
-        largestPlan.node,
-        `${property} compact statement plan changed from ${smallestPlan.node} at ${scales[0]} (${smallestPlan.statement}) to ${largestPlan.node} at ${scales.at(-1)} (${largestPlan.statement})`,
-      ).toBe(smallestPlan.node);
-      console.info(`COMPACT_DECISION_GROWTH ${JSON.stringify(report)}`);
-      const measured = await capture(db, () => operation(scales.at(-1)!));
-      const plans = JSON.stringify(measured.capture.plans);
-      expect(measured.capture.plans).toHaveLength(1);
-      expect(plans).toContain('revision_transaction');
-      expect(plans).toContain('revision_pkey');
-      expect(plans).toContain('"Scan Direction":"Backward"');
-      console.info(`COMPACT_DECISION_PLAN ${JSON.stringify({ property, axis, capture: measured.capture })}`);
+      }
       expect(
         (
           await db.admin.query('SELECT candidate_id FROM semantic.candidate WHERE route=$1 AND subject_id=$2', [
