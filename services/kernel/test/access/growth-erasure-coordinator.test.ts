@@ -5,7 +5,11 @@ import {
   readErasureStatus,
   resolveRetention,
 } from '../../src/access/index.ts';
-import { newId } from '../../src/route/route.ts';
+import { advanceErasureCompletion, recordLateErasureItem, resolveLateErasureItem } from '../../src/access/erasure.ts';
+import { runCommand } from '../../src/command/command.ts';
+import { LOCATOR_EFFECTS_QUEUE } from '../../src/work/queues.ts';
+import frontierWork from '../../src/access/erasure-frontier-work.sql';
+import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const participants = ERASURE_PARTICIPANTS[1];
@@ -40,8 +44,8 @@ async function accounts(
     [route, ids],
   );
   await database.admin.query(
-    `INSERT INTO access.erasure(route,account_id,version,at,completed_at)
-     SELECT $1,id,1,$3,$4 FROM unnest($2::uuid[]) id`,
+    `INSERT INTO access.erasure(route,account_id,version,at,completed_at,frontier,workflow_until)
+     SELECT $1,id,1,$3,$4,'[]'::jsonb,0 FROM unnest($2::uuid[]) id`,
     [route, ids, at, acknowledged.length === participants.length ? completedAt : null],
   );
   await database.admin.query(
@@ -150,6 +154,7 @@ test('erasure status costs one point read and at most P outcomes as accounts and
               : { outcome: 'none', retained: [] },
           ]),
         ),
+        outstanding: { lateItems: false, effectsFrontier: false },
         completedAt: completedAt.toISOString(),
       });
     },
@@ -214,5 +219,149 @@ for (const [index, phase] of (['initial', 'repeat'] as const).entries()) {
       expect(cost.relations?.['access.erasure_acknowledgement']?.sequentialScans).toBe(0);
       expect(cost.relations?.['access.erasure_acknowledgement']?.rows).toBeLessThanOrEqual(3);
     }
+  }, 180000);
+}
+
+const lateBasis = {
+  actorAccountId: '00000000-0000-8000-8000-000000000001',
+  clientId: 'internal-access',
+  requestedBy: null,
+};
+for (const [index, phase] of (['record', 'resolve'] as const).entries()) {
+  test(`late item ${phase} has constant statements and rows at three scales of unrelated accounts and late items`, async () => {
+    const route = 0x4580 + index;
+    const accountId = newId(route);
+    const locator = 'fixed-copy-id';
+    const report = await checkGrowth(db, {
+      name: `late erasure item ${phase}`,
+      scales,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(database, scale, previous) {
+        if (previous === 0) await accounts(database, route, [accountId], []);
+        const ids = Array.from({ length: scale - previous }, () => newId(route));
+        await accounts(database, route, ids, participants);
+        await database.admin.query(
+          `INSERT INTO access.erasure_late_item(route,account_id,participant,locator)
+          SELECT $1,id,'content','copy:'||n FROM unnest($2::uuid[]) id CROSS JOIN generate_series(1,8) n`,
+          [route, ids],
+        );
+      },
+      async operation(database) {
+        // Restore the same fixture key outside the instrumented product pool for each measured run.
+        await database.admin.query('DELETE FROM access.erasure_late_item WHERE route=$1 AND account_id=$2', [
+          route,
+          accountId,
+        ]);
+        if (phase === 'resolve')
+          await database.admin.query(
+            `INSERT INTO access.erasure_late_item(route,account_id,participant,locator)
+          VALUES($1,$2,'content',$3)`,
+            [route, accountId, locator],
+          );
+        if (phase === 'record')
+          await runCommand(database.pool, { partition: partitionOf(route), basis: lateBasis }, async (tx) => {
+            await recordLateErasureItem(tx, { accountId, participant: 'content', locator });
+            return {
+              value: null,
+              events: [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
+            };
+          });
+        else await resolveLateErasureItem({ pool: database.pool }, { accountId, participant: 'content', locator });
+      },
+    });
+    expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
+    expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
+    for (const { cost } of report.samples) {
+      expect(cost.relations['access.erasure_late_item']?.sequentialScans ?? 0).toBe(0);
+      expect(cost.relations['access.erasure']?.sequentialScans ?? 0).toBe(0);
+    }
+  }, 180000);
+}
+
+for (const [index, phase] of (['undelivered', 'locator'] as const).entries()) {
+  test(`completion with ${phase} frontier stays bounded as outbox history, erasures, late items and unrelated DBOS workflows grow`, async () => {
+    const route = 0x4590 + index;
+    const accountId = newId(route);
+    const partition = partitionOf(route);
+    const workflowId = `erasure-growth-held:${accountId}`;
+    const report = await checkGrowth(db, {
+      name: `erasure completion ${phase}`,
+      scales,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(database, scale, previous) {
+        if (previous === 0) {
+          await accounts(database, route, [accountId], participants.slice(0, -1));
+          await database.admin.query(
+            `UPDATE access.erasure SET frontier=$3::jsonb,workflow_until=$4
+            WHERE route=$1 AND account_id=$2`,
+            [route, accountId, JSON.stringify([{ partition, position: '2' }]), phase === 'locator' ? 1000 : null],
+          );
+          await database.admin.query(
+            `INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position)
+            VALUES($1,'effects',1,1) ON CONFLICT(partition_no,consumer) DO UPDATE SET epoch=1,position=1`,
+            [partition],
+          );
+          await database.admin.query(
+            `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,priority,created_at)
+            VALUES($1,'effect','PENDING',$2,7,10)`,
+            [workflowId, LOCATOR_EFFECTS_QUEUE],
+          );
+        }
+        const ids = Array.from({ length: scale - previous }, () => newId(route));
+        await accounts(database, route, ids, participants);
+        await database.admin.query(
+          `INSERT INTO access.erasure_late_item(route,account_id,participant,locator)
+          SELECT $1,id,'content','copy:'||n FROM unnest($2::uuid[]) id CROSS JOIN generate_series(1,8) n`,
+          [route, ids],
+        );
+        await database.admin.query(
+          `INSERT INTO core.outbox(partition_no,position,event_seq,event_count,epoch,id,type,data)
+          SELECT $1,100+n,0,1,1,gen_random_uuid(),'com.rezics.subject.created.v1','{}'::jsonb
+          FROM generate_series($2::integer+1,$3::integer) n`,
+          [partition, previous, scale],
+        );
+        await database.admin.query(
+          `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,priority,created_at)
+          SELECT 'erasure-growth:'||$1||':'||n,'unrelated',CASE WHEN n%2=0 THEN 'ERROR' ELSE 'PENDING' END,
+            'effects',n%3,1 FROM generate_series($2::integer+1,$3::integer) n`,
+          [accountId, previous, scale],
+        );
+        // New locator work on both sides of the omitted priority column must stay outside the fixed frontier.
+        await database.admin.query(
+          `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,priority,created_at)
+          SELECT 'erasure-newer:'||$1||':'||n,'effect','ENQUEUED',$4,(ARRAY[0,7,23])[n%3+1],100000+n
+          FROM generate_series($2::integer+1,$3::integer) n`,
+          [accountId, previous, scale, LOCATOR_EFFECTS_QUEUE],
+        );
+      },
+      async operation(database) {
+        expect((await advanceErasureCompletion({ pool: database.pool }, accountId)).value).toBe(false);
+      },
+    });
+    expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
+    expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
+    for (const { cost } of report.samples) {
+      expect(cost.relations['core.outbox']?.rows ?? 0).toBe(0);
+      expect(cost.relations['dbos.workflow_status']?.sequentialScans ?? 0).toBe(0);
+      expect(cost.relations['access.erasure_late_item']?.sequentialScans ?? 0).toBe(0);
+    }
+    if (phase === 'locator') {
+      // Explain the exact product SQL with its real parameters; never force an index or a planner setting.
+      const input: Record<string, unknown> = { queue: LOCATOR_EFFECTS_QUEUE, route, account_id: accountId };
+      const { rows } = await db.admin.query(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${frontierWork.sql}`,
+        frontierWork.params.map((name) => input[name]),
+      );
+      const plan = JSON.stringify(rows[0]);
+      expect(plan).toContain('idx_workflow_status_in_flight_v2');
+      expect(plan).not.toContain('Seq Scan');
+      const searches = Array.from(plan.matchAll(/"Index Searches":(\d+)/g), (match) => Number(match[1]));
+      expect(searches.length).toBeGreaterThan(0);
+      expect(Math.max(...searches)).toBeLessThanOrEqual(8);
+    }
+    await db.admin.query(
+      'DELETE FROM dbos.workflow_status WHERE workflow_uuid=$1 OR workflow_uuid LIKE $2 OR workflow_uuid LIKE $3',
+      [workflowId, `erasure-growth:${accountId}:%`, `erasure-newer:${accountId}:%`],
+    );
   }, 180000);
 }

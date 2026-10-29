@@ -627,37 +627,43 @@ The owner names exceptions in its acknowledgement and retention inventory, purge
 commits. Resolution records one time, requires expiry to have arrived, is idempotent, and refuses an unknown erasure,
 participant or store. Like acknowledgement, it runs as the platform and restores no initiator.
 
-The last acknowledgement sets `completedAt` in the same transaction: it means active cleanup complete, even when
-retention remains. PostgreSQL keeps the minimal record independently of DBOS history and command receipts;
-completion never reopens on event replay. Internal/test-only `readErasureStatus(client, accountId)` returns the
-recorded version, T, `completedAt`, and each participant's `outcome` and `retained` exceptions with `resolvedAt`
-(null until resolved) and `overdue` (true only while unresolved and expiry is before the database read time).
-Its `state` is `pending` until all participants acknowledge, then `retention-outstanding` while any exception is
-unresolved, then `complete`. It returns null for a missing erasure and has no HTTP route. Backup expiry is not
-modelled because no backup policy exists; it remains an open external condition.
+The terminal `access.erasure` workflow is started by the tombstone effect and retries completion durably until
+all participants acknowledge, no late item is open, and the effects frontier has passed. Acknowledgement alone
+never marks completion. `completedAt` means active cleanup complete even when retention remains. The minimal
+PostgreSQL record is independent of DBOS history and command receipts and never reopens on event replay.
 
-The late-locator completion extension requires a bounded DBOS frontier probe before it can replace the
-acknowledgement-only completion above. Its probe must select unfinished workflows of registered locator effects,
-bounded by the moment their source envelopes have passed the effects checkpoint. The shared relay identifies an
-effect through `queue_name = 'effects'` and `queue_partition_key = '<effect>:<partition>'`; every effect workflow
-has the same workflow name, `effect`.
+`recordLateErasureItem(tx, { accountId, participant, locator })` runs inside the live command transaction in the
+account's home that holds the participant's locator fence. The participant must belong to the recorded version.
+The opaque locator is 1–255 printable ASCII characters, ids only and never personal data. Insertion is idempotent
+on account, participant and locator, including an already resolved item. After the copy's minimization or purge
+commits, the effect calls `resolveLateErasureItem({ pool }, { accountId, participant, locator })` as internal platform
+work. Resolution is idempotent, refuses an unknown item, and restores no initiator. Both interfaces refuse an
+account without an erasure record. Participants close their fence before paging and acknowledge once every located
+item is handled; each effect reaching a closed fence handles its own copy through these interfaces.
 
-DBOS 5.4.6-preview supplies `idx_workflow_status_in_flight_v2` on
-`(queue_name, status, priority, created_at)` and `idx_workflow_status_partition_dequeue_v3` on
-`(queue_name, status, queue_partition_key, priority, created_at, workflow_uuid)`, both restricted to unfinished
-workflows. Neither provides the required creation-time range directly after the effect key without constraining
-priority. A frontier must not silently exclude reprioritized locator workflows or examine an increasing number of
-newer workflows while searching for an older one. The priority-independent bound is therefore not established.
+Register locator effect names in `ERASURE_LOCATOR_EFFECTS`, beside `ERASURE_PARTICIPANTS`. The effects relay routes
+only those effects to `locator-effects`, with the effects queue's concurrency options including
+`partitionConcurrency: 1`. Workflow ids, partition keys, ordering, steps and retries remain the same.
 
-The implementation prerequisite is a kernel-owned index on
-`dbos.workflow_status (queue_name, queue_partition_key, created_at) WHERE status IN ('ENQUEUED', 'PENDING')`.
-Install it after the SDK's schema migration, which currently runs after the application migrations in
-[`migrate`](../../scripts/database.ts), and preserve it across SDK upgrades. Verify the probe with registered effect
-keys held fixed while newer unfinished workflows and unrelated history grow, including varied priorities.
-Once this prerequisite is available, snapshot partition heads once after the tombstone, store only checkpoint
-backlogs, wait for their delivery, freeze the workflow frontier, and retry the indexed completion probe in durable
-work. Open late items must also block completion; acknowledgements and retention resolution retain their current
-meaning. These frontier and late-item interfaces are not implemented yet.
+In its first durable step after T, the coordinator reads the fixed partition map and effects checkpoints in one
+statement, storing only heads ahead of their checkpoint. Each retry probes those exact checkpoint keys. After all
+reach their stored positions, it freezes a database millisecond timestamp. It then checks for `ENQUEUED` or
+`PENDING` workflows on `locator-effects` created at or before that timestamp. Later work and unrelated queues,
+including failed workflows, cannot extend this frontier. It never scans outbox history or polls from a request.
+The individual `startWorkflow` enqueue used by the relay takes its creation timestamp from PostgreSQL, so the
+frozen database timestamp bounds every delivered enqueue.
+
+DBOS 5.4.6-preview owns `idx_workflow_status_in_flight_v2` on `(queue_name, status, priority, created_at)`, partial on
+`ENQUEUED` and `PENDING`. The probe constrains queue and status, leaves priority unrestricted, and bounds
+`created_at`. PostgreSQL 19's B-tree skip scan costs one descent per distinct priority on this dedicated queue.
+The native growth test requires that index, no sequential scan and bounded `Index Searches`; the kernel issues
+no DDL in the DBOS schema.
+
+Internal/test-only `readErasureStatus(client, accountId)` returns version, T, `completedAt`, participant outcomes
+and retained exceptions with `resolvedAt` and `overdue`. `outstanding.lateItems` and
+`outstanding.effectsFrontier` report unresolved work without exposing locators. `state` stays `pending` until
+active cleanup completes, then `retention-outstanding` while exceptions remain unresolved, then `complete`.
+It returns null for a missing erasure and has no HTTP route. Backup expiry remains an open external condition.
 
 - Each purge is idempotent and bounded per step, so durable retries and replay are safe.
 - Deletion never waits for consumers. Authority ends at T; consumer data goes asynchronously and durably.
@@ -1681,3 +1687,13 @@ commands is covered by the shared receipt, write-basis and outbox rows above.
 - Logs and telemetry outside these stores have no documented account-data inventory, erasure trigger or retention deadline here.
 - Backups/replicas and restore procedures have no documented expiry or deletion-replay barrier. A restored backup could bring back a deleted identity; prevention is not demonstrated.
 - The platform privacy contact must be published and named in deletion confirmation; these services do not define its address or a request-tracking/response process. Owner-provided self-serve export remains future work.
+
+### Late erasure items and completion cost
+
+- Recording or resolving touches one erasure primary-key probe and one keyed late-item insert or update. Statements
+  and rows are constant; blocks are logarithmic as unrelated erasures and late items grow.
+- Completion probes the open-item partial index, at most one checkpoint per stored backlog partition, the bounded
+  acknowledgement range, and the SDK in-flight index. The one-time snapshot is bounded by the fixed partition map.
+  Outbox history is never read. Statements and rows are constant with unrelated data and history; blocks are
+  logarithmic for fixed frontier and priority cardinality.
+- Growth evidence: `test/access/growth-erasure-coordinator.test.ts`, three scales with the account and frontier fixed.

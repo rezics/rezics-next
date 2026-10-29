@@ -1,5 +1,6 @@
 import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../access/auth-consent.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
+import { erasureWorkModule } from '../access/erasure.ts';
 import { createAccess } from '../access/index.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
@@ -69,6 +70,7 @@ const accountsWorkModule: WorkModule = {
 /** Add each module's registration here, in dependency order, once. */
 export const KERNEL_WORK_MODULES: readonly WorkModule[] = [
   accountsWorkModule,
+  erasureWorkModule,
   ratingWorkModule,
   commerceWorkModule,
   libraryWorkModule,

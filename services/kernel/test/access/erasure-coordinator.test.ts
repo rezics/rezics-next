@@ -13,6 +13,7 @@ import {
   LifecycleDeniedError,
   REGISTRATION_TTL_MS,
 } from '../../src/access/lifecycle.ts';
+import { advanceErasureCompletion } from '../../src/access/erasure.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
@@ -25,8 +26,17 @@ const completedAt = new Date(at.getTime() + 1000);
 const ids = ERASURE_PARTICIPANTS[1];
 const key = () => Bun.randomUUIDv7();
 const commands = () => createLifecycleCommands({ pool: db.pool, access, clock: () => at });
-const ack = (accountId: string, participant: string, outcome: 'erased' | 'none' = 'erased') =>
-  acknowledgeErasure({ pool: db.pool, clock: () => completedAt }, { accountId, participant, outcome });
+async function frontierDelivered(accountId: string) {
+  // This coordinator fixture has no effects. Model their delivered checkpoint before acknowledging.
+  await db.admin.query(`INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position)
+    SELECT partition_no,'effects',CASE WHEN position=0 THEN NULL ELSE epoch END,position FROM core.partition
+    ON CONFLICT(partition_no,consumer) DO UPDATE SET epoch=excluded.epoch,position=excluded.position`);
+  await advanceErasureCompletion({ pool: db.pool, clock: () => completedAt }, accountId);
+}
+const ack = async (accountId: string, participant: string, outcome: 'erased' | 'none' = 'erased') => {
+  if (await status(accountId)) await frontierDelivered(accountId);
+  return acknowledgeErasure({ pool: db.pool, clock: () => completedAt }, { accountId, participant, outcome });
+};
 const status = (accountId: string) => readErasureStatus(db.pool, accountId);
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -65,6 +75,7 @@ async function context(accountId: string) {
 async function deleted() {
   const accountId = await person();
   const tombstone = await commands().tombstone(await context(accountId), { accountId, key: key() });
+  await frontierDelivered(accountId);
   return { accountId, tombstone };
 }
 async function assertRecord(accountId: string, transactionId: string) {
@@ -88,6 +99,7 @@ async function assertRecord(accountId: string, transactionId: string) {
     at: at.toISOString(),
     state: 'pending',
     participants: Object.fromEntries(ids.map((id) => [id, { outcome: 'pending', retained: [] }])),
+    outstanding: { lateItems: false, effectsFrontier: true },
     completedAt: null,
   });
 }

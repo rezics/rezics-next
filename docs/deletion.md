@@ -38,12 +38,17 @@ promises still hold.
    imports, shared history (receipts, outbox events, editorial provenance, durable work), and delivery custody (media
    storage and caches). Each participant acknowledges that its cleanup actually happened or attests that no data of
    the account applies. Dispatching work or accepting an obligation is not completion; only minimized or erased
-   payload is. A minimal completion record lives in PostgreSQL outside DBOS history, so deleting workflow history
+   payload is. Completion also waits for every open late item to be resolved and for the effects frontier: all
+   envelopes committed before T must be delivered and their registered locator effect workflows finished.
+   A minimal completion record lives in PostgreSQL outside DBOS history, so deleting workflow history
    cannot lose an unfinished obligation or let an old event reopen activity.
 3. **Every role.** Cleanup follows every role the account held: author, editor, uploader, reporter, buyer, seller,
    delegate, operator, member and acting human. It is not limited to rows keyed by the account id.
 4. **Shared copies.** Copies in shared stores are found through exact locators that the producing owner records
-   atomically with the copy: receipt, outbox event, provenance transaction, durable work id, Auth record key, media
+   atomically with the copy, or for a copy in another partition, by an effect behind the participant’s fence. The
+   participant closes that fence before paging; an effect finding it closed records a late erasure item and handles
+   the copy itself, resolving the item only after minimization or purge commits. Locators include receipt, outbox
+   event, provenance transaction, durable work id, Auth record key, media
    object key, search document or import record. The store's owner minimizes them through a registered minimizer for
    that artifact type. There is no account-wide JSON scan, search for a person's name or central ownership graph.
    Every producer of personal data uses an indexed native ownership relation or records the exact locator. A new

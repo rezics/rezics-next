@@ -53,6 +53,7 @@ test('a human deletion uses Auth approval and execution, records version 1 and r
       'shared-history': { outcome: 'pending', retained: [] },
       delivery: { outcome: 'pending', retained: [] },
     },
+    outstanding: { lateItems: false, effectsFrontier: true },
     completedAt: null,
   });
   const response = await kernel.handle(

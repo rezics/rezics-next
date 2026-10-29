@@ -683,8 +683,11 @@ CREATE TABLE access.erasure (
     version integer NOT NULL,
     at timestamp with time zone NOT NULL,
     completed_at timestamp with time zone,
+    frontier jsonb,
+    workflow_until bigint,
     CONSTRAINT erasure_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT erasure_check1 CHECK (((completed_at IS NULL) OR (completed_at >= at))),
+    CONSTRAINT erasure_frontier_check CHECK (((frontier IS NULL) OR (jsonb_typeof(frontier) = 'array'::text))),
     CONSTRAINT erasure_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT erasure_version_check CHECK ((version > 0))
 );
@@ -705,6 +708,20 @@ CREATE TABLE access.erasure_acknowledgement (
     CONSTRAINT erasure_acknowledgement_participant_check CHECK (((length(participant) >= 1) AND (length(participant) <= 64))),
     CONSTRAINT erasure_acknowledgement_resolutions_check CHECK ((jsonb_typeof(resolutions) = 'object'::text)),
     CONSTRAINT erasure_acknowledgement_retained_check CHECK (((jsonb_typeof(retained) = 'array'::text) AND (jsonb_array_length(retained) <= 16) AND ((outcome = 'erased'::text) OR (retained = '[]'::jsonb))))
+);
+
+
+--
+-- Name: erasure_late_item; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_late_item (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    participant text NOT NULL,
+    locator text NOT NULL,
+    resolved_at timestamp with time zone,
+    CONSTRAINT erasure_late_item_locator_check CHECK (((locator COLLATE "C") ~ '^[ -~]{1,255}$'::text))
 );
 
 
@@ -1317,6 +1334,14 @@ ALTER TABLE ONLY access.erasure_acknowledgement
 
 
 --
+-- Name: erasure_late_item erasure_late_item_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_late_item
+    ADD CONSTRAINT erasure_late_item_pkey PRIMARY KEY (route, account_id, participant, locator);
+
+
+--
 -- Name: erasure erasure_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1590,6 +1615,13 @@ CREATE INDEX committed_continuation_operator_latest ON access.committed_continua
 
 
 --
+-- Name: erasure_late_item_open; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_late_item_open ON access.erasure_late_item USING btree (route, account_id) WHERE (resolved_at IS NULL);
+
+
+--
 -- Name: lifecycle_coordination_purpose_page; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -1827,6 +1859,14 @@ ALTER TABLE ONLY access.committed_continuation
 
 ALTER TABLE ONLY access.erasure_acknowledgement
     ADD CONSTRAINT erasure_acknowledgement_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: erasure_late_item erasure_late_item_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_late_item
+    ADD CONSTRAINT erasure_late_item_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
 
 
 --

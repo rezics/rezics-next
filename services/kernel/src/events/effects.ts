@@ -2,7 +2,8 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool } from 'pg';
 import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
-import { WORK_QUEUES } from '../work/queues.ts';
+import { ERASURE_LOCATOR_EFFECTS } from '../access/erasure.ts';
+import { LOCATOR_EFFECTS_QUEUE, WORK_QUEUES } from '../work/queues.ts';
 import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
 import { readBatch, type CloudEvent, type Envelope } from './log.ts';
@@ -77,7 +78,7 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
             await DBOS.startWorkflow(workflow, {
               workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
               workflowIDReusePolicy: 'return-existing',
-              queueName: EFFECTS_QUEUE,
+              queueName: ERASURE_LOCATOR_EFFECTS.has(effect.name) ? LOCATOR_EFFECTS_QUEUE : EFFECTS_QUEUE,
               enqueueOptions: { queuePartitionKey: `${effect.name}:${partition}` },
             })(effect.name, event);
           }

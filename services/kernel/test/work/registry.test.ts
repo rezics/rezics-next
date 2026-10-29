@@ -7,7 +7,15 @@ import { fixture } from './support/process.ts';
 const registryTimeout = 60_000 + 2 * 30_000 + 30_000;
 
 test('the queue set is exactly ADR-0033, with reserved governance concurrency and source partitions', () => {
-  expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
+  expect(Object.keys(WORK_QUEUES)).toEqual([
+    'governance',
+    'effects',
+    'locator-effects',
+    'workflows',
+    'delivery',
+    'import',
+    'maintenance',
+  ]);
   expect(WORK_QUEUES.governance.workerConcurrency).toBeGreaterThan(0);
   expect(WORK_QUEUES.import.partitionConcurrency).toBeGreaterThan(0);
 });

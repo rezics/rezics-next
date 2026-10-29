@@ -22,6 +22,7 @@ test('worker configuration names invalid variables without revealing values', ()
   expect(KERNEL_WORK_MODULES.filter((module) => module === commerceWorkModule)).toHaveLength(1);
   expect(KERNEL_WORK_MODULES.map((module) => module.name)).toEqual([
     'accounts',
+    'account_erasure',
     'rating',
     'commerce',
     'library',
@@ -31,7 +32,15 @@ test('worker configuration names invalid variables without revealing values', ()
     'content',
     'retention',
   ]);
-  expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
+  expect(Object.keys(WORK_QUEUES)).toEqual([
+    'governance',
+    'effects',
+    'locator-effects',
+    'workflows',
+    'delivery',
+    'import',
+    'maintenance',
+  ]);
   expect(readWorkerConfig({ DATABASE_URL: databaseUrl })).toMatchObject({ databaseUrl, poolSize: 10 });
   expect(
     readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel', NOMAD_ALLOC_INDEX: '3' }),

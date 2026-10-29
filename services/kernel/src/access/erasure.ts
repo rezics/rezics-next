@@ -1,6 +1,16 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import type { WorkModule } from '../work/registry.ts';
+import { LOCATOR_EFFECTS_QUEUE } from '../work/queues.ts';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  hasLiveCommandTransaction,
+  noEffect,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import type { AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
@@ -9,6 +19,11 @@ import acknowledge from './erasure-acknowledge.sql';
 import complete from './erasure-complete.sql';
 import status from './erasure-status.sql';
 import resolve from './erasure-resolve.sql';
+import recordLate from './erasure-late-record.sql';
+import resolveLate from './erasure-late-resolve.sql';
+import snapshotFrontier from './erasure-frontier-snapshot.sql';
+import deliverFrontier from './erasure-frontier-delivered.sql';
+import pendingLocator from './erasure-frontier-work.sql';
 
 /** Append versions; never change a list used by a recorded erasure. */
 export const ERASURE_PARTICIPANTS = Object.freeze({
@@ -27,6 +42,8 @@ export const ERASURE_PARTICIPANTS = Object.freeze({
   ] as const),
 });
 export const ERASURE_PARTICIPANT_VERSION = 1;
+/** Owners register every effect that writes cross-partition erasure locators here. */
+export const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string> = new Set<string>();
 export type ErasureOutcome = 'erased' | 'none';
 export type RetentionException = {
   store: string;
@@ -46,6 +63,7 @@ export type ErasureStatus = {
       retained: (StoredException & { resolvedAt: string | null; overdue: boolean })[];
     }
   >;
+  outstanding: { lateItems: boolean; effectsFrontier: boolean };
   completedAt: string | null;
 };
 
@@ -129,11 +147,13 @@ export async function acknowledgeErasure(
         throw new LifecycleDeniedError();
       const value = { accountId, participant, outcome };
       if (!row.inserted) return noEffect(value);
-      await complete.run(tx, {
-        ...key,
-        participants: [...participants(record.version)],
-        at: authoritativeTimeValue(time),
-      });
+      const pending = await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE });
+      if (pending && !pending.pending)
+        await complete.run(tx, {
+          ...key,
+          participants: [...participants(record.version)],
+          at: authoritativeTimeValue(time),
+        });
       return {
         value,
         events: [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
@@ -179,7 +199,11 @@ export async function resolveRetention(
 
 /** Internal/test read. One snapshot covers both the record and its bounded acknowledgement range. */
 export async function readErasureStatus(client: AccessClient, accountId: string): Promise<ErasureStatus | null> {
-  const row = await status.run(client, { route: accountRoute(accountId), account_id: accountId });
+  const row = await status.run(client, {
+    route: accountRoute(accountId),
+    account_id: accountId,
+    queue: LOCATOR_EFFECTS_QUEUE,
+  });
   if (!row) return null;
   const outcomes = row.outcomes as Record<
     string,
@@ -218,6 +242,136 @@ export async function readErasureStatus(client: AccessClient, accountId: string)
     version: row.version,
     at: new Date(row.at).toISOString(),
     participants: recorded,
+    outstanding: { lateItems: row.lateItems, effectsFrontier: row.effectsFrontier },
     completedAt: row.completedAt === null ? null : new Date(row.completedAt).toISOString(),
   };
 }
+
+type LateErasureItem = { accountId: string; participant: string; locator: string };
+function lateKey(input: LateErasureItem) {
+  if (typeof input.locator !== 'string' || !/^[\x20-\x7e]{1,255}$/.test(input.locator))
+    throw new LifecycleDeniedError();
+  return {
+    route: accountRoute(input.accountId),
+    account_id: input.accountId,
+    participant: input.participant,
+    locator: input.locator,
+  };
+}
+
+/** Call with the live home command holding the participant's locator fence. Ids only, never personal payload. */
+export async function recordLateErasureItem(tx: CommandTransaction, input: LateErasureItem): Promise<void> {
+  const key = lateKey(input);
+  if (!hasLiveCommandTransaction(tx) || currentCommand(tx).partition !== partitionOf(key.route))
+    throw new LifecycleDeniedError();
+  const record = await lock.run(tx, key);
+  if (!record || !participants(record.version).includes(input.participant)) throw new LifecycleDeniedError();
+  await recordLate.run(tx, key);
+}
+
+/** Internal platform command, only after the copy's minimization or purge commits. */
+export async function resolveLateErasureItem(deps: { pool: Pool; clock?: () => Date }, input: LateErasureItem) {
+  const key = lateKey(input);
+  return runCommand(
+    deps.pool,
+    {
+      partition: partitionOf(key.route),
+      clock: deps.clock,
+      basis: { actorAccountId: '00000000-0000-8000-8000-000000000001', clientId: 'internal-access', requestedBy: null },
+    },
+    async (tx, { time }) => {
+      const record = await lock.run(tx, key);
+      if (!record || !participants(record.version).includes(input.participant)) throw new LifecycleDeniedError();
+      const rows = await resolveLate.run(tx, { ...key, at: authoritativeTimeValue(time) });
+      const row = rows[0];
+      if (!row) throw new LifecycleDeniedError();
+      if (!row.changed) return noEffect(input);
+      return {
+        value: input,
+        events: [
+          {
+            type: 'com.rezics.access.account-updated.v1',
+            subject: input.accountId,
+            data: { accountId: input.accountId },
+          },
+        ],
+      };
+    },
+  );
+}
+
+/** One durable terminal-work step; requests never drive completion. */
+export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () => Date }, accountId: string) {
+  const key = { route: accountRoute(accountId), account_id: accountId };
+  return runCommand(
+    deps.pool,
+    {
+      partition: partitionOf(key.route),
+      clock: deps.clock,
+      basis: { actorAccountId: '00000000-0000-8000-8000-000000000001', clientId: 'internal-access', requestedBy: null },
+    },
+    async (tx, { time }) => {
+      const record = await lock.run(tx, key);
+      if (!record) throw new LifecycleDeniedError();
+      if (record.completedAt !== null) return noEffect(true);
+      let changed = false;
+      if (record.frontier === null) {
+        await snapshotFrontier.run(tx, key);
+        changed = true;
+      }
+      const delivered = await deliverFrontier.run(tx, key);
+      changed ||= delivered !== null;
+      const pending = await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE });
+      let done = false;
+      if (pending && !pending.pending) {
+        const completed = await complete.run(tx, {
+          ...key,
+          participants: [...participants(record.version)],
+          at: authoritativeTimeValue(time),
+        });
+        done = completed !== null;
+        changed ||= done;
+      }
+      if (!changed) return noEffect(false);
+      return {
+        value: done,
+        events: [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
+      };
+    },
+  );
+}
+
+/** The terminal workflow survives retries and completion is independent of retained DBOS history. */
+export const erasureWorkModule: WorkModule = {
+  name: 'account_erasure',
+  register(context) {
+    const advance = DBOS.registerStep(
+      async (accountId: string) => (await advanceErasureCompletion({ pool: context.pool }, accountId)).value,
+      { name: 'access.erasure.advance', retriesAllowed: true, maxAttempts: 10 },
+    );
+    DBOS.registerWorkflow(
+      async (accountId: string) => {
+        while (!(await advance(accountId))) await DBOS.sleep(1);
+      },
+      { name: 'access.erasure' },
+    );
+    context.addEffects([
+      {
+        name: 'account_erasure',
+        types: ['com.rezics.access.account-tombstoned.v1'],
+        async run(event) {
+          const { accountId } = event.data as { accountId: string };
+          await context.client.enqueue(
+            {
+              workflowName: 'access.erasure',
+              workflowID: `erasure:${accountId}`,
+              workflowIDReusePolicy: 'return-existing',
+              queueName: 'maintenance',
+            },
+            accountId,
+          );
+        },
+      },
+    ]);
+  },
+};
