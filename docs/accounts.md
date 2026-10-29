@@ -44,8 +44,10 @@ including on replay; [Handles][access-handles] defines the registry and exceptio
 
 Renaming publishes the new claim and reserves the former spelling for 30 days; during that window the old name
 must redirect to the same account, without alias chains. [lifecycle.ts][lifecycle] provides that internal
-resolution, but [public profile lookup][account-data] accepts only active claims and the
-[website page loader][agent-page] treats reserved handles as missing: public forwarding is an implementation gap.
+resolution. [Public profile lookup][account-data] also resolves a former claim while its `formerUntil` is in the
+future, to the same account only while it is active, and never to its current spelling; it returns `movedTo` with
+the current handle. The [website page loader][agent-page] still treats reserved handles as missing, so page
+forwarding remains an implementation gap.
 After the reservation expires, [reservation SQL][handle-reserve] permits another account to claim the spelling
 without waiting for cleanup. The research's permanent retirement, privacy unlinking and dispute/reassignment
 procedures remain proposals; the adopted validation and registry do not adopt those additional policies.
@@ -58,6 +60,14 @@ omitted; handle and agent lookups also hide deleted accounts. The ID form preser
 Accounts are public, enumerable identities; the public projection protects private fields rather than concealing that a live account exists.
 [routes.ts][account-routes], [account-data.ts][account-data] and [Public identity read][access-public] define the
 projection and its bounds.
+
+Discovery surfaces list only accounts whose public presentation is live, using the predicate in [Public identity
+read][access-public]: `state = 'active' AND NOT authn_fenced`. The organization speakers listing and search are
+discovery surfaces; see [Organization speakers page][access-speakers]. From the fence's T onward, any authentication
+fence, including suspension, removes an account from discovery lists and counts. No field, reason or ordering
+distinguishes which fence applied. Pending, deleted and erased accounts are never discovered; lifting a fence makes
+the account discoverable again. Attribution is unchanged: the `ids` read keeps presenting a suspended account as
+`active`, which keeps suspension undisclosed.
 
 The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label. The base's
 [account-data.ts][account-data] meets that shape for organizations but still returns extra null/false fields
@@ -551,6 +561,7 @@ release a hold, and [Auth consent erasure][consent-erasure] removes consent afte
 [access-grant-rule]: ../services/kernel/src/access/README.md#grant-rule
 [access-preferences]: ../services/kernel/src/access/README.md#viewer-preferences
 [access-public]: ../services/kernel/src/access/README.md#public-identity-read
+[access-speakers]: ../services/kernel/src/access/README.md#organization-speakers-page
 [access-profile]: ../services/kernel/src/access/README.md#public-profile-by-handle
 [access-reinstatement]: ../services/kernel/src/access/README.md#operator-reinstatement-fanout
 [access-barriers]: ../services/kernel/src/access/README.md#native-auth-barriers
