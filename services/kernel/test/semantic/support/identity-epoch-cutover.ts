@@ -5,7 +5,11 @@ import { migrate } from '../../../scripts/database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { runCommand } from '../../../src/command/command.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
-import { createAgentVerificationCommands, readAgentVerificationWorkflowRequest, recordPendingAgentVerification } from '../../../src/access/agent-verification.ts';
+import {
+  createAgentVerificationCommands,
+  readAgentVerificationWorkflowRequest,
+  recordPendingAgentVerification,
+} from '../../../src/access/agent-verification.ts';
 import { createRealAccess } from '../real-access.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';
 import { createSubject } from '../../../src/semantic/subject.ts';
@@ -151,12 +155,17 @@ export async function allChanges(f: EpochFixture, store: IdentityEpochStore, job
 
 /** Exact native owner perturbation on OUR database; this is a failure, never a readiness producer. */
 export async function withoutOwner<T>(f: EpochFixture, partition: number, work: () => Promise<T>) {
-  const { rows: [owner] } = await f.admin.query('DELETE FROM core.partition WHERE partition_no=$1 RETURNING *', [partition]);
+  const {
+    rows: [owner],
+  } = await f.admin.query('DELETE FROM core.partition WHERE partition_no=$1 RETURNING *', [partition]);
   expect(owner).toBeDefined();
   try {
     return await work();
   } finally {
-    await f.admin.query('INSERT INTO core.partition SELECT * FROM jsonb_populate_record(NULL::core.partition,$1::jsonb)', [JSON.stringify(owner)]);
+    await f.admin.query(
+      'INSERT INTO core.partition SELECT * FROM jsonb_populate_record(NULL::core.partition,$1::jsonb)',
+      [JSON.stringify(owner)],
+    );
   }
 }
 
@@ -188,7 +197,7 @@ export async function afterSourceRelease<T>(
       apply(target, self, args: unknown[]) {
         if (context.getStore()) {
           const input = args[0];
-          const sql = typeof input === 'string' ? input : (input as { text?: string })?.text ?? '';
+          const sql = typeof input === 'string' ? input : ((input as { text?: string })?.text ?? '');
           statements.push(sql);
           if (/identity_epoch_mapping/i.test(sql)) sourceObserved = true;
         }
@@ -218,9 +227,15 @@ export async function afterSourceRelease<T>(
   f.pool.on('release', release);
   const result = context.run(true, lookup);
   // Surface early lookup failure instead of hanging a schedule on an unimplemented query path.
-  const ended = result.then(() => 'ended' as const, () => 'ended' as const);
+  const ended = result.then(
+    () => 'ended' as const,
+    () => 'ended' as const,
+  );
   try {
-    expect(await Promise.race([reached.promise.then(() => 'released' as const), ended]), 'lookup must reach actual source mapping read and release').toBe('released');
+    expect(
+      await Promise.race([reached.promise.then(() => 'released' as const), ended]),
+      'lookup must reach actual source mapping read and release',
+    ).toBe('released');
     expect(held, 'source connection must be released before control checkout').toBe(0);
     await between();
     proceed.resolve();
@@ -254,7 +269,11 @@ export async function approvedVerification(f: EpochFixture, catalogue: string) {
     actor: await access.authenticate(real.bearer(persona), { pool: f.pool, deadline: Date.now() + 5000 }),
   });
   const requested = await commands.request(await context('person'), {
-    accountId: accounts.person, subject: catalogue, statement: 'This is my catalogue identity', links: [], key: randomUUID(),
+    accountId: accounts.person,
+    subject: catalogue,
+    statement: 'This is my catalogue identity',
+    links: [],
+    key: randomUUID(),
   });
   const decided = await commands.approve(await context('staff'), { requestId: requested.value.id, key: randomUUID() });
   expect(decided.value.state).toBe('approving');
@@ -284,7 +303,7 @@ export async function withInFlightControlMove<T>(f: EpochFixture, operation: () 
     client.query = new Proxy(query, {
       apply(target, self, args: unknown[]) {
         const input = args[0];
-        const sql = typeof input === 'string' ? input : (input as { text?: string })?.text ?? '';
+        const sql = typeof input === 'string' ? input : ((input as { text?: string })?.text ?? '');
         const result = Reflect.apply(target, self, args);
         if (context.getStore() && !paused && /JOIN semantic\.subject AS subject/i.test(sql)) {
           paused = true;
@@ -305,10 +324,14 @@ export async function withInFlightControlMove<T>(f: EpochFixture, operation: () 
   );
   let moved = false;
   try {
-    expect(await Promise.race([reached.promise.then(() => 'native-read' as const), result.then(() => 'ended' as const)]),
-      'in-flight schedule must reach actual owner SQL').toBe('native-read');
+    expect(
+      await Promise.race([reached.promise.then(() => 'native-read' as const), result.then(() => 'ended' as const)]),
+      'in-flight schedule must reach actual owner SQL',
+    ).toBe('native-read');
     // The existing fixed control home is Global (partition 0); source accounts are deliberately elsewhere.
-    await f.admin.query("UPDATE core.partition SET write_state='moved',moved_to='cutover-test-node' WHERE partition_no=0");
+    await f.admin.query(
+      "UPDATE core.partition SET write_state='moved',moved_to='cutover-test-node' WHERE partition_no=0",
+    );
     moved = true;
     proceed.resolve();
     return await result;
