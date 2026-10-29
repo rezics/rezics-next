@@ -2,6 +2,8 @@
 
 Research evidence, 2026-10-29. No implementation, deadline increase, publication approval or gate completion.
 The inspected worktree baseline is `5dfa8a7b4efec80a940b8332774d88bb093c2eec`.
+Retry inspection confirmed unchanged Definitions, publication, HTTP, request and command sources against that
+baseline; the retained probes below were inspected, not rerun as new measurements.
 
 ## Recommendation
 
@@ -146,8 +148,8 @@ monolingual language (4,206, 288.73 ms), URL (1,651, 220.84 ms), and decimal (85
 This identifies proof work, rather than property-validator compilation, as the dominant cost here.
 
 Raw captures and scripts are `profile{,-pinned,-large,-valid-large,-valid-large-pinned,-exact-max}.jsonl` and
-their generating `.ts` scripts, plus `native-confirm.jsonl` and `worker{,-max}-probe{,-pinned}.jsonl` under the temporary
-directory. Earlier 400/700-character label experiments were invalid and stopped at schema errors; they are excluded
+their generating `.ts` scripts, plus `native-confirm.jsonl`, `worker-probe.jsonl`, `worker-probe-pinned.jsonl` and
+`worker-max-probe.jsonl` under the temporary directory. Earlier 400/700-character label experiments were invalid and stopped at schema errors; they are excluded
 from the valid scale evidence. The exact-limit raw capture SHA-256 is
 `1a7252bbaea656db9e0b011e48a9864b62c63da649878536d8c62eff65116bdf`.
 
@@ -210,6 +212,10 @@ Scope existence to the actual pool/Global published row; do not trust a bare pro
 extension/composed entries. A cold-process stored row is not already a current in-memory validation certificate:
 validate it once off-thread unless the owner explicitly establishes durable historical validation authority.
 Merely selecting a digest, a control query, imported module or `typeof` result is no such proof.
+The existing process map has no eviction. Automatically seeding it on every publish would broaden retention:
+adopt explicit per-pool entry and byte caps before doing so, retain only committed immutable certificates, and
+evict without changing validity. A miss repeats fresh preparation; hostile digest churn must not retain pending
+jobs or grow a negative cache. The semantic owner must choose those caps and pool-disposal lifetime.
 
 Before hashing, enforce an iterative bounded JSON/UTF-8/collection guard on the snapshot. It must reject malformed
 Unicode in values and keys, non-finite numbers, cycles, BigInt, undefined/functions/symbols and exotic serialization
@@ -228,10 +234,20 @@ not authorize bodies containing extra non-JSON members that disappear during ser
 absent, run all schema/semantic/pattern checks. Invalid new releases have no exemption. Preserve existing parsed-JSON
 error precedence, pointers, ordering and caps when separating guards; internal exotic-input diagnostics need explicit
 coverage rather than assuming the existing size traversal is a total JSON validator.
+Preserve collection-limit precedence before size, then canonical-JSON rejection before schema errors; do not
+replace an existing set of collection pointers with a generic guard error. A bounded iterative guard can count
+well-formed strings and escaped UTF-8 bytes in O(input bytes), without sorting keys or running any proof. It
+must stop at the byte cap rather than first materializing an oversized canonical string. Retain the current
+root `invalid` diagnostic for malformed Unicode/non-finite input, mapped to `/release` and `invalid_format` by HTTP.
 
 The receipt digest remains `requestDigest('definitions.publish', actor, { params: {}, body })`, including the
 client/requested-by envelope. Guarding only inside `publishRelease` is too late to protect this earlier HTTP hash.
 Retain the same request digest bytes while arranging snapshot/guard preparation ahead of both hashes.
+One candidate keeps the owned snapshot in the worker while returning only both digests after the guard. The
+parent checks actual published authority; on a miss, the same bounded job resumes full validation, then returns
+its validated body. On a hit, publication uses the certified cached body. This avoids clone-back before a hit
+and duplicate parsing/proof work on a miss, but adds a message round trip and retained job bytes. Charge both
+to the original deadline and capacity; this protocol needs native tests and is not demonstrated by the probes.
 
 Every path still executes native `authorization.prepare` and final `authorize` **before receipt lookup**.
 A published cache hit is data evidence only; it never grants permission, returns existence information to a denied
