@@ -15,22 +15,37 @@ function setup() {
   mkdirSync(state);
   const logPath = join(worker.worktree, 'run.jsonl');
   const task = {
-    id: 'long-notice-task', state: 'running', currentAttempt: 3,
-    brief: { goal: 'control-plane', manager: 'manager-a' }, worktree: worker.worktree,
+    id: 'long-notice-task',
+    state: 'running',
+    currentAttempt: 3,
+    brief: { goal: 'control-plane', manager: 'manager-a' },
+    worktree: worker.worktree,
     base: git(repo.main, ['rev-parse', 'main']),
   } as Task;
   const attempt = {
-    taskId: task.id, attempt: 3, state: 'running', startedAt: new Date(now - 2 * 60 * 60_000).toISOString(), logPath,
+    taskId: task.id,
+    attempt: 3,
+    state: 'running',
+    startedAt: new Date(now - 2 * 60 * 60_000).toISOString(),
+    logPath,
   } as Attempt;
   const store = {
-    tasks: () => [task], attempt: () => attempt, retryIntents: () => [] as RetryIntent[],
+    tasks: () => [task],
+    attempt: () => attempt,
+    retryIntents: () => [] as RetryIntent[],
     attemptsEndedBetween: () => [] as Attempt[],
   };
   const delivered: string[] = [];
-  const run = (at: number) => watch(
-    store, repo.path, { stabilize: 'missing-stabilize', integration: 'missing-dev' }, state,
-    (summary) => delivered.push(summary), at, () => {},
-  );
+  const run = (at: number) =>
+    watch(
+      store,
+      repo.path,
+      { stabilize: 'missing-stabilize', integration: 'missing-dev' },
+      state,
+      (summary) => delivered.push(summary),
+      at,
+      () => {},
+    );
   return { repo, worker, state, logPath, task, delivered, run };
 }
 
@@ -53,7 +68,13 @@ test('a long attempt is reported again at once when its last command or commit c
   try {
     const threshold = now + 1;
     expect(value.run(threshold)).toBe(1);
-    appendFileSync(value.logPath, JSON.stringify({ type: 'item.completed', item: { id: 'new-command', type: 'command_execution', command: 'bun test changed.ts' } }) + '\n');
+    appendFileSync(
+      value.logPath,
+      JSON.stringify({
+        type: 'item.completed',
+        item: { id: 'new-command', type: 'command_execution', command: 'bun test changed.ts' },
+      }) + '\n',
+    );
     expect(value.run(threshold + 1_000)).toBe(1);
     writeFileSync(join(value.worker.worktree, 'commit-change.txt'), 'new commit\n');
     git(value.worker.worktree, ['add', 'commit-change.txt']);

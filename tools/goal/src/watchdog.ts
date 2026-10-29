@@ -260,7 +260,14 @@ function longAttemptIncidents(
   now: number,
   limitFor: (task: Task) => number,
 ): { key: string; managerId: string; kind: ManagerEventKind; summary: string; command?: string; commits?: number }[] {
-  const found: { key: string; managerId: string; kind: ManagerEventKind; summary: string; command?: string; commits?: number }[] = [];
+  const found: {
+    key: string;
+    managerId: string;
+    kind: ManagerEventKind;
+    summary: string;
+    command?: string;
+    commits?: number;
+  }[] = [];
   for (const task of tasks) {
     if (task.state !== 'running' || task.currentAttempt < 1) continue;
     let attempt: Attempt;
@@ -498,7 +505,10 @@ export function watch(
     if (isLongAttempt && attemptAlert) {
       const reports = (state.longAttemptReports ??= {});
       const previous = reports[violation.key];
-      const unchanged = previous !== undefined && previous.command === attemptAlert.command && previous.commits === attemptAlert.commits;
+      const unchanged =
+        previous !== undefined &&
+        previous.command === attemptAlert.command &&
+        previous.commits === attemptAlert.commits;
       const lastReportAt = previous ? Date.parse(previous.at) : Number.NaN;
       if (unchanged && Number.isFinite(lastReportAt) && now - lastReportAt < 60 * 60_000) continue;
       reports[violation.key] = {
