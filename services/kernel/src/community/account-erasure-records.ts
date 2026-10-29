@@ -109,7 +109,9 @@ async function erasableOperation(pool: Pool, row: Locator, at: number): Promise<
         operation.requested_at !== null &&
         Date.parse(operation.requested_at) < at - MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS
       );
-    return (TERMINAL_WORKFLOW_STATUSES as readonly string[]).includes(workflow.status);
+    return (
+      typeof workflow.status === 'string' && (TERMINAL_WORKFLOW_STATUSES as readonly string[]).includes(workflow.status)
+    );
   });
 }
 
