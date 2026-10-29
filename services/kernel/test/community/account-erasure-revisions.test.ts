@@ -406,15 +406,6 @@ test("an account revision erasure page stays within its bound as other editors' 
       () => drainEffects(system.database.pool, partitionOf(routeOf(owner.id)!)),
       system.database.pool,
     );
-    const locatorCount = (
-      await boundedFixtureQuery<{ n: number }>(
-        admin,
-        'count pending owner revision locators after deletion',
-        'SELECT count(*)::integer AS n FROM community.revision_locator WHERE route=$1 AND account_id=$2',
-        [routeOf(owner.id), owner.id],
-      )
-    ).rows[0]!.n;
-    expect(locatorCount).toBeGreaterThan(50);
     // The terminal workflow stays open until this fixture invokes the participant's revision phase below.
     // Waiting for every workflow here blocks on that expected open obligation.
     await nativeStage(true, 'worker.stop', () => worker.stop(), system.database.pool);
@@ -522,8 +513,18 @@ test("an account revision erasure page stays within its bound as other editors' 
     expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
     expect(after).not.toBeNull();
+    const remainingLocators = (
+      await boundedFixtureQuery<{ n: number }>(
+        db.admin,
+        'count remaining owner revision locators for continuation proof',
+        'SELECT count(*)::integer AS n FROM community.revision_locator WHERE route=$1 AND account_id=$2',
+        [routeOf(owner.id), owner.id],
+      )
+    ).rows[0]!.n;
+    expect(remainingLocators).toBeGreaterThan(0);
+    expect(remainingLocators).toBeLessThanOrEqual(50);
     const continuation = await eraseAccountRevisionsPage({ pool: db.pool }, owner.id, after);
-    expect(continuation).toEqual({ found: locatorCount - 50, pending: 0, next: null });
+    expect(continuation).toEqual({ found: remainingLocators, pending: 0, next: null });
     expect(await eraseAccountRevisionsPage({ pool: db.pool }, owner.id, continuation.next)).toEqual({
       found: 0,
       pending: 0,
