@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -36,6 +36,8 @@ const kernel = join(repository, 'services/kernel');
 const remoteCheck = join(repository, 'scripts/remote-check.ts');
 const checkHost = join(repository, 'scripts/check-host');
 const kernelFiles = ['test/access-hook.test.ts', 'test/admission.test.ts'];
+
+setDefaultTimeout(60_000);
 
 function generatedHostRun(): string {
   return runScript('cache-test', '/srv/rezics-check/runs/cache-test', '.', ['true'], 'check-a');
@@ -807,6 +809,10 @@ async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<voi
   expect(condition()).toBe(true);
 }
 
+async function waitForCondition(condition: () => boolean): Promise<void> {
+  while (!condition()) await Bun.sleep(10);
+}
+
 async function kernelCheck(
   environment: Record<string, string>,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -976,8 +982,16 @@ test('an in-place write to a shared installed package fails and removes its host
       mkdirSync(join(scopedRunFile, '..'), { recursive: true });
       linkSync(join(cache, '@scope/pkg@3.0.0@@@1/b.js'), scopedRunFile);
     }
+    const installedTime = new Date(Date.now() - 5_000);
+    utimesSync(cacheFile, installedTime, installedTime);
+    if (!scoped) {
+      const scopedCacheFile = join(cache, '@scope/pkg@3.0.0@@@1/b.js');
+      utimesSync(scopedCacheFile, installedTime, installedTime);
+    }
     const marker = join(run, '.bun-install-complete');
     writeFileSync(marker, '');
+    const markerTime = new Date(Date.now() - 2_000);
+    utimesSync(marker, markerTime, markerTime);
 
     const script = `code=0\nprintf changed > ${JSON.stringify(runFile)}\n${installedPackageCacheCheck(run, 'check-a', cache)}\nprintf '%s\\n' "$code"`;
     const result = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
@@ -1025,7 +1039,15 @@ test('the package cache failure lists at most ten changed run-relative paths', (
     writeFileSync(join(cache, name, 'file.js'), 'original');
     linkSync(join(cache, name, 'file.js'), join(runPackages, name, 'file.js'));
   }
-  writeFileSync(join(run, '.bun-install-complete'), '');
+  const installedTime = new Date(Date.now() - 5_000);
+  for (let index = 0; index < 11; index += 1) {
+    const name = `pkg${index}@1.0.0@@@1`;
+    utimesSync(join(cache, name, 'file.js'), installedTime, installedTime);
+  }
+  const marker = join(run, '.bun-install-complete');
+  writeFileSync(marker, '');
+  const markerTime = new Date(Date.now() - 2_000);
+  utimesSync(marker, markerTime, markerTime);
   const script = `code=0\nfor file in ${JSON.stringify(runPackages)}/*/file.js; do printf changed > "$file"; done\n${installedPackageCacheCheck(run, 'check-a', cache)}\nprintf '%s\\n' "$code"`;
   const result = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
   expect(result.status, result.stderr).toBe(0);
@@ -2383,25 +2405,23 @@ test('multi-slot waiters on one host start in the order they began waiting', asy
     const latestHolderFinish = Math.max(...holderRuns.map((event) => Number(event.fakeStartedAt) + durationMs));
 
     older = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo older'], ['--slots', '2']);
-    await waitFor(() => events().filter((event) => event.kind === 'multi-marker').length === 1, 10_000);
+    await waitForCondition(() => events().filter((event) => event.kind === 'multi-marker').length === 1);
     const olderMarker = events().find((event) => event.kind === 'multi-marker')!;
     younger = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo younger'], ['--slots', '2']);
-    await waitFor(() => events().filter((event) => event.kind === 'multi-marker').length === 2, 10_000);
+    await waitForCondition(() => events().filter((event) => event.kind === 'multi-marker').length === 2);
     const youngerMarker = events().find((event) => event.kind === 'multi-marker' && event.id !== olderMarker.id)!;
-    await waitFor(
+    await waitForCondition(
       () =>
         events().some(
           (event) => event.kind === 'probe' && event.multiWaitingId === olderMarker.id && event.multiWaitingSlots === 2,
         ),
-      10_000,
     );
 
     writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish));
-    await waitFor(
+    await waitForCondition(
       () =>
         events().some((event) => event.kind === 'run' && String(event.script).includes('echo older')) &&
         events().some((event) => event.kind === 'run' && String(event.script).includes('echo younger')),
-      10_000,
     );
     const grantedWaiterOrder = events()
       .filter((event) => event.kind === 'slot' && event.granted && event.requested === 2)
@@ -2723,7 +2743,7 @@ test('a remote run reports how long it waited, synced, installed and ran', async
 });
 
 /** Executes generated host scripts with local cgroup files and command fakes, never SSH or the real Docker daemon. */
-function runFixture() {
+function runFixture(systemdMode: 'systemd-259' | 'old' = 'systemd-259') {
   const directory = mkdtempSync(join(root, 'run-'));
   const bin = join(directory, 'bin');
   const pinnedBunDirectory = join(directory, 'pinned-bun');
@@ -2740,6 +2760,21 @@ const stateFile = directory + '/state';
 const state = JSON.parse(readFileSync(stateFile, 'utf8'));
 const cgroup = (slice: string) => directory + '/cgroup/rezics-check.slice/' + slice;
 if (command === 'systemd-run') {
+  if (args.includes('--help')) {
+    if (process.env.SYSTEMD_MODE === 'systemd-259') console.log('--expand-environment');
+    process.exit(0);
+  }
+  if (process.env.SYSTEMD_MODE === 'old' && args.some((argument) => argument.startsWith('--expand-environment'))) {
+    console.error('systemd-run: unrecognized option --expand-environment=no');
+    process.exit(1);
+  }
+  if (process.env.SYSTEMD_MODE === 'systemd-259' && !args.includes('--expand-environment=no')) {
+    const script = args[args.indexOf('sh') + 2] ?? '';
+    if (/\$\{(?![A-Za-z_][A-Za-z0-9_]*\})[^}]+\}/.test(script)) {
+      console.error('Invalid environment variable name evaluates to an empty string');
+      process.exit(1);
+    }
+  }
   const path = cgroup(process.env.REZICS_CHECK_SLICE!);
   mkdirSync(path, { recursive: true });
   writeFileSync(path + '/cpu.stat', 'usage_usec 500000\\nuser_usec 400000\\nsystem_usec 100000\\n');
@@ -2821,6 +2856,7 @@ writeFileSync(stateFile, JSON.stringify(state));
           env: {
             ...process.env,
             ...env,
+            SYSTEMD_MODE: systemdMode,
             REMOTE_CHECK_PINNED_BUN_PATH: join(pinnedBunDirectory, 'bun'),
             PATH: `${bin}:${process.env.PATH}`,
             RUN_FIXTURE: directory,
@@ -2833,14 +2869,28 @@ writeFileSync(stateFile, JSON.stringify(state));
   };
 }
 
-async function generatedRun() {
+async function generatedRun(command = ['sh', '-c', 'docker run database; docker container create search; exit 7']) {
   const { env, events } = scenario({ a: { available: 20e9 } });
-  expect(
-    (await remote(env, workspace(), ['sh', '-c', 'docker run database; docker container create search; exit 7'])).code,
-  ).toBe(0);
+  expect((await remote(env, workspace(), command)).code).toBe(0);
   const script = (kind: string) => String(events().find((event) => event.kind === kind)!.script);
   return { run: script('run'), cleanup: script('cleanup'), slot: script('slot') };
 }
+
+test('systemd 259 keeps the run script parameter expansions intact', async () => {
+  const { run } = await generatedRun(['sh', '-c', 'value=${1#prefix}; test "$value" = suffix; printf "%s" "$value"', 'sh', 'prefixsuffix']);
+  const fixture = runFixture('systemd-259');
+  const result = fixture.execute(run);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('suffix');
+});
+
+test('older systemd starts the command without --expand-environment support', async () => {
+  const { run } = await generatedRun(['sh', '-c', 'printf old-systemd-started']);
+  const fixture = runFixture('old');
+  const result = fixture.execute(run);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('old-systemd-started');
+});
 
 test('the run checks installed packages after the command and before recording its exit status', async () => {
   const { run } = await generatedRun();
