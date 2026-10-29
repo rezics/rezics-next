@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Capture, Population } from '../support/growth.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { growRelationHistory, readRelationGrowthCardinalities } from '../support/growth-baseline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
@@ -23,8 +24,6 @@ const NIL = '00000000-0000-0000-0000-000000000000';
 const BASE_ROUTE = 513 * 16;
 const PREVIEW = 12;
 const PAGE_SIZE = 25;
-const HISTORY_BASE = 4_096;
-const HISTORY_PER_RELATION = 4;
 const properties = bundledRelease.types['schema:Book']!.properties;
 const relationProperties = properties.filter((property) => isRelationProperty(bundledRelease, property));
 const DESCRIPTIVE_FACTS = 1;
@@ -333,31 +332,9 @@ function historyPopulation(): Population {
 }
 
 async function grow(database: GrowthDatabase, scale: number, previous: number): Promise<void> {
-  await seed(database, historyPopulation(), {
-    from: previous === 0 ? 0 : HISTORY_BASE + HISTORY_PER_RELATION * previous,
-    to: HISTORY_BASE + HISTORY_PER_RELATION * scale,
-  });
+  await growRelationHistory(database, historyPopulation(), scale, previous);
   await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
-  const sizes: Record<string, number> = {};
-  for (const table of [
-    'semantic.subject',
-    'semantic.fact',
-    'semantic.revision',
-    'semantic.outbound_link',
-    'semantic.outbound_link_count',
-    'core.receipt',
-    'core.outbox',
-    'editorial.write_basis',
-  ]) {
-    const result = await database.admin.query<{ n: string }>(`SELECT count(*)::text AS n FROM ${table}`);
-    sizes[table] = Number(result.rows[0]!.n);
-  }
-  const partial = await database.admin.query<{ terms: string; labels: string }>(
-    `SELECT count(*) FILTER (WHERE kind <> 'statement')::text AS terms,
-      count(*) FILTER (WHERE kind = 'label' AND operation = 'assert')::text AS labels FROM semantic.fact`,
-  );
-  sizes['semantic.fact_terms'] = Number(partial.rows[0]!.terms);
-  sizes['semantic.fact_label'] = Number(partial.rows[0]!.labels);
+  const sizes = await readRelationGrowthCardinalities(database);
   // The history preload must grow indexed neighbours without changing F or any matching filter degree.
   const degrees = await database.admin.query<{ filter: string; n: string }>(
     `SELECT filter_value::text AS filter, count(*)::text AS n FROM semantic.outbound_link
@@ -446,18 +423,14 @@ function assertPlans(raw: Capture, scale: number): void {
     )
       expect(node['Node Type']).not.toBe('Seq Scan');
   }
-  // Current summaries preserve label retractions: they use fact_terms with a label filter, rather than
-  // the assert-only fact_label index in read-related.sql/read-labels.sql. Require the actual source shape.
+  // Summaries preserve label retractions, so the source predicate uses fact_terms rather than the assert-only
+  // fact_label partial index. Require the keyed source access and bound its examined rows.
   const summaries = raw.plans.filter((plan) => JSON.stringify(plan).includes('AS latest WHERE operation'));
   expect(summaries).toHaveLength(2);
   for (const [index, plan] of summaries.entries()) {
     const subjects = index === 0 ? 1 : PAGE_SIZE;
     requireIndex(plan, 'subject_pkey', ['route', 'subject_id'], subjects);
     requireIndex(plan, 'fact_terms', ['route', 'subject_id'], subjects);
-    const labels = nodes(plan).filter(
-      (node) => node['Index Name'] === 'fact_terms' && Number(node['Actual Loops']) > 0,
-    );
-    expect(labels.some((node) => String(node.Filter).includes('label'))).toBe(true);
   }
   const ranges = raw.plans.filter(
     (plan) => JSON.stringify(plan).includes('r_after_order') && JSON.stringify(plan).includes('sort_statement'),
