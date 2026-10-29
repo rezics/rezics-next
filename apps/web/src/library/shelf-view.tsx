@@ -39,6 +39,7 @@ import {
   type PersonalLibraryEntry,
 } from './entries-read';
 import { coverSubject } from './subject-row';
+import { displayLibraryTitle } from './title';
 import { progressView } from './progress-label';
 import type { ShelfLayout, ShelfSize } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
@@ -64,8 +65,10 @@ function entryProgress(entry: PersonalLibraryEntry, locale: string) {
   return view ? { value: view.percent == null ? null : view.percent / 100, label: view.text } : undefined;
 }
 
-function titleOf(entry: PersonalLibraryEntry): string {
-  return entry.subject?.label ?? m.library_subject_unavailable();
+function titleOf(entry: PersonalLibraryEntry, locale: string) {
+  return entry.subject
+    ? displayLibraryTitle(entry.subject.label, locale)
+    : { text: m.library_subject_unavailable(), lang: undefined };
 }
 
 function coverOf(entry: PersonalLibraryEntry) {
@@ -87,7 +90,7 @@ type Controls = ReturnType<typeof useShelfRows> & { locale: string; hydrated: bo
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
   // A subject nobody can read has no page; its card stays on the library.
   return entry.subject
-    ? subjectHref({ id: entry.subject.id, label: entry.subject.label }, locale).href
+    ? subjectHref({ id: entry.subject.id, label: displayLibraryTitle(entry.subject.label, locale).text }, locale).href
     : `/${locale}/library`;
 }
 
@@ -109,7 +112,7 @@ function EntryMenu({
   const admitted = useOperation('library_entry.put');
   const progressAdmitted = useOperation('progress_session.list');
   const { entry } = row;
-  const title = titleOf(entry);
+  const title = titleOf(entry, controls.locale).text;
   const subjectId = entry.subject?.id;
   const entries: ItemMenuEntry[] = [
     {
@@ -132,7 +135,10 @@ function EntryMenu({
             label: m.library_menu_open(),
             onSelect: () => {
               if (entry.subject) {
-                const href = subjectHref({ id: entry.subject.id, label: entry.subject.label }, controls.locale);
+                const href = subjectHref(
+                  { id: entry.subject.id, label: displayLibraryTitle(entry.subject.label, controls.locale).text },
+                  controls.locale,
+                );
                 void navigate({ to: href.to, params: href.params });
               }
             },
@@ -211,6 +217,7 @@ function GridView({ controls, shelf, size }: { controls: Controls; shelf: Librar
       {rows.map((row) => {
         const { entry } = row;
         const progress = entryProgress(entry, locale);
+        const title = titleOf(entry, locale);
         const notes =
           row.conflict || row.failure || entry.state !== shelf ? (
             <div className="space-y-1">
@@ -223,7 +230,8 @@ function GridView({ controls, shelf, size }: { controls: Controls; shelf: Librar
           <EntryMenu key={entry.subjectId} row={row} controls={controls} triggerSlot trigger={{ variant: 'ghost' }}>
             <CoverCard
               href={hrefOf(entry, locale)}
-              title={titleOf(entry)}
+              title={title.text}
+              {...(title.lang ? { titleLang: title.lang } : {})}
               cover={coverOf(entry)}
               {...(progress ? { progress } : {})}
               secondary={
@@ -249,13 +257,15 @@ function ListView({ controls }: { controls: Controls }) {
       {rows.map((row) => {
         const { entry } = row;
         const progress = entryProgress(entry, locale);
-        const title = titleOf(entry);
+        const localizedTitle = titleOf(entry, locale);
+        const title = localizedTitle.text;
         return (
           <ShelfListRow
             key={entry.subjectId}
             href={hrefOf(entry, locale)}
             cover={coverOf(entry)}
             title={title}
+            {...(localizedTitle.lang ? { titleLang: localizedTitle.lang } : {})}
             meta={entry.subject?.typeLabel}
             {...(progress ? { progress } : {})}
             status={stateLabel(entry.state)}
@@ -290,10 +300,12 @@ function TableView({ controls }: { controls: Controls }) {
   const tableRows: ShelfTableRow[] = rows.map((row) => {
     const { entry } = row;
     const progress = entryProgress(entry, locale);
+    const title = titleOf(entry, locale);
     return {
       id: entry.subjectId,
       href: hrefOf(entry, locale),
-      title: titleOf(entry),
+      title: title.text,
+      ...(title.lang ? { titleLang: title.lang } : {}),
       cover: coverOf(entry),
       ...(progress ? { progress: <ProgressRow {...progress} /> } : {}),
       type: entry.subject?.typeLabel,
@@ -353,7 +365,7 @@ export function ShelfEntries({
     <>
       {notices.map((row) => (
         <p key={row.entry.subjectId} role={row.failure ? 'alert' : 'status'} className="text-sm">
-          <span className="font-medium">{titleOf(row.entry)}</span>{' '}
+          <span className="font-medium">{titleOf(row.entry, locale).text}</span>{' '}
           {row.failure ? failureText(row.failure) : m.library_conflict()}
         </p>
       ))}
@@ -375,7 +387,7 @@ export function ShelfEntries({
             <AlertDialogHeader>
               <AlertDialogTitle>{m.library_remove_confirm()}</AlertDialogTitle>
               <AlertDialogDescription>
-                {leaving ? m.library_remove_description({ title: titleOf(leaving) }) : null}
+                {leaving ? m.library_remove_description({ title: titleOf(leaving, locale).text }) : null}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

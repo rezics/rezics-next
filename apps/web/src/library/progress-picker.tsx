@@ -7,6 +7,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { SuggestionResult } from '../search/suggestions';
 import { hitYear } from '../search/results';
 import type { LibrarySubject } from './reads';
+import { displayLibraryTitle } from './title';
 
 export type ProgressPickerSubject = EntityPickerSubject & { type?: string };
 
@@ -14,7 +15,7 @@ export function pickerSubject(subject: LibrarySubject): ProgressPickerSubject {
   return {
     id: subject.id,
     type: subject.type,
-    title: subject.label,
+    title: displayLibraryTitle(subject.label, getLocale()).text,
     types: subject.types,
     typeLabel: subject.typeLabel ?? '',
     cover: subject.cover,

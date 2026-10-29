@@ -19,6 +19,7 @@ import { AccountRef } from './account-ref';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
 import { pageText } from '../features/pages/shared';
+import { libraryTitleValue, LibraryTitle } from './title';
 import {
   deleteCollection,
   moveCollectionMember,
@@ -416,17 +417,18 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
               {members.map((member, index) => {
                 const subject = member.subject;
                 const locale = getLocale();
-                const title = subject
-                  ? pageText({ [subject.labelLanguage ?? locale]: subject.label }, locale, subject.labelLanguage)
-                      .text || subject.label
-                  : m.library_subject_unavailable();
+                const localizedTitle = subject ? pageText(libraryTitleValue(subject.label), locale) : null;
+                const title = localizedTitle?.text ?? m.library_subject_unavailable();
                 const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
                 return (
                   <ListRow key={member.id} className="list-none space-y-3 rounded-xl p-2">
-                    <ListRowLink href={href ?? '#'}>{title}</ListRowLink>
+                    <ListRowLink href={href ?? '#'}>
+                      {subject ? <LibraryTitle label={subject.label} locale={locale} /> : title}
+                    </ListRowLink>
                     <CoverCard
                       {...(href ? { href } : {})}
                       title={title}
+                      {...(localizedTitle?.lang ? { titleLang: localizedTitle?.lang } : {})}
                       cover={{
                         subject: subject
                           ? { id: subject.id, title, types: subject.types }

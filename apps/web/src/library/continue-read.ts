@@ -157,13 +157,14 @@ export async function loadContinue(
       const header = results[`subject:${item.subjectId}`];
       const subject = header?.status === 200 ? header.body?.subject : undefined;
       if (!subject) return [];
-      const language = typeof subject.label === 'object' && subject.label ? subject.label.language : undefined;
+      const title = libraryLabel(subject.label, item.subjectId);
+      const language = typeof title === 'object' ? title.language : undefined;
       const progress = continueProgress(item.activeProgressSession);
       const label = stateText(item.state);
       return [
         {
           subjectId: item.subjectId,
-          label: libraryLabel(subject.label, item.subjectId),
+          label: typeof title === 'string' ? title : title.value,
           ...(language ? { language } : {}),
           summary: summaryOf(subject),
           progress:
@@ -195,12 +196,13 @@ export async function loadLegacyContinue(
       page.libraryEntries.flatMap((entry) => {
         const subject = entry.subject as RawSubject | null | undefined;
         if (!subject) return [];
-        const language = typeof subject.label === 'object' && subject.label ? subject.label.language : undefined;
+        const label = libraryLabel(subject.label, entry.subjectId);
+        const language = typeof label === 'object' ? label.language : undefined;
         const stateLabel = stateText(entry.state);
         return [
           readProgress(client, entry.subjectId, authorization).then((progress): ContinueEntry => ({
             subjectId: entry.subjectId,
-            label: libraryLabel(subject.label, entry.subjectId),
+            label: typeof label === 'string' ? label : label.value,
             ...(language ? { language } : {}),
             summary: summaryOf(subject),
             progress:

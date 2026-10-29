@@ -19,6 +19,7 @@ import { csrfHeaders } from '../threads/composer';
 import { parseUnitBatch, type ProgressChange, type ProgressSessionPage, type ProgressState } from './progress-reads';
 import { finishProgressSession, recordProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
+import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressView } from './progress-label';
 
 const buttonClass =
@@ -385,11 +386,21 @@ function SessionEditor({
               <p className="work-title text-2xl font-medium sm:text-3xl">
                 {session.subject ? (
                   <Link
-                    to={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).to}
-                    params={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).params}
+                    to={
+                      subjectHref(
+                        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
+                        getLocale(),
+                      ).to
+                    }
+                    params={
+                      subjectHref(
+                        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
+                        getLocale(),
+                      ).params
+                    }
                     className="underline-offset-4 hover:underline"
                   >
-                    {session.subject.label}
+                    <LibraryTitle label={session.subject.label} locale={getLocale()} />
                   </Link>
                 ) : (
                   m.library_subject_unavailable()

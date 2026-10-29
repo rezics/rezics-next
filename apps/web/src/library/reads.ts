@@ -16,16 +16,17 @@ export type LibrarySubject = {
   id: string;
   type: string;
   types: string[];
-  label: string;
+  label: LibraryTitleLabel;
   labelLanguage?: string;
   cover: CoverSummary | null;
   typeLabel?: string;
 };
 export type LibraryLabel = string | { value: string; language: string } | null;
+export type LibraryTitleLabel = string | { value: string; language: string };
 
-/** Both subject summaries and collection/space targets present a plain display label. */
-export function libraryLabel(label: LibraryLabel | undefined, fallback: string): string {
-  return typeof label === 'string' ? label : (label?.value ?? fallback);
+/** Preserve the kernel-selected language for subject summaries and collection/space targets. */
+export function libraryLabel(label: LibraryLabel | undefined, fallback: string): LibraryTitleLabel {
+  return typeof label === 'string' ? label : (label ?? fallback);
 }
 export type LibraryAccount = { handle: string | null; displayName: string | null };
 export type CollectionVisibility = 'private' | 'public' | 'unlisted';

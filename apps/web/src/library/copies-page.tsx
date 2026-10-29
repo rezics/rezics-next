@@ -14,6 +14,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
 import { coverSubject, rowRatio, SubjectCover } from './subject-row';
+import { displayLibraryTitle, LibraryTitle } from './title';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy, readCopySubject } from './copies-actions';
@@ -460,8 +461,10 @@ export function CopyForm({
 }
 
 function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; ratio: CoverRatio }) {
-  const href = copy.subject ? subjectHref({ id: copy.subject.id, label: copy.subject.label }, locale()) : null;
-  const title = copy.subject?.label ?? m.library_subject_unavailable();
+  const pageLocale = locale();
+  const localizedTitle = copy.subject ? displayLibraryTitle(copy.subject.label, pageLocale) : null;
+  const href = copy.subject ? subjectHref({ id: copy.subject.id, label: localizedTitle!.text }, pageLocale) : null;
+  const title = localizedTitle?.text ?? m.library_subject_unavailable();
   const canEdit = Boolean(
     copy.kind &&
     copy.kind !== 'legacy-unspecified' &&
@@ -477,14 +480,14 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
   return (
     <ListRow className="flex items-center gap-3 py-4 sm:gap-4">
       <ListRowLink href={href?.href ?? '#'} className="z-[2]">
-        {title}
+        {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
       </ListRowLink>
       <div className="w-[72px] shrink-0 sm:w-24">
         <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
       </div>
       <div className="min-w-0 flex-1">
         <p aria-hidden="true" className="font-medium break-words">
-          {title}
+          {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
         </p>
         <p className="text-sm text-muted-foreground">
           <MetaLine items={[kind, copy.kindLabel ?? m.library_other(), copy.statusLabel ?? m.library_other()]} />
@@ -538,7 +541,8 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
     setCopies(page.copies);
     setAddKey(page.addKey);
   }, [page]);
-  const filteredTitle = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
+  const filteredLabel = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
+  const filteredTitle = filteredLabel ? displayLibraryTitle(filteredLabel, locale()).text : undefined;
   return (
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">

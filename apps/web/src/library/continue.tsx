@@ -10,6 +10,7 @@ import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { progressView } from './progress-label';
+import { pageText } from '../features/pages/shared';
 import { SectionHeading } from './section-heading';
 import type { ContinueEntry } from './continue-read';
 
@@ -34,8 +35,8 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
   const cards = subjects.map(({ entry, subject }) => {
     const progress = progressView(entry.progress, locale);
     const progressLabel = progress?.text ?? entry.stateLabel;
-    const lang = entry.language && entry.language.toLowerCase() !== locale.toLowerCase() ? entry.language : undefined;
-    const title = entry.label || m.subject_value_unlabelled();
+    const localizedTitle = pageText(entry.language ? { [entry.language]: entry.label } : entry.label, locale);
+    const title = localizedTitle.text || m.subject_value_unlabelled();
     const href = entry.progress
       ? `/${locale}/library/progress/${encodeURIComponent(entry.progress.sessionId)}`
       : `/${locale}/library/progress?subjectId=${encodeURIComponent(entry.subjectId)}`;
@@ -45,7 +46,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
         {...(admitted ? { href } : {})}
         cover={{ subject, cover: coverOf(entry.summary), src: coverSrc }}
         title={title}
-        {...(lang ? { titleLang: lang } : {})}
+        {...(localizedTitle.lang ? { titleLang: localizedTitle.lang } : {})}
         linkLabel={m.home_continue_label({ title }, options)}
         {...(progressLabel
           ? {

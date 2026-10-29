@@ -5,14 +5,15 @@ import type { ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
-import { pageText } from '../features/pages/shared';
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
+import { displayLibraryTitle, libraryTitleValue, LibraryTitle } from './title';
+import { pageText } from '../features/pages/shared';
 
 /** What `Cover` needs of an embedded subject; a subject nobody can read still gets its frame, titled as unavailable. */
 export function coverSubject(subject: LibrarySubject | null): CoverSubject {
   return subject
-    ? { id: subject.id, title: subject.label, types: subject.types }
+    ? { id: subject.id, title: displayLibraryTitle(subject.label, getLocale()).text, types: subject.types }
     : { id: 'unavailable', title: m.library_subject_unavailable(), types: [] };
 }
 
@@ -71,11 +72,9 @@ export function SubjectIdentity({
   children?: ReactNode;
 }) {
   const locale = getLocale();
-  const title = subject
-    ? pageText({ [subject.labelLanguage ?? locale]: subject.label }, locale, subject.labelLanguage).text ||
-      subject.label
-    : null;
-  const href = subject ? subjectHref({ id: subject.id, label: title! }, locale) : null;
+  const title = subject ? pageText(libraryTitleValue(subject.label), locale) : null;
+  const href = subject ? subjectHref({ id: subject.id, label: title!.text }, locale) : null;
+
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
       <SubjectCover subject={subject} ratio={ratio} size={size} />
@@ -83,7 +82,7 @@ export function SubjectIdentity({
         <p className="font-medium break-words">
           {subject ? (
             <Link to={href!.to} params={href!.params} className="text-primary underline-offset-4 hover:underline">
-              {title}
+              <LibraryTitle label={subject.label} locale={locale} />
             </Link>
           ) : (
             <span>{m.library_subject_unavailable()}</span>

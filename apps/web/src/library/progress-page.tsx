@@ -23,6 +23,7 @@ import { progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';
 import { finishProgressSession, startProgressSession, readProgressChoices } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
+import { displayLibraryTitle, LibraryTitle } from './title';
 
 const modeChoices: { value: ProgressMode; label: () => string }[] = [
   { value: 'scalar_amount', label: () => m.library_progress_mode_amount() },
@@ -283,15 +284,27 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
           {readable ? (
             <>
               <ListRowLink href={`/${getLocale()}/library/progress/${encodeURIComponent(session.id)}`}>
-                {session.subject?.label ?? m.library_subject_unavailable()}
+                {session.subject ? (
+                  <LibraryTitle label={session.subject.label} locale={getLocale()} />
+                ) : (
+                  m.library_subject_unavailable()
+                )}
               </ListRowLink>
               <span className="work-title line-clamp-2 text-lg font-medium">
-                {session.subject?.label ?? m.library_subject_unavailable()}
+                {session.subject ? (
+                  <LibraryTitle label={session.subject.label} locale={getLocale()} />
+                ) : (
+                  m.library_subject_unavailable()
+                )}
               </span>
             </>
           ) : (
             <span className="work-title line-clamp-2 text-lg font-medium">
-              {session.subject?.label ?? m.library_subject_unavailable()}
+              {session.subject ? (
+                <LibraryTitle label={session.subject.label} locale={getLocale()} />
+              ) : (
+                m.library_subject_unavailable()
+              )}
             </span>
           )}
           {session.subject?.typeLabel ? (
@@ -318,8 +331,13 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
                           {
                             type: 'link' as const,
                             label: m.library_progress_open_subject(),
-                            href: subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale())
-                              .href,
+                            href: subjectHref(
+                              {
+                                id: session.subject.id,
+                                label: displayLibraryTitle(session.subject.label, getLocale()).text,
+                              },
+                              getLocale(),
+                            ).href,
                           },
                         ]
                       : []),

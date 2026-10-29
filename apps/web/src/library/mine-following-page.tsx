@@ -8,6 +8,7 @@ import { Link } from '@tanstack/react-router';
 import { coverSrc } from '../media/cover-src';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { displayLibraryTitle } from './title';
 import { PageHeading } from '../shell/page-heading';
 import type { MineFollow, MineFollowingPage } from './mine-following';
 import { unfollow } from './mine-following-actions';
@@ -69,6 +70,9 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                 <CoverGrid ratio={sharedRatio(subjects)}>
                   {items.map((follow, index) => {
                     const subject = subjects[index]!;
+                    const title = follow.target
+                      ? displayLibraryTitle(follow.target.label, getLocale())
+                      : { text: subject.title, lang: undefined };
                     const path = type === 'subject' ? 'subjects' : 'collections';
                     return (
                       <CoverCard
@@ -76,7 +80,8 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                         {...(follow.target && type !== 'space' && (type !== 'collection' || canReadCollection)
                           ? { href: `/${getLocale()}/${path}/${encodeURIComponent(follow.target.id)}` }
                           : {})}
-                        title={subject.title}
+                        title={title.text}
+                        {...(title.lang ? { titleLang: title.lang } : {})}
                         cover={{
                           subject,
                           cover: follow.target?.cover ?? null,
