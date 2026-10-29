@@ -78,3 +78,25 @@ Verification commands from the worktree root, through `bun scripts/worker-check.
 bun test services/importer/tests/vndb-tables.test.ts services/importer/tests/vndb-tables-growth.test.ts
 bun run --cwd services/importer typecheck
 ```
+
+## Final results
+
+The completed two-file runtime run at `8c0e9f42b9` passed: **8 tests, 0 failures, 13,360 assertions across
+2 local files**. Its raw receipt is
+`worker-check-2026-10-29T13-32-20.972Z-f4a98e1b.log`; it covers exactly the two test files in the command above.
+
+The first importer typecheck reported five local annotation errors. Commit
+`ecbeb2c7ed7ff7df9dc25b738265554dafc41258` corrected only `CountedCheck` input annotations and compatibility
+casts in those two files. Inspection of that commit's diff confirms no runtime behaviour, assertion, fixture or
+bound changed after the passing runtime run; the runtime suite was not rerun.
+
+The final `bun run --cwd services/importer typecheck` completed with **exit status 0 and no type errors in
+133 files**. Its raw receipt is `worker-check-2026-10-29T13-42-31.556Z-8942fc94.log`: it ran on host c after
+787.361 seconds queued for a slot. The earlier annotation errors were source errors corrected by the commit,
+not infrastructure failures.
+
+These receipts were read directly from the original worktree's `.temp/goal/checks/` logs, alongside the committed
+report and the final source diff. They establish the local runtime scope and importer compiler scope above;
+they do not establish all-source import acceptance, portable/native API acceptance, PostgreSQL support, the missing
+projection-driver binding, or a passing main revision. The two-file source change has a separate pending landing;
+this report does not imply its integration.
