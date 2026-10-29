@@ -109,11 +109,14 @@ test("a post image stays claimed by its first post: that post's revisions may re
   const path = `/v1/threads/${driver.containers.thread.id}/posts`;
   const unknown = await send('POST', path, reference([newId(driver.containers.thread.route)]));
   expect(unknown.status).toBe(409);
-  const problem = await unknown.text();
-  expect(JSON.parse(problem).code).toBe('media_unavailable');
+  const problem = await unknown.json();
+  delete problem.request_id;
+  expect(problem.code).toBe('media_unavailable');
   const second = await send('POST', path, reference([image]));
   expect(second.status).toBe(409);
-  expect(await second.text()).toBe(problem);
+  const secondProblem = await second.json();
+  delete secondProblem.request_id;
+  expect(JSON.stringify(secondProblem)).toBe(JSON.stringify(problem));
   expect(await row(image)).toEqual(before);
 
   const { system } = currentMediaScenario();
@@ -129,7 +132,9 @@ test("a post image stays claimed by its first post: that post's revisions may re
     visibility: 'published',
   });
   expect(thread.status).toBe(409);
-  expect(await thread.text()).toBe(problem);
+  const threadProblem = await thread.json();
+  delete threadProblem.request_id;
+  expect(JSON.stringify(threadProblem)).toBe(JSON.stringify(problem));
   expect(await row(image)).toEqual(before);
   expect(before.claimed_item_id).toBe(first.id);
 });
