@@ -650,6 +650,67 @@ test('CPU sampling follows parent links, includes descendants and excludes unrel
   expect(processTreeCpuTicks(10, join(root, 'unavailable'))).toBeUndefined();
 });
 
+test('local progress accumulates quiet descendant CPU and stops sampling when the command exits', async () => {
+  const root = recoveryFixture();
+  const procRoot = join(root, 'proc');
+  const pidFile = join(root, 'pid');
+  const stopFile = join(root, 'stop');
+  const log = join(root, 'command.log');
+  mkdirSync(procRoot);
+  const overrides = {
+    REZICS_CHECK_PROGRESS_INTERVAL_MS: '10',
+    REZICS_CHECK_PROC_ROOT: procRoot,
+    REZICS_CHECK_PROGRESS_PID_FILE: pidFile,
+  };
+  const old = { ...process.env };
+  Object.assign(process.env, overrides);
+  try {
+    await withQuietAdmission(async () => {
+      const running = runWorkerCheck(
+        ['bun', '-e', `while (!require('node:fs').existsSync(${JSON.stringify(stopFile)})) await Bun.sleep(5)`],
+        root,
+        false,
+        log,
+      );
+      try {
+        await untilRecorded(() => existsSync(pidFile));
+        const pid = Number(readFileSync(pidFile, 'utf8'));
+        const stat = (processId: number, parent: number, ticks: number) => {
+          mkdirSync(join(procRoot, String(processId)), { recursive: true });
+          writeFileSync(
+            join(procRoot, String(processId), 'stat'),
+            `${processId} (quiet child) S ${parent} 0 0 0 0 0 0 0 0 0 ${ticks} 0\n`,
+          );
+        };
+        stat(pid, 1, 0);
+        stat(pid + 1, pid, 125);
+        stat(pid + 2, 1, 10_000);
+        await untilRecorded(() => readFileSync(log, 'utf8').includes('worker-check: running, 1 CPU seconds'));
+        const firstReport = readFileSync(log, 'utf8');
+        stat(pid + 1, pid, 165);
+        await Bun.sleep(35);
+        expect(readFileSync(log, 'utf8')).toBe(firstReport);
+        stat(pid + 1, pid, 245);
+        await untilRecorded(() => readFileSync(log, 'utf8').includes('worker-check: running, 2 CPU seconds'));
+        expect(readFileSync(log, 'utf8')).toBe(
+          'worker-check: running, 1 CPU seconds\nworker-check: running, 2 CPU seconds\n',
+        );
+      } finally {
+        writeFileSync(stopFile, '');
+        expect(await running).toBe(0);
+      }
+      const completed = readFileSync(log, 'utf8');
+      await Bun.sleep(35);
+      expect(readFileSync(log, 'utf8')).toBe(completed);
+    });
+  } finally {
+    for (const key of Object.keys(overrides)) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key];
+    }
+  }
+});
+
 test('a quiet local command with CPU progress is not stopped as stalled and its runner ends cleanly', async () => {
   const root = recoveryFixture();
   const marker = join(root, 'progress-pid');

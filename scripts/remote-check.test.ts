@@ -3229,6 +3229,32 @@ test('a quiet remote command without CPU progress writes no progress line', () =
   expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
 });
 
+test('a quiet remote command reports every interval with at least one CPU second of progress', () => {
+  const fixture = runFixture();
+  const command = [
+    'sh',
+    '-c',
+    'until [ -f "$1" ] && [ "$(wc -l < "$1")" -ge 7 ]; do /bin/sleep 0.005; done',
+    'progress-command',
+    '/srv/rezics-check/sleep-pids',
+  ];
+  const result = fixture.execute(
+    runScript('remote-each-interval', '/srv/rezics-check/runs/remote-each-interval', '.', command, 'check-a', 10),
+    { PROGRESS_INCREMENT: '1200000' },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  const reports = [...result.stderr.matchAll(/remote-check: running on check-a, (\d+) CPU seconds/g)];
+  const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
+  // Each new sleeper proves the preceding interval finished sampling and reporting.
+  expect(reports.length).toBeGreaterThanOrEqual(6);
+  expect(reports.length).toBeGreaterThanOrEqual(pids.length - 1);
+  expect(reports.map((report) => Number(report[1]))).toEqual(
+    reports.map((_, index) => Math.floor((500_000 + (index + 1) * 1_200_000) / 1_000_000)),
+  );
+  expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
+  expect(result.stderr.lastIndexOf('remote-check: running on')).toBeLessThan(result.stderr.indexOf('remote-check: command'));
+});
+
 test('remote CPU reports accumulate subsecond work across intervals', () => {
   const fixture = runFixture();
   // End after six completed samples, independent of process startup time on a loaded host.
