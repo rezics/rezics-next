@@ -1,3 +1,4 @@
+import { metaText } from '@rezics/ui/meta-line';
 import type { CopiesPageData } from './copies-read';
 import { m } from '../paraglide/messages.js';
 
@@ -49,7 +50,7 @@ export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrf
                 {page.profile.kinds.flatMap((kind) =>
                   kind.statuses.map((status) => (
                     <option key={`${kind.id}:${status.id}`} value={status.id}>
-                      {kind.label} · {status.label}
+                      {metaText([kind.label, status.label])}
                     </option>
                   )),
                 )}

@@ -31,6 +31,7 @@ test('visible middle-dot separators in source are centralized, with named conten
     'apps/web/src/kernel/fake/search-facets.ts': 'fixture names contain a middle dot',
     'apps/web/src/kernel/recorded/subject.json': 'recorded fixture names contain a middle dot',
     'apps/web/src/kernel/recorded/subject-page.json': 'recorded fixture names contain a middle dot',
+    'apps/web/src/kernel/recorded/subject-page-zh-Hans.json': 'recorded fixture names contain a middle dot',
     'apps/web/src/kernel/recorded/search-typed.json': 'recorded fixture names contain a middle dot',
     'apps/web/src/paraglide/messages/subject_ratings_imported.js':
       'generated localization of the imported rating message',
@@ -40,6 +41,8 @@ test('visible middle-dot separators in source are centralized, with named conten
     'apps/web/src/routes/subjects/$id_.$slug_.relations.tsx': 'document title separator',
     'apps/web/src/stories/home.stories.tsx': 'fixture story names',
     'apps/web/src/stories/moderation-decision.stories.tsx': 'fixture story names',
+    'apps/web/src/stories/moderation-reports.stories.tsx': 'fixture story names',
+    'apps/web/src/stories/library-collection-dynamic.stories.tsx': 'fixture story names',
     'apps/web/src/stories/settings.stories.tsx': 'fixture story names',
     'packages/ui/src/components/meta-line.tsx': 'shared metadata separator implementation',
     'packages/ui/src/components/avatar-initials.tsx': 'middle dot splits a name for initials',
