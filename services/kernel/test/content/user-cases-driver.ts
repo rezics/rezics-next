@@ -17,11 +17,13 @@ import type {
 } from '../../../../specs/content-user-cases-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { createPublicRatingSource } from '../../src/rating/public-rating-source.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createOpenSearch, OpenSearchError } from '../../src/search/opensearch.ts';
+import { withPublicRatings } from '../../src/search/rating-subject-source.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
@@ -80,9 +82,14 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
   const system = await openUserCasesSystem();
   const pool = system.database.pool;
   const prefix = `uc-${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}-`;
-  const fixtureTime = Date.now();
+  let fixtureTime = Date.now();
   const searchUrl = process.env.OPENSEARCH_URL;
   const search = searchUrl ? createOpenSearch(searchUrl) : undefined;
+  const publicRatings = createPublicRatingSource(pool);
+  const searchSubjects = withPublicRatings(subjectSource(pool, system.routeKey), publicRatings, {
+    questionId: STANDARD_QUESTION_ID,
+    populationId: GLOBAL_CONTEXT,
+  });
   const holds = new Set<HeldPage>();
   let worker: Awaited<ReturnType<typeof startUserCasesWorker>> | undefined;
   let workClient: WorkClient | undefined;
@@ -143,7 +150,8 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
               pool,
               client: search,
               prefix,
-              source: subjectSource(pool, system.routeKey),
+              source: searchSubjects,
+              ratings: publicRatings,
               cursors: system.tokenKeys,
             }),
           }
@@ -238,6 +246,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
       worker = await startUserCasesWorker(system, prefix);
       try {
         await settleUserCasesWorker(system, worker, prefix);
+        fixtureTime = Math.max(fixtureTime, Date.now());
         if (search) await search.request('POST', `/${prefix}subjects-g1/_refresh`);
       } finally {
         await worker.stop();
