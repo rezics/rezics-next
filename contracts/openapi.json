@@ -48243,6 +48243,13 @@
                                   "null"
                                 ]
                               },
+                              "incarnationId": {
+                                "format": "uuid",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
                               "lastActivityAt": {
                                 "type": "string"
                               },
@@ -48483,6 +48490,13 @@
                             "properties": {
                               "createdAt": {
                                 "type": "string"
+                              },
+                              "incarnationId": {
+                                "format": "uuid",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "revision": {
                                 "maximum": 2147483646,
@@ -49422,6 +49436,15 @@
             }
           },
           {
+            "in": "query",
+            "name": "incarnationId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
             "in": "header",
             "name": "idempotency-key",
             "required": true,
@@ -50136,6 +50159,13 @@
                       "properties": {
                         "createdAt": {
                           "type": "string"
+                        },
+                        "incarnationId": {
+                          "format": "uuid",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "revision": {
                           "maximum": 2147483646,
@@ -51064,6 +51094,10 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "incarnationId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
                   "revision": {
                     "maximum": 2147483646,
                     "minimum": 1,
@@ -51095,6 +51129,13 @@
                       "properties": {
                         "createdAt": {
                           "type": "string"
+                        },
+                        "incarnationId": {
+                          "format": "uuid",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "revision": {
                           "maximum": 2147483646,
@@ -51141,6 +51182,13 @@
                       "properties": {
                         "createdAt": {
                           "type": "string"
+                        },
+                        "incarnationId": {
+                          "format": "uuid",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "revision": {
                           "maximum": 2147483646,

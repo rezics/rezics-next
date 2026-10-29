@@ -164,7 +164,7 @@ export async function updateEntryState(
 ): Promise<Entry | null> {
   const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
   if (acceptedPin === null) assertState(state);
-  const row = await entryUpdate.run(queryClient(client), {
+  const [row] = await entryUpdate.run(queryClient(client), {
     route,
     account_id: accountId,
     subject_id: subjectId,
@@ -185,7 +185,7 @@ export async function deleteEntry(
   revision: number,
   expectedIncarnationId?: string,
 ): Promise<Entry | null> {
-  const row = await entryDelete.run(queryClient(client), {
+  const [row] = await entryDelete.run(queryClient(client), {
     route,
     account_id: accountId,
     subject_id: subjectId,
