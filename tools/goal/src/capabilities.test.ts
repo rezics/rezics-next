@@ -63,4 +63,17 @@ describe('capability completion contract', () => {
       ),
     ).toContain('Scenario failed: catalogue reads released data');
   });
+
+  test('scope rows with multiple owners and reasons without an explanation are validated', () => {
+    const scope = '| System | Owner | First public scope |\n| --- | --- | --- |\n| Notifications | content; accounts for preferences | In |';
+    const manifest = parseCapabilityManifest(fixture('Notifications'), 'accounts');
+    expect(validateCapabilityManifest(manifest, scope)).toEqual([]);
+    const emptyReason = parseCapabilityManifest(
+      fixture('Notifications').replace('reason:This capability does not appear here', 'reason:'),
+      'accounts',
+    );
+    expect(validateCapabilityManifest(emptyReason, scope)).toContain(
+      'Notifications curated needs scenario names or a reason',
+    );
+  });
 });

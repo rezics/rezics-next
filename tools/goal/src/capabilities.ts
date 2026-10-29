@@ -82,7 +82,7 @@ function scopeRows(scopeMarkdown: string): { name: string; owners: string[] }[] 
       const row = cells(line);
       if (row.length < 3 || !/^In(?:\b|:)/.test(row[2]!)) return [];
       const owners = row[1]!
-        .split(',')
+        .split(/[,;]/)
         .map((part) => part.split('(')[0]!.trim())
         .filter(Boolean);
       return [{ name: row[0]!, owners }];
@@ -128,7 +128,8 @@ export function validateCapabilityManifest(manifest: CapabilityManifest, scopeMa
       if (!capability[field].trim()) errors.push(`${capability.scope} is missing ${field}`);
     for (const surface of SURFACES) {
       const cell = capability.surfaces[surface].trim();
-      if (!cell || (!cell.startsWith('reason:') && !scenarioNames(cell).length))
+      const reason = /^reason:\s*\S[\s\S]*$/.test(cell);
+      if (!cell || (!reason && !scenarioNames(cell).length))
         errors.push(`${capability.scope} ${surface} needs scenario names or a reason`);
     }
     if (!capability.command.length) errors.push(`${capability.scope} has no native acceptance command`);
