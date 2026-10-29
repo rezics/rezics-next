@@ -11,8 +11,9 @@ Validation checks references, CURIE expansion, sorted unique lists, type bases,
 facets, relation metadata and cover ratios, datatype-specific members, fixed value
 schemas, context defaults, saved filters, and regular-expression safety. A facet is an item, a time, a quantity, or
 a code: a `string` whose release definition has a `pattern`. Pattern checks use
-one shared structural admission policy and recheck 4.5.0's in-process synchronous
-entry point in an isolated VM context. The pinned browser checker's `performance.now`
+one shared structural admission policy, a bounded IRI composition proof, and
+recheck 4.5.0's in-process synchronous entry point in an isolated VM context.
+The pinned browser checker's `performance.now`
 is a private counter, with a budget of 8,192 native cancellation checkpoints
 per expression; it never reads or patches the host clock. This also bounds DFA
 construction, which has no native size cap. Safety verdicts have no wall-clock deadline. Admission permits at most
@@ -21,8 +22,26 @@ repetition endpoints, and 128 expanded structural units (including group and
 quantifier overhead). Nested repetitions multiply their costs before analysis.
 Backreferences, named groups, Unicode properties, lookbehind, and lookahead of
 more than one character atom are refused. All shipped value schemas fit this profile.
-The checker caps graph construction at 1,024 transitions and accepts only an
-`automaton` safe verdict. Its `auto` selection is used because the pinned version
+After admission, the static proof recognizes the complete grammar
+`(?:^F S*:T*$)(?![\s\S])` (spaces separate grammar symbols), optionally wrapped in
+`^(?:1|...)$`. `F` must be a nonempty positive ASCII letter class, `S` a nonempty
+positive ASCII scheme class containing only letters, digits, `+`, `.` or `-`,
+and `T` one native Unicode character class. All anchors, quantifiers, assertions
+and wrappers must match the grammar exactly, with JavaScript's `u` flag alone.
+The initial anchor fixes one start; `S` excludes the colon delimiter, so only one
+split can enter `T`. Each repeated class scans and backtracks at most the input
+length, with constant work at each suffix assertion. The optional `1` branch has
+a disjoint first character. Matching is therefore linear even on hostile misses.
+Proof recognition scans at most 256 source characters, checks ASCII intervals
+without expanding ranges, and constructs no graph. It retains all admission
+limits and does not execute a matcher. `analyzePattern` reports this independent
+proof as `proof: 'iri-composition'`, with zero native checkpoints; it is never
+inferred from a checker refusal. This admits the released wildcard quantity unit
+composition without changing its emitted bytes or accepted language.
+
+All other admitted patterns use the checker, which caps graph construction at
+1,024 transitions and accepts only an `automaton` safe verdict. Its `auto`
+selection is used because the pinned version
 bypasses graph limits in explicit `automaton` mode; a synchronous diagnostic guard
 refuses limit failures and fuzz fallback before seeding or matching. Recall attack
 execution is disabled. Invalid, unsupported, over-budget, and inconclusive patterns
@@ -740,7 +759,7 @@ Source conventions:
   `qualifiers` is a space-separated string of existing slot names.
 - Patterns are allowed only on `string`, `external-id`, and `monolingualtext`.
   Every source pattern must compile with JavaScript's `u` flag, contain at most
-  256 characters, and receive `safe` from recheck's synchronous checker.
+  256 characters, and be proved safe by the shared pattern policy above.
 - Each presentation entry uses a BCP 47 language tag or `<group>/<tag>`, where
   group matches `^[a-z][a-z0-9-]{0,63}$`, and contains a YAML object with optional
   `types`, `properties`, `inverseProperties`, and `typeDescriptions` maps, keyed by release CURIE.
