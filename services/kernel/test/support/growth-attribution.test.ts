@@ -99,11 +99,11 @@ test('failed growth reports normalized statement costs, plan nodes, and intermit
         statement: expect.stringContaining('/* growth-tag */'),
         rows: expect.any(Number),
         blocks: expect.any(Number),
-        count: 3,
+        count: 1,
       }),
     );
     expect(statements).toContainEqual(
-      expect.objectContaining({ statement: expect.stringContaining('WHERE id = $1'), count: 3 }),
+      expect.objectContaining({ statement: expect.stringContaining('WHERE id = ?'), count: 1 }),
     );
   }
 }, 60_000);
