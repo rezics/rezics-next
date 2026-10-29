@@ -115,9 +115,14 @@ test('explicit named Realm setup grants only native Global realm create and pres
   const unknownContext = newId(routeOf(context.id)!);
   status(await fixture.request('alice', 'GET', `/v1/contexts/${unknownContext}`), 404);
   denied(await fixture.request('alice', 'POST', '/v1/realms', { ...body, contextId: unknownContext }, discoveryKey()));
-  const unreadableContext = await fixture.scoped('alice', ['realm:create', 'realm:read', 'space:manage']);
-  status(await unreadableContext.request('GET', `/v1/contexts/${context.id}`), 404);
-  denied(await unreadableContext.request('POST', '/v1/realms', body, discoveryKey()));
+  // A real Space is not a readable Context. Current community Contexts have a public read floor;
+  // omitting context:read from a bearer does not manufacture a private Context.
+  const publicContextReader = await fixture.scoped('alice', ['realm:create', 'realm:read', 'space:manage']);
+  expect(status(await publicContextReader.request('GET', `/v1/contexts/${context.id}`), 200).context).toEqual(context);
+  status(await publicContextReader.request('GET', `/v1/contexts/${aliceSpace.spaceId}`), 404);
+  denied(
+    await publicContextReader.request('POST', '/v1/realms', { ...body, contextId: aliceSpace.spaceId }, discoveryKey()),
+  );
   const unmanagedSpace = await fixture.scoped('alice', ['realm:create', 'realm:read', 'context:read']);
   status(await unmanagedSpace.request('GET', `/v1/contexts/${context.id}`), 200);
   denied(await unmanagedSpace.request('POST', '/v1/realms', body, discoveryKey()));

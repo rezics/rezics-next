@@ -159,8 +159,12 @@ Only the original `collections` gate is open; personal Library and progress rema
 independently requires Global `realm:create`, native `space:manage` on an existing free host Space, and native
 `context:read` with `publicContextEligibility` on the supplied Context. The latter checks the actual
 `semantic.context` row through `context-public-evidence.sql` and `context-public-exists.sql`; a routed unknown ID
-has no eligible row. An Alice scope variant omitting `context:read` cannot read the existing Context (404) and
-cannot create the Realm (403), even with the Global grant. A variant omitting `space:manage`, Bob's Space, a wrong
+has no eligible row. Using the actual Space ID as a Context also gives Context GET 404 and Realm creation 403:
+that existing resource has no eligible Context row. These are the native unreadable-Context controls; the current
+Context creation body has no private-visibility field. An Alice scope variant omitting `context:read` still reads
+the created community Context (200): native Access caps the authenticated grant branch with scopes without
+poisoning a verified public read floor. The helper neither supplies nor bypasses that eligibility.
+A variant omitting `space:manage`, Bob's Space, a wrong
 resource used as a Space and an unknown Space also yield 403. An occupied Space denies a second Realm (403).
 Ungranted Bob's own-Space request denies independently; the granted empty-scope account still receives 403.
 These are native denial/no-effect controls, not a new private Context mechanism or a Global Context recipe.
