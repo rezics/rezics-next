@@ -1,6 +1,7 @@
 # Public facet discovery
 
-This document owns the approved count-free facet continuation wire. [Search](../services/kernel/src/search/README.md)
+This document owns the approved count-free property/value facet continuation wire and the narrow
+[kind-count exception](#kind-count-exception). [Search](../services/kernel/src/search/README.md)
 owns execution; [Filtered lists](filtered-lists.md) owns admission, useful pages, privacy and numerical budgets.
 The additive [type-only contract](../services/kernel/src/search/facet-discovery-contract.ts) describes the adopted
 transport, not the current service response or an executable shared ABI.
@@ -84,6 +85,28 @@ discovery enumerates values; released range fields remain available independentl
 Group supported properties within the existing eight-property request limit. Report the actual Book roster even
 when it is smaller; do not fabricate more fields or increase limits to fit a demonstration.
 
+## Kind-count exception
+
+Only universal search kind chips may carry counts under [Universal search conditions](search-conditions.md#kind-facets-and-generic-hits).
+Property/value facets above and public search totals remain count-free. This exception does not add counts to
+`subjects:facets`, permit count ordering or certify current sampled type buckets.
+
+Disjunctive counts remove ONLY the designated kind leaf directly under top-level AND. Keep nested OR/NOT kind
+leaves and every other predicate; without that designated leaf count the unchanged query. Authorize and charge
+the potentially broader count population separately, with whole-query current privacy including excluded rows.
+
+`{value, exact:true}` requires certified complete canonical membership; `exact:false` requires a certified
+positive lower bound displayed `N+`. Unknown/unavailable is omitted or explicitly unavailable, never zero; do
+not show a zero lower-bound badge. Exact zero requires proved authorized absence. Fixed maintained evidence
+must represent the exact query population and update atomically with membership/privacy reductions. Capped
+fully checked enumeration is exact only on complete exhaustion. Unchecked buckets, estimates, occurrences,
+page lengths and full-match direct aggregates are not evidence.
+
+Kind metadata is a fixed bounded page in configured order, with data ID/localized label/icon and one More kinds
+control for continuation. Counts are attempted once on the initial query and retained across hit continuations;
+changed conditions start a new query. Later metadata pages may mark counts unavailable. The research values
+Smax=2/C=2/K_page=8 remain proposals pending first native measurement, not frozen output or engine bounds.
+
 ## Implementation status and native acceptance prerequisites
 
 The current `query.ts`/`service.ts` facet path is a sampled, count-ordered preview with unsafe count metadata,
@@ -138,3 +161,19 @@ These are implementation closure requirements, not native cases supplied or pass
   iterator work and every backend's actual counters, including denied/empty/deep pages, sparse matches and repair.
   Prove useful filled/final pages and finite retained preparation under the current three-scale limits. Sampled
   terms, bounded output length and formatter/type passes cannot establish these bounds.
+
+### Initial universal kind counts and metadata
+
+- Touches: configured metadata, designated-leaf transformation, broader source authorization/population,
+  maintained evidence or checked witnesses, whole-query safety, original/terminal support and retained cursor work.
+- Bound: share [Universal search Cost](search-conditions.md#mixed-kind-ranked-page-and-kind-counts) and
+  [Filtered lists budgets](filtered-lists.md#budgets); no per-kind/source allowance. Counts include raw rejects,
+  duplicates, lookahead, shard/iterator work, SQL, Access and bytes. Proposed C=2 enumeration runs only in a spare
+  third round, at most `min(C,2*remaining+1)` candidates; a full page permits one. Hit refill means unavailable
+  counts. No repeated count enumeration on hit continuation. At ten million matches use exact fixed maintained
+  evidence, capped fully checked witnesses or unavailable; sparse `terminate_after` is no examined-work proof.
+- Growth check: Search's native merged-page capture at 64/512/4096 grows matches, corpus, kinds and reductions
+  independently at fixed page size. Cover dominant/rare kinds, broader disjunction, nested OR/NOT, exact zero,
+  certified positive lower bounds, unavailable evidence, partial shards and excluded-row reductions arriving and
+  ACKed during execution. Capture actual iterator/SQL/Access/byte cost and served share, without native claims
+  from formatting. Metadata continuation must not add per-kind queries or repeat hit-continuation counts.
