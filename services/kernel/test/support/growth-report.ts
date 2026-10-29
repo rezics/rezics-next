@@ -129,30 +129,31 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
     backends: readonly (number | undefined)[] | undefined,
     plans: readonly unknown[],
     planStatements: readonly (number | undefined)[] | undefined,
-  ): StatementOccurrence[] => statements.map((statement, index) => {
-    const planIndices: number[] = [];
-    let rows = 0;
-    let blocks = 0;
-    for (let planIndex = 0; planIndex < plans.length; planIndex++) {
-      if (planStatements?.[planIndex] !== index) continue;
-      planIndices.push(planIndex);
-      for (const entry of planEntries(plans[planIndex])) {
-        const cost = planCost(entry.plan);
-        rows += cost.rows;
-        blocks += cost.blocks;
+  ): StatementOccurrence[] =>
+    statements.map((statement, index) => {
+      const planIndices: number[] = [];
+      let rows = 0;
+      let blocks = 0;
+      for (let planIndex = 0; planIndex < plans.length; planIndex++) {
+        if (planStatements?.[planIndex] !== index) continue;
+        planIndices.push(planIndex);
+        for (const entry of planEntries(plans[planIndex])) {
+          const cost = planCost(entry.plan);
+          rows += cost.rows;
+          blocks += cost.blocks;
+        }
       }
-    }
-    const code = errors?.[index] ?? null;
-    return {
-      index,
-      statement: normalizeStatement(statement),
-      backend: backends?.[index],
-      error: code === null ? null : { code, message: messages?.[index] ?? '' },
-      plans: planIndices,
-      rows,
-      blocks,
-    };
-  });
+      const code = errors?.[index] ?? null;
+      return {
+        index,
+        statement: normalizeStatement(statement),
+        backend: backends?.[index],
+        error: code === null ? null : { code, message: messages?.[index] ?? '' },
+        plans: planIndices,
+        rows,
+        blocks,
+      };
+    });
   return {
     statements: occurrences(
       capture.statements,
