@@ -1,6 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFile } from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser } from 'playwright';
 import { m } from '../src/paraglide/messages.js';
@@ -23,8 +24,9 @@ const linked: Item = {
 };
 const plain: Item = {
   id: 'plain',
-  kind: 'report_outcome',
+  kind: 'moderation_decision',
   actorId: null,
+  reportId: 'report-1',
   unread: false,
   text: 'A notice without a destination',
   unavailable: false,
@@ -44,12 +46,19 @@ function markup(items: Item[]) {
   return renderToStaticMarkup(createElement(InboxRows, { page: { items, next: null } }));
 }
 
+test('Inbox stories enter the inbox route through the shared page story shell', async () => {
+  const source = await readFile(new URL('../src/stories/inbox.stories.tsx', import.meta.url), 'utf8');
+  expect(source).toContain("import { PageStory } from './page'");
+  expect(source).toContain('<PageStory visitor="Signed In" path={`/inbox?fixture=${fixture}`} />');
+  expect(source).toContain("title: 'Pages/Inbox'");
+});
+
 test('the inbox renders notifications as ListRows, with an actor avatar or kind icon, and distinguishes unread rows', () => {
   const html = markup([linked, plain]);
   expect(html.match(/data-slot="list-row"/g)).toHaveLength(2);
   expect(html).toContain('data-slot="list-row-link"');
   expect(html).toContain('data-slot="avatar"');
-  expect(html).toContain('aria-label="Report outcome"');
+  expect(html).toContain('data-icon-kind="report_outcome"');
   expect(html).toContain('data-unread="true"');
   expect(html).toContain('data-unread="false"');
   expect(html).toContain('before:opacity-0');
@@ -78,12 +87,13 @@ test('unavailable notices stay plain and every row retains an accessible full da
   for (const row of rows) {
     expect(row).toMatch(/<time[^>]*dateTime="2026-10-29T10:00:00.000Z"/);
     expect(row).toMatch(/<time[^>]*title="[^"]+"/);
+    expect(row).toContain('sr-only');
     expect(row).not.toContain('Oct 29, 2026, 10:00 AM');
   }
 });
 
 test('notification links wrap their content and mixed timestamps render different relative times', () => {
-  const second: Item = { ...linked, id: 'second', createdAt: '2026-10-29T08:00:00.000Z' };
+  const second: Item = { ...linked, id: 'second', createdAt: '2026-10-26T08:00:00.000Z' };
   const html = markup([linked, second]);
   const rows = [...html.matchAll(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/g)].map((match) => match[0]!);
   expect(rows[0]).toContain('href="/threads/one"');
