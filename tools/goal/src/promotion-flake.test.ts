@@ -31,7 +31,7 @@ test('a failing stabilize candidate is held for a fix without prefix confirmatio
     expect(h.head()).toBe(dev);
     expect(h.head('main')).toBe(main);
     expect(git(h.root, 'diff', '--name-only', dev, 'dev')).toBe('');
-    expect(existsSync(`${h.root}/bad`)).toBe(true);
+    expect(git(h.root, 'show', 'dev:bad')).toBe('bad');
     expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
     for (const task of [first, culprit, last]) {
       expect(h.store.task(task.id).state).toBe('integrated');
@@ -155,7 +155,7 @@ test('a failing stabilize candidate publishes no passing prefix to main', async 
       expect(h.store.task(task.id).state).toBe('integrated');
       expect(h.store.task(task.id).currentAttempt).toBe(1);
     }
-    expect(existsSync(`${h.root}/bad`)).toBe(true);
+    expect(git(h.root, 'show', 'dev:bad')).toBe('bad');
     expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
   } finally { h.dispose(); }
 });
