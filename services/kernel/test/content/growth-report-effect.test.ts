@@ -5,6 +5,7 @@ import { createReport, type ReportTarget } from '../../src/content/reports.ts';
 import { applyReportEffect } from '../../src/content/report-effect.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import type { AccountActor } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
@@ -22,12 +23,19 @@ const projectedType = 'com.rezics.content.report-target.projected.v1';
 let system: NativeContentSystem;
 let db: GrowthDatabase;
 let target: ReportTarget;
+let authorActor: AccountActor;
 let growOrdinal = 0;
 
 beforeAll(async () => {
   system = await createNativeContentSystem({ databaseUrl });
   db = await openGrowthDatabase(system.database.pool.options.connectionString);
   await bootstrapRelease(system.database.pool, bundledRelease);
+  const authenticatedAuthor = await system.access.authenticate(system.actors.author.bearer, {
+    pool: db.pool,
+    deadline: Date.now() + 600_000,
+  });
+  if (authenticatedAuthor.kind !== 'account') throw new Error('Fixture credential must authenticate an account');
+  authorActor = authenticatedAuthor;
   const command = async <T>(
     method: string,
     path: string,
@@ -93,12 +101,20 @@ afterAll(async () => {
 });
 
 function growthRows(population: Population, placement: { ordinal: number; route: number; partition: number }) {
-  const reportId = newId(placement.route);
   const targetRoute = routeOf(target.id)!;
+  const reverse = population.name.endsWith('reverse');
+  let reportPartition = placement.partition;
+  if (reverse) {
+    reportPartition = (partitionOf(routeOf(target.id)!) + 1) % 4096;
+    if (reportPartition === sourcePartition) reportPartition = (reportPartition + 1) % 4096;
+  }
+  const reportRoute = reportPartition * 16 + (placement.ordinal % 16);
+  const reportId = newId(reportRoute);
+  const createdAt = new Date('2026-10-27T00:00:00.000Z');
   return {
     'content.report': [
       {
-        route: placement.route,
+        route: reportRoute,
         report_id: reportId,
         target_kind: target.kind,
         target_id: target.id,
@@ -106,20 +122,20 @@ function growthRows(population: Population, placement: { ordinal: number; route:
         reason: 'spam',
         evidence: null,
         reporter_account_id: null,
-        created_at: new Date('2026-10-27T00:00:00.000Z'),
+        created_at: createdAt,
         recorded_transaction_id: randomUUID(),
       },
     ],
-    ...(population.name.endsWith('reverse')
+    ...(reverse
       ? {
           'content.report_target': [
             {
               route: targetRoute,
               target_kind: target.kind,
               target_id: target.id,
-              report_route: placement.route,
+              report_route: reportRoute,
               report_id: reportId,
-              created_at: new Date('2026-10-27T00:00:00.000Z'),
+              created_at: createdAt,
             },
           ],
         }
@@ -131,10 +147,6 @@ async function createReportEvents(
   db: GrowthDatabase,
   requiredPartition?: number,
 ): Promise<{ events: CloudEvent[]; partition: number }> {
-  const actor = await system.access.authenticate(system.actors.author.bearer, {
-    pool: db.pool,
-    deadline: Date.now() + 30_000,
-  });
   const events: CloudEvent[] = [];
   let attempts = 0;
   let sourcePartition = requiredPartition;
@@ -142,7 +154,7 @@ async function createReportEvents(
     attempts++;
     const outcome = await createReport(
       { pool: db.pool, access: system.access, routeKey: system.routeKey },
-      actor,
+      authorActor,
       { target, reason: 'other', evidence: 'Growth report evidence' },
       { idempotencyKey: randomUUID(), requestId: randomUUID(), deadline: Date.now() + 30_000 },
     );
@@ -312,7 +324,11 @@ test('Report effect replay stays within its bound and changes nothing as history
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-  for (const result of replayResults) expect(result.after).toEqual(result.before);
+  for (const result of replayResults) {
+    expect(result.before.rows).toBe(1);
+    expect(result.before.events).toBe(1);
+    expect(result.after).toEqual(result.before);
+  }
   for (const sample of report.samples)
     for (const relation of ['content.report', 'content.report_target'])
       expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
