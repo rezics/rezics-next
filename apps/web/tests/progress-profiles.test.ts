@@ -186,6 +186,8 @@ test('a percent pair keeps an over-100 cursor position while clamping its bar', 
 // Mount the actual pages. Only transport, routing and unrelated page chrome are replaced.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, type Browser, type Page } from 'playwright';
+import { build as buildStyles } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 import { join, resolve } from 'node:path';
 import { routes as profileRoutes, profileSessionId } from '../src/kernel/fake/progress-profiles';
 let browser: Browser;
@@ -324,6 +326,20 @@ async function mount(kind: 'index' | 'session', type = 'Novel', overrides = {}) 
     });
     expect(build.success, build.logs.map(String).join('\n')).toBe(true);
     const code = await build.outputs[0]!.text();
+    // Shared controls need the same layout and stacking rules as the served page.
+    const styles = await buildStyles({
+      configFile: false,
+      root: join(root, 'apps/web'),
+      logLevel: 'silent',
+      plugins: [tailwindcss()],
+      build: { write: false, rollupOptions: { input: join(root, 'apps/web/src/styles.css') } },
+    });
+    const outputs = Array.isArray(styles) ? styles : [styles];
+    const css = outputs
+      .flatMap((output) => ('output' in output ? output.output : []))
+      .filter((output) => output.type === 'asset' && output.fileName.endsWith('.css'))
+      .map((output) => output.source)
+      .join('\n');
     server = Bun.serve({
       port: 0,
       fetch(request) {
@@ -339,7 +355,7 @@ async function mount(kind: 'index' | 'session', type = 'Novel', overrides = {}) 
           return Response.json(answer, { status: answer.status });
         }
         return new Response(
-          '<html lang="en"><body><main id="app"></main><script type="module" src="/app.js"></script></body></html>',
+          `<html lang="en"><head><style>${css}</style></head><body><main id="app"></main><script type="module" src="/app.js"></script></body></html>`,
           { headers: { 'content-type': 'text/html' } },
         );
       },
