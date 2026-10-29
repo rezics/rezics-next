@@ -33,6 +33,7 @@ let kernel: TestKernel;
 let options: PersonasOptions;
 let first: Awaited<ReturnType<typeof createPersonas>>;
 let second: typeof first;
+let additional: typeof first;
 let commands: ReturnType<typeof createCommerceCommands>;
 let scheduled: typeof commands;
 let fake: ReturnType<typeof startFakeStripe>;
@@ -135,6 +136,7 @@ beforeAll(async () => {
   options = { version: PERSONAS_VERSION, pool, auth };
   first = await createPersonas(kernel, options);
   second = await createPersonas(kernel, { ...options, governance: first.staff });
+  additional = await createPersonas(kernel, { ...options, governance: first.staff });
   for (const group of ['purchases', 'selling']) await post(first.staff, `/v1/platform/exposure/${group}:open`, {});
   for (const [resource, actions] of [
     [PLATFORM_RESOURCE, ['offer:create']],
@@ -652,11 +654,9 @@ describe('fresh Auth account deletion fences native late paid and refund-reversa
 
 // Additional physical schedules use the same owned Auth/kernel world and leave the existing cases unchanged.
 test('fresh Auth T before legacy service admission still permits late paid accounting without recreating entitlement role grants', async () => {
-  const fresh = await createPersonas(kernel, { ...options, governance: first.staff });
-  const buyer = fresh.bob;
+  const buyer = additional.bob;
   const order = await checkout(buyer);
   await terminal(buyer);
-  await fenced(buyer, order);
   fake.pay(order.checkoutSessionId!);
   const attempt = await prepare(order, 'legacy', scheduled);
   const start = trace.length;
@@ -671,6 +671,7 @@ test('fresh Auth T before legacy service admission still permits late paid accou
   expect(roles.rows).toEqual([]);
   expect(current.events.filter((e) => /entitlement\.(granted|restored)/.test(e.type))).toEqual([]);
   accountBeforeOrder(trace.slice(start), buyer.accountId);
+  await fenced(buyer, order);
   const originalReceipt = await receipt(order, attempt.workflowId);
   const later = await begin(order);
   const admitted = await state(order);
@@ -685,8 +686,7 @@ test('fresh Auth T before legacy service admission still permits late paid accou
 });
 
 test('real deletion race reversed for restoration: refund-failure bytes and claim precede Auth T, account barrier follows T and only money reconciles', async () => {
-  const fresh = await createPersonas(kernel, { ...options, governance: first.staff });
-  const buyer = fresh.bob;
+  const buyer = additional.alice;
   const order = await paid(buyer);
   const refund = fake.refund(order.checkoutSessionId!, { amount: 1200 });
   expect((await (await prepare(order, 'claimed')).apply()).changed).toBe(true);
@@ -727,8 +727,8 @@ test('real deletion race reversed for restoration: refund-failure bytes and clai
 });
 
 test('account-share availability failure has an actual pg_blocking_pids witness and no committed financial receipt or partial effects', async () => {
-  const fresh = await createPersonas(kernel, { ...options, governance: first.staff });
-  const order = await checkout(fresh.bob);
+  const buyer = additional.staff;
+  const order = await checkout(buyer);
   fake.pay(order.checkoutSessionId!);
   const attempt = await prepare(order, 'claimed', scheduled);
   const before = await state(order);
@@ -744,8 +744,8 @@ test('account-share availability failure has an actual pg_blocking_pids witness 
     const pid = (await control.query('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
     // Scheduling only: the account row and all lifecycle facts remain unchanged.
     await control.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
-      routeOf(fresh.bob.accountId),
-      fresh.bob.accountId,
+      routeOf(buyer.accountId),
+      buyer.accountId,
     ]);
     failShare = true;
     applying = attempt.apply().then(
