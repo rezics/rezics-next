@@ -12,10 +12,9 @@ function setChecks(h: ReturnType<typeof integrationHarness>, checks: Integration
 function markTask(
   h: ReturnType<typeof integrationHarness>,
   taskId: string,
-  values: { goal?: string; target?: string },
+  values: { target?: string },
 ): void {
   h.store.updateTask({ taskId, attempt: 0 }, (task) => {
-    if (values.goal) task.brief.goal = values.goal;
     if (values.target === 'stabilize') task.brief.target = 'stabilize';
   });
 }
@@ -42,9 +41,8 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     const first = h.dispatch('dev-a.ts');
     const affected = h.dispatch('affected.ts');
     const second = h.dispatch('dev-b.ts');
-    const controlPlane = h.dispatch('cp.ts');
+    const controlPlane = h.dispatch('tools/goal/cp.ts', [], ['true'], 'control-plane');
     const stabilize = h.dispatch('stabilize.ts');
-    markTask(h, controlPlane.id, { goal: 'control-plane' });
     markTask(h, stabilize.id, { target: 'stabilize' });
     await h.start(first);
     await h.start(affected);
@@ -84,14 +82,13 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     h.settings.integration.batchSize = 3;
     setChecks(h, [{ paths: ['**'], command: ['true'] }]);
 
-    const controlPlane = h.dispatch('cp-leading.ts');
+    const controlPlane = h.dispatch('tools/goal/cp-leading.ts', [], ['true'], 'control-plane');
     const stabilize = h.dispatch('stabilize-leading.ts');
     const first = h.dispatch('dev-first.ts');
     const affected = h.dispatch('affected-middle.ts');
     const second = h.dispatch('dev-second.ts');
     const third = h.dispatch('dev-third.ts');
     const fourth = h.dispatch('dev-fourth.ts');
-    markTask(h, controlPlane.id, { goal: 'control-plane' });
     markTask(h, stabilize.id, { target: 'stabilize' });
     await h.start(controlPlane);
     await h.start(stabilize);
