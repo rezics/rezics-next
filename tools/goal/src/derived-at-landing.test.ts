@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { git } from './merge.ts';
+import { promote } from './promotion.ts';
 import { integrationHarness } from './test-support.ts';
 
 function commitFixture(h: ReturnType<typeof integrationHarness>, files: Record<string, string>): void {
@@ -88,13 +89,19 @@ writeFileSync(${JSON.stringify(openapi)}, 'stable contract');
     expect(h.outcomes[0]?.mergedCommit).toBe(integrated);
 
     const checkedHeads: string[] = [];
-    await h.promote(async (_command, cwd) => {
-      checkedHeads.push(git(cwd, 'rev-parse', 'HEAD'));
-      const valid =
-        readFileSync(join(cwd, declaration), 'utf8') === 'stable declaration' &&
-        readFileSync(join(cwd, openapi), 'utf8') === 'stable contract';
-      return { passed: valid, output: valid ? '' : 'AssertionError: derived output is stale', timedOut: false };
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      derivedFiles: h.settings.derivedFiles!,
+      runGate: async (_command, cwd) => {
+        checkedHeads.push(git(cwd, 'rev-parse', 'HEAD'));
+        const valid =
+          readFileSync(join(cwd, declaration), 'utf8') === 'stable declaration' &&
+          readFileSync(join(cwd, openapi), 'utf8') === 'stable contract';
+        return { passed: valid, output: valid ? '' : 'AssertionError: derived output is stale', timedOut: false };
+      },
     });
+    await h.job.drain();
 
     expect(h.head()).toBe(integrated);
     expect(h.head('main')).toBe(integrated);
