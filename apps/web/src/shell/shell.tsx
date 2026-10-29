@@ -139,7 +139,7 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
   const offered = useOfferedDestinations(session);
   return (
     <nav aria-label={m.shell_navigation()} className="sticky top-16 flex min-h-0 w-full flex-1 flex-col">
-      <SidebarContent>
+      <SidebarContent className="overflow-visible!">
         <SidebarGroup>
           <SidebarMenu>
             {offered.map((item) => {
