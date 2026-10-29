@@ -48,31 +48,10 @@ for (const person of ['other people', 'same person history'] as const) {
         expect((await h.step(f, { key: replayKey })).effects).toBe(1);
         // Keep immutable creation and command receipt lookups representative
         // before the first scale, regardless of which neighbourhood grows.
-        const exerciseTargets = Array.from({ length: 13 }, () => newId(f.target.route));
         if (mode === 'revoked replay') {
           // Native Auth owns and publishes the pending restriction before its
           // unavailable Access acknowledgement. Access floor remains unchanged.
           expect((await h.request('/consent', { client_id: f.clientId, scope: [] }, f.cookie)).status).toBe(503);
-        }
-        function exerciseFixture(targetId: string) {
-          const target = { ...f.target, id: targetId };
-          return {
-            ...f,
-            target,
-            anchor: {
-              resource: target,
-              async validate(client: Parameters<NonNullable<typeof f.anchor.validate>>[0]) {
-                return (
-                  (
-                    await client.query('SELECT active FROM durable_test.authority WHERE route=$1 AND id=$2', [
-                      target.route,
-                      target.id,
-                    ])
-                  ).rows[0]?.active === true
-                );
-              },
-            },
-          };
         }
         async function operation(runFixture = f) {
           if (mode === 'revoked replay') {
@@ -118,21 +97,6 @@ for (const person of ['other people', 'same person history'] as const) {
                  SELECT $1,'account',CASE WHEN $4 THEN $2 ELSE id END,'durable-test.step',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
                  FROM unnest($3::uuid[]) id`,
                 [partitionOf(f.target.route), f.id, ids, person === 'same person history'],
-              );
-              const targetIds = exerciseTargets;
-              await db.admin.query(
-                `INSERT INTO durable_test.authority(route,id,active) SELECT $1,id,true FROM unnest($2::uuid[]) id`,
-                [f.target.route, targetIds],
-              );
-              await db.admin.query(
-                `INSERT INTO access.resource_grant(route,resource_id,subject_id,subject_role,action,valid,transaction_id)
-                 SELECT $1,id,$2,'member','subject:write','(,)',$3 FROM unnest($4::uuid[]) id`,
-                [f.target.route, group, f.id, targetIds],
-              );
-              await db.admin.query(
-                `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-                 SELECT $1,id,$2,'subject:write','(,)',$2 FROM unnest($3::uuid[]) id`,
-                [f.target.route, f.id, targetIds],
               );
             }
             const count = (scale - previous) * 500;
@@ -196,10 +160,25 @@ for (const person of ['other people', 'same person history'] as const) {
             ])
               await db.admin.query(`VACUUM (ANALYZE) ${table}`);
           },
-          operation: async (_db, _scale, repetition) => operation(exerciseFixture(exerciseTargets[repetition]!)),
+          ...(mode === 'retry and replay'
+            ? {
+                async prepare(db) {
+                  await db.admin.query('DELETE FROM durable_test.effect WHERE route=$1 AND id=$2', [
+                    f.target.route,
+                    f.target.id,
+                  ]);
+                },
+              }
+            : {}),
+          operation: async () => operation(),
         });
         expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
-        const observed = await capture(h.db, () => operation(exerciseFixture(exerciseTargets[12]!)));
+        if (mode === 'retry and replay')
+          await h.db.admin.query('DELETE FROM durable_test.effect WHERE route=$1 AND id=$2', [
+            f.target.route,
+            f.target.id,
+          ]);
+        const observed = await capture(h.db, () => operation());
         const statements = observed.capture.statements;
         for (const pattern of [
           /FROM durable_test.operation/,
