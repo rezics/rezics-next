@@ -531,27 +531,6 @@ test('the final delegated formula retains a full-key assignment probe', async ()
       client.release();
     }
   });
-  const nodes: Record<string, unknown>[] = [];
-  function visit(value: unknown): void {
-    if (Array.isArray(value)) {
-      for (const child of value) visit(child);
-    } else if (typeof value === 'object' && value !== null) {
-      const node = value as Record<string, unknown>;
-      if (node['Relation Name'] === 'principal_assignment')
-        nodes.push(
-          Object.fromEntries(
-            ['Node Type', 'Index Name', 'Index Cond', 'Filter', 'Actual Rows', 'Actual Loops'].map((key) => [
-              key,
-              node[key],
-            ]),
-          ),
-        );
-      if (node.Plan) visit(node.Plan);
-      if (node.Plans) visit(node.Plans);
-    }
-  }
-  for (const plan of measured.capture.plans) visit(plan);
-  console.info('Final permission assignment plan:', JSON.stringify(nodes));
   expectIndex(measured.capture.plans, 'principal_assignment_pkey');
 });
 

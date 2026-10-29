@@ -41,8 +41,13 @@ WITH input AS NOT MATERIALIZED (
 ), assignment AS MATERIALIZED (
   SELECT i.assignment_request_id IS NULL OR EXISTS (
     SELECT 1 FROM access.principal_assignment p
-    WHERE p.route = i.assignment_route AND p.principal_id = i.principal_id
-      AND p.request_id = i.assignment_request_id AND p.assigned_actor_id = i.actor_id
+    -- Keep the exact anchor in primary-key order even when other consumers add
+    -- differently ordered discovery indexes over the same columns.
+    WHERE ROW(p.route, p.principal_id, p.request_id)
+            >= ROW(i.assignment_route, i.principal_id, i.assignment_request_id)
+      AND ROW(p.route, p.principal_id, p.request_id)
+            <= ROW(i.assignment_route, i.principal_id, i.assignment_request_id)
+      AND p.assigned_actor_id = i.actor_id
       AND p.valid @> t.at
   ) AS valid
   FROM input i CROSS JOIN authority t
