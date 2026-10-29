@@ -9,7 +9,9 @@ const authStacks: Awaited<ReturnType<typeof startAuthStack>>[] = [];
 // their owned stack while each Auth app/browser gets fresh cookies and cleanup.
 beforeAll(async () => {
   stacks.push(await startNativeWebStack());
-}, 180_000);
+  // Native setup includes its own 150s Worker startup budget plus database
+  // migration and SQL compilation. Browser journey deadlines remain below.
+}, 300_000);
 
 afterEach(async () => {
   for (const auth of authStacks.splice(0).reverse()) await auth.stop();
