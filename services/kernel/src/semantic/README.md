@@ -748,6 +748,17 @@ pending in the parent CPU contract; these shape limits do not supply that produc
 - Bound: Rows, blocks and statements constant in M.
 - Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
+For an older compacted candidate, the same statement reads the latest subject revision through a descending
+`revision_pkey` seek to allocate the next revision. Its recorded release still comes from the independent origin
+point lookup through `revision_transaction`; candidate id, property, slot and relation still come from the current
+asserted fact. The regular decision read retains its latest-revision release. This adds constant examined rows and
+statements, with logarithmic index depth in subject history, within the existing native subject transaction and
+bounded expansion, decision, CAS, receipt and outbox work. No history enumeration or extra connection is needed.
+`test/semantic/growth-compact-candidate-decisions.test.ts` captures the full native compact SQL at 64, 512 and 4096
+revisions and unrelated subjects on independent axes, checking constant rows/statements and logarithmic blocks with
+the shared series rules and indexed origin/head plans. The frozen native compact decision cases separately verify
+scalar and item-relation decisions, revisions 1/2/3 and unchanged authorized receipt replay.
+
 ### Candidate adoption across manifests
 
 - Touches: HTTP `adoptCandidates` on the active release. A warm cache resolves the activation pointer and checks that one property on the subject's type. Grow M; fix the selection and authorization evidence.
