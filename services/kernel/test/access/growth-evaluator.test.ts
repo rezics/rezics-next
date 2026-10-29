@@ -18,7 +18,14 @@ afterAll(async () => {
 
 // Both axes use the same population: measured-action grants AND denials, unrelated
 // accounts/resources, same-route rows, and old intervals for an exact candidate.
-async function population(db: GrowthDatabase, f: ActorFixture, grants: number, memberships: number, previous: number) {
+async function population(
+  db: GrowthDatabase,
+  f: ActorFixture,
+  grants: number,
+  memberships: number,
+  previous: number,
+  unrelatedCount = grants + memberships * 8,
+) {
   const ids = Array.from({ length: grants - previous }, () => newId(f.resource.route));
   const nonmatches = ids.map(() => newId(f.resource.route));
   const accounts = ids.flatMap((id, index) => [id, nonmatches[index]!]);
@@ -107,7 +114,6 @@ async function population(db: GrowthDatabase, f: ActorFixture, grants: number, m
     FROM generate_series($4::integer,$5::integer-1) n`,
     [0x4567, f.staleId, f.actorId, previous, grants, f.transactionId],
   );
-  const unrelatedCount = grants + memberships * 8;
   const noise = Array.from({ length: unrelatedCount - (unrelatedCounts.get(f) ?? 0) }, () => newId(f.resource.route));
   unrelatedCounts.set(f, unrelatedCount);
   await db.admin.query(
@@ -210,7 +216,8 @@ test('evaluator rows/statements/blocks are at most linear in admitted K through 
     name: 'actor evaluator K',
     scales: [10, 100, 1000],
     bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
-    grow: (db, scale, previous) => population(db, f, 4096, scale, previous ? 4096 : 0),
+    rule: 'series',
+    grow: (db, scale, previous) => population(db, f, 4096, scale, previous ? 4096 : 0, 9000),
     operation: () => operation(f, outage, staleTarget),
   });
 }, 60000);
