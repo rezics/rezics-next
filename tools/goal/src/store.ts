@@ -648,7 +648,7 @@ export class WorkerStore implements AttemptFence {
     brief: Brief,
     paths: { briefPath: string; worktree: string; branch: string; base: string },
     taskClass: Task['taskClass'],
-    id = crypto.randomUUID(),
+    id: string = crypto.randomUUID(),
   ): Task {
     const task = this.db
       .transaction(() => {
