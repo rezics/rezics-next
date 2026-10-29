@@ -22,7 +22,7 @@ export function registerLibraryWork({ pool, client, addEffects }: WorkContext): 
       );
       // Release the Collection connection before entering any subject partition command.
       // A retry repeats the whole page against current source truth; completed syncs are no-ops.
-      for (const { subjectId } of subjects) await syncSubjectListing({ pool }, { subjectId, collectionId });
+      for (const { subjectId } of subjects) await syncSubjectListing({ pool, client }, { subjectId, collectionId });
       return subjects.length === PAGE_SIZE ? subjects[PAGE_SIZE - 1]!.subjectId : null;
     },
     { name: 'library.syncCollectionPage', ...COMMAND_STEP_RETRIES },
@@ -58,7 +58,7 @@ export function registerLibraryWork({ pool, client, addEffects }: WorkContext): 
       types: ['com.rezics.library.collection.member.changed.v1'],
       async run(event) {
         const { subjectId, collectionId } = event.data as { subjectId: string; collectionId: string };
-        await syncSubjectListing({ pool }, { subjectId, collectionId });
+        await syncSubjectListing({ pool, client }, { subjectId, collectionId });
       },
     },
     {

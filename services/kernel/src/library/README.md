@@ -1095,8 +1095,10 @@ including a withdrawal delivered before the first positive. Never-public private
 no target record, receipt or event. Duplicate occurrences contribute one Collection, independently of multiplicity.
 
 Pair/count changes and the existing `{subjectId}` listed event commit together. A newer source stamp with unchanged
-multiplicity updates only derived ordering metadata through `noEffect`; it changes no count, public revision or
-event. There is no receipt: the retained source version supplies replay ordering, including public/private/public
+multiplicity rolls back the command attempt, then updates only derived ordering metadata through the existing fenced
+operational transaction. It changes no count, public revision or event, and never conceals writes in `noEffect`.
+Registered work reuses its native WorkClient; direct callers own a short-lived client on the supplied pool.
+There is no receipt: the retained source version supplies replay ordering, including public/private/public
 cycles. It reads neither personal Library facts nor curator labels.
 
 The source examines only occurrences of this subject in this Collection through `collection_member_subject`
@@ -1120,7 +1122,9 @@ or enumerate all subject pairs. Current active-unfenced account public-view disc
 known-ID public/unlisted readability remains separate native Access authority.
 
 One page costs one indexed subject-keyset statement plus two source statements and one apply statement per subject,
-with the native transaction envelopes. Total finite work follows only the changed Collection's distinct subjects
+with the native transaction envelopes. A stamp-only advance pays a rolled-back apply plus one operational apply;
+a concurrent public change retries in the command envelope within the original deadline.
+Total finite work follows only the changed Collection's distinct subjects
 and their occurrences, never unrelated Collections, subjects, member history or partitions.
 `collection-publication-growth.test.ts` exercises actual commands, default work-module effects, retained observations,
 zero-first/reverse delivery, retries, duplicate occurrences, deletion, finite continuation, native rows/blocks/statements
