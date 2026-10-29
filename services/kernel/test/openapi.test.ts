@@ -119,7 +119,7 @@ test('global body parser restores JSON schemas and preserves raw request content
                 'application/octet-stream': { schema: { type: 'string', format: 'binary' } },
               },
             },
-          },
+          } as never,
         },
         () => ({ ok: true }),
       );
@@ -130,7 +130,7 @@ test('global body parser restores JSON schemas and preserves raw request content
   const withHook = build(true);
   const rawGenerated = toOpenAPISchema(withHook, { staticFile: false }).paths['/v1/global-body']?.post?.requestBody;
   console.log('Global parser generated request body:', JSON.stringify(rawGenerated));
-  expect(rawGenerated?.content).toEqual({});
+  expect((rawGenerated as { content?: unknown } | undefined)?.content).toEqual({});
 
   const withoutHookDocument = openApiDocument(withoutHook);
   const withHookDocument = openApiDocument(withHook);
