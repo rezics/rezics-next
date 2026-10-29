@@ -32,6 +32,13 @@ function taskCommits(task: Task, cwd: string): string[] {
   return git(cwd, 'rev-list', '--reverse', `${task.integratedBase ?? task.base}..${task.integratedCommit}`)
     .split('\n').filter(Boolean);
 }
+function filesInCommits(cwd: string, commitList: readonly string[]): string[] {
+  const files = new Set<string>();
+  for (const commit of commitList)
+    for (const file of git(cwd, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean))
+      files.add(file);
+  return [...files];
+}
 function taskLandings(settings: Settings, store: WorkerStore, base: string, target: string): Task[] {
   const landed = new Set(commits(settings.mainCheckout, base, target));
   return store.tasks().filter((task) => task.state === 'integrated' && task.integratedCommit &&
@@ -109,7 +116,9 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
         ? landingCommits.filter(({ task }) => task.id === failed!.check.taskId)
         : failed.check.closure.includes('**')
           ? landingCommits
-          : landingCommits.filter(({ task }) => task.brief.paths.some((path) => failed!.check.closure.some((scope) => matchesPath(path, [scope]))));
+          : landingCommits.filter(({ commits: taskCommitList }) =>
+              filesInCommits(checkout, taskCommitList).some((file) => matches(file, failed!.check.closure)),
+            );
       if (!suspect.length) return;
       // Prefix bisection is restricted to landings whose declared workspace can affect the failed command.
       const boundaries = suspect.map(({ task, commits: taskHeads }) => ({ task, commit: taskHeads.at(-1)! }));
