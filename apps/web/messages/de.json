@@ -696,5 +696,20 @@
   "settings_public_reviews": "Rezensionen",
   "settings_public_collections": "Sammlungen",
   "settings_public_realms": "Realms",
-  "settings_public_speakers": "Als Sprecher aufgeführt"
+  "settings_public_speakers": "Als Sprecher aufgeführt",
+  "board_more_actions": "Boardaktionen",
+  "moderation_reports_heading": "Moderationsmeldungen",
+  "moderation_reports_tab": "Meldungen",
+  "moderation_tabs_label": "Moderationsbereiche",
+  "moderation_thread_filter": "Meldungen zu diesem Thread",
+  "moderation_target_unavailable": "Dieser Inhalt ist nicht verfügbar.",
+  "moderation_reason_label": "Grund",
+  "moderation_statement_label": "Mitteilung an den Autor",
+  "moderation_take_down": "Entfernen",
+  "moderation_dismiss": "Ablehnen",
+  "moderation_actioned": "Bearbeitet",
+  "moderation_dismissed": "Abgelehnt",
+  "moderation_reports_empty": "Auf dieser Seite gibt es keine Meldungen.",
+  "moderation_action_failed": "Die Moderationsaktion konnte nicht abgeschlossen werden.",
+  "action_cancel": "Abbrechen"
 }

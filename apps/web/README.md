@@ -1182,3 +1182,24 @@ Its cost is under Cost.
 Public composition previews keep their readable content when a group is closed. Links to individual collections
 require `collection.get`; an account collection list's continuation requires `account.collections`, since later
 pages use that standalone operation rather than the public composition read.
+
+### Notifications inbox (`/inbox`)
+
+- **Touches:** One private notification page read, then at most one existing post, decision or report read per distinct target; the navigation badge reads the capped count after hydration.
+- **Bound:** A page contains at most 20 notices; at most `1 + D + 1` kernel reads for `D` distinct targets, plus one count read per navigation inside its 60-second stale time. Opening marks the newest notice once.
+- **Growth check:** `tests/notifications-inbox.test.ts` checks pages of 5 and 20 notices naming three repeated posts and limits reads to the list, distinct targets and count.
+- **Visual check:** Inbox stories cover empty, mixed, unavailable and more-than-99 unread states in English and Simplified Chinese; use light and dark themes at 390 and 1280 pixels.
+
+### Moderation decision (`/moderation/decisions/<id>`)
+
+- **Touches:** One private decision read and one existing read of its post or thread; one appeal write and one decision re-read after submission.
+- **Bound:** Exactly two kernel reads per page view. The author can appeal through the decision's `:appeal` method through the inclusive 183-day deadline; successful and terminal-conflict submissions use the next decision read to show current state.
+- **Growth check:** `tests/moderation-decision.test.ts` checks the two-read bound, author and deadline gates, pending appeal state, overlong draft preservation and refreshed late/duplicate states.
+- **Visual check:** Decision stories cover open, pending and expired appeals in English and Simplified Chinese at 390 and 1280 pixels.
+
+### Board moderation reports (`/boards/{id}/moderation`)
+
+- **Touches:** One page of at most 20 reports, then one existing target read per distinct post, thread or board on that page.
+- **Bound:** At most `1 + D` kernel reads for `D` distinct report targets; each moderator action issues one write.
+- **Growth check:** `tests/moderation-reports.test.ts` pages repeated targets and confirms one target read per distinct identity, preserves the cursor and excludes reporter identity.
+- **Visual check:** Moderation report stories cover open and resolved reports in English and Simplified Chinese; use light and dark themes at 390 and 1280 pixels.

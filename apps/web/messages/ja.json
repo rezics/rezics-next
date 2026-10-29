@@ -696,5 +696,20 @@
   "settings_public_reviews": "レビュー",
   "settings_public_collections": "コレクション",
   "settings_public_realms": "レルム",
-  "settings_public_speakers": "スピーカーとして掲載"
+  "settings_public_speakers": "スピーカーとして掲載",
+  "board_more_actions": "ボードの操作",
+  "moderation_reports_heading": "モデレーション報告",
+  "moderation_reports_tab": "報告",
+  "moderation_tabs_label": "モデレーションの項目",
+  "moderation_thread_filter": "このスレッドの報告",
+  "moderation_target_unavailable": "このコンテンツは利用できません。",
+  "moderation_reason_label": "理由",
+  "moderation_statement_label": "投稿者への説明",
+  "moderation_take_down": "非表示にする",
+  "moderation_dismiss": "却下",
+  "moderation_actioned": "対応済み",
+  "moderation_dismissed": "却下済み",
+  "moderation_reports_empty": "このページに報告はありません。",
+  "moderation_action_failed": "モデレーション操作を完了できませんでした。",
+  "action_cancel": "キャンセル"
 }

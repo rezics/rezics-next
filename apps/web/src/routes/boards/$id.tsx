@@ -76,7 +76,27 @@ function BoardPage() {
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <BoardContext realm={realm} />
-        <PageHeading>{board.title ?? m.threads_untitled()}</PageHeading>
+        <div className="flex items-start justify-between gap-4">
+          <PageHeading>{board.title ?? m.threads_untitled()}</PageHeading>
+          {session === 'signed-in' ? (
+            <details className="relative shrink-0">
+              <summary
+                aria-label={m.board_more_actions()}
+                className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md border hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                ⋯
+              </summary>
+              <div className="absolute right-0 z-10 mt-1 min-w-48 rounded-md border bg-popover p-1 shadow-md">
+                <a
+                  className="block rounded-sm px-3 py-2 text-sm hover:bg-muted"
+                  href={`/${locale}/boards/${id}/moderation`}
+                >
+                  {m.moderation_reports_heading()}
+                </a>
+              </div>
+            </details>
+          ) : null}
+        </div>
       </header>
       <section className="space-y-4" aria-labelledby="board-threads-heading">
         <h2 id="board-threads-heading" className="text-xl font-semibold">

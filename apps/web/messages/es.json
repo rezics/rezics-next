@@ -696,5 +696,20 @@
   "settings_public_reviews": "Reseñas",
   "settings_public_collections": "Colecciones",
   "settings_public_realms": "Realms",
-  "settings_public_speakers": "Aparecer como ponente"
+  "settings_public_speakers": "Aparecer como ponente",
+  "board_more_actions": "Acciones del tablón",
+  "moderation_reports_heading": "Denuncias de moderación",
+  "moderation_reports_tab": "Denuncias",
+  "moderation_tabs_label": "Secciones de moderación",
+  "moderation_thread_filter": "Denuncias de este hilo",
+  "moderation_target_unavailable": "Este contenido no está disponible.",
+  "moderation_reason_label": "Motivo",
+  "moderation_statement_label": "Mensaje para el autor",
+  "moderation_take_down": "Retirar",
+  "moderation_dismiss": "Descartar",
+  "moderation_actioned": "Resuelta",
+  "moderation_dismissed": "Descartada",
+  "moderation_reports_empty": "No hay denuncias en esta página.",
+  "moderation_action_failed": "No se pudo completar la acción de moderación.",
+  "action_cancel": "Cancelar"
 }

@@ -696,5 +696,20 @@
   "settings_public_reviews": "리뷰",
   "settings_public_collections": "컬렉션",
   "settings_public_realms": "렐름",
-  "settings_public_speakers": "발표자로 표시"
+  "settings_public_speakers": "발표자로 표시",
+  "board_more_actions": "게시판 작업",
+  "moderation_reports_heading": "신고 검토",
+  "moderation_reports_tab": "신고",
+  "moderation_tabs_label": "검토 섹션",
+  "moderation_thread_filter": "이 스레드의 신고",
+  "moderation_target_unavailable": "이 콘텐츠를 사용할 수 없습니다.",
+  "moderation_reason_label": "사유",
+  "moderation_statement_label": "작성자에게 전달할 설명",
+  "moderation_take_down": "게시 중단",
+  "moderation_dismiss": "기각",
+  "moderation_actioned": "조치됨",
+  "moderation_dismissed": "기각됨",
+  "moderation_reports_empty": "이 페이지에는 신고가 없습니다.",
+  "moderation_action_failed": "검토 작업을 완료할 수 없습니다.",
+  "action_cancel": "취소"
 }

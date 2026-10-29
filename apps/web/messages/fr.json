@@ -696,5 +696,20 @@
   "settings_public_reviews": "Avis",
   "settings_public_collections": "Collections",
   "settings_public_realms": "Realms",
-  "settings_public_speakers": "Répertorié comme intervenant"
+  "settings_public_speakers": "Répertorié comme intervenant",
+  "board_more_actions": "Actions du tableau",
+  "moderation_reports_heading": "Signalements de modération",
+  "moderation_reports_tab": "Signalements",
+  "moderation_tabs_label": "Sections de modération",
+  "moderation_thread_filter": "Signalements de ce fil",
+  "moderation_target_unavailable": "Ce contenu est indisponible.",
+  "moderation_reason_label": "Motif",
+  "moderation_statement_label": "Message destiné à l’auteur",
+  "moderation_take_down": "Retirer",
+  "moderation_dismiss": "Rejeter",
+  "moderation_actioned": "Traité",
+  "moderation_dismissed": "Rejeté",
+  "moderation_reports_empty": "Aucun signalement sur cette page.",
+  "moderation_action_failed": "L’action de modération n’a pas abouti.",
+  "action_cancel": "Annuler"
 }

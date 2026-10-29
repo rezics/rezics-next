@@ -696,5 +696,20 @@
   "settings_public_reviews": "评论",
   "settings_public_collections": "合集",
   "settings_public_realms": "领域",
-  "settings_public_speakers": "列为演讲者"
+  "settings_public_speakers": "列为演讲者",
+  "board_more_actions": "版块操作",
+  "moderation_reports_heading": "审核举报",
+  "moderation_reports_tab": "举报",
+  "moderation_tabs_label": "审核栏目",
+  "moderation_thread_filter": "此主题的举报",
+  "moderation_target_unavailable": "此内容目前不可用。",
+  "moderation_reason_label": "原因",
+  "moderation_statement_label": "给作者的说明",
+  "moderation_take_down": "下架",
+  "moderation_dismiss": "驳回",
+  "moderation_actioned": "已处理",
+  "moderation_dismissed": "已驳回",
+  "moderation_reports_empty": "此页没有举报。",
+  "moderation_action_failed": "无法完成审核操作。",
+  "action_cancel": "取消"
 }

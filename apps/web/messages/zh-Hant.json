@@ -696,5 +696,20 @@
   "settings_public_reviews": "評論",
   "settings_public_collections": "合集",
   "settings_public_realms": "領域",
-  "settings_public_speakers": "列為講者"
+  "settings_public_speakers": "列為講者",
+  "board_more_actions": "版面操作",
+  "moderation_reports_heading": "審核檢舉",
+  "moderation_reports_tab": "檢舉",
+  "moderation_tabs_label": "審核分頁",
+  "moderation_thread_filter": "此討論串的檢舉",
+  "moderation_target_unavailable": "此內容目前無法使用。",
+  "moderation_reason_label": "原因",
+  "moderation_statement_label": "給作者的說明",
+  "moderation_take_down": "下架",
+  "moderation_dismiss": "駁回",
+  "moderation_actioned": "已處理",
+  "moderation_dismissed": "已駁回",
+  "moderation_reports_empty": "此頁沒有檢舉。",
+  "moderation_action_failed": "無法完成審核操作。",
+  "action_cancel": "取消"
 }

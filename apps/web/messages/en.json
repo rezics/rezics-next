@@ -696,5 +696,20 @@
   "settings_public_reviews": "Reviews",
   "settings_public_collections": "Collections",
   "settings_public_realms": "Realms",
-  "settings_public_speakers": "Speakers listed"
+  "settings_public_speakers": "Speakers listed",
+  "board_more_actions": "Board actions",
+  "moderation_reports_heading": "Moderation reports",
+  "moderation_reports_tab": "Reports",
+  "moderation_tabs_label": "Moderation sections",
+  "moderation_thread_filter": "Reports for this thread",
+  "moderation_target_unavailable": "This content is unavailable.",
+  "moderation_reason_label": "Reason",
+  "moderation_statement_label": "Statement to the author",
+  "moderation_take_down": "Take down",
+  "moderation_dismiss": "Dismiss",
+  "moderation_actioned": "Actioned",
+  "moderation_dismissed": "Dismissed",
+  "moderation_reports_empty": "There are no reports on this page.",
+  "moderation_action_failed": "The moderation action could not be completed.",
+  "action_cancel": "Cancel"
 }
