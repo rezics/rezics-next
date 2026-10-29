@@ -12,20 +12,7 @@
         "type": "schema:Book",
         "label": "Kokoro",
         "types": ["schema:Book"],
-        "cover": {
-          "media": "01a17a3b-0884-7c01-8a3f-c0de00000001",
-          "width": 320,
-          "height": 480,
-          "placeholder": { "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX", "color": "#6d4d6f" },
-          "variants": [{ "format": "webp", "width": 320 }],
-          "focalPoint": null,
-          "credit": {
-            "rightsHolder": "REZICS fixtures",
-            "via": { "name": "Generated fixture", "url": "https://rezics.com" },
-            "license": "CC0-1.0",
-            "obligations": []
-          }
-        }
+        "cover": null
       }
     },
     {
@@ -55,20 +42,7 @@
         "type": "schema:Book",
         "label": "The Tale of Genji",
         "types": ["schema:Book"],
-        "cover": {
-          "media": "01a17a3b-0884-7c01-8a3f-c0de00000001",
-          "width": 320,
-          "height": 480,
-          "placeholder": { "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX", "color": "#6d4d6f" },
-          "variants": [{ "format": "webp", "width": 320 }],
-          "focalPoint": null,
-          "credit": {
-            "rightsHolder": "REZICS fixtures",
-            "via": { "name": "Generated fixture", "url": "https://rezics.com" },
-            "license": "CC0-1.0",
-            "obligations": []
-          }
-        }
+        "cover": null
       }
     },
     {
@@ -98,20 +72,7 @@
         "type": "schema:Book",
         "label": "The Little Prince",
         "types": ["schema:Book"],
-        "cover": {
-          "media": "01a17a3b-0884-7c01-8a3f-c0de00000001",
-          "width": 320,
-          "height": 480,
-          "placeholder": { "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX", "color": "#6d4d6f" },
-          "variants": [{ "format": "webp", "width": 320 }],
-          "focalPoint": null,
-          "credit": {
-            "rightsHolder": "REZICS fixtures",
-            "via": { "name": "Generated fixture", "url": "https://rezics.com" },
-            "license": "CC0-1.0",
-            "obligations": []
-          }
-        }
+        "cover": null
       }
     }
   ],

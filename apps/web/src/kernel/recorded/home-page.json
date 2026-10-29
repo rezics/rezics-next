@@ -140,20 +140,7 @@
               "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
               "label": { "value": "The Little Prince", "language": "en" },
-              "cover": {
-                "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0001",
-                "width": 640,
-                "height": 960,
-                "placeholder": { "thumbhash": "", "color": "#2f5d50" },
-                "variants": [{ "format": "webp", "width": 320 }],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "Rezics fixture art",
-                  "via": { "name": "Rezics", "url": "https://rezics.com" },
-                  "license": "CC0-1.0",
-                  "obligations": []
-                }
-              }
+              "cover": null
             }
           },
           {
