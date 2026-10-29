@@ -160,3 +160,33 @@ test("the account page's optional operator lookup is one public identity read", 
   expect(calls).toEqual(['operator-account']);
   expect(identities?.['operator-account']).toMatchObject({ handle: 'operator', displayName: 'Operator Name' });
 });
+
+test('a followed handle page takes precedence over a merged subject survivor without another read', async () => {
+  let reads = 0;
+  const client = {
+    pages: {
+      $read: {
+        post: async () => {
+          reads += 1;
+          return {
+            status: 200,
+            data: {
+              subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e81',
+              account: 'account-id',
+              document: { root: { props: {} }, content: [{ type: 'AccountIdentity', props: { id: 'account' } }] },
+              reads: {
+                r0: { status: 200, body: { accounts: [{ id: 'account-id', state: 'active', handle: 'helper' }] } },
+              },
+            },
+          };
+        },
+      },
+    },
+  } as never;
+  expect(await loadSubjectPage(client, '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', 'reviews', 'en')).toEqual({
+    kind: 'redirect',
+    id: 'helper',
+    target: 'account',
+  });
+  expect(reads).toBe(1);
+});
