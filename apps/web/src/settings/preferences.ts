@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import { readLibraryResult } from '../library/reads';
+import { readLibraryResult, type CollectionVisibility } from '../library/reads';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 
@@ -22,6 +22,82 @@ export type PreferenceChange = {
 export type PreferenceWriteResult =
   | { ok: true; preferences: ReadingPreferences }
   | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
+
+export type OwnedCollection = { id: string; title: string; visibility: CollectionVisibility; revision: number };
+export type OwnedCollectionsPage = { collections: OwnedCollection[]; next: string | null };
+export type CollectionVisibilityWrite =
+  | { ok: true; collection: OwnedCollection }
+  | { ok: false; reason: 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
+
+function ownedCollection(value: {
+  id: string;
+  title: string;
+  visibility: CollectionVisibility;
+  revision: number;
+}): OwnedCollection {
+  return { id: value.id, title: value.title, visibility: value.visibility, revision: value.revision };
+}
+
+/** One bounded owner read for the requested page. */
+export async function readOwnedCollections(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  cursor: string | null,
+): Promise<OwnedCollectionsPage> {
+  await prepareSession(request, sessionEnv);
+  const authorization = viewerCredential(request);
+  const accountId = sessionSubject(request);
+  if (!authorization || !accountId) throw new Error('Sign in required');
+  const result = await client.accounts({ accountId }).collections.get({
+    query: { limit: 20, ...(cursor ? { cursor } : {}) },
+    headers: { authorization },
+  });
+  const page = readLibraryResult(result);
+  return { collections: page.collections.map(ownedCollection), next: page.next };
+}
+
+export async function changeCollectionVisibility(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { collectionId: string; revision: number; visibility: CollectionVisibility; idempotencyKey: string },
+): Promise<CollectionVisibilityWrite> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    if (!authorization || !sessionSubject(request)) return { ok: false, reason: 'forbidden' };
+    const result = await client
+      .collections({ collectionId: input.collectionId })
+      .patch(
+        { revision: input.revision, visibility: input.visibility },
+        { headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string } },
+      );
+    if (!result.error && result.data?.collection)
+      return { ok: true, collection: ownedCollection(result.data.collection) };
+    if (result.status === 409) return { ok: false, reason: 'conflict' };
+    if (result.status === 400 || result.status === 422) return { ok: false, reason: 'invalid' };
+    if (result.status === 401 || result.status === 403) return { ok: false, reason: 'forbidden' };
+    return { ok: false, reason: 'unavailable' };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+export async function reloadOwnedCollection(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  collectionId: string,
+): Promise<OwnedCollection> {
+  await prepareSession(request, sessionEnv);
+  const authorization = viewerCredential(request);
+  if (!authorization || !sessionSubject(request)) throw new Error('Sign in required');
+  const result = await client
+    .collections({ collectionId })
+    .get({ query: { view: 'FULL' }, headers: { authorization } });
+  return ownedCollection(readLibraryResult(result).collection);
+}
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

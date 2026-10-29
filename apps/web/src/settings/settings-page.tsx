@@ -12,6 +12,8 @@ import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, savePreferences } from './actions';
 import type { ReadingPreferences, SettingsPage, SpoilerLevel } from './preferences';
+import { CollectionPrivacySection } from './collection-privacy';
+import { useOperation } from '../kernel/exposure';
 
 type Signal = 'idle' | 'saving' | 'saved' | 'conflict' | 'reloading' | 'failed';
 
@@ -72,7 +74,7 @@ function ReadingCard({ initial }: { initial: ReadingPreferences }) {
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>{m.settings_reading_heading()}</h2>
+          <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_reading_text()}</CardDescription>
       </CardHeader>
@@ -157,7 +159,7 @@ function AccountCard({ securityHref, csrfToken }: { securityHref: string | null;
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>{m.settings_account_heading()}</h2>
+          <h2 id="settings-account-heading">{m.settings_account_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_account_text()}</CardDescription>
       </CardHeader>
@@ -185,16 +187,44 @@ export function SettingsPageView({
   page: Extract<SettingsPage, { signedIn: true }>;
   csrfToken: string | null;
 }) {
+  const collectionsAdmitted = useOperation('account.collections');
   return (
-    <article className="max-w-2xl space-y-8 text-foreground">
+    <article className="mx-auto w-full max-w-6xl space-y-8 px-4 text-foreground sm:px-6">
       <header>
         <PageHeading>{m.settings_heading()}</PageHeading>
       </header>
-
-      <>
-        <ReadingCard key={page.preferences.version} initial={page.preferences} />
-        <AccountCard securityHref={page.securityHref} csrfToken={csrfToken} />
-      </>
+      <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
+        <nav aria-label={m.settings_sections_label()} className="hidden lg:block">
+          <ul className="sticky top-6 space-y-2 border-l border-border pl-4 text-sm">
+            <li>
+              <a className="text-muted-foreground hover:text-foreground" href="#reading">
+                {m.settings_reading_heading()}
+              </a>
+            </li>
+            {collectionsAdmitted ? (
+              <li>
+                <a className="text-muted-foreground hover:text-foreground" href="#privacy">
+                  {m.settings_privacy_heading()}
+                </a>
+              </li>
+            ) : null}
+            <li>
+              <a className="text-muted-foreground hover:text-foreground" href="#account">
+                {m.settings_account_heading()}
+              </a>
+            </li>
+          </ul>
+        </nav>
+        <div className="min-w-0 space-y-8">
+          <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
+            <ReadingCard key={page.preferences.version} initial={page.preferences} />
+          </section>
+          <CollectionPrivacySection />
+          <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6">
+            <AccountCard securityHref={page.securityHref} csrfToken={csrfToken} />
+          </section>
+        </div>
+      </div>
     </article>
   );
 }

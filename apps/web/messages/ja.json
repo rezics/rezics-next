@@ -628,5 +628,21 @@
   "thread_media_status": "画像の状態",
   "thread_media_processing": "この画像は処理中です。",
   "thread_media_unusable": "この画像はもう使用できません。",
-  "thread_media_remove": "画像を削除"
+  "thread_media_remove": "画像を削除",
+  "settings_sections_label": "設定のセクション",
+  "settings_privacy_heading": "プライバシー",
+  "settings_privacy_text": "コレクションを閲覧できる人を選びます。",
+  "settings_privacy_visibility_label": "公開範囲",
+  "settings_privacy_private": "非公開",
+  "settings_privacy_unlisted": "限定公開",
+  "settings_privacy_public": "公開",
+  "settings_privacy_private_text": "自分だけがこのコレクションを閲覧できます。",
+  "settings_privacy_unlisted_text": "リンクを知っている人は誰でもこのコレクションを閲覧できます。",
+  "settings_privacy_public_text": "このコレクションはプロフィールと検索結果に表示されます。",
+  "settings_privacy_loading": "コレクションを読み込んでいます…",
+  "settings_privacy_empty": "コレクションはまだありません。",
+  "settings_privacy_load_more": "さらに読み込む",
+  "settings_privacy_conflict_title": "このコレクションは別の場所で変更されました",
+  "settings_privacy_conflict_text": "変更は保存されませんでした。再読み込みして現在の公開範囲を確認してください。",
+  "settings_privacy_reload_row": "コレクションを再読み込み"
 }

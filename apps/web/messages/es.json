@@ -628,5 +628,21 @@
   "thread_media_status": "Estado de la imagen",
   "thread_media_processing": "La imagen todavía se está procesando.",
   "thread_media_unusable": "Ya no se puede usar esta imagen.",
-  "thread_media_remove": "Quitar imagen"
+  "thread_media_remove": "Quitar imagen",
+  "settings_sections_label": "Secciones de ajustes",
+  "settings_privacy_heading": "Privacidad",
+  "settings_privacy_text": "Elige quién puede ver tus colecciones.",
+  "settings_privacy_visibility_label": "Visibilidad",
+  "settings_privacy_private": "Privada",
+  "settings_privacy_unlisted": "No incluida",
+  "settings_privacy_public": "Pública",
+  "settings_privacy_private_text": "Solo tú puedes ver esta colección.",
+  "settings_privacy_unlisted_text": "Cualquiera que tenga el enlace puede ver esta colección.",
+  "settings_privacy_public_text": "Esta colección aparece en tu página y en las búsquedas.",
+  "settings_privacy_loading": "Cargando colecciones…",
+  "settings_privacy_empty": "Aún no tienes colecciones.",
+  "settings_privacy_load_more": "Cargar más",
+  "settings_privacy_conflict_title": "Esta colección cambió en otro lugar",
+  "settings_privacy_conflict_text": "No se guardó el cambio. Vuelve a cargar esta colección para ver su visibilidad actual.",
+  "settings_privacy_reload_row": "Volver a cargar la colección"
 }

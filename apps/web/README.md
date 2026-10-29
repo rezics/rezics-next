@@ -5,8 +5,9 @@ The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run de
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
 The settings page at `/settings` shows the signed-in person's spoiler level and cover suitability and saves each change
-when chosen, with the version it read; a stale version keeps the choice on screen and offers a reload. It links to
-security settings on the Auth site and offers sign-out. Its controls stay disabled until the page hydrates.
+when chosen, with the version it read; a stale version keeps the choice on screen and offers a reload. Its Privacy
+section reads the signed-in person's Collections after hydration, one page at a time, and lets them change visibility.
+It links to security settings on the Auth site and offers sign-out. Its controls stay disabled until the page hydrates.
 
 `bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
 Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.
@@ -78,7 +79,7 @@ Configure these variables in the environment of `bun run dev`:
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
   `presentation:activate`; checkout start needs `order:create` and the order return page needs `order:read`; the settings page needs
-  `account:read` and `account:update`.
+  `account:read`, `account:update`, `collection:read` and `collection:update` (for the owner Collection list and visibility writes).
   Offer pages and other public reads need no scope. Sign-in requests
   `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
@@ -130,7 +131,7 @@ const websiteScopes = registration.scopes.join(' ');
 
 The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
 `reaction:set`,
-the curation scopes `presentation:publish` and `presentation:activate`, and `order:create` and `order:read`, and the settings page's `account:read` and `account:update`.
+the curation scopes `presentation:publish` and `presentation:activate`, and `order:create` and `order:read`, and the settings page's `account:read`, `account:update`, `collection:read` and `collection:update`.
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
@@ -701,6 +702,16 @@ language through the client's `accept-language`.
 - **Growth check:** `tests/settings-page-cost.test.ts`: `the settings page stays within its bound as the stored version grows`,
   `a settings change is one write however often the settings changed before` and
   `three repeated loads each cost the same`
+
+### Collection privacy settings
+
+- **Touches:** One session read and one owner `GET /v1/accounts/<id>/collections?limit=20` for each page the person requests.
+  A visibility change is one `PATCH /v1/collections/<id>` with its revision and an idempotency key. Reloading after a
+  conflict reads only that Collection.
+- **Bound:** At most 20 Collection rows per requested page and one kernel read per page. A visibility change is one
+  kernel write. No read cost depends on Collections beyond pages the person opens.
+- **Growth check:** `tests/settings-privacy.test.ts`: `first-page cost stays fixed for 5 and 50 Collections, then grows
+  by one read per requested page`; the paging test also checks one additional read for Load more.
 
 ### Personal library
 

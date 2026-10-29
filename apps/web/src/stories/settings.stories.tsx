@@ -1,10 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Settings', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Pages/Settings',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      viewports: {
+        settingsPhone: { name: 'Settings · 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+        settingsDesktop: { name: 'Settings · 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -22,10 +33,98 @@ async function settingsReady(context: { canvasElement: HTMLElement }) {
     settingsPreferencesRecording.suitability === 'show' ? 'true' : 'false',
   );
   await view.findByRole('button', { name: m.account_sign_out() });
+  await view.findByRole('heading', { level: 2, name: m.settings_privacy_heading() });
+  await view.findByRole('link', { name: 'Books to revisit' });
+  await view.findByRole('link', { name: /unusually long Collection title/i });
+  await view.findByRole('combobox', { name: m.settings_privacy_visibility_label() });
 }
 
 export const SignedIn: Story = {
-  name: 'Signed In',
+  name: 'Signed In · 1280',
+  parameters: { viewport: { defaultViewport: 'settingsDesktop' } },
   play: settingsReady,
   render: () => <PageStory visitor="Signed In" path="/settings" />,
+};
+
+export const Phone: Story = {
+  name: 'Phone · 390',
+  parameters: { viewport: { defaultViewport: 'settingsPhone' } },
+  play: settingsReady,
+  render: () => <PageStory visitor="Signed In" path="/settings" />,
+};
+
+export const StaleVisibility: Story = {
+  name: 'Stale visibility · 390',
+  parameters: { viewport: { defaultViewport: 'settingsPhone' } },
+  play: async (context) => {
+    await settingsReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    const link = view.getByRole('link', { name: /unusually long Collection title/i });
+    const row = link.closest('li');
+    if (!row) throw new Error('Collection row missing');
+    const select = within(row).getByRole('combobox');
+    await userEvent.selectOptions(select, 'private');
+    await view.findByText(m.settings_privacy_conflict_text());
+    await view.findByRole('button', { name: m.settings_privacy_reload_row() });
+    await expect(select).toHaveValue('public');
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings" />,
+};
+
+export const StaleVisibilityDesktop: Story = {
+  name: 'Stale visibility · 1280',
+  parameters: { viewport: { defaultViewport: 'settingsDesktop' } },
+  play: async (context) => {
+    await settingsReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    const link = view.getByRole('link', { name: /unusually long Collection title/i });
+    const row = link.closest('li');
+    if (!row) throw new Error('Collection row missing');
+    const select = within(row).getByRole('combobox');
+    await userEvent.selectOptions(select, 'private');
+    await view.findByText(m.settings_privacy_conflict_text());
+    await view.findByRole('button', { name: m.settings_privacy_reload_row() });
+    await expect(select).toHaveValue('public');
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings" />,
+};
+
+export const SavedVisibility: Story = {
+  name: 'Saved visibility',
+  parameters: { viewport: { defaultViewport: 'settingsDesktop' } },
+  play: async (context) => {
+    await settingsReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    const firstRow = view.getByRole('link', { name: 'Books to revisit' }).closest('li');
+    if (!firstRow) throw new Error('Collection row missing');
+    const select = within(firstRow).getByRole('combobox');
+    await userEvent.selectOptions(select, 'unlisted');
+    await expect(select).toHaveValue('unlisted');
+    await view.findByText(m.settings_privacy_unlisted_text());
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings" />,
+};
+
+export const CollectionsClosed: Story = {
+  name: 'Collections closed',
+  parameters: { admitted: ['personal_library', 'reading_progress'] },
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await view.findByRole('heading', { level: 1, name: m.settings_heading() });
+    await expect(view.queryByRole('heading', { level: 2, name: m.settings_privacy_heading() })).toBeNull();
+    await expect(view.queryByRole('link', { name: m.settings_privacy_heading() })).toBeNull();
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings" />,
+};
+
+export const SignedOut: Story = {
+  name: 'Signed Out',
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await view.findByRole('link', { name: m.account_sign_in() });
+    await expect(view.queryByRole('radio')).toBeNull();
+  },
+  render: () => <PageStory visitor="Signed Out" path="/settings" />,
 };

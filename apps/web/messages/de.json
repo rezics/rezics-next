@@ -628,5 +628,21 @@
   "thread_media_status": "Bildstatus",
   "thread_media_processing": "Dieses Bild wird noch verarbeitet.",
   "thread_media_unusable": "Dieses Bild kann nicht mehr verwendet werden.",
-  "thread_media_remove": "Bild entfernen"
+  "thread_media_remove": "Bild entfernen",
+  "settings_sections_label": "Einstellungsbereiche",
+  "settings_privacy_heading": "Datenschutz",
+  "settings_privacy_text": "Lege fest, wer deine Sammlungen sehen kann.",
+  "settings_privacy_visibility_label": "Sichtbarkeit",
+  "settings_privacy_private": "Privat",
+  "settings_privacy_unlisted": "Nicht gelistet",
+  "settings_privacy_public": "Öffentlich",
+  "settings_privacy_private_text": "Nur du kannst diese Sammlung sehen.",
+  "settings_privacy_unlisted_text": "Jede Person mit dem Link kann diese Sammlung sehen.",
+  "settings_privacy_public_text": "Diese Sammlung erscheint auf deiner Seite und in der Suche.",
+  "settings_privacy_loading": "Sammlungen werden geladen …",
+  "settings_privacy_empty": "Du hast noch keine Sammlungen.",
+  "settings_privacy_load_more": "Weitere laden",
+  "settings_privacy_conflict_title": "Diese Sammlung wurde an anderer Stelle geändert",
+  "settings_privacy_conflict_text": "Deine Änderung wurde nicht gespeichert. Lade diese Sammlung neu, um die aktuelle Sichtbarkeit zu sehen.",
+  "settings_privacy_reload_row": "Sammlung neu laden"
 }

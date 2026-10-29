@@ -628,5 +628,21 @@
   "thread_media_status": "이미지 상태",
   "thread_media_processing": "이 이미지는 아직 처리 중입니다.",
   "thread_media_unusable": "이 이미지는 더 이상 사용할 수 없습니다.",
-  "thread_media_remove": "이미지 삭제"
+  "thread_media_remove": "이미지 삭제",
+  "settings_sections_label": "설정 섹션",
+  "settings_privacy_heading": "개인정보 보호",
+  "settings_privacy_text": "컬렉션을 볼 수 있는 사람을 선택하세요.",
+  "settings_privacy_visibility_label": "공개 범위",
+  "settings_privacy_private": "비공개",
+  "settings_privacy_unlisted": "링크 공개",
+  "settings_privacy_public": "공개",
+  "settings_privacy_private_text": "나만 이 컬렉션을 볼 수 있습니다.",
+  "settings_privacy_unlisted_text": "링크가 있는 사람은 누구나 이 컬렉션을 볼 수 있습니다.",
+  "settings_privacy_public_text": "이 컬렉션은 내 페이지와 검색 결과에 표시됩니다.",
+  "settings_privacy_loading": "컬렉션을 불러오는 중…",
+  "settings_privacy_empty": "아직 컬렉션이 없습니다.",
+  "settings_privacy_load_more": "더 불러오기",
+  "settings_privacy_conflict_title": "이 컬렉션이 다른 곳에서 변경되었습니다",
+  "settings_privacy_conflict_text": "변경 사항이 저장되지 않았습니다. 다시 불러와 현재 공개 범위를 확인하세요.",
+  "settings_privacy_reload_row": "컬렉션 다시 불러오기"
 }

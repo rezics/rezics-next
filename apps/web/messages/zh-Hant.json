@@ -628,5 +628,21 @@
   "thread_media_status": "圖片狀態",
   "thread_media_processing": "這張圖片仍在處理中。",
   "thread_media_unusable": "這張圖片已無法使用。",
-  "thread_media_remove": "移除圖片"
+  "thread_media_remove": "移除圖片",
+  "settings_sections_label": "設定區段",
+  "settings_privacy_heading": "隱私",
+  "settings_privacy_text": "選擇誰可以瀏覽你的收藏集。",
+  "settings_privacy_visibility_label": "可見範圍",
+  "settings_privacy_private": "私人",
+  "settings_privacy_unlisted": "不公開列出",
+  "settings_privacy_public": "公開",
+  "settings_privacy_private_text": "只有你可以瀏覽此收藏集。",
+  "settings_privacy_unlisted_text": "任何持有連結的人都可以瀏覽此收藏集。",
+  "settings_privacy_public_text": "此收藏集會顯示在你的頁面和搜尋結果中。",
+  "settings_privacy_loading": "正在載入收藏集…",
+  "settings_privacy_empty": "你目前沒有收藏集。",
+  "settings_privacy_load_more": "載入更多",
+  "settings_privacy_conflict_title": "此收藏集已在其他地方變更",
+  "settings_privacy_conflict_text": "變更未儲存。請重新載入此收藏集以查看目前的可見範圍。",
+  "settings_privacy_reload_row": "重新載入收藏集"
 }
