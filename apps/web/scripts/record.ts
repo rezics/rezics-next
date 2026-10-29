@@ -821,18 +821,34 @@ function stableRecording(value: unknown, previous: unknown): unknown {
   ]);
 }
 
-/** Recorded story rows use the shared subject entry's cover, including its explicit placeholder choice. */
-function applyStorySubjectCovers(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(applyStorySubjectCovers);
+/** Recorded story rows use the shared identity, labels and cover, projected to the story locale. */
+function applyStorySubjects(value: unknown, locale: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => applyStorySubjects(item, locale));
   if (!value || typeof value !== 'object') return value;
   const result = Object.fromEntries(
-    Object.entries(value).map(([name, child]) => [name, applyStorySubjectCovers(child)]),
+    Object.entries(value).map(([name, child]) => [name, applyStorySubjects(child, locale)]),
   ) as Record<string, unknown>;
   const subject =
     typeof result.id === 'string' && typeof result.type === 'string' && (result.labels || result.label)
       ? storySubjects.find((entry) => entry.id === result.id)
       : undefined;
-  if (subject) result.cover = subject.cover ?? null;
+  if (subject) {
+    const localizedLabel = subject.labels[locale] ?? subject.labels.en ?? Object.values(subject.labels)[0]!;
+    result.type = subject.type;
+    if (result.labels && typeof result.labels === 'object' && !Array.isArray(result.labels))
+      result.labels = { ...subject.labels };
+    if (typeof result.label === 'string') result.label = localizedLabel;
+    else if (result.label && typeof result.label === 'object' && !Array.isArray(result.label))
+      result.label = { ...result.label, value: localizedLabel, language: locale };
+    if (result.summary && typeof result.summary === 'object' && !Array.isArray(result.summary)) {
+      const summary = { ...result.summary } as Record<string, unknown>;
+      if (summary.label && typeof summary.label === 'object' && !Array.isArray(summary.label))
+        summary.label = { ...summary.label, value: localizedLabel, language: locale };
+      summary.cover = subject.cover ?? null;
+      result.summary = summary;
+    }
+    result.cover = subject.cover ?? null;
+  }
   return result;
 }
 
@@ -1783,7 +1799,8 @@ async function main(): Promise<void> {
     // Definitions are generated snapshots; retaining old strings would preserve stale digests and ratios.
     const generated = name === 'definitions-active' || name === 'definitions-release';
     const previous = !generated && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
-    await writeFile(file, JSON.stringify(applyStorySubjectCovers(stableRecording(body, previous))));
+    const locale = name.endsWith('-zh-Hans') ? 'zh-Hans' : 'en';
+    await writeFile(file, JSON.stringify(applyStorySubjects(stableRecording(body, previous), locale)));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
   if (written.length) {
