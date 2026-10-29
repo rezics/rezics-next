@@ -549,18 +549,50 @@ Library cleanup/custody locators; exhausting Semantic refs cannot certify Librar
 locators. Shared receipt/outbox/editorial write-basis and DBOS copies require the ACTUAL shared owner's minimizer
 ACK, not dispatch. Operational DBOS history belongs to shared-history; no nonexistent Core OP record is inventoried.
 
-Use the delivered account terminal T, account locator fence/registration, `recordLateErasureItem`,
+Use the delivered account terminal T, participant-owned locator fences, `recordLateErasureItem`,
 `resolveLateErasureItem`, `acknowledgeErasure`, `advanceErasureCompletion`, `readErasureStatus` and erasureWorkModule.
-A participant's own ACK follows its own exhausted locators and receiving cleanup custody; it does NOT wait for
-overall frontier/all other ACKs (a cycle). OVERALL completion separately requires effects frontier, no open late
-items and ALL fixed A5 ACKs. Late items arriving behind enumeration remain outstanding until actual resolution.
-Use the actual ERASURE_LOCATOR_EFFECTS/locator-effects queue registration and frontier snapshot/delivered/work
-queries: freeze the database timestamp only after recorded effects checkpoints, then probe the existing indexed
-ENQUEUED/PENDING frontier. Unrelated or failed workflows do not extend that finite frontier. Separately, a failed
-workflow/fork that owns a missing locator or unacknowledged copy leaves its PARTICIPANT unfinished, never no-data;
-passing the coordinator frontier cannot absolve that custody. Existing work/retention.ts terminal-history deletion
-is not erasure/minimizer evidence or authority to forget an unfinished identity obligation. Actual source
-locator/failed-work integration remains a required native owner binding, not a prose certificate.
+`recordLateErasureItem` requires a live account-home command transaction that already holds that participant's own
+locator fence. `resolveLateErasureItem` runs only after actual minimization or purge commits. Neither helper creates
+or closes a fence, enumerates roles or minimizes; those physical owner producers remain missing. A participant's
+own ACK follows its own closed fence, all located and known-role dispositions, its minimizer and shared receiving
+custody. It does NOT wait for `readErasureStatus.complete`, other participants, the overall frontier or global open
+work. A truly unfinished copy independently leaves its owner unfinished.
+
+Access owns input-free `erasure_locator_work` keyed by workflow id. The required effects relay opens one row for each
+registered locator effect before `startWorkflow` or enqueue; `opened_at` is database milliseconds using the same
+expression as `workflow_until`. An OPEN row with `opened_at <= workflow_until` holds OVERALL completion for ANY
+account; a later-open row does not hold that cutoff, and an unset cutoff is incomplete. ERROR, CANCELLED,
+max-recovery and a crash before done stay open. Only SUCCESS/done under the same workflow id or explicit platform
+resolution naming that row after the owner handled the copy clears it. A fork, deleted DBOS history, age, alert or
+timeout never clears it. Failed-locator-work and overdue/resolution-duty owner deliveries remain required native
+dependencies, not ports delivered here.
+
+Overall completion separately requires every fixed A5 ACK, no open late items, the actual effects frontier and no
+applicable open locator work. The coordinator and status use one ordered lookup on the OPEN-only `opened_at` index,
+ranged by `opened_at <= workflow_until`, oldest first with `LIMIT 1`: constant statements and O(1) examined rows,
+with logarithmic OPEN-index blocks. They read no DBOS workflow table or closed history and introduce no
+history-based permission. Do not compare authoritative T to a database cutoff or envelope positions to the
+BACKLOG-ONLY vector. `readErasureStatus` reports open locator work as outstanding and overdue status under its
+existing `outstanding` reporting; this contract invents no callable or status field. An overdue held pass logs only
+the workflow id at error level, with no workflow inputs, personal data or locators. The Access
+[erasure-consumer policy](../access/README.md#erasure-consumers) and [account-erasure policy](../../../../docs/deletion.md#account-erasure)
+own the overdue duty: alert after 24 hours of database age and named platform resolution within 7 days after the
+alert, only after the owner handled the copy. These are cited owner-policy values, not Semantic constants. An alert,
+age or duty breach never clears the hold or certifies cleanup. Account/queue scoping remains a later option only
+for producers that certify every account role their copies can carry.
+
+Late items arriving behind enumeration remain outstanding until actual resolution. Existing
+work/retention.ts terminal-history deletion is not erasure/minimizer evidence or authority to forget an unfinished
+identity obligation. Actual source locator, failed-work, role-enumeration and physical-minimizer integrations remain
+required native owner work, not prose certificates.
+
+Required native erasure schedules include: an unrelated OPEN row with `opened_at <= X.workflow_until` holds X; a
+later-open row does not hold an earlier cutoff, so X completes while later rows remain open. ERROR, CANCELLED,
+max-recovery, crash before done, fork and deletion of DBOS history before the first tombstone all leave the row
+holding. Only same-ID SUCCESS/done or named platform resolution after owner handling clears that row. With all
+ACKs, open work or a late item keeps overall completion pending; after actual named resolution and no other change,
+X completes on the next coordinator pass. An overdue alert never clears the hold. These are required native cases,
+not tests delivered here.
 
 The fixed A5 participant registry is distinct from the two identity publication participants. Identity publication
 does not certify erasure, and Library A5 does not take over identity directory ACK. Immediate terminal account
@@ -624,7 +656,12 @@ and shared history are not zero and must be captured from actual WorkClient on t
 ### Touches, Bound and Growth check for every operation
 
 Every growth entry below names REQUIRED tests on activation under `test/semantic/growth-identity-publication.test.ts`
-(abbreviated **GI**). That file is not delivered here. It must use existing `test/support/growth.ts:checkGrowth`
+(abbreviated **GI**). That file is not delivered here. Its 1/8/64 values are harness scale factors over seeded
+production-shaped populations of thousands of rows (usually 500 × scale), as described by the kernel README's
+[Growth checks](../../README.md#growth-checks), not populations of 1, 8 and 64 rows. The smallest scale must exercise
+every continuation, raw boundary and first/next page shape exercised by the largest; use fixed-operation and
+boundary fixtures as needed without exceeding group or slot caps. Keep the separate 64/512/4096 group and 100/101
+raw-work axes unchanged. It must use existing `test/support/growth.ts:checkGrowth`
 with `rule: 'series'` and native EXPLAIN examined rows/shared blocks/statements, all actual pools/engine captures.
 Leading SQL tags `/* identity:source:<operation> */` and `/* identity:control:<operation> */` distinguish growing
 statements. Returned/affected row helpers cannot replace plans. Periodic reclaim/wakeup belongs in `prepare` AND
@@ -656,7 +693,11 @@ catalogue/DDL/trigger costs and installation waiting remain visible in their act
 4. **Filtered page and cursor validation.** Touches: existing shared batched owner/epoch observation plus TWO
    control probes, existing per-candidate source points and complete source observation. Bound: no separate
    readMapping, extra snapshot/client/control SQL or per-ID loop. Fit direct<=12 statements/backend or composed
-   `8+4R_page` (R_page is source references, not retained obligations), one connection/backend; existing candidate,
+   `8+4R_reads` (`R_reads` is the number of DISTINCT ADMITTED READS of the common page, `R_reads <= 16` and total
+   output slots `<= 128`), one connection/backend; resource leaves, conditions, dependencies, homes and retained
+   `R` minimized obligations do not increase `R_reads`, and `R` has no page-read alias. A mixed `subject.search`
+   request is one read with at most 12 statements per backend. The `8+4R_reads` formula applies only to composed
+   pages. Existing candidate,
    Access, raw/native plan and physical-query allowances apply. Work is page-derived; no S/D scan. Growth check:
    GI `finite owner pages progress under continuous disjoint identity work`, source size/query support 64/512/4096,
    unrelated A/G/M/E and R/L/H independently 1/8/64, complete excluded/NOT/order changes and cursor start/final/
@@ -754,7 +795,7 @@ never full publication success. Native setup failures before a named assertion a
 | Native structural semantics  | Larger survivor, split/restore/repoint, overlapping undo/replay preserve direct terminals and exact immutable counts; first/deep/empty/shared100/101 changes include overlap/lookahead/retries without free row101; current flat lookup never follows ancestors.                                                                                                                                                                                                                    |
 | Export/custody               | Lower dirty head, OLD+NEW key-changing update, delete negative, saved empty replay, source export crash before custody and custody before source ACK; failed ACK of h leaves h+1; failed/moved control custody retains exact page and native receipt.                                                                                                                                                                                                                               |
 | Retention EVERY step         | Assert Gq+4P and Aq+4P4096 from ALL native tables after every commit/crash/replay/abandon/bootstrap/unsealed/export/partial deletion/move; no fifth copy, false G=0 or R/L group. Minimize real undo/reversal/move/cursor refs, generation ref-lock races and missing-minimizer refusal. Local admission refused before native empty proof, succeeds after it; another partition progresses. Relation/index byte deltas and examined work, not three small jobs or delete.rowCount. |
-| Terminal/late/failed custody | Actual account terminal T/locator fence, late item registration behind enumeration, failed-work/fork missing locator, owner/shared minimizer custody, participant-own ACK independent of overall frontier, then overall no-open-late/allACK/frontier. Native Auth deletePersona proves full flow; direct tombstone proves barrier observation only. No Semantic ref exhaustion claiming Library purge.                                                                              |
+| Terminal/late/failed custody | Require the native erasure schedules above, each owner's own fence and minimizer, shared custody, and participant-own ACK independent of overall state. Preserve actual Auth `deletePersona` full flow; direct tombstone proves barrier only. No Semantic ref exhaustion claiming Library purge.                                                                                                                                                                                    |
 | Full publication             | Actual mapping + fixed Search + full Library receipts with all prior effects/fences custodied; missing/delayed receipt stays pending, crash/replay publishes once, public canonical uniqueness and cursor currentness, crossing-epoch delayed first positive/terminal purge cannot resurrect support.                                                                                                                                                                               |
 
 Existing `test/semantic/identity-epoch-admission.test.ts`, `identity-epoch-publication.test.ts`,
