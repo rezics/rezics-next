@@ -2,7 +2,6 @@ import { subjectPartition } from './source.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 
 type RecordValue = Record<string, unknown>;
-type NativeSortValue = string | number | null;
 
 function record(value: unknown): value is RecordValue {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

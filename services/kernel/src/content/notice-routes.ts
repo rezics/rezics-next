@@ -37,7 +37,6 @@ const item = t.Object({
   reportId: t.Union([t.String(), t.Null()]),
   unread: t.Boolean(),
 });
-const listResponse = t.Object({ items: t.Array(item), next: t.Union([t.String(), t.Null()]) });
 const countResponse = t.Object({ count: t.Integer({ minimum: 0, maximum: 100 }), capped: t.Boolean() });
 const seenBody = strictContentSchema(t.Object({ through: t.String() }, { additionalProperties: false }));
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
