@@ -113,9 +113,13 @@ preserves proposal property objects and requires the native read datatype only o
 responses; a busy partition relay consumes one of the same 16 calls and is never readiness.
 Its unchanged SHA-256 is
 `0df9043bf4316fe51014a836a680e902f0a84a7a9b6174622143d31479cc0077`, matching the frozen registry.
-The current focused native and adjacent recovery checks are pending. The earlier local
+The focused native check stops before test execution at a frozen-helper TypeScript error:
+its native-only `data_type` expectation is contextually checked as a proposal property.
+The two executed adjacent recovery files pass; the separately named extra recovery file and
+current-tree root typecheck are pending. The earlier local
 reopen regression passed (2 cases, 16 assertions); its exact runtime/test bytes are unchanged.
-The existing successful root typecheck covers the unchanged product and shared types.
+The prior successful root typecheck remains historical evidence; shared changes in the current
+base require a fresh result.
 See the [verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
 for revisions, receipts, reached transitions and evidence limits.
 

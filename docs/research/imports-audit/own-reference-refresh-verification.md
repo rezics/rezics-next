@@ -22,18 +22,43 @@ The stored dependency signature is importer coordination metadata; it does not a
 
 ## Current verification
 
-Focused native acceptance and the three-file recovery command are pending on this continuation.
-No runtime, storage API, shared type or local regression bytes have changed. Under the latest
-contract, reuse the previous local **2 pass, 16 assertions** and root typecheck **exit 0 across
-13 workspaces** (receipt `07-46-41.621Z-30884bbc`, check prefix `b1158554`) on product `c79e538dfd`.
-The prior adjacent submission `070d3370` ended in infrastructure before results, so it supplies no
-post-retention recovery proof and the three-file command must run here.
+Tested revision: `2d8d4ee5fda226a3ebbaf52a39ef9b0c6616880d`.
 
-The combined frozen correction distinguishes proposal and native read property shapes and allows
-`busy` to consume a relay call within the unchanged 16-call partition budget. Only `read` with zero
-envelopes establishes readiness; `stopped` remains fatal. These are authorized observation changes,
-not product behavior changes. Native `SnakSchema` and `StatementSchema` require `data_type` on reads;
-portable bulk proposals keep their id-only property shape. No other oracle change is assumed.
+The focused native command ran once, check `8e7e4f69-f2ee-4f2c-9705-2b0085447826`, and ended
+with exit 1 before executing either native case. Log:
+`.temp/goal/checks/worker-check-2026-10-29T10-32-03.500Z-b3752d91.log`.
+
+```text
+test/imports/known-reference-refresh.test.ts(72,53): error TS2769: No overload matches this call.
+The last overload gave the following error.
+Object literal may only specify known properties, and 'data_type' does not exist in type '{ id: string; }'.
+```
+
+The approved frozen helper declares `statement: BatchStatement`, so `toContainEqual` contextually types the
+expected qualifier as a portable proposal snak. Its newly approved native-only property object contains
+`data_type`, which that proposal type excludes. Native `SnakSchema` and `StatementSchema` do require that
+read datatype; changing either production schema to accommodate this helper would redefine the contract.
+No native transition was reached in this run. The frozen-file preservation requirement prevents correcting
+this local helper typing without another authorized frozen correction. No worker amendment was made.
+
+The requested adjacent invocation, check `1e62a394-38a6-462f-8c60-211852017650`, exited 0 with
+**10 pass, 138 assertions**, but ran only import-session and deferred-cover-recovery. Its third argument
+mistakenly named nonexistent `deferred-cover-extra.test.ts`, which Bun silently ignored. Log:
+`.temp/goal/checks/worker-check-2026-10-29T10-33-38.618Z-acdb7e8a.log`.
+Run the actual `deferred-cover-recovery-extra.test.ts` separately to complete that evidence without repeating
+the two passing files. This is a command-selection correction, not a product fix.
+
+No importer runtime, storage API, conversion, shared definition or local own-reference regression bytes have
+changed since product `c79e538dfd`. Reuse the earlier local **2 pass, 16 assertions**; its later rerun ended
+in transport before results. The previous root typecheck passed all 13 workspaces (receipt
+`07-46-41.621Z-30884bbc`, check prefix `b1158554`). Other shared product/types in the current base differ
+from that revision, so run the mandated root typecheck once for this tree instead of extending that old proof.
+
+The combined frozen correction distinguishes proposal and native read property shapes and permits `busy` to
+consume a relay call within the unchanged 16-call partition budget. Only `read` with zero envelopes establishes
+readiness; `stopped` remains fatal. These authorized observation changes have not yet reached native execution.
+The wrapper placed native acceptance on b and the adjacent command on c using inherited configuration;
+no routing, host, dependency or infrastructure settings were changed.
 
 ## Earlier evidence
 
@@ -77,8 +102,8 @@ passes predate candidate retention and do not establish current recovery behavio
 ## Decisions and bounds
 
 Preserve existing semantically unchanged candidates and every immutable journal/bootstrap byte. Reuse qualified
-local/typecheck evidence because their relevant product/test bytes are unchanged; rerun the named native and adjacent
-commands only. Do not rebase or merge this assigned branch. Existing Cost ceilings remain; candidate retention adds
+local evidence because its relevant product/test bytes are unchanged. Current shared-base differences require a
+fresh root typecheck; run the named native and adjacent coverage without repeating the two passing adjacent files. Do not rebase or merge this assigned branch. Existing Cost ceilings remain; candidate retention adds
 at most C × Q full-statement comparisons, C ≤ 300 current owned candidates and Q ≤ 100 actual Open Library proposals,
 with existing bounded statement bytes. This is local bounded work, with no new history scan or server query.
 
