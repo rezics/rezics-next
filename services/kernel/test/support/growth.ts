@@ -371,7 +371,11 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           else await check.operation(db, scale, repetition);
         });
       });
-      pendingWrites = warmed.writes;
+      for (const [target, relations] of warmed.writes) {
+        const accumulated = pendingWrites.get(target) ?? new Set<string>();
+        for (const relation of relations) accumulated.add(relation);
+        pendingWrites.set(target, accumulated);
+      }
       repetition++;
     }
 

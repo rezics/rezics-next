@@ -56,7 +56,7 @@ test('settle waits for an older snapshot and removes the first index-probe exces
   }
   const dirtyFirst = await probe();
   const dirtyNext = await probe();
-  expect(dirtyFirst).toBeGreaterThanOrEqual(dirtyNext);
+  expect(dirtyFirst).toBeGreaterThan(dirtyNext);
   let completed = false;
   const waiting = settle(db, { relations: [table], timeoutMs: 5000, pollMs: 20 }).then((elapsed) => {
     completed = true;
@@ -82,7 +82,9 @@ test('settle times out with an infrastructure error that identifies the holding 
   try {
     await expect(settle(db, { relations: [table], timeoutMs: 30, pollMs: 5 })).rejects.toMatchObject({
       name: 'GrowthSettleInfrastructureError',
-      message: expect.stringContaining('growth-settle-holder'),
+      message: expect.stringMatching(
+        /"pid":\d+,"backend_type":"client backend","application_name":"growth-settle-holder","state":"idle in transaction","xact_start":"[^"]+","query":"SELECT count\(\*\) FROM growth_settle_test\.rows"/,
+      ),
     });
   } finally {
     await holder.query('ROLLBACK');
@@ -102,6 +104,13 @@ test('settle disables autovacuum on relations created after the growth database 
   );
   expect(result.rows[0]!.reloptions).toContain('autovacuum_enabled=false');
   expect(result.rows[0]!.toast_reloptions).toContain('autovacuum_enabled=false');
+  const enabled = await db.admin.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE c.relkind='r' AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+        AND (c.reloptions IS NULL OR NOT c.reloptions @> ARRAY['autovacuum_enabled=false']
+          OR NOT c.reloptions @> ARRAY['toast.autovacuum_enabled=false'])`,
+  );
+  expect(enabled.rows[0]!.count).toBe('0');
 });
 
 test('writes through triggers have settled state before every measured repetition', async () => {

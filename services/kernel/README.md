@@ -385,10 +385,14 @@ backend's first. `checkGrowth` refuses fewer than one warm-up per scale. After e
 with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. Each settle waits until
 no other connection in that database holds a transaction ID or snapshot older than the starting horizon, then runs
 `VACUUM (INDEX_CLEANUP ON)` on target relations and verifies every nonempty relation page is all-visible. If pages remain
-not all-visible, it waits and vacuums once more. The default horizon wait is 30 seconds. On timeout or failed visibility
-verification, it throws `GrowthSettleInfrastructureError` with holding backend details; this is a test infrastructure
-failure, not a growth-bound failure. Settle also disables autovacuum on every table, including tables created since the
-database opened. Before each measured repetition, the harness captures each warm-up or preceding run's ModifyTable
+not all-visible, it repeats the horizon wait and vacuums up to two more times; later rounds use `FREEZE` and
+`DISABLE_PAGE_SKIPPING`. The last round uses `VERBOSE` and retains PostgreSQL INFO and WARNING notices. If verification
+still fails, the infrastructure error includes those notices, prepared transactions, replication slot horizons,
+relation owners, and (when the admin role can create `pg_visibility`) non-visible block numbers and
+`pg_check_visible` results. The default horizon wait is 30 seconds. On horizon timeout or failed visibility
+verification, it throws `GrowthSettleInfrastructureError`; this is a test infrastructure failure, not a growth-bound
+failure. Settle also disables autovacuum on every table, including tables created since the database opened. Before
+each measured repetition, the harness captures each warm-up or preceding run's ModifyTable
 targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE in every
 database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db, scale,
 repetition)` hook runs outside capture after settling and before every measured repetition, never before warm-ups. A

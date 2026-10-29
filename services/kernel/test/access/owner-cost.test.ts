@@ -48,6 +48,12 @@ test('the owner guard and its lifecycle commands stay within constant rows and l
     for (const target of [f.actor, f.member, f.expired, f.absent]) {
       plans.push(await f.explain(target));
     }
+    const scale = currentScale;
+    const scaleProbes = probesByScale.get(scale) ?? ([[], [], [], []] as number[][]);
+    plans.forEach((plan, index) => {
+      scaleProbes[index]!.push((plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0));
+    });
+    probesByScale.set(scale, scaleProbes);
     f.commandPlans.length = 0;
     await f.change(memberToChange, 'member');
     await f.change(ownerToRemove, null);
@@ -57,6 +63,8 @@ test('the owner guard and its lifecycle commands stay within constant rows and l
     for (const plan of plans) assertPlanShape(plan);
   }
 
+  let currentScale = 0;
+  const probesByScale = new Map<number, number[][]>();
   const report = await checkGrowth(growth, {
     name: 'the owner guard and its lifecycle commands stay within constant rows and logarithmic blocks as members grow',
     scales: [64, 512, 4096],
@@ -76,16 +84,21 @@ test('the owner guard and its lifecycle commands stay within constant rows and l
       });
     },
     async warmup(_database, scale) {
+      currentScale = scale;
       await exercise(f.owners[2]!, f.owners[3]!);
       await resetCommandState();
       await f.seed(scale);
     },
     async operation(_database, scale) {
+      currentScale = scale;
       await exercise(f.member, f.owners[1]!);
       await resetCommandState();
     },
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+  for (const scale of [64, 512, 4096]) {
+    expect(probesByScale.get(scale)?.map((probes) => new Set(probes).size)).toEqual([1, 1, 1, 1]);
+  }
 }, 30000);
 
 test('zero, one and many owner outcomes distinguish owners from current and expired members', async () => {

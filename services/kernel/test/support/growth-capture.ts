@@ -673,23 +673,106 @@ function qualifiedIdentifier(value: string): string {
 
 async function tableNames(
   database: GrowthDatabase,
-): Promise<{ schema: string; name: string; options: string[] | null }[]> {
-  const result = await database.admin.query<{ schema: string; name: string; options: string[] | null }>(
-    `SELECT n.nspname AS schema, c.relname AS name,c.reloptions AS options
+): Promise<{ schema: string; name: string; kind: string; options: string[] | null }[]> {
+  const result = await database.admin.query<{ schema: string; name: string; kind: string; options: string[] | null }>(
+    `SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options
        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema')
+      WHERE c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_'
       ORDER BY n.nspname,c.relname`,
   );
   return result.rows;
 }
 
 async function disableAutovacuum(database: GrowthDatabase): Promise<void> {
-  for (const { schema, name, options } of await tableNames(database)) {
+  for (const { schema, name, kind, options } of await tableNames(database)) {
+    if (kind !== 'r') continue;
     if (options?.includes('autovacuum_enabled=false') && options.includes('toast.autovacuum_enabled=false')) continue;
     await database.admin.query(
       `ALTER TABLE ${qualifiedIdentifier(`${schema}.${name}`)} SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)`,
     );
   }
+}
+
+type SettleHolder = {
+  pid: number;
+  backend_type: string;
+  application_name: string;
+  state: string;
+  xact_start: Date | null;
+  query: string;
+};
+
+async function horizonHolders(database: GrowthDatabase, horizon: string): Promise<SettleHolder[]> {
+  const result = await database.admin.query<SettleHolder>(
+    `SELECT a.pid,a.backend_type,a.application_name,a.state,a.xact_start,split_part(a.query,E'\\n',1) AS query
+       FROM pg_stat_activity a
+      WHERE a.datname=current_database() AND a.pid<>pg_backend_pid()
+        AND ((a.backend_xid IS NOT NULL AND a.backend_xid::text::bigint < $1::bigint)
+          OR (a.backend_xmin IS NOT NULL AND a.backend_xmin::text::bigint < $1::bigint))
+      ORDER BY a.pid`,
+    [horizon],
+  );
+  return result.rows;
+}
+
+async function waitForHorizon(database: GrowthDatabase, horizon: string, deadline: number, pollMs: number) {
+  while (true) {
+    const holders = await horizonHolders(database, horizon);
+    if (holders.length === 0) return;
+    if (Date.now() >= deadline)
+      throw new GrowthSettleInfrastructureError(
+        `Could not reach a clean transaction horizon; holding backends: ${JSON.stringify(holders)}`,
+      );
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
+async function visibilityDetails(database: GrowthDatabase, relations: readonly string[]) {
+  const details: Record<string, unknown> = {};
+  const extension = await database.admin.query<{ installed: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pg_visibility') AS installed`,
+  );
+  if (!extension.rows[0]?.installed) {
+    try {
+      await database.admin.query('CREATE EXTENSION pg_visibility');
+    } catch {
+      // The remaining server and ownership details still identify inaccessible visibility diagnostics.
+      details.pgVisibility = 'unavailable to the growth database role';
+    }
+  }
+  const installed = await database.admin.query<{ installed: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pg_visibility') AS installed`,
+  );
+  if (installed.rows[0]?.installed) {
+    for (const relation of relations) {
+      const blocks = await database.admin.query(
+        `SELECT blkno,all_visible,all_frozen FROM pg_visibility_map($1::regclass) WHERE NOT all_visible ORDER BY blkno`,
+        [relation],
+      );
+      const check = await database.admin.query(`SELECT * FROM pg_check_visible($1::regclass)`, [relation]);
+      details[relation] = { notAllVisibleBlocks: blocks.rows, pgCheckVisible: check.rows };
+    }
+  }
+  const [prepared, slots, owners] = await Promise.all([
+    database.admin.query(
+      `SELECT gid,prepared,owner,database FROM pg_prepared_xacts WHERE database=current_database() ORDER BY gid`,
+    ),
+    database.admin.query(
+      `SELECT slot_name,slot_type,database,xmin::text AS xmin,catalog_xmin::text AS catalog_xmin
+         FROM pg_replication_slots WHERE database=current_database() OR xmin IS NOT NULL OR catalog_xmin IS NOT NULL
+        ORDER BY slot_name`,
+    ),
+    database.admin.query(
+      `SELECT n.nspname || '.' || c.relname AS relation,pg_get_userbyid(c.relowner) AS owner,current_user AS settle_role
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE (n.nspname || '.' || c.relname)=ANY($1::text[]) ORDER BY relation`,
+      [relations],
+    ),
+  ]);
+  details.preparedTransactions = prepared.rows;
+  details.replicationSlots = slots.rows;
+  details.owners = owners.rows;
+  return details;
 }
 
 export async function settle(
@@ -704,80 +787,75 @@ export async function settle(
   const started = performance.now();
   const timeoutMs = options.timeoutMs ?? 30_000;
   const pollMs = options.pollMs ?? 100;
+  const deadline = Date.now() + timeoutMs;
+  const horizonResult = await database.admin.query<{ horizon: string }>(
+    `SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS horizon`,
+  );
+  const horizon = horizonResult.rows[0]!.horizon;
   await disableAutovacuum(database);
   const names = options.relations ?? (await tableNames(database)).map(({ schema, name }) => `${schema}.${name}`);
-  const deadline = Date.now() + timeoutMs;
-  let holders: Array<{
-    pid: number;
-    backend_type: string;
-    application_name: string;
-    state: string;
-    xact_start: Date | null;
-    query: string;
-  }> = [];
-  while (true) {
-    const result = await database.admin.query<{
-      pid: number;
-      backend_type: string;
-      application_name: string;
-      state: string;
-      xact_start: Date | null;
-      query: string;
-    }>(
-      `WITH horizon AS (SELECT pg_snapshot_xmax(pg_current_snapshot())::text::bigint AS xid)
-       SELECT a.pid,a.backend_type,a.application_name,a.state,a.xact_start,split_part(a.query,E'\\n',1) AS query
-         FROM pg_stat_activity a CROSS JOIN horizon h
-        WHERE a.datname=current_database() AND a.pid<>pg_backend_pid()
-          AND ((a.backend_xid IS NOT NULL AND a.backend_xid::text::bigint < h.xid)
-            OR (a.backend_xmin IS NOT NULL AND a.backend_xmin::text::bigint < h.xid))
-        ORDER BY a.pid`,
-    );
-    holders = result.rows;
-    if (holders.length === 0) break;
-    if (Date.now() >= deadline)
-      throw new GrowthSettleInfrastructureError(
-        `Could not reach a clean transaction horizon; holding backends: ${JSON.stringify(holders)}`,
-      );
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-  }
   const vacuum = async (
     relations: readonly string[],
-    vacuumOptions: { readonly disablePageSkipping?: boolean; readonly freeze?: boolean } = {},
+    vacuumOptions: {
+      readonly disablePageSkipping?: boolean;
+      readonly freeze?: boolean;
+      readonly verbose?: boolean;
+    } = {},
   ) => {
-    for (const relation of relations) {
-      await database.admin.query(
-        `VACUUM (${vacuumOptions.freeze ? 'FREEZE, ' : ''}INDEX_CLEANUP ON${vacuumOptions.disablePageSkipping ? ', DISABLE_PAGE_SKIPPING' : ''}${options.analyze ? ', ANALYZE' : ''}) ${qualifiedIdentifier(relation)}`,
-      );
+    const notices: string[] = [];
+    if (relations.length === 0) return notices;
+    const client = await database.admin.connect();
+    const captureNotice = (notice: { severity?: string; message?: string }) => {
+      if (notice.message) notices.push(`${notice.severity ?? 'NOTICE'}: ${notice.message}`);
+    };
+    client.on('notice', captureNotice);
+    try {
+      for (const relation of relations) {
+        const sql = `VACUUM (${vacuumOptions.verbose ? 'VERBOSE, ' : ''}${vacuumOptions.freeze ? 'FREEZE, ' : ''}INDEX_CLEANUP ON${vacuumOptions.disablePageSkipping ? ', DISABLE_PAGE_SKIPPING' : ''}${options.analyze ? ', ANALYZE' : ''}) ${qualifiedIdentifier(relation)}`;
+        await client.query(sql);
+      }
+    } finally {
+      client.removeListener('notice', captureNotice);
+      client.release();
     }
+    return notices;
   };
-  await vacuum(names);
   const verify = async () => {
     if (names.length === 0) return [];
     const result = await database.admin.query<{ relation: string; pages: number; visible: number }>(
       `SELECT n.nspname || '.' || c.relname AS relation,c.relpages AS pages,c.relallvisible AS visible
          FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE c.relkind IN ('r','m') AND c.relpages > 0 AND (n.nspname || '.' || c.relname)=ANY($1::text[])
-          AND c.relallvisible < c.relpages`,
+          AND c.relallvisible <> c.relpages`,
       [names],
     );
     return result.rows;
   };
-  let dirty = await verify();
-  if (dirty.length > 0) {
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-    await vacuum(
-      dirty.map(({ relation }) => relation),
-      { disablePageSkipping: true, freeze: true },
-    );
+  let dirty: Awaited<ReturnType<typeof verify>> = [];
+  let lastNotices: string[] = [];
+  for (let round = 0; round < 3; round++) {
+    await waitForHorizon(database, horizon, deadline, pollMs);
+    const targets = round === 0 ? names : dirty.length > 0 ? dirty.map(({ relation }) => relation) : names;
+    lastNotices = await vacuum(targets, {
+      disablePageSkipping: round > 0,
+      freeze: round > 0,
+      verbose: round === 2,
+    });
     dirty = await verify();
+    if (dirty.length === 0) break;
+    if (round < 2) await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   if (dirty.length > 0) {
     const waiting = await database.admin.query(
       `SELECT pid,backend_type,application_name,state,xact_start,backend_xid::text,backend_xmin::text,split_part(query,E'\\n',1) AS query
          FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() ORDER BY pid`,
     );
+    const details = await visibilityDetails(
+      database,
+      dirty.map(({ relation }) => relation),
+    );
     throw new GrowthSettleInfrastructureError(
-      `VACUUM did not make every page all-visible; relations: ${JSON.stringify(dirty)}; backends: ${JSON.stringify(waiting.rows)}`,
+      `VACUUM did not make every page all-visible after three rounds; relations: ${JSON.stringify(dirty)}; backends: ${JSON.stringify(waiting.rows)}; vacuum notices: ${JSON.stringify(lastNotices)}; attribution: ${JSON.stringify(details)}`,
     );
   }
   return performance.now() - started;
