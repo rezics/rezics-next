@@ -493,7 +493,7 @@ test('Eden serializes .$complete.post and .$authorizeDownload.get as literal col
 test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
   const media = await available();
   const digestBody = new Bun.CryptoHasher('sha256').update('{}').digest();
-  // 32 rows per scale unit puts every growing relation on point plans at N=32.
+  // 16 rows per scale unit puts every growing relation on point plans at N=32.
   const operation = async (database: typeof db) => {
     const decision = await decideDownload({ pool: database.pool, access }, media.id, { kind: 'anonymous' }, 'webp-320');
     expect(decision.allowed).toBe(true);
@@ -637,7 +637,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
             };
           },
         },
-        { from: previous * 32, to: scale * 32 },
+        { from: previous * 16, to: scale * 16 },
       );
     },
     operation,
