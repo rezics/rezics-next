@@ -141,7 +141,7 @@ were edited. No full kernel, web or root gate, extra test suite, live provider f
 legacy port or growth check was run. The artifact's nonempty-file acceptance proves
 specification delivery only; it cannot substitute for missing native execution.
 
-## Current verification
+## Retained verification before the approved readiness exception
 
 The assigned native file already exists on this attempt's base, `b086419c29`.
 Both named cases above are retained byte for byte; no duplicate acceptance test
@@ -200,3 +200,39 @@ native failure does not block specification delivery. The nonempty-file
 acceptance is run after committing this record, with its terminal result in the
 delivery summary. That artifact check proves specification delivery only. It
 does not turn the rich-field case's partial execution into a full native pass.
+
+
+## Approved readiness exception verification
+
+The controller installed and committed the frozen test at
+`4be7dce7a3ab98aac169b3dccfa30f00c769de76` before this continuation.
+The actual controller registry, canonical embedded brief bytes, and worker file
+all have SHA-256
+`61a687e0dcf7dcf9b76d3b56f3e0286e6032bb4ad94bf147291284c0cad7adb8`.
+Reversing only the approved busy branch produces the exact prior hash
+`654536a4c123d563ff739ac63925e6b71fd638d738e161d429d1fbc6054fbd00`.
+The exception sleeps 5 ms on an actual busy result and continues within the same
+16 total relay calls. Stopped remains fatal; only a real read with zero envelopes
+establishes readiness. Every business assertion and all configured limits and
+timeouts remain unchanged. This worker does not edit the frozen file.
+
+The previous artifact handle `0a22b40c-265a-41bc-8162-72a238fb08cb`
+is terminal, exit 0. No earlier check remains running in this worktree.
+The previous 1 pass / 1 fail / 272 expectations result and its real refresh
+receipts remain historical evidence above, not a full pass for this installation.
+
+Decision: reuse the affected kernel compiler exit 0 at
+`55ff0a5ffa7985839062b83ea17c97244a685d3a` as expressly authorized.
+Apart from the controller's approved readiness branch, this continuation changes
+only this report; the focused native kernel command also checks affected types
+and formatting. No broad gate or old native suite is requested.
+The exact focused command and artifact command above will each run once after
+the relevant final commit, with terminal results recorded below.
+
+Source reading reconfirmed the full source audit, converter and README, native
+fixture and README, bundled mapping entries, pure Wikidata assertions/driver,
+native API runtime/observer and editor candidate/adoption schemas. The reference
+index was read; it does not require a Wikidata reference implementation here.
+The earlier URL refresh, unresolved author and CC0 decisions remain unchanged.
+No outside-path file, product, helper or definition is changed. The same fixed
+record/candidate neighbourhood and deferred gaps above apply.
