@@ -153,7 +153,6 @@ async function residue(table: string, role: string, id: string, routing: string)
     organization_close: {
       organization_id: nativeId,
       receipt_id: newId(route),
-      cursor_member: newId(2),
       handle_key: 'close',
     },
     organization_member: { organization_id: nativeId, member_account_id: newId(2), role: 'member', valid },
@@ -237,7 +236,7 @@ const inventory: Record<string, string> = {
   membership_inverse_terminal: 'account_id,group_id',
   operator_opening_receipt: 'operator_account_id,subject_account_id,acting_human_id',
   operator_relation_slot: 'subject_account_id,operator_account_id',
-  organization_close: 'organization_id,cursor_member',
+  organization_close: 'organization_id',
   organization_member: 'organization_id,member_account_id',
   principal_assignment: 'principal_id,creator_principal_id,assigned_actor_id',
   rating_counter_controller: 'account_id,controller_id',

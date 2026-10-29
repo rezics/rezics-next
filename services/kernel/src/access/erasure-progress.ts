@@ -133,7 +133,6 @@ export const ERASURE_DISCOVERY_ROLES: readonly (readonly [string, string, Routin
     '',
   ],
   ['organization_close', 'organization_id', 'owner', 'route:int,organization_id:uuid', ''],
-  ['organization_close', 'cursor_member', 'partitions', 'route:int,organization_id:uuid', ''],
   [
     'organization_member',
     'organization_id',

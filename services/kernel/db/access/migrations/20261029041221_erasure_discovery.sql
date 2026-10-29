@@ -57,7 +57,6 @@ CREATE INDEX erasure_operator_opening_receipt_acting_human_id ON access.operator
 CREATE INDEX erasure_operator_relation_slot_subject_account_id ON access.operator_relation_slot (subject_account_id, route, reservation_id);
 CREATE INDEX erasure_operator_relation_slot_operator_account_id ON access.operator_relation_slot (operator_account_id, route, subject_account_id, reservation_id);
 CREATE INDEX erasure_organization_close_organization_id ON access.organization_close (organization_id, route);
-CREATE INDEX erasure_organization_close_cursor_member ON access.organization_close (cursor_member, route, organization_id);
 CREATE INDEX erasure_organization_member_organization_id ON access.organization_member (organization_id, route, member_account_id, valid);
 CREATE INDEX erasure_organization_member_member_account_id ON access.organization_member (member_account_id, route, organization_id, valid);
 CREATE INDEX erasure_principal_assignment_principal_id ON access.principal_assignment (principal_id, route, request_id);
@@ -94,7 +93,6 @@ DROP INDEX access.erasure_principal_assignment_creator_principal_id;
 DROP INDEX access.erasure_principal_assignment_principal_id;
 DROP INDEX access.erasure_organization_member_member_account_id;
 DROP INDEX access.erasure_organization_member_organization_id;
-DROP INDEX access.erasure_organization_close_cursor_member;
 DROP INDEX access.erasure_organization_close_organization_id;
 DROP INDEX access.erasure_operator_relation_slot_operator_account_id;
 DROP INDEX access.erasure_operator_relation_slot_subject_account_id;
