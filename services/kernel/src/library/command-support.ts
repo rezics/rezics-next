@@ -28,10 +28,7 @@ export function workStepDeadline(): number {
 }
 
 type CommandContext = { transactionId: string; time: AuthoritativeTime };
-export type LibraryCommandBody<T> = (
-  tx: CommandTransaction,
-  command: CommandContext,
-) => Promise<CommandResult<T>>;
+export type LibraryCommandBody<T> = (tx: CommandTransaction, command: CommandContext) => Promise<CommandResult<T>>;
 
 export type OwnAccountCommand = {
   action: string;
