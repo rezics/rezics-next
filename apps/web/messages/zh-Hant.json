@@ -658,7 +658,7 @@
   "search_sort_relevance": "相關度",
   "search_stale_cursor_restarted": "結果已更新，現顯示第一頁。",
   "library_copy_kind": "類型",
-  "library_copy_unsupported": "此項目的藏書設定不支援該複本類型與狀態。",
+  "library_copy_unsupported": "此項目的書架設定不支援該複本類型與狀態。",
   "library_copy_no_longer_offered": "此項目已不再提供這種複本類型。",
   "library_progress_no_longer_offered": "這個項目已不再提供這種進度記錄方式。",
   "library_progress_unsupported": "這個項目不支援這種進度記錄方式。"
