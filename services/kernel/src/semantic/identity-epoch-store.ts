@@ -358,7 +358,7 @@ export const identityEpochStore: IdentityEpochStore = {
     if (existing) {
       if (
         existing.terminal === original &&
-        BigInt(existing.epoch) === owner.epoch &&
+        BigInt(existing.epoch) === BigInt(owner.epoch) &&
         existing.origin === 'creation' &&
         existing.recorded_transaction_id === source.recorded_transaction_id &&
         existing.gate_transaction_id === source.recorded_transaction_id &&
