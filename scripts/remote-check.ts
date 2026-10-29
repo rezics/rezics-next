@@ -6,9 +6,9 @@
 //
 // A short run (one slot, estimated at no more than 120,000 ms, and not a gate) waits at most one short run per host.
 // Each host keeps one slot as express capacity, so its ordinary capacity is one slot lower.
-// While a gate waits, non-gate runs may use at most ordinaryCapacity - gateCapacity ordinary slots; short runs may
-// also use the express slot. The gate starts once the runs holding its slots when it began waiting have ended,
-// whatever queue forms behind it.
+// Waiter order is gate, landing, multi-slot, ordinary. While a gate waits, non-gate runs leave its reserved slots
+// free; while a landing waiter waits, ordinary and multi-slot runs leave its requested slots free. Short runs may
+// still use the express slot. A waiter starts once the runs holding its slots when it began waiting have ended.
 // A non-gate run requesting more than one slot reserves its slot count on the host where it can start soonest: among
 // hosts with enough ordinary capacity and measured resource headroom to reach its request, it chooses the one with
 // the fewest busy ordinary slots; if none can reach it yet, it chooses the least busy eligible host. Other non-gate
@@ -55,6 +55,8 @@ export type RemoteCheck = {
   progressIntervalMs?: number;
   /** Allows the promotion gate to use all but one slot of its host. */
   gate?: boolean;
+  /** Admission class selected by REMOTE_CHECK_PRIORITY. */
+  priority?: 'landing';
   pollMs?: number;
   /** Test seam for retry backoff; defaults to 100 ms. */
   retryBackoffMs?: number;
@@ -425,7 +427,37 @@ for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
 done
 flock -u 6
 exec 6>&-
-printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nMEMORY_RESERVED %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\n' "$processors" "$slice_processors" "$load" "$memory_reserved" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id"`;
+landing_waiting_slots=0
+landing_waiting_id=-
+landing_waiting_started=
+landing_waiting_sequence=
+exec 6>"${ROOT}/slots/landing-queue.lock"
+flock -x 6
+for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
+  [ -e "$landing_marker" ] || continue
+  exec 7<>"$landing_marker" || continue
+  if flock -n 7; then
+    rm -f -- "$landing_marker"
+    flock -u 7
+  else
+    marker_slots=
+    marker_started=
+    marker_sequence=
+    read -r marker_slots marker_started marker_sequence <&7 || true
+    case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_started" -lt "$landing_waiting_started" ] || { [ "$marker_started" -eq "$landing_waiting_started" ] && [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; }; then
+      landing_waiting_slots=$marker_slots
+      landing_marker_id=\${landing_marker##*/landing-wait-}
+      landing_waiting_id=\${landing_marker_id%.lock}
+      landing_waiting_started=$marker_started
+      landing_waiting_sequence=$marker_sequence
+    fi
+  fi
+  exec 7>&-
+done
+flock -u 6
+exec 6>&-
+printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nMEMORY_RESERVED %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\nLANDING_WAITING_SLOTS %s\\nLANDING_WAITING_ID %s\\n' "$processors" "$slice_processors" "$load" "$memory_reserved" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id" "$landing_waiting_slots" "$landing_waiting_id"`;
 }
 
 /** Holds a marker while a gate waits, so single-slot checks can prefer unmarked hosts. */
@@ -465,6 +497,12 @@ cat >/dev/null
 rm -f -- ${quote(marker)}`;
 }
 
+/** Holds a priority marker until a landing run starts, gives up or is aborted. */
+function landingMarkerScript(id: string, slots: number, arrivalOrder: string): string {
+  const marker = `${ROOT}/slots/landing-wait-${id}.lock`;
+  return `# REMOTE_CHECK_LANDING_MARKER\n# REMOTE_CHECK_LANDING_COUNT ${slots}\n# REMOTE_CHECK_LANDING_ID ${id}\n# REMOTE_CHECK_LANDING_ARRIVAL ${arrivalOrder}\nset -eu\nmkdir -p ${ROOT}/slots\nexec 6>"${ROOT}/slots/landing-queue.lock"\nflock -x 6\nexec 8>${quote(marker)}\nflock -n 8 || { flock -u 6; exit ${SLOT_BUSY}; }\ntrap 'rm -f -- ${quote(marker)}; exit 0' HUP INT TERM\nsequence_file=${ROOT}/slots/landing-wait-sequence\nsequence=0\nif [ -e "$sequence_file" ]; then read -r sequence < "$sequence_file" || sequence=0; fi\ncase "$sequence" in ''|*[!0-9]*) sequence=0 ;; esac\nsequence=$((sequence + 1))\nprintf '%s\\n' "$sequence" > "$sequence_file"\nprintf '%s %s %s\\n' ${slots} ${arrivalOrder} "$sequence" >&8\nflock -u 6\nexec 6>&-\necho LANDING_MARKER\ncat >/dev/null\nrm -f -- ${quote(marker)}`;
+}
+
 /** Takes all requested slots together, or none. The host reservation protects only this short take. */
 function slotScript(
   host: Host,
@@ -475,8 +513,10 @@ function slotScript(
   shortRun: boolean,
   estimateMs: number | undefined,
   gate: boolean,
+  priority: 'landing' | undefined = undefined,
   multiWaiterId: string | undefined,
   memoryReservationBytes: number,
+  landingWaiterId: string | undefined,
 ): string {
   const ordinaryLocks = (start: number, end: number, action: 'count' | 'take' | 'skip'): string =>
     Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
@@ -538,6 +578,25 @@ if [ -e "$gate_marker" ]; then
   fi
   exec 7>&-
 fi
+landing_waiting_slots=0
+landing_waiting_id=-
+landing_waiting_sequence=
+for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
+  [ -e "$landing_marker" ] || continue
+  exec 7<>"$landing_marker" || continue
+  if flock -n 7; then rm -f -- "$landing_marker"; flock -u 7; else
+    marker_slots=; marker_started=; marker_sequence=
+    read -r marker_slots marker_started marker_sequence <&7 || true
+    case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_started" -lt "$landing_waiting_started" ] || { [ "$marker_started" -eq "$landing_waiting_started" ] && [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; }; then
+      landing_waiting_slots=$marker_slots
+      landing_marker_id=\${landing_marker##*/landing-wait-}; landing_waiting_id=\${landing_marker_id%.lock}
+      landing_waiting_started=$marker_started
+      landing_waiting_sequence=$marker_sequence
+    fi
+  fi
+  exec 7>&-
+done
 multi_waiting_slots=0
 multi_waiting_id=-
 multi_waiting_sequence=
@@ -569,11 +628,19 @@ for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
 done
 ordinary_admission_limit=${ordinaryAdmissionLimit}
 wait_behind_older_multi=0
+wait_behind_older_landing=0
 if [ "$gate_waiting" -eq 1 ]; then
   if [ ${gate ? 1 : 0} -eq 1 ]; then
     ordinary_admission_limit=${ordinaryCapacity}
   else
     ordinary_admission_limit=${gateRemainder}
+  fi
+elif [ "$landing_waiting_slots" -gt 0 ] && [ ${gate ? 0 : 1} -eq 1 ]; then
+  if [ ${landingWaiterId ? quote(landingWaiterId) : "''"} = "$landing_waiting_id" ]; then
+    ordinary_admission_limit=${ordinaryCapacity}
+  else
+    ordinary_admission_limit=0
+    wait_behind_older_landing=1
   fi
 elif [ ${gate ? 1 : 0} -eq 0 ] && [ "$multi_waiting_slots" -gt 0 ]; then
   if [ ${multiWaiterId ? quote(multiWaiterId) : "''"} = "$multi_waiting_id" ]; then
@@ -624,7 +691,9 @@ REMOTE_CHECK_SLOT_TAKE=1
 # REMOTE_CHECK_SLOT_LIMIT ${slotLimit}
 # REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT ${ordinaryAdmissionLimit}
 # REMOTE_CHECK_GATE_REQUEST ${gate ? 1 : 0}
+# REMOTE_CHECK_PRIORITY ${priority ?? 'ordinary'}
 # REMOTE_CHECK_MULTI_SLOT_WAITER_ID ${multiWaiterId ?? '-'}
+# REMOTE_CHECK_LANDING_WAITER_ID ${landingWaiterId ?? '-'}
 exec 8>"${ROOT}/slots/reserve.lock"
 flock -x -n 8 || exit ${SLOT_BUSY}
 ${markerPolicy}
@@ -661,7 +730,7 @@ reserved_slots=
 ordinary_used=0
 # REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS
 ${countBusyOrdinary}
-if [ "$wait_behind_older_multi" -eq 1 ]; then exit ${SLOT_BUSY}; fi
+if [ "$wait_behind_older_multi" -eq 1 ] || { [ "\${wait_behind_older_landing:-0}" -eq 1 ] && [ ${shortRun ? 0 : 1} -eq 1 ]; } || { [ ${priority === 'landing' ? 1 : 0} -eq 1 ] && [ "$gate_waiting" -eq 1 ]; }; then exit ${SLOT_BUSY}; fi
 ${takeOrdinary}
 ${expressTake}
 ${countOtherOrdinary}
@@ -734,6 +803,7 @@ export function runScript(
   command: string[],
   hostName: string,
   progressIntervalMs = DEFAULT_LIVENESS_INTERVAL_MS,
+  priorityClass = 'ordinary',
 ): string {
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
   const wrapperDirectory = `${directory}/.temp/check-host`;
@@ -876,6 +946,7 @@ mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && 
 ${dockerWrapper}WRAPPER
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
 export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
+printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
 cd ${directory} || exit 1
 touch ${quote(`${directory}/.alive`)}
 # systemd 259 expands \${NAME} in --scope arguments by default, which broke the script's parameter expansions on c
@@ -1082,6 +1153,8 @@ type HostProbe = {
   gateWaiting: boolean;
   multiWaitingSlots: number;
   multiWaitingId: string | null;
+  landingWaitingSlots: number;
+  landingWaitingId: string | null;
 };
 type RankedHost = {
   host: Host;
@@ -1097,6 +1170,7 @@ type RankedHost = {
   gateWaiting: boolean;
   ordinarySlotsUsed: number;
   expressSlotUsed: boolean;
+  landingWaitingSlots: number;
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
@@ -1114,8 +1188,10 @@ function rankHost(
   slots: number,
   estimateMs: number | undefined,
   gate: boolean,
+  priority: 'landing' | undefined = undefined,
   multiWaiterId?: string,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
+  landingWaiterId?: string,
 ): RankedHost {
   const capacity = hostCapacity(host, probe);
   const ordinaryCapacity = Math.max(0, capacity - 1);
@@ -1123,18 +1199,25 @@ function rankHost(
   const hasMultiWaiter = !probe.gateWaiting && probe.multiWaitingSlots > 0;
   const isOldestMultiWaiter = hasMultiWaiter && multiWaiterId !== undefined && probe.multiWaitingId === multiWaiterId;
   const waitsBehindOlderMulti = hasMultiWaiter && slots > 1 && multiWaiterId !== undefined && !isOldestMultiWaiter;
+  const hasLandingWaiter = probe.landingWaitingSlots > 0;
+  const isOldestLandingWaiter = hasLandingWaiter && landingWaiterId !== undefined && probe.landingWaitingId === landingWaiterId;
+  const waitsBehindLanding = hasLandingWaiter && !gate && !isOldestLandingWaiter;
   const ordinaryAdmissionLimit = gate
     ? ordinaryCapacity
     : probe.gateWaiting
       ? ordinaryCapacity - gateCapacity
-      : hasMultiWaiter
+      : hasLandingWaiter
+        ? isOldestLandingWaiter
+          ? ordinaryCapacity
+          : 0
+        : hasMultiWaiter
         ? isOldestMultiWaiter
           ? ordinaryCapacity
           : ordinaryCapacity - probe.multiWaitingSlots
         : ordinaryCapacity;
   const resourceSlots = probeCapacity(capacity);
   const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
-  const shortRun = isShortRun(slots, estimateMs, gate);
+  const shortRun = priority !== 'landing' && isShortRun(slots, estimateMs, gate);
   let freeSlots: number;
   let slotLimit: number;
   if (shortRun) {
@@ -1151,6 +1234,11 @@ function rankHost(
   }
   if (probe.memoryReserved + slots * memoryReservationBytes > memoryMaximum) freeSlots = 0;
   if (waitsBehindOlderMulti) freeSlots = 0;
+  if (
+    waitsBehindLanding && !shortRun ||
+    (priority === 'landing' && probe.gateWaiting) ||
+    (priority === 'landing' && hasLandingWaiter && !isOldestLandingWaiter)
+  ) freeSlots = 0;
   return {
     host,
     capacity,
@@ -1165,6 +1253,7 @@ function rankHost(
     gateWaiting: probe.gateWaiting,
     ordinarySlotsUsed: probe.ordinarySlotsUsed,
     expressSlotUsed: probe.expressSlotUsed,
+    landingWaitingSlots: probe.landingWaitingSlots,
   };
 }
 
@@ -1227,6 +1316,10 @@ function parseProbe(output: string): HostProbe | null {
   const multiWaitingSlots = Number(multiWaitingSlotsValue);
   const multiWaitingIdValue = value('MULTI_SLOT_WAITING_ID');
   const multiWaitingId = multiWaitingIdValue === '-' ? null : multiWaitingIdValue;
+  const landingWaitingSlotsValue = value('LANDING_WAITING_SLOTS');
+  const landingWaitingSlots = Number(landingWaitingSlotsValue);
+  const landingWaitingIdValue = value('LANDING_WAITING_ID');
+  const landingWaitingId = landingWaitingIdValue === '-' ? null : landingWaitingIdValue;
   if (
     processorValue === null ||
     sliceProcessorValue === null ||
@@ -1265,6 +1358,13 @@ function parseProbe(output: string): HostProbe | null {
     multiWaitingIdValue === null ||
     (multiWaitingId !== null && !/^[a-zA-Z0-9-]+$/.test(multiWaitingId)) ||
     (multiWaitingSlots === 0) !== (multiWaitingId === null) ||
+    landingWaitingSlotsValue === null ||
+    !Number.isSafeInteger(landingWaitingSlots) ||
+    landingWaitingSlots < 0 ||
+    landingWaitingSlots > 1_000_000 ||
+    landingWaitingIdValue === null ||
+    (landingWaitingId !== null && !/^[a-zA-Z0-9-]+$/.test(landingWaitingId)) ||
+    (landingWaitingSlots === 0) !== (landingWaitingId === null) ||
     (!sliceMemory && !memoryFallback)
   )
     return null;
@@ -1283,6 +1383,8 @@ function parseProbe(output: string): HostProbe | null {
     gateWaiting,
     multiWaitingSlots,
     multiWaitingId,
+    landingWaitingSlots,
+    landingWaitingId,
   };
 }
 
@@ -1392,8 +1494,10 @@ async function takeSlots(
   shortRun: boolean,
   estimateMs: number | undefined,
   gate: boolean,
+  priority: 'landing' | undefined = undefined,
   multiWaiterId: string | undefined,
   memoryReservationBytes: number,
+  landingWaiterId: string | undefined,
   signal: AbortSignal,
 ): Promise<Lease | null> {
   return takeSession(
@@ -1407,8 +1511,10 @@ async function takeSlots(
       shortRun,
       estimateMs,
       gate,
+      priority,
       multiWaiterId,
       memoryReservationBytes,
+      landingWaiterId,
     ),
     /^SLOTS? \d+$/m,
     signal,
@@ -1428,6 +1534,10 @@ async function takeMultiSlotMarker(
   return takeSession(host, multiSlotMarkerScript(id, slots), /^MULTI_SLOT_MARKER$/m, signal);
 }
 
+async function takeLandingMarker(host: Host, id: string, slots: number, arrivalOrder: string, signal: AbortSignal): Promise<SessionLease | null> {
+  return takeSession(host, landingMarkerScript(id, slots, arrivalOrder), /^LANDING_MARKER$/m, signal);
+}
+
 /** Hosts that can admit slots, with the most resource-backed free slots first. */
 async function rankedHosts(
   hosts: Host[],
@@ -1440,6 +1550,8 @@ async function rankedHosts(
   loggedSkips: Map<string, string> = new Map(),
   loggedSkipLines: Set<string> = new Set(),
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
+  priority: 'landing' | undefined = undefined,
+  landingWaiterId?: string,
 ): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
@@ -1470,7 +1582,7 @@ async function rankedHosts(
     probes
       .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
       .filter(({ host, probe }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
-      .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate, multiWaiterId, memoryReservationBytes))
+      .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate, priority, multiWaiterId, memoryReservationBytes, landingWaiterId))
       // Equal slot counts prefer the host with more measured slice memory headroom.
       .sort(
         (left, right) =>
@@ -1494,19 +1606,10 @@ async function acquireOnce(
   signal: AbortSignal,
   gate = false,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
+  priority: 'landing' | undefined = undefined,
 ): Promise<Lease | null> {
-  const ranked = await rankedHosts(
-    hosts,
-    signal,
-    requestedSlots,
-    estimateMs,
-    gate,
-    false,
-    undefined,
-    new Map(),
-    new Set(),
-    memoryReservationBytes,
-  );
+  const landingWaiterId = priority === 'landing' ? randomUUID() : undefined;
+  const ranked = await rankedHosts(hosts, signal, requestedSlots, estimateMs, gate, false, undefined, new Map(), new Set(), memoryReservationBytes, priority, landingWaiterId);
   let slots = requestedSlots;
   if (ranked.length > 0) {
     if (gate) {
@@ -1520,7 +1623,7 @@ async function acquireOnce(
         );
       }
     } else {
-      const cap = requestedSlotCap(ranked, isShortRun(requestedSlots, estimateMs, gate), requestedSlots);
+      const cap = requestedSlotCap(ranked, priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate), requestedSlots);
       if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
     }
   }
@@ -1533,11 +1636,13 @@ async function acquireOnce(
       slotLimit,
       ordinaryCapacity,
       ordinaryAdmissionLimit,
-      isShortRun(slots, estimateMs, gate),
+      priority !== 'landing' && isShortRun(slots, estimateMs, gate),
       estimateMs,
       gate,
+      priority,
       undefined,
       memoryReservationBytes,
+      landingWaiterId,
       signal,
     );
     if (lease && signal.aborted) {
@@ -1568,13 +1673,19 @@ async function acquire(
   gate = false,
   waitRepeatMs = 60_000,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
+  priority: 'landing' | undefined = undefined,
 ): Promise<Lease | null> {
   let answered = false;
   let slots = requestedSlots;
   let warnedGateReduction = false;
   let marker: SessionLease | undefined;
   let markerHost: string | undefined;
-  const multiWaiterId = !gate && slots > 1 ? randomUUID() : undefined;
+  const landingWaiterId = priority === 'landing' && !gate ? randomUUID() : undefined;
+  const landingArrivalOrder = landingWaiterId
+    ? String(Math.floor((performance.timeOrigin + performance.now()) * 1_000))
+    : undefined;
+  const multiWaiterId = !gate && priority !== 'landing' && slots > 1 ? randomUUID() : undefined;
+  const priorityClass = gate ? 'gate' : priority ?? (slots > 1 ? 'multi-slot' : 'ordinary');
   const wait = checkWaitRecorder();
   const skippedHosts = new Map<string, string>();
   const loggedSkipLines = new Set<string>();
@@ -1591,7 +1702,7 @@ async function acquire(
       : 'no responding hosts';
     const reasons = [...skippedHosts.values()];
     console.error(
-      `remote-check: every check slot is busy; waiting for a free one (${state})${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
+      `remote-check: every check slot is busy; waiting for a free one (${state}); priority ${priorityClass}${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
     );
   };
   const announceWait = (ranked: RankedHost[]): void => {
@@ -1619,8 +1730,15 @@ async function acquire(
         skippedHosts,
         loggedSkipLines,
         memoryReservationBytes,
+        priority,
+        landingWaiterId,
       );
       if (multiWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
+        if (marker) await marker.release();
+        marker = undefined;
+        markerHost = undefined;
+      }
+      if (landingWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
         if (marker) await marker.release();
         marker = undefined;
         markerHost = undefined;
@@ -1643,7 +1761,7 @@ async function acquire(
             }
           }
         } else {
-          const cap = requestedSlotCap(ranked, isShortRun(requestedSlots, estimateMs, gate), requestedSlots);
+          const cap = requestedSlotCap(ranked, priority !== 'landing' && isShortRun(requestedSlots, estimateMs, gate), requestedSlots);
           if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
         }
       } else if (giveUpIfUnanswered && !answered) return null;
@@ -1654,8 +1772,13 @@ async function acquire(
         marker = undefined;
         markerHost = undefined;
       }
+      if (landingWaiterId && markerHost && markedHost?.fallback && globallyStartable.some(({ host }) => !host.fallback)) {
+        if (marker) await marker.release();
+        marker = undefined;
+        markerHost = undefined;
+      }
       const acquisitionHosts =
-        multiWaiterId && markerHost ? ranked.filter(({ host }) => host.name === markerHost) : ranked;
+        (multiWaiterId || landingWaiterId) && markerHost ? ranked.filter(({ host }) => host.name === markerHost) : ranked;
       const canStart = startableHosts(acquisitionHosts, slots, gate);
       for (const entry of canStart) {
         const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
@@ -1666,11 +1789,13 @@ async function acquire(
           slotLimit,
           ordinaryCapacity,
           ordinaryAdmissionLimit,
-          isShortRun(slots, estimateMs, gate),
+          priority !== 'landing' && isShortRun(slots, estimateMs, gate),
           estimateMs,
           gate,
+          priority,
           multiWaiterId,
           memoryReservationBytes,
+          landingWaiterId,
           signal,
         );
         if (lease && signal.aborted) {
@@ -1690,6 +1815,26 @@ async function acquire(
           marker = undefined;
           markerHost = target.host.name;
           marker = (await takeGateMarker(target.host, signal)) ?? undefined;
+        }
+      }
+      if (landingWaiterId && ranked.length > 0 && !gate) {
+        const eligible = ranked.filter(({ ordinaryCapacity }) => ordinaryCapacity >= slots);
+        const currentlyReachable = eligible.filter(
+          ({ resourceSlots, ordinarySlotsUsed }) => resourceSlots + ordinarySlotsUsed >= slots,
+        );
+        const candidates = (currentlyReachable.length > 0 ? currentlyReachable : eligible).sort(
+          (left, right) =>
+            left.ordinarySlotsUsed - right.ordinarySlotsUsed ||
+            right.resourceSlots - left.resourceSlots ||
+            right.memoryHeadroom - left.memoryHeadroom,
+        );
+        const target = ranked.find(({ host }) => host.name === markerHost) ?? candidates[0];
+        if (target && target.host.name !== markerHost) {
+          if (marker) await marker.release();
+          markerHost = target.host.name;
+          marker = (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
+        } else if (target && !marker) {
+          marker = (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
         }
       }
       if (multiWaiterId && ranked.length > 0) {
@@ -1926,7 +2071,7 @@ async function runLeased(
         'ssh',
         ...sshOptions(host),
         host.address,
-        runScript(id, directory, options.cwd ?? '.', options.command, host.name, options.progressIntervalMs),
+        runScript(id, directory, options.cwd ?? '.', options.command, host.name, options.progressIntervalMs, options.gate ? 'gate' : options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     );
@@ -2059,16 +2204,10 @@ async function runWithTransportRetries(
         options.gate ?? false,
         options.waitRepeatMs,
         memoryReservationBytes,
+        options.priority,
       );
     } else {
-      lease = await acquireOnce(
-        retryHosts,
-        slots,
-        options.estimateMs,
-        signal,
-        options.gate ?? false,
-        memoryReservationBytes,
-      );
+      lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false, memoryReservationBytes, options.priority);
       if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
         lease = await acquire(
           hosts,
@@ -2081,6 +2220,7 @@ async function runWithTransportRetries(
           options.gate ?? false,
           options.waitRepeatMs,
           memoryReservationBytes,
+          options.priority,
         );
       }
     }
@@ -2137,6 +2277,7 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
       signal,
       options.gate ?? false,
       memoryReservationBytes,
+      options.priority,
     );
     if (!lease) return { status: 'no-slot' };
     try {
@@ -2157,6 +2298,10 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
 function parse(argv: string[]): RemoteCheck {
   const hostsFile = process.env.KERNEL_CHECK_REMOTE;
   if (!hostsFile) throw new Error('KERNEL_CHECK_REMOTE must name the hosts file');
+  const priorityValue = process.env.REMOTE_CHECK_PRIORITY;
+  if (priorityValue !== undefined && priorityValue !== 'landing') {
+    throw new Error(`REMOTE_CHECK_PRIORITY must be landing when set, received ${priorityValue}`);
+  }
   let cwd: string | undefined;
   let slots: number | undefined;
   let memoryGiB: number | undefined;
@@ -2232,6 +2377,7 @@ function parse(argv: string[]): RemoteCheck {
     ...(estimateMs === undefined ? {} : { estimateMs }),
     ...(maxMs === undefined ? {} : { maxMs }),
     ...(gate ? { gate } : {}),
+    ...(priorityValue === undefined ? {} : { priority: 'landing' as const }),
     ...(returns === undefined ? {} : { returns }),
     ...(pollMs === undefined ? {} : { pollMs }),
     ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),

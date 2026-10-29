@@ -48,7 +48,8 @@ if (script.includes('MemAvailable')) {
       '\\nPROCESSORS 16\\nSLICE_PROCESSORS ' + ((config.cpuQuotaPercent ?? 800) / 100) +
       '\\nLOAD 0\\nORDINARY_SLOTS_USED ' + ordinarySlotsUsed +
       '\\nEXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0) + '\\nGATE_WAITING 0' +
-      '\\nMULTI_SLOT_WAITING_SLOTS 0\\nMULTI_SLOT_WAITING_ID -',
+      '\\nMULTI_SLOT_WAITING_SLOTS 0\\nMULTI_SLOT_WAITING_ID -' +
+      '\\nLANDING_WAITING_SLOTS 0\\nLANDING_WAITING_ID -',
   );
 } else if (script.includes('REMOTE_CHECK_RESERVATION')) {
   const lock = dir + '/' + hostKey + '.reservation';
@@ -423,6 +424,41 @@ test("a worker's stack run waits for a check host slot instead of running locall
   expect(seen.filter((event) => event.kind === 'slot' && event.granted === false).length).toBeGreaterThan(0);
   expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
   expect(seen.filter((event) => event.kind === 'probe').length).toBeGreaterThan(2);
+}, 30_000);
+
+test('landing priority: stackRun carries landing to admission and check entry points preserve the caller environment', async () => {
+  const { env, events } = scenario({ a: { available: 20e9 } });
+  const result = await stack({ ...env, REMOTE_CHECK_PRIORITY: 'landing' }, ['true']);
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('stack-run: the run priority landing on a');
+  expect(events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain('# REMOTE_CHECK_PRIORITY landing');
+  expect(events().find((event) => event.kind === 'run')?.script).toContain("printf 'remote-check: run priority %s");
+
+  const kernel = readFileSync(join(repository, 'services/kernel/scripts/check.ts'), 'utf8');
+  const auth = readFileSync(join(repository, 'services/auth/scripts/check.ts'), 'utf8');
+  const web = readFileSync(join(repository, 'apps/web/scripts/check.ts'), 'utf8');
+  const placement = readFileSync(join(repository, 'scripts/stack-run.ts'), 'utf8');
+  expect(kernel).toContain('    env,\n  );');
+  expect(auth).toContain('process.exitCode = await stackRun(');
+  expect(auth).toContain("command: ['bun', 'scripts/check.ts', ...args],\n    },\n    async () => {");
+  expect(web).toContain('      options.env ?? process.env,');
+  expect(web).toContain('export async function runHostTests(\n  env: NodeJS.ProcessEnv = process.env');
+  expect(placement).toContain('env: Environment = process.env');
+}, 30_000);
+
+test('landing priority: workers drop landing and report it once, and other values are usage errors', async () => {
+  const worker = scenario({ a: { available: 20e9 } });
+  const workerResult = await stack({ ...worker.env, REMOTE_CHECK_PRIORITY: 'landing', GOAL_TASK_ID: 'worker' }, ['true']);
+  expect(workerResult.code).toBe(0);
+  expect(workerResult.stderr.match(/worker environment ignores REMOTE_CHECK_PRIORITY=landing/g)).toHaveLength(1);
+  expect(worker.events().some((event) => event.kind === 'landing-marker')).toBe(false);
+  expect(worker.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain('# REMOTE_CHECK_PRIORITY ordinary');
+
+  const invalid = scenario({ a: { available: 20e9 } });
+  const refused = await stack({ ...invalid.env, REMOTE_CHECK_PRIORITY: 'urgent' }, ['true']);
+  expect(refused.code).toBe(1);
+  expect(refused.stderr).toContain('REMOTE_CHECK_PRIORITY must be landing');
+  expect(invalid.events()).toEqual([]);
 }, 30_000);
 
 test('a worker does not run locally after a reachable host fails during workspace sync', async () => {

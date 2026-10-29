@@ -164,6 +164,14 @@ function localReason(run: StackRun, env: Environment): string | { hostsFile: str
  */
 export async function runOnCheckHost(run: StackRun, env: Environment = process.env): Promise<number | null> {
   validateEstimateMs(run.estimateMs);
+  const requestedPriority = env.REMOTE_CHECK_PRIORITY;
+  if (requestedPriority !== undefined && requestedPriority !== 'landing') {
+    throw new Error(`REMOTE_CHECK_PRIORITY must be landing when set, received ${requestedPriority}`);
+  }
+  const priority = requestedPriority === 'landing' && isWorker(env) ? undefined : requestedPriority;
+  if (requestedPriority === 'landing' && isWorker(env)) {
+    console.error('stack-run: worker environment ignores REMOTE_CHECK_PRIORITY=landing');
+  }
   const reason = localReason(run, env);
   if (typeof reason === 'string') {
     console.error(`stack-run: ${run.label} local, ${reason}`);
@@ -191,6 +199,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         command: run.command,
         ...(run.slots === undefined ? {} : { slots: run.slots }),
         ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
+        ...(priority === undefined ? {} : { priority }),
         ...(interval === undefined ? {} : { pollMs: interval }),
         ...(run.returns === undefined ? {} : { returns: run.returns }),
         answered: () => {
@@ -199,7 +208,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         started: (host) => {
           started = true;
           run.started?.(host);
-          console.error(`stack-run: ${run.label} on ${host}`);
+          console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);
         },
       },
       controller.signal,

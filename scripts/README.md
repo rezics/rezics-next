@@ -212,6 +212,7 @@ containers in `rezics-check.slice` and labels them `rezics.worker.attempt=<task>
 containers with that attempt label. Remote runs do not receive worker identity and retain their run label and cleanup.
 
 Stderr reports `remote-check: slot wait`, `rsync`, `bun install` and `command`, each with seconds and host name.
+Set `REMOTE_CHECK_PRIORITY=landing` for a landing check to wait ahead of multi-slot and ordinary runs, while gates keep first priority.
 The `rsync` line also includes the bytes sent from rsync statistics. If zstd is unavailable, the run reports that it
 uses rsync's default compression. Returned outputs add `rsync back`. Slot wait includes probing and acquisition;
 rsync measures the upload.
