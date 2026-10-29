@@ -4,12 +4,28 @@ import { RoutePage, type RoutePageData } from '../../features/pages/route';
 import { subjectPageMessages } from '../../features/pages/route-support';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { ZonePageSurface, ZoneReadBoundary, ZoneShell } from '../../zones/zone-shell';
+import { ZonePageSurface, ZoneReadBoundary, ZoneShell, zonePageTitle } from '../../zones/zone-shell';
 import { readZonePageRequest } from '../../zones/zone-read';
 
 export const Route = createFileRoute('/zones/$id')({
-  loader: ({ params }) => readZonePageRequest({ data: { id: params.id, locale: getLocale(), target: { route: '' } } }),
-  head: () => ({ meta: [{ title: m.zone_home() }] }),
+  staticData: { sessionReread: true },
+  loader: ({ params, context }) =>
+    readZonePageRequest({
+      data: {
+        id: params.id,
+        locale: getLocale(),
+        target: { route: '' },
+        credentialMode: context.credentialMode,
+      },
+    }),
+  head: ({ loaderData }) => ({
+    meta: [
+      {
+        title:
+          loaderData?.kind === 'page' ? zonePageTitle(loaderData.page.zone, '', getLocale()) : m.not_found_heading(),
+      },
+    ],
+  }),
   component: ZoneHomeRoute,
 });
 
@@ -29,7 +45,7 @@ function ZoneHomeRoute() {
                 <RoutePage
                   page={{ ...outcome.page, route: '', document } as unknown as RoutePageData}
                   locale={locale}
-                  heading={m.zone_home()}
+                  heading={zonePageTitle(zone, '', locale)}
                   messages={subjectPageMessages()}
                   {...(nonce !== undefined ? { nonce } : {})}
                   renderJsonLd={false}

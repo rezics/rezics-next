@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { slug } from '@rezics/definitions/slug';
 import { UI_LOCALES, type CompositionDocument, type ZoneStarter } from '@rezics/composition';
 import { bundledDigest } from '@rezics/definitions/bundled';
@@ -8,6 +10,7 @@ import type { NativeWebStack } from './stack.ts';
 const nativeRead = 'A public page from the native Zone configuration.';
 const privateRead = 'PRIVATE-ZONE-STATIC-CONTENT';
 const protectedRead = 'TAKEN-DOWN-ZONE-STATIC-CONTENT';
+const repositoryRoot = resolve(import.meta.dir, '../../../../');
 
 const labels = (english: string, translations: readonly string[]) =>
   Object.fromEntries(
@@ -272,6 +275,27 @@ export async function createNativeStaticZonesFixture(stack: NativeWebStack): Pro
     createdPrivate.zone.id,
     createdPrivate.zone.revision,
     privateConfiguration,
+  );
+
+  const recordPage = async (id: string, route: string) =>
+    json(
+      await stack.kernel(`/v1/zones/${id}:readPage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: { route }, languages: ['en'] }),
+      }),
+      `record native ${route || 'home'} page`,
+    );
+  const [home, guide, metadata] = await Promise.all([
+    recordPage(publishedPublic.zone.id, ''),
+    recordPage(publishedPublic.zone.id, 'guide'),
+    json(await stack.kernel(`/v1/zones/${publishedPublic.zone.id}`), 'record native Zone metadata'),
+  ]);
+  const recordingDirectory = join(repositoryRoot, '.temp');
+  await mkdir(recordingDirectory, { recursive: true });
+  await Bun.write(
+    join(recordingDirectory, 'native-static-zones-recording.json'),
+    `${JSON.stringify({ home, guide, metadata }, null, 2)}\n`,
   );
 
   return {

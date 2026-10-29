@@ -45,6 +45,15 @@ function navigationLabel(route: string, locale: string): string {
   return segment.replaceAll('-', ' ').replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase(locale));
 }
 
+export function zoneRouteHeading(route: string, locale: string): string {
+  return navigationLabel(route, locale);
+}
+
+export function zonePageTitle(zone: ZonePublic, route: string, locale: string): string {
+  const title = zoneLabel(zone, locale)?.text ?? m.zone_home();
+  return route ? `${navigationLabel(route, locale)} · ${title}` : title;
+}
+
 function navigationHref(zone: ZonePublic, locale: string, route: string): string {
   const suffix = route ? `/${route.split('/').map(encodeURIComponent).join('/')}` : '';
   return `/${encodeURIComponent(locale)}/zones/${encodeURIComponent(zone.id)}${suffix}`;
@@ -71,7 +80,7 @@ export function ZoneShell({ zone, locale, children }: { zone: ZonePublic; locale
                 aria-current={route === '' ? 'page' : undefined}
                 className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {navigationLabel(route, locale)}
+                {zoneRouteHeading(route, locale)}
               </a>
             ))}
           </nav>

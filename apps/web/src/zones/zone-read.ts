@@ -3,8 +3,12 @@ import { isView, type View } from '@rezics/composition';
 import { notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
 import type { ZonePageRequest, ZonePageResponse } from '../../../../services/kernel/src/zones/contract.ts';
 import type { ZonePageQuery, ZonePageReadProgress } from '../../../../services/kernel/src/zones/page-continuation.ts';
+import type { ReadCredentialMode } from '../kernel/credential';
+import type { SessionEnv } from '../session/client';
+import { prepareSession, viewerCredential } from '../session/request';
 import { loadSubjectPage, type SubjectPageData } from '../features/pages/subject';
 import { loadViewPages } from '../features/pages/subject-frame';
 import { locales } from '../paraglide/runtime.js';
@@ -14,7 +18,7 @@ type ZoneRouteClient = {
     $readPage: {
       post(
         body: ZonePageRequest,
-        options?: { query?: ZonePageQuery },
+        options?: { query?: ZonePageQuery; headers?: { authorization: string } },
       ): Promise<{
         status: number;
         data: ZonePageResponse | ZonePageReadProgress | null;
@@ -55,6 +59,7 @@ export type ZonePageInput = {
   locale: string;
   target: ZonePageRequest['target'];
   cursor?: ZonePageQuery['cursor'];
+  credentialMode?: ReadCredentialMode;
 };
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -83,7 +88,11 @@ function validateInput(input: unknown): ZonePageInput {
     typeof input.locale !== 'string' ||
     !locales.includes(input.locale as (typeof locales)[number]) ||
     !validTarget(input.target) ||
-    ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string')
+    ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
+    ('credentialMode' in input &&
+      input.credentialMode !== undefined &&
+      input.credentialMode !== 'anonymous' &&
+      input.credentialMode !== 'session')
   )
     throw notFound();
   return {
@@ -91,6 +100,7 @@ function validateInput(input: unknown): ZonePageInput {
     locale: input.locale,
     target: input.target,
     ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+    ...(input.credentialMode === 'session' ? { credentialMode: 'session' } : {}),
   };
 }
 
@@ -103,7 +113,7 @@ export async function readZonePage(
   client: KernelClient,
   id: string,
   request: ZonePageRequest,
-  options: { cursor?: ZonePageQuery['cursor']; followContinuations?: boolean } = {},
+  options: { cursor?: ZonePageQuery['cursor']; followContinuations?: boolean; authorization?: string } = {},
 ): Promise<ZonePageOutcome> {
   const zone = (client as unknown as ZoneRouteClient).zones({ id });
   let cursor = options.cursor;
@@ -111,7 +121,10 @@ export async function readZonePage(
   for (let attempt = 0; attempt <= (follow ? 4 : 0); attempt++) {
     let result: Awaited<ReturnType<typeof zone.$readPage.post>>;
     try {
-      result = await zone.$readPage.post(request, cursor === undefined ? undefined : { query: { cursor } });
+      result = await zone.$readPage.post(request, {
+        ...(cursor === undefined ? {} : { query: { cursor } }),
+        ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
+      });
     } catch {
       return { kind: 'error' };
     }
@@ -130,7 +143,7 @@ export async function readZonePage(
 export async function readZonePageForRoute(
   client: KernelClient,
   input: ZonePageInput,
-  options: { followContinuations?: boolean } = {},
+  options: { followContinuations?: boolean; authorization?: string } = {},
 ): Promise<ZonePageRouteOutcome> {
   const result = await readZonePage(
     client,
@@ -139,6 +152,7 @@ export async function readZonePageForRoute(
     {
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       ...(options.followContinuations === undefined ? {} : { followContinuations: options.followContinuations }),
+      ...(options.authorization === undefined ? {} : { authorization: options.authorization }),
     },
   );
   if (result.kind !== 'page' || !('subject' in input.target)) return result;
@@ -167,7 +181,17 @@ function setReadResponse(outcome: ZonePageRouteOutcome, serverRender: boolean): 
 
 async function readForRequest(input: ZonePageInput, followContinuations: boolean): Promise<ZonePageRouteOutcome> {
   const { kernelClient } = await import('../kernel/client');
-  let outcome = await readZonePageForRoute(kernelClient(input.locale), input, { followContinuations });
+  const request = getRequest();
+  let authorization: string | undefined;
+  if (input.credentialMode === 'session') {
+    await prepareSession(request, env as Partial<SessionEnv>);
+    authorization = viewerCredential(request) ?? undefined;
+  }
+  setResponseHeader('cache-control', 'private, no-store');
+  let outcome = await readZonePageForRoute(kernelClient(input.locale), input, {
+    followContinuations,
+    ...(authorization === undefined ? {} : { authorization }),
+  });
   if (outcome.kind === 'page' && outcome.common) {
     const { page, overview, view } = outcome.common;
     const { pageRelationProperties, subjectPageType } = await import('../features/pages/subject');
