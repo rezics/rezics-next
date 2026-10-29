@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import type { AccessConfig } from '../../src/access/index.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import type { ResourceRoleCatalogue } from '../../src/access/resource-roles.ts';
-import { createWriteRateLimiter, type WriteRateLimiter } from '../../src/access/write-rate.ts';
+import type { WriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { WriteRateStageOptions } from '../../src/access/write-rate-stage.ts';
 import type { CommerceDependencies } from '../../src/commerce/routes.ts';
 import type { ContentRuntime } from '../../src/content/runtime.ts';
@@ -53,12 +53,6 @@ function runtimeDefaults(options: KernelRuntimeOverrides & { auth: Authenticatio
   return createKernelRuntimeDefaults({
     ...options,
     tokens: options.tokens ?? testTokens(),
-    // Exercise the native counter with test configuration, including its ordinary budgets.
-    writeRate:
-      options.writeRate ??
-      createWriteRateLimiter({
-        secret: process.env.KERNEL_WRITE_RATE_SECRET ?? 'kernel-native-test-write-rate-secret',
-      }),
   });
 }
 

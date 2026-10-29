@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { PublicJwks } from '@rezics/auth';
 import { fromPlainText } from '@rezics/document';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { eraseAccountUploadsPage, type UploadErasureCursor } from '../../src/content/account-erasure-uploads.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
 import { processImage } from '../../src/content/image-job.ts';
@@ -264,9 +265,24 @@ beforeAll(async () => {
       ...auth.host.service.verifier,
       fetch: (input, init) => auth.host.service.handler(new Request(input, init)),
     },
+    writeRate: createWriteRateLimiter({
+      secret: 'uploads-http-test-write-rate-secret-32-bytes',
+      overrides: JSON.stringify({
+        'new-account': {
+          write: { maximum: 100000, seconds: 86400 },
+          upload: { maximum: 10000, seconds: 86400 },
+        },
+      }),
+    }),
   });
   personas = await createPersonas(app, options());
-  await grant(personas.staff, GLOBAL_CONTEXT, ['subject:create', 'board:create']);
+  for (const action of ['subject:create', 'board:create']) {
+    await db.admin.query(
+      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+       VALUES ($1,$2,$3,$4,'(,)'::tstzrange,$3) ON CONFLICT DO NOTHING`,
+      [routeOf(GLOBAL_CONTEXT), GLOBAL_CONTEXT, personas.staff.accountId, action],
+    );
+  }
   websiteKey = await generateKeyPair('ES256', { extractable: true });
   const scopes = [...productionActions().keys()];
   await auth.host.service.internal.registerClient({
