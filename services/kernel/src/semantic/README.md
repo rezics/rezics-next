@@ -325,12 +325,13 @@ Subject IDs permanently name catalogue records and are never reused. Creation re
 (and import batch authority where applicable), writes revision 1 and is independent of Search. Compact fact storage
 is an optimization, not a separate compact-revision creation target. Merging requires `subject:merge` and asserts
 duplicate identity only. Distinct editions, translations and formats remain separate subjects linked by relations.
-Full native creation and merge-command implementation/acceptance remain required; this section selects no new ABI.
+Native revision-1 creation installs the self mapping in its source transaction. Full asynchronous merge-command
+completion still requires the mapping and fixed participant producers below.
 
 ### Durable publication and caller contract
 
 Merge, unmerge, repoint, `verifyAccountAgent` and `unverifyAccountAgent` use the same native durable mechanism.
-Jobs with disjoint changed group sets run concurrently; claims, fixed symbolic capacity P and reclaim pressure
+Jobs with disjoint changed group sets run concurrently; claims, production partition-local capacity P=1 and reclaim pressure
 are partition-local. PREPARING is affected pending/overlap-busy. No global sole pending job, whole-job lock,
 active marker or universal page gate is allowed. Coherent immutable non-ABA double collection checks at most
 4,096 originals per resulting group before ALL new admission effects. Missing/moved/incomplete evidence is
@@ -430,10 +431,11 @@ Participant-own erasure ACK is acyclic; overall completion separately waits fron
 
 ### Specification closure and remaining native acceptance
 
-This document and the [sole native owner](identity-epoch-contract.md) adopt scoped concurrency, not runtime or
-formatted-byte freeze. Adjacent global contract TS and old native sketches are explicitly superseded proposals;
-they do not fit unchanged. Performance confirmation of ALL nine Cost items and full coowner review of these
-corrected document hashes precede types/native implementation. P remains symbolic. No numeric budget changes.
+This document and the [sole native owner](identity-epoch-contract.md) adopt scoped concurrency with production
+partition-local capacity P=1. The native STORE, bounded all-home bootstrap, ordered preparation/cancellation and
+Library identity binding implement that route; their TypeScript contracts describe the same actual producers.
+The old global-control proposal is superseded. Native evidence for these producers does not establish complete
+publication or freeze the remaining Cost obligations.
 
 The contract retains REQUIRED admission/publication/HTTP/cutover native schedules, scoped finite-owner progress,
 complete excluded/order dependencies, coherent cap/ABA, P=1 claims, uncertain cancellation, legitimate first apply,
@@ -559,7 +561,7 @@ change.
   using checkGrowth series/leading SQL tags/native EXPLAIN, three-scale group/support and independent control/history/
   live-obligation axes. Reclaim/wakeup is in prepare and its own measured case. Native table counts and relation/index
   byte deltas cover every retained/crash/replay/abandon state; continuous disjoint jobs cannot stall finite owner pages.
-  Actual producer/body/c_MAX bindings and Performance confirmation of all nine items remain required BEFORE types or runtime.
+  Complete producer/body/c_MAX evidence for all nine items remains required for full publication and Cost closure.
 
 ### Command and receipt
 

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
-import type { Access, AccountActor } from '../../src/request/access.ts';
+import type { Access } from '../../src/request/access.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { newId } from '../../src/route/route.ts';
@@ -21,7 +21,6 @@ import { createRealAccess } from './real-access.ts';
 let db: GrowthDatabase;
 let access: Access;
 let real: Awaited<ReturnType<typeof createRealAccess<{ editor: string }>>>;
-let actor: AccountActor;
 const route = 0x5d10;
 const globalResource = { route: 0, id: GLOBAL_CONTEXT };
 const release = { digest: bundledDigest, release: bundledRelease };
@@ -41,7 +40,6 @@ beforeAll(async () => {
       ['subject:merge', { anonymous: false }],
     ]),
   });
-  actor = await access.authenticate(real.bearer('editor'), { pool: db.pool, deadline: Date.now() + 5000 });
   await real.grant(globalResource, 'editor', 'subject:create');
   await real.grant(globalResource, 'editor', 'subject:merge');
 });
@@ -52,14 +50,7 @@ afterAll(async () => {
 
 test('native current mapping remains bounded as unrelated subject history grows', async () => {
   const key = randomUUID();
-  const authorization = await accessCommandAuthorization(
-    access,
-    actor,
-    'subject:create',
-    globalResource,
-    { pool: db.pool, deadline: Date.now() + 5000 },
-    () => new Error('Fixture denied subject:create'),
-  );
+  const { actor, authorization } = await authorize('subject:create');
   const created = await createSubject(db.pool, {
     actor,
     target: { route, id: newId(route) },
@@ -104,16 +95,24 @@ test('native current mapping remains bounded as unrelated subject history grows'
     for (const cost of sample.repetitions) expect(cost.statements + cost.controlStatements).toBeLessThanOrEqual(8);
 }, 600_000);
 
-async function createNative(targetRoute: number) {
-  const key = randomUUID();
+async function authorize(action: 'subject:create' | 'subject:merge') {
+  const context = { pool: db.pool, deadline: Date.now() + 5000 };
+  // Each measured request gets its own authenticated snapshot and unchanged deadline.
+  const actor = await access.authenticate(real.bearer('editor'), context);
   const authorization = await accessCommandAuthorization(
     access,
     actor,
-    'subject:create',
+    action,
     globalResource,
-    { pool: db.pool, deadline: Date.now() + 5000 },
-    () => new Error('Fixture denied subject:create'),
+    context,
+    () => new Error(`Fixture denied ${action}`),
   );
+  return { actor, authorization };
+}
+
+async function createNative(targetRoute: number) {
+  const key = randomUUID();
+  const { actor, authorization } = await authorize('subject:create');
   return (
     await createSubject(db.pool, {
       actor,
@@ -201,22 +200,14 @@ test('native capped admission includes current authorization, immutable inputs a
   let survivor = '';
   let redirected = '';
   let key = '';
-  let authorization: Awaited<ReturnType<typeof accessCommandAuthorization>>;
   const prepare = async (_database: GrowthDatabase, _scale: number, repetition: number) => {
     survivor = await createNative(0x7400 + repetition * 16);
     redirected = await createNative(0x7400 + repetition * 16);
     key = randomUUID();
-    authorization = await accessCommandAuthorization(
-      access,
-      actor,
-      'subject:merge',
-      globalResource,
-      { pool: db.pool, deadline: Date.now() + 5000 },
-      () => new Error('Fixture denied subject:merge'),
-    );
     await settle(db, { analyze: true });
   };
   const operation = async (database: GrowthDatabase) => {
+    const { actor, authorization } = await authorize('subject:merge');
     const admitted = await runCommand(
       database.pool,
       {
@@ -260,22 +251,14 @@ test('coherent admission and ordered cancellation stay indexed', async () => {
   let survivor = '';
   let redirected = '';
   let key = '';
-  let authorization: Awaited<ReturnType<typeof accessCommandAuthorization>>;
   const prepare = async (_database: GrowthDatabase, _scale: number, repetition: number) => {
     redirected = await createNative(0x7800 + repetition * 32);
     survivor = await createNative(0x7810 + repetition * 32);
     key = randomUUID();
-    authorization = await accessCommandAuthorization(
-      access,
-      actor,
-      'subject:merge',
-      globalResource,
-      { pool: db.pool, deadline: Date.now() + 5000 },
-      () => new Error('Fixture denied subject:merge'),
-    );
     await settle(db, { analyze: true });
   };
   const operation = async (database: GrowthDatabase) => {
+    const { actor, authorization } = await authorize('subject:merge');
     const job = await identityEpochStore.prepareAdmission(
       database.pool,
       {

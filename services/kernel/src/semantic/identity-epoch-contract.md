@@ -278,15 +278,15 @@ NOT yet supply complete scoped observations or registration/summary custody:
 | Library `owner-fact-version.ts:readOwnerFactVersion`                         | Indexed account-home mutation version                             | Complete dependency capture/registration and summary custody; broad mutation alarm alone is insufficient                                                              |
 | Search `scope-source.ts`                                                     | Admission scaffolding, unavailable native prepare/prefix/evaluate | Complete native canonical Source and physical namespace/source authorization, including negative/excluded/order population                                            |
 | Search `source.ts:SubjectSource`, Semantic `search-source.ts:subjectSource`  | Subject chunks/snapshots and bounded facet samples/probes         | Complete scoped producer observation and native canonical-index participant, not sampled returned IDs                                                                 |
-| Semantic native STORE/mapping                                                | Superseded types and missing producers                            | Current-route/control fences, ordered capacity, attempt closure, registration handshake, native committed partition summaries and receipt reconciliation              |
+| Semantic native STORE/mapping                                                | Native STORE, bootstrap, current-route reads, ordered P=1 custody | Complete mapping maintenance, registration handshake and native committed partition summaries; fixed participant custody still gates publication                         |
 
 Search's actual `searchWorkModule -> startSearchIndexing -> createSubjectIndexer`, subjectIndexName/subjectAlias,
 per-generation subjectConsumer, 256-ID chunks and `refresh: wait_for` bulk precede ordinary checkpoints. They do
 not supply complete canonical/negative-query observation or SourceAccess. Native namespace/query admission must
 prevent FOREIGN private lookup before engine work; current original/terminal admission and privacy-reduction
 ACKs remain independent. Full Search/Library publication cannot be proved by producer-focused missing-capability
-cases. Each missing row needs an owner-native red case and actual SQL/engine binding, before types/runtime; Root's
-scoped ruling supplies none of those exports. It selects this boundary rather than freezing the old global types.
+cases. Each missing row requires an owner-native case and actual SQL/engine binding. STORE and bootstrap
+acceptance exercise the implemented scoped route without substituting for those missing producer records.
 
 ## Native effects and fixed participant custody
 
@@ -668,11 +668,11 @@ Search, schema or SQL implementation. Directory/first-apply production cannot be
 
 | Producer                  | Required surface / evidence                                                                                                  | Present |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bootstrap completeness, per-home fences, ACK custody   | MISSING |
+| Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bounded all-home bootstrap, P=1 fences, native custody | Implemented; full publication still awaits the producers below |
 | Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING |
 | Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | MISSING |
 | Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | MISSING |
-| Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | MISSING |
+| Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | Allocator/schema present; complete producer integration remains required |
 | Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | MISSING |
 
 These are real capability dependencies, not task identifiers. Store/native-step acceptance must not require a fake
@@ -1079,8 +1079,7 @@ schema-derived body terms to bind and measure, not invented existing exports or 
 | Publish local command      | K_receipted + j + v + p + w + r + o + authorization/gate             | v validates mapping plus TWO versioned participant completion records and prior-home custody; p covers admitted-to-published CAS and committed scoped-summary work. Summary fanout happens in retained bounded steps, never all scopes in this command. |
 
 These algebraic totals name EVERY statement category before measurement. Exact j/g/v/i/p/w/r/o native SQL counts
-and c_MAX values are MISSING until native storage/producer plans bind them; Performance must confirm them before
-types or runtime. This is not a measured K+body pass. Bounded body size follows constant descriptors and
+and c_MAX values require actual native storage/producer plan evidence for complete Cost closure. This is not a measured K+body pass. Bounded body size follows constant descriptors and
 indexed point/continued work, not a blanket claim that a multi-command acquisition is one transaction.
 
 Actual OP has a different framework: initial time snapshot BEGIN/SET/time/COMMIT =4; serializable transaction
@@ -1113,7 +1112,7 @@ receipts/closed-home fences.
 
 - Bound: O(1) rows PER home command and O(log A + log G + log M + log E +
 log(R+L+H)) blocks; statement sums above per command, plus both effects-free collection passes. No full member
-scan or global history walk. Planned homes are a fixed descriptor from inputs, job home included. 
+scan or global history walk. Planned homes are a fixed descriptor from inputs, job home included.
 
 - Growth check: GI `coherent admission and ordered cancellation stay indexed`, pending/control/history independently 1/8/64,
 group sizes 64/512/4096, P=1 cross-home contention, mixed-count/ABA, uncertain RPC and all-table 4097 no-effects.
@@ -1159,7 +1158,7 @@ output slots `<= 128`), one connection/backend; resource leaves, conditions, dep
 `R` minimized obligations do not increase `R_reads`, and `R` has no page-read alias. A mixed `subject.search`
 request is one read with at most 12 statements per backend. The `8+4R_reads` formula applies only to composed
 pages. Existing candidate,
-Access, raw/native plan and physical-query allowances apply. Work is page-derived; no S/D scan. 
+Access, raw/native plan and physical-query allowances apply. Work is page-derived; no S/D scan.
 
 - Growth check: GI `finite owner pages progress under continuous disjoint identity work`, source size/query support 64/512/4096,
 unrelated A/G/M/E and R/L/H independently 1/8/64, complete excluded/NOT/order changes and cursor start/final/
@@ -1317,9 +1316,8 @@ support, actual native writer/command/read/operational/work bindings, Library st
 and Search source/scope-source/producer-consumer/privacy contracts. The two integrated cutover reports (current
 `a73bcefb2fe9a901d22478bb4e3d774c06186c55`, deep `e9ae39f06176b66a4026533812f07c6e00e46dec`) and both independent
 concurrent reports identify candidate mechanisms, not native performance evidence. The integrated current report
-also exists at `docs/research/identity-concurrent-groups-current.md`; the absolute reviewed copies, comparison,
-full coowner review, single-closure master and Performance/Accounts/Search reviews supplied the corrected adoption.
-Their superseded global-summary alternatives do not remain a second contract.
+also exists at `docs/research/identity-concurrent-groups-current.md`. Their superseded global-summary alternatives
+do not remain a second contract.
 The integrated deep report's CAS/basis distinction, read-only replay ordering, once-per-home/job quota and physical
 payload/fence accounting apply here; its receipt-home-first priority scheduling and global OPEN/CLOSE alternatives
 remain superseded by ordered first-resource capacity and source-scoped committed summaries.
@@ -1336,9 +1334,9 @@ Read-only reference evidence: PostgreSQL `src/backend/commands/trigger.c`, `inde
 Native installation locking/snapshot rules and body-before-result journalling motivate the required schedules;
 no reference implementation was copied and no new external research is claimed.
 
-Review proceeds on hashes of these formatted owner documents: Semantic and all coowners review complete-query
-producer bindings, native custody and ownership; Performance confirms ALL nine items and actual derived body/
-metadata/page-fit plans BEFORE types or runtime. Missing scope producers, owner-transfer bound, account source
-intent/delivery, native bootstrap/guard/minimizer/locator and fixed participant bindings remain exact native red
-obligations, not approval requests for alternate product policy. Formatter success checks bytes only. Integration
-does not freeze a signature, attest native performance, complete publication or satisfy a main/root runtime gate.
+Complete-query producer bindings, native custody and ownership require actual implementation evidence. All nine
+Cost items and derived body/metadata/page-fit plans remain obligations for complete publication. Missing scope
+producers, owner-transfer bounds, account source intent/delivery, minimizers/locators and fixed participant bindings
+remain explicit native obligations. The implemented STORE/bootstrap producers do not replace those records.
+Formatter success checks bytes only. Integration alone does not attest native performance, complete publication
+or satisfy a main/root runtime gate.
