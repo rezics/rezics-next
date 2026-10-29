@@ -61,7 +61,7 @@ test('an affected check uses a process group too, and timeout kills its child', 
 });
 
 test('train fixtures opt out of repository affected and sibling defaults', () => {
-  expect(process.env.GOAL_TEST_ENVIRONMENT).toBe('1');
+  expect(process.env.REZICS_GOAL_TEST_ENVIRONMENT).toBe('1');
   expect(landingAffectedChecks(['services/kernel/src/file.ts'], true, undefined)).toEqual([]);
   expect(
     landingAffectedChecks(

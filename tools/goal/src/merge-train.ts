@@ -57,7 +57,7 @@ export function landingAffectedChecks(
   workspace: boolean,
   explicit: readonly AffectedTestCheck[] | undefined,
 ): AffectedTestCheck[] {
-  const testDefaults = process.env.GOAL_TEST_ENVIRONMENT === '1';
+  const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
   const checks = workspace ? [...(explicit ?? (testDefaults ? [] : defaults.affectedTests))] : [];
   return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths)));
 }
@@ -1789,7 +1789,7 @@ export class MergeTrain {
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
-        const testDefaults = process.env.GOAL_TEST_ENVIRONMENT === '1';
+        const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
         const affectedChecks = landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
         const priorAffectedResults: AffectedTestResult[] = workspace ? [] : [...(request.affectedTests ?? [])];
         const siblings = siblingTestCommand(
