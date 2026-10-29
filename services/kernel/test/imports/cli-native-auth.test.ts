@@ -72,7 +72,7 @@ test('the real CLI account-key and public-write journey is frozen against native
     const authPaths: string[] = [];
     let inputPasses = 0;
     let inputBytes = 0;
-    const invoke = async (title: string) => {
+    const invoke = async (title: string, acquisition: 'fresh' | 'resume' = 'fresh') => {
       const bytes = new TextEncoder().encode(JSON.stringify({ id: 987654, type: 2, name: title }) + '\n');
       let consumed = 0;
       const result = await runImportCli(argv, {
@@ -138,8 +138,9 @@ test('the real CLI account-key and public-write journey is frozen against native
           return response;
         }) as typeof fetch,
       });
-      expect(result.openHandles).toBe(0);
-      expect(consumed).toBe(bytes.length);
+      const diagnostic = JSON.stringify({ code: result.code, stdout: result.stdout, stderr: result.stderr });
+      expect(result.openHandles, diagnostic).toBe(0);
+      expect(consumed, diagnostic).toBe(acquisition === 'resume' ? 0 : bytes.length);
       return result;
     };
     const inspect = () => {
@@ -225,8 +226,8 @@ test('the real CLI account-key and public-write journey is frozen against native
     await native.renewManagement();
     await f.setBulkPermission(true);
     const recoveryStart = exchanges.length;
-    const recovered = await invoke('Changed native CLI title');
-    expect(recovered.code).toBe(0);
+    const recovered = await invoke('Changed native CLI title', 'resume');
+    expect(recovered.code, JSON.stringify(recovered)).toBe(0);
     const recoveryKeys = exchanges
       .slice(recoveryStart)
       .flatMap((entry) => entry.body.commands.map((command) => command.key));
@@ -243,7 +244,12 @@ test('the real CLI account-key and public-write journey is frozen against native
     expect(authPaths.filter((path) => path === '/token')).toHaveLength(4);
     // Access verifies the actual issued bearers against native Auth's configured JWKS handler.
     expect((await f.auth.handler(new Request(f.auth.verifier.jwksUrl))).status).toBe(200);
-    expect(inputPasses).toBe(4);
+    expect(inputPasses).toBe(3);
+    expect(inputBytes).toBe(
+      ['Native CLI title', 'Native CLI title', 'Changed native CLI title']
+        .map((name) => new TextEncoder().encode(JSON.stringify({ id: 987654, type: 2, name }) + '\n').length)
+        .reduce((sum, bytes) => sum + bytes, 0),
+    );
     console.log(
       'native CLI evidence',
       JSON.stringify({
