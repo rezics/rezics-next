@@ -21,6 +21,9 @@ const titleOf = (value: unknown): string => {
 const subjectPath = (id: string, label: string, locale = 'en') =>
   `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug(label)}`;
 const globalContext = '00000000-0000-8000-8000-000000000000';
+// A request shares one deadline across all commands. Keep its work at the
+// kernel's eight normal admission permits rather than filling the API maximum.
+const fixtureBatchSize = 8;
 
 function accountIdFromAuthorization(authorization: string): string {
   const token = authorization.match(/^Bearer ([^.]+)\.([^.]+)\./)?.[2];
@@ -138,8 +141,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     });
     await Promise.all(
       batches.map(async ({ persona, entries: writerEntries }) => {
-        for (let start = 0; start < writerEntries.length; start += 100) {
-          const batch = writerEntries.slice(start, start + 100);
+        for (let start = 0; start < writerEntries.length; start += fixtureBatchSize) {
+          const batch = writerEntries.slice(start, start + fixtureBatchSize);
           const commands = batch.map(({ key, type, label, descriptions }) => ({
             op: 'create',
             key,
@@ -164,12 +167,14 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
               `Could not batch-create fixture subjects through kernel API: ${response.status} ${await response.text()}`,
             );
           const result = (await response.json()) as {
-            results: { key: string; status: number; value?: { id: string } }[];
+            results: { key: string; status: number; value?: { id: string }; problem?: unknown }[];
           };
           for (const item of result.results) {
             const entry = batch.find(({ key }) => key === item.key)!;
             if (item.status !== 201 || !item.value?.id)
-              throw new Error(`Could not create fixture subject ${item.key}: API status ${item.status}`);
+              throw new Error(
+                `Could not create fixture subject ${item.key}: API status ${item.status} ${JSON.stringify(item.problem)}`,
+              );
             created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
           }
         }
