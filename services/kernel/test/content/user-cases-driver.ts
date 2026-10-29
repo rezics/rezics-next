@@ -79,6 +79,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
   const system = await openUserCasesSystem();
   const pool = system.database.pool;
   const prefix = `uc-${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}-`;
+  const fixtureTime = Date.now();
   const searchUrl = process.env.OPENSEARCH_URL;
   const search = searchUrl ? createOpenSearch(searchUrl) : undefined;
   const holds = new Set<HeldPage>();
@@ -120,6 +121,8 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
       pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
+      clock: () => new Date(fixtureTime),
+      content: { cursorNow: () => fixtureTime },
       access: () => system.access,
       writeRate: createWriteRateLimiter({ secret: crypto.randomUUID() + crypto.randomUUID(), overrides: highRates }),
       ratePeer: () => '127.0.0.1',
