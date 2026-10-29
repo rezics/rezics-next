@@ -173,3 +173,8 @@ Canary `pipeline-outcomes` completed exit 0: outer 1 pass, 0 fail, 5 expectation
 No failures. Receipt `97ae0653-cb63-4fa6-8838-d105f42bca19`; measurement log
 `.temp/goal/checks/worker-check-2026-10-29T05-02-30.769Z-cb22af27.log`. Captured HEAD/tree remain exact,
 tracked status clean. Next is previous pipeline, the final measurement. No placement defect occurred.
+
+Previous `pipeline-outcomes` completed exit 0: outer 1 pass, 0 fail, 5 expectations, proving 14 child passes.
+No failures. Receipt `40d28e53-77cd-44f1-9b85-39673f51fc57`; measurement log
+`.temp/goal/checks/worker-check-2026-10-29T05-03-02.126Z-ac6e671d.log`. Final pair complete.
+All twelve measurements now have terminal receipts; none were repeated.
