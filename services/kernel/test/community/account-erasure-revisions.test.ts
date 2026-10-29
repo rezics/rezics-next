@@ -254,6 +254,19 @@ test("an account revision erasure page stays within its bound as other editors' 
       );
       after = null;
     };
+    const growQuery = async (
+      database: Awaited<ReturnType<typeof openGrowthDatabase>>,
+      text: string,
+      values: unknown[],
+    ) => {
+      const client = await database.admin.connect();
+      try {
+        await client.query("SET statement_timeout = '30s'");
+        return await client.query(text, values);
+      } finally {
+        client.release();
+      }
+    };
     const report = await checkGrowth(db, {
       name: "an account revision erasure page stays within its bound as other editors' revisions grow",
       rule: 'series',
@@ -266,14 +279,16 @@ test("an account revision erasure page stays within its bound as other editors' 
         const ids = Array.from({ length: scale - previous }, () => newId(route));
         for (let offset = 0; offset < ids.length; offset += 256) {
           const batch = ids.slice(offset, offset + 256);
-          await database.admin.query(
+          await growQuery(
+            database,
             `INSERT INTO community.realm_revision
             (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
             SELECT $1,$2,id,$3,'Other editor','Keep','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
             [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.member.id, batch],
           );
           console.log(`revision rows inserted ${offset + batch.length} of ${ids.length}`);
-          await database.admin.query(
+          await growQuery(
+            database,
             `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
             SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
             [routeOf(fixture.member.id), fixture.member.id, route, realm.realmId, batch],
@@ -281,7 +296,8 @@ test("an account revision erasure page stays within its bound as other editors' 
           console.log(`revision locators inserted ${offset + batch.length} of ${ids.length}`);
         }
         console.log(`revision growth counting ${scale}`);
-        const population = await database.admin.query(
+        const population = await growQuery(
+          database,
           'SELECT count(*)::integer AS n FROM community.realm_revision WHERE route=$1 AND realm_id=$2 AND author=$3',
           [route, realm.realmId, fixture.member.id],
         );
