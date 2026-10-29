@@ -3,7 +3,7 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Calendar } from '@rezics/ui/shadcn/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@rezics/ui/shadcn/drawer';
+import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/shadcn/popover';
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { de, enUS, es, fr, ja, ko, zhCN, zhTW } from 'date-fns/locale';
@@ -438,14 +438,9 @@ export function CopyForm({
   return (
     <Exposure operation={copy ? 'copy.update' : 'copy.create'}>
       {mobile ? (
-        <Drawer open onOpenChange={(open) => !open && onClose()}>
-          <DrawerContent className="max-h-[90dvh] overflow-y-auto">
-            <DrawerHeader>
-              <DrawerTitle>{title}</DrawerTitle>
-            </DrawerHeader>
-            <div className="overflow-y-auto p-4">{content}</div>
-          </DrawerContent>
-        </Drawer>
+        <BottomSheet open onOpenChange={(open) => !open && onClose()} title={title}>
+          {content}
+        </BottomSheet>
       ) : (
         <Dialog open onOpenChange={(open) => !open && onClose()}>
           <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">

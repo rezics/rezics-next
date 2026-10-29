@@ -31,7 +31,7 @@ a dropdown anchored to its trigger. Menu labels, including the title and Back co
 locale messages. A submenu becomes a sheet page; browser Back returns to the previous page and then closes the sheet.
 Selecting a radio value closes the menu once. Escape closes either form, and focus returns to the trigger.
 
-Callers use `Menu` or a component built on it; they never import shadcn's dropdown or drawer primitives to implement a
+Callers use `Menu` or a component built on it; they never import shadcn's dropdown primitive to implement a
 menu. `editor-selection-menu.tsx` is a floating formatting toolbar over a text selection, not a menu. `cover.tsx`'s
 credit control is not a menu.
 
@@ -39,6 +39,11 @@ credit control is not a menu.
 - **Touches:** No new reads; rendering only, over data the page already loaded.
 - **Bound:** Constant work per entry rendered.
 - **Growth check:** None; no read path changes.
+
+## Bottom sheets
+
+Callers use `Menu` or `BottomSheet` and never import the shadcn drawer. Every sheet always shows a grab handle, title
+and Done control, and keeps safe-area padding below its scrollable body.
 
 ## Editor and document body
 

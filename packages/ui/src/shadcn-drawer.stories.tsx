@@ -11,8 +11,8 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@rezics/ui/shadcn/drawer';
-import { waitForFocus } from '../test/focus.ts';
-import { settled, withSurface } from '../stories/support.tsx';
+import { waitForFocus } from './test/focus.ts';
+import { settled, withSurface } from './stories/support.tsx';
 
 const meta = {
   title: 'shadcn/Drawer',

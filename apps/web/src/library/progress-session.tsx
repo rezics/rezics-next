@@ -10,7 +10,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Menu } from '@rezics/ui/menu';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
-import { Drawer, DrawerContent, DrawerTitle } from '@rezics/ui/shadcn/drawer';
+import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
@@ -460,20 +460,15 @@ function SessionEditor({
       ) : null}
       {editing ? (
         phone ? (
-          <Drawer open={editing} onOpenChange={setEditing}>
-            <DrawerContent>
-              <div className="max-h-[85dvh] overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <DrawerTitle>{m.library_progress_update()}</DrawerTitle>
-                <input type="hidden" name="idempotencyKey" value={key} />
-                {alert ? (
-                  <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                    {alert}
-                  </p>
-                ) : null}
-                {offered ? recordForm : null}
-              </div>
-            </DrawerContent>
-          </Drawer>
+<BottomSheet open={editing} onOpenChange={setEditing} title={m.library_progress_update()}>
+            <input type="hidden" name="idempotencyKey" value={key} />
+            {alert ? (
+              <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                {alert}
+              </p>
+            ) : null}
+            {offered ? recordForm : null}
+          </BottomSheet>
         ) : (
           <Dialog open={editing} onOpenChange={setEditing}>
             <DialogContent className="max-h-[85dvh] overflow-y-auto">

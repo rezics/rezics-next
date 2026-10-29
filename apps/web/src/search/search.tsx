@@ -5,7 +5,7 @@ import { Cover, sharedRatio } from '@rezics/ui/cover';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@rezics/ui/shadcn/drawer';
+import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import {
   Combobox,
   ComboboxContent,
@@ -18,6 +18,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/sha
 import { FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Label } from '@rezics/ui/shadcn/label';
 import { Separator } from '@rezics/ui/shadcn/separator';
+import { SlidersHorizontalIcon } from 'lucide-react';
 import { cn } from '@rezics/ui/utils';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, type ReactElement } from 'react';
@@ -543,19 +544,26 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
               <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
             </Collapsible>
           </form>
-          <Drawer open={filtersOpen} onOpenChange={setFiltersOpen}>
-            <DrawerContent className="lg:hidden">
-              <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
-                <DrawerHeader>
-                  <DrawerTitle>
-                    {m.search_filters()} ({number.format(activeFilterCount)})
-                  </DrawerTitle>
-                </DrawerHeader>
-                <div className="min-h-0 overflow-y-auto p-4">{filterContents('mobile')}</div>
-              </form>
-            </DrawerContent>
-          </Drawer>
-          <div className="order-first min-w-0 space-y-4 lg:order-none lg:col-start-2 lg:row-start-1">{results}</div>
+<button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} w-fit gap-2 border-border lg:hidden`}
+            style={{ borderColor: 'color-mix(in oklch, var(--border), var(--foreground) 35%)' }}
+            aria-label={`${m.search_filters()} (${number.format(activeFilterCount)})`}
+            onClick={() => setFiltersOpen(true)}
+          >
+            <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+            {m.search_filters()} ({number.format(activeFilterCount)})
+          </button>
+          <BottomSheet
+            open={filtersOpen}
+            onOpenChange={setFiltersOpen}
+            title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
+          >
+            <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
+              {filterContents('mobile')}
+            </form>
+          </BottomSheet>
+          <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-1">{results}</div>
         </div>
       ) : (
         results

@@ -55,7 +55,7 @@ function PhoneFilterSheetStory() {
   useEffect(() => {
     if (window.innerWidth >= 1024) return;
     const open = () => {
-      const trigger = document.querySelector<HTMLButtonElement>('button[data-slot="drawer-trigger"]');
+      const trigger = document.querySelector<HTMLButtonElement>('main button[aria-label^="Filters"]');
       if (!trigger) return false;
       trigger.click();
       return true;

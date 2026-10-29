@@ -8,7 +8,8 @@ const read = (path: string) => readFileSync(join(root, path), 'utf8');
 test('package menus share the responsive menu implementation', () => {
   const menu = read('src/components/menu.tsx');
   expect(menu).toContain('export function Menu');
-  expect(menu).toContain('Drawer');
+  expect(menu).toContain('BottomSheet');
+  expect(menu).not.toMatch(/shadcn\/drawer/);
   expect(menu).toContain('DropdownMenu');
   expect(menu).toContain('window.matchMedia');
   expect(menu).toContain('(max-width: 767px)');

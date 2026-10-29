@@ -386,7 +386,7 @@ test(
 );
 
 test(
-  'facets follow results on phones and open from one filter control, while sitting beside results on desktop',
+  'phone filters sit between the query and results and close with Done; desktop facets sit beside results',
   async () => {
     const page = await open(
       `/en/search?q=Kokoro&type=${encodeURIComponent(book)}&f.${encodeURIComponent(author)}=${authorOne}`,
@@ -398,15 +398,32 @@ test(
       expect(await filterButton.count()).toBe(1);
       const result = main.getByRole('link', { name: 'Kokoro', exact: true });
       expect(await result.isVisible()).toBe(true);
+      const queryBox = await main.locator('#search-form').boundingBox();
+      const filterBox = await filterButton.boundingBox();
+      const mobileResultBox = await result.boundingBox();
+      expect(
+        queryBox && filterBox && mobileResultBox && queryBox.y < filterBox.y && filterBox.y < mobileResultBox.y,
+      ).toBe(true);
+      expect(await filterButton.evaluate((element) => getComputedStyle(element).borderTopColor)).not.toBe(
+        'rgba(0, 0, 0, 0)',
+      );
+      expect(await filterButton.locator('svg').count()).toBe(1);
       expect(await main.getByRole('checkbox').count()).toBe(0);
       await filterButton.click();
       expect(await page.getByRole('dialog').count()).toBe(1);
+      const dialog = page.getByRole('dialog');
+      expect(await dialog.getByRole('heading', { name: 'Filters (2)' }).count()).toBe(1);
+      expect(
+        await dialog.getByRole('button', { name: 'Done' }).evaluate((button) => button.getBoundingClientRect().height),
+      ).toBeGreaterThanOrEqual(44);
+      expect(await dialog.locator('[data-slot="drawer-swipe-handle"]').count()).toBe(1);
       expect(await page.getByRole('dialog').getByRole('checkbox').count()).toBeGreaterThan(0);
       expect(
         await page.getByRole('dialog').locator(`input[name="f.${author}"][value="${authorOne}"]`).isChecked(),
       ).toBe(true);
-      await page.keyboard.press('Escape');
+      await dialog.getByRole('button', { name: 'Done' }).click();
       await page.getByRole('dialog').waitFor({ state: 'detached' });
+      expect(await filterButton.evaluate((button) => button === document.activeElement)).toBe(true);
       await page.setViewportSize({ width: 1280, height: 860 });
       expect(await main.getByRole('checkbox').count()).toBeGreaterThan(0);
       const resultBox = await result.boundingBox();

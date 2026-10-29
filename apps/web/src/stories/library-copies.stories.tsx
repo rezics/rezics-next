@@ -53,7 +53,7 @@ export const AddFormOpen: Story = {
   },
 };
 export const EditFormOpen: Story = {
-  render: () => <CopiesStory mode="one" />,
+render: () => <CopiesStory mode="one" />,
   async play(args) {
     await ready(args);
     const canvas = within(args.canvasElement);
@@ -62,6 +62,7 @@ export const EditFormOpen: Story = {
     await within(document.body).findByRole('dialog');
   },
 };
+
 export const Refusal: Story = {
   render: () => <CopiesStory mode="refusal" />,
   async play(args) {

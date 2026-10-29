@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as D from '../shadcn/dropdown-menu.tsx';
-import { Drawer, DrawerContent, DrawerTitle } from '../shadcn/drawer.tsx';
+import { BottomSheet } from './bottom-sheet.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { Field, FieldLabel } from '../shadcn/field.tsx';
 import { RadioGroup, RadioGroupItem } from '../shadcn/radio-group.tsx';
@@ -265,88 +265,145 @@ export function Menu({
         </D.DropdownMenu>
       )}
       {form === 'sheet' && (
-        <Drawer open={open} onOpenChange={(value) => (value ? openMenu() : close())}>
-          <DrawerContent>
-            <div className="max-h-[80dvh] overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <DrawerTitle>{page?.label ?? title}</DrawerTitle>
-              {page && (
-                <Button variant="ghost" className="min-h-11" onClick={() => window.history.back()}>
-                  ‹ {resolvedBackLabel}
-                </Button>
-              )}
-              <div className="mt-2 flex flex-col">
-                {content && entries.length === 0 && !page
-                  ? content
-                  : (page?.entries ?? entries).map((entry, index) => {
-                      if (entry.type === 'separator') return <hr key={index} className="my-2 border-border" />;
-                      if (entry.type === 'radio')
-                        return (
-                          <RadioGroup
-                            key={index}
-                            aria-label={entry.label}
-                            value={entry.value}
-                            onValueChange={(value) => {
-                              entry.onValueChange(value);
-                              close();
-                            }}
-                            className="gap-0"
+<BottomSheet
+          open={open}
+          onOpenChange={(value) => (value ? openMenu() : close())}
+          title={page?.label ?? title}
+          before={
+            page ? (
+              <Button variant="ghost" className="min-h-11" onClick={() => window.history.back()}>
+                ‹ {resolvedBackLabel}
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="mt-2 flex flex-col">
+            {content && entries.length === 0 && !page
+              ? content
+              : (page?.entries ?? entries).map((entry, index) => {
+                  if (entry.type === 'separator') return <hr key={index} className="my-2 border-border" />;
+                  if (entry.type === 'radio')
+                    return (
+                      <RadioGroup
+                        key={index}
+                        aria-label={entry.label}
+                        value={entry.value}
+                        onValueChange={(value) => {
+                          entry.onValueChange(value);
+                          close();
+                        }}
+                        className="gap-0"
+                      >
+                        {entry.options.map((option) => (
+                          <Field key={option.value} orientation="horizontal" className="min-h-11 items-center">
+                            <RadioGroupItem id={`${radioName}-${index}-${option.value}`} value={option.value} />
+                            <FieldLabel
+                              htmlFor={`${radioName}-${index}-${option.value}`}
+                              className="min-h-11 flex-1 items-center rounded-xl px-3 hover:bg-accent"
+                            >
+                              {option.label}
+                            </FieldLabel>
+                          </Field>
+                        ))}
+                      </RadioGroup>
+                    );
+                  if (entry.type === 'submenu')
+                    return (
+                      <Button
+                        key={index}
+                        variant="ghost"
+                        className="min-h-11 justify-between"
+                        onClick={() => {
+                          setStack((value) => [...value, entry]);
+                          window.history.pushState({ rezicsMenuPage: true }, '', window.location.href);
+                          historyDepth.current += 1;
+                        }}
+                      >
+                        {entry.label}
+                        <span aria-hidden>›</span>
+                      </Button>
+                    );
+                  if (entry.type === 'link')
+                    return (
+                      <a
+                        key={index}
+                        href={entry.href}
+                        className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
+                        onClick={() => close()}
+                      >
+                        {entry.label}
+                      </a>
+                    );
+                  return (
+                    <Button
+                      key={index}
+                      variant="ghost"
+                      className={`min-h-11 justify-start ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
+                      disabled={entry.disabled}
+                      onClick={() => select(entry)}
+                    >
+                      {entry.label}
+                    </Button>
+                  );
+                })}
+          </div>
+        </BottomSheet>
                           >
-                            {entry.options.map((option) => (
-                              <Field key={option.value} orientation="horizontal" className="min-h-11 items-center">
-                                <RadioGroupItem id={`${radioName}-${index}-${option.value}`} value={option.value} />
-                                <FieldLabel
-                                  htmlFor={`${radioName}-${index}-${option.value}`}
-                                  className="min-h-11 flex-1 items-center rounded-xl px-3 hover:bg-accent"
-                                >
-                                  {option.label}
-                                </FieldLabel>
-                              </Field>
-                            ))}
-                          </RadioGroup>
-                        );
-                      if (entry.type === 'submenu')
-                        return (
-                          <Button
-                            key={index}
-                            variant="ghost"
-                            className="min-h-11 justify-between"
-                            onClick={() => {
-                              setStack((value) => [...value, entry]);
-                              window.history.pushState({ rezicsMenuPage: true }, '', window.location.href);
-                              historyDepth.current += 1;
-                            }}
-                          >
-                            {entry.label}
-                            <span aria-hidden>›</span>
-                          </Button>
-                        );
-                      if (entry.type === 'link')
-                        return (
-                          <a
-                            key={index}
-                            href={entry.href}
-                            className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
-                            onClick={() => close()}
-                          >
-                            {entry.label}
-                          </a>
-                        );
-                      return (
-                        <Button
-                          key={index}
-                          variant="ghost"
-                          className={`min-h-11 justify-start ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
-                          disabled={entry.disabled}
-                          onClick={() => select(entry)}
-                        >
-                          {entry.label}
-                        </Button>
-                      );
-                    })}
-              </div>
-            </div>
-          </DrawerContent>
-        </Drawer>
+                            <input
+                              type="radio"
+                              name={`${radioName}-${index}`}
+                              checked={entry.value === option.value}
+                              onChange={() => {
+                                entry.onValueChange(option.value);
+                                close();
+                              }}
+                            />
+                            {option.label}
+                          </label>
+                        ))}
+                      </div>
+                    );
+                  if (entry.type === 'submenu')
+                    return (
+                      <Button
+                        key={index}
+                        variant="ghost"
+                        className="min-h-11 justify-between"
+                        onClick={() => {
+                          setStack((value) => [...value, entry]);
+                          window.history.pushState({ rezicsMenuPage: true }, '', window.location.href);
+                          historyDepth.current += 1;
+                        }}
+                      >
+                        {entry.label}
+                        <span aria-hidden>›</span>
+                      </Button>
+                    );
+                  if (entry.type === 'link')
+                    return (
+                      <a
+                        key={index}
+                        href={entry.href}
+                        className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
+                        onClick={() => close()}
+                      >
+                        {entry.label}
+                      </a>
+                    );
+                  return (
+                    <Button
+                      key={index}
+                      variant="ghost"
+                      className={`min-h-11 justify-start ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
+                      disabled={entry.disabled}
+                      onClick={() => select(entry)}
+                    >
+                      {entry.label}
+                    </Button>
+                  );
+                })}
+          </div>
+        </BottomSheet>
       )}
     </TriggerContext.Provider>
   );
