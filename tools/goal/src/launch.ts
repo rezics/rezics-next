@@ -1,5 +1,15 @@
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
@@ -469,9 +479,7 @@ function releaseWhenStarted(
     try {
       const attempts = store.attempts(taskId);
       const current =
-        targetAttempt === undefined
-          ? attempts.at(-1)
-          : attempts.find((attempt) => attempt.attempt === targetAttempt);
+        targetAttempt === undefined ? attempts.at(-1) : attempts.find((attempt) => attempt.attempt === targetAttempt);
       if (current && current.state !== 'pending' && current.state !== 'waiting') {
         release();
       }

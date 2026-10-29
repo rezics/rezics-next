@@ -14,9 +14,16 @@ test('admitted starts retain capacity throughout delayed preparation until runni
     writeFileSync(join(directory, 'capacity.json'), JSON.stringify({ maxWorkers: 2, minAvailableMiB: 0 }));
     const ids = ['one', 'two', 'three', 'four'];
     for (const [sequence, id] of ids.entries()) {
-      db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(id, sequence + 1, 1, '{}');
+      db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
+        id,
+        sequence + 1,
+        1,
+        '{}',
+      );
       db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
-        id, 1, JSON.stringify({ state: 'pending' }),
+        id,
+        1,
+        JSON.stringify({ state: 'pending' }),
       );
     }
     const preparing: string[] = [];
@@ -26,7 +33,9 @@ test('admitted starts retain capacity throughout delayed preparation until runni
       // Model the time spent rebasing and installing before launch records the attempt as running.
       await new Promise((resolve) => setTimeout(resolve, 400));
       db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-        JSON.stringify({ state: 'running' }), id, 1,
+        JSON.stringify({ state: 'running' }),
+        id,
+        1,
       );
     });
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -55,9 +64,16 @@ test('check-wake attempts do not count as running or admitted starts', async () 
   const store = new WorkerStore(db);
   try {
     writeFileSync(join(directory, 'capacity.json'), JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
-    db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run('wake', 1, 1, '{}');
+    db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
+      'wake',
+      1,
+      1,
+      '{}',
+    );
     db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
-      'wake', 1, JSON.stringify({ state: 'waiting' }),
+      'wake',
+      1,
+      JSON.stringify({ state: 'waiting' }),
     );
     expect(capacityAvailable(store, directory)).toBe(true);
     await awaitHostCapacity(store, directory, false, 'next');
@@ -91,15 +107,24 @@ test('a failed launch releases its admitted place for a later waiter', async () 
   const store = new WorkerStore(db);
   try {
     writeFileSync(join(directory, 'capacity.json'), JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
-    db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run('failed', 1, 1, '{}');
+    db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
+      'failed',
+      1,
+      1,
+      '{}',
+    );
     db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
-      'failed', 1, JSON.stringify({ state: 'pending' }),
+      'failed',
+      1,
+      JSON.stringify({ state: 'pending' }),
     );
     await awaitHostCapacity(store, directory, false, 'failed');
     expect(capacityAvailable(store, directory)).toBe(false);
 
     db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'exited' }), 'failed', 1,
+      JSON.stringify({ state: 'exited' }),
+      'failed',
+      1,
     );
     const released = await Promise.race([
       (async () => {
