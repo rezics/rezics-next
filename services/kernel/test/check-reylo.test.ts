@@ -19,11 +19,7 @@ test("the compiler and each test file's processes use the check's explicit analy
     // A stale value from the caller's shell must not decide where a file's processes analyse.
     const base = { PATH: '/usr/bin', DATABASE_URL: url, REYLO_CONFIG: '/elsewhere/.reylo.yaml' };
     const compilerInvocations: Array<{ program: string; args: string[]; environment: NodeJS.ProcessEnv }> = [];
-    const recordCompilerInvocation = (
-      program: string,
-      args: string[],
-      environment: NodeJS.ProcessEnv,
-    ): void => {
+    const recordCompilerInvocation = (program: string, args: string[], environment: NodeJS.ProcessEnv): void => {
       compilerInvocations.push({ program, args, environment });
     };
     invokeTypecheck('/kernel/node_modules/.bin/tsc', null, base, reyloConfig, recordCompilerInvocation);
@@ -50,10 +46,7 @@ test("the compiler and each test file's processes use the check's explicit analy
       ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
       ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
     ]);
-    expect(compilerInvocations.map(({ environment }) => environment.REYLO_CONFIG)).toEqual([
-      reyloConfig,
-      reyloConfig,
-    ]);
+    expect(compilerInvocations.map(({ environment }) => environment.REYLO_CONFIG)).toEqual([reyloConfig, reyloConfig]);
     expect(compilerInvocations.map(({ environment }) => environment.DATABASE_URL)).toEqual([url, url]);
     expect(compilerInvocations.map(({ program }) => program)).toEqual([
       '/kernel/node_modules/.bin/tsc',
@@ -88,11 +81,14 @@ test('native Reylo analysis stays warm without losing diagnostics or runtime res
   const compilerPath = resolve(KERNEL_ROOT, '../../node_modules/.bin/tsc');
   const pool = new pg.Pool({ connectionString: runtimeUrl, max: 1 });
   try {
-    writeFileSync(resolve(directory, 'tsconfig.json'), JSON.stringify({
-      extends: resolve(KERNEL_ROOT, 'tsconfig.json'),
-      compilerOptions: { noEmit: true },
-      include: ['consumer.ts'],
-    }));
+    writeFileSync(
+      resolve(directory, 'tsconfig.json'),
+      JSON.stringify({
+        extends: resolve(KERNEL_ROOT, 'tsconfig.json'),
+        compilerOptions: { noEmit: true },
+        include: ['consumer.ts'],
+      }),
+    );
     writeFileSync(resolve(directory, 'consumer.ts'), "import query from './query.sql';\nexport default query;\n");
 
     const compile = () =>
