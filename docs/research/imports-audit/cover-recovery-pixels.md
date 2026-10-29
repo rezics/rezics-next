@@ -30,8 +30,8 @@ request is permitted. Same-input repeat and reopen preserve commands, receipts, 
 Read the old three-case native test, its recovery factory and report, deferred recovery report, native media
 boundary/observer and boundary spec/driver, importer recovery contract and binding types, subject summary types,
 Imports Goal, architecture/scope and development verification rules. No reference source is named for this surface;
-no external reference implementation was required or copied. The earlier distinct-pixel-only case is not present
-under the current checkout's imports test/report paths and is not used as proof of this combined journey.
+no external reference implementation was required or copied. Also read `media-distinct-input.test.ts`: its
+separate normal red/blue import and source-ownership checks do not prove the interrupted combined journey.
 
 Decisions: use the factory unchanged (including its tmpfs journal and 600-second timeout), use bounded exact-key
 journal reads for durable ACK evidence, and decode every served variant rather than infer pixels from source URLs.
