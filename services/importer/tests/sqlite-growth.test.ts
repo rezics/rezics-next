@@ -1,6 +1,11 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
-import { assertGrowth } from '../../kernel/test/support/growth-bound';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import { RecordStore } from '../src/record-store';
 import { createSqliteProbe } from './support/sqlite-growth';
 
@@ -12,7 +17,7 @@ test('SQLite probe counts executed rows and statements and rejects growing scans
   const p = createSqliteProbe(db, { growingTables: ['records'] });
   try {
     const sample = p.measure(() => db.query('SELECT id FROM records WHERE id=?').get(2));
-    expect(sample.cost).toEqual({ rows: 1, blocks: 0, statements: 1 });
+    expect(sample.counts).toEqual({ 'sqlite returned rows': 1, 'sqlite statements': 1 });
     p.verifyPlans();
     p.measure(() => db.query('SELECT id FROM records WHERE source=?').all('source'));
     expect(() => p.verifyPlans()).toThrow();
@@ -51,13 +56,17 @@ test('actual record store uses indexed keys at three analyzed scales', () => {
           store.count('wikidata');
           store.page('wikidata', { after: 'Q1', limit: 3 });
         });
-        expect(result.cost.rows).toBe(5);
-        expect(result.cost.statements).toBe(3);
+        expect(result.counts['sqlite returned rows']).toBe(5);
+        expect(result.counts['sqlite statements']).toBe(3);
         p.verifyPlans();
-        samples.push({ scale, cost: result.cost });
+        samples.push({ scale, counted: countedSample([result.counts]) });
       }
     }
-    assertGrowth(samples, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+    const check: CountedCheck = {
+      read: (value: unknown) => value as CountedValues,
+      bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+    };
+    expect(countedViolations(check, samples)).toEqual([]);
   } finally {
     p.restore();
     store.close();
@@ -90,7 +99,7 @@ test('probe counts execution rather than preparation, preserves bindings and raw
       statement.values(3);
       db.run('UPDATE records SET source=? WHERE id=?', ['changed', 2]);
     });
-    expect(result.cost).toEqual({ rows: 2, blocks: 0, statements: 4 });
+    expect(result.counts).toEqual({ 'sqlite returned rows': 2, 'sqlite statements': 4 });
     expect(result.statements.map((s) => s.parameters)).toEqual([[2], [99], [3], ['changed', 2]]);
     expect(result.statements.map((s) => s.rows)).toEqual([1, 0, 1, 0]);
     expect(p.verifyPlans().every((e) => e.plan.length > 0)).toBe(true);
@@ -118,7 +127,7 @@ test('partial and unused iterators count only actual execution and consumed rows
       iterator.next();
       iterator.return?.();
     });
-    expect(result.cost).toEqual({ rows: 3, blocks: 0, statements: 2 });
+    expect(result.counts).toEqual({ 'sqlite returned rows': 3, 'sqlite statements': 2 });
     p.verifyPlans();
   } finally {
     p.restore();
@@ -141,7 +150,7 @@ test('query cache, exec, transactions and returning writes count once', () => {
       db.exec("BEGIN; UPDATE records SET source='x' WHERE id=2; COMMIT");
       db.query('INSERT INTO records VALUES(?,?) RETURNING id').get(100, 'new');
     });
-    expect(result.cost).toEqual({ rows: 2, blocks: 0, statements: 8 });
+    expect(result.counts).toEqual({ 'sqlite returned rows': 2, 'sqlite statements': 8 });
     expect(result.statements.filter((s) => s.kind === 'control')).toHaveLength(4);
     expect(p.verifyPlans().some((e) => e.kind === 'insert')).toBe(true);
   } finally {
@@ -201,7 +210,7 @@ test('throws restore measurement state and explicit restore preserves original m
       throw new Error('operation failed');
     }),
   ).toThrow('operation failed');
-  expect(p.measure(() => statement.get(2)).cost.statements).toBe(1);
+  expect(p.measure(() => statement.get(2)).counts['sqlite statements']).toBe(1);
   expect(() => p.measure(() => db.query('INSERT INTO records VALUES(?,?)').run(1, 'private body'))).toThrow();
   p.restore();
   p.restore();
@@ -255,7 +264,7 @@ test('indexed writes, named bindings and explicit keyed inserts retain native ev
       db.query('DELETE FROM records WHERE id=?').run(100);
       db.exec("BEGIN; UPDATE records SET source='a;b' WHERE id=2; /* ; */ COMMIT;");
     });
-    expect(result.cost).toEqual({ rows: 1, blocks: 0, statements: 6 });
+    expect(result.counts).toEqual({ 'sqlite returned rows': 1, 'sqlite statements': 6 });
     expect(result.statements[0]!.parameters).toEqual([{ $id: 2 }]);
     expect(result.statements[1]!.kind).toBe('insert');
     expect(result.statements[2]!.changes).toBe(1);
@@ -278,7 +287,7 @@ test('nested native transactions count real savepoint and rollback executions', 
       expect(() => inner()).toThrow('rollback');
     });
     const result = p.measure(() => outer.immediate());
-    expect(result.cost).toEqual({ rows: 1, blocks: 0, statements: 6 });
+    expect(result.counts).toEqual({ 'sqlite returned rows': 1, 'sqlite statements': 6 });
     expect(result.statements.filter((s) => s.kind === 'control')).toHaveLength(5);
     p.verifyPlans();
   } finally {
@@ -297,7 +306,7 @@ test('probe does not intercept unrelated databases and restores statement method
       other.query('SELECT * FROM records').all();
       prepared.get(3);
     });
-    expect(measured.cost).toEqual({ rows: 1, blocks: 0, statements: 1 });
+    expect(measured.counts).toEqual({ 'sqlite returned rows': 1, 'sqlite statements': 1 });
     const instrumented = prepared.get;
     p.restore();
     expect(prepared.get).not.toBe(instrumented);
@@ -317,9 +326,9 @@ test('compound exec preserves native aggregate changes, empty SQL and quoted bou
       db.exec("INSERT INTO records VALUES(100,'a;b'); -- ;\n INSERT INTO records VALUES(101,'second')"),
     );
     expect(result.value).toEqual({ changes: 2, lastInsertRowid: 101 });
-    expect(result.cost).toEqual({ rows: 0, blocks: 0, statements: 2 });
+    expect(result.counts).toEqual({ 'sqlite returned rows': 0, 'sqlite statements': 2 });
     const empty = p.measure(() => expect(() => db.exec('-- only a comment')).toThrow());
-    expect(empty.cost.statements).toBe(0);
+    expect(empty.counts['sqlite statements']).toBe(0);
     p.verifyPlans();
   } finally {
     p.restore();
