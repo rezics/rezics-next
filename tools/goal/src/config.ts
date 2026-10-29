@@ -276,6 +276,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
       tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),
+      checkResultReuse: typeof integration.checkResultReuse === 'boolean' ? integration.checkResultReuse : (() => { throw new Error('invalid checkResultReuse'); })(),
     },
   };
 }

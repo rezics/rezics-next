@@ -131,7 +131,7 @@ export function gateRunner(
   environment: NodeJS.ProcessEnv | CheckResultGateOptions = {},
   reuse?: CheckResultGateOptions,
 ): GateRunner {
-  if ('root' in environment && 'results' in environment) { reuse = environment; environment = {}; }
+  if ('root' in environment && 'results' in environment) { reuse = environment as CheckResultGateOptions; environment = {}; }
   const env = environment as NodeJS.ProcessEnv;
   const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...env });
   return async (argv, cwd, logPath) => {
