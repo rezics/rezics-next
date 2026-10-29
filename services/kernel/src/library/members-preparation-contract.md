@@ -193,6 +193,12 @@ still needs the later native result producer rather than fabricated ready member
 fresh Auth approval and actual row-lock observation. Fixture success, reached missing method, actual pass at a
 revision and promotion are separate evidence. A red specification cannot certify the numeric bounds.
 
+The native fixture's successful mounted create/read is a prerequisite for each case, not a substitute for its
+reservation assertions. Report setup failures separately from literal `reserve`, `touch` and `admitStep`
+unimplemented failures. A compiler pass or an infrastructure retry establishes neither fixture success nor a
+native behavior pass. Trusted clock advancement changes idle lifecycle time only; request deadlines still use
+Core's actual deadline clock and must not be extended by advancing or freezing that fixture clock.
+
 Remaining implementation dependencies: reservation schema/indexes and bounded native producer/registration;
 Library A5 cleanup and Accounts actual-copy minimizer handoff; full Members adapter including unsupported-source
 admission and HTTP 202 behavior; shared common-page cross-resource Access composition; full owner query/index,
