@@ -7,10 +7,10 @@
       "createdAt": "2026-10-29T08:50:27.168Z",
       "updatedAt": "2026-10-29T08:50:27.242Z",
       "subject": {
-        "id": "01a186da-7828-77f5-8c18-5b1d98094510",
+        "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Kokoro", "language": "en" },
+        "label": { "value": "心", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
@@ -22,10 +22,10 @@
       "createdAt": "2026-10-29T08:50:27.230Z",
       "updatedAt": "2026-10-29T08:50:27.230Z",
       "subject": {
-        "id": "01a186da-787a-7147-bbe3-5634df9aed8e",
+        "id": "01a17a3b-6bd9-706f-b395-987536454933",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "I Am a Cat", "language": "en" },
+        "label": { "value": "我是猫", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
@@ -37,10 +37,10 @@
       "createdAt": "2026-10-29T08:50:27.211Z",
       "updatedAt": "2026-10-29T08:50:27.211Z",
       "subject": {
-        "id": "01a186da-7861-7662-866e-2bcecd745204",
+        "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "The Tale of Genji", "language": "en" },
+        "label": { "value": "源氏物语", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
@@ -52,10 +52,10 @@
       "createdAt": "2026-10-29T08:50:27.192Z",
       "updatedAt": "2026-10-29T08:50:27.192Z",
       "subject": {
-        "id": "01a186da-7843-768c-a9a9-2575dbef004d",
+        "id": "01a17a3b-6bab-705b-935e-d6dc0cacd82d",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Norwegian Wood", "language": "en" },
+        "label": { "value": "挪威的森林", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
@@ -67,10 +67,10 @@
       "createdAt": "2026-10-29T08:50:27.137Z",
       "updatedAt": "2026-10-29T08:50:27.137Z",
       "subject": {
-        "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "label": { "value": "小王子", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }

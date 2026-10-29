@@ -122,7 +122,8 @@
       "body": {
         "subjects": [
           {
-            "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
+            "cover": null,
+            "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
             "type": "schema:Book",
             "labels": {
               "en": "The Little Prince",
@@ -135,10 +136,10 @@
               "es": "El Principito"
             },
             "summary": {
-              "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
+              "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
               "type": "schema:Book",
               "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-              "label": { "value": "Le Petit Prince", "language": "fr" },
+              "label": { "value": "小王子", "language": "zh-Hans" },
               "creativeWork": true,
               "cover": null
             }

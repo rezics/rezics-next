@@ -7,10 +7,10 @@
       "createdAt": "2026-10-28T00:38:38.187Z",
       "updatedAt": "2026-10-28T00:38:41.545Z",
       "subject": {
-        "id": "01a17ff1-7bf0-727b-b8b0-dd59cf6e7a7f",
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "label": { "value": "The Little Prince", "language": "en" },
         "creativeWork": true,
         "cover": null
       }
@@ -22,7 +22,7 @@
       "createdAt": "2026-10-28T00:38:38.411Z",
       "updatedAt": "2026-10-28T00:38:41.531Z",
       "subject": {
-        "id": "01a17ff1-d6a1-7302-b992-e5a5a68a35f4",
+        "id": "01a17a3b-6bab-705b-935e-d6dc0cacd82d",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
         "label": { "value": "Norwegian Wood", "language": "en" },
@@ -37,7 +37,7 @@
       "createdAt": "2026-10-28T00:38:38.510Z",
       "updatedAt": "2026-10-28T00:38:41.514Z",
       "subject": {
-        "id": "01a17ff1-d6b9-76c5-b107-1a9645f15f80",
+        "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
         "label": { "value": "The Tale of Genji", "language": "en" },
@@ -52,7 +52,7 @@
       "createdAt": "2026-10-28T00:38:38.587Z",
       "updatedAt": "2026-10-28T00:38:41.497Z",
       "subject": {
-        "id": "01a17ff1-d6cd-7761-b3ee-ac88a44ef1b2",
+        "id": "01a17a3b-6bd9-706f-b395-987536454933",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
         "label": { "value": "I Am a Cat", "language": "en" },
@@ -67,7 +67,7 @@
       "createdAt": "2026-10-28T00:38:38.296Z",
       "updatedAt": "2026-10-28T00:38:41.482Z",
       "subject": {
-        "id": "01a17ff1-d687-75b6-ac1f-86c0da7a09ef",
+        "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
         "label": { "value": "Kokoro", "language": "en" },

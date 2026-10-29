@@ -6,10 +6,10 @@
       "note": null,
       "addedAt": "2026-10-29T08:50:27.425Z",
       "subject": {
-        "id": "01a186da-788f-74c4-8ec3-3343f539fb10",
+        "id": "01a17a3b-6c01-77c8-94fd-810a3ae73369",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Snow Country", "language": "en" },
+        "label": { "value": "雪国", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
@@ -20,10 +20,10 @@
       "note": null,
       "addedAt": "2026-10-29T08:50:27.323Z",
       "subject": {
-        "id": "01a186da-7861-7662-866e-2bcecd745204",
+        "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "The Tale of Genji", "language": "en" },
+        "label": { "value": "源氏物语", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
@@ -34,10 +34,10 @@
       "note": "Read it first as a child, and again whenever I need to be reminded what matters.",
       "addedAt": "2026-10-29T08:50:27.357Z",
       "subject": {
-        "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "label": { "value": "小王子", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
@@ -48,10 +48,10 @@
       "note": "The letter in the third part is the reason this one stays on the shelf.",
       "addedAt": "2026-10-29T08:50:27.398Z",
       "subject": {
-        "id": "01a186da-7828-77f5-8c18-5b1d98094510",
+        "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
         "type": "schema:Book",
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "Kokoro", "language": "en" },
+        "label": { "value": "心", "language": "zh-Hans" },
         "creativeWork": true,
         "cover": null
       }
