@@ -30,6 +30,18 @@ async function seedVerifiedPages(database: GrowthDatabase, count: number, subjec
      FROM unnest($2::uuid[], $3::uuid[]) AS seeded(subject_id, account_id)`,
     [subjectRoute, subjectIds, accountIds],
   );
+  await database.admin.query(
+    `INSERT INTO semantic.subject(route, subject_id, type, recorded_transaction_id, current_facts)
+     SELECT $1, subject_id, 'schema:Person', subject_id, 1
+     FROM unnest($2::uuid[]) AS seeded(subject_id)`,
+    [subjectRoute, subjectIds],
+  );
+  await database.admin.query(
+    `INSERT INTO semantic.fact(route, subject_id, slot_id, log_seq, operation, kind, language, body, recorded_transaction_id)
+     SELECT $1, subject_id, subject_id, 1, 'assert', 'label', 'en', to_jsonb('Verified subject ' || subject_id::text), subject_id
+     FROM unnest($2::uuid[]) AS seeded(subject_id)`,
+    [subjectRoute, subjectIds],
+  );
 }
 
 async function seedPendingWrite(database: GrowthDatabase, accountId: string, subjectId: string, receiptId: string) {
@@ -56,6 +68,16 @@ beforeAll(async () => {
      VALUES ($1, $2, $3, $4)`,
     [lookupSubjectRoute, targetSubject, targetAccount, newId(0)],
   );
+  await db.admin.query(
+    `INSERT INTO semantic.subject(route, subject_id, type, recorded_transaction_id, current_facts)
+     VALUES ($1, $2, 'schema:Person', $2, 1)`,
+    [lookupSubjectRoute, targetSubject],
+  );
+  await db.admin.query(
+    `INSERT INTO semantic.fact(route, subject_id, slot_id, log_seq, operation, kind, language, body, recorded_transaction_id)
+     VALUES ($1, $2, $2, 1, 'assert', 'label', 'en', to_jsonb('Target verified subject'), $2)`,
+    [lookupSubjectRoute, targetSubject],
+  );
 });
 
 afterAll(async () => db?.close());
@@ -63,10 +85,12 @@ afterAll(async () => db?.close());
 test('agent page lookup stays within its bound as unrelated verified subjects grow', async () => {
   const report = await checkGrowth(db, {
     name: 'agent page lookup stays within its bound as unrelated verified subjects grow',
+    rule: 'series',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     warmups: 1,
     async grow(database, scale, previous) {
+      if (previous === 0) await seedVerifiedPages(database, 1024, lookupSubjectRoute);
       await seedVerifiedPages(database, scale - previous, lookupSubjectRoute);
     },
     async operation() {
@@ -74,13 +98,18 @@ test('agent page lookup stays within its bound as unrelated verified subjects gr
       const body = (await response.json()) as { accounts: { id: string }[] };
       expect(response.status).toBe(200);
       expect(body.accounts.map(({ id }) => id)).toEqual([targetAccount]);
+      expect(body.accounts[0]?.subject).toEqual({
+        id: targetSubject,
+        label: 'Target verified subject',
+        type: 'schema:Person',
+      });
     },
   });
 
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
   for (const sample of report.samples) {
-    expect(sample.cost.relations?.['access.agent_page']?.rows).toBeGreaterThan(0);
-    expect(sample.cost.relations?.['access.account']?.rows).toBeGreaterThan(0);
+    expect(sample.cost.relations?.['access.agent_page']?.rows).toBe(1);
+    expect(sample.cost.relations?.['access.account']?.rows).toBe(1);
   }
 }, 60_000);
 
