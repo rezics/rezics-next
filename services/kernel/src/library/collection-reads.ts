@@ -1,4 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
+import type { AuthoritativeTime, CommandAttempt } from '../command/command.ts';
 import { readAccount, type Account } from '../access/account-data.ts';
 import { readPublicViews } from '../access/index.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -207,6 +210,7 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
     viewer: Actor,
     id: string,
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+    observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
   ): Promise<StoredCollection | null> {
     if (typeof id !== 'string') return null;
     const route = routeOf(id);
@@ -217,25 +221,28 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
       viewer,
       'collection:read',
       { route, id, eligibility: readEligibility(route, id, sink) },
-      {
-        pool,
-        deadline,
-      },
+      observation?.attempt ? commandAccessContext({ pool, deadline }, observation.attempt) : { pool, deadline },
     );
-    return readOnly(pool, async (client) => {
+    return readOnly(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
       const account =
         actor(viewer) && routeOf(viewer.accountId) !== null
           ? await readAccount(client, routeOf(viewer.accountId)!, viewer.accountId)
           : null;
-      const allowed = await check(client);
+      const allowed = await check(client, observation?.time);
       if (sink.failure) throw sink.failure.error;
       if (!sink.seen) sink.row = await collectionRead.run(queryOf(client), { route, id });
       return disclose(sink.row, allowed, account, viewer);
     });
   }
 
-  async function readCollection(viewer: Actor, id: string, deadline?: number): Promise<CollectionView> {
-    const row = await loadCollection(viewer, id, deadline);
+  async function readCollection(
+    viewer: Actor,
+    id: string,
+    deadline?: number,
+    observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
+  ): Promise<CollectionView> {
+    const row = await loadCollection(viewer, id, deadline, observation);
     if (!row) throw notFound();
     return collectionView(row);
   }

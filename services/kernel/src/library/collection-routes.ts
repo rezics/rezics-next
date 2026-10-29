@@ -26,7 +26,7 @@ const id = t.String();
 const nullableString = t.Union([t.String(), t.Null()]);
 const visibility = t.Union([t.Literal('private'), t.Literal('unlisted'), t.Literal('public')]);
 const revision = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
-const collectionSchema = t.Object(
+export const collectionSchema = t.Object(
   {
     id,
     curatorAccountId: id,

@@ -1062,3 +1062,30 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Touches: At most four partition-interval partial-index seeks yielding at most `4L` candidates, bounded partition epoch reads and existing anonymous disclosure/gate probes per candidate. No member, subject, progress, copy or private-state population scan.
 - Bound: `O(Q + L)` rows and statements and `O((Q + L) log N)` blocks, with `Q <= 4` and `L <= 1000`, independent of the total Collection, member or curator population. Sparse traversal work carries across pages.
 - Growth check: `test/library/growth-sitemap.test.ts`: `Collection sitemap page cost stays bounded as Collections and hidden candidates grow`, first and continuation pages with listed, filtered and denied candidates grown separately, including empty partitions and routes. Rows and statements stay constant; blocks stay logarithmic. The shared growth classifier counts catalog probes.
+
+### Private Collection pins
+
+[Library pins](../../../../docs/library-pins.md) owns the wire and preference rules. `pin-routes.ts` mounts
+`library_pin.list`, `library_pin.put` and `library_pin.delete` under `personal_library`; scopes are
+`library_pin:list` and `library_pin:update`. `pins.ts` uses the native prepared own-account runner and common
+Collection point reader. A new target's read is prepared before owner checkout; exact receipts precede fresh
+business failures. Existing pins remain reorderable/removable without target permission. No Collection grants,
+materialization, owner fact sequence or Everything source version is written.
+
+`library.collection_pins` has one `(route, account_id)` row containing at most 100 UUIDs and a retained list
+revision. GET never initializes it and resolves only the returned IDs after releasing the owner snapshot.
+The cursor uses the shared codec, owner/limit binding and revision/ordinal position. Work is one bounded owner
+record plus O(returned limit) native Collection and Access points and their output bytes; off-page targets and
+personal histories are never read. This is a bounded point-read implementation, not a three-scale growth proof.
+
+Retention inventory/handoff: erase the entire `library.collection_pins` row by its exact `(route, account_id)`
+primary key during terminal Library account erasure, including an empty retained revision. Unpin has no archive
+or restore period: it is preference state. The native owner share fence holds through commit and prevents late
+writes. Shared receipt locators are `(partition_no, principal_kind='account', principal_id=account_id,
+command_kind IN ('library.pin.put','library.pin.delete'), idempotency_key)` in `core.receipt`; response is only
+`{revision}`, but request digests and keys are private evidence. Each effective change emits exactly one
+`com.rezics.library.pin.updated.v1` event, `subject=account_id`, `{collectionId}`. Its native exact locator is
+`(partition_no, position, event_seq)` in `core.outbox`, recorded by the ordinary command envelope.
+These private IDs/evidence follow shared history minimization and delivery custody; this module adds no
+participant acknowledgement and does not claim complete account erasure. Built-in pin integration remains
+separately required through the common Collection reader and its frozen native suite.

@@ -18,6 +18,7 @@ import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
+import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
 import { ratingRoutes } from '../rating/routes.ts';
 import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
@@ -395,9 +396,15 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(collections), realmRoleReader }),
   });
+  const pins = pinRoutes(collections as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(pins), realmRoleReader }),
+  });
   let ratings: ReturnType<typeof ratingRoutes>;
   let sourceStatistics: ReturnType<typeof sourceStatisticRoutes>;
-  ratings = ratingRoutes(collections as unknown as ReturnType<typeof definitionRoutes>, {
+  ratings = ratingRoutes(pins as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     tokens,
     clock,
@@ -462,6 +469,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof ratingRoutes> &
   ReturnType<typeof collectionRoutes> &
+  ReturnType<typeof pinRoutes> &
   ReturnType<typeof personalLibraryRoutes> &
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
