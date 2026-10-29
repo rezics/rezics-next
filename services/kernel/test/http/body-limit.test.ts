@@ -60,8 +60,6 @@ test('a default-limit request fails before schema validation, authorization, or 
       body: t.Object({ valid: t.Boolean() }),
       detail: {
         operationId: 'probe.body_limit',
-        'x-action': 'probe:write',
-        'x-exposure': 'public',
         security: [{ bearerAuth: [] }, {}],
       },
     },
@@ -113,8 +111,6 @@ test('a raw route delivers a non-JSON body as bytes without request-path JSON va
     {
       detail: {
         operationId: 'probe.raw_body',
-        'x-action': 'probe:write',
-        'x-exposure': 'public',
         'x-body-mode': 'raw',
         security: [{ bearerAuth: [] }, {}],
       },
