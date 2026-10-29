@@ -42,7 +42,7 @@ import {
 import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';
-import { FRESHNESS_WAIT_MS, linksCaughtUp, pendingMergeSources } from './link-freshness.ts';
+import { pendingMergeSources, waitForSubjectLinks } from './link-freshness.ts';
 export { waitForSubjectLinks } from './link-freshness.ts';
 import readVisibility from './read-visibility.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
@@ -929,8 +929,7 @@ export async function listSubjectLinks(
     cursor = decoded;
   }
   const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const freshnessDeadline = Math.min(deadline, deadlineFor(FRESHNESS_WAIT_MS));
-  let caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject, freshnessDeadline));
+  let caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
   const readPage = async (refreshAuthorization = true) => {
     if (refreshAuthorization) await refreshStatementReaderAuthorization();
     const authorize =
@@ -1075,7 +1074,7 @@ export async function listSubjectLinks(
       snapshot.page.freshness.caught_up = false;
       break;
     }
-    caughtUp = await linksCaughtUp(pool, options.seen, options.subject, freshnessDeadline, pendingMembers);
+    caughtUp = await waitForSubjectLinks(pool, options.seen, options.subject, deadline, pendingMembers);
     // Even an unready wait can outlive evidence or a grant. Recheck current
     // source authority before returning either a fresh or an eventual page.
     snapshot = await readPage();
@@ -1197,7 +1196,7 @@ export async function listSubjectRelations(
     cursor = decoded;
   }
   const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject, deadline));
+  const caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
   if (options.caughtUp === undefined) await refreshStatementReaderAuthorization();
   const authorize =
     options.caughtUp === undefined && options.prepareAuthorization

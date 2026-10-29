@@ -96,9 +96,10 @@ export function waitForSubjectLinks(
   seen: readonly SessionComponent[],
   subject: string,
   deadline: number,
+  members: readonly string[] = [],
 ): Promise<boolean> {
   const started = Date.now();
   // Leave at least half of the remaining request budget for authorization and the read.
   const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
-  return linksCaughtUp(pool, seen, subject, waitUntil);
+  return linksCaughtUp(pool, seen, subject, waitUntil, members);
 }
