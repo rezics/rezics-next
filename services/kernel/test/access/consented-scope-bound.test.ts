@@ -183,14 +183,42 @@ test('the full default website catalogue commits membership and content actor sn
   } finally {
     realmConnection.release();
   }
-  await pool.query(
-    `INSERT INTO content.thread
-    (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-    VALUES ($1,$2,$3,$4,'scope bound','published',1,$5)`,
-    [route, thread, actor.accountId, newId(route), newId(route)],
-  );
+  const board = newId(route),
+    post = newId(route),
+    postRevision = newId(route),
+    transaction = newId(route);
+  const contentConnection = await pool.connect();
+  try {
+    await contentConnection.query('BEGIN');
+    await contentConnection.query(
+      `INSERT INTO content.thread
+       (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id)
+       VALUES ($1,$2,$3,$4,'scope bound','published',1,$5,$6)`,
+      [route, thread, actor.accountId, board, transaction, post],
+    );
+    await contentConnection.query(
+      `INSERT INTO content.post
+       (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+       VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
+      [route, thread, post, actor.accountId, postRevision, transaction],
+    );
+    await contentConnection.query(
+      `INSERT INTO content.revision
+       (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+       VALUES ($1,$2,$3,$4,'scope bound',decode(repeat('00',32),'hex'),'scope bound','CC0-1.0','{}',$5,'available',$6)`,
+      [route, thread, post, postRevision, board, transaction],
+    );
+    await contentConnection.query('COMMIT');
+  } catch (error) {
+    await contentConnection.query('ROLLBACK');
+    throw error;
+  } finally {
+    contentConnection.release();
+  }
   for (const [resource, action] of [
     [realm, 'realm:join'],
+    [post, 'post:erase'],
+    [actor.accountId, 'account:read'],
     [PLATFORM_RESOURCE.id, 'client:manage'],
   ])
     await pool.query(
