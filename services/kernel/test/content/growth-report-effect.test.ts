@@ -175,7 +175,8 @@ async function createReportEvents(
     }
     if (route === sourceRoute) keys.push(key);
   }
-  const sourcePartition = partitionOf(sourceRoute!);
+  if (sourceRoute === undefined) throw new Error('No report source route selected');
+  const sourcePartition = partitionOf(sourceRoute);
   for (const key of keys) {
     const outcome = await createReport(
       { pool: db.pool, access: system.access, routeKey: system.routeKey },
@@ -208,7 +209,7 @@ async function createReportEvents(
   }
   if (events.length !== runsPerScale)
     throw new Error(`Could not create enough reports in partition ${sourcePartition}`);
-  return { events, route: sourceRoute! };
+  return { events, route: sourceRoute };
 }
 
 test('Report effect projection stays within its bound as source reports and target reverse-index history grow', async () => {
