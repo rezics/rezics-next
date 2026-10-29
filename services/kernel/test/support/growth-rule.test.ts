@@ -25,14 +25,26 @@ afterAll(async () => {
 
 async function check(
   name: string,
-  options: { rule?: 'step' | 'series'; repetitions?: number; variable?: boolean; fixed?: boolean } = {},
+  options: {
+    rule?: 'step' | 'series';
+    repetitions?: number;
+    variable?: boolean;
+    fixed?: boolean;
+    indexProbes?: number;
+    constantBlocks?: boolean;
+  } = {},
 ) {
   await db.admin.query(`TRUNCATE ${table}`);
   return await checkGrowth(db, {
     name,
     ...(options.rule === undefined ? {} : { rule: options.rule }),
     ...(options.repetitions === undefined ? {} : { repetitions: options.repetitions }),
-    bounds: { rows: options.fixed ? 'linear' : 'constant', blocks: 'linear', statements: 'linear' },
+    bounds: {
+      rows: options.fixed ? 'linear' : 'constant',
+      blocks: options.constantBlocks ? 'constant' : 'linear',
+      statements: 'linear',
+    },
+    ...(options.indexProbes === undefined ? {} : { indexProbes: options.indexProbes }),
     slack: { rows: { absolute: 0, relative: 0 } },
     grow: async (database, scale, previous) => {
       await database.admin.query(`INSERT INTO ${table} SELECT generate_series($1 + 1, $2)`, [previous, scale]);
@@ -79,4 +91,15 @@ test('the step rule stays the default and GROWTH_RULE=series selects the series 
     if (prior === undefined) delete process.env.GROWTH_RULE;
     else process.env.GROWTH_RULE = prior;
   }
+});
+
+test('indexProbes requires a positive safe integer and a non-constant blocks bound', async () => {
+  for (const indexProbes of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await expect(check('invalid probe count', { indexProbes })).rejects.toThrow(
+      'invalid probe count: indexProbes must be a positive safe integer',
+    );
+  }
+  await expect(check('constant probe count', { indexProbes: 1, constantBlocks: true })).rejects.toThrow(
+    'constant probe count: indexProbes cannot be used with a constant blocks bound',
+  );
 });

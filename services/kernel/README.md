@@ -298,7 +298,17 @@ length, and every other text field uses its UTF-8 byte length. Command tags, not
 harness's own `SET` statements are not counted. Foreground and background statement bytes are reported separately.
 Growth checks support `step` and `series` rules: `check.rule` selects a rule, then `GROWTH_RULE=series` selects series,
 and otherwise step remains the default. Series checks report `GrowthBoundError` when no allowed family fits, and
-`GrowthEvidenceError` when repetitions do not provide enough evidence.
+`GrowthEvidenceError` when repetitions do not provide enough evidence. The series rule and its shadow verdict use
+calibrated uncertainty from `docs/research/growth-uncertainty-calibration.md`: rows allow max(22, 0% of the median),
+blocks max(9, 3%), and statements are exact. `slack` applies only to the step rule; byte metrics keep their existing
+slack handling.
+
+For a logarithmic or linear blocks bound, `indexProbes` may declare the positive number of index descents one run
+makes into growing relations. The blocks series may then include a non-decreasing staircase from zero, gaining at
+most `indexProbes` blocks between consecutive scales. This models a depth transition for a fixed set of indexed
+probes: B-tree and GiST fanouts exceed the harness's largest scale ratio, so one descent gains at most one level per
+scale transition. The allowance can hide at most `indexProbes` blocks per step. A constant blocks bound rejects this
+option because it is a bound to correct for growing indexes, not a discretization allowance.
 
 Each measured session in the instrumented `pool` and `openPool` connections pins `max_parallel_workers_per_gather = 0`
 and `jit = off`, then sets `work_mem = 4MB`, `random_page_cost = 4`, `effective_cache_size = 4GB`,

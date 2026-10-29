@@ -57,6 +57,8 @@ export type GrowthCheck = {
   readonly byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>;
   readonly rule?: 'step' | 'series';
   readonly slack?: Partial<Record<GrowthMetric, Slack>>;
+  /** Index descents per measured run against growing relations; each scale transition may add up to this many blocks. */
+  readonly indexProbes?: number;
   /** Counts returned by the operation. `includeBackends` makes the harness-provided `connections` count available. */
   readonly counted?: CountedCheck;
   readonly includeBackends?: boolean;
@@ -115,13 +117,16 @@ export type ShadowVerdict = (
 function shadowVerdict(samples: readonly ReportSample[], check: GrowthCheck, metric: Metric): ShadowVerdict {
   const uncertainties: number[] = [];
   try {
-    const slack = check.slack?.[metric] ?? GROWTH_UNCERTAINTY[metric];
+    const slack = GROWTH_UNCERTAINTY[metric];
     const points = samples.map(({ scale, cost, repetitions }) => {
       const uncertainty = Math.max(slack.absolute, slack.relative * cost[metric]);
       uncertainties.push(uncertainty);
       return { scale, repetitions: repetitions.map((value) => value[metric]), uncertainty };
     });
-    return { ...classifySeries(points, check.bounds[metric]), uncertainties };
+    return {
+      ...classifySeries(points, check.bounds[metric], metric === 'blocks' ? check.indexProbes ?? 0 : 0),
+      uncertainties,
+    };
   } catch (error) {
     // Shadow diagnostics must not preempt any existing assertion, including validation of bounds and slack.
     return {
@@ -289,6 +294,12 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const scales = check.scales ?? [1, 8, 64];
   const repetitions = check.repetitions ?? 5;
   const warmups = check.warmups ?? 1;
+  if (check.indexProbes !== undefined) {
+    if (!Number.isSafeInteger(check.indexProbes) || check.indexProbes <= 0)
+      throw new TypeError(`${check.name}: indexProbes must be a positive safe integer`);
+    if (check.bounds.blocks === 'constant')
+      throw new TypeError(`${check.name}: indexProbes cannot be used with a constant blocks bound`);
+  }
   if (check.counted) validateCountedConfig(check.counted);
   if (scales.length < 3 || scales.length > 5) throw new TypeError('Growth checks require three to five scales');
   const [first, second] = scales;
@@ -452,6 +463,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
             uncertainty: uncertainties[index]!,
           })),
           check.bounds[metric],
+          metric === 'blocks' ? check.indexProbes ?? 0 : 0,
         );
         if (verdict.outcome === 'insufficient-evidence') {
           throw new GrowthEvidenceError(
@@ -460,7 +472,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         }
         if (verdict.outcome === 'violation') {
           const error = new GrowthBoundError([], samples, check.byteBounds);
-          error.message = `${metric} violates ${check.bounds[metric]} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; families ${Object.entries(
+          error.message = `${metric} violates ${check.bounds[metric]} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; staircase ${verdict.staircase.join(', ')}; families ${Object.entries(
             verdict.families,
           )
             .map(([family, fit]) => `${family} factor ${fit.factor}`)

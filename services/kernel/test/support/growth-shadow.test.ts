@@ -4,7 +4,6 @@ import { resolve, join } from 'node:path';
 import { withConnection } from '../../src/database/pool.ts';
 import {
   checkGrowth,
-  DEFAULT_SLACK,
   GrowthBoundError,
   growthViolations,
   openGrowthDatabase,
@@ -12,6 +11,7 @@ import {
   type GrowthDatabase,
 } from './growth.ts';
 import { classifySeries } from './growth-model.ts';
+import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -105,8 +105,9 @@ test("the growth profile line carries each scale's repetitions, relation sizes a
     const report = await checkGrowth(db!, {
       name: 'shadow growth profile',
       scales: [1, 4, 16, 64],
-      bounds,
+      bounds: { ...bounds, blocks: 'logarithmic' },
       slack,
+      indexProbes: 2,
       repetitions: 2,
       grow: async () => {},
       operation,
@@ -118,7 +119,7 @@ test("the growth profile line carries each scale's repetitions, relation sizes a
       file: expect.stringMatching(/growth-shadow\.test\.ts$/),
       check: report.name,
       scales: [1, 4, 16, 64],
-      bounds,
+      bounds: { ...bounds, blocks: 'logarithmic' },
       seeding: report.samples.map(({ seeding }) => seeding),
       repetitions: report.samples.map(({ repetitions }) =>
         repetitions.map(({ rows, blocks, statements }) => ({ rows, blocks, statements })),
@@ -130,7 +131,7 @@ test("the growth profile line carries each scale's repetitions, relation sizes a
       expect(sample.relationSizes[table]).toMatchObject({ reltuples: 100, relpages: expect.any(Number) });
     }
     for (const metric of metrics) {
-      const tolerance = metric === 'rows' ? slack.rows : DEFAULT_SLACK[metric];
+      const tolerance = GROWTH_UNCERTAINTY[metric];
       const uncertainties = report.samples.map(({ cost }) =>
         Math.max(tolerance.absolute, tolerance.relative * cost[metric]),
       );
@@ -140,15 +141,23 @@ test("the growth profile line carries each scale's repetitions, relation sizes a
           repetitions: repetitions.map((cost) => cost[metric]),
           uncertainty: uncertainties[index]!,
         })),
-        bounds[metric],
+        metric === 'blocks' ? 'logarithmic' : bounds[metric],
+        metric === 'blocks' ? 2 : 0,
       );
       expect(report.shadow[metric]).toEqual({ ...expected, uncertainties });
+      expect(report.shadow[metric].uncertainties).toEqual(
+        report.samples.map(({ cost }) =>
+          Math.max(GROWTH_UNCERTAINTY[metric].absolute, GROWTH_UNCERTAINTY[metric].relative * cost[metric]),
+        ),
+      );
       expect(profile.shadow[metric]).toMatchObject({ outcome: expected.outcome, uncertainties });
       for (const family of ['constant', 'logarithmic', 'linear'] as const) {
         const { a, b, factor } = expected.families[family];
         expect(profile.shadow[metric].families[family]).toEqual({ a, b, t: factor });
       }
     }
+    expect(profile.shadow.blocks.staircase).toEqual(report.shadow.blocks.staircase);
+    expect(profile.shadow.blocks.staircase).toHaveLength(report.samples.length);
 
     await expect(
       checkGrowth(db!, {
