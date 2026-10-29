@@ -17,7 +17,7 @@ import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
 if (args[0] === 'run') console.log('postgres-container');
-else if (!['ps', 'port', 'rm'].includes(args[0])) process.exit(74);
+else if (!['ps', 'port', 'rm', 'volume'].includes(args[0])) process.exit(74);
 `,
   );
   chmodSync(shim, 0o755);
@@ -30,7 +30,17 @@ else if (!['ps', 'port', 'rm'].includes(args[0])) process.exit(74);
     const module = resolve(import.meta.dir, '../scripts/database.ts');
     const child = Bun.spawn(
       [process.execPath, '-e', `import { ownDatabase } from ${JSON.stringify(module)}; ownDatabase();`],
-      { env: { ...process.env, PATH: `${temporary}:${process.env.PATH ?? ''}` }, stderr: 'pipe', stdout: 'ignore' },
+      {
+        env: {
+          ...process.env,
+          PATH: `${temporary}:${process.env.PATH ?? ''}`,
+          AUTH_CHECK_CONTAINER: 'fake-lane',
+          DATABASE_URL: 'postgres://fake/lane',
+          AUTH_CHECK_LANE_OWNER: String(process.pid),
+        },
+        stderr: 'pipe',
+        stdout: 'ignore',
+      },
     );
     expect(await child.exited).toBe(1);
     expect(await new Response(child.stderr).text()).toContain('Cannot determine Auth test database port');
@@ -52,6 +62,7 @@ test('the auth check database keeps its data on a disk-backed volume, not a memo
   expect(run).not.toContain('--tmpfs');
   expect(run).toContain(`rezics.auth.check.pid=${pid}`);
   expect(run).toContain('--rm');
+  expect(run.slice(1, 3)).toEqual(['--stop-timeout', '2']);
   expect(run.slice(run.indexOf(POSTGRES_IMAGE))).toEqual([
     POSTGRES_IMAGE,
     '-c',

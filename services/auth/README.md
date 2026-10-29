@@ -39,11 +39,12 @@ PostgreSQL 19 image as kernel. It never uses `DATABASE_URL`, `AUTH_DATABASE_URL`
 or the development database. It applies committed dbmate migrations twice,
 compares the normalized schema dump, checks the schema against the installed
 Better Auth migration API, runs strict root TypeScript, root lint/format tools
-and the frozen Bun tests. Containers use `rezics.auth.check.pid` labels and tmpfs;
+and the frozen Bun tests. Containers use `rezics.auth.check.pid` labels and disk-backed volumes;
 normal exit and SIGINT/SIGTERM remove them, and later checks remove stale fixtures.
-Docker is required; a missing database URL never skips tests. Direct `bun test`
-also creates a fixture when `AUTH_TEST_DATABASE_URL` is absent. That variable is
-reserved for the check's fixture, never a development database.
+Auth test databases run through `scripts/stack-run.ts` on a check host when one answers (otherwise locally with a stderr notice), reuse the check lane's container, and remove leftover containers on failure.
+Docker is required; a missing database URL never skips tests. Direct database tests must use
+`bun run --cwd services/auth check <file>` so the whole test can be placed.
+`AUTH_TEST_DATABASE_URL` is reserved for the check's fixture, never a development database.
 
 Create an Auth-only database and apply migrations before starting an application:
 

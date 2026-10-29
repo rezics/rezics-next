@@ -10,16 +10,87 @@ export const DEFAULT_RUN_TIMEOUT = 120_000;
 
 type TestDatabase = { readonly url: string; readonly container: string; close: () => void };
 
+const OWNER_LABEL = 'rezics.auth.check.pid';
+const NONCE_LABEL = 'rezics.auth.check.nonce';
+const CLEANUP_TIMEOUT = 5_000;
+let placed = false;
+let cleanupRegistered = false;
+
+function registerCleanup(): void {
+  if (cleanupRegistered) return;
+  cleanupRegistered = true;
+  process.once('exit', cleanupOwned);
+}
+
+export function assertDatabasePlacement(): void {
+  if (!placed && !laneContext(process.env)) {
+    throw new Error('Auth test databases require placement; use bun run --cwd services/auth check <file>');
+  }
+}
+
+function cleanupDocker(args: string[]): string {
+  const result = spawnSync('docker', args, { cwd: directory, encoding: 'utf8', timeout: CLEANUP_TIMEOUT });
+  return result.stdout?.trim() ?? '';
+}
+
+/** Remove only this process's containers, including created containers, and their labelled volumes. */
+function cleanupOwned(): void {
+  const filter = `label=${OWNER_LABEL}=${process.pid}`;
+  const containers = cleanupDocker(['ps', '-aq', '--filter', filter]).split('\n').filter(Boolean);
+  if (containers.length) cleanupDocker(['rm', '-f', '-v', ...containers]);
+  const volumes = cleanupDocker(['volume', 'ls', '-q', '--filter', filter]).split('\n').filter(Boolean);
+  if (volumes.length) cleanupDocker(['volume', 'rm', '-f', ...volumes]);
+}
+
+/** Place the whole check: a fixture's loopback URL cannot be handed back from a remote host. */
+export async function databaseCheck(command: string[], action: () => Promise<number>): Promise<number> {
+  const { stackRun } = await import('../../../scripts/stack-run.ts');
+  return stackRun({ label: 'auth check', root: resolve(directory, '../..'), cwd: directory, command }, async () => {
+    placed = true;
+    registerCleanup();
+    try {
+      return await action();
+    } finally {
+      cleanupOwned();
+      process.off('exit', cleanupOwned);
+      cleanupRegistered = false;
+      placed = false;
+    }
+  });
+}
+
 export function run(
   program: string,
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
   { timeout = DEFAULT_RUN_TIMEOUT }: { timeout?: number } = {},
 ): string {
-  // 30s was short enough to kill a live `docker run` while the daemon was still
-  // creating the container. The container then stayed up, owned by this process,
-  // and the next start waited even longer. Two minutes still fails a stuck daemon.
+  const fixture = program === 'docker' && args[0] === 'run' && args.includes('-d') && args.includes(POSTGRES_IMAGE);
+  let nonce: string | undefined;
+  if (fixture) {
+    assertDatabasePlacement();
+    registerCleanup();
+    nonce = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+    args = [
+      'run',
+      '--stop-timeout',
+      '2',
+      '--label',
+      `${OWNER_LABEL}=${process.pid}`,
+      '--label',
+      `${NONCE_LABEL}=${nonce}`,
+      ...args.slice(1),
+    ];
+  }
   const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8', timeout });
+  if (nonce && (result.error || result.status !== 0)) {
+    // docker run can create a container without starting it or returning its id.
+    // Reap it synchronously before propagating either a timeout or a non-zero exit.
+    const ids = cleanupDocker(['ps', '-aq', '--filter', `label=${NONCE_LABEL}=${nonce}`])
+      .split('\n')
+      .filter(Boolean);
+    if (ids.length) cleanupDocker(['rm', '-f', '-v', ...ids]);
+  }
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
   return result.stdout.trim();
@@ -57,7 +128,7 @@ export function schemaDump(url: string, fixture?: TestDatabase): string {
     database.port = '5432';
     args = ['exec', fixture.container, ...dumpArgs, database.href];
   } else {
-    args = ['run', '--rm', '--network', 'host', POSTGRES_IMAGE, ...dumpArgs, url];
+    args = ['run', '--stop-timeout', '2', '--rm', '--network', 'host', POSTGRES_IMAGE, ...dumpArgs, url];
   }
   const dump = run('docker', args);
   return (
@@ -70,7 +141,7 @@ export function schemaDump(url: string, fixture?: TestDatabase): string {
 
 /**
  * The migrated Auth database a check lane is handed: a copy of the check's template, in the check's container. Only the
- * lane's own `bun test` process, the direct child of the check, takes part; a process a test starts keeps its own server.
+ * lane's own `bun test` process, the direct child of the check, takes part; a process a test starts must use a placed check.
  */
 type LaneContext = { container: string; url: string };
 
@@ -90,7 +161,7 @@ function laneStatement(container: string, sql: string): string[] {
 /**
  * A migrated database for one test. Under the check the file's lane already runs against a copy of the migrated
  * template, so the first fixture is that copy and later ones are further copies in the same server; starting a server
- * per fixture is what made files wait on the Docker daemon. Outside the check each fixture owns a server.
+ * per fixture is what made files wait on the Docker daemon. Outside the check use the placed check command.
  */
 export function testDatabase(): TestDatabase {
   const lane = laneContext(process.env);
@@ -122,7 +193,8 @@ export function testDatabase(): TestDatabase {
 
 /** A migrated database in a server of its own, removed on close. */
 export function ownDatabase(): TestDatabase {
-  const label = 'rezics.auth.check.pid';
+  assertDatabasePlacement();
+  const label = OWNER_LABEL;
   // Capture owners with IDs so concurrent cleanup cannot race a separate inspect.
   for (const row of run('docker', [
     'ps',
@@ -147,75 +219,55 @@ export function ownDatabase(): TestDatabase {
       spawnSync('docker', ['rm', '-f', '-v', id], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
     }
   }
-  // Unique per attempt so a timed-out `docker run` can be reaped without touching
-  // another fixture this process already owns.
-  const nonce = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
-  let container: string | undefined;
+  const container = run('docker', [
+    'run',
+    '-d',
+    '--rm',
+    '-p',
+    '127.0.0.1::5432',
+    // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
+    '--mount',
+    `type=volume,destination=/var/lib/postgresql,volume-label=${label}=${process.pid}`,
+    '-e',
+    'POSTGRES_USER=rezics',
+    '-e',
+    'POSTGRES_PASSWORD=rezics',
+    '-e',
+    `POSTGRES_DB=${TEMPLATE_DATABASE}`,
+    POSTGRES_IMAGE,
+    '-c',
+    'fsync=off',
+    '-c',
+    'synchronous_commit=off',
+    '-c',
+    'full_page_writes=off',
+    '-c',
+    'max_wal_size=256MB',
+    // Each check lane holds pools of its own, and a lane's tests open further copies.
+    '-c',
+    'max_connections=500',
+  ]);
+  let closed = false;
+  const close = () => {
+    if (!closed && container) {
+      closed = true;
+      removeContainer(container);
+    }
+  };
+  const interrupt = (code: number) => {
+    close();
+    process.exit(code);
+  };
+  process.once('SIGINT', () => interrupt(130));
+  process.once('SIGTERM', () => interrupt(143));
   try {
-    container = run('docker', [
-      'run',
-      '-d',
-      '--rm',
-      '--label',
-      `${label}=${process.pid}`,
-      '--label',
-      `rezics.auth.check.nonce=${nonce}`,
-      '-p',
-      '127.0.0.1::5432',
-      // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
-      '--mount',
-      `type=volume,destination=/var/lib/postgresql,volume-label=${label}=${process.pid}`,
-      '-e',
-      'POSTGRES_USER=rezics',
-      '-e',
-      'POSTGRES_PASSWORD=rezics',
-      '-e',
-      `POSTGRES_DB=${TEMPLATE_DATABASE}`,
-      POSTGRES_IMAGE,
-      '-c',
-      'fsync=off',
-      '-c',
-      'synchronous_commit=off',
-      '-c',
-      'full_page_writes=off',
-      '-c',
-      'max_wal_size=256MB',
-      // Each check lane holds pools of its own, and a lane's tests open further copies.
-      '-c',
-      'max_connections=500',
-    ]);
-    let closed = false;
-    const close = () => {
-      if (!closed && container) {
-        closed = true;
-        removeContainer(container);
-      }
-    };
-    const interrupt = (code: number) => {
-      close();
-      process.exit(code);
-    };
-    process.once('SIGINT', () => interrupt(130));
-    process.once('SIGTERM', () => interrupt(143));
-    try {
-      const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
-      if (!port) throw new Error('Cannot determine Auth test database port');
-      const url = `postgres://rezics:rezics@127.0.0.1:${port}/${TEMPLATE_DATABASE}?sslmode=disable`;
-      migrate(url);
-      return { url, container, close };
-    } catch (error) {
-      close();
-      throw error;
-    }
+    const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
+    if (!port) throw new Error('Cannot determine Auth test database port');
+    const url = `postgres://rezics:rezics@127.0.0.1:${port}/${TEMPLATE_DATABASE}?sslmode=disable`;
+    migrate(url);
+    return { url, container, close };
   } catch (error) {
-    if (!container && (error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-      const listed = spawnSync('docker', ['ps', '-aq', '--filter', `label=rezics.auth.check.nonce=${nonce}`], {
-        cwd: directory,
-        encoding: 'utf8',
-        timeout: 120_000,
-      });
-      for (const id of (listed.stdout ?? '').split('\n').filter(Boolean)) removeContainer(id);
-    }
+    close();
     throw error;
   }
 }

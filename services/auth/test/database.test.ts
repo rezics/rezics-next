@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_RUN_TIMEOUT, migrate, POSTGRES_IMAGE, run, schemaDump, ownDatabase } from '../scripts/database.ts';
+import { DEFAULT_RUN_TIMEOUT, assertDatabasePlacement, migrate, POSTGRES_IMAGE, run, schemaDump, ownDatabase } from '../scripts/database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const timeout = 60_000;
@@ -20,6 +20,7 @@ test('run keeps its 120-second default and reports ETIMEDOUT for a child exceedi
 });
 
 function traceDocker(action: (commands: () => string[][], temporary: string) => void): void {
+  assertDatabasePlacement();
   const docker = Bun.which('docker');
   if (!docker) throw new Error('Docker is required for the database regression');
   const root = resolve(directory, '../../.temp');
@@ -68,10 +69,14 @@ test(
   () => {
     traceDocker((commands) => {
       // Stop after the real dump so this child check cannot recursively run this test suite.
-      const result = Bun.spawnSync([process.execPath, 'scripts/check.ts'], {
+      const result = Bun.spawnSync([process.execPath, 'scripts/check.ts', 'test/database.test.ts'], {
         cwd: directory,
         // The check must run here, where docker is traced, and without queueing for a local slot.
-        env: { ...process.env, AUTH_DUMP_TRACE_STOP: '1', REZICS_STACK_LEASE: 'off' },
+        env: {
+          ...process.env,
+          AUTH_DUMP_TRACE_STOP: '1',
+          REZICS_STACK_LEASE: 'off',
+        },
         timeout: 30_000,
       });
       expect(result.exitCode).toBe(1);
@@ -80,14 +85,29 @@ test(
       let calls = commands();
       const container = calls.find((args) => args[0] === 'port')?.[1];
       if (!container) throw new Error('Check did not create a PostgreSQL fixture');
-      while (Date.now() < deadline && calls.at(-1)?.[0] !== 'rm') {
+      while (Date.now() < deadline && !calls.some((args) => args[0] === 'rm')) {
         Bun.sleepSync(50);
         calls = commands();
       }
       const dumps = calls.filter((args) => args.includes('pg_dump'));
       expect(dumps.map((args) => args.slice(0, 3))).toEqual([['exec', container, 'pg_dump']]);
       expect(calls.filter((args) => args[0] === 'run')).toHaveLength(1);
-      expect(calls.at(-1)).toEqual(['rm', '-f', '-v', container]);
+      expect(calls).toContainEqual(['rm', '-f', '-v', container]);
+      expect(calls).toContainEqual(['ps', '-aq', '--filter', expect.stringMatching(/^label=rezics.auth.check.pid=/)]);
+      const volumes = calls.filter((args) => args[0] === 'volume');
+      expect(volumes[0]).toEqual([
+        'volume',
+        'ls',
+        '-q',
+        '--filter',
+        expect.stringMatching(/^label=rezics.auth.check.pid=/),
+      ]);
+      expect(volumes.length).toBeLessThanOrEqual(2);
+      if (volumes[1]) {
+        expect(volumes[1].slice(0, 3)).toEqual(['volume', 'rm', '-f']);
+        expect(volumes[1].length).toBeGreaterThan(3);
+      }
+      expect(calls.at(-1)).toEqual(volumes.at(-1));
     });
   },
   timeout,
@@ -160,7 +180,7 @@ test(
           const removalDeadline = Date.now() + 20_000;
           while (
             Date.now() < removalDeadline &&
-            !commands().some((args) => args[0] === 'rm' && args[2] === first.container)
+            !commands().some((args) => args[0] === 'rm' && args[3] === first.container)
           )
             Bun.sleepSync(50);
           const afterClose = commands().length;
@@ -208,6 +228,8 @@ test(
         expect(commands().slice(start)).toEqual([
           [
             'run',
+            '--stop-timeout',
+            '2',
             '--rm',
             '--network',
             'host',
