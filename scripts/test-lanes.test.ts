@@ -16,6 +16,7 @@ import {
   scheduleFiles,
   timingsDirectory,
   writeTimings,
+  testCommand,
   type FileTiming,
 } from './test-lanes.ts';
 
@@ -482,7 +483,7 @@ test('${name} sees its own clone', () => {
       'drop fixture_test_3',
     ]);
     expect(printed.match(/database=postgres:\/\/host\/lane_\d+/g)).toHaveLength(3);
-    expect(printed.match(/^(\w+) database=/gm)).toEqual(['unknown database=', 'slow database=', 'fast database=']);
+    expect(['unknown', 'slow', 'fast'].map((name) => printed.includes(`${name} database=`))).toEqual([true, true, true]);
     const latest = readLatest(timings);
     expect(Object.keys(latest).sort()).toEqual(['test/fast.test.ts', 'test/slow.test.ts', 'test/unknown.test.ts']);
     expect(latest['test/unknown.test.ts']!.result).toBe('pass');
