@@ -297,8 +297,9 @@ test('eight maximum locator keys fit within a 4 KiB page and prefix seeks stay l
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${seek}`,
         args,
       );
-      const scans = nodes(measured.rows[0]!['QUERY PLAN'])
-        .filter((node) => node['Relation Name'] === 'history_locator' && Number(node['Actual Loops']) > 0);
+      const scans = nodes(measured.rows[0]!['QUERY PLAN']).filter(
+        (node) => node['Relation Name'] === 'history_locator' && Number(node['Actual Loops']) > 0,
+      );
       expect(scans.length).toBeGreaterThan(0);
       for (const scan of scans) {
         expect(scan['Index Name']).toBe('history_locator_pending');
