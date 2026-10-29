@@ -55,7 +55,9 @@ test('settle waits for an older snapshot and removes the first index-probe exces
   }
   async function probe() {
     const result = await holder.query<{
-      'QUERY PLAN': Array<{ Plan: { 'Node Type': string; 'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number } }>;
+      'QUERY PLAN': Array<{
+        Plan: { 'Node Type': string; 'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number };
+      }>;
     }>(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT id FROM ${table} WHERE id <= 3000`);
     const plan = result.rows[0]!['QUERY PLAN'][0]!.Plan;
     expect(plan['Node Type']).toBe('Index Only Scan');
