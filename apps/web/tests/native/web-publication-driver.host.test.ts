@@ -67,7 +67,7 @@ describe('native web publication driver host', () => {
       expect(published.has(new URL(url).pathname.split('/')[3]!)).toBe(true);
   });
 
-  test("settle waits until the fixture's built feeds and search show it", async () => {
+  test("settle waits until the fixture's built feeds show it", async () => {
     await driver.settle();
     const kernelOrigin = new URL(fixture.personalRead).origin;
     for (const kind of ['collection', 'realm', 'space', 'board', 'thread'] as const) {
@@ -85,6 +85,13 @@ describe('native web publication driver host', () => {
       for (const { url } of fixture.sitemap[kind].eligible)
         expect(published.has(new URL(url).pathname.split('/')[3]!)).toBe(true);
     }
+    const response = await driver.request('/robots.txt');
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('sitemap');
+  });
+
+  test("native search returns the fixture's matching books", async () => {
+    const kernelOrigin = new URL(fixture.personalRead).origin;
     const search = await fetch(`${kernelOrigin}/v1/subjects:search`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -96,9 +103,6 @@ describe('native web publication driver host', () => {
     expect(results.subjects.map((subject) => subject.labels[data.search.locale])).toEqual(
       expect.arrayContaining(data.search.matchingBooks),
     );
-    const response = await driver.request('/robots.txt');
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain('sitemap');
   });
 
   test('request is real HTTP and origin reconfiguration retains native data', async () => {
