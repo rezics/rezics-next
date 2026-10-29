@@ -356,6 +356,7 @@ test('prepared omission handoff returns the durable strongest proof without chan
     const run = store.begin(FIXTURE_SOURCE);
     if (run === 'busy') throw new Error('Unexpected busy');
     const staged = record('omission-handoff', 1);
+    staged.row.source = FIXTURE_SOURCE;
     store.stage(run, staged);
     expect(store.seal(run, { complete: true }).status).toBe('ready');
     const original = command(staged);
