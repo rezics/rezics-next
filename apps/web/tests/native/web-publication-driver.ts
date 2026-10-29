@@ -1,7 +1,7 @@
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
 import { startNativeWebStack } from './stack';
-import type { WebPublicationDriver, PublicationFixture, SitemapKind } from '../../../../specs/web-publication-driver';
+import type { WebPublicationDriver, PublicationFixture } from '../../../../specs/web-publication-driver';
 
 const defaultPublicOrigin = 'https://rezics.example.test';
 const typeByKey: Record<string, string> = {
@@ -12,6 +12,15 @@ const typeByKey: Record<string, string> = {
   person: 'schema:Person',
   organization: 'schema:Organization',
   automated: 'schema:SoftwareApplication',
+};
+const fixtureTypeByKey: Record<string, string> = {
+  book: 'Book',
+  recipe: 'Recipe',
+  game: 'VideoGame',
+  release: 'released game release profile',
+  person: 'Person',
+  organization: 'Organization',
+  automated: 'released automated agent profile',
 };
 const titleOf = (value: unknown): string => {
   if (!value || typeof value !== 'object' || !('title' in value) || typeof value.title !== 'string')
@@ -34,18 +43,26 @@ function accountIdFromAuthorization(authorization: string): string {
   return claims.sub;
 }
 
-function assertReleasedDefinitions(): void {
+function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtures/web-publication.json')): void {
   const types = bundledRelease.types as Record<string, unknown>;
   const properties = bundledRelease.properties as Record<string, unknown>;
   for (const [key, type] of Object.entries(typeByKey)) {
     if (!types[type]) throw new Error(`Missing released definition for fixture subject ${key}: ${type}`);
   }
+  for (const [key, subject] of Object.entries(data.subjects)) {
+    const type = typeByKey[key];
+    if (!type || fixtureTypeByKey[key] !== subject.type)
+      throw new Error(`Missing released definition for fixture subject ${key}: ${subject.type}`);
+    const definition = bundledRelease.types[type];
+    if (definition?.schemaOrgType !== `https://schema.org/${subject.schemaOrgType}`)
+      throw new Error(`Missing released Schema.org definition for fixture subject ${key}: ${subject.schemaOrgType}`);
+  }
   for (const property of [
-    'schema:wordCount',
+    data.definitions.wordCount,
     'wdt:P7937',
     'schema:keywords',
-    'schema:suitableForDiet',
-    'schema:cookTime',
+    data.definitions.diet,
+    data.definitions.cookTime.split(',')[0]!,
     'schema:recipeIngredient',
     'schema:recipeInstructions',
   ]) {
@@ -57,11 +74,33 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   const stack = await startNativeWebStack();
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
+  const feedMeasurements = new Map<string, { times: number[]; retries: number }>();
+  // Only native setup/control requests retry. Served documents must retain their
+  // original HTTP response, including retryable failures and manual redirects.
+  const kernel: typeof stack.kernel = async (path, init, persona) => {
+    for (let attempt = 0; ; attempt++) {
+      const started = performance.now();
+      const response = await stack.kernel(path, init, persona);
+      const measurements = feedMeasurements.get(new URL(path, stack.kernelOrigin).pathname);
+      measurements?.times.push(performance.now() - started);
+      if (response.ok) return response;
+      const problem = await response.clone().json().catch(() => null) as
+        | { retryable?: unknown; request_id?: unknown }
+        | null;
+      if (problem?.retryable !== true || attempt === 3) return response;
+      if (measurements) measurements.retries++;
+      console.info(
+        `web-publication-driver-retry: route=${path} status=${response.status} request_id=${String(problem.request_id)} retry=${attempt + 1}`,
+      );
+      await response.body?.cancel();
+      await Bun.sleep(1000 * 2 ** attempt);
+    }
+  };
   const request: WebPublicationDriver['request'] = (url, persona, headers) => stack.request(url, persona, headers);
   const provision = async (data: typeof import('../../../../specs/fixtures/web-publication.json')) => {
     const started = performance.now();
-    assertReleasedDefinitions();
-    const active = await stack.kernel('/v1/definitions/active');
+    assertReleasedDefinitions(data);
+    const active = await kernel('/v1/definitions/active');
     if (!active.ok) throw new Error(`Could not read released definition: ${active.status} ${await active.text()}`);
     const activeBody = (await active.json()) as { digest: string };
     if (activeBody.digest !== bundledDigest)
@@ -72,18 +111,12 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     const created = new Map<string, { id: string; label: string; type: string }>();
     const entries = Object.entries(data.subjects).map(([key, value]) => ({
       key,
-      type: typeByKey[key] ?? 'schema:Book',
+      type: typeByKey[key]!,
       label: titleOf(value),
       descriptions: 'description' in value ? { en: String(value.description) } : undefined,
     }));
-    for (const [view, count] of Object.entries({
-      editions: 105,
-      contents: 105,
-      cast: 105,
-      crew: 105,
-      inverse: 105,
-      relations: 105,
-    })) {
+    for (const view of data.traversal.views) {
+      const count = data.traversal.countPerView;
       for (let index = 1; index <= count; index++) {
         const key = `${view}-${String(index).padStart(3, '0')}`;
         entries.push({ key, type: 'schema:Book', label: `${view} ${index}`, descriptions: undefined });
@@ -102,7 +135,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         const credentials = await stack.credentials(persona);
         const accountId = accountIdFromAuthorization(credentials.authorization);
         const grantKey = crypto.randomUUID();
-        const grant = await stack.kernel(
+        const grant = await kernel(
           '/v1/grants',
           {
             method: 'POST',
@@ -119,7 +152,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         if (!grant.ok)
           throw new Error(`Could not grant native fixture writer ${persona}: ${grant.status} ${await grant.text()}`);
         const rateTierKey = crypto.randomUUID();
-        const rateTier = await stack.kernel(
+        const rateTier = await kernel(
           `/v1/accounts/${encodeURIComponent(accountId)}:setRateTier`,
           {
             method: 'POST',
@@ -157,7 +190,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
             subject: { type, labels: { en: label }, ...(descriptions ? { descriptions } : {}) },
           }));
           let response: Response;
-          response = await stack.kernel(
+          response = await kernel(
             '/v1/subjects:batchWrite',
             { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commands }) },
             persona,
@@ -232,29 +265,45 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   const settle = async () => {
     // Feed reads are native API requests. An empty page is not exhaustion when it
     // carries a continuation; always follow the opaque cursor until next is null.
-    const feeds: SitemapKind[] = ['collection', 'realm', 'space', 'board', 'thread'];
-    const routes: Record<string, string> = {
-      collection: 'collections',
-      realm: 'realms',
-      space: 'spaces',
-      board: 'boards',
-      thread: 'threads',
-    };
-    for (const feed of feeds) {
+    const routes = [
+      '/v1/sitemap/collections',
+      '/v1/sitemap/realms',
+      '/v1/sitemap/spaces',
+      '/v1/sitemap/boards',
+      '/v1/sitemap/threads',
+      '/v1/subject-pages',
+    ];
+    for (const route of routes) {
       let cursor: string | null = null;
       let pages = 0;
-      do {
-        const query = new URLSearchParams({ limit: '2' });
-        if (cursor) query.set('cursor', cursor);
-        const response = await stack.kernel(`/v1/sitemap/${routes[feed]}?${query}`);
-        if (!response.ok)
-          throw new Error(`Native sitemap feed ${feed} returned ${response.status}: ${await response.text()}`);
-        const page = (await response.json()) as { next: string | null };
-        cursor = page.next;
-        if (++pages > 10_000) throw new Error(`Native sitemap feed ${feed} did not terminate`);
-      } while (cursor !== null);
+      const measurements = { times: [] as number[], retries: 0 };
+      feedMeasurements.set(route, measurements);
+      try {
+        do {
+          const query = new URLSearchParams({ limit: '100' });
+          if (cursor !== null) query.set('cursor', cursor);
+          const response = await kernel(`${route}?${query}`);
+          if (!response.ok)
+            throw new Error(`Native sitemap feed ${route} returned ${response.status}: ${await response.text()}`);
+          const page = (await response.json()) as { next: unknown };
+          if (page.next !== null && typeof page.next !== 'string')
+            throw new Error(`Native sitemap feed ${route} omitted its continuation`);
+          cursor = page.next;
+          if (++pages > 10_000) throw new Error(`Native sitemap feed ${route} did not terminate`);
+        } while (cursor !== null);
+      } finally {
+        feedMeasurements.delete(route);
+        const times = measurements.times.sort((a, b) => a - b);
+        const middle = Math.floor(times.length / 2);
+        const median = times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
+        console.info(
+          `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
+        );
+      }
     }
-    await Bun.sleep(50);
+    // Exhausted discovery feeds do not establish asynchronous consumer progress.
+    // Do not replace the missing native completion read with a timed sleep.
+    throw new Error('settle requires a native HTTP read reporting durable projections and the search index drained; the kernel exposes none');
   };
 
   return {
