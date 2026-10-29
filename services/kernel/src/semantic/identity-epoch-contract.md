@@ -96,12 +96,20 @@ follow effects retain active/terminal account locks independently of identity pu
 
 ### Immutable cut before any new effect
 
+After current authorization, resolve same-receipt replay through an indexed read BEFORE fresh cap collection.
+Recheck a raced original receipt binding before returning overflow: existing preparing/admitted custody wins over
+a fresh refusal, and resumes that same job. Neither lookup creates a receipt or any other effect.
+
 Resolve the at-most-two input groups to immutable, non-ABA current generation/source versions and exact counts.
 Perform an effects-free double collection: capture EVERY input header/source version, then validate EVERY captured
 version remains current, ready and under the same native owner/generation. A common cut lies between last capture
 and first validation when all versions match. A version cannot return to an earlier value after a change. A
 single mixed read is insufficient: moving an original can expose a new 2048 count with an old 2049 count even
 when the coherent union is 4096. Immutable data alone does not make differently timed current pointers coherent.
+Both passes include current original-to-group source bindings and readiness, not just unchanged group headers;
+a stable former group or gated half-publication cannot qualify as a current input. Distinguish the claim/CAS
+version from the published basis version. Preparing/cancelling advances CAS state, while the published basis
+changes only with published generation/routing: cancellation cannot invalidate every original's unchanged pointer.
 
 Use that coherent cut and constant transform to check EVERY resulting cardinality, including split/repoint and
 undo's explicit restored original. Shared generation references collapse once. No caller original vector,
@@ -131,6 +139,8 @@ home out of order. The compact binding can be established only after cap validat
 selects the one attempt/home before remote delivery. A full job, claim, full copy and slot are charged where
 physically stored, even when another home retains a locator. Acquisition at the first resource reserves local
 P-capacity and the job there atomically; later acquisitions proceed strictly in order. At every home, native
+capacity is charged once per `(home,job)`, shared by both changed groups when they reside at that home. Its full
+physical allocations still count individually. At every home, the
 partition-owner fence, attempt lock, capacity counter/unique slot and group overlap predicate are checked in the
 same transaction as the claim. A read followed by an unlocked insert is insufficient.
 
@@ -157,6 +167,9 @@ The retained native job-home CAS selects exactly one disposition: admitted or ca
 native claim receipts and revalidated source versions; cancellation closes every planned home and reconciles
 receipts/slots before releasing custody. Admitted work cannot be cancelled by a stale delivery. Delayed acquisition
 cannot resurrect a closed attempt. No new attempt overlaps the old one's uncertain claims without that proof.
+Retain rejected-attempt fences until every registered delayed delivery/retry has receiving native custody.
+Minimization to an indexed per-home/job rejected-attempt watermark requires that custody proof; absence or elapsed
+time cannot permit recreation of an old attempt. These minimal fences are charged history, never full-job slots.
 
 The admitted record atomically binds immutable intent, inputs, affected pending descriptor, native receipt and
 wakeup. That descriptor is authoritative before home gates or participants run; it need not materialize 4096 rows
@@ -427,6 +440,11 @@ new headers. Source legacy memberships, their retained exports and new shadow ro
 copy ledger before each allocation. A bootstrap that cannot reserve the next bounded copy must reclaim or pause
 locally; bootstrapReady does not excuse storage. Current groups share unchanged flat generations; each charged attempt
 needs at most two retained inputs and two outputs. Current inputs are not double-counted as extra until retired.
+The transactional allocation ledger names every physical copy and partial payload. Duplicated export pages,
+outbox and workflow payloads spend the SAME membership allowance; a materialized member list is not free history.
+Store exact immutable range/receipt locators where sufficient instead. Original basis belongs in the existing
+source row/point where the native plan proves the bound; an inverse index is not another current membership copy,
+and any alternative physical copy must be charged explicitly.
 Merge reduces G by one, split increases it by one and repoint changes at most two groups; former current inputs
 then consume the reserved extra allowance. Birth increases actual G/A with its singleton. Allocation reserves
 against the post-transition bound before writing; no fifth copy or allocation-on-retry is possible.
@@ -737,6 +755,9 @@ concurrent reports identify candidate mechanisms, not native performance evidenc
 also exists at `docs/research/identity-concurrent-groups-current.md`; the absolute reviewed copies, comparison,
 full coowner review, single-closure master and Performance/Accounts/Search reviews supplied the corrected adoption.
 Their superseded global-summary alternatives do not remain a second contract.
+The integrated deep report's CAS/basis distinction, read-only replay ordering, once-per-home/job quota and physical
+payload/fence accounting apply here; its receipt-home-first priority scheduling and global OPEN/CLOSE alternatives
+remain superseded by ordered first-resource capacity and source-scoped committed summaries.
 
 Read-only reference evidence: PostgreSQL `src/backend/commands/trigger.c`, `indexcmds.c`,
 `src/backend/utils/time/snapmgr.c`, `src/backend/access/heap/heapam.c` in
