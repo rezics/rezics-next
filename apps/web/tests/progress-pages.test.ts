@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { progressDefaultUnit } from '../src/library/progress-page.tsx';
+import { progressDefaultUnit } from '../src/library/progress-default-unit.ts';
 
 const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text();
 
@@ -20,9 +20,7 @@ test('default progress units follow subject type', async () => {
   expect(progressDefaultUnit(['schema:Movie'])).toBe('episode');
   expect(progressDefaultUnit(['schema:VideoGame'])).toBe('percent');
   const page = await read('../src/library/progress-page.tsx');
-  expect(page).toContain('function progressDefaultUnit');
-  expect(page).toMatch(/video\|movie[^\n]*return 'episode'/);
-  expect(page).toMatch(/return 'page'/);
+  expect(page).toContain('progressDefaultUnit');
 });
 
 test('progress labels use localized messages for locator parts and chapters', async () => {

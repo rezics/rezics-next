@@ -20,6 +20,7 @@ import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode, ProgressUnitWrite } from './progress-reads';
 import { progressView } from './progress-label';
+import { progressDefaultUnit } from './progress-default-unit';
 import { finishProgressSession, startProgressSession } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
 
@@ -53,13 +54,6 @@ const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
 
 const subscribe = () => () => {};
-
-export function progressDefaultUnit(types: readonly string[] | undefined): ProgressUnitWrite {
-  const values = (types ?? []).map((type) => type.toLowerCase());
-  if (values.some((type) => /videogame|game/.test(type))) return 'percent';
-  if (values.some((type) => /video|movie|tvseries|tvseason|tv.*episode/.test(type))) return 'episode';
-  return 'page';
-}
 
 export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   const router = useRouter();
