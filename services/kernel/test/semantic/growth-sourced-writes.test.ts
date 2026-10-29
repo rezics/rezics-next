@@ -106,7 +106,9 @@ const batchRuns: {
 // work: relation totals alone cannot identify which lookup examined unrelated rows.
 type NativePlan = { 'Query Text': string; Plan: Record<string, unknown> };
 const nativeAgentScans: Record<string, unknown>[] = [];
-let nativeRun: Map<string, { plan: NativePlan; work: { rows: number; blocks: number }[] }> | undefined;
+let nativeRun:
+  | Map<string, { plan: NativePlan; work: { rows: number; blocks: number; agents: Record<string, unknown>[] }[] }>
+  | undefined;
 let nativeFailures: { statement: string; code?: string; message: string; detail?: string }[] | undefined;
 const observedClients = new WeakSet<PoolClient>();
 function nativePlanShape(node: Record<string, unknown>): unknown {
@@ -156,13 +158,24 @@ function observeNativeClient(client: PoolClient): void {
     const shape = JSON.stringify([plan['Query Text'], nativePlanShape(plan.Plan)]);
     const entry = nativeRun.get(shape) ?? { plan, work: [] };
     const { rows, blocks } = costOf({ statements: [], plans: [plan] });
-    entry.work.push({ rows, blocks });
-    nativeRun.set(shape, entry);
+    const agents: Record<string, unknown>[] = [];
     const visit = (node: Record<string, unknown>) => {
-      if (node['Relation Name'] === 'account_agent_subject') nativeAgentScans.push(node);
+      if (node['Relation Name'] === 'account_agent_subject') {
+        nativeAgentScans.push(node);
+        agents.push(
+          Object.fromEntries(
+            ['Node Type', 'Index Cond', 'Filter', 'Actual Rows', 'Rows Removed by Filter', 'Actual Loops'].map((key) => [
+              key,
+              node[key],
+            ]),
+          ),
+        );
+      }
       for (const child of (node.Plans ?? []) as Record<string, unknown>[]) visit(child);
     };
     visit(plan.Plan);
+    entry.work.push({ rows, blocks, agents });
+    nativeRun.set(shape, entry);
   });
 }
 
