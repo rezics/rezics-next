@@ -26,10 +26,14 @@ export const ManyCopies: Story = {
   async play(args) {
     await ready(args);
     const canvas = within(args.canvasElement);
-    const kokoro = canvas.getByText('Kokoro').closest('li');
-    const coverMedia = recording.copies[1]?.subject.cover?.media;
-    if (typeof coverMedia !== 'string') throw new Error('The recorded Kokoro copy has no cover media.');
+    const recordedCopy = recording.copies[1];
+    const coverMedia = recordedCopy?.subject.cover?.media;
+    if (!recordedCopy || typeof coverMedia !== 'string' || !recordedCopy.note) {
+      throw new Error('The recorded Kokoro copy has no cover media or identifying note.');
+    }
+    const kokoro = (await canvas.findByText(recordedCopy.note, { exact: true })).closest('li');
     if (!kokoro) throw new Error('The recorded Kokoro copy did not render in the list.');
+    expect(kokoro.textContent).toContain('Kokoro');
     expect(kokoro?.textContent).toContain('Digital');
     expect(kokoro?.textContent).not.toContain('Physical');
     const image = kokoro.querySelector('[data-slot="cover"] img');
