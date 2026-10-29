@@ -47,6 +47,7 @@ async function withRetryFixture(run: (job: WorkerJob, h: ReturnType<typeof harne
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
     failAttempt(h, task.id, 1);
     job.onAttemptExit({ taskId: task.id, attempt: 1 });
     await job.drain();
@@ -65,7 +66,7 @@ test('a stale tool blocker with no check or matching command gets one relaunch a
     expect(h.store.task(taskId).currentAttempt).toBe(3);
     expect(h.store.events(taskId, 2).map((event) => event.kind)).toContain('stale-tool-blocker-retry');
     expect(h.store.record({ taskId, attempt: 2 })?.escalation).not.toBe('stalled');
-    const prompt = readFileSync(join(h.store.task(taskId).worktree, '.temp/goal-test-prompts', '2'), 'utf8');
+    const prompt = readFileSync(join(h.store.task(taskId).worktree, '.temp/goal-test-prompts', '3'), 'utf8');
     expect(prompt).toContain("The retry manifest records a failure from an earlier attempt");
     expect(prompt).toContain('Hosts and tools may have been fixed since then');
     expect(prompt).toContain('Rerun the failing command before reporting any blocker');
