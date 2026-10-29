@@ -144,7 +144,9 @@ test('effects of one partition start in position order', async () => {
   const later = envelope(partition, 11n, 'position-11');
   await effects.enqueue([later, earlier]);
   await within(
-    Promise.all([earlier, later].map((item) => DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult())),
+    Promise.all(
+      [earlier, later].map((item) => DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult()),
+    ),
     'ordered effect results',
   );
   expect(starts.slice(-2)).toEqual(['position-10', 'position-11']);
