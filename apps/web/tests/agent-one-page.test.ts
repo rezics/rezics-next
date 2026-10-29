@@ -12,6 +12,7 @@ import { accountSchemaType } from '../src/features/pages/account';
 import { subjectAccountRedirect } from '../src/features/pages/subject';
 import { routes as agentRoutes } from '../src/kernel/fake/agent-one-page';
 import { loadViewPages } from '../src/features/pages/subject-frame';
+import { readRelationsPage } from '../src/features/pages/relations-view';
 
 const redirectedClient = (data: unknown) =>
   ({
@@ -226,4 +227,23 @@ test('a redirected subject view stops after its page read without loading the ov
   expect(requests).toEqual([
     { target: { subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', view: 'reviews' }, languages: ['zh-Hans'] },
   ]);
+});
+
+test('a redirected relations view never reads inverse links', async () => {
+  const requests: unknown[] = [];
+  const client = {
+    pages: {
+      $read: {
+        post: async (request: unknown) => {
+          requests.push(request);
+          return { status: 308, data: { redirect: { from: 'subject', to: 'helper' } } };
+        },
+      },
+    },
+  } as never;
+  expect(await readRelationsPage(client, { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', locale: 'en' })).toEqual({
+    overview: { kind: 'redirect', id: 'helper', target: 'account' },
+    links: null,
+  });
+  expect(requests).toEqual([{ target: { subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80' }, languages: ['en'] }]);
 });
