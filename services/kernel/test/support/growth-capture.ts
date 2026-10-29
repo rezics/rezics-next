@@ -20,9 +20,11 @@ export type SeedingCount = { statements: number; rowsWritten: number };
 type ActiveCapture = {
   statementRecords: StatementRecord[];
   plans: unknown[];
+  planStatements: (number | undefined)[];
   readonly includeBackends: boolean;
   planBackends: (number | undefined)[];
   backgroundPlans: unknown[];
+  backgroundPlanStatements: (number | undefined)[];
   backgroundPlanBackends: (number | undefined)[];
   pending: Set<Promise<void>>;
   error?: Error;
@@ -31,10 +33,12 @@ type StatementRecord = {
   readonly text: string;
   readonly background: boolean;
   readonly backend: number | undefined;
+  readonly index: number;
   requestBytes: number;
   responseBytes: number;
   failed: boolean;
   errorCode: string | null;
+  errorMessage: string | null;
   planCount: number;
 };
 type WireStatement = {
@@ -315,10 +319,12 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         text,
         background: attribution.background,
         backend: capture.includeBackends ? backendPid(client) : undefined,
+        index: capture.statementRecords.filter((item) => item.background === attribution.background).length,
         requestBytes: 0,
         responseBytes: 0,
         failed: false,
         errorCode: null,
+        errorMessage: null,
         planCount: 0,
       };
       capture.statementRecords.push(record);
@@ -355,6 +361,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         if (failed) {
           const code = (error as { code?: unknown } | null)?.code;
           record.errorCode = typeof code === 'string' && code.length > 0 ? code : 'unknown';
+          record.errorMessage = error instanceof Error ? error.message : String(error);
         }
       }
       if (!failed) countWrites(state.seeding, result);
@@ -450,6 +457,7 @@ function instrument(client: PoolClient, state: CaptureState): void {
       )
         statement.planCount++;
       (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
+      (attribution.background ? capture.backgroundPlanStatements : capture.planStatements).push(statement?.index);
       if (capture.includeBackends)
         (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
     } catch (error) {
@@ -548,9 +556,11 @@ export async function capture<T>(
   const active: ActiveCapture = {
     statementRecords: [],
     plans: [],
+    planStatements: [],
     includeBackends: options.includeBackends === true,
     planBackends: [],
     backgroundPlans: [],
+    backgroundPlanStatements: [],
     backgroundPlanBackends: [],
     pending: new Set(),
   };
@@ -588,7 +598,9 @@ export async function capture<T>(
         requestBytes: foreground.map(({ requestBytes }) => requestBytes),
         responseBytes: foreground.map(({ responseBytes }) => responseBytes),
         plans: active.plans,
+        planStatements: active.planStatements,
         statementErrors: foreground.map(({ errorCode }) => errorCode),
+        statementErrorMessages: foreground.map(({ errorMessage }) => errorMessage),
         ...(active.includeBackends
           ? { statementBackends: foreground.map(({ backend }) => backend), planBackends: active.planBackends }
           : {}),
@@ -596,7 +608,9 @@ export async function capture<T>(
         backgroundRequestBytes: background.map(({ requestBytes }) => requestBytes),
         backgroundResponseBytes: background.map(({ responseBytes }) => responseBytes),
         backgroundPlans: active.backgroundPlans,
+        backgroundPlanStatements: active.backgroundPlanStatements,
         backgroundStatementErrors: background.map(({ errorCode }) => errorCode),
+        backgroundStatementErrorMessages: background.map(({ errorMessage }) => errorMessage),
         ...(active.includeBackends
           ? {
               backgroundStatementBackends: background.map(({ backend }) => backend),

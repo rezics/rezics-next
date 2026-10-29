@@ -105,6 +105,74 @@ export function statementAttributions(capture: Capture): StatementAttribution[] 
   return [...statements].map(([statement, cost]) => ({ statement, ...cost }));
 }
 
+export type StatementOccurrence = {
+  readonly index: number;
+  readonly statement: string;
+  readonly backend: number | undefined;
+  readonly error: { readonly code: string; readonly message: string } | null;
+  readonly plans: readonly number[];
+  readonly rows: number;
+  readonly blocks: number;
+};
+
+export type StatementOccurrences = {
+  readonly statements: readonly StatementOccurrence[];
+  readonly backgroundStatements: readonly StatementOccurrence[];
+};
+
+/** Costs each statement occurrence only from plans linked to it at capture time. */
+export function statementOccurrences(capture: Capture): StatementOccurrences {
+  const occurrences = (
+    statements: readonly string[],
+    errors: readonly (string | null)[] | undefined,
+    messages: readonly (string | null)[] | undefined,
+    backends: readonly (number | undefined)[] | undefined,
+    plans: readonly unknown[],
+    planStatements: readonly (number | undefined)[] | undefined,
+  ): StatementOccurrence[] => statements.map((statement, index) => {
+    const planIndices: number[] = [];
+    let rows = 0;
+    let blocks = 0;
+    for (let planIndex = 0; planIndex < plans.length; planIndex++) {
+      if (planStatements?.[planIndex] !== index) continue;
+      planIndices.push(planIndex);
+      for (const entry of planEntries(plans[planIndex])) {
+        const cost = planCost(entry.plan);
+        rows += cost.rows;
+        blocks += cost.blocks;
+      }
+    }
+    const code = errors?.[index] ?? null;
+    return {
+      index,
+      statement: normalizeStatement(statement),
+      backend: backends?.[index],
+      error: code === null ? null : { code, message: messages?.[index] ?? '' },
+      plans: planIndices,
+      rows,
+      blocks,
+    };
+  });
+  return {
+    statements: occurrences(
+      capture.statements,
+      capture.statementErrors,
+      capture.statementErrorMessages,
+      capture.statementBackends,
+      capture.plans,
+      capture.planStatements,
+    ),
+    backgroundStatements: occurrences(
+      capture.backgroundStatements ?? [],
+      capture.backgroundStatementErrors,
+      capture.backgroundStatementErrorMessages,
+      capture.backgroundStatementBackends,
+      capture.backgroundPlans ?? [],
+      capture.backgroundPlanStatements,
+    ),
+  };
+}
+
 function median(values: readonly number[]): number {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);

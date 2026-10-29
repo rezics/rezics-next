@@ -72,3 +72,29 @@ test("a growth report keeps every repetition's cost and the size of every relati
   expect(error!.message).toContain('rows repetitions by scale: 1 [1000, 1000], 8 [4500, 4500], 64 [32500, 32500]');
   expect(error!.message).toContain(`Relations whose reltuples did not grow: ${constant} (500 to 500)`);
 }, 60_000);
+
+test('a growth report preserves ordered statement occurrences for every measured repetition', async () => {
+  const database = db!;
+  const report = await checkGrowth(database, {
+    name: 'ordered occurrence report',
+    repetitions: 2,
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    operation: (growthDb) =>
+      withConnection(growthDb.pool, async (client) => {
+        await client.query('SELECT 81 AS first_occurrence');
+        await client.query('SELECT 82 AS second_occurrence');
+      }),
+  });
+  expect(report.samples.map(({ occurrenceRepetitions }) => occurrenceRepetitions)).toHaveLength(3);
+  for (const sample of report.samples) {
+    expect(sample.occurrenceRepetitions).toHaveLength(2);
+    for (const repetition of sample.occurrenceRepetitions) {
+      expect(repetition.statements.map(({ statement }) => statement)).toEqual([
+        'SELECT ? AS first_occurrence',
+        'SELECT ? AS second_occurrence',
+      ]);
+      expect(repetition.backgroundStatements).toEqual([]);
+    }
+  }
+}, 60_000);

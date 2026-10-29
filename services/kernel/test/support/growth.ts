@@ -26,7 +26,13 @@ import {
 } from './growth-cost.ts';
 import { classifySeries, type SeriesClassification } from './growth-model.ts';
 import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
-import { formatStatementAttribution, profileStatements, statementAttributions } from './growth-report.ts';
+import {
+  formatStatementAttribution,
+  profileStatements,
+  statementAttributions,
+  statementOccurrences,
+  type StatementOccurrences,
+} from './growth-report.ts';
 import {
   countedSample,
   countedViolations,
@@ -100,6 +106,7 @@ export type ReportSample = {
   readonly relationSizes: Readonly<Record<string, RelationSize>>;
   readonly seeding: SeedingCost;
   readonly statementRepetitions: readonly (readonly StatementAttribution[])[];
+  readonly occurrenceRepetitions: readonly StatementOccurrences[];
   readonly counted?: CountedSample;
 };
 
@@ -356,6 +363,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
 
     const costs: Cost[] = [];
     const statementRepetitions: StatementAttribution[][] = [];
+    const occurrenceRepetitions: StatementOccurrences[] = [];
     const countedRuns: Record<string, number>[] = [];
     for (let run = 0; run < repetitions; run++) {
       // DBOS return-existing enqueues update workflow_status; vacuum its tuple chain before every measured repetition.
@@ -388,6 +396,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       assertCatalogBound(check.name, scale, measured.capture, samples);
       costs.push(cost);
       statementRepetitions.push(statementAttributions(measured.capture));
+      occurrenceRepetitions.push(statementOccurrences(measured.capture));
       repetition++;
     }
     samples.push({
@@ -398,6 +407,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       relationSizes: sizesForMeasuredRelations(costs, availableRelationSizes),
       seeding,
       statementRepetitions,
+      occurrenceRepetitions,
     });
     previous = scale;
   }

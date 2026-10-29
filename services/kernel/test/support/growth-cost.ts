@@ -3,7 +3,10 @@ export type Capture = {
   readonly requestBytes?: readonly number[];
   readonly responseBytes?: readonly number[];
   readonly plans: readonly unknown[];
+  /** Statement occurrence index parallel to each plan. */
+  readonly planStatements?: readonly (number | undefined)[];
   readonly statementErrors?: readonly (string | null)[];
+  readonly statementErrorMessages?: readonly (string | null)[];
   /** Backend process ID parallel to each statement and plan when capture(..., { includeBackends: true }) is used. */
   readonly statementBackends?: readonly (number | undefined)[];
   readonly planBackends?: readonly (number | undefined)[];
@@ -11,7 +14,10 @@ export type Capture = {
   readonly backgroundRequestBytes?: readonly number[];
   readonly backgroundResponseBytes?: readonly number[];
   readonly backgroundPlans?: readonly unknown[];
+  /** Background statement occurrence index parallel to each background plan. */
+  readonly backgroundPlanStatements?: readonly (number | undefined)[];
   readonly backgroundStatementErrors?: readonly (string | null)[];
+  readonly backgroundStatementErrorMessages?: readonly (string | null)[];
   /** Backend process ID parallel to each background statement and plan, when backends are included. */
   readonly backgroundStatementBackends?: readonly (number | undefined)[];
   readonly backgroundPlanBackends?: readonly (number | undefined)[];
@@ -250,6 +256,8 @@ export function withoutCatalogTexts(
   );
   const plans = capture.plans.flatMap((document, index) => {
     const backend = capture.planBackends?.[index];
+    const owner = capture.planStatements?.[index];
+    if (owner !== undefined && !statements.includes(owner)) return [];
     return documentEntries(document).some(
       ({ queryText }) =>
         hasMatchingStatement(capture.statements, capture.statementBackends, capture.planBackends, queryText, backend) &&
@@ -270,19 +278,38 @@ export function withoutCatalogTexts(
     ...(capture.statementErrors === undefined
       ? {}
       : { statementErrors: statements.map((index) => capture.statementErrors![index]!) }),
+    ...(capture.statementErrorMessages === undefined
+      ? {}
+      : { statementErrorMessages: statements.map((index) => capture.statementErrorMessages![index]!) }),
     ...(capture.statementBackends === undefined
       ? {}
       : { statementBackends: statements.map((index) => capture.statementBackends![index]) }),
     ...(capture.planBackends === undefined ? {} : { planBackends: plans.map((index) => capture.planBackends![index]) }),
+    ...(capture.planStatements === undefined
+      ? {}
+      : {
+          planStatements: plans.map((index) => {
+            const original = capture.planStatements![index];
+            if (original === undefined) return undefined;
+            const mapped = statements.indexOf(original);
+            return mapped < 0 ? undefined : mapped;
+          }),
+        }),
     ...(capture.backgroundStatements === undefined ? {} : { backgroundStatements: capture.backgroundStatements }),
     ...(capture.backgroundRequestBytes === undefined ? {} : { backgroundRequestBytes: capture.backgroundRequestBytes }),
     ...(capture.backgroundResponseBytes === undefined
       ? {}
       : { backgroundResponseBytes: capture.backgroundResponseBytes }),
     ...(capture.backgroundPlans === undefined ? {} : { backgroundPlans: capture.backgroundPlans }),
+    ...(capture.backgroundPlanStatements === undefined
+      ? {}
+      : { backgroundPlanStatements: capture.backgroundPlanStatements }),
     ...(capture.backgroundStatementErrors === undefined
       ? {}
       : { backgroundStatementErrors: capture.backgroundStatementErrors }),
+    ...(capture.backgroundStatementErrorMessages === undefined
+      ? {}
+      : { backgroundStatementErrorMessages: capture.backgroundStatementErrorMessages }),
     ...(capture.backgroundStatementBackends === undefined
       ? {}
       : { backgroundStatementBackends: capture.backgroundStatementBackends }),

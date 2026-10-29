@@ -17,6 +17,21 @@ beforeAll(async () => {
   await db.admin.query('CREATE TABLE growth_capture_test.lookup (id integer PRIMARY KEY)');
   await db.admin.query('INSERT INTO growth_capture_test.lookup (id) VALUES (1)');
   await db.admin.query('CREATE TABLE growth_capture_test.trigger_input (id integer PRIMARY KEY)');
+  await db.admin.query('CREATE SEQUENCE growth_capture_test.retry_sequence');
+  await db.admin.query(`
+    CREATE FUNCTION growth_capture_test.serialization_retry() RETURNS integer
+    LANGUAGE plpgsql AS $function$
+    DECLARE attempt bigint;
+    BEGIN
+      attempt := nextval('growth_capture_test.retry_sequence');
+      IF attempt = 1 THEN
+        RAISE EXCEPTION 'serialization retry' USING ERRCODE = '40001';
+      END IF;
+      PERFORM id FROM growth_capture_test.lookup WHERE id = 1;
+      RETURN 17;
+    END
+    $function$
+  `);
   await db.admin.query(`
     CREATE FUNCTION growth_capture_test.observe_insert() RETURNS trigger
     LANGUAGE plpgsql AS $function$
@@ -87,6 +102,64 @@ test('a failed statement counts as executed work and carries its SQLSTATE', asyn
     { text: 'INSERT INTO growth_capture_test.lookup (id) VALUES (1)', error: '23505' },
     { text: 'INSERT INTO growth_capture_test.lookup (id) VALUES (1)', error: null },
   ]);
+});
+
+test('plans point to the queued statement occurrence that produced them', async () => {
+  const database = db!;
+  const result = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      const first = client.query('SELECT 71 AS queued');
+      const second = client.query('SELECT 72 AS queued');
+      await Promise.all([first, second]);
+    }),
+  );
+  expect(result.capture.statements).toEqual(['SELECT 71 AS queued', 'SELECT 72 AS queued']);
+  expect(result.capture.planStatements).toEqual([0, 1]);
+});
+
+test('failed and unplanned statements retain backend and error details without plans', async () => {
+  const database = db!;
+  const result = await capture(
+    database,
+    () =>
+      withConnection(database.pool, async (client) => {
+        await expect(client.query('SELECT * FROM growth_capture_test.missing')).rejects.toMatchObject({ code: '42P01' });
+        await client.query("SET application_name = 'growth capture test'");
+      }),
+    { includeBackends: true },
+  );
+  const { statementOccurrences } = await import('./growth-report.ts');
+  const occurrences = statementOccurrences(result.capture).statements;
+  expect(occurrences).toHaveLength(2);
+  expect(occurrences[0]).toMatchObject({ backend: expect.any(Number), error: { code: '42P01' }, plans: [] });
+  expect(occurrences[0]!.error!.message).toContain('growth_capture_test.missing');
+  expect(occurrences[1]).toMatchObject({ backend: expect.any(Number), error: null, plans: [] });
+});
+
+test('the same SQL keeps separate plans across a rolled back serialization attempt and committed retry', async () => {
+  const database = db!;
+  await database.admin.query("ALTER SEQUENCE growth_capture_test.retry_sequence RESTART WITH 1");
+  const query = 'SELECT growth_capture_test.serialization_retry()';
+  const result = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      await client.query('BEGIN');
+      await expect(client.query(query)).rejects.toMatchObject({ code: '40001' });
+      await client.query('ROLLBACK');
+      await client.query('BEGIN');
+      await client.query(query);
+      await client.query('COMMIT');
+    }),
+  );
+  const { statementOccurrences } = await import('./growth-report.ts');
+  const occurrences = statementOccurrences(result.capture).statements.filter(({ statement }) => statement === query);
+  expect(occurrences).toHaveLength(2);
+  expect(occurrences.map(({ error, plans }) => ({ error: error?.code ?? null, plans }))).toEqual([
+    { error: '40001', plans: [] },
+    { error: null, plans: expect.arrayContaining([expect.any(Number)]) },
+  ]);
+  expect(occurrences[0]).toMatchObject({ rows: 0, blocks: 0 });
+  expect(occurrences[1]!.rows).toBeGreaterThan(0);
+  expect(occurrences[1]!.blocks).toBeGreaterThan(0);
 });
 
 test('a failed background statement counts in the background statements and carries its SQLSTATE', async () => {
@@ -191,6 +264,15 @@ test('captures nested statements run by a trigger function', async () => {
         plan['Query Text'].includes('SELECT id FROM growth_capture_test.lookup WHERE id = NEW.id'),
     ),
   ).toBe(true);
+  expect(result.capture.plans.flatMap((plan, index) =>
+    typeof plan === 'object' &&
+    plan !== null &&
+    'Query Text' in plan &&
+    typeof plan['Query Text'] === 'string' &&
+    plan['Query Text'].includes('SELECT id FROM growth_capture_test.lookup WHERE id = NEW.id')
+      ? [result.capture.planStatements?.[index]]
+      : [],
+  )).toEqual([0]);
 });
 
 test('captures statements from every connection the operation checks out', async () => {

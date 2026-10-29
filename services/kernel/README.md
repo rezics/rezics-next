@@ -333,6 +333,12 @@ test can still use `SET LOCAL` for a planner option inside its transaction.
 
 Use `includeBackends` for captures spanning multiple connections; it matches each plan to statements from the same
 backend PID.
+Each captured statement is also an occurrence: one execution of a client statement, including failed executions.
+Plans, including nested statement plans, are linked to the occurrence executing when the notice arrives. Growth reports
+keep these ordered per-run records in `occurrenceRepetitions`, with foreground and background statement lists kept
+separate. Use these records for checks that must prove the cost of each attempt, such as an aborted transaction and
+its successful retry. `statementRepetitions` and grouped statement attributions remain useful for overall profiles;
+they combine matching SQL across runs and must not be split by attempt.
 Growth checks can also declare `counted` units: `read(value, scale)` extracts per-run integer counts, while `limits`
 sets a ceiling at every scale and `bounds` sets a growth rule; reports include each unit's median and measured values.
 The harness provides `connections` as the number of distinct backend processes used by the operation when
