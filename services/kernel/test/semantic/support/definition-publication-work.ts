@@ -92,17 +92,26 @@ export function workDiagnostic(release: Release) {
   const wireBytes = Buffer.byteLength(JSON.stringify({ release }));
   // The actual shared Auth driver's client id; requested_by is null for this account.
   const envelopeBytes = canonicalBytes({
-    operation: 'definitions.publish', client_id: 'semantic-outcomes', requested_by: null,
+    operation: 'definitions.publish',
+    client_id: 'semantic-outcomes',
+    requested_by: null,
     body: { params: {}, body: { release } },
   });
   // Existing successful path: size walk; validation JCS; digest JCS+SHA;
   // receipt-envelope JCS+SHA. This excludes parse and other traversals on purpose.
   const knownByteFloor = 4 * releaseBytes + 2 * envelopeBytes + 2 * valueCanonicalBytes;
   return {
-    releaseBytes, wireBytes, envelopeBytes, valueCanonicalBytes, valueNodes,
-    distinct: distinct.size, steps, newSteps,
+    releaseBytes,
+    wireBytes,
+    envelopeBytes,
+    valueCanonicalBytes,
+    valueNodes,
+    distinct: distinct.size,
+    steps,
+    newSteps,
     fixedInitializationSteps: [...fixed.values()].reduce((sum, proof) => sum + proof.steps, 0),
-    fixedSources: fixed.size, fixedSafe: [...fixed.values()].every((proof) => proof.safe),
+    fixedSources: fixed.size,
+    fixedSafe: [...fixed.values()].every((proof) => proof.safe),
     allSafe: proofs.every((proof) => proof.safe),
     knownByteFloor,
     currentFloor: CHECKPOINT_WEIGHT * steps + knownByteFloor,
@@ -114,9 +123,18 @@ export function workDiagnostic(release: Release) {
 // Actual write surfaces of definitions publish/runCommand, plus semantic revision/fact
 // surfaces to detect a mistakenly routed command. Missing tables throw; none mean zero.
 export const EFFECT_TABLES = [
-  'semantic.definition_release', 'semantic.definition_activation', 'semantic.revision',
-  'semantic.subject', 'semantic.fact', 'semantic.candidate', 'semantic.source_candidate',
-  'semantic.external_claim', 'core.partition', 'core.receipt', 'core.outbox', 'editorial.write_basis',
+  'semantic.definition_release',
+  'semantic.definition_activation',
+  'semantic.revision',
+  'semantic.subject',
+  'semantic.fact',
+  'semantic.candidate',
+  'semantic.source_candidate',
+  'semantic.external_claim',
+  'core.partition',
+  'core.receipt',
+  'core.outbox',
+  'editorial.write_basis',
 ] as const;
 
 export async function effectsSnapshot(pool: Pool) {

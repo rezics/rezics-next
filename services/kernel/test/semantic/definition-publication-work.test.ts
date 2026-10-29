@@ -4,7 +4,11 @@ import { RELEASE_LIMITS, releaseDigest, validateRelease } from '@rezics/definiti
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
 import {
-  CHECKPOINT_WEIGHT, effectsSnapshot, publicationFixture, PROPOSED_WORK_MAX, workDiagnostic,
+  CHECKPOINT_WEIGHT,
+  effectsSnapshot,
+  publicationFixture,
+  PROPOSED_WORK_MAX,
+  workDiagnostic,
 } from './support/definition-publication-work.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 
@@ -14,7 +18,9 @@ beforeAll(async () => {
   driver = await createSemanticDriver();
   await driver.projection('paused');
 }, 180_000);
-afterAll(async () => { await driver?.close(); });
+afterAll(async () => {
+  await driver?.close();
+});
 
 const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
 const snapshotHash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -24,10 +30,15 @@ const snapshotHash = (value: unknown) => createHash('sha256').update(JSON.string
 test('cold definition publication refuses deterministic excess work before effects while ordinary valid publication and current authorized replay retain their outcomes', async () => {
   const ordinary = publicationFixture();
   const excess = publicationFixture(RELEASE_LIMITS.properties - Object.keys(bundledRelease.properties).length);
-  for (const [name, release] of [['current bundled', bundledRelease], ['ordinary third-type', ordinary], ['excess', excess]] as const) {
+  for (const [name, release] of [
+    ['current bundled', bundledRelease],
+    ['ordinary third-type', ordinary],
+    ['excess', excess],
+  ] as const) {
     expect(validateRelease(release), `${name}: actual pure validator`).toEqual([]);
     const diagnostic = workDiagnostic(release);
-    console.log('definition-publication-work diagnostic', JSON.stringify({ name, ...diagnostic }));
+    const { proofs: _proofs, ...counts } = diagnostic;
+    console.log('definition-publication-work diagnostic', JSON.stringify({ name, ...counts }));
     expect(diagnostic.allSafe).toBe(true);
     expect(diagnostic.fixedSafe).toBe(true);
     expect(diagnostic.releaseBytes).toBeLessThanOrEqual(RELEASE_LIMITS.bytes);
@@ -104,15 +115,26 @@ test('cold definition publication refuses deterministic excess work before effec
   const refused = await publish(excess);
   const excessAfter = await effectsSnapshot(driver.fixtures.pool);
   // Retain actual response and all-effects fingerprints even when status is wrong.
-  console.log('definition-publication-work reached HTTP boundary', JSON.stringify({
-    status: refused.status, body: refused.body,
-    before: snapshotHash(excessBefore), after: snapshotHash(excessAfter),
-    deltas: Object.fromEntries(Object.keys(excessBefore).map((table) => [table,
-      (excessAfter[table] as unknown[]).length - (excessBefore[table] as unknown[]).length])),
-  }));
+  console.log(
+    'definition-publication-work reached HTTP boundary',
+    JSON.stringify({
+      status: refused.status,
+      body: refused.body,
+      before: snapshotHash(excessBefore),
+      after: snapshotHash(excessAfter),
+      deltas: Object.fromEntries(
+        Object.keys(excessBefore).map((table) => [
+          table,
+          (excessAfter[table] as unknown[]).length - (excessBefore[table] as unknown[]).length,
+        ]),
+      ),
+    }),
+  );
   expect(refused.status, JSON.stringify(refused.body)).toBe(422);
   expect(refused.body).toMatchObject({
-    code: 'definition_work_exceeded', retryable: false, effect_status: 'not_applied',
+    code: 'definition_work_exceeded',
+    retryable: false,
+    effect_status: 'not_applied',
     errors: [{ pointer: '/release', code: 'out_of_range' }],
   });
   expect(refused.headers.has('retry-after')).toBe(false);
