@@ -39,7 +39,7 @@ export function encodeRoles(roles: readonly AccountRole[]): number {
   if (!Array.isArray(roles) || roles.length > ACCOUNT_ROLES.length) throw new TypeError('Invalid account roles');
   return roles.reduce((mask, role) => {
     if (!Object.hasOwn(ACCOUNT_ROLE_BITS, role)) throw new TypeError('Unknown account role');
-    return mask | ACCOUNT_ROLE_BITS[role];
+    return mask | ACCOUNT_ROLE_BITS[role as AccountRole];
   }, 0);
 }
 

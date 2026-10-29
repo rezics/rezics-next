@@ -67,7 +67,7 @@ const inventory = {
 };
 
 test('registry closes over exactly three artifact types and minimizer version one', () => {
-  expect(Object.keys(HISTORY_ARTIFACTS)).toEqual(types);
+  expect(Object.keys(HISTORY_ARTIFACTS)).toEqual([...types]);
   for (const type of types) {
     const entry = historyArtifact(type, 1);
     expect(entry.minimizerVersion).toBe(1);
@@ -115,7 +115,7 @@ test('registry closes over exactly three artifact types and minimizer version on
 });
 
 test('role union covers the complete account inventory with stable independent bits', () => {
-  expect(ACCOUNT_ROLE_BITS).toEqual(inventory);
+  expect({ ...ACCOUNT_ROLE_BITS }).toEqual(inventory);
   expect(new Set(Object.values(ACCOUNT_ROLE_BITS)).size).toBe(Object.keys(inventory).length);
   expect(encodeRoles(ACCOUNT_ROLES)).toBe(ALL_ACCOUNT_ROLES);
   expect(decodeRoles(ALL_ACCOUNT_ROLES)).toEqual(ACCOUNT_ROLES);
