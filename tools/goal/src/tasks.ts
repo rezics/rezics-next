@@ -733,9 +733,14 @@ export class WorkerTasks {
               return reading ? pace(reading, candidate, now, schedule)?.urgency : undefined;
             },
       );
-      const resumeSession = old?.session && agentAdapter(profile.cli).canResume &&
-        old.pool === pool.name && old.profile.cli === profile.cli && old.profile.model === profile.model
-        ? old.session : undefined;
+      const resumeSession =
+        old?.session &&
+        agentAdapter(profile.cli).canResume &&
+        old.pool === pool.name &&
+        old.profile.cli === profile.cli &&
+        old.profile.model === profile.model
+          ? old.session
+          : undefined;
       const make = (n: number): Attempt => ({
         taskId,
         attempt: n,
@@ -822,7 +827,15 @@ export class WorkerTasks {
               this.settings.mainCheckout,
             );
             retryPrepared = true;
-            return await this.launcher(this.store, this.store.task(taskId), next, pool, prompt, this.settings.codex, resumeSession);
+            return await this.launcher(
+              this.store,
+              this.store.task(taskId),
+              next,
+              pool,
+              prompt,
+              this.settings.codex,
+              resumeSession,
+            );
           });
         }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);

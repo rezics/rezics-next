@@ -3,15 +3,38 @@ import { agentAdapter, type AgentAdapter } from './agents.ts';
 import { launchCommand } from './launch.ts';
 import type { Cli, Pool, Profile } from './types.ts';
 
-const pool = (cli: Cli): Pool => ({ name: cli, cli, command: cli, configDirectory: '/tmp/config', classes: ['implementation'], allowanceKey: cli, policy: { weight: 1, reservePercent: 0, allowUnknown: true, maxAgeMs: 1000 } });
-const profile = (cli: Cli): Profile => ({ cli, model: cli === 'codex' ? 'gpt-6-luna' : 'claude-sonnet', effort: 'high', poolClass: 'implementation' });
+const pool = (cli: Cli): Pool => ({
+  name: cli,
+  cli,
+  command: cli,
+  configDirectory: '/tmp/config',
+  classes: ['implementation'],
+  allowanceKey: cli,
+  policy: { weight: 1, reservePercent: 0, allowUnknown: true, maxAgeMs: 1000 },
+});
+const profile = (cli: Cli): Profile => ({
+  cli,
+  model: cli === 'codex' ? 'gpt-6-luna' : 'claude-sonnet',
+  effort: 'high',
+  poolClass: 'implementation',
+});
 
 describe('agent adapters', () => {
   test('Codex and Claude own start, resume, session, exit and allowance behavior', () => {
     const codex = agentAdapter('codex');
     const claude = agentAdapter('claude');
-    expect(launchCommand({ profile: profile('codex'), pool: pool('codex'), worktree: '/work', prompt: 'task' })[1]).toContain('exec');
-    expect(launchCommand({ profile: profile('claude'), pool: pool('claude'), worktree: '/work', prompt: 'task', resumeSession: 's' })[1]).toContain('--resume');
+    expect(
+      launchCommand({ profile: profile('codex'), pool: pool('codex'), worktree: '/work', prompt: 'task' })[1],
+    ).toContain('exec');
+    expect(
+      launchCommand({
+        profile: profile('claude'),
+        pool: pool('claude'),
+        worktree: '/work',
+        prompt: 'task',
+        resumeSession: 's',
+      })[1],
+    ).toContain('--resume');
     expect(codex.sessionId({ type: 'thread.started', thread_id: 'c' })).toBe('c');
     expect(claude.sessionId({ type: 'system', subtype: 'init', session_id: 'a' })).toBe('a');
     expect(claude.isRateLimit({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected' } })).toBe(true);
@@ -22,18 +45,42 @@ describe('agent adapters', () => {
   test('a fake adapter can start, wait for a check, resume and finish a task', async () => {
     const events: string[] = [];
     const fake: AgentAdapter = {
-      cli: 'codex', canResume: true, streamsLog: true,
-      start() { events.push('start'); return ['fake', []]; },
-      resume({ session }) { events.push(`resume:${session}`); return ['fake', []]; },
-      parseExit(output) { return JSON.parse(output); },
-      sessionId() { return 'fake-session'; },
-      isRateLimit() { return false; },
-      environment(_pool, env) { return env; },
-      matchesEvent() { return false; },
+      cli: 'codex',
+      canResume: true,
+      streamsLog: true,
+      start() {
+        events.push('start');
+        return ['fake', []];
+      },
+      resume({ session }) {
+        events.push(`resume:${session}`);
+        return ['fake', []];
+      },
+      parseExit(output) {
+        return JSON.parse(output);
+      },
+      sessionId() {
+        return 'fake-session';
+      },
+      isRateLimit() {
+        return false;
+      },
+      environment(_pool, env) {
+        return env;
+      },
+      matchesEvent() {
+        return false;
+      },
       afterExit() {},
-      parseUsage() { return null; },
-      failure() { return null; },
-      completed() { return false; },
+      parseUsage() {
+        return null;
+      },
+      failure() {
+        return null;
+      },
+      completed() {
+        return false;
+      },
     };
     const options = { profile: profile('codex'), pool: pool('codex'), worktree: '/work', prompt: 'task' };
     const resolveAdapter = () => fake;
@@ -75,25 +122,50 @@ console.log(JSON.stringify({ kind: 'usage', input: 11, output: 3 }));
 
 function fakeAdapter(canResume = true): AgentAdapter {
   return {
-    cli: 'codex', canResume, streamsLog: true,
-    start({ pool, prompt }) { return [pool.command, ['--fresh', prompt]]; },
-    resume({ pool, prompt, session }) { return [pool.command, ['--continue', session, prompt]]; },
-    parseExit(output) {
-      try { return JSON.parse(output.replace(/^FAKE_EXIT:/, '')); } catch { return null; }
+    cli: 'codex',
+    canResume,
+    streamsLog: true,
+    start({ pool, prompt }) {
+      return [pool.command, ['--fresh', prompt]];
     },
-    matchesEvent(event) { return typeof event.kind === 'string'; },
-    sessionId(event) { return event.kind === 'identity' ? event.value : null; },
+    resume({ pool, prompt, session }) {
+      return [pool.command, ['--continue', session, prompt]];
+    },
+    parseExit(output) {
+      try {
+        return JSON.parse(output.replace(/^FAKE_EXIT:/, ''));
+      } catch {
+        return null;
+      }
+    },
+    matchesEvent(event) {
+      return typeof event.kind === 'string';
+    },
+    sessionId(event) {
+      return event.kind === 'identity' ? event.value : null;
+    },
     parseEvent(event) {
       if (event.kind === 'answer') return { answer: event.value, final: true };
-      if (event.kind === 'usage') return { usage: { tokens: { input: event.input, cached: 0, output: event.output }, delta: false } };
+      if (event.kind === 'usage')
+        return { usage: { tokens: { input: event.input, cached: 0, output: event.output }, delta: false } };
       return null;
     },
-    isRateLimit(event) { return event.kind === 'allowance-empty'; },
-    failure(event) { return event.kind === 'failure' ? event.value : null; },
-    completed(event) { return event.kind === 'done'; },
-    environment(_pool, env) { return env; },
+    isRateLimit(event) {
+      return event.kind === 'allowance-empty';
+    },
+    failure(event) {
+      return event.kind === 'failure' ? event.value : null;
+    },
+    completed(event) {
+      return event.kind === 'done';
+    },
+    environment(_pool, env) {
+      return env;
+    },
     afterExit() {},
-    parseUsage() { return null; },
+    parseUsage() {
+      return null;
+    },
   };
 }
 
@@ -104,7 +176,15 @@ for (const canResume of [true, false]) {
       try {
         const task = h.tasks.dispatch(h.briefFile);
         const landings: unknown[] = [];
-        const job = new WorkerJob(h.tasks, { enqueue(request) { landings.push(request); } }, { deliver() {} });
+        const job = new WorkerJob(
+          h.tasks,
+          {
+            enqueue(request) {
+              landings.push(request);
+            },
+          },
+          { deliver() {} },
+        );
         await job.start(task.id);
         const ref = { taskId: task.id, attempt: 1 };
         expect(h.store.attempt(ref).state).toBe('waiting');
@@ -114,7 +194,10 @@ for (const canResume of [true, false]) {
         expect(landings).toHaveLength(0);
         const results = join(task.worktree, '.temp/goal/checks/results');
         mkdirSync(results, { recursive: true });
-        writeFileSync(join(results, 'check-fake.json'), JSON.stringify({ exitStatus: 0, summary: 'passed', logPath: 'fake.log' }));
+        writeFileSync(
+          join(results, 'check-fake.json'),
+          JSON.stringify({ exitStatus: 0, summary: 'passed', logPath: 'fake.log' }),
+        );
         await job.recoverOrphans();
         await job.drain();
         const args = JSON.parse(readFileSync(join(task.worktree, '.temp/continued.json'), 'utf8')) as string[];
@@ -130,7 +213,9 @@ for (const canResume of [true, false]) {
         expect(h.store.attempt(ref).result).toBe('FAKE_EXIT:{"status":"success"}');
         expect(h.store.record(ref)?.tokens).toEqual({ input: 11, cached: 0, output: 3 });
         expect(landings).toHaveLength(1);
-      } finally { h.dispose(); }
+      } finally {
+        h.dispose();
+      }
     });
   }, 30_000);
 }
@@ -142,11 +227,31 @@ test('adapter-specific usage, session, failures and pool observations reach the 
     { kind: 'usage', input: 7, output: 2 },
     { kind: 'failure', value: 'custom exhaustion' },
     { kind: 'allowance-empty' },
-  ].map((event) => JSON.stringify(event)).join('\n');
-  expect(measureLog(log, { adapter })).toMatchObject({ session: 'custom', tokens: { input: 7, cached: 0, output: 2 }, failureKind: 'pool-exhausted' });
-  withAgentAdapter({ ...adapter, readAllowance(p, now) {
-    return { pool: p.name, allowanceKey: p.allowanceKey, at: new Date(now).toISOString(), observedAt: null, windows: [], exhausted: true, error: null };
-  } }, () => expect(readPool(pool('codex')).exhausted).toBe(true));
+  ]
+    .map((event) => JSON.stringify(event))
+    .join('\n');
+  expect(measureLog(log, { adapter })).toMatchObject({
+    session: 'custom',
+    tokens: { input: 7, cached: 0, output: 2 },
+    failureKind: 'pool-exhausted',
+  });
+  withAgentAdapter(
+    {
+      ...adapter,
+      readAllowance(p, now) {
+        return {
+          pool: p.name,
+          allowanceKey: p.allowanceKey,
+          at: new Date(now).toISOString(),
+          observedAt: null,
+          windows: [],
+          exhausted: true,
+          error: null,
+        };
+      },
+    },
+    () => expect(readPool(pool('codex')).exhausted).toBe(true),
+  );
 });
 
 test('worker control-plane modules contain no branches on a concrete agent CLI or provider event format', () => {
@@ -157,7 +262,9 @@ test('worker control-plane modules contain no branches on a concrete agent CLI o
     expect(text, file).not.toMatch(/\.cli\s*(?:===|!==)\s*['"](?:codex|claude|grok|cursor)['"]/);
   }
   const records = readFileSync(join(source, 'records.ts'), 'utf8');
-  expect(records).not.toMatch(/['"](?:thread\.started|turn\.completed|token_usage_record|session_meta|rate_limit_event|tool_use)['"]/);
+  expect(records).not.toMatch(
+    /['"](?:thread\.started|turn\.completed|token_usage_record|session_meta|rate_limit_event|tool_use)['"]/,
+  );
 });
 
 test('fix-round retries use the adapter session only for the same pool and model', async () => {
@@ -169,13 +276,19 @@ test('fix-round retries use the adapter session only for the same pool and model
       await job.start(task.id);
       const previous = { taskId: task.id, attempt: 1 };
       // A check failure is handed to a new attempt of the same task.
-      h.store.updateTask(previous, (current) => { current.state = 'stopped'; });
-      h.store.updateAttempt(previous, (attempt) => { attempt.state = 'stopped'; });
+      h.store.updateTask(previous, (current) => {
+        current.state = 'stopped';
+      });
+      h.store.updateAttempt(previous, (attempt) => {
+        attempt.state = 'stopped';
+      });
       await job.start(task.id, { fixRound: 1 });
       const args = JSON.parse(readFileSync(join(task.worktree, '.temp/continued.json'), 'utf8')) as string[];
       expect(args.slice(0, 2)).toEqual(['--continue', 'opaque-session']);
       expect(h.store.attempt({ taskId: task.id, attempt: 2 }).fixRound).toBe(1);
-    } finally { h.dispose(); }
+    } finally {
+      h.dispose();
+    }
   });
 }, 30_000);
 
@@ -216,19 +329,33 @@ for (const cli of ['codex', 'claude'] as const) {
       writeFileSync(h.settings.routingFile, JSON.stringify(routing));
       const task = h.tasks.dispatch(h.briefFile);
       const landings: unknown[] = [];
-      const job = new WorkerJob(h.tasks, { enqueue(request) { landings.push(request); } }, { deliver() {} });
+      const job = new WorkerJob(
+        h.tasks,
+        {
+          enqueue(request) {
+            landings.push(request);
+          },
+        },
+        { deliver() {} },
+      );
       await job.start(task.id);
       const ref = { taskId: task.id, attempt: 1 };
       expect(h.store.attempt(ref).state).toBe('waiting');
       expect(h.store.attempt(ref).session).toBe('pool-session');
       const results = join(task.worktree, '.temp/goal/checks/results');
       mkdirSync(results, { recursive: true });
-      writeFileSync(join(results, 'check-pool.json'), JSON.stringify({ exitStatus: 0, summary: 'passed', logPath: 'pool.log' }));
+      writeFileSync(
+        join(results, 'check-pool.json'),
+        JSON.stringify({ exitStatus: 0, summary: 'passed', logPath: 'pool.log' }),
+      );
       await job.recoverOrphans();
       await job.drain();
       expect(h.store.task(task.id).state).toBe('landing');
       expect(landings).toHaveLength(1);
-      const commands = readFileSync(join(task.worktree, '.temp/adapter-commands.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[]);
+      const commands = readFileSync(join(task.worktree, '.temp/adapter-commands.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as string[]);
       expect(commands).toHaveLength(2);
       expect(commands[0]![0]).toBe(cli === 'codex' ? 'exec' : '-p');
       expect(commands[1]).toContain(cli === 'codex' ? 'resume' : '--resume');
@@ -237,14 +364,18 @@ for (const cli of ['codex', 'claude'] as const) {
       const env = JSON.parse(readFileSync(join(task.worktree, '.temp/adapter-environment.json'), 'utf8'));
       expect(env[cli]).toBe(account.configDirectory);
       expect(env[cli === 'codex' ? 'claude' : 'codex']).toBeUndefined();
-    } finally { h.dispose(); }
+    } finally {
+      h.dispose();
+    }
   }, 30_000);
 }
 
 test('worker monitoring and consultation do not parse provider event schemas or inject provider flags', () => {
   for (const file of ['job.ts', 'watchdog.ts', 'settle.ts', 'consult.ts', 'launch.ts']) {
     const text = readFileSync(join(import.meta.dir, file), 'utf8');
-    expect(text, file).not.toMatch(/['"](?:command_execution|tool_use|thread\.started|rate_limit_event|--skip-git-repo-check|--strict-mcp-config)['"]/);
+    expect(text, file).not.toMatch(
+      /['"](?:command_execution|tool_use|thread\.started|rate_limit_event|--skip-git-repo-check|--strict-mcp-config)['"]/,
+    );
   }
 });
 
@@ -255,12 +386,19 @@ test('exit objects wrapped in prose are parsed by the adapter itself', () => {
 });
 
 test('an explicitly selected adapter owns opaque exit parsing without global registration', () => {
-  const adapter: AgentAdapter = { ...fakeAdapter(), parseExit(output) {
-    if (output === 'opaque-wait') return { status: 'waiting', checks: ['opaque-check'] };
-    if (output === 'opaque-blocked') return { status: 'blocked', blocker: { kind: 'scope-growth', detail: 'custom detail' } };
-    return null;
-  } };
+  const adapter: AgentAdapter = {
+    ...fakeAdapter(),
+    parseExit(output) {
+      if (output === 'opaque-wait') return { status: 'waiting', checks: ['opaque-check'] };
+      if (output === 'opaque-blocked')
+        return { status: 'blocked', blocker: { kind: 'scope-growth', detail: 'custom detail' } };
+      return null;
+    },
+  };
   const log = (value: string) => JSON.stringify({ kind: 'answer', value });
   expect(measureLog(log('opaque-wait'), { adapter }).waitingChecks).toEqual(['opaque-check']);
-  expect(measureLog(log('opaque-blocked'), { adapter })).toMatchObject({ failureKind: 'scope-growth', blocker: 'custom detail' });
+  expect(measureLog(log('opaque-blocked'), { adapter })).toMatchObject({
+    failureKind: 'scope-growth',
+    blocker: 'custom detail',
+  });
 });

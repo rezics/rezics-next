@@ -35,8 +35,14 @@ type State = {
 
 const SIGNATURES = [
   { name: 'check-host transport', pattern: CHECK_HOST_TRANSPORT },
-  { name: 'model capacity', pattern: { test: (text: string) => allAgentAdapters().some((adapter) => adapter.signals?.(text).capacity) } },
-  { name: 'allowance exhausted', pattern: { test: (text: string) => allAgentAdapters().some((adapter) => adapter.signals?.(text).allowance) } },
+  {
+    name: 'model capacity',
+    pattern: { test: (text: string) => allAgentAdapters().some((adapter) => adapter.signals?.(text).capacity) },
+  },
+  {
+    name: 'allowance exhausted',
+    pattern: { test: (text: string) => allAgentAdapters().some((adapter) => adapter.signals?.(text).allowance) },
+  },
   { name: 'file watchers exhausted', pattern: /EMFILE/i },
   { name: 'out of memory or disk', pattern: /ENOSPC|ENOMEM|\bKilled\b|out of memory/i },
   { name: 'lease or lock timeouts', pattern: /Lease held|lease.*timeout|lock.*timeout|timeout.*(?:lease|lock)/i },
@@ -126,7 +132,9 @@ function failureSignature(error: string): (typeof SIGNATURES)[number] | undefine
 }
 
 function reportsBlocked(result: string, attempt: Attempt): boolean {
-  const exit = parseAgentExit(result, attempt.profile?.cli ? agentAdapter(attempt.profile.cli) : undefined) as { status?: unknown } | null;
+  const exit = parseAgentExit(result, attempt.profile?.cli ? agentAdapter(attempt.profile.cli) : undefined) as {
+    status?: unknown;
+  } | null;
   return exit?.status === 'blocked';
 }
 
@@ -179,7 +187,10 @@ function failureIncidents(
 }
 
 function recentCommands(attempt: Attempt): string[] {
-  return agentCommands(readLogTail(attempt.logPath), attempt.profile?.cli ? agentAdapter(attempt.profile.cli) : undefined).slice(-RECENT_COMMANDS);
+  return agentCommands(
+    readLogTail(attempt.logPath),
+    attempt.profile?.cli ? agentAdapter(attempt.profile.cli) : undefined,
+  ).slice(-RECENT_COMMANDS);
 }
 
 function elapsedText(ms: number): string {

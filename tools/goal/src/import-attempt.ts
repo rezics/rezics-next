@@ -90,7 +90,8 @@ export function importRunDirectory(tasks: WorkerTasks, directory: string): Attem
   const start = JSON.parse(readFileSync(join(directory, 'meta.start.json'), 'utf8'));
   const end = JSON.parse(readFileSync(join(directory, 'meta.end.json'), 'utf8'));
   if (
-    !isAgentCli(start.cli) || agentAdapter(start.cli).canImport === false ||
+    !isAgentCli(start.cli) ||
+    agentAdapter(start.cli).canImport === false ||
     !['low', 'medium', 'high', 'xhigh', 'max'].includes(start.effort) ||
     typeof start.pool !== 'string' ||
     typeof start.task !== 'string' ||
