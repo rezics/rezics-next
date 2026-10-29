@@ -944,7 +944,9 @@ export class WorkerTasks {
   }
   completionScope(goal: string): string[] {
     return this.store.db
-      .query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal')=? AND json_extract(body, '$.state') != 'cancelled' ORDER BY sequence")
+      .query(
+        "SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal')=? AND json_extract(body, '$.state') != 'cancelled' ORDER BY sequence",
+      )
       .all(goal)
       .map((row) => (row as { id: string }).id);
   }

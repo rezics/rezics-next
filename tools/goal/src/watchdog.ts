@@ -439,7 +439,8 @@ export function violations(
 
 /** Report violations to the supermanager; returns how many were delivered. */
 export function watch(
-  store: Pick<WorkerStore, 'attempt' | 'retryIntents' | 'attemptsEndedBetween'> & Partial<Pick<WorkerStore, 'tasks' | 'activeTasks'>>,
+  store: Pick<WorkerStore, 'attempt' | 'retryIntents' | 'attemptsEndedBetween'> &
+    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks'>>,
   checkout: string,
   branches: { stabilize: string; integration: string },
   stateDirectory: string,

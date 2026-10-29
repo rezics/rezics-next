@@ -24,15 +24,24 @@ function fixture(): { db: Database; store: WorkerStore; path: string } {
   const insertAttempt = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)');
   const taskPadding = 't'.repeat(7_500);
   const attemptPadding = 'a'.repeat(8_000);
-  const task = (id: string, sequence: number, state: string, currentAttempt = 0) => JSON.stringify({
-    id, sequence, currentAttempt, state, brief: { goal: 'fixture', target: 'main', after: [], manager: 'manager' },
-    payload: taskPadding,
-  });
+  const task = (id: string, sequence: number, state: string, currentAttempt = 0) =>
+    JSON.stringify({
+      id,
+      sequence,
+      currentAttempt,
+      state,
+      brief: { goal: 'fixture', target: 'main', after: [], manager: 'manager' },
+      payload: taskPadding,
+    });
   for (let i = 0; i < 3_000; i++) {
     const id = `settled-${i}`;
     insertTask.run(id, i, 2, task(id, i, 'integrated', 2));
     for (let attempt = 1; attempt <= 1; attempt++)
-      insertAttempt.run(id, attempt, JSON.stringify({ taskId: id, attempt, state: 'superseded', payload: attemptPadding }));
+      insertAttempt.run(
+        id,
+        attempt,
+        JSON.stringify({ taskId: id, attempt, state: 'superseded', payload: attemptPadding }),
+      );
   }
   for (let i = 0; i < 5; i++) {
     const id = `active-${i}`;
@@ -43,7 +52,11 @@ function fixture(): { db: Database; store: WorkerStore; path: string } {
   for (let i = 0; i < 2_000; i++) {
     const id = `settled-${i}`;
     const attempt = i + 3;
-    insertAttempt.run(id, attempt, JSON.stringify({ taskId: id, attempt, state: 'cancelled', payload: attemptPadding }));
+    insertAttempt.run(
+      id,
+      attempt,
+      JSON.stringify({ taskId: id, attempt, state: 'cancelled', payload: attemptPadding }),
+    );
   }
   return { db, store, path };
 }
