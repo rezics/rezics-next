@@ -1,5 +1,6 @@
 -- Coverage is the canonical account flag, projected without rereading actor
--- state. This view and the real inverse remain on the admitted actor's anchor.
+-- state. Each admitted membership kind has its own complete account-keyed
+-- range; unrelated accounts never become a hash-join input. Do not truncate.
 WITH parameters AS MATERIALIZED (
   SELECT :members::nullable(jsonb) AS members, :route::integer AS route, :account_id::uuid AS account_id
 ), members AS MATERIALIZED (
@@ -15,6 +16,12 @@ JOIN LATERAL (
   WHERE c.route = m.route AND c.account_id = m.account_id LIMIT 1
 ) c ON true
 LEFT JOIN LATERAL (
-  SELECT i.kind, i.group_id FROM access.membership_inverse i
-  WHERE i.route = c.route AND i.account_id = c.account_id OFFSET 0
+  SELECT membership.kind, membership.group_id
+  FROM (VALUES ('organization'), ('realm')) AS k(kind)
+  CROSS JOIN LATERAL (
+    SELECT kind, group_id FROM access.membership_inverse
+    WHERE route = c.route AND account_id = c.account_id AND kind = k.kind
+    ORDER BY group_id
+    OFFSET 0
+  ) membership
 ) i ON true;

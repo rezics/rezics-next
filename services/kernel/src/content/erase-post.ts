@@ -54,7 +54,7 @@ export type ErasureInitiator = Readonly<{
 
 type Point =
   | Readonly<{ action: 'moderation:takedown'; kind: 'board' | 'thread' | 'post'; id: string; reason: string }>
-  | Readonly<{ action: 'post:erase'; kind: 'post'; id: string; reason: string }>
+  | Readonly<{ action: 'post:erase'; kind: 'post'; id: string; reason: string; softDelete?: boolean }>
   | Readonly<{ action: 'media:erase'; kind: 'media'; id: string; reason: string }>;
 type Scope = {
   id: string;
@@ -93,7 +93,7 @@ async function prepareAuthorizedPoint(
           principal: { kind: 'account' as const, id: actor.accountId },
           basis: { clientId: actor.clientId, requestedBy: actor.requestedBy },
         };
-  const parameters = { route, id: point.id, kind: point.kind };
+  const parameters = { route, id: point.id, kind: point.kind, deleted_at: null as string | null };
   const args = (statement: { params: readonly string[] }) =>
     statement.params.map((name) => parameters[name as keyof typeof parameters]);
   const readRealm = async (client: AccessClient, current: Scope | undefined) => {
@@ -224,6 +224,8 @@ async function prepareAuthorizedPoint(
     authorization,
     async mutate(tx: CommandTransaction) {
       if (!scope) throw new GrantDeniedError();
+      parameters.deleted_at =
+        point.action === 'post:erase' && point.softDelete ? authoritativeTimeValue(commandTime(tx)!) : null;
       const statement = point.action === 'moderation:takedown' ? takedown : erase;
       const result = await tx.query<{ security_revision: string }>(statement.sql, args(statement));
       const changed = result.rows[0];
@@ -340,6 +342,28 @@ async function logicalErasure(
       kind: 'post',
       id: input.postId,
       reason: input.reason,
+    },
+    context,
+  );
+  return { ...result, value: { postId: result.value.targetId, securityRevision: result.value.securityRevision } };
+}
+
+/** The ordinary owner DELETE retains history during its restore window. */
+export async function softDeletePost(
+  deps: ErasePostDependencies,
+  actor: Actor,
+  input: ErasePostInput,
+  context: ErasePostContext,
+) {
+  const result = await mutateAuthorizedPoint(
+    deps,
+    actor,
+    {
+      action: 'post:erase',
+      kind: 'post',
+      id: input.postId,
+      reason: input.reason,
+      softDelete: true,
     },
     context,
   );
@@ -467,7 +491,7 @@ export async function erasePostLogicalPageAsInitiator(
       let erasedRevisions = 0;
       const events = [];
       for (const id of postIds) {
-        const parameters = { route, id, kind: 'post' };
+        const parameters = { route, id, kind: 'post', deleted_at: null };
         const args = (statement: { params: readonly string[] }) =>
           statement.params.map((name) => parameters[name as keyof typeof parameters]);
         const counted = await tx.query<{ revisions: string }>(countRevisions.sql, args(countRevisions));

@@ -58,6 +58,10 @@ export const CONTENT_EVENTS = {
   ...MEDIA_IMPORT_EVENTS,
   ...MEDIA_MODERATION_EVENTS,
   ...MODERATION_EVENTS,
+  'com.rezics.content.post.restored.v1': Type.Object(
+    { postId: UUID, securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    { additionalProperties: false },
+  ),
   ...REPORT_EVENTS,
   'com.rezics.content.reaction.changed.v1': Type.Object(
     {

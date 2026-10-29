@@ -6,7 +6,8 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { parseItem } from 'structured-headers';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { erasePostLogical } from './erase-post.ts';
+import { softDeletePost } from './erase-post.ts';
+import { restorePost } from './restore-post.ts';
 import { postEraseReceiptAccess } from './operations.ts';
 import { appealRoutes } from './appeal-routes.ts';
 import { moderationRoutes } from './moderation-routes.ts';
@@ -683,6 +684,31 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           }),
         ),
     )
+    .post(
+      customMethod('/v1/posts/:id', 'restore'),
+      {
+        params,
+        headers: commandHeaders,
+        response: { 204: withHeaders(t.Void(), sessionHeader), 409: problemSchema('conflict'), ...writeFailures },
+        detail: {
+          operationId: 'post.restore',
+          'x-exposure': 'public',
+          'x-action': 'post:erase',
+          'x-replay-authorization': 'self-account-read',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        await contentOperation(async () => {
+          const result = await admission.run('normal', job, () =>
+            restorePost(dependencies, actor, id, requestContext(request, job.deadline)),
+          );
+          session.record(result);
+          set.status = 204;
+        });
+      },
+    )
     .delete(
       '/v1/posts/:id',
       {
@@ -704,8 +730,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         const context = requestContext(request, job.deadline);
         try {
           const result = await admission.run('normal', job, () =>
-            erasePostLogical(
-              { ...dependencies, access: postEraseReceiptAccess(dependencies.access) },
+            softDeletePost(
+              { ...dependencies, access: postEraseReceiptAccess(dependencies.access, true) },
               actor,
               { postId: id, reason: 'Author deletion' },
               context,

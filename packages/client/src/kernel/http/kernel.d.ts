@@ -23,6 +23,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { type WorkClient } from '../work/client.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
+import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
@@ -71,6 +72,12 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
 };
 type KernelComposition = ZoneComposition & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes>;
 export type Kernel = KernelComposition;
+type ClientRoutes<Routes, Base> = {
+    [Key in keyof Routes]: Key extends keyof Base ? Base[Key] extends {
+        body: unknown;
+        response: unknown;
+    } ? Base[Key] : ClientRoutes<Routes[Key], Base[Key]> : Routes[Key];
+};
 /** createKernel guarantees one parameter name for each route position. */
-export type ClientKernel = Elysia<KernelComposition['~Prefix'], 'local', KernelComposition['~Singleton'], KernelComposition['~Definitions'], KernelComposition['~Metadata'], KernelComposition['~Routes'], KernelComposition['~Ephemeral'], KernelComposition['~Volatile']>;
+export type ClientKernel = Elysia<KernelComposition['~Prefix'], 'local', KernelComposition['~Singleton'], KernelComposition['~Definitions'], KernelComposition['~Metadata'], ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']>, KernelComposition['~Ephemeral'], KernelComposition['~Volatile']>;
 export {};

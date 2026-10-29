@@ -297,7 +297,12 @@ test('an author deletes their own post: removed slots preserve replies and clean
     next: null,
   });
   expect((await request(`/posts/${f.post}/revisions/${f.revision}`, 'GET', author)).status).toBe(404);
-  const { pageSizes: sizes } = await clearErasedPostRevisions(db.pool, { postId: f.post }, Date.now() + 10_000);
+  const { pageSizes: sizes } = await clearErasedPostRevisions(
+    db.pool,
+    { postId: f.post },
+    Date.now() + 10_000,
+    () => new Date(Date.now() + 31 * 86400000),
+  );
   expect(sizes).toEqual([100, 100, 5]);
   expect(
     (
@@ -312,7 +317,12 @@ test('an author deletes their own post: removed slots preserve replies and clean
     'SELECT * FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY recorded_at,revision_id',
     [route, f.post],
   );
-  const replay = await clearErasedPostRevisions(db.pool, { postId: f.post }, Date.now() + 10_000);
+  const replay = await clearErasedPostRevisions(
+    db.pool,
+    { postId: f.post },
+    Date.now() + 10_000,
+    () => new Date(Date.now() + 31 * 86400000),
+  );
   expect(replay.clearedRevisions).toBe(0);
   expect(
     (

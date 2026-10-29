@@ -8,7 +8,10 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 
 if (process.argv.includes('--erased-post-worker')) {
   const { readWorkerConfig, startWorker } = await import('../../src/worker.ts');
-  await startWorker(readWorkerConfig(process.env));
+  await startWorker({
+    ...readWorkerConfig(process.env),
+    clock: () => new Date(Date.now() + 31 * 86400000),
+  });
   console.log('erased-post-worker-ready');
 } else {
   const { afterAll, beforeAll, expect, test } = await import('bun:test');

@@ -368,7 +368,7 @@ function costNode(
         key,
         nodeType === 'ModifyTable' ? actualRows * loops : examined,
         exclusiveHit + exclusiveRead,
-        nodeType === 'Seq Scan' ? 1 : 0,
+        nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
       );
     }
   } else if (nodeType === 'Bitmap Index Scan') {

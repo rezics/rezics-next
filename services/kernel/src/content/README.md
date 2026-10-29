@@ -127,6 +127,8 @@ a popular board's reviews across authors instead of accumulating them in the boa
 review exists per author, subject and board. Removing it releases that slot permanently for that thread.
 A review creation conflict returns 409 `conflict` with optional `existingThreadId` identifying the author's live
 review on that board, omitted if the review disappears before the point read after rollback.
+review exists per author, subject and board. Deleting its opening post releases that slot; restoring it reclaims the
+slot only if no other live review holds it.
 
 `createThread` checks the board purpose during its existing board validation: reviews require a reviews board,
 and discussion threads require a discussion board. The `board_identity` trigger makes purpose immutable, so this
@@ -150,24 +152,55 @@ Reads of a Realm-owned board, thread or post require `realm:read` on its contain
 
 Threads and posts can be taken down with `moderation:takedown` on the target or on its containing Realm. Realm owners and moderators carry that action for content in their own Realm; neither a parent resource nor another Realm grants it. Authorization is checked before receipt lookup, so a denied replay remains denied. Board and media takedown authorization is unchanged.
 
-Authors erase their own posts with `DELETE /v1/posts/{id}` and an `Idempotency-Key`. The route uses the authenticated native identity and the existing `post:erase` owner permission; erasure remains separate from moderation takedown. Success and authorized replay return 204 with the stored session position. The request commits one tombstone and the existing ID-only `com.rezics.content.post.erased.v1` event, without loading or clearing revision bodies.
+## Deletion
 
-Media owners erase their own media with `DELETE /v1/media/{id}` and an `Idempotency-Key`. The route requires the current media owner and denies collection-pending media; success and authorized replay return 204 with the stored session position.
+Published deleted posts remain in thread pages as `removed: true` with `body: null`. Their history is empty and
+exact revision routes return 404 immediately. Replies retain their parent and order. Deleting the opening post
+preserves the thread and replies; thread disclosure returns `title: null` until the opening post is restored.
 
-Published erased posts remain in thread pages as `removed: true` with `body: null`. Their history is empty and exact revision routes return 404 immediately, before physical cleanup. Replies retain their parent and order. Erasing the opening post preserves the thread and replies; the existing logical erasure leaves the stored thread title unchanged, while thread disclosure returns `title: null`.
+Posts, including thread opening posts and reviews, are soft-deleted and restorable. An author uses
+`DELETE /v1/posts/{id}` with an `Idempotency-Key` and the existing `post:erase` owner permission. Success and an
+authorized replay return 204 with the stored session position. One tombstone records `deleted_at`, raises the post's
+security revision and emits the ID-only `com.rezics.content.post.erased.v1` event. Bodies, digests and search text
+remain stored but unreadable throughout the restore window.
 
-`clearErasedPostRevisions(pool, { postId }, deadline)` clears retained revision bodies, their SHA-256 digests and search text using the committed tombstone as authority. Each digest is cleared in the same statement as its body, since retaining a hash would let a reader confirm guesses about erased text. It runs `null-erased-revisions.sql` in atomic pages of 100, releases each connection between pages and can safely run again. It changes no revision of an available post. This module exports the cleanup for direct invocation; worker registration and consumption of the post-erased event belong to the content work integration.
+`POST /v1/posts/{id}:restore` requires an `Idempotency-Key`, the native author and `post:erase`. Before 30 days have
+elapsed it returns 204, restores the same revisions, raises the security revision and emits
+`com.rezics.content.post.restored.v1` with `postId` and `securityRevision`. At the 30-day boundary, after purge starts,
+or for another account it returns the same 404 as an unknown post. A review whose slot holds another live review
+returns 409. Author reply candidates are rebuilt from retained creation metadata by the restored event; author thread,
+board and subject thread candidates and reaction totals are retained, and current disclosure re-admits their content
+at once.
+
+The durable hourly `content.collection.hourly` sweep visits the fixed 4096 partitions, at most eight concurrently.
+Each partition visits its 16 routes. `page-deleted-posts.sql` selects at most 100 expired posts per durable step through
+`post_deleted_page_idx(route,deleted_at,post_id)`. Each post gets an irreversible purge fence before its revision
+pages, so restore cannot race cleanup. `clearErasedPostRevisions` clears bodies, SHA-256 digests and search text together
+in existing `null-erased-revisions.sql` pages of 100, releasing the connection between pages. Completion removes the
+post from the partial selection index. Each revision page is a durable step whose stored output preserves the cursor
+after a worker crash. A lost step retries unfinished work; a duplicate erased event before expiry or
+after completion changes nothing. No available post is changed. The purge's selection has constant statements and
+at most 100 rows per page; body work is linear in affected revisions, without rescanning completed posts.
+
+Moderation `:erase` routes and account author-erasure workflows retain their immediate, irreversible cleanup.
+Reaction and vote clears change an answer in its slot rather than delete a record. Reports retain identifiers and
+decisions. Media and authored documents are closed behind grants and still erase immediately; soft deletion for them
+is a gap. Legal holds are not implemented and remain a gap.
+
+Media owners erase their own media with `DELETE /v1/media/{id}` and an `Idempotency-Key`. The route requires the current
+media owner and denies collection-pending media; success and authorized replay return 204 with the stored session
+position.
 
 ## Author items
 
 `content.author_item` keeps candidate threads and replies on the author's route for profile reads. The
-`content_author_item` effect handles thread creation, reply creation and ID-only post erasure with one guarded
-command in the author's partition per event. `actorId` supplies the author and the creation event's `activityAt`
+`content_author_item` effect handles thread creation, reply creation and ID-only post erasure and restoration with one
+guarded command in the author's partition per event. `actorId` supplies the author and the creation event's `activityAt`
 supplies its original creation time, including microseconds. Thread creation emits only `thread.created.v1`, whose
 `itemId` is the opening post; the index stores the thread identity instead, so the opening post is never a reply.
-Both discussion and review threads retain their kind, and replies retain their containing thread. Erasure reads
-the retained post's author by primary key in the thread's partition and releases that connection before the author
-command. Missing posts and unchanged rows do nothing; receipts make committed replay inert and the source epoch
+Both discussion and review threads retain their kind, and replies retain their containing thread. Erasure and
+restoration read the retained post's author by primary key in the thread's partition and release that connection before
+the author command. Missing posts and unchanged rows do nothing; receipts make committed replay inert and the source epoch
 and position guard rejects stale writes. No backfill is needed.
 
 `GET /v1/accounts/{accountId}/threads?kind=discussion|review&limit=&cursor=` returns `{ threads, next }` in
@@ -530,6 +563,7 @@ A malformed media ID list is a 400 `invalid_request`. Any well-formed reference 
 
 Content setup writes one installation marker and one Global `reaction:set` grant once. The Global grant growth
 check uses scales [256, 1024, 4096] with the series rule.
+| Deleted post purge | One deletion-time index range selects <=100 unfinished expired posts, then existing revision-index pages of <=100 with exact post fences. Completion excludes the post from the selection index. | Constant statements/rows per selection and revision page; total work linear in deleted posts and their revisions. | `test/content/post-soft-deletion.test.ts`: `deleted post purge selection stays bounded`, scales 64, 256, 1024. |
 
 Derivations use the implemented adapters and SQL in `db/content/migrations/` and `db/content/schema.sql`. At fixed admitted input, unique-key B-tree probes examine constant rows and use O(log N) shared blocks; changing k indexed rows uses O(k log N) blocks. Rows include filtered candidates; blocks include bounded body access but exclude dead tuples, vacuum debt and lock waits. `C` is the command envelope (receipt/partition/outbox and bounded write-basis inserts), adding constant rows/statements and logarithmic blocks. `A` is an authenticated Access check, derived in [Access Cost](../access/README.md#cost). Transactions, settings, catalogue checks and time reads add fixed statement constants. Body and metadata byte caps bound read/write bytes.
 

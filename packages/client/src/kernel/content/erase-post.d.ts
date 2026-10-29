@@ -39,6 +39,7 @@ type Point = Readonly<{
     kind: 'post';
     id: string;
     reason: string;
+    softDelete?: boolean;
 }> | Readonly<{
     action: 'media:erase';
     kind: 'media';
@@ -50,6 +51,18 @@ export declare function mutateContentPoint(deps: ErasePostDependencies, actor: A
     targetId: string;
     securityRevision: string;
 }>>;
+/** The ordinary owner DELETE retains history during its restore window. */
+export declare function softDeletePost(deps: ErasePostDependencies, actor: Actor, input: ErasePostInput, context: ErasePostContext): Promise<{
+    partition: number;
+    epoch: number;
+    position: bigint;
+    transactionId: string;
+    replayed: boolean;
+    value: {
+        postId: string;
+        securityRevision: string;
+    };
+}>;
 export declare function erasePostLogical(deps: ErasePostDependencies, actor: Actor, input: ErasePostInput, context: ErasePostContext): Promise<CommandOutcome<{
     postId: string;
     securityRevision: string;

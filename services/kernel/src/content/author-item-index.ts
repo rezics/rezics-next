@@ -11,11 +11,13 @@ import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
 import upsert from './author-item-upsert.sql';
 import remove from './author-item-delete.sql';
 import readAuthor from './author-item-read-author.sql';
+import readRestored from './author-item-read-restored.sql';
 
 const threadCreated = 'com.rezics.content.thread.created.v1';
 const postCreated = 'com.rezics.content.post.created.v1';
 const postErased = 'com.rezics.content.post.erased.v1';
-const sourceTypes = [threadCreated, postCreated, postErased] as const;
+const postRestored = 'com.rezics.content.post.restored.v1';
+const sourceTypes = [threadCreated, postCreated, postErased, postRestored] as const;
 const projectorId = '00000000-0000-4000-8000-000000000001';
 const maxPosition = 9_223_372_036_854_775_807n;
 class UnchangedAuthorItem extends Error {}
@@ -62,7 +64,7 @@ function parse(event: CloudEvent) {
   return { creation, id, sourceRoute, epoch, position };
 }
 
-/** One author-partition command per creation or erasure; source checkouts are released first. */
+/** One author-partition command per creation, erasure or restoration; source checkouts are released first. */
 export function createAuthorItemEffect(pool: Pool): Effect {
   return {
     name: 'content_author_item',
@@ -70,13 +72,25 @@ export function createAuthorItemEffect(pool: Pool): Effect {
     async run(event) {
       const change = parse(event);
       const { creation, epoch, position } = change;
-      const authorId = creation
-        ? creation.actorId
-        : await withConnection(pool, async (client) => {
-            const anchor = await readPartition(client, partitionOf(change.sourceRoute));
-            if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
-            return (await readAuthor.run(client, { route: change.sourceRoute, post_id: change.id }))?.author_account_id;
-          });
+      const restored =
+        event.type === postRestored
+          ? await withConnection(pool, async (client) => {
+              const anchor = await readPartition(client, partitionOf(change.sourceRoute));
+              if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
+              return readRestored.run(client, { route: change.sourceRoute, post_id: change.id });
+            })
+          : null;
+      if (event.type === postRestored && !restored) return;
+      const authorId = restored
+        ? restored.author_account_id
+        : creation
+          ? creation.actorId
+          : await withConnection(pool, async (client) => {
+              const anchor = await readPartition(client, partitionOf(change.sourceRoute));
+              if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
+              return (await readAuthor.run(client, { route: change.sourceRoute, post_id: change.id }))
+                ?.author_account_id;
+            });
       if (!authorId) return;
       const authorRoute = route(authorId);
       const itemKind = event.type === threadCreated ? 'thread' : 'post';
@@ -86,9 +100,9 @@ export function createAuthorItemEffect(pool: Pool): Effect {
         author_account_id: authorId,
         item_kind: itemKind,
         item_id: itemId,
-        thread_id: creation?.threadId,
-        thread_kind: creation?.kind,
-        created_at: creation?.activityAt,
+        thread_id: restored?.thread_id ?? creation?.threadId,
+        thread_kind: restored?.kind ?? creation?.kind,
+        created_at: restored?.created_at ?? creation?.activityAt,
         source_epoch: epoch,
         source_position: position.toString(),
       };
@@ -103,7 +117,7 @@ export function createAuthorItemEffect(pool: Pool): Effect {
             receipt: { actorAccountId: projectorId, kind: 'content.author-item.project', key: event.id, digest },
           },
           async (tx) => {
-            const statement = creation ? upsert : remove;
+            const statement = creation || restored ? upsert : remove;
             const result = await tx.query(
               statement.sql,
               statement.params.map((name) => parameters[name as keyof typeof parameters]),

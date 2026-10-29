@@ -124,7 +124,13 @@ async function erase(f: Fixture) {
   const response = await call(f.bearer, 'DELETE', `/posts/${f.post}`);
   expect(response.status).toBe(204);
 }
-const cleanup = (f: Fixture) => clearErasedPostRevisions(db.pool, { postId: f.post }, Date.now() + 10_000);
+const cleanup = (f: Fixture) =>
+  clearErasedPostRevisions(
+    db.pool,
+    { postId: f.post },
+    Date.now() + 10_000,
+    () => new Date(Date.now() + 31 * 86_400_000),
+  );
 
 test('physical erasure clears each erased revision body and digest together and preserves immutable metadata', async () => {
   const f = await fixture();
@@ -141,7 +147,7 @@ test('physical erasure clears each erased revision body and digest together and 
   expect(await stored(f)).toEqual(
     before.map((row) => ({ ...row, body: null, body_sha256: null, search_text: null, availability: 'erased' })),
   );
-  expect(await cleanup(f)).toEqual({ pageSizes: [3], clearedRevisions: 0 });
+  expect(await cleanup(f)).toEqual({ pageSizes: [], clearedRevisions: 0 });
   for (const row of before) {
     const selected = await readRevision.run(db.admin, {
       route: routeOf(f.post)!,
@@ -227,7 +233,7 @@ test('reads, command replays and revisions of live posts preserve their canonica
   const replay = await call(f.bearer, 'POST', '/threads', f.input, f.key);
   expect(replay.status).toBe(201);
   expect((await replay.json()).thread.firstPost).toMatchObject({ id: f.post, sha256: digest });
-  expect(await cleanup(f)).toEqual({ pageSizes: [0], clearedRevisions: 0 });
+  expect(await cleanup(f)).toEqual({ pageSizes: [], clearedRevisions: 0 });
   expect(await stored(f)).toEqual([original]);
   const edited = await revise(f, 'Live edited secret');
   const editedDigest = createHash('sha256').update(serializeDocument(edited.input.body)).digest('hex');

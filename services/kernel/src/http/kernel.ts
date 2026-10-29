@@ -488,6 +488,16 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof contextRoutes>;
 export type Kernel = KernelComposition;
 
+// Every route module inherits the same definition routes. Reuse their method types
+// once: intersecting all inherited response unions can exceed TypeScript's union limit.
+type ClientRoutes<Routes, Base> = {
+  [Key in keyof Routes]: Key extends keyof Base
+    ? Base[Key] extends { body: unknown; response: unknown }
+      ? Base[Key]
+      : ClientRoutes<Routes[Key], Base[Key]>
+    : Routes[Key];
+};
+
 /** createKernel guarantees one parameter name for each route position. */
 export type ClientKernel = Elysia<
   KernelComposition['~Prefix'],
@@ -495,7 +505,7 @@ export type ClientKernel = Elysia<
   KernelComposition['~Singleton'],
   KernelComposition['~Definitions'],
   KernelComposition['~Metadata'],
-  KernelComposition['~Routes'],
+  ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']>,
   KernelComposition['~Ephemeral'],
   KernelComposition['~Volatile']
 >;

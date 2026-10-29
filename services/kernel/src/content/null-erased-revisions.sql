@@ -1,4 +1,4 @@
--- Post tombstone is committed cleanup authority. Exact revision index keys;
+-- Caller supplies permanent erasure or an expired tombstone fence. Exact revision index keys;
 -- original IDs, licences and media references remain unchanged.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :post_id::uuid AS post_id
@@ -26,10 +26,10 @@ WITH input AS NOT MATERIALIZED (
     )
     AND r.route = p.route AND r.post_id = p.post_id
     AND r.recorded_at = p.recorded_at AND r.revision_id = p.revision_id
-    AND p.changed
+    AND p.changed AND r.availability = 'available'
   RETURNING r.revision_id
 )
-SELECT p.revision_id, p.recorded_at::text AS at, p.changed
+SELECT p.revision_id, p.recorded_at::text AS at, c.revision_id IS NOT NULL AS changed
 FROM page p
 LEFT JOIN cleared c ON c.revision_id = p.revision_id
 ORDER BY p.recorded_at, p.revision_id;

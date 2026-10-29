@@ -299,16 +299,21 @@ BEGIN
     IF TG_OP = 'DELETE' THEN
       RAISE EXCEPTION 'Erased post identity must survive cleanup' USING ERRCODE = '23514';
     END IF;
-    IF NEW.availability <> 'erased' OR NEW.head_revision_id IS DISTINCT FROM OLD.head_revision_id THEN
-      RAISE EXCEPTION 'Logical post erasure is irreversible' USING ERRCODE = '23514';
+    IF NEW.head_revision_id IS DISTINCT FROM OLD.head_revision_id
+       OR (NEW.availability = 'erased' AND NEW.deleted_at IS DISTINCT FROM OLD.deleted_at)
+       OR (NEW.availability <> 'erased' AND
+           (OLD.deleted_at IS NULL OR OLD.purge_started_at IS NOT NULL OR OLD.purge_completed)) THEN
+      RAISE EXCEPTION 'Purged post erasure is irreversible' USING ERRCODE = '23514';
     END IF;
   END IF;
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  IF OLD.purge_started_at IS NOT NULL AND NEW.purge_started_at IS DISTINCT FROM OLD.purge_started_at
+     OR OLD.purge_completed AND NOT NEW.purge_completed THEN
+    RAISE EXCEPTION 'Post purge is irreversible' USING ERRCODE = '23514';
   END IF;
   IF NEW.availability IS DISTINCT FROM OLD.availability
      AND NEW.security_revision <= OLD.security_revision THEN
-    RAISE EXCEPTION 'Post erasure requires an increasing security revision' USING ERRCODE = '23514';
+    RAISE EXCEPTION 'Post availability requires an increasing security revision' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END;
@@ -418,7 +423,11 @@ CREATE FUNCTION content.guard_review_thread() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF OLD.review_live IS FALSE AND NEW.review_live IS TRUE THEN
+  IF NOT OLD.review_live AND NEW.review_live AND NOT EXISTS (
+    SELECT 1 FROM content.post p WHERE p.route = NEW.route AND p.post_id = NEW.first_post_id
+      AND p.availability = 'available' AND p.purge_started_at IS NULL
+      AND p.visibility <> 'taken_down' AND NEW.availability = 'available' AND NEW.visibility <> 'taken_down'
+  ) THEN
     RAISE EXCEPTION 'A removed review cannot become live again' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
@@ -1028,12 +1037,17 @@ CREATE TABLE content.post (
     recorded_transaction_id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     availability text DEFAULT 'available'::text NOT NULL,
+    deleted_at timestamp with time zone,
+    purge_started_at timestamp with time zone,
+    purge_completed boolean DEFAULT false NOT NULL,
     CONSTRAINT post_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT post_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT post_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT post_check2 CHECK ((route = ((get_byte(uuid_send(reply_to_post_id), 10) * 256) + get_byte(uuid_send(reply_to_post_id), 11)))),
     CONSTRAINT post_check3 CHECK ((route = ((get_byte(uuid_send(head_revision_id), 10) * 256) + get_byte(uuid_send(head_revision_id), 11)))),
     CONSTRAINT post_check4 CHECK ((reply_to_post_id <> post_id)),
+    CONSTRAINT post_deletion_state CHECK (((deleted_at IS NULL) OR (availability = 'erased'::text))),
+    CONSTRAINT post_purge_state CHECK ((((purge_started_at IS NULL) OR (availability = 'erased'::text)) AND ((NOT purge_completed) OR (purge_started_at IS NOT NULL)))),
     CONSTRAINT post_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT post_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT post_visibility_check CHECK ((visibility = ANY (ARRAY['published'::text, 'draft'::text, 'protected'::text, 'taken_down'::text])))
@@ -1784,6 +1798,13 @@ CREATE INDEX notice_route_created_idx ON content.notice USING btree (route, crea
 --
 
 CREATE UNIQUE INDEX notice_route_kind_source_recipient_idx ON content.notice USING btree (route, kind, source_id, recipient_id);
+
+
+--
+-- Name: post_deleted_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_deleted_page_idx ON content.post USING btree (route, deleted_at, post_id) WHERE ((deleted_at IS NOT NULL) AND (NOT purge_completed));
 
 
 --

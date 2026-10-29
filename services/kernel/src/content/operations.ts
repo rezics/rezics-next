@@ -325,12 +325,15 @@ export async function readOperation(
   return view(operationId, row.thread_id, row.author_account_id, status);
 }
 
-/** Post erasure is irreversible. When its current post:erase grant has been
+/** A denied post:erase grant may still permit lookup of a committed receipt.
+ * The ordinary soft-delete route cannot mutate an erased post. Permanent erasure
+ * must exclude restorable tombstones from this fallback, because converting one
+ * to permanent erasure requires the actual post:erase grant. When it has been
  * revoked, an erased post may authorize lookup of its existing receipt through
  * the route's declared self-account-read permission. A missing receipt still
  * reaches the existing mutation guard, which rejects an already erased post.
  */
-export function postEraseReceiptAccess(access: Access): Access {
+export function postEraseReceiptAccess(access: Access, softDelete = false): Access {
   type Evidence = {
     actor: Actor;
     action: string;
@@ -391,7 +394,11 @@ export function postEraseReceiptAccess(access: Access): Access {
       )
         return allowed;
       const post = await readPostAvailability.run(client, { route: resource.route, post_id: resource.id });
-      if (post?.availability !== 'erased') return false;
+      if (
+        post?.availability !== 'erased' ||
+        (!softDelete && post.deleted_at !== null && post.purge_started_at === null)
+      )
+        return false;
       return access.authorize(client, actor, 'account:read', facts.accountResource, facts.accountEvidence, time);
     },
   });

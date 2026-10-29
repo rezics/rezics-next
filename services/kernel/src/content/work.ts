@@ -20,6 +20,7 @@ import { Value } from 'typebox/value';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
+import { purgeDeletedPostPage } from './deleted-post-purge.ts';
 import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
 import readOperationEnqueue from './read-operation-enqueue.sql';
 import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
@@ -254,10 +255,30 @@ async function registerWork(
     },
     { name: 'content.collect.step', ...retry },
   );
+  const purgeDeleted = DBOS.registerStep(async (_name: string, action: () => Promise<unknown>) => action(), {
+    name: 'content.deletedPostPurge.step',
+    ...retry,
+  });
   const drain = DBOS.registerWorkflow(
     async (partition: number) => {
       if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
         throw new RangeError('Invalid collection partition');
+      for (let offset = 0; offset < 16; offset++) {
+        while (
+          (
+            await purgeDeletedPostPage(
+              context.pool,
+              partition * 16 + offset,
+              context.clock(),
+              () => Date.now() + 120_000,
+              <T>(name: string, action: () => Promise<T>) => purgeDeleted(name, action) as Promise<T>,
+              createErasureJob(context.pool, storage),
+            )
+          ).postIds.length === 100
+        ) {
+          /* Completed posts leave the index before the next bounded durable step. */
+        }
+      }
       // Each bounded batch is its own durable step, so recovery replays progress.
       while (!(await collect(partition)).complete) {
         /* Drain actual changed rows only. */
@@ -373,12 +394,22 @@ async function registerWork(
   // The erased-post event carries only identity. The committed tombstone is the
   // authority, so a retry or a new event id reads it again and leaves erased rows unchanged.
   const erasedPostEvent = 'com.rezics.content.post.erased.v1' as const;
-  const clearErasedPost = DBOS.registerStep(
+  const clearErasedPost = DBOS.registerStep(async (_name: string, action: () => Promise<unknown>) => action(), {
+    name: 'content.erasePostRevisions.step',
+    ...retry,
+  });
+  DBOS.registerWorkflow(
     async (postId: string) =>
-      clearErasedPostRevisions(context.pool, { postId }, Date.now() + 120_000, createErasureJob(context.pool, storage)),
-    { name: 'content.erasePostRevisions.step', ...retry },
+      clearErasedPostRevisions(
+        context.pool,
+        { postId },
+        () => Date.now() + 120_000,
+        context.clock,
+        <T>(name: string, action: () => Promise<T>) => clearErasedPost(name, action) as Promise<T>,
+        createErasureJob(context.pool, storage),
+      ),
+    { name: 'content.erasePostRevisions' },
   );
-  DBOS.registerWorkflow(async (postId: string) => clearErasedPost(postId), { name: 'content.erasePostRevisions' });
   context.addEffects([
     {
       name: 'content_post_erased',
