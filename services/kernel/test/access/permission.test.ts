@@ -3,7 +3,15 @@ import pg from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess, checkPermission, checkDelegationBounds } from '../../src/access/permission.ts';
 import { AccessUnavailableError, createResourcePublicEligibility } from '../../src/access/index.ts';
-import { accessCheck, type AccountActor, type Actor, type Resource } from '../../src/request/access.ts';
+import {
+  accessCheck,
+  accessExplicitCheck,
+  prepareReadDecisions,
+  type AccountActor,
+  type Actor,
+  type Resource,
+} from '../../src/request/access.ts';
+import { newId } from '../../src/route/route.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -150,6 +158,86 @@ test('actor grant, verified consented scope and principal grant independently ca
   await removeGrant(principalId);
   expect(await run()).toBe(false);
   expect(await run(identity({ requestedBy: null }))).toBe(true);
+});
+
+test('scalar, explicit and batched decisions admit 1000 inverse entries per operand and fail closed beyond coverage', async () => {
+  const groups = Array.from({ length: 1001 }, () => newId(0x4567));
+  await pool.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+     SELECT $1,id,'organization','active',$3 FROM unnest($2::uuid[]) id`,
+    [0x4567, groups, transactionId],
+  );
+  for (const subject of [actorId, principalId]) {
+    await removeGrant(subject);
+    // Only the last admitted group supplies authority. The other 999 rows are
+    // admission evidence, with real negative organization membership proofs.
+    await membership('owner', subject, groups[999]!);
+    await pool.query(
+      `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+       SELECT $1,$2,'organization',id,id,$4 FROM unnest($3::uuid[]) id ON CONFLICT DO NOTHING`,
+      [routeOf(subject), subject, groups.slice(0, 1000), transactionId],
+    );
+  }
+  await grant(groups[999]!, action, resource, 'owner');
+  const ordinary = identity({ requestedBy: null });
+  const delegated = identity();
+  async function decisions(actor: AccountActor, allowed: boolean) {
+    const ctx = await context(actor);
+    expect(await (await accessCheck(access, actor, action, resource, ctx))(pool)).toBe(allowed);
+    expect(await (await accessExplicitCheck(access, actor, action, resource, await context(actor)))(pool)).toEqual({
+      allowed,
+      explicit: allowed,
+    });
+    const input = { actor, context: await context(actor), actions: new Set([action]) };
+    if (!allowed) {
+      await expect(prepareReadDecisions(access, input)).rejects.toBeInstanceOf(AccessUnavailableError);
+      return;
+    }
+    const prepared = await prepareReadDecisions(access, input);
+    expect(
+      await prepared.decide(pool, { action, resourceType: 'subject', ids: [resource.id, otherResource.id] }),
+    ).toEqual({
+      [resource.id]: { allowed: true, explicit: true },
+      [otherResource.id]: { allowed: false, explicit: false },
+    });
+  }
+  await decisions(ordinary, true);
+  await decisions(delegated, true);
+  for (const subject of [actorId, principalId]) {
+    const actor = subject === actorId ? ordinary : delegated;
+    await pool.query(
+      `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+       VALUES ($1,$2,'organization',$3,$3,$4)`,
+      [routeOf(subject), subject, groups[1000], transactionId],
+    );
+    await decisions(actor, false);
+    await pool.query('DELETE FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND group_id=$3', [
+      routeOf(subject),
+      subject,
+      groups[1000],
+    ]);
+    await pool.query('UPDATE access.account SET membership_inverse_complete=false WHERE route=$1 AND account_id=$2', [
+      routeOf(subject),
+      subject,
+    ]);
+    await decisions(actor, false);
+    await pool.query('UPDATE access.account SET membership_inverse_complete=true WHERE route=$1 AND account_id=$2', [
+      routeOf(subject),
+      subject,
+    ]);
+    await decisions(actor, true);
+  }
+  // A cached actor observation cannot stand in for missing inverse coverage.
+  const ctx = await context(ordinary);
+  await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [routeOf(actorId), actorId]);
+  expect(await (await accessCheck(access, ordinary, action, resource, ctx))(pool)).toBe(false);
+  expect(await (await accessExplicitCheck(access, ordinary, action, resource, ctx))(pool)).toEqual({
+    allowed: false,
+    explicit: false,
+  });
+  await expect(
+    prepareReadDecisions(access, { actor: ordinary, context: ctx, actions: new Set([action]) }),
+  ).rejects.toBeInstanceOf(AccessUnavailableError);
 });
 
 test('resource, actor and action must match; operators and first-party preconsent supply no grants', async () => {
