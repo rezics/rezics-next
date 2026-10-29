@@ -161,7 +161,7 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
                       },
                     ];
                 } else {
-                  // Repeated admitted heads retain the very same selected membership.
+                  // Irrelevant property heads never change the native membership selection.
                   // Compact slots are never given editorial history: a native edit
                   // would expand them. Their unrelated property history grows instead.
                   if (selected)
@@ -173,7 +173,7 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
                         context_id: GLOBAL_CONTEXT,
                         head: baseHead + ordinal + 1,
                         mode: 'replace',
-                        selection: [{ candidate: selected, rank: 'preferred' }],
+                        selection: [],
                         revision,
                       },
                     ];
