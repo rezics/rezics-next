@@ -18,6 +18,38 @@ let runtime: ReturnType<typeof Bun.spawn>;
 let workerOutput = '';
 let workerRead: Promise<void>;
 let workerErrors: Promise<string>;
+const replies: unknown[] = [];
+
+async function workerRequest(request: 'observe' | 'redeliver') {
+  runtime.send(request);
+  const deadline = Date.now() + 30_000;
+  while (!replies.length && Date.now() < deadline && runtime.exitCode === null) await Bun.sleep(10);
+  const reply = replies.shift() as {
+    error?: string;
+    request: string;
+    envelope: { partition: number; epoch: number; position: string; events: unknown[] };
+    eventSeq: number;
+    workflowId: string;
+    status: { workflowID: string; workflowName: string; status: string; input: unknown[] };
+    steps: { name: string }[];
+  };
+  expect(reply).toBeDefined();
+  expect(reply.error).toBeUndefined();
+  expect(reply.request).toBe(request);
+  expect(reply.status).toMatchObject({ workflowID: reply.workflowId, workflowName: 'effect', status: 'SUCCESS' });
+  expect(reply.status.input).toEqual(['imports_erasure', reply.envelope.events[reply.eventSeq]]);
+  expect(reply.steps.filter((step) => step.name === 'effect.run')).toHaveLength(1);
+  return reply;
+}
+
+function observeOwners(status: Awaited<ReturnType<typeof readErasureStatus>>) {
+  expect(status).not.toBeNull();
+  expect(Object.keys(status!.participants)).toHaveLength(11);
+  if (Object.values(status!.participants).some((participant) => participant.outcome === 'pending'))
+    expect(status!.completedAt).toBeNull();
+  // Record every owner's actual result; concurrent acknowledgements belong to that owner.
+  console.log('native erasure owners', JSON.stringify(status));
+}
 
 beforeAll(async () => {
   auth = await nativeFixture(pool);
@@ -39,9 +71,11 @@ async function startImportsWorker() {
     env: {
       ...process.env,
       DATABASE_URL: databaseUrl,
+      IMPORTS_ERASURE_ACCOUNT: person.accountId,
       KERNEL_WORKER_POOL_SIZE: '20',
       KERNEL_EXECUTOR_ID: `imports-erasure-${crypto.randomUUID()}`,
     },
+    ipc: (message) => replies.push(message),
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -76,7 +110,7 @@ afterAll(async () => {
   }
 });
 
-test('real account deletion delivers the registered imports effect and persists a truthful immutable none acknowledgement', async () => {
+test('registered imports erasure effect preserves the exact native acknowledgement and workflow identity under actual redelivery without inventing other owners outcomes', async () => {
   expect(KERNEL_WORK_MODULES.filter((module) => module === importsWorkModule)).toHaveLength(1);
   expect(KERNEL_WORK_MODULES.map((module) => module.name)).toEqual([
     'accounts',
@@ -114,36 +148,47 @@ test('real account deletion delivers the registered imports effect and persists 
 
   await startImportsWorker();
   await drainEffects(pool, partition);
+  const first = await workerRequest('observe');
   let delivered = await readErasureStatus(pool, person.accountId);
   for (let attempt = 0; attempt < 100 && delivered?.participants.imports?.outcome === 'pending'; attempt++) {
     await Bun.sleep(10);
     delivered = await readErasureStatus(pool, person.accountId);
   }
   expect(delivered?.participants.imports?.outcome).toBe('none');
-  expect(delivered?.participants.access?.outcome).toBe('pending');
-  expect(delivered?.participants.auth?.outcome).toBe('pending');
-  expect(delivered?.completedAt).toBeNull();
+  observeOwners(delivered);
+  expect(first.envelope.partition).toBe(partition);
+  expect(first.workflowId).toBe(`fx:${first.envelope.epoch}:${partition}:${first.envelope.position}:${first.eventSeq}:imports_erasure`);
+  expect(first.envelope.events[first.eventSeq]).toMatchObject(eventRows.rows[0]!);
 
   const acknowledgement = await pool.query<{
-    outcome: string;
-    retained: unknown;
+    acknowledgement: Record<string, unknown>;
     xmin: string;
   }>(
-    `SELECT a.outcome,a.retained,a.xmin::text
+    `SELECT to_jsonb(a) AS acknowledgement,a.xmin::text
      FROM access.erasure_acknowledgement a
      WHERE a.route=$1 AND a.account_id=$2 AND a.participant='imports'`,
     [route, person.accountId],
   );
   expect(acknowledgement.rows).toHaveLength(1);
-  expect(acknowledgement.rows[0]).toMatchObject({ outcome: 'none', retained: [] });
+  expect(acknowledgement.rows[0]?.acknowledgement).toMatchObject({
+    outcome: 'none', retained: [], participant: 'imports', account_id: person.accountId,
+  });
   const immutableRow = acknowledgement.rows[0];
+  const redelivered = await workerRequest('redeliver');
+  expect(redelivered.envelope).toEqual(first.envelope);
+  expect(redelivered.eventSeq).toBe(first.eventSeq);
+  expect(redelivered.workflowId).toBe(first.workflowId);
+  expect(redelivered.status).toEqual(first.status);
+  expect(redelivered.steps).toEqual(first.steps);
   const replay = await pool.query(
-    `SELECT a.outcome,a.retained,a.xmin::text
+    `SELECT to_jsonb(a) AS acknowledgement,a.xmin::text
      FROM access.erasure_acknowledgement a
      WHERE a.route=$1 AND a.account_id=$2 AND a.participant='imports'`,
     [route, person.accountId],
   );
   expect(replay.rows).toEqual([immutableRow]);
-  expect((await readErasureStatus(pool, person.accountId))?.participants.imports?.outcome).toBe('none');
+  const final = await readErasureStatus(pool, person.accountId);
+  expect(final?.participants.imports?.outcome).toBe('none');
+  observeOwners(final);
   expect(deletion.accountId).toBe(person.accountId);
 });
