@@ -198,13 +198,11 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
         },
         { from: 0, to: 1 },
       );
-      expect(await readDecisionCandidate.run(db.pool, params)).toEqual([
-        {
-          ...metadata,
-          revision: axis === 'history' ? scales.at(-1)! : 2,
-          release: headDigest,
-        },
-      ]);
+      expect(await readDecisionCandidate.run(db.pool, params)).toEqual({
+        ...metadata,
+        revision: axis === 'history' ? scales.at(-1)! : 2,
+        release: headDigest,
+      });
       expect(await readCompactCandidate.run(db.pool, params)).toEqual({
         ...metadata,
         revision: axis === 'history' ? scales.at(-1)! : 2,
