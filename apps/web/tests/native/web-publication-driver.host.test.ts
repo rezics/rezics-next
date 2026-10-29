@@ -108,8 +108,7 @@ describe('native web publication driver host', () => {
     await driver.configurePublicOrigin(data.alternatePublicOrigin);
     const afterRestart = await driver.request(fixture.subjects.book, 'anonymous', { host: 'untrusted.invalid' });
     expect(afterRestart).toBeInstanceOf(Response);
-    if (afterRestart.status === 403)
-      throw new Error(`Foreign Host returned 403: ${await afterRestart.text()}`);
+    if (afterRestart.status === 403) throw new Error(`Foreign Host returned 403: ${await afterRestart.text()}`);
     expect(afterRestart.status).toBe(200);
   });
 

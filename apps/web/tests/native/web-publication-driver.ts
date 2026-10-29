@@ -83,7 +83,9 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   const stack = await startNativeWebStack();
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
-  let provisioned: { data: typeof import('../../../../specs/fixtures/web-publication.json'); fixture: PublicationFixture } | undefined;
+  let provisioned:
+    | { data: typeof import('../../../../specs/fixtures/web-publication.json'); fixture: PublicationFixture }
+    | undefined;
   const feedMeasurements = new Map<string, { times: number[]; retries: number }>();
   // Only native setup/control requests retry. Served documents must retain their
   // original HTTP response, including retryable failures and manual redirects.
@@ -94,9 +96,10 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       const measurements = feedMeasurements.get(new URL(path, stack.kernelOrigin).pathname);
       measurements?.times.push(performance.now() - started);
       if (response.ok) return response;
-      const problem = (await response.clone().json().catch(() => null)) as
-        | { retryable?: unknown; request_id?: unknown }
-        | null;
+      const problem = (await response
+        .clone()
+        .json()
+        .catch(() => null)) as { retryable?: unknown; request_id?: unknown } | null;
       if (problem?.retryable !== true || attempt === 3) return response;
       if (measurements) measurements.retries++;
       console.info(
@@ -130,14 +133,23 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       key,
       type: typeByKey[key]!,
       label: titleOf(value),
-      labels: { en: titleOf(value), ...('zhHansTitle' in value ? { 'zh-Hans': value.zhHansTitle } : {}) } as Record<string, string>,
+      labels: { en: titleOf(value), ...('zhHansTitle' in value ? { 'zh-Hans': value.zhHansTitle } : {}) } as Record<
+        string,
+        string
+      >,
       descriptions: 'description' in value ? { en: String(value.description) } : undefined,
     }));
     for (const view of data.traversal.views) {
       const count = data.traversal.countPerView;
       for (let index = 1; index <= count; index++) {
         const key = `${view}-${String(index).padStart(3, '0')}`;
-        entries.push({ key, type: 'schema:Book', label: `${view} ${index}`, labels: { en: `${view} ${index}` }, descriptions: undefined });
+        entries.push({
+          key,
+          type: 'schema:Book',
+          label: `${view} ${index}`,
+          labels: { en: `${view} ${index}` },
+          descriptions: undefined,
+        });
       }
       entries.push({
         key: `${view}-withheld`,
@@ -305,11 +317,13 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     const pending = new Map<string, Set<string>>(
       routes.map(([kind, route]) => [
         route,
-        new Set(fixture.sitemap[kind].eligible.map(({ url }) => {
-          const id = new URL(url).pathname.split('/')[3];
-          if (!id) throw new Error(`Fixture sitemap URL lacks its created identity: ${url}`);
-          return decodeURIComponent(id);
-        })),
+        new Set(
+          fixture.sitemap[kind].eligible.map(({ url }) => {
+            const id = new URL(url).pathname.split('/')[3];
+            if (!id) throw new Error(`Fixture sitemap URL lacks its created identity: ${url}`);
+            return decodeURIComponent(id);
+          }),
+        ),
       ]),
     );
     const expected = new Map([...pending].map(([route, ids]) => [route, new Set(ids)]));
@@ -367,7 +381,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
           feedMeasurements.delete(route);
           const times = measurements.times.sort((a, b) => a - b);
           const middle = Math.floor(times.length / 2);
-          const median = times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
+          const median =
+            times.length === 0 ? 0 : times.length % 2 ? times[middle]! : (times[middle - 1]! + times[middle]!) / 2;
           console.info(
             `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} empty-pages=${emptyPages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
           );
@@ -380,17 +395,19 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ text: data.search.query, languages: [data.search.locale], limit: 100 }),
         });
-        if (!response.ok)
-          throw new Error(`Native search returned ${response.status}: ${await response.text()}`);
+        if (!response.ok) throw new Error(`Native search returned ${response.status}: ${await response.text()}`);
         const result = (await response.json()) as { subjects: { type: string; labels: Record<string, string> }[] };
-        const titles = new Set(result.subjects.filter(({ type }) => type === 'schema:Book').map(({ labels }) => labels[data.search.locale]));
+        const titles = new Set(
+          result.subjects.filter(({ type }) => type === 'schema:Book').map(({ labels }) => labels[data.search.locale]),
+        );
         missingTitles = data.search.matchingBooks.filter((title) => !titles.has(title));
         searchPending = missingTitles.length !== 0;
       }
       console.info(`web-publication-driver-settle: round=${++round} unmet=${JSON.stringify(unmet())}`);
       if (pending.size === 0 && !searchPending) return;
       const remaining = deadline - performance.now();
-      if (remaining <= 0) throw new Error(`Publication fixture did not settle within 180 seconds: ${unmet().join('; ')}`);
+      if (remaining <= 0)
+        throw new Error(`Publication fixture did not settle within 180 seconds: ${unmet().join('; ')}`);
       await Bun.sleep(Math.min(1000 * 2 ** Math.min(round - 1, 3), remaining));
     }
   };
