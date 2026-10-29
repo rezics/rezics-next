@@ -22,42 +22,46 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
   const [order, setOrder] = useState(initial);
   const [gaveUp, setGaveUp] = useState(false);
   useEffect(() => {
-    if (!openSettlement.has(order.settlement)) return;
+    if (checkout === 'canceled' || !openSettlement.has(order.settlement)) return;
     let polls = 0;
     let stopped = false;
-    const timer = setInterval(() => {
-      if (polls >= recheckLimit) {
-        clearInterval(timer);
-        if (!stopped) setGaveUp(true);
-        return;
-      }
-      polls += 1;
-      const attempt = polls;
-      void fetch(`/orders/${order.id}/status`, { headers: { accept: 'application/json' } })
-        .then(async (response) => {
-          if (!response.ok || stopped) return null;
-          return (await response.json()) as { settlement?: unknown; offerId?: unknown };
-        })
-        .then((body) => {
-          if (!body || stopped || typeof body.settlement !== 'string' || typeof body.offerId !== 'string') return;
-          const settlement = normalize(body.settlement);
-          setOrder((current) =>
-            current.settlement === settlement && current.offerId === body.offerId
-              ? current
-              : { ...current, settlement, offerId: body.offerId as string },
-          );
-          if (!openSettlement.has(settlement) || attempt >= recheckLimit) {
-            clearInterval(timer);
-            if (openSettlement.has(settlement)) setGaveUp(true);
+    let timer: ReturnType<typeof setTimeout>;
+    const recheck = () => {
+      timer = setTimeout(async () => {
+        if (stopped) return;
+        if (polls >= recheckLimit) {
+          setGaveUp(true);
+          return;
+        }
+        polls += 1;
+        const attempt = polls;
+        try {
+          const response = await fetch(`/orders/${order.id}/status`, { headers: { accept: 'application/json' } });
+          if (response.ok && !stopped) {
+            const body = (await response.json()) as { settlement?: unknown; offerId?: unknown };
+            if (typeof body.settlement === 'string' && typeof body.offerId === 'string') {
+              const settlement = normalize(body.settlement);
+              setOrder((current) =>
+                current.settlement === settlement && current.offerId === body.offerId
+                  ? current
+                  : { ...current, settlement, offerId: body.offerId as string },
+              );
+              if (!openSettlement.has(settlement) || attempt >= recheckLimit) {
+                if (openSettlement.has(settlement)) setGaveUp(true);
+                return;
+              }
+            }
           }
-        })
-        .catch(() => {});
-    }, recheckMs);
+        } catch {}
+        if (!stopped) recheck();
+      }, recheckMs);
+    };
+    recheck();
     return () => {
       stopped = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, [order.id, order.settlement]);
+  }, [checkout, order.id, order.settlement]);
 
   const pending = openSettlement.has(order.settlement);
   const canceled = checkout === 'canceled' && order.settlement !== 'paid';
