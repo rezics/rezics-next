@@ -25,7 +25,10 @@ import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOpti
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
   readonly actors: Omit<ContentActors, 'worker' | 'otherWorker'>;
-  readonly auth: Omit<ContentSystem['auth'], 'websiteClient'> & { readonly ordinaryScopes: readonly string[] };
+  readonly auth: Omit<ContentSystem['auth'], 'websiteClient' | 'ordinaryClient'> & {
+    readonly ordinaryClient: ContentSystem['auth']['ordinaryClient'] & { readonly scopes: readonly string[] };
+    readonly ordinaryScopes: readonly string[];
+  };
   /** The full fixture registers its website client on this same real Auth service. */
   readonly nativeAuth: AuthService;
 };
@@ -225,13 +228,20 @@ async function createNativeContentSystemWithOptions(
       executorId: namespace,
     });
     nativeAuth = host.service;
-    const ordinaryClient = { id: `${namespace}_ordinary`, kind: 'first-party' as const };
+    const ordinaryClientId = `${namespace}_ordinary`;
     // Auth validates both the issued consent and the registered client ceiling
     // when a durable step restores its initiator.
     const scopes = ordinaryScopes
       ? [...ordinaryScopes]
       : [...actions.keys()].filter((action) => action !== 'media:complete').sort();
     const registeredOrdinaryScopes = Object.freeze([...scopes]);
+    // Keep the registered ceiling on the client object as well: consumer
+    // fixtures can retain it when a higher-level fixture narrows its auth API.
+    const ordinaryClient = Object.freeze({
+      id: ordinaryClientId,
+      kind: 'first-party' as const,
+      scopes: registeredOrdinaryScopes,
+    });
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
       firstParty: true,
