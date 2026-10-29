@@ -76,8 +76,12 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: '/v1/accounts',
     story: async ({ request }) =>
-      new URL(request.url).searchParams.has('ids') ? { status: 200, accounts: [operator], next: null } : undefined,
+      new URL(request.url).searchParams.get('ids') === OPERATOR
+        ? { status: 200, accounts: [operator], next: null }
+        : undefined,
     fixture: async ({ request }) =>
-      new URL(request.url).searchParams.has('ids') ? { status: 200, accounts: [operator], next: null } : undefined,
+      new URL(request.url).searchParams.get('ids') === OPERATOR
+        ? { status: 200, accounts: [operator], next: null }
+        : undefined,
   },
 ];
