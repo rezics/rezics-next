@@ -310,5 +310,12 @@ export async function createNativeStaticZonesFixture(stack: NativeWebStack): Pro
   };
 }
 
+/** Adds unrelated native Zones for the page-read request-count growth check. */
+export async function createNativeStaticZoneGrowthResources(stack: NativeWebStack, count: number): Promise<void> {
+  const configuration = structuredClone(bookStarter) as ZoneStarter;
+  configuration.scope = [];
+  for (let index = 0; index < count; index++) await createZone(stack, configuration, 'private');
+}
+
 export const zoneDisclosureFieldPaths = ['/labels/en', '/pages/0/document/content/2/props/text'] as const;
 export const zoneDisclosureComplaint = 'A native fixture notice used to check current Zone disclosure.';

@@ -3,6 +3,7 @@ import type { BrowserContext, Page } from 'playwright';
 import { UI_LOCALES } from '@rezics/composition';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import {
+  createNativeStaticZoneGrowthResources,
   createNativeStaticZonesFixture,
   zoneDisclosureComplaint,
   zoneDisclosureFieldPaths,
@@ -226,6 +227,32 @@ test('static Zone pages do not offer closed source operations or invoke source-d
       ),
     ),
   ).toEqual([]);
+});
+
+test('the same static page uses one bounded kernel read with 1, 8, and 64 unrelated Zones', async () => {
+  const sizes = [1, 8, 64] as const;
+  let created = 0;
+  const observedKernelReads: number[] = [];
+  for (const size of sizes) {
+    await createNativeStaticZoneGrowthResources(stack, size - created);
+    created = size;
+    const started = stack.kernelRequests().length;
+    const response = await stack.request(`${stack.web}/en/zones/${fixture.publicZoneId}/guide`);
+    expect(response.status, `${size} unrelated Zones`).toBe(200);
+    await response.arrayBuffer();
+    const requests = stack.kernelRequests().slice(started);
+    const pageReads = requests.filter(({ url }) => url.endsWith(`/v1/zones/${fixture.publicZoneId}:readPage`));
+    expect(pageReads).toHaveLength(1);
+    expect(pageReads[0]?.failure).toBeUndefined();
+    expect(
+      requests.filter(({ url }) =>
+        /\/v1\/zones(?:\?|$)|\/v1\/zones\/[^/?]+\/(?:subjects|collections)|:prepare/.test(url),
+      ),
+    ).toEqual([]);
+    observedKernelReads.push(pageReads.length);
+  }
+  expect(observedKernelReads).toEqual([1, 1, 1]);
+  console.info('Native Zone page growth: unrelated Zones 1/8/64; kernel page reads 1/1/1');
 });
 
 test('current Zone takedown removes protected copy from page and metadata for the next persona read', async () => {
