@@ -1351,7 +1351,7 @@ export class MergeTrain {
     let added = false;
     const runGate = o.runGate ?? gateRunner();
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
-    const recoverAlreadyIntegrated = (): boolean => {
+    const recoverAlreadyIntegrated = async (): Promise<boolean> => {
       if (!entry.candidate) return false;
       try {
         git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
@@ -1367,7 +1367,14 @@ export class MergeTrain {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
         added = true;
-        this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+        await this.mergeStabilizedCommitIntoDev(
+          entry.candidate,
+          trainTree,
+          request.taskId,
+          recorded.manager,
+          logPath,
+          runGate,
+        );
       }
       return true;
     };
@@ -1375,7 +1382,7 @@ export class MergeTrain {
       o.fence.assertCurrent(request);
       if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      if (recoverAlreadyIntegrated()) return finish();
+      if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
       if (workspace && sharedStore) {
         sharedSource = tip;
@@ -1426,7 +1433,7 @@ export class MergeTrain {
         integratesIntoDev = false;
       }
       // Recover an advance that committed before its outcome was saved.
-      if (recoverAlreadyIntegrated()) return finish();
+      if (await recoverAlreadyIntegrated()) return finish();
       const originalBase = controlPlaneFork ?? git(o.mainCheckout, 'merge-base', tip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
@@ -1937,7 +1944,14 @@ export class MergeTrain {
         );
         if (controlPlane) this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
         else if (stabilize)
-          this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
+          await this.mergeStabilizedCommitIntoDev(
+            candidate,
+            trainTree,
+            request.taskId,
+            recorded.manager,
+            logPath,
+            runGate,
+          );
         return finish();
       }
     } catch (error) {
@@ -2123,13 +2137,14 @@ export class MergeTrain {
   }
 
   /** Merge the new stabilize commit into dev. A conflict leaves stabilize advanced and wakes both managers. */
-  private mergeStabilizedCommitIntoDev(
+  private async mergeStabilizedCommitIntoDev(
     candidate: string,
     trainTree: string,
     taskId: string,
     managerId: string | undefined,
     logPath: string,
-  ): void {
+    runGate: GateRunner,
+  ): Promise<void> {
     const devBranch = this.options.integrationBranch ?? 'dev';
     const devRef = `refs/heads/${devBranch}`;
     try {
@@ -2176,6 +2191,32 @@ export class MergeTrain {
           }
         }
         const merged = git(trainTree, 'rev-parse', 'HEAD');
+        const introduced = new Set(git(this.options.mainCheckout, 'rev-list', `${expected}..${candidate}`).split('\n'));
+        const store = this.options.fence as AttemptFence & { tasks?: () => Task[] };
+        const tasks =
+          store
+            .tasks?.()
+            .filter(
+              (task) =>
+                task.brief.target === 'stabilize' &&
+                task.state === 'integrated' &&
+                task.integratedCommit !== undefined &&
+                introduced.has(task.integratedCommit),
+            ) ?? [];
+        for (const task of tasks) {
+          const command = task.brief.acceptance.command;
+          appendFileSync(
+            logPath,
+            `Stabilize acceptance for ${task.id} on merged ${devBranch} candidate ${merged}: ${command.join(' ')}\n`,
+          );
+          const checked = await runGate(command, trainTree, logPath);
+          if (!checked.passed) {
+            const failure = firstFailure(checked.output);
+            appendFileSync(logPath, `Stabilize acceptance failed for ${task.id}: ${failure.assertion}\n`);
+            this.notifyStabilizeAcceptanceFailure(task, command, failure, merged);
+            return;
+          }
+        }
         if (merged === expected) return;
         try {
           git(this.options.mainCheckout, 'update-ref', devRef, merged, expected);
@@ -2189,6 +2230,39 @@ export class MergeTrain {
     } catch (error) {
       appendFileSync(logPath, `${error}\n`);
       this.notifyStabilizeConflict(taskId, managerId, candidate, []);
+    }
+  }
+
+  private notifyStabilizeAcceptanceFailure(
+    task: Task,
+    command: readonly string[],
+    failure: ReturnType<typeof firstFailure>,
+    candidate: string,
+  ): void {
+    const summary =
+      `Task ${task.id} acceptance command ${command.join(' ')} failed on merged dev candidate ${candidate}: first failure: ${failure.assertion}; ${failure.excerpt}`.replace(
+        /[\r\n]+/g,
+        ' ',
+      );
+    const supermanager =
+      this.options.supermanager ??
+      localBranchSettings(this.options.mainCheckout).supermanager ??
+      defaults.integration.supermanager;
+    const managers = [...new Set([task.brief.manager, supermanager].filter((id): id is string => Boolean(id)))];
+    const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
+    const path = join(this.options.stateDirectory, 'goal.sqlite');
+    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const db = shared ?? owned;
+    if (!db) return;
+    try {
+      const inbox = new SqliteManagerInbox(
+        db,
+        this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+      );
+      for (const manager of managers)
+        inbox.deliver({ managerId: manager, taskId: task.id, kind: 'instruction', summary });
+    } finally {
+      owned?.close();
     }
   }
 
