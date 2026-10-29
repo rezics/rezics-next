@@ -646,6 +646,38 @@ test('${name} sees its own clone', () => {
   });
 });
 
+test('file timings retain fixture phases when the reporter prefixes progress dots', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const timings = resolve(directory, 'timings');
+    mkdirSync(resolve(module, 'test'), { recursive: true });
+    writeFileSync(
+      resolve(module, 'test/phases.test.ts'),
+      [
+        "import { test } from 'bun:test';",
+        'process.stdout.write(\'.REZICS_KERNEL_FIXTURE_PHASES={\\"workerBoot\\":1.25}\\n\');',
+        'process.stdout.write(\'REZICS_KERNEL_FIXTURE_PHASES={\\"workerDrain\\":0.5}\\n\');',
+        "test('records both fixture boundaries', () => {});",
+        '',
+      ].join('\n'),
+    );
+    const env = { ...laneEnvironment(directory, 1), FIXTURE_CHECK_TIMINGS: timings };
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/phases.test.ts'],
+      partial: false,
+      createDatabase: async () => undefined,
+      dropDatabase: async () => undefined,
+      environment: () => env,
+      env,
+    });
+
+    expect(result).toEqual({ failed: [], concurrency: 1 });
+    expect(readLatest(timings)['test/phases.test.ts']?.fixturePhases).toEqual({ workerBoot: 1.25, workerDrain: 0.5 });
+  });
+});
+
 test('a suite lets the check record each completed file peak in its timing', async () => {
   await withDirectory(async (directory) => {
     const module = resolve(directory, 'module');

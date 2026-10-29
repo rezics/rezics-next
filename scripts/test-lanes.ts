@@ -497,7 +497,7 @@ function readModuleLoad(output: string): number | undefined {
 }
 
 function readFixturePhases(output: string): Record<string, number> | undefined {
-  const markers = Array.from(output.matchAll(/^REZICS_KERNEL_FIXTURE_PHASES=(\{[^\r\n]*\})$/gm), (match) => match[1]!);
+  const markers = Array.from(output.matchAll(/REZICS_KERNEL_FIXTURE_PHASES=(\{[^\r\n]*\})/g), (match) => match[1]!);
   if (markers.length === 0) return undefined;
   const phases: Record<string, number> = {};
   for (const marker of markers) {
@@ -505,7 +505,12 @@ function readFixturePhases(output: string): Record<string, number> | undefined {
       const parsed: unknown = JSON.parse(marker);
       if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
       for (const [name, seconds] of Object.entries(parsed)) {
-        if (/^[a-z][a-zA-Z0-9]*$/.test(name) && typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0) {
+        if (
+          /^[a-z][a-zA-Z0-9]*$/.test(name) &&
+          typeof seconds === 'number' &&
+          Number.isFinite(seconds) &&
+          seconds >= 0
+        ) {
           phases[name] = seconds;
         }
       }
@@ -579,7 +584,7 @@ export function writeTimings(
     mkdirSync(directory, { recursive: true });
     const now = options.now ?? new Date();
     const stamp = now.toISOString().replace(/[-:]/g, '');
-    const latestRun = options.run ?? (options.partial ? readLatestRun(directory) ?? undefined : undefined);
+    const latestRun = options.run ?? (options.partial ? (readLatestRun(directory) ?? undefined) : undefined);
     const runRecord = { recorded: now.toISOString(), files, ...(latestRun ? { run: latestRun } : {}) };
     writeAtomically(resolve(directory, `${stamp}.json`), `${JSON.stringify(runRecord, null, 2)}\n`);
     const merged = options.partial ? { ...readLatest(directory), ...files } : files;
