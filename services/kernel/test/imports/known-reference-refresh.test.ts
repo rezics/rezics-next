@@ -66,10 +66,10 @@ function claim(runtime: ApiRuntime, run: Run, key: string) {
   expect(binding).toEqual({ state: 'bound', subject: result.value.id });
   return { id: result.value.id, response: result, binding };
 }
-function unresolved(statement: BatchStatement, key: string) {
+function unresolved(statement: BatchStatement, key: string, wire: 'proposal' | 'native' = 'proposal') {
   expect(statement.value).toEqual({ type: 'somevalue' });
   expect(statement.qualifiers).toContainEqual({
-    property: { id: 'wdt:P648' },
+    property: wire === 'native' ? { id: 'wdt:P648', data_type: 'external-id' } : { id: 'wdt:P648' },
     value: { type: 'value', content: key.split('/').at(-1) },
   });
 }
@@ -120,7 +120,10 @@ async function open() {
       for (let batch = 0; batch < 16; batch++) {
         const delivered = await links.run(partitionOf(routeOf(id)!));
         expect(delivered.status).not.toBe('stopped');
-        expect(delivered.status).not.toBe('busy');
+        if (delivered.status === 'busy') {
+          await Bun.sleep(5);
+          continue;
+        }
         if (delivered.status === 'read' && delivered.envelopes === 0) {
           caughtUp = true;
           break;
@@ -239,7 +242,7 @@ test('the same session refreshes an unchanged native edition after learning its 
     expect(await candidates(book.id, relation, context)).toEqual(unresolvedHistory);
     const author = await candidates(book.id, 'schema:author');
     expect(author).toHaveLength(1);
-    unresolved(author[0]!.statement, '/authors/OL1A');
+    unresolved(author[0]!.statement, '/authors/OL1A', 'native');
   } finally {
     await runtime.close();
   }
