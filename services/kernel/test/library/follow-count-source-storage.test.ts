@@ -394,7 +394,10 @@ test('native source hook rows and statements stay constant with logarithmic bloc
       expect(run.plans.length).toBeGreaterThan(0);
   } catch (error) {
     if (error instanceof GrowthBoundError) {
-      await Bun.write(new URL('growth.json', evidence), JSON.stringify({ populations, samples: error.samples }, null, 2));
+      await Bun.write(
+        new URL('growth.json', evidence),
+        JSON.stringify({ populations, samples: error.samples }, null, 2),
+      );
       for (const sample of error.samples)
         console.info(
           'Native follow source rejected growth:',
