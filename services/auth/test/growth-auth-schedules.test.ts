@@ -77,7 +77,7 @@ async function runGrowth() {
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
   let seedHistory: () => Promise<number>;
-  let lastMeasuredStart: Date | undefined;
+  let lastMeasuredStart: number | undefined;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -156,7 +156,7 @@ async function runGrowth() {
             await db.admin.query(`VACUUM ANALYZE ${table}`);
         },
         async operation(_, scale) {
-          if (scale === 64) lastMeasuredStart = new Date();
+          if (scale === 64) lastMeasuredStart = Date.now();
           // Preparation and affected-row checks use only the uncaptured admin pool.
           // The same oldest 1000 rows are admitted regardless of background size.
           await db.admin
@@ -244,7 +244,7 @@ async function runGrowth() {
       const operations = workflowIds.length
         ? await db.admin.query(
             `SELECT workflow_uuid,function_name FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs
-            WHERE workflow_uuid = ANY($1::text[]) ORDER BY workflow_uuid,function_id`,
+            WHERE workflow_uuid = ANY($1::uuid[]) ORDER BY workflow_uuid,function_id`,
             [workflowIds],
           )
         : { rows: [] };
