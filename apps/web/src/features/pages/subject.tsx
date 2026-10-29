@@ -111,8 +111,6 @@ export async function loadSubjectPage(
       return { kind: 'redirect', id: body.redirect.to, target: 'account' };
   }
   if (result.status === 200 && result.data) {
-    const survivor = result.data.subject;
-    if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
     if (typeof result.data.account === 'string') {
       const raw = {
         ...result.data,
@@ -125,6 +123,8 @@ export async function loadSubjectPage(
         if (handle) return { kind: 'redirect', id: handle, target: 'account' };
       }
     }
+    const survivor = result.data.subject;
+    if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
     return { kind: 'page', page: result.data as unknown as SubjectPageData };
   }
   throw problemError(result.error?.value);
