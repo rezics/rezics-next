@@ -1,6 +1,6 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
-import { coverFallback, placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
+import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
 import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
@@ -136,7 +136,9 @@ export function SpacePage({ page }: { page: SpacePageData }) {
   const location = useLocation();
   const colors = placeholderColors({ id: page.space.id, types: [] });
   const banner = page.space.banner;
-  const bannerSrc = banner ? coverFallback(banner.media, banner.variants, 'webp', 'fill', coverSrc) : undefined;
+  const bannerVariant = banner?.variants.find((variant) => variant.format === 'webp') ?? banner?.variants.at(-1);
+  const bannerSrc =
+    banner && bannerVariant ? coverSrc(banner.media, bannerVariant.format, bannerVariant.width) : undefined;
   return (
     <article className="max-w-5xl space-y-10 text-foreground">
       <header
