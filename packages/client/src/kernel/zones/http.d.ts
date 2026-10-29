@@ -3,7 +3,7 @@ import type { TSchema } from 'typebox';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-/** Only resource routes are mounted here. Page/union and lifecycle workers have separate owners. */
+/** Resource routes and independent static pages; source-dependent execution has separate owners. */
 export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: {
     pool: Pool;
     access: () => Access;
@@ -4455,6 +4455,191 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 }[];
                             };
                             422: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        zones: {
+            ":id": {
+                $readPage: {
+                    post: {
+                        body: {
+                            target: {
+                                route: string;
+                            } | {
+                                subject: string;
+                                view?: "appearances" | "characters" | "collections" | "contents" | "credits" | "details" | "discussion" | "editions" | "lists" | "overview" | "posts" | "relations" | "reviews" | "works";
+                            };
+                            languages?: string[];
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                subject?: string;
+                                account?: string;
+                                profile: string;
+                                template: {
+                                    scope: "base" | "generic" | "route" | "type";
+                                    key: string | null;
+                                };
+                                document: any;
+                                views?: string[];
+                                reads: Record<string, {
+                                    status: number;
+                                    body: any;
+                                }>;
+                                zone: {
+                                    id: string;
+                                    revision: string;
+                                    labels: {
+                                        de?: string;
+                                        en?: string;
+                                        es?: string;
+                                        fr?: string;
+                                        ja?: string;
+                                        ko?: string;
+                                        "zh-Hans"?: string;
+                                        "zh-Hant"?: string;
+                                    };
+                                    visibility: "private" | "public" | "unlisted";
+                                    appearance: {
+                                        density?: "comfortable" | "compact";
+                                        radius?: "lg" | "md" | "sm";
+                                        surface?: "cards" | "flat";
+                                        cover?: "landscape" | "portrait" | "square";
+                                        headingScale?: "lg" | "md";
+                                    };
+                                    navigation: {
+                                        route: string;
+                                    }[];
+                                };
+                            };
+                            202: {
+                                next: string;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            412: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
