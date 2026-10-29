@@ -6,7 +6,6 @@ import storeSelectJob2 from './identity-epoch-store-select-job-2.sql';
 import storeSelectJob3 from './identity-epoch-store-select-job-3.sql';
 import storeSelectMapping from './identity-epoch-store-select-mapping.sql';
 import storeSelectBootstrapHome from './identity-epoch-store-select-bootstrap-home.sql';
-import storeSelectMapping2 from './identity-epoch-store-select-mapping-2.sql';
 import storeSelectGroup from './identity-epoch-store-select-group.sql';
 import storeSelectControl2 from './identity-epoch-store-select-control-2.sql';
 import storeInsertJob from './identity-epoch-store-insert-job.sql';
@@ -244,7 +243,9 @@ export const identityEpochStore: IdentityEpochStore = {
         'identity_epoch_unavailable',
         'Identity inputs require released-home preparation',
       );
-    const inputs = (await tx.query(storeSelectMapping.sql, [ids, routes, command.partition])).rows;
+    const sources = (await tx.query(storeSelectMapping.sql, [ids, routes, command.partition])).rows;
+    if (new Set(sources.map((g) => g.input_original)).size !== new Set(ids).size) throw unavailable();
+    const inputs = [...new Map(sources.map((g) => [g.terminal, g])).values()];
     const sourceClosure = (await tx.query(storeSelectBootstrapHome.sql, [command.partition])).rows[0];
     if (
       !inputs.length ||
@@ -252,13 +253,12 @@ export const identityEpochStore: IdentityEpochStore = {
         ((await readIdentityEpochCutover(tx)).state !== 'ready' || !sourceClosure?.sealed_generation))
     )
       throw unavailable();
-    const covered = (await tx.query(storeSelectMapping2.sql, [ids, routes, command.partition])).rows[0].n;
-    if (covered !== new Set(ids).size) throw unavailable();
     const resulting =
       intent.kind === 'merge'
         ? inputs.reduce((n, g) => n + BigInt(g.observed_count), 0n)
         : intent.kind === 'repoint'
-          ? BigInt(inputs.find((g) => g.terminal === intent.terminal)?.observed_count ?? 4096) + 1n
+          ? BigInt(sources.find((g) => g.input_original === intent.terminal)!.observed_count) +
+            (sources[0]!.generation === sources[1]!.generation ? 0n : 1n)
           : 1n;
     if (resulting > 4096n)
       throw new IdentityEpochStoreError(
