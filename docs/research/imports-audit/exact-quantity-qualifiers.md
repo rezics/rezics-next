@@ -1,8 +1,8 @@
 # Exact-quantity conservative source handoff
 
 The [conversion README](../../../packages/conversion/README.md#conservative-exact-quantity-source-handoff)
-owns the adopted rule. This report freezes native negative qualification-edge
-scenarios before default converter repair; it does not repair conversion.
+owns the adopted rule. This report records the frozen native
+qualification-edge scenarios, the converter repair and its verification.
 
 Every actual qualifier of an exact-quantity assertion must survive losslessly in
 the same native statement through reviewed mappings and admitted schema. Any
@@ -20,6 +20,16 @@ LinkML generator `0.17.1`. Release file SHA-256:
 `87e1eb6fdec7eb1e9945342525ab08cb5c0298dbfcd2f719df4074c68baaba22`.
 Wikidata converter revision is `wikidata-3`; converter file SHA-256:
 `05b7d9fa8c832e8fe66730121550989a58b2cf30e2e76a800d0bbcbde890a74f`.
+
+The implementation advances only the converter's existing revision discipline:
+Wikidata is now `wikidata-4`, and the converter SHA-256 is
+`e6198bf88f0735f2e9d712a3502cde41b0df8f89cff6c8b1dd3ff3e61dc671f2`. The
+bundled release remains byte-identical. Exactness is detected from the mapped
+property's actual closed amount/unit value schema. Projection records loss for
+unknown qualifier keys without reading their values and for mapped qualifier
+snaks that cannot be normalized; emission withholds the whole exact measurement
+when projection or admitted-value emission loses a qualifier. Ordinary
+quantities and nonmeasurement proposals retain their existing conversion.
 
 The actual Book property list admits schema:wordCount. Its definition maps
 exactly to wd:P6570, datatype quantity, integer amount, unit 1, minimum 0,
@@ -45,9 +55,9 @@ then pushes the amount. P459 has no mapping. The released wdt:P518 also has
 mappings[] and StoryArc-only targets, so the reviewed text-part qualifier is
 lost already at projection. Neither property name nor a QID supplies a native
 binding, and arbitrary text scope cannot be narrowed to StoryArc. Item-qualifier
-emission also skips item qualifiers when encountered. Both projection and
-emission need conservative rejection in the successor; handling only mapped
-qualifiers at emission misses unknown source keys.
+emission also skips item qualifiers when encountered. The successor now marks
+loss at projection and emission, so these qualification shapes cannot become an
+unqualified native proposal.
 
 ## Frozen native scenarios
 
@@ -182,8 +192,11 @@ failure; converter repair and positive whole-holder evidence remain separate.
 
 ## Limits and decisions
 
-The actual bundle is consumed unchanged. No product, helper, definition, release
-or existing test changes are needed. All changed files are declared paths.
+The actual bundle is consumed unchanged; no source/native revision, runtime
+importer path, rights policy or definition was changed. The converter behavior
+uses its existing revision and the new focused pure tests exercise the shipped
+definitions without a synthetic release or guessed binding. The frozen native
+file remains unchanged at the hash above. All changed files are declared paths.
 Current qualifiers[] promises no positive qualified measurement case. Original
 unqualified P6570 is not generated/genuine whole-holder evidence. Rejecting loss
 proves neither positive provider support, measurement coverage, complete indexing
