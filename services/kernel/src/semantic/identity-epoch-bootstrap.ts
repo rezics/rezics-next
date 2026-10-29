@@ -49,7 +49,15 @@ import memberDirty from './identity-epoch-bootstrap-member-dirty.sql';
 
 const NIL = '00000000-0000-0000-0000-000000000000';
 type Phase = 'subjects' | 'members' | 'dirty' | 'member-dirty';
-type Row = { route: number; original: string; terminal: string; source_revision: string; present: boolean };
+type Row = {
+  route: number;
+  original: string;
+  terminal: string;
+  source_revision: string;
+  present: boolean;
+  previous_partition?: number | null;
+  previous_terminal?: string | null;
+};
 type Page = { generation: bigint; phase: Phase; caughtUp: boolean; native: IdentityNativeReceipt; rows: Row[] };
 export type IdentityEpochBootstrapProgress = Readonly<{
   partition: number;
@@ -197,6 +205,54 @@ export async function stepIdentityEpochBootstrap(
     work.bytes = Buffer.byteLength(JSON.stringify(page.rows));
   }
   const retained = page;
+  const withdrawals = new Map<number, Row[]>();
+  for (const row of retained.rows) {
+    if (
+      row.previous_partition != null &&
+      row.previous_terminal &&
+      (!row.present || row.previous_terminal !== row.terminal)
+    )
+      withdrawals.set(row.previous_partition, [...(withdrawals.get(row.previous_partition) ?? []), row]);
+  }
+  // Every old home commits withdrawal custody before any new home can add this export.
+  // The retained source page survives uncertainty at either side of the handoff.
+  for (const [destination, rows] of withdrawals) {
+    await runCommand(pool, { partition: destination }, async (tx) => {
+      await query(tx, bootstrapSelectControl.sql, [destination]);
+      const duplicate = (
+        await query(tx, bootstrapSelectBootstrapCustody.sql, [
+          destination,
+          partition,
+          retained.generation.toString(),
+          'withdraw',
+        ])
+      ).rows[0];
+      if (duplicate) {
+        if (duplicate.native_transaction_id !== retained.native.transactionId) throw fail();
+        return noEffect(null);
+      }
+      for (const row of rows) {
+        const previous = (await query(tx, bootstrapSelectOriginal.sql, [destination, row.original])).rows[0];
+        if (!previous) continue;
+        if (previous.pending_job || previous.terminal !== row.previous_terminal) throw fail();
+        await query(tx, bootstrapUpdateOriginal.sql, [previous.generation, row.original]);
+        await query(tx, bootstrapUpdateGroup.sql, [previous.terminal]);
+      }
+      await query(tx, bootstrapInsertBootstrapCustody.sql, [
+        destination,
+        partition,
+        retained.generation.toString(),
+        retained.native.transactionId,
+        retained.native.epoch,
+        retained.native.position.toString(),
+        'withdraw',
+      ]);
+      return {
+        value: null,
+        events: [{ ...identityBootstrapWake(partition, retained.generation), type: IDENTITY_EPOCH_PROGRESS }],
+      };
+    });
+  }
   // Each receiving group home is visited independently. Source clients have already been released.
   const homes = new Map<number, Row[]>();
   for (const row of retained.rows) {
@@ -208,7 +264,12 @@ export async function stepIdentityEpochBootstrap(
   for (const [destination, rows] of homes) {
     await runCommand(pool, { partition: destination }, async (tx, { transactionId }) => {
       const duplicate = (
-        await query(tx, bootstrapSelectBootstrapCustody.sql, [destination, partition, retained.generation.toString()])
+        await query(tx, bootstrapSelectBootstrapCustody.sql, [
+          destination,
+          partition,
+          retained.generation.toString(),
+          'add',
+        ])
       ).rows[0];
       if (duplicate) {
         if (duplicate.native_transaction_id !== retained.native.transactionId) throw fail();
@@ -220,6 +281,7 @@ export async function stepIdentityEpochBootstrap(
       if (!owner || owner.writeState !== 'active') throw fail();
       if (retained.phase === 'subjects' || retained.phase === 'dirty') {
         for (const row of rows) {
+          if (!row.present) continue;
           const header = (
             await query(tx, bootstrapInsertGroup.sql, [destination, row.terminal, transactionId, owner.epoch])
           ).rows[0];
@@ -257,6 +319,7 @@ export async function stepIdentityEpochBootstrap(
         retained.native.transactionId,
         retained.native.epoch,
         retained.native.position.toString(),
+        'add',
       ]);
       return {
         value: null,

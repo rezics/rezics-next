@@ -5,7 +5,7 @@ INSERT INTO semantic.identity_epoch_mapping(route,original,terminal,epoch,origin
         FROM jsonb_to_recordset((SELECT p1 FROM parameters)::jsonb) AS r(route integer,original uuid,terminal uuid,source_revision bigint,present boolean)
         JOIN semantic.subject s ON (s.route,s.subject_id)=(r.route,r.original)
         LEFT JOIN semantic.identity_epoch_dirty d ON (d.route,d.original)=(r.route,r.original)
-        WHERE r.present AND coalesce(d.revision,0)=r.source_revision
+        WHERE r.present AND coalesce(d.revision,0)>=r.source_revision
         ON CONFLICT(route,original) DO UPDATE SET terminal=excluded.terminal,epoch=excluded.epoch,origin=excluded.origin,
           recorded_transaction_id=excluded.recorded_transaction_id,control_partition=excluded.control_partition,
           control_group=excluded.control_group,source_revision=excluded.source_revision,owner_epoch=excluded.owner_epoch;
