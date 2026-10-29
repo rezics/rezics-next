@@ -106,17 +106,27 @@ epoch, position and event sequence directly from the committed row; no event fie
 Storage schemas and VNDB grouping were rechecked against the inventories; no new account-owned importer payload
 or portable-table producer was found. The README adoption and its exact bounds remain unchanged.
 
-Earlier submissions used the internal `--run` interface and failed before allocating checks with
-`Invalid check id: --`. That historical submission error does not establish a native product failure.
-The current authorized public submission commands are:
+The meaningful acceptance amendments were committed before submission. Terminal verification:
 
 - `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/erasure-participant.test.ts`
-- `bun scripts/worker-check.ts -- bun run --cwd services/kernel typecheck`
+  passed on the formatted acceptance revision `69642e6def`: 1 pass, 0 fail, 47 assertions, no load rerun.
+  Evidence: `.temp/goal/checks/worker-check-2026-10-29T20-38-36.157Z-756f7dc5.log`.
+- `bun scripts/worker-check.ts -- bun run --cwd services/kernel typecheck` passed, including construction.
+  Evidence: `.temp/goal/checks/worker-check-2026-10-29T18-36-18.084Z-38e75f8f.log`.
+  Subsequent test/child changes were formatting only; this passed check was not repeated.
 
-The meaningful acceptance amendments are committed before submission. Kernel typecheck completed successfully. The focused acceptance stopped at the formatter before native
-execution: `Format issues found in above 1 files. Run without `--check` to fix.` The acceptance and child
-were formatted without changing assertions or runtime behavior, and that repair is committed before the
-focused check is resubmitted. Native acceptance remains unproven until its terminal result; no cleanup, integration or promotion is inferred from this artifact.
+The first focused submission stopped at formatting before native execution. Formatting was repaired and committed
+without changing assertions or runtime behavior before the successful focused submission. Earlier internal-runner
+submission errors supplied no native evidence and are superseded by these public-interface terminal results.
+
+The native case reached genuine fresh Auth signin/approve/execute, the committed tombstone, production registered
+worker/relay/effect delivery and the imports `none` acknowledgement. The same observed envelope was redelivered
+through the registered enqueue. Both native DBOS results were terminal SUCCESS with identical workflow identity,
+inputs and persisted step records; the single full ACK and xmin remained unchanged. All ten other participants
+were actually pending in both observations, with empty retained arrays and completedAt null. These are observed
+outcomes, not manufactured expectations: the acceptance also allows concurrent acknowledgements by those owners.
+This proves the scoped participant delivery and replay case, not other-owner cleanup, integration or promotion.
+
 Only declared files change, with no production API, frozen assertion or unrelated default edits. No reference
 project is named for this surface or needed. The full committed diff is the reviewable patch. The predecessor's
 live worker is neither restarted nor edited.
