@@ -128,12 +128,12 @@ test('default own-reference refresh survives reopen without rewriting bootstrap 
 
   const reopened = new Importer({ path, transport: native.transport });
   try {
-    expect((await reopened.runRecords(registration, input(work))).status).toBe('committed');
+    expect((await reopened.runRecords(registration, input(work, edition))).status).toBe('committed');
     const ownWork = reopened.session.bindings.claim({ source: registration.source, external_id: work.key });
     expect(ownWork?.state).toBe('bound');
     if (ownWork?.state !== 'bound') throw new Error('Work create did not retain its public subject ID');
 
-    expect((await reopened.runRecords(registration, input(edition))).status).toBe('committed');
+    expect((await reopened.runRecords(registration, input(edition, work))).status).toBe('committed');
     const proposals = native.requests.flatMap((request) => request.commands).filter(
       (command) => command.op === 'propose' && command.source.external_id === edition.key,
     );
@@ -148,7 +148,7 @@ test('default own-reference refresh survives reopen without rewriting bootstrap 
     expect(native.receipts.get(bootstrap!.key)).toEqual(initialRow);
 
     const before = native.requests.length;
-    expect((await reopened.runRecords(registration, input(edition))).status).toBe('committed');
+    expect((await reopened.runRecords(registration, input(edition, work))).status).toBe('committed');
     expect(native.requests.length).toBe(before);
     expect(native.receipts.get(bootstrap!.key)).toEqual(initialRow);
     expect(native.requests.flatMap((request) => request.commands).filter((command) => command.key === bootstrap!.key))
