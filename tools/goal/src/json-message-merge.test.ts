@@ -2,11 +2,12 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { rebaseOnto } from './merge-train.ts';
-import { git } from './merge.ts';
+import { git as gitCommand } from './merge.ts';
 import { integrationHarness, markdown } from './test-support.ts';
 
 const catalog = 'apps/web/messages/en.json';
 const format = (value: Record<string, string>) => `${JSON.stringify(value, null, 2)}\n`;
+const git = (cwd: string, args: string[]) => gitCommand(cwd, ...args);
 
 async function catalogTask() {
   const h = integrationHarness();
