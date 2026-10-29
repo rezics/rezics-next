@@ -1,3 +1,4 @@
+import { accountDeletionRuntime, registerAccountDeletionRuntime } from '../../support/account-deletion.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { WEBSITE_CLIENT_ID, type PublicJwks } from '@rezics/auth';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -64,10 +65,6 @@ export interface ContentSystem {
     }): Promise<ContentCredential>;
     /** Refresh through the real Auth service while retaining the registered client identity. */
     refresh(input: { readonly refreshToken: string }): Promise<ContentCredential>;
-  };
-  readonly deletion: {
-    readonly auth: Parameters<typeof import('../../support/account-deletion.ts').deletePersona>[0]['auth'];
-    person(): Promise<{ accountId: string; bearer: string }>;
   };
   readonly access: Access;
   /** Catalogue derived from the routes mounted on this real Kernel. */
@@ -288,7 +285,6 @@ export async function createContentSystem(options: ContentSystemOptions): Promis
 
     const system: ContentSystem = {
       database: native.database,
-      deletion: native.deletion,
       kernel: native.kernel,
       routeKey: native.routeKey,
       tokenKeys: native.tokenKeys,
@@ -314,6 +310,7 @@ export async function createContentSystem(options: ContentSystemOptions): Promis
           });
         }));
     governanceCredentialPorts.set(system, governance);
+    registerAccountDeletionRuntime(system, accountDeletionRuntime(native));
     return system;
   } catch (error) {
     try {

@@ -1,3 +1,4 @@
+import { registerAccountDeletionRuntime, type AccountDeletionRuntime } from '../../support/account-deletion.ts';
 import {
   createAuthHost,
   createBarrierProofVerifier,
@@ -305,7 +306,38 @@ async function createNativeContentSystemWithOptions(
     }
     await command(`/v1/accounts/${suspended.actor.accountId}:suspend`, { reason: 'Native suspended persona' }, 200);
 
-    return {
+    const deletion: AccountDeletionRuntime = {
+      auth: {
+        authPool,
+        host,
+        request: (path, body, headers) => requestAuth(path, body, headers?.get('cookie') ?? ''),
+      },
+      async person() {
+        const name = `erase_${crypto.randomUUID().replaceAll('-', '')}`;
+        const clientId = `${name}_client`;
+        const deletionScopes = [...new Set([...scopes, 'account:delete'])];
+        await nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes: deletionScopes });
+        const { accountId } = await host!.workflows.register({
+          key: name,
+          handle: name,
+          email: `${name}@content.test`,
+          password: 'ordinary native registration password',
+        });
+        const signed = await requestAuth('/signin', {
+          account_id: accountId,
+          password: 'ordinary native registration password',
+          client_id: clientId,
+          scope: deletionScopes,
+        });
+        const cookie = signed.headers
+          .getSetCookie()
+          .map((value) => value.split(';')[0])
+          .join('; ');
+        const token = await credential(await requestAuth('/token', {}, cookie));
+        return { accountId, bearer: token.bearer };
+      },
+    };
+    const system: NativeContentSystem = {
       database: { pool, admin, authPool, authAdmin },
       kernel,
       routeKey,
@@ -320,43 +352,15 @@ async function createNativeContentSystemWithOptions(
         refresh: async ({ refreshToken }) => credential(await requestAuth('/token', {}, refreshToken)),
       },
       nativeAuth,
-      deletion: {
-        auth: {
-          authPool,
-          host,
-          request: (path, body, headers) => requestAuth(path, body, headers?.get('cookie') ?? ''),
-        },
-        async person() {
-          const name = `erase_${crypto.randomUUID().replaceAll('-', '')}`;
-          const clientId = `${name}_client`;
-          const deletionScopes = [...new Set([...scopes, 'account:delete'])];
-          await nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes: deletionScopes });
-          const { accountId } = await host!.workflows.register({
-            key: name,
-            handle: name,
-            email: `${name}@content.test`,
-            password: 'ordinary native registration password',
-          });
-          const signed = await requestAuth('/signin', {
-            account_id: accountId,
-            password: 'ordinary native registration password',
-            client_id: clientId,
-            scope: deletionScopes,
-          });
-          const cookie = signed.headers
-            .getSetCookie()
-            .map((value) => value.split(';')[0])
-            .join('; ');
-          const token = await credential(await requestAuth('/token', {}, cookie));
-          return { accountId, bearer: token.bearer };
-        },
-      },
+
       access,
       actions,
       clock: { setCommandTime: setTime, setCursorVerificationTime: setTime },
       transport: { capture },
       close,
     };
+    registerAccountDeletionRuntime(system, deletion);
+    return system;
   } catch (error) {
     try {
       await close();

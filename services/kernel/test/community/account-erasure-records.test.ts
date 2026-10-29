@@ -4,7 +4,7 @@ import { banAccount } from '../../src/community/ban.ts';
 import { createSpace } from '../../src/community/space.ts';
 import { createRealm } from '../../src/community/realm.ts';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
-import { deletePersona, drainEffects } from '../support/account-deletion.ts';
+import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
 import { createProductionAccess } from './membership-fixture.ts';
 import { closeCommunityDrivers, createCommunityDriver, communityFixtureRuntime, worker } from './community-driver.ts';
@@ -18,9 +18,10 @@ async function setup() {
   const driver = await createCommunityDriver();
   const fixture = await driver.provision();
   const { system } = communityFixtureRuntime();
-  const persona = await system.deletion.person();
+  const deletion = accountDeletionRuntime(system);
+  const persona = await deletion.person();
   const account = { id: persona.accountId, bearer: persona.bearer };
-  return { driver, fixture, system, persona, account };
+  return { driver, fixture, system, deletion, persona, account };
 }
 async function json<T>(response: Response, status: number): Promise<T> {
   expect(response.status, await response.clone().text()).toBe(status);
@@ -96,10 +97,7 @@ async function drain(driver: CommunityDriver, ids: string[]) {
   await driver.settle();
 }
 async function erase(state: Awaited<ReturnType<typeof setup>>, ids: string[]) {
-  const erased = await deletePersona(
-    { pool: state.system.database.pool, auth: state.system.deletion.auth },
-    state.persona,
-  );
+  const erased = await deletePersona({ pool: state.system.database.pool, auth: state.deletion.auth }, state.persona);
   await drain(state.driver, [...ids, state.account.id]);
   const phase = await import('../../src/community/account-erasure-records.ts');
   let after: import('../../src/community/account-erasure-records.ts').CommunityRecordsCursor | null = null;
@@ -295,7 +293,7 @@ test.serial(
     await driver.settle();
     expect((await driver.grantModerator(place.realmId, account)).status).toBe(201);
     await ban(driver, account, place.realmId, fixture.outsider, 'Growth probe');
-    const erased = await deletePersona({ pool: system.database.pool, auth: system.deletion.auth }, state.persona);
+    const erased = await deletePersona({ pool: system.database.pool, auth: state.deletion.auth }, state.persona);
     await drain(driver, [place.realmId, account.id]);
     await worker.stop();
     const db = await openGrowthDatabase(system.database.pool.options.connectionString);

@@ -5,6 +5,22 @@ import type { Persona, PersonasOptions } from './personas.ts';
 
 export type AccountDeletionErrorBody = { error?: unknown; effect_status?: unknown; [key: string]: unknown };
 
+export type AccountDeletionRuntime = {
+  auth: Parameters<typeof deletePersona>[0]['auth'];
+  person(): Promise<{ accountId: string; bearer: string }>;
+};
+const runtimes = new WeakMap<object, AccountDeletionRuntime>();
+
+/** Keep fixture-only native Auth ports outside the frozen product driver shape. */
+export function registerAccountDeletionRuntime(system: object, runtime: AccountDeletionRuntime): void {
+  runtimes.set(system, runtime);
+}
+export function accountDeletionRuntime(system: object): AccountDeletionRuntime {
+  const runtime = runtimes.get(system);
+  if (!runtime) throw new Error('Native account deletion runtime is unavailable');
+  return runtime;
+}
+
 export class AccountDeletionError extends Error {
   constructor(
     readonly status: number,
