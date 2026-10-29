@@ -906,7 +906,13 @@ async function visibilityDetails(database: GrowthDatabase, relations: readonly s
   return details;
 }
 
-type RelationCounters = { relation: string; n_tup_ins: string; n_tup_upd: string; n_tup_del: string; n_dead_tup: string };
+type RelationCounters = {
+  relation: string;
+  n_tup_ins: string;
+  n_tup_upd: string;
+  n_tup_del: string;
+  n_dead_tup: string;
+};
 
 async function settleCounters(database: GrowthDatabase, relations: readonly string[]): Promise<RelationCounters[]> {
   // PostgreSQL backends publish cumulative statistics asynchronously. Give them a flush window before reading.
@@ -925,12 +931,19 @@ function countersChanged(before: RelationCounters[], after: RelationCounters[]):
   const previous = new Map(before.map((row) => [row.relation, row]));
   return after.some((row) => {
     const old = previous.get(row.relation);
-    return old !== undefined &&
-      (old.n_tup_ins !== row.n_tup_ins || old.n_tup_upd !== row.n_tup_upd || old.n_tup_del !== row.n_tup_del);
+    return (
+      old !== undefined &&
+      (old.n_tup_ins !== row.n_tup_ins || old.n_tup_upd !== row.n_tup_upd || old.n_tup_del !== row.n_tup_del)
+    );
   });
 }
 
-async function tupleDetails(database: GrowthDatabase, relation: string, blocks: readonly { blkno: number | string }[], horizon: string) {
+async function tupleDetails(
+  database: GrowthDatabase,
+  relation: string,
+  blocks: readonly { blkno: number | string }[],
+  horizon: string,
+) {
   const columns = await database.admin.query<{
     name: string;
     is_primary: boolean;
@@ -951,9 +964,13 @@ async function tupleDetails(database: GrowthDatabase, relation: string, blocks: 
   const [schema] = relation.split('.', 2);
   const qualified = qualifiedIdentifier(relation);
   const workflowTable = qualifiedIdentifier(`${schema}.workflow_status`);
-  const workflowExists = hasWorkflow && (await database.admin.query<{ exists: boolean }>(
-    `SELECT to_regclass($1) IS NOT NULL AS exists`, [`${schema}.workflow_status`],
-  )).rows[0]?.exists;
+  const workflowExists =
+    hasWorkflow &&
+    (
+      await database.admin.query<{ exists: boolean }>(`SELECT to_regclass($1) IS NOT NULL AS exists`, [
+        `${schema}.workflow_status`,
+      ])
+    ).rows[0]?.exists;
   const found: Record<string, unknown>[] = [];
   for (const { blkno } of blocks) {
     const result = await database.admin.query<{
@@ -968,8 +985,12 @@ async function tupleDetails(database: GrowthDatabase, relation: string, blocks: 
       `SELECT t.ctid::text,t.xmin::text,t.xmax::text,(t.xmin::text::bigint >= $2::bigint) AS at_or_after_horizon,
               (SELECT jsonb_object_agg(k,v) FROM (SELECT key AS k,value AS v FROM jsonb_each(to_jsonb(t)) WHERE key=ANY($3::text[])) p) AS primary_key,
               (SELECT jsonb_object_agg(k,left(v,120)) FROM (SELECT key AS k,value AS v FROM jsonb_each_text(to_jsonb(t)) WHERE key=ANY($4::text[])) p) AS text_columns,
-              ${workflowExists ? `(SELECT jsonb_build_object('name',ws.name,'status',ws.status,'queue_name',ws.queue_name,'created_at',ws.created_at)
-                  FROM ${workflowTable} ws WHERE to_jsonb(ws)->>'workflow_uuid'=to_jsonb(t)->>'workflow_uuid' LIMIT 1)` : 'NULL::jsonb'} AS workflow
+              ${
+                workflowExists
+                  ? `(SELECT jsonb_build_object('name',ws.name,'status',ws.status,'queue_name',ws.queue_name,'created_at',ws.created_at)
+                  FROM ${workflowTable} ws WHERE to_jsonb(ws)->>'workflow_uuid'=to_jsonb(t)->>'workflow_uuid' LIMIT 1)`
+                  : 'NULL::jsonb'
+              } AS workflow
          FROM ${qualified} t
         WHERE t.ctid >= format('(%s,1)',$1::integer)::tid AND t.ctid < format('(%s,1)',$1::integer+1)::tid
         ORDER BY t.xmin::text::bigint DESC,t.ctid LIMIT 16`,
@@ -1062,7 +1083,13 @@ export async function settle(
     });
     dirty = await verify();
     if (dirty.length === 0) break;
-    if (round < 2) counterSamples.push(await settleCounters(database, dirty.map(({ relation }) => relation)));
+    if (round < 2)
+      counterSamples.push(
+        await settleCounters(
+          database,
+          dirty.map(({ relation }) => relation),
+        ),
+      );
     if (round < 2) await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   if (dirty.length > 0) {
@@ -1070,17 +1097,25 @@ export async function settle(
       `SELECT pid,backend_type,application_name,state,xact_start,backend_xmin::text,backend_xid::text
          FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() ORDER BY pid`,
     );
-    const moving = counterSamples.some((sample, index) => index > 0 && countersChanged(counterSamples[index - 1]!, sample));
-    const staticCounters = counterSamples.length > 0 && !moving;
-    const heldSnapshot = staticCounters && waiting.rows.some((backend) =>
-      typeof backend.backend_xmin === 'string' && Number(backend.backend_xmin) >= Number(horizon),
+    const moving = counterSamples.some(
+      (sample, index) => index > 0 && countersChanged(counterSamples[index - 1]!, sample),
     );
+    const staticCounters = counterSamples.length > 0 && !moving;
+    const heldSnapshot =
+      staticCounters &&
+      waiting.rows.some(
+        (backend) => typeof backend.backend_xmin === 'string' && Number(backend.backend_xmin) >= Number(horizon),
+      );
     const cause = moving ? 'concurrent writer' : heldSnapshot ? 'snapshot held during VACUUM' : 'unclassified';
-    const blocks = await visibilityDetails(database, dirty.map(({ relation }) => relation));
+    const blocks = await visibilityDetails(
+      database,
+      dirty.map(({ relation }) => relation),
+    );
     const tupleRows: Record<string, unknown> = {};
     for (const { relation } of dirty) {
       const detail = blocks[relation] as { notAllVisibleBlocks?: { blkno: number }[] } | undefined;
-      if (detail?.notAllVisibleBlocks) tupleRows[relation] = await tupleDetails(database, relation, detail.notAllVisibleBlocks, horizon);
+      if (detail?.notAllVisibleBlocks)
+        tupleRows[relation] = await tupleDetails(database, relation, detail.notAllVisibleBlocks, horizon);
     }
     const attribution = { ...blocks, tuples: tupleRows };
     throw new GrowthSettleInfrastructureError(

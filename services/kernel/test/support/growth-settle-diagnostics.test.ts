@@ -27,7 +27,8 @@ async function waitForVacuum() {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     const result = await db.admin.query<{ active: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM pg_stat_progress_vacuum WHERE relid=$1::regclass) AS active`, [relation],
+      `SELECT EXISTS (SELECT 1 FROM pg_stat_progress_vacuum WHERE relid=$1::regclass) AS active`,
+      [relation],
     );
     if (result.rows[0]?.active) return;
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -93,7 +94,9 @@ test('a post-start DBOS row is listed with its horizon, key, text and workflow s
     `INSERT INTO ${schema}.workflow_status (workflow_uuid,name,status,queue_name,created_at) VALUES ($1,'growth.test','PENDING','growth-queue',now())`,
     [workflow],
   );
-  await db.admin.query(`INSERT INTO ${relation} (id,workflow_uuid,body) VALUES (300001,$1,repeat('z',140))`, [workflow]);
+  await db.admin.query(`INSERT INTO ${relation} (id,workflow_uuid,body) VALUES (300001,$1,repeat('z',140))`, [
+    workflow,
+  ]);
   try {
     await expect(settling).rejects.toMatchObject({
       name: 'GrowthSettleInfrastructureError',
