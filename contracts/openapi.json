@@ -51742,6 +51742,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "overloaded",
                         "partition_unavailable",
                         "transaction_retry_exhausted",
@@ -51797,6 +51798,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -51807,6 +51809,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Service Overloaded",
                         "Partition Unavailable",
                         "Transaction Retry Exhausted",
@@ -51816,6 +51819,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
                         "https://rezics.com/problems/transaction_retry_exhausted",
@@ -51837,7 +51841,7 @@
                 }
               }
             },
-            "description": "Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
