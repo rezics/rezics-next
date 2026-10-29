@@ -23,6 +23,8 @@ describe('native Auth and web stack', () => {
 
     const alice = await auth.signIn('alice');
     const bob = await auth.signIn('bob');
+    expect(alice.visitedUrls.some((url) => new URL(url).pathname === '/consent')).toBe(false);
+    expect(bob.visitedUrls.some((url) => new URL(url).pathname === '/consent')).toBe(false);
     expect(alice.url).toStartWith(stack.web);
     expect((await alice.response()).status()).toBe(200);
     expect(bob.url).toStartWith(stack.web);
