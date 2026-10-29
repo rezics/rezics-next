@@ -11,6 +11,7 @@ test('retry --brief on a held task replaces its brief and keeps it held until de
     const task = h.tasks.dispatch(h.briefFile);
     const worker = await h.tasks.retry(task.id);
     await worker.done;
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => { attempt.state = 'stopped'; });
     h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
       current.state = 'held';
       current.brief.after = [dependency.id];
@@ -42,8 +43,9 @@ test('a refused retry writes no brief file', async () => {
     const amended = join(h.root, '.temp/goal/amended.md');
     writeFileSync(amended, `${markdown}\nRefused amendment.\n`);
     const briefs = join(h.settings.stateDirectory, 'briefs');
+    const before = readdirSync(briefs);
     expect(() => h.tasks.queueRetry(task.id, { brief: amended })).toThrow('cannot retry integrated task');
-    expect(readdirSync(briefs)).toEqual([]);
+    expect(readdirSync(briefs)).toEqual(before);
   } finally {
     h.dispose();
   }
