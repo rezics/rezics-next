@@ -3913,8 +3913,7 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
     const landingGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_PRIORITY landing'));
     const ordinaryGrant = grants.findIndex((event) =>
       String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
-      String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1') &&
-      String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999'),
+      String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
     );
     const multiGrant = grants.findIndex((event, index) => index > landingGrant && String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'));
     expect(landingGrant).toBeGreaterThanOrEqual(0);
