@@ -117,9 +117,8 @@ test('established nonmeasurement output remains unchanged by exact qualifier rej
     entity({ P459: [{ snaktype: 'somevalue', property: 'P459', datatype: 'wikibase-item' }] }),
   );
   const ordinary = (output: ReturnType<typeof convert>) =>
-    output.proposals
-      .flatMap((command) =>
-        command.op === 'propose' && command.statement.property.id !== 'schema:wordCount' ? [command.statement] : [],
-      );
+    output.proposals.flatMap((command) =>
+      command.op === 'propose' && command.statement.property.id !== 'schema:wordCount' ? [command.statement] : [],
+    );
   expect(ordinary(withRejectedMeasurement)).toEqual(ordinary(plain));
 });
