@@ -166,7 +166,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
     for (const row of seeded.rows) insertedIds.push(row.id);
     await growth.admin.query(
       `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position, updated_at)
-       SELECT partition_no, $1, 1,
+       SELECT partition_no, $1, CASE WHEN partition_no = $2 AND position = 0 THEN NULL ELSE 1 END,
               CASE WHEN partition_no = $2 THEN position ELSE position + 8192 END, now()
        FROM core.partition
        ON CONFLICT (consumer, partition_no) DO UPDATE
