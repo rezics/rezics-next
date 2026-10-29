@@ -283,14 +283,14 @@ beforeAll(async () => {
       [routeOf(GLOBAL_CONTEXT), GLOBAL_CONTEXT, personas.staff.accountId, action],
     );
   }
-  for (const persona of [personas.alice, personas.bob, personas.orgOwner]) {
+  for (const persona of [personas.alice, personas.bob]) {
     await db.admin.query(
       `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
        VALUES ($1,$2,$2,'media:create','(,)'::tstzrange,$2) ON CONFLICT DO NOTHING`,
       [routeOf(persona.accountId), persona.accountId],
     );
   }
-  for (const persona of [personas.bob, personas.orgOwner]) {
+  for (const persona of [personas.bob, personas.revoked]) {
     await grant(persona, GLOBAL_CONTEXT, ['subject:create', 'statement:propose']);
   }
   websiteKey = await generateKeyPair('ES256', { extractable: true });
@@ -399,7 +399,7 @@ test("account erasure keeps the account's authored fields an anonymous reader is
 });
 
 test("an account upload and field erasure page stays within its bound as other uploaders' media and other authors' fields grow", async () => {
-  const owner = personas.orgOwner;
+  const owner = personas.revoked;
   await field(owner, 'Growth field');
   const web = await website(owner);
   const post = await thread(web);
