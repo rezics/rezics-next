@@ -494,64 +494,39 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     evidence.push({ scale, operation: operation.name, capture: result.capture });
   }
 
-  const states = new Map<number, State[]>();
-  const report = await checkGrowth(db, {
-    name: 'Personal label catalogue operations',
-    scales,
-    rule: 'series',
-    warmups: 1,
-    repetitions: 5,
-    includeBackends: true,
-    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    async grow(database, scale) {
-      await grow(database, scale);
-      const before = Number(
-        (await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label'))
-          .rows[0]!.count,
-      );
-      for (const operation of operations) await assertCapturedOperation(scale, operation);
-      const after = Number(
-        (await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label'))
-          .rows[0]!.count,
-      );
-      if (counts[String(scale)] && typeof counts[String(scale)] === 'object')
-        Object.assign(counts[String(scale)] as Record<string, unknown>, { fixedMeasurementRows: after - before });
-    },
-    async warmup() {
-      for (const operation of operations) operation.assert(await operation.run(await operation.prepare()));
-    },
-    async prepare(_database, _scale, repetition) {
-      const prepared = new Array<State>(operations.length);
-      for (const [index, operation] of operations.entries())
-        if (!operation.name.startsWith('list')) prepared[index] = await operation.prepare();
-      for (const [index, operation] of operations.entries())
-        if (operation.name.startsWith('list')) prepared[index] = await operation.prepare();
-      states.set(repetition, prepared);
-    },
-    async operation(_database, _scale, repetition) {
-      const prepared = states.get(repetition);
-      if (!prepared) throw new Error(`Missing fresh operation states for repetition ${repetition}`);
-      const ordered = [
-        ...operations
-          .map((operation, index) => ({ operation, state: prepared[index]! }))
-          .filter(({ operation }) => operation.name.startsWith('list')),
-        ...operations
-          .map((operation, index) => ({ operation, state: prepared[index]! }))
-          .filter(({ operation }) => !operation.name.startsWith('list')),
-      ];
-      for (const { operation, state } of ordered) operation.assert(await operation.run(state));
-    },
-  });
-  for (const sample of report.samples) {
-    const relation = sample.cost.relations['library.personal_label'];
-    expect(relation).toBeDefined();
-    expect(relation!.sequentialScans).toBe(0);
-    const boundedRows = operations.reduce(
-      (total, operation) => total + (operation.name.startsWith('list') ? 16 : 2),
-      0,
-    );
-    expect(relation!.rows).toBeLessThanOrEqual(boundedRows);
-    expect(sample.cost.backgroundStatements ?? 0).toBe(0);
+  for (const operation of operations) {
+    const states = new Map<number, State>();
+    const report = await checkGrowth(db, {
+      name: `Personal label catalogue ${operation.name}`,
+      scales,
+      rule: 'series',
+      warmups: 1,
+      repetitions: 5,
+      includeBackends: true,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(database, scale) {
+        await grow(database, scale);
+        await assertCapturedOperation(scale, operation);
+      },
+      async warmup() {
+        operation.assert(await operation.run(await operation.prepare()));
+      },
+      async prepare(_database, _scale, repetition) {
+        states.set(repetition, await operation.prepare());
+      },
+      async operation(_database, _scale, repetition) {
+        const state = states.get(repetition);
+        if (!state) throw new Error(`Missing fresh state for ${operation.name} repetition ${repetition}`);
+        operation.assert(await operation.run(state));
+      },
+    });
+    for (const sample of report.samples) {
+      const relation = sample.cost.relations['library.personal_label'];
+      expect(relation).toBeDefined();
+      expect(relation!.sequentialScans).toBe(0);
+      expect(relation!.rows).toBeLessThanOrEqual(operation.name.startsWith('list') ? 8 : 1);
+      expect(sample.cost.backgroundStatements ?? 0).toBe(0);
+    }
   }
   mkdirSync('.temp/label-catalogue', { recursive: true });
   writeFileSync('.temp/label-catalogue/native-growth.json', JSON.stringify(evidence));
