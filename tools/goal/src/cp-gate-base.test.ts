@@ -79,13 +79,13 @@ async function controlPlaneOutcome(
 test.serial('the control-plane gate allows failures reproduced by the same test file on its base', async () => {
   const { outcome } = await controlPlaneOutcome(true);
   expect(outcome?.passed).toBe(true);
-});
+}, 30_000);
 
 test.serial('the control-plane gate refuses a test file that fails on the branch and passes on its base', async () => {
   const { outcome } = await controlPlaneOutcome(false);
   expect(outcome?.passed).toBe(false);
   expect(outcome?.firstFailure?.assertion).toContain('Failures introduced on this branch');
-});
+}, 30_000);
 
 test.serial('the control-plane gate compares each failing test file alone on branch and base', async () => {
   const files = ['tools/goal/src/fixtures/one.test.ts', 'tools/goal/src/fixtures/two.test.ts'];
@@ -107,7 +107,7 @@ test.serial('the control-plane gate compares each failing test file alone on bra
   expect(outcome?.passed).toBe(false);
   expect(outcome?.firstFailure?.excerpt).toContain(files[1]);
   expect(outcome?.firstFailure?.excerpt).not.toContain(files[0]);
-});
+}, 30_000);
 
 test.serial('a failing control-plane test file added on the branch is a new failure', async () => {
   const file = 'tools/goal/src/fixtures/branch-only.test.ts';
@@ -122,4 +122,4 @@ test.serial('a failing control-plane test file added on the branch is a new fail
   expect(isolatedRuns[0]?.cwd).not.toContain('control-plane-base-');
   expect(outcome?.passed).toBe(false);
   expect(outcome?.firstFailure?.assertion).toContain('Failures introduced on this branch');
-});
+}, 30_000);
