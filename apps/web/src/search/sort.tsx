@@ -11,7 +11,7 @@ export function SearchSort({
   sort: 'relevance' | 'rating';
   locale: string;
   query: string;
-  type?: string;
+  type?: string | undefined;
   facets: Record<string, string[]>;
 }) {
   return (

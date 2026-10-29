@@ -108,7 +108,11 @@ export function ResultList({
         );
         const score = hit.publicRating?.score;
         return (
-          <ListRow key={hit.id} forceOverlay={hit.storyOverlay} className="flex min-w-0 items-start gap-4 py-2">
+          <ListRow
+            key={hit.id}
+            {...(hit.storyOverlay ? { forceOverlay: true } : {})}
+            className="flex min-w-0 items-start gap-4 py-2"
+          >
             <ListRowLink href={subjectLink.href}>{label.text}</ListRowLink>
             <div className="w-[72px] shrink-0 sm:w-24">
               <Cover

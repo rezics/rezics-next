@@ -97,6 +97,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function problemCode(error: unknown): string | undefined {
+  if (!isRecord(error)) return undefined;
+  if (typeof error.code === 'string') return error.code;
+  return isRecord(error.value) && typeof error.value.code === 'string' ? error.value.code : undefined;
+}
+
 function allowedType(release: Release, type: unknown): type is string {
   return typeof type === 'string' && Object.hasOwn(release.types, type) && isRecord(release.types[type]);
 }
@@ -257,7 +263,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             .subjects.$facets.post(facetBody)
             .then((response) => {
               if (response.error) {
-                facetIndexNotReady = isRecord(response.error) && response.error.code === 'index_not_ready';
+                facetIndexNotReady = problemCode(response.error) === 'index_not_ready';
                 return null;
               }
               return response.data as FacetResult;
@@ -280,7 +286,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
           .subjects.$facets.post(typeBody)
           .then((response) => {
             if (response.error) {
-              facetIndexNotReady ||= isRecord(response.error) && response.error.code === 'index_not_ready';
+              facetIndexNotReady ||= problemCode(response.error) === 'index_not_ready';
               return null;
             }
             return ((response.data as FacetResult).facets.find((facet) => facet.property === 'type')?.values ?? []).map(
