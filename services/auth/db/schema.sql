@@ -1334,6 +1334,13 @@ CREATE INDEX auth_session_opening_subject_account_id_idx ON public.auth_session_
 
 
 --
+-- Name: auth_workflow_request_automated_registration; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_workflow_request_automated_registration ON public.auth_workflow_request USING btree (((request ->> 'registrationId'::text))) WHERE ((request ->> 'kind'::text) = 'automated'::text);
+
+
+--
 -- Name: oauthAccessToken_authorizationCodeId_idx; Type: INDEX; Schema: public; Owner: -
 --
 
