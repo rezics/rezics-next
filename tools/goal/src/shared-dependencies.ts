@@ -59,25 +59,42 @@ function runInstall(root: string, shared = false): void {
       `Dependency install failed in ${root}: ${result.stderr || result.error?.message || `bun exited ${result.status}`}`,
     );
 }
-function localWorkspaceLinks(root: string): void {
+/** Workspace directories (relative to root) that have a package.json. */
+function workspaceDirs(root: string): string[] {
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     workspaces?: string[] | { packages?: string[] };
   };
   const patterns = Array.isArray(manifest.workspaces) ? manifest.workspaces : (manifest.workspaces?.packages ?? []);
+  const result: string[] = [];
   for (const pattern of patterns) {
     const wildcard = pattern.indexOf('*');
     const parent = wildcard < 0 ? pattern : pattern.slice(0, wildcard).replace(/\/$/, '');
+    if (!existsSync(join(root, parent))) continue;
     const dirs = wildcard < 0 ? [parent] : readdirSync(join(root, parent)).map((name) => join(parent, name));
-    for (const dir of dirs) {
-      const file = join(root, dir, 'package.json');
-      if (!existsSync(file)) continue;
-      const name = (JSON.parse(readFileSync(file, 'utf8')) as { name?: string }).name;
-      if (!name) continue;
-      const link = join(root, 'node_modules', name);
-      if (existsSync(link) || lstatSyncSafe(link)) continue;
-      mkdirSync(dirname(link), { recursive: true });
-      symlinkSync(join(root, dir), link, 'dir');
-    }
+    for (const dir of dirs) if (existsSync(join(root, dir, 'package.json'))) result.push(dir);
+  }
+  return result;
+}
+function localWorkspaceLinks(root: string): void {
+  for (const dir of workspaceDirs(root)) {
+    const name = (JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')) as { name?: string }).name;
+    if (!name) continue;
+    const link = join(root, 'node_modules', name);
+    if (existsSync(link) || lstatSyncSafe(link)) continue;
+    mkdirSync(dirname(link), { recursive: true });
+    symlinkSync(join(root, dir), link, 'dir');
+  }
+}
+/**
+ * Copies each workspace's own node_modules (its dependency links) from the store. The links are relative and reach
+ * the packages through the worktree's node_modules/.bun link, so they are copied unchanged.
+ */
+export function copyWorkspaceSkeletons(template: string, worktree: string): void {
+  for (const dir of workspaceDirs(template)) {
+    const source = join(template, dir, 'node_modules');
+    const target = join(worktree, dir, 'node_modules');
+    if (!existsSync(source) || lstatSyncSafe(target) || !existsSync(join(worktree, dir))) continue;
+    cpSync(source, target, { recursive: true, dereference: false, verbatimSymlinks: true });
   }
 }
 function lstatSyncSafe(path: string): boolean {
@@ -131,6 +148,7 @@ function copySkeleton(template: string, worktree: string): void {
   };
   walk(target);
   symlinkSync(join(template, 'node_modules', '.bun'), join(target, '.bun'), 'dir');
+  copyWorkspaceSkeletons(template, worktree);
   localWorkspaceLinks(worktree);
 }
 export function installPrivate(worktree: string): void {

@@ -272,3 +272,30 @@ test('a sealed store keeps package binaries executable and refuses writes', () =
     h.close();
   }
 });
+
+test('a worktree on a shared store gets each workspace its own dependency links', () => {
+  const h = fixture();
+  try {
+    const stores = join(h.root, 'stores');
+    const tree = (name: string) => {
+      const path = h.tree(name);
+      mkdirSync(join(path, 'packages', 'other'), { recursive: true });
+      writeFileSync(join(path, 'packages/other/package.json'), JSON.stringify({ name: '@test/other', version: '1.0.0' }));
+      writeFileSync(
+        join(path, 'packages/sample/package.json'),
+        JSON.stringify({ name: '@test/sample', version: '1.0.0', dependencies: { '@test/other': 'workspace:*' } }),
+      );
+      const lock = Bun.spawnSync(['bun', 'install', '--lockfile-only'], { cwd: path });
+      if (lock.exitCode !== 0) throw new Error(new TextDecoder().decode(lock.stderr));
+      return path;
+    };
+    const a = tree('a'),
+      b = tree('b');
+    installShared(a, stores);
+    installShared(b, stores);
+    expect(lstatSync(join(b, 'node_modules/.bun')).isSymbolicLink()).toBe(true);
+    expect(realpathSync(join(b, 'packages/sample/node_modules/@test/other'))).toBe(resolve(b, 'packages/other'));
+  } finally {
+    h.close();
+  }
+});
