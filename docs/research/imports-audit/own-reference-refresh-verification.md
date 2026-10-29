@@ -29,8 +29,18 @@ assertion order and business assertions are unchanged. The approved raw, install
 worker and read-only controller registry hashes all match the SHA-256 above. No worker formatting
 or frozen edit was necessary.
 
-The mandated root typecheck will run once first. Focused native acceptance will run once only if
-that compiler exits zero. The earlier isolated compiler probe is not evidence for this full file.
+The mandated root typecheck ran once first on committed revision
+`39e12edb2885ffd974fa849f9de53b0fa3d21ab1`:
+
+```sh
+bun scripts/worker-check.ts -- bun scripts/typecheck.ts
+```
+
+Check `95993fff-f007-4bce-830a-78972966d876` reached terminal **exit 0**. All 13 workspaces
+completed without errors. Log:
+`.temp/goal/checks/worker-check-2026-10-29T18-18-52.273Z-db91360d.log`.
+The full frozen file now compiles; focused native acceptance is the remaining required check.
+The earlier isolated compiler probe is not used as full-file evidence.
 Runtime, storage and local regression bytes are identical to `c79e538dfd`, so the qualified local
 bootstrap/reopen **2 pass, 16 assertions** and post-retention adjacent **11 pass, 158 assertions**
 receipts below are reused. No production, shared-type, infrastructure or dependency change is made.

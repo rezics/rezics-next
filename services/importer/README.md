@@ -116,8 +116,10 @@ Its installed SHA-256 is
 file, canonical worker bytes and read-only frozen registry. The latest authorized amendment
 factors the existing property conditional into a local binding before the same generic matcher;
 the compared objects and business assertions are unchanged. The preceding root typecheck failed
-with frozen-helper TS2353 before native execution. Current-tree root typecheck is required first;
-focused native acceptance runs only after compiler success. This installation alone proves neither.
+with frozen-helper TS2353 before native execution. Current-tree root typecheck passed all 13 workspaces on
+`39e12edb2885ffd974fa849f9de53b0fa3d21ab1` (check `95993fff-f007-4bce-830a-78972966d876`).
+Focused native acceptance remains to run after that compiler success; compilation alone does
+not establish the native transitions.
 All three adjacent recovery files passed (11 cases, 158 assertions), with the extra recovery file
 run separately after a filename correction. The local reopen regression passed (2 cases,
 16 assertions); runtime, storage and local regression bytes remain unchanged, so those qualified
