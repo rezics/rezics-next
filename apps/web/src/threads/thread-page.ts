@@ -1,4 +1,6 @@
 import type { KernelClient } from '@rezics/client';
+import type { DocumentMentions } from '@rezics/ui/document-body';
+import { readDocumentMentions } from '../kernel/mentions';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
@@ -24,6 +26,7 @@ export type LoadedThreadPage = {
   board?: Board;
   realm?: BoardRealm;
   posts: PostPage;
+  mentions: DocumentMentions;
   viewerId?: string;
   verification: VerificationConfig;
 };
@@ -114,7 +117,12 @@ export async function loadThreadPage(
   const [pageContext, postsResult] = await Promise.all([readContext(), postsRead]);
   context = pageContext;
   posts = checkRead<PostPage>(postsResult, 'thread posts');
+  const mentions = await readDocumentMentions(
+    client,
+    posts.posts.map((post) => post.body),
+  );
   return {
+    mentions,
     thread: thread.thread,
     ...context,
     posts,

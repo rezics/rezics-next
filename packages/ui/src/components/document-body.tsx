@@ -13,16 +13,33 @@ export const documentBodyLabels = {
 
 export type DocumentBodyLabels = { readonly [K in keyof typeof documentBodyLabels]: string };
 
-type Props = { document: DocumentSnapshot; className?: string; labels?: Partial<DocumentBodyLabels> };
+export type DocumentMentions = Readonly<Record<string, { handle: string }>>;
+type Props = {
+  document: DocumentSnapshot;
+  className?: string;
+  labels?: Partial<DocumentBodyLabels>;
+  mentions?: DocumentMentions;
+  locale?: string;
+};
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
-export function DocumentBody({ document, className, labels }: Props) {
+export function DocumentBody({ document, className, labels, mentions, locale = 'en' }: Props) {
   const resolved = { ...documentBodyLabels, ...labels };
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
     options: {
       nodeMapping: {
+        mention: ({ node }: any) => {
+          const account = Object.hasOwn(mentions ?? {}, node.attrs?.accountId)
+            ? mentions?.[node.attrs.accountId]
+            : undefined;
+          return account ? (
+            <a href={`/${encodeURIComponent(locale)}/@${encodeURIComponent(account.handle)}`}>@{account.handle}</a>
+          ) : (
+            <>@</>
+          );
+        },
         horizontalRule: () => <hr />,
         image: ({ node }: any) => {
           const id = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
@@ -70,7 +87,8 @@ export function DocumentBody({ document, className, labels }: Props) {
         ),
       },
       markMapping: {
-        link: ({ mark, children }: any) => {
+        link: ({ mark, children, node }: any) => {
+          if (node.type.name === 'mention') return <>{children}</>;
           const href = safeDocumentUrl(mark.attrs?.href);
           return href ? (
             <a href={href} rel={rel}>

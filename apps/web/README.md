@@ -572,6 +572,12 @@ Each server render and browser session has its own query cache. Public reads sta
 - **Growth check:** `tests/thread-personal.test.ts` verifies anonymous server rendering, browser-only personal data,
   reserved personal-control space and query updates after reply, edit, delete and reaction.
 
+### Thread page mentions
+
+- **Touches:** One additional public `GET /v1/accounts?ids=` in the thread page's server read when a rendered post mentions someone; none otherwise. All posts share the resulting current-handle map, with a plain `@` for missing or deleted accounts
+- **Bound:** At most 100 distinct account ids, collected in document order in O(page document nodes); ids beyond that bound remain unresolved. This adds at most 1 K to the thread page bound above. The post composer's exact `GET /v1/accounts?handle=` lookup waits for a 200 ms typing pause and aborts stale requests, with at most one request in flight
+- **Growth check:** `tests/mentions.test.ts` loads pages mentioning 0, 1, 10, 100 and 120 distinct accounts; `packages/ui/tests/editor-mention.test.ts` covers one lookup for a quickly typed ten-character handle, cancellation, selection and accessibility
+
 ### Realm crumb
 
 The line above a thread title reads `Realm › Board`, and the line above a board title names the Realm. Both are links:

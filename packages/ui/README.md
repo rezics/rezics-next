@@ -46,6 +46,8 @@ The rich-text editor keeps Tiptap and the document model (`@rezics/document`) an
 
 shadcn menus and sheets render in a portal on the page, not inside the story canvas, so a story finds them with `screen`. A layer that takes focus must hand it back through Tiptap's frame-deferred restore (`returnFocus` in `editor-selection-menu.tsx`); wait for the editor to hold focus before sending the next key.
 
+`RichTextEditor` accepts an optional `lookupMention(handle, signal)` source. After a 200 ms typing pause, `@handle` offers one exact account match; stale lookups are aborted, keyboard or pointer selection inserts an inline `mention` with only its `accountId`, and Escape keeps the typed text. Without a source, `@` stays plain text. `DocumentBody` accepts a `mentions` map of account ids to current handles and a `locale` (English by default); it renders localized agent links, or a plain `@` for unresolved accounts. Handles are rendered as text, never HTML.
+
 `Prose` is the surface for documents, in the reading page (`DocumentBody`) and in the editor. Body text is interface text. Only a Work title, marked with the `work-title` class, takes the serif face. A line holds about 65 characters (36 em for Chinese, Japanese and Korean, where a character is an em wide), and CJK text gets more leading. The styles live in `src/prose.css`.
 
 ## Content feedback

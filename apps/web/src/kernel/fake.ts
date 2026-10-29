@@ -397,6 +397,8 @@ async function selectRecording(
       };
     }
   }
+  if (request.method === 'GET' && pathname === `/v1/threads/${mentionThreadId}`) return mentionStoryThread();
+  if (request.method === 'GET' && pathname === `/v1/threads/${mentionThreadId}/posts`) return mentionStoryPosts();
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
     // A shelf reads one status at a time; the recording holds every status, so the answer keeps the asked one.
     const state = new URL(request.url).searchParams.get('state');
@@ -433,6 +435,32 @@ async function selectRecording(
     }
     const withDeleted = pathname === '/v1/accounts' ? withDeletedOrganization(request, recordings.accounts) : undefined;
     if (withDeleted) return withDeleted;
+    if (pathname === '/v1/accounts' && new URL(request.url).searchParams.has('handle')) {
+      const handle = new URL(request.url).searchParams.get('handle')!;
+      const accounts = Array.isArray(recordings.accounts?.accounts) ? recordings.accounts.accounts : [];
+      return {
+        status: 200,
+        accounts: accounts.filter(
+          (account) =>
+            isRecord(account) &&
+            account.state === 'active' &&
+            typeof account.handle === 'string' &&
+            account.handle.toLowerCase() === handle.toLowerCase(),
+        ),
+        next: null,
+      };
+    }
+    if (pathname === '/v1/accounts' && new URL(request.url).searchParams.has('ids')) {
+      const ids = new Set(new URL(request.url).searchParams.get('ids')!.split(',').slice(0, 100));
+      const accounts = Array.isArray(recordings.accounts?.accounts) ? recordings.accounts.accounts : [];
+      return {
+        status: 200,
+        accounts: accounts.filter(
+          (account) => isRecord(account) && typeof account.id === 'string' && ids.has(account.id),
+        ),
+        next: null,
+      };
+    }
     if (pathname === '/v1/accounts') return recordings.accounts;
     const vote = /^\/v1\/subjects\/([^/]+)\/ratings\/([^/]+)\/vote$/.exec(pathname);
     if (
@@ -1026,6 +1054,21 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
       const account = fixtures.accounts?.find((item) => item.subject === subjectId && item.state === 'active');
       return Response.json({ accounts: account ? [accountProfile(fixtures, account)] : [], next: null });
     }
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/v1/accounts' &&
+      (url.searchParams.has('handle') || url.searchParams.has('ids'))
+    ) {
+      const handle = url.searchParams.get('handle');
+      const ids = new Set(url.searchParams.get('ids')?.split(',').slice(0, 100) ?? []);
+      const accounts =
+        fixtures.accounts?.filter((account) =>
+          handle !== null
+            ? account.state === 'active' && account.handle.toLowerCase() === handle.toLowerCase()
+            : ids.has(account.id),
+        ) ?? [];
+      return Response.json({ accounts: accounts.map((account) => accountProfile(fixtures, account)), next: null });
+    }
     const list = /^\/v1\/accounts\/([^/]+)\/(posts|threads|collections)$/.exec(url.pathname);
     if (request.method === 'GET' && list) {
       const owner = fixtures.accounts?.find(
@@ -1071,3 +1114,26 @@ function suggestionRead(subjects: readonly unknown[], request: Request): KernelR
 }
 
 export { pageRead };
+/** A separate mention story preserves the recorded responses used by the other page stories. */
+export const mentionThreadId = '01a17a7a-1071-720c-8100-2345e36e84df';
+function mentionStoryPosts(): KernelRecording {
+  const posts = structuredClone(threadPostsRecording.posts);
+  for (const post of posts) {
+    post.threadId = mentionThreadId;
+    if (post.body)
+      post.body.doc.content.push({
+        type: 'paragraph',
+        attrs: { id: `mentions-${post.id}` },
+        content: [
+          { type: 'text', text: 'Thanks, ' },
+          { type: 'mention', attrs: { accountId: accountsRecording.accounts[0]!.id } },
+          { type: 'text', text: '. ' },
+          { type: 'mention', attrs: { accountId: deletedOrganizationId } },
+        ],
+      } as never);
+  }
+  return { status: 200, posts, next: null };
+}
+function mentionStoryThread(): KernelRecording {
+  return { status: 200, thread: { ...threadRecording.thread, id: mentionThreadId } };
+}

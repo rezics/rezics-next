@@ -1,6 +1,6 @@
 import { useSession } from '../../session/query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody, type DocumentMentions } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
 import type { ReactionKind } from '@rezics/ui/reactions';
 import { createFileRoute, redirect, useLocation } from '@tanstack/react-router';
@@ -69,7 +69,17 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
 });
 
 function ThreadPage() {
-  const { thread, board, realm, posts: loadedPosts, verification, authors, subjects, now } = Route.useLoaderData();
+  const {
+    thread,
+    board,
+    realm,
+    posts: loadedPosts,
+    verification,
+    authors,
+    subjects,
+    mentions,
+    now,
+  } = Route.useLoaderData();
   const [posts, setPosts] = useState(loadedPosts);
   const { state: session } = useSession();
   const queryClient = useQueryClient();
@@ -127,6 +137,7 @@ function ThreadPage() {
                   onChange={updatePost}
                   post={post}
                   authors={authors}
+                  mentions={mentions}
                   now={now}
                   counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
                   returnTo={returnTo}
@@ -198,6 +209,7 @@ function postDeleteFailureText(failure: WriteFailure): string {
 function PostSlot({
   post,
   authors,
+  mentions,
   now,
   viewerId,
   personalReady,
@@ -213,6 +225,7 @@ function PostSlot({
 }: {
   post: ThreadPost;
   authors: PageAuthors;
+  mentions: DocumentMentions;
   now: string;
   viewerId: string | undefined;
   personalReady: boolean;
@@ -358,7 +371,13 @@ function PostSlot({
           }}
         />
       ) : (
-        <DocumentBody className="mx-0!" document={post.body} labels={{ revealSpoiler: m.thread_reveal_spoiler() }} />
+        <DocumentBody
+          className="mx-0!"
+          document={post.body}
+          mentions={mentions}
+          locale={getLocale()}
+          labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
+        />
       )}
     </li>
   );

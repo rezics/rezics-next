@@ -45,6 +45,8 @@
   "editor_invalid_url": "Geben Sie eine http:-, https:- oder mailto:-Adresse ein.",
   "editor_italic": "Kursiv",
   "editor_link": "Link",
+  "editor_mention_accounts": "Konto erwähnen",
+  "editor_mention_loading": "Konto wird gesucht…",
   "editor_open_link": "Link öffnen",
   "editor_ordered_list": "Nummerierte Liste",
   "editor_paragraph": "Absatz",

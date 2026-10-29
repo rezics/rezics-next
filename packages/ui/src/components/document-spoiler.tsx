@@ -38,7 +38,9 @@ export function DocumentSpoiler({ children, label = 'Reveal spoiler' }: { childr
         }
       }}
     >
-      <span aria-hidden="true">{children}</span>
+      <span aria-hidden="true" style={{ visibility: 'hidden' }}>
+        {children}
+      </span>
     </Button>
   );
 }

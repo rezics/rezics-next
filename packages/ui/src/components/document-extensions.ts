@@ -100,6 +100,33 @@ const HardBreak = Node.create({
   renderHTML: () => ['br'],
 });
 
+const Mention = Node.create({
+  name: 'mention',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  addAttributes: () => ({
+    accountId: {
+      default: null,
+      parseHTML: (element: HTMLElement) => element.getAttribute('data-mention-account-id'),
+      renderHTML: (attrs: Attribute) => ({ 'data-mention-account-id': attrs.accountId }),
+    },
+  }),
+  parseHTML: () => [
+    {
+      tag: 'span[data-mention-account-id]',
+      getAttrs: (element) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+          element.getAttribute('data-mention-account-id') ?? '',
+        )
+          ? {}
+          : false,
+    },
+  ],
+  renderHTML: ({ HTMLAttributes }) => ['span', HTMLAttributes, '@'],
+  renderText: () => '@',
+});
+
 const Ruby = Node.create({
   name: 'ruby',
   group: 'inline',
@@ -463,6 +490,7 @@ export const documentExtensions: Extensions = [
   codeBlock,
   horizontalRule,
   HardBreak,
+  Mention,
   Ruby,
   table,
   tableRow,

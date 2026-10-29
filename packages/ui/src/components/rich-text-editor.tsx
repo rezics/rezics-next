@@ -26,6 +26,14 @@ import { editorUploads, type ImageUploader, type UploadEntry, type UploadState }
 import { availableCommands, imageCommand } from './editor-commands.ts';
 import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
 
+import {
+  idleMentionHandlers,
+  mentionExtension,
+  MentionMenu,
+  withMentionView,
+  type MentionSource,
+} from './editor-mention.tsx';
+
 export type { ImageUploader, UploadedImage, UploadState } from './editor-uploads.ts';
 export type { RichTextEditorLabels } from './editor-labels.ts';
 
@@ -45,6 +53,7 @@ export interface RichTextEditorProps {
   toolbar?: 'auto' | 'always' | 'never';
   maxLength?: number;
   upload?: ImageUploader;
+  lookupMention?: MentionSource;
   onUploadState?: (state: UploadState, count: number) => void;
   /** Rendered at the end of the row that starts with the image control. */
   actions?: ReactNode;
@@ -139,6 +148,7 @@ export function RichTextEditor({
   maxLength,
   upload,
   onUploadState,
+  lookupMention,
   actions,
   onBlur,
   onFocus,
@@ -173,6 +183,10 @@ export function RichTextEditor({
   const labelsRef = useRef(resolvedLabels);
   labelsRef.current = resolvedLabels;
   const slashHandlers = useRef(idleSlashHandlers);
+  const mentionHandlers = useRef(idleMentionHandlers);
+  const mentionEnabled = useRef(!!lookupMention);
+  mentionEnabled.current = !!lookupMention;
+  const mentionHandles = useRef(new Map<string, string>());
 
   const publish = useCallback(
     (editor: TiptapEditor) => {
@@ -222,14 +236,18 @@ export function RichTextEditor({
     {
       extensions: [
         EditorHistory,
-        ...withImageView(
-          editorExtensions(value.profile, {
-            ...(placeholder === undefined ? {} : { placeholder }),
-            ...(maxLength === undefined ? {} : { maxLength }),
-          }),
-          () => labelsRef.current,
+        ...withMentionView(
+          withImageView(
+            editorExtensions(value.profile, {
+              ...(placeholder === undefined ? {} : { placeholder }),
+              ...(maxLength === undefined ? {} : { maxLength }),
+            }),
+            () => labelsRef.current,
+          ),
+          mentionHandles,
         ),
         slashExtension(slashHandlers),
+        mentionExtension(mentionHandlers, mentionEnabled),
       ],
       content: normalizedValue.doc as JSONContent,
       injectCSS: false,
@@ -427,6 +445,15 @@ export function RichTextEditor({
               labels={resolvedLabels}
               onInsert={(files, position, alt) => uploads.current?.add(files, position, alt)}
               onClose={() => setImagePosition(null)}
+            />
+          ) : null}
+          {lookupMention ? (
+            <MentionMenu
+              editor={editor}
+              source={lookupMention}
+              handlers={mentionHandlers}
+              handles={mentionHandles}
+              labels={resolvedLabels}
             />
           ) : null}
           <SlashMenu

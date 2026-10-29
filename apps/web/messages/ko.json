@@ -45,6 +45,8 @@
   "editor_invalid_url": "http:, https: 또는 mailto: 주소를 입력하세요.",
   "editor_italic": "기울임",
   "editor_link": "링크",
+  "editor_mention_accounts": "계정 언급",
+  "editor_mention_loading": "계정 검색 중…",
   "editor_open_link": "링크 열기",
   "editor_ordered_list": "번호 매기기 목록",
   "editor_paragraph": "단락",

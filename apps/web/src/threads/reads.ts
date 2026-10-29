@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import type { DocumentMentions } from '@rezics/ui/document-body';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -160,6 +161,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
           board?: Board['board'];
           realm?: BoardRealm;
           posts: PostPage;
+          mentions: DocumentMentions;
           viewerId?: string;
           verification: VerificationConfig;
           authors: PageAuthors;

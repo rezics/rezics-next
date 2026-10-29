@@ -6,6 +6,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { Spinner } from '@rezics/ui/shadcn/spinner';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { lookupPostMention } from './mentions';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from './actions';
@@ -88,6 +89,8 @@ function editorLabels(): RichTextEditorLabels {
     table: m.editor_table(),
     insertBlock: m.editor_insert_block(),
     slashEmpty: m.editor_slash_empty(),
+    mentionAccounts: m.editor_mention_accounts(),
+    mentionLoading: m.editor_mention_loading(),
     bold: m.editor_bold(),
     italic: m.editor_italic(),
     strike: m.editor_strike(),
@@ -230,10 +233,12 @@ export function PostComposer<T>({
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
     const next = fromPlainText(target.innerText, 'blocks');
-    bodyRef.current = next;
-    if (plainEditorVisible) setBody(next);
     const hasMedia = target.querySelector('img, [data-media-id], [data-type="image"]') !== null;
     setBodyCanSend(hasDocumentContent(next) || hasMedia);
+    // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
+    if (target.classList.contains('ProseMirror')) return;
+    bodyRef.current = next;
+    if (plainEditorVisible) setBody(next);
   }
 
   function handleUploadState(state: UploadState, count: number) {
@@ -321,6 +326,7 @@ export function PostComposer<T>({
             {...(titleRequired ? {} : { placeholder: m.thread_reply_placeholder() })}
             {...(titleRequired ? { toolbar: 'always' as const } : {})}
             labels={labels}
+            lookupMention={lookupPostMention}
             className={`thread-post-editor ${editorSize}${plainEditorVisible ? ' thread-editor-pending' : ''}`}
             actions={
               <Button
@@ -431,6 +437,8 @@ export function InlinePostEditor({
   function captureEditorInput(event: FormEvent<HTMLDivElement>) {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
+    // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
+    if (target.classList.contains('ProseMirror')) return;
     const next = fromPlainText(target.innerText, 'blocks');
     bodyRef.current = next;
     setBody(next);
@@ -495,6 +503,12 @@ export function InlinePostEditor({
       className="space-y-4 rounded-xl border border-border/70 bg-card p-5"
       onInputCapture={captureEditorInput}
       onKeyDownCapture={(event) => {
+        if (
+          event.target instanceof HTMLElement &&
+          (event.target.closest('[role="combobox"][aria-expanded="true"]') ||
+            event.currentTarget.querySelector('[data-slot="editor-mention"]'))
+        )
+          return;
         if (event.key === 'Escape' && !submitting) {
           event.preventDefault();
           onCancel();
@@ -516,6 +530,7 @@ export function InlinePostEditor({
             onChange={updateBody}
             label={m.thread_reply_body_label()}
             labels={labels}
+            lookupMention={lookupPostMention}
             className="thread-post-editor"
             upload={upload}
             onUploadState={handleUploadState}

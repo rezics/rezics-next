@@ -45,6 +45,8 @@
   "editor_invalid_url": "Escribe una dirección http:, https: o mailto:.",
   "editor_italic": "Cursiva",
   "editor_link": "Enlace",
+  "editor_mention_accounts": "Mencionar una cuenta",
+  "editor_mention_loading": "Buscando la cuenta…",
   "editor_open_link": "Abrir el enlace",
   "editor_ordered_list": "Lista numerada",
   "editor_paragraph": "Párrafo",

@@ -45,6 +45,8 @@
   "editor_invalid_url": "http:、https: または mailto: のアドレスを入力してください。",
   "editor_italic": "斜体",
   "editor_link": "リンク",
+  "editor_mention_accounts": "アカウントをメンション",
+  "editor_mention_loading": "アカウントを検索中…",
   "editor_open_link": "リンクを開く",
   "editor_ordered_list": "番号付きリスト",
   "editor_paragraph": "段落",
