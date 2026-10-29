@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -44,20 +44,46 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
 export type GateRunner = (argv: readonly string[], cwd: string, logPath: string) => Promise<GateResult>;
 
-export function gateRunner(timeoutMs = 600_000, stateDirectory?: string): GateRunner {
+const activeCommandGroups = new Set<number>();
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  const stopGroups = () => {
+    for (const pid of activeCommandGroups) {
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {}
+    }
+    process.removeListener(signal, stopGroups);
+    process.kill(process.pid, signal);
+  };
+  process.on(signal, stopGroups);
+}
+
+/** Run a command in an isolated process group and reap the entire group on every exit path. */
+export function processGroupRunner(
+  timeoutMs?: number,
+  stateDirectory?: string,
+  parent: NodeJS.ProcessEnv = process.env,
+  sanitizeEnvironment = true,
+): GateRunner {
   return async (argv, cwd, logPath) => {
     if (!argv.length) throw new Error('A gate command is required');
-    // A separate process group allows the timeout to stop grandchildren as well as the shell.
-    const { spawn } = await import('node:child_process');
     return await new Promise<GateResult>((resolve, reject) => {
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
-        env: gateEnvironment(process.env, stateDirectory ?? gateStateDirectory(cwd, process.env)),
+        env: sanitizeEnvironment ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent)) : parent,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
+      if (child.pid !== undefined) activeCommandGroups.add(child.pid);
       let output = '';
       let timedOut = false;
+      let settled = false;
+      const killGroup = () => {
+        if (child.pid === undefined) return;
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch {}
+      };
       const collect = (chunk: Buffer) => {
         const text = chunk.toString();
         output += text;
@@ -65,22 +91,37 @@ export function gateRunner(timeoutMs = 600_000, stateDirectory?: string): GateRu
       };
       child.stdout.on('data', collect);
       child.stderr.on('data', collect);
-      const timer = setTimeout(() => {
-        timedOut = true;
-        try {
-          process.kill(-child.pid!, 'SIGKILL');
-        } catch {}
-      }, timeoutMs);
+      const timer =
+        timeoutMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              timedOut = true;
+              killGroup();
+            }, timeoutMs);
+      const cleanup = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        if (child.pid !== undefined) activeCommandGroups.delete(child.pid);
+        killGroup();
+      };
       child.once('error', (error) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(error);
       });
       child.once('close', (code) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        cleanup();
         resolve({ passed: code === 0 && !timedOut, output, timedOut });
       });
     });
   };
+}
+
+export function gateRunner(timeoutMs = 600_000, stateDirectory?: string): GateRunner {
+  const run = processGroupRunner(timeoutMs, stateDirectory);
+  return (argv, cwd, logPath) => run(argv, cwd, logPath);
 }
 
 /** Extract assertion content, ignoring reporter ordering, source locations and timing decoration. */
