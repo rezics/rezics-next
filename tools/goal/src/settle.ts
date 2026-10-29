@@ -1,6 +1,13 @@
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
-import { makeRecord, POOL_EXHAUSTED, readMeasurement, reportedApproaches, reportsSuccess } from './records.ts';
+import {
+  makeRecord,
+  POOL_EXHAUSTED,
+  readLogTail,
+  readMeasurement,
+  reportedApproaches,
+  reportsSuccess,
+} from './records.ts';
 import { recordClaudeRateLimit } from './usage.ts';
 import { evidenceBundle } from './evidence.ts';
 import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
@@ -61,10 +68,10 @@ export async function settle(
         a.exitCode = code;
         a.after = pool ? tasks.reader(pool) : null;
       });
-      const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
+      const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory, maxLogBytes: 256 * 1024 });
       if (pool?.cli === 'claude')
         try {
-          recordClaudeRateLimit(pool, readFileSync(attempt.logPath, 'utf8'));
+          recordClaudeRateLimit(pool, readLogTail(attempt.logPath));
         } catch {
           /* No log to read. */
         }

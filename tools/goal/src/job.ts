@@ -24,6 +24,7 @@ import {
   isUsageLimitRefusal,
   makeRecord,
   readMeasurement,
+  readLogTail,
   reportedApproaches,
   CHECK_HOST_TRANSPORT,
   MODEL_AT_CAPACITY,
@@ -58,7 +59,7 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
 
 function loggedCommands(logPath: string): string[] {
   try {
-    return readFileSync(logPath, 'utf8')
+    return readLogTail(logPath)
       .split(/\r?\n/)
       .flatMap((line) => {
         try {
@@ -631,6 +632,10 @@ export class WorkerJob implements GateOutcomeSink {
     // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.
     if (adoptRunning) this.releaseMetDependents();
     const tasks = adoptRunning ? store.tasks() : [];
+    let sweepItems = 0;
+    const yieldSweep = async () => {
+      if (++sweepItems % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+    };
     for (const task of !adoptRunning
       ? []
       : tasks.filter(
@@ -640,13 +645,15 @@ export class WorkerJob implements GateOutcomeSink {
             this.tasks.dependenciesMet(t, tasks) &&
             // A ready task with a pending retry intent is a retry, started from the intent.
             store.retryIntent({ taskId: t.id, attempt: t.currentAttempt })?.status !== 'pending',
-        ))
+        )) {
       this.track(
         this.startReleased(task.id).catch((error) => {
           if (store.task(task.id).state === 'ready') throw error;
           // Another process started it first.
         }),
       );
+      await yieldSweep();
+    }
     const stateDirectory = resolve(this.tasks.settings.stateDirectory);
     const ownsRunLog = (logPath: string) => {
       const path = relative(stateDirectory, resolve(logPath));
@@ -665,6 +672,7 @@ export class WorkerJob implements GateOutcomeSink {
     if (adoptRunning) {
       const graceMs = this.tasks.settings.startGraceMs ?? START_GRACE_MS;
       for (const attempt of store.attemptsInState('pending')) {
+        await yieldSweep();
         if (attempt.state !== 'pending' || Date.now() - Date.parse(attempt.startedAt) < graceMs) continue;
         const task = store.task(attempt.taskId);
         if (task.currentAttempt !== attempt.attempt || task.state !== 'ready') continue;
@@ -691,6 +699,7 @@ export class WorkerJob implements GateOutcomeSink {
       const graceMs = 2 * (this.tasks.settings.startGraceMs ?? START_GRACE_MS);
       const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
       for (const task of store.tasks()) {
+        await yieldSweep();
         if (task.state !== 'ready' || task.currentAttempt !== 0 || this.recovering.has(task.id)) continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
         try {
@@ -712,6 +721,7 @@ export class WorkerJob implements GateOutcomeSink {
     // Adopted attempts are followed at once: followed in turn, one long-running worker held back every later settle.
     const follows: Promise<void>[] = [];
     for (const { attempt: candidate, taskState, currentAttempt } of candidates) {
+      await yieldSweep();
       const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
       // Candidate metadata was read from the task/attempt join before touching the per-task lease.
       if (taskState !== 'running' || currentAttempt !== ref.attempt) continue;
