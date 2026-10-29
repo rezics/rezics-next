@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
-import type { Task } from './types.ts';
+import { settle } from './settle.ts';
+import type { Attempt, Task } from './types.ts';
 import { harness } from './test-support.ts';
 
 const waitingCli = `#!/usr/bin/env bun
@@ -14,7 +15,7 @@ const root = process.cwd();
 if (process.argv.includes('resume')) {
   writeFileSync(join(root, '.temp/goal/resume-args.json'), JSON.stringify(process.argv));
   writeFileSync(join(root, '.temp/goal/resume-started'), 'yes');
-  while (!existsSync(join(root, '.temp/goal/release-resume'))) await Bun.sleep(10);
+  await Bun.sleep(150);
   writeFileSync('result.txt', 'resumed');
   spawnSync('git', ['add', 'result.txt']);
   spawnSync('git', ['commit', '-m', 'Resume check worker']);
@@ -35,13 +36,68 @@ async function waitFor(path: string): Promise<void> {
   throw new Error(`timed out waiting for ${path}`);
 }
 
+async function startWaitingAttempt(h: ReturnType<typeof harness>) {
+  const task = h.tasks.dispatch(h.briefFile);
+  const startedAt = new Date().toISOString();
+  const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n): Attempt => ({
+    taskId: task.id,
+    attempt: n,
+    state: 'pending',
+    profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt,
+    endedAt: null,
+    process: null,
+    driver: null,
+    logPath: join(h.settings.stateDirectory, 'runs', task.id, `${n}.jsonl`),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(n)),
+    auxiliaryProcesses: [],
+    session: null,
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  }));
+  mkdirSync(join(attempt.logPath, '..'), { recursive: true });
+  writeFileSync(
+    attempt.logPath,
+    [
+      { type: 'thread.started', thread_id: 'wake-session' },
+      {
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: JSON.stringify({ status: 'waiting', summary: 'checks running', checks: ['check-a', 'check-b'] }),
+        },
+      },
+    ].map((event) => JSON.stringify(event)).join('\n') + '\n',
+  );
+  h.store.updateAttempt(attempt, (current) => {
+    current.state = 'running';
+  });
+  h.store.updateTask(attempt, (current) => {
+    current.state = 'running';
+  });
+  const landings: unknown[] = [];
+  await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue: (request) => landings.push(request) });
+  expect(landings).toHaveLength(0);
+  return { task, ref: { taskId: task.id, attempt: 1 } };
+}
+
 test('waiting workers release their cap slot and resume the same session with every completed check result', async () => {
   const h = harness(waitingCli);
   try {
-    const task = h.tasks.dispatch(h.briefFile);
+    const { task, ref } = await startWaitingAttempt(h);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    await job.start(task.id);
-    const ref = { taskId: task.id, attempt: 1 };
     const waiting = h.store.attempt(ref);
     expect(waiting.state).toBe('waiting');
     expect(waiting.checks).toEqual(['check-a', 'check-b']);
@@ -70,7 +126,6 @@ test('waiting workers release their cap slot and resume the same session with ev
     const prompt = args.at(-1)!;
     expect(prompt).toContain('check-a: exit status 0; passed; log path .temp/goal/checks/check-a.log');
     expect(prompt).toContain('check-b: exit status 9; assertion failed: expected 2; log path .temp/goal/checks/check-b.log');
-    writeFileSync(join(task.worktree, '.temp/goal/release-resume'), 'yes');
     await recovery;
     expect(readFileSync(join(task.worktree, 'result.txt'), 'utf8')).toBe('resumed');
   } finally {
@@ -81,9 +136,8 @@ test('waiting workers release their cap slot and resume the same session with ev
 test('a vanished check wakes a waiting attempt with the recovery fact', async () => {
   const h = harness(waitingCli);
   try {
-    const task = h.tasks.dispatch(h.briefFile);
+    const { task } = await startWaitingAttempt(h);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    await job.start(task.id);
     const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
     mkdirSync(resultDirectory, { recursive: true });
     writeFileSync(join(resultDirectory, 'check-a.json'), JSON.stringify({ exitStatus: 0, summary: 'passed', logPath: 'a.log' }));
@@ -91,7 +145,6 @@ test('a vanished check wakes a waiting attempt with the recovery fact', async ()
     await waitFor(join(task.worktree, '.temp/goal/resume-started'));
     const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
     expect(args.at(-1)).toContain('check check-b: run vanished or check host failed');
-    writeFileSync(join(task.worktree, '.temp/goal/release-resume'), 'yes');
     await recovery;
   } finally {
     h.dispose();
