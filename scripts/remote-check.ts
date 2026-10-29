@@ -10,17 +10,7 @@
 // host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
 import { randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { openDb } from '../tools/goal/src/db.ts';
-import { recordFlow } from '../tools/goal/src/flow.ts';
-
-export function recordRemoteCheckFlow(action: 'requested'|'acquired'|'released', env: NodeJS.ProcessEnv = process.env, at = new Date()): void {
-  const taskId=env.GOAL_TASK_ID, attempt=Number(env.GOAL_ATTEMPT), waitFile=env.GOAL_CHECK_WAIT_FILE;
-  if (!taskId || !waitFile || !Number.isSafeInteger(attempt) || attempt < 0) return;
-  const stateDirectory=dirname(dirname(dirname(resolve(waitFile))));
-  const db=openDb(join(stateDirectory,'goal.sqlite'));
-  try { recordFlow(db,{taskId,attempt,stage:'check',action,at:at.toISOString()}); } finally { db.close(); }
-}
+import { join, resolve } from 'node:path';
 
 export type Host = {
   name: string;
@@ -444,9 +434,7 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  recordRemoteCheckFlow('requested');
   const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal);
-  recordRemoteCheckFlow('acquired');
   const { host } = lease;
   reportDuration('slot wait', slotWaitStarted, host.name);
   const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -498,7 +486,6 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
       console.error(`remote-check: could not remove ${directory} on ${host.name}`);
     }
     await lease.release();
-    recordRemoteCheckFlow('released');
   }
 }
 
