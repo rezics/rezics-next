@@ -121,12 +121,17 @@ beforeAll(async () => {
     [PLATFORM_RESOURCE, ['offer:create']],
     [{ route: 0, id: GLOBAL_CONTEXT }, ['subject:create']],
   ] as const) {
-    await post(first.staff, '/v1/grants', {
-      resource,
-      subject: { kind: 'account', id: first.staff.accountId },
-      actions,
-      valid: '(,)',
-    });
+    await post(
+      first.staff,
+      '/v1/grants',
+      {
+        resource,
+        subject: { kind: 'account', id: first.staff.accountId },
+        actions,
+        valid: '(,)',
+      },
+      201,
+    );
   }
   await bootstrapRelease(pool, bundledRelease);
   targetSubjectId = (
