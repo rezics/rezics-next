@@ -138,7 +138,7 @@ function Logo() {
 function Navigation({ pathname, session }: { pathname: string; session: ShellSession }) {
   const offered = useOfferedDestinations(session);
   return (
-    <nav aria-label={m.shell_navigation()} className="sticky top-16 flex min-h-0 w-full flex-1 flex-col">
+    <nav aria-label={m.shell_navigation()} className="sticky top-16 w-full">
       <SidebarContent className="overflow-visible!">
         <SidebarGroup>
           <SidebarMenu>
