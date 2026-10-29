@@ -548,7 +548,8 @@ export function resolveMechanicalConflicts(
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
         if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
           throw new WorkerConflictError(file);
-        if (markdown === 'union') assertTaskDeletionsAbsent(file, base!, ours!, text);
+        // During rebase, stage 2 is the new base (dev) and stage 3 is the replayed task commit.
+        if (markdown === 'union') assertTaskDeletionsAbsent(file, base!, theirs!, text);
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -574,8 +575,10 @@ export function resolveMechanicalConflicts(
         comparableJson(theirs) !== comparableJson(base)
       )
         throw new WorkerConflictError(file);
+      // Stage 3 is the task being replayed; stage 2 is dev. Reject any mechanically merged result
+      // that restores a message value the task removed or replaced.
       const deletedOrReplaced = Object.keys(base ?? {}).filter(
-        (key) => Object.hasOwn(base!, key) && (!Object.hasOwn(ours!, key) || comparableJson(base![key]) !== comparableJson(ours![key])),
+        (key) => Object.hasOwn(base!, key) && (!Object.hasOwn(theirs!, key) || comparableJson(base![key]) !== comparableJson(theirs![key])),
       );
       const stale = deletedOrReplaced.filter(
         (key) => Object.hasOwn(merged.value, key) && comparableJson(merged.value[key]) === comparableJson(base![key]),
