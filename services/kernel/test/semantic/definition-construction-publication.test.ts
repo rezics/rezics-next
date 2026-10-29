@@ -96,7 +96,8 @@ async function cold(options: {
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  child.stdin.end(JSON.stringify({ runtime: driver.fixtures.runtime, ...options }));
+  child.stdin.write(JSON.stringify({ runtime: driver.fixtures.runtime, ...options }));
+  child.stdin.end();
   const [stdout, stderr, exit] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

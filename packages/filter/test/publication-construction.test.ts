@@ -88,7 +88,7 @@ test('ordinary Filter outcomes keep stable one-level order own-data access and m
 
 test('raw mutable FilterRelease calls refresh patterns qualifiers typed facets and the untyped facet union', () => {
   const release = constructionFixture(0, 8);
-  const qualifier = release.properties['grow:code']!.qualifiers[0]!;
+  const qualifier = 'grow:code';
   const withQualifier = {
     statement: {
       property: 'grow:code',
@@ -150,7 +150,7 @@ test('raw Filter construction ignores inherited, accessor-backed and sparse defi
   expect(facetProperties(release, ['grow:Root'])).toEqual([]);
 
   const sparse = new Array<string>(1);
-  rootType.facets = sparse;
+  Object.defineProperty(rootType, 'facets', { configurable: true, value: sparse });
   expect(facetProperties(release, ['grow:Root'])).toEqual([]);
   expect(reads).toBe(0);
 });

@@ -101,7 +101,12 @@ type Counts = {
   hashSortComparisons: number;
   facetProbes: number;
 };
-type ProbeState = Counts & { bases: WeakSet<object>; types: WeakSet<object>; qualifiers: WeakSet<object> };
+type ProbeState = Counts & {
+  bases: WeakSet<object>;
+  types: WeakSet<object>;
+  qualifiers: WeakSet<object>;
+  uniqueArrays: WeakSet<object>;
+};
 type Row = {
   name: string;
   mode: 'release' | 'filter';
@@ -286,19 +291,24 @@ async function probe(): Promise<Evidence> {
     );
     construction = replaceOnce(
       construction,
+      'for (const member of value) {',
+      `for (const member of value) {
+          if (${counter}.uniqueArrays.has(value)) ${counter}.duplicateVisits++;`,
+    );
+    construction = replaceOnce(
+      construction,
       'if (seen.has(hash)) add(pointer);',
-      `if ((${counter}.duplicateProbes++, seen.has(hash))) add(pointer);`,
+      `if ((${counter}.uniqueArrays.has(value) && ${counter}.duplicateProbes++, seen.has(hash))) add(pointer);`,
     );
     construction = replaceOnce(
       construction,
       'const hash = Hash(member);',
-      `${counter}.duplicateVisits++;
-          const hash = Hash(member);`,
+      'const hash = Hash(member);',
     );
     construction = replaceOnce(
       construction,
       'seen.add(hash);',
-      `${counter}.duplicateAppends++;
+      `${counter}.uniqueArrays.has(value) && ${counter}.duplicateAppends++;
           seen.add(hash);`,
     );
     copy('construction', constructionPath, construction, join(directory, 'construction.ts'));
@@ -349,6 +359,7 @@ async function probe(): Promise<Evidence> {
         bases: new WeakSet(),
         types: new WeakSet(),
         qualifiers: new WeakSet(),
+        uniqueArrays: new WeakSet(),
       };
       for (const [key, type] of Object.entries(release.types))
         if (key.startsWith('grow:')) {
@@ -356,6 +367,19 @@ async function probe(): Promise<Evidence> {
           state.types.add(type);
         }
       state.qualifiers.add(release.properties[code]!.qualifiers);
+      if (name.startsWith('duplicate-')) {
+        const member = name.split('-')[1]!;
+        const list = member === 'qualifiers' ? release.properties[code]!.qualifiers : release.types[rootType]![member];
+        state.uniqueArrays.add(list);
+      } else if (name === 'malformed-unique-members') {
+        for (const type of Object.values(release.types))
+          for (const list of [type.bases, type.mappings, type.facets]) state.uniqueArrays.add(list);
+        for (const property of Object.values(release.properties)) {
+          for (const list of [property.mappings, property.qualifiers, property.targets, property.units])
+            if (list) state.uniqueArrays.add(list);
+          if (Array.isArray(property.relation?.filter)) state.uniqueArrays.add(property.relation.filter);
+        }
+      }
       global.__publicationConstruction = state;
       const selected = Object.entries(release.filters ?? {}).filter(([key]) => key.startsWith('construction'));
       function admissions(api: typeof measuredFilter) {
