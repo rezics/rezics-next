@@ -169,10 +169,9 @@ function observeNativeClient(client: PoolClient): void {
         nativeAgentScans.push(node);
         agents.push(
           Object.fromEntries(
-            ['Node Type', 'Index Cond', 'Filter', 'Actual Rows', 'Rows Removed by Filter', 'Actual Loops'].map((key) => [
-              key,
-              node[key],
-            ]),
+            ['Node Type', 'Index Cond', 'Filter', 'Actual Rows', 'Rows Removed by Filter', 'Actual Loops'].map(
+              (key) => [key, node[key]],
+            ),
           ),
         );
       }
@@ -1213,7 +1212,12 @@ async function runSourcedBatch(scale: number, repetition: number): Promise<unkno
   } finally {
     // Lossless compression keeps complete native plans and every occurrence's work
     // in the remote log without spending the result transport on repeated SQL text.
-    const evidence = JSON.stringify({ scale, repetition, statements: [...nativeRun.values()], failures: nativeFailures });
+    const evidence = JSON.stringify({
+      scale,
+      repetition,
+      statements: [...nativeRun.values()],
+      failures: nativeFailures,
+    });
     console.info(`SOURCED_NATIVE_PLANS_GZIP ${Buffer.from(Bun.gzipSync(Buffer.from(evidence))).toString('base64')}`);
     nativeRun = undefined;
     nativeFailures = undefined;
