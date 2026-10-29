@@ -23,7 +23,9 @@ test('derived file input globs load with the declared generator', () => {
       inputs: ['services/kernel/**'],
     },
   ]);
-  expect(() => readDerivedFiles([{ path: 'out.txt', stage: 'promotion', command: ['true'], inputs: ['../secret'] }])).toThrow();
+  expect(() =>
+    readDerivedFiles([{ path: 'out.txt', stage: 'promotion', command: ['true'], inputs: ['../secret'] }]),
+  ).toThrow();
 });
 
 test('settings anchor to the main checkout from a linked worktree; local settings and environment override defaults', () => {

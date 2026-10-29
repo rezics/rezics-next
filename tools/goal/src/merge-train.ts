@@ -1460,8 +1460,7 @@ export class MergeTrain {
           git(trainTree, 'reset', '--hard', base);
           git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
         } else rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
-        if (!stabilize && integratesIntoDev)
-          regenerateLandingDerivedFiles(trainTree, base, derivedFiles, logPath);
+        if (!stabilize && integratesIntoDev) regenerateLandingDerivedFiles(trainTree, base, derivedFiles, logPath);
         const frozen = workspace
           ? sharedStore!
               .tasks()
