@@ -7,6 +7,12 @@ import { landingAffectedChecks } from './merge-train.ts';
 
 const alive = (pid: number) => {
   try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    if (stat.slice(stat.lastIndexOf(')') + 2).startsWith('Z ')) return false;
+  } catch {
+    return false;
+  }
+  try {
     process.kill(pid, 0);
     return true;
   } catch {
