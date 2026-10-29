@@ -600,17 +600,25 @@ export function runScript(id: string, directory: string, cwd: string, command: s
     install_started=$(date +%s%N)
     expected_bun=${quote(PINNED_BUN_VERSION)}
     expected_revision=${quote(PINNED_BUN_REVISION)}
-    /usr/local/bin/bun install --frozen-lockfile
+    case "$(uname -m)" in
+      x86_64) build=x64; grep -q avx2 /proc/cpuinfo || build=x64-baseline ;;
+      aarch64) build=aarch64 ;;
+      *) echo "remote-check: unsupported check-host architecture $(uname -m)" >&2; exit 1 ;;
+    esac
+    mkdir -p .temp/pinned-bun
+    curl -fsSL "https://registry.npmjs.org/@oven/bun-linux-${build}/-/bun-linux-${build}-${expected_bun}.tgz" | tar -xz -C .temp/pinned-bun
+    bun="$PWD/.temp/pinned-bun/package/bin/bun"
+    if ! "$bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
+      echo "remote-check: downloaded Bun does not match packageManager $expected_bun" >&2
+      exit 1
+    fi
+    "$bun" install --frozen-lockfile
     code=$?
     if [ "$code" -eq 0 ]; then touch ${quote(`${directory}/.bun-install-complete`)}; fi
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then
-      if ! "$PWD/node_modules/.bin/bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
-        echo "remote-check: installed Bun does not match packageManager $expected_bun" >&2
-        exit 1
-      fi
-      export PATH="$PWD/node_modules/.bin:$PATH"
+      export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       cd "$1"
       code=$?
       shift

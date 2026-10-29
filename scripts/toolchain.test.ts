@@ -73,12 +73,10 @@ test('worker checks select the pinned repository Bun and remote checks verify bo
   const remote = runScript('run-id', '/srv/rezics-check/runs/run-id', '.', ['bun', 'test'], 'host-a');
   expect(remote).toContain(`expected_bun='${manifest.packageManager.slice(4)}'`);
   expect(remote).toContain('Bun.revision === process.argv[1]');
-  expect(remote).toContain('"$PWD/node_modules/.bin/bun" --eval');
-  expect(remote).toContain('/usr/local/bin/bun install --frozen-lockfile');
-  expect(remote.indexOf('/usr/local/bin/bun install --frozen-lockfile')).toBeLessThan(
-    remote.indexOf('"$PWD/node_modules/.bin/bun" --eval'),
-  );
-  expect(remote).not.toContain('/usr/local/bin/bun --eval');
+  expect(remote).toContain('https://registry.npmjs.org/@oven/bun-linux-${build}/-/bun-linux-${build}-${expected_bun}.tgz');
+  expect(remote).toContain('"$PWD/.temp/pinned-bun/package/bin/bun"');
+  expect(remote).toContain('"$bun" install --frozen-lockfile');
+  expect(remote).not.toContain('/usr/local/bin/bun');
 });
 
 for (const [extension, source] of [
