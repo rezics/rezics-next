@@ -269,7 +269,9 @@ test('effects relay discovery stays within its bound as outbox history grows', a
             throw new Error(`expected only hot partition ${hot}, found ${discovered.map((row) => row.partition_no)}`);
           const result = await relay.run(hot);
           if (result.status !== 'read' || result.envelopes !== 1)
-            throw new Error(`expected one effects batch, received ${result.status}/${result.envelopes}`);
+            throw new Error(
+              `expected one effects batch, received ${result.status}/${result.status === 'read' ? result.envelopes : ''}`,
+            );
           return result;
         });
       },
