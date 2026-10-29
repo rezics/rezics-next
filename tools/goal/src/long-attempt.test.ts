@@ -98,7 +98,8 @@ test('repeated process inspection in recent commands reports polling once when n
     expect(delivered.map(({ summary }) => summary).join('\n')).toContain('Polling:');
     expect(delivered[1]).toMatchObject({ managerId: 'manager-a', kind: 'stalled' });
     expect(runWatch(store, state, delivered, now + 5 * 60_000)).toBe(0);
-    expect(runWatch(store, state, delivered, now + 3 * 60 * 60_000)).toBe(0);
+    expect(runWatch(store, state, delivered, now + 3 * 60 * 60_000)).toBe(1);
+    expect(delivered).toHaveLength(3);
     expect(delivered.filter(({ summary }) => summary.startsWith('Polling:'))).toHaveLength(1);
   } finally {
     repo.close();
