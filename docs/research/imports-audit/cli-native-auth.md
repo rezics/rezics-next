@@ -208,3 +208,32 @@ Logs:
 
 The earlier Origin and retraction evidence above remains historical evidence from its stated attempts. This run
 reached the denial transition but did not complete restoration, so it is not main or promotion evidence.
+
+## Frozen resume oracle correction and completed native journey
+
+The authorized frozen resume correction is committed with the exact raw post-amendment bytes: SHA-256
+`a38b8c4e06235ecfac7fd72c6ba8bdb2b26e890006ebad0bfc705a9c209f107a`. The correction marks only the fourth
+invocation as a resume and asserts it consumes zero bytes; the first three invocations consume their exact inputs,
+and input pass/byte counts are asserted against those three inputs. The CLI's result diagnostics are attached to the
+existing open-handle, consumption and recovered-code assertions. All lifecycle, identity, body, key, effect,
+receipt, denial and cleanup assertions remain intact. No test transport behavior or desired response was added.
+
+The focused native acceptance was run once after this correction:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-native-auth.test.ts
+```
+
+It exited **0** on revision `3668a8bfe8b237ef57edc9af4148a9e2dd944c38` (the report update was the only subsequent change). The formatted frozen test
+has the same authorized SHA-256 above. The native journey passed: actual key provisioning, four `/signin/key` and
+four `/token` calls, native JWKS verification, first import, same-input reopen, bulk grant denial with API 403 and
+`effect_status: "not_applied"`, durable pending-key/body preservation, grant restoration, and exact pending-key
+replay all completed. The resumed fourth invocation consumed no input. The final effects, receipts and candidate
+assertions passed; the test reported 1 pass, 0 failures and 302 expectations. Its evidence line was
+`{"inputPasses":3,"inputBytes":155,"commands":7,"subjects":1,"candidates":4,"receipts":7}`.
+
+The acceptance log is `.temp/goal/checks/worker-check-2026-10-29T05-02-03.776Z-791cf607.log`. The local nine-case
+CLI credential outcome check and root typecheck had already passed on the preceding attempt; neither shared code
+nor type-level code changed in this correction, so they were not repeated. No broad workspace check ran. The
+recovery code was zero and every later native transition completed; this evidence identifies no missing producer
+or credential error-policy conflict. This native pass is not main or promotion evidence.
