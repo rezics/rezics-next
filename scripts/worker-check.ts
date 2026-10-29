@@ -149,11 +149,15 @@ export async function runWorkerCheck(
   };
   if (remoteEligible) {
     let remoteOutput = '';
-    const remote = spawn(resolveRepositoryBun(['bun'], root)[0]!, [join(root, 'scripts/remote-check.ts'), root, '--', ...argv], {
-      cwd: root,
-      env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
-      stdio: ['inherit', 'pipe', 'pipe'],
-    });
+    const remote = spawn(
+      resolveRepositoryBun(['bun'], root)[0]!,
+      [join(root, 'scripts/remote-check.ts'), root, '--', ...argv],
+      {
+        cwd: root,
+        env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
+        stdio: ['inherit', 'pipe', 'pipe'],
+      },
+    );
     const saveRemote = (chunk: Buffer): void => {
       writeSync(descriptor, chunk);
       remoteOutput = (remoteOutput + chunk.toString('utf8')).slice(-16_000);
@@ -336,7 +340,11 @@ export async function runWorkerCheck(
 }
 
 /** Use the caller only when it is the repository's pinned Bun; otherwise select the installed repository binary. */
-export function resolveRepositoryBun(command: readonly string[], root: string, executable = process.execPath): string[] {
+export function resolveRepositoryBun(
+  command: readonly string[],
+  root: string,
+  executable = process.execPath,
+): string[] {
   if (command[0] !== 'bun') return [...command];
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     packageManager?: string;

@@ -2,17 +2,12 @@ import { expect, test } from 'bun:test';
 import { diagnosticFiles, ownDiagnostics } from '../scripts/check.ts';
 
 test('file mode reports diagnostics in changed kernel files as well as named tests', () => {
-  const files = diagnosticFiles(
-    ['test/check-file-mode.test.ts'],
-    '/repo/services/kernel',
-    'task-base',
-    () => [
-      'services/kernel/test/check-file-mode.test.ts',
-      'services/kernel/src/access/erasure.ts',
-      'services/auth/src/session.ts',
-      'README.md',
-    ],
-  );
+  const files = diagnosticFiles(['test/check-file-mode.test.ts'], '/repo/services/kernel', 'task-base', () => [
+    'services/kernel/test/check-file-mode.test.ts',
+    'services/kernel/src/access/erasure.ts',
+    'services/auth/src/session.ts',
+    'README.md',
+  ]);
 
   const diagnostics = ownDiagnostics(
     [
