@@ -183,16 +183,18 @@ export async function readErasureStatus(client: AccessClient, accountId: string)
   if (!row) return null;
   const outcomes = row.outcomes as Record<
     string,
-    { outcome: ErasureOutcome; retained: StoredException[]; resolutions: Record<string, string> }
+    { outcome: string; retained: StoredException[]; resolutions: Record<string, string> }
   >;
   let outstanding = false;
   const recorded = Object.fromEntries(
     participants(row.version).map((id) => {
       const ack = outcomes[id];
+      if (ack && ack.outcome !== 'erased' && ack.outcome !== 'none') throw new LifecycleDeniedError();
+      const outcome: ErasureOutcome | 'pending' = ack?.outcome ?? 'pending';
       return [
         id,
         {
-          outcome: ack?.outcome ?? 'pending',
+          outcome,
           retained: (ack?.retained ?? []).map((entry) => {
             const resolved =
               ack && Object.hasOwn(ack.resolutions, entry.store) ? ack.resolutions[entry.store] : undefined;
