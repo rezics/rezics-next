@@ -1177,7 +1177,6 @@ to the session query. No personal admitted set enters the server-rendered query 
 reuse the isolate's anonymous entry. The fake defaults to no admitted groups: set `Fixtures.admitted`, or call
 `setFakeAdmitted` for recorded stories. Storybook's `admitted` parameter selects the review set.
 
-
 Its cost is under Cost.
 
 Public composition previews keep their readable content when a group is closed. Links to individual collections
