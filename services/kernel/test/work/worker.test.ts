@@ -29,6 +29,7 @@ test('worker configuration names invalid variables without revealing values', ()
     'community',
     'semantic',
     'search',
+    'imports',
     'content',
     'retention',
   ]);

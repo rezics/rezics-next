@@ -140,30 +140,38 @@ policy. Imported proposals and media remain under those owners. The importer
 does not soft-delete, restore or purge authoritative user-owned records, expose
 parallel lifecycle routes, or use privileged SQL into those modules.
 
-Under the adopted terminal-erasure decision, Accounts owns one terminal
-workflow and a fixed, versioned participant list. Imports is a participant: it
-must acknowledge completed cleanup or attest that no applicable data exists
-for its scope. Successful dispatch alone is not an acknowledgement of
-completion.
-Confirmation time `T` is an immediate read, write and producer fence. An
-in-flight or delayed import must not recreate an erased account's data or
-benefits. The [Access account-deletion contract](../kernel/src/access/README.md#account-deletion-policy)
-currently specifies terminal deletion but does not yet document the fixed
-participant-list interface; that Accounts-owned contract must adopt it before
-an importer integration can be implemented. The [common deletion
-policy](../../docs/deletion.md) remains the shared lifecycle policy. This
-README does not define a second workflow or receipt format.
+Accounts owns one terminal workflow and a fixed, versioned participant list.
+The kernel's `imports` work effect consumes
+`com.rezics.access.account-tombstoned.v1`, then records an immutable `none`
+acknowledgement through Access. `none` is truthful for the reviewed importer
+storage because no importer-owned persisted payload is owned by a platform
+account. This is server-side work in the kernel; the importer CLI remains an
+API-only client with no PostgreSQL dependency, privileged write, deletion hook
+or access to operator SQLite/key files. Dispatch by itself is not completion.
+The common [deletion policy](../../docs/deletion.md) and
+[Access coordinator](../kernel/src/access/README.md#account-deletion-policy)
+remain authoritative for lifecycle and acknowledgement semantics.
 
-The current importer has no terminal-erasure participant or account-scoped
-locator integration. Its run journal and source records are operator-managed
-source coordination state, not by themselves a user's personal-library
-import. Shared copies, if a producer creates any, are found through that
-producer's exact locators and minimized by the owning store. Imported
-catalogue facts and communal subjects, and externally managed source
-journals, are not thereby classified as personal user data. Personal-library
-imports are not inferred from source mappings and remain outside first public
-scope unless separately specified. No cleanup job, retention interval,
-no-data attestation format or locator mechanism is claimed here.
+The retention inventory is exact: accepted source projections and source
+record state are keyed by source and external key; run state, generations,
+candidate/media identifiers, immutable request and acknowledgement bytes,
+receipts, counters, and same-source process ownership are importer-owned
+SQLite coordination state. None has an account owner or account locator.
+Credentials and bearer tokens are memory-only; operator key/configuration
+files and source inputs are external to application storage. Author, editor,
+uploader, delegate, operator and acting-human attribution, shared receipts,
+outbox, media, search and catalogue copies belong to their respective owners,
+not this importer inventory. No importer copy of account-owned payload was
+found, so there is no purge job or personal-data retention interval here.
+This `none` result does not attest cleanup by those other participants.
+
+Any future importer field or store containing personal or private account
+data must first gain a native indexed account ownership relation or an exact
+locator recorded atomically with its producer. Its retention and bounded
+minimizer must be documented before release; do not infer ownership from a
+source name, scan JSON/name text, or add a central ownership graph. A new
+personal-library import is outside the current storage and public scope until
+that producer and locator exist.
 
 In [`importer.ts`](src/importer.ts), source disappearance and replacement reconcile
 provenance by publicly bulk-retracting the actual returned source candidate IDs.
@@ -191,6 +199,12 @@ state while effects remain unresolved. Authoritative lifecycle work and its
 bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
+
+### Imports erasure disposition
+
+| Operation | Cost touches | Bound / Growth |
+| --- | --- | --- |
+| Server tombstone effect and truthful no-data acknowledgement | Validate the fixed event type and account identifier, then call Access `acknowledgeErasure` once. Imports performs no SQLite access, domain scan, source-record purge, or cross-owner cleanup. | Constant adapter work plus the coordinator's bounded point acknowledgement transaction for the `imports` row among the 11 version-1 participants. The coordinator growth proof is `services/kernel/test/access/growth-erasure-coordinator.test.ts`, `erasure acknowledgement (first) stays constant as accounts and completed erasures grow at three scales`; it checks the indexed acknowledgement relation has no sequential scan and bounded rows. No local counters or separate benchmark are claimed. |
 
 ### Adaptive writes
 
