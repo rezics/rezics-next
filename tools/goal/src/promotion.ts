@@ -1001,11 +1001,22 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
 async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Promise<boolean> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
-  if (!(await stabilizeQuickGate(options, dev)) || optionalHead(checkout, settings.stabilizeBranch) !== undefined)
+  const prepared = await regenerateDerivedHead(options, dev, settings.integrationBranch);
+  if (
+    prepared.retry ||
+    !(await stabilizeQuickGate(options, prepared.head)) ||
+    optionalHead(checkout, settings.stabilizeBranch) !== undefined
+  )
     return false;
-  if (head(checkout, settings.integrationBranch) !== dev) return false;
+  if (head(checkout, settings.integrationBranch) !== prepared.head) return false;
   try {
-    git(checkout, 'update-ref', ref(settings.stabilizeBranch), dev, '0000000000000000000000000000000000000000');
+    git(
+      checkout,
+      'update-ref',
+      ref(settings.stabilizeBranch),
+      prepared.head,
+      '0000000000000000000000000000000000000000',
+    );
     return true;
   } catch {
     return optionalHead(checkout, settings.stabilizeBranch) !== undefined;

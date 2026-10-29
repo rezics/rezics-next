@@ -21,8 +21,8 @@ test('stabilize gates its head instead of the integration head and advances to d
     const dev = h.head();
     const gated: string[] = [];
 
-    await h.promote(async (_command, cwd) => {
-      gated.push(git(cwd, 'rev-parse', 'HEAD'));
+    await h.promote(async (command, cwd) => {
+      if (command[0] === 'true') gated.push(git(cwd, 'rev-parse', 'HEAD'));
       return success;
     });
 
@@ -93,7 +93,7 @@ test('a blocked stabilize candidate is gated again only after its head moves', a
     const moved = h.advanceDev('later');
     git(h.root, 'update-ref', 'refs/heads/stabilize', moved, candidate);
     await h.promote(runGate);
-    expect(gates).toBe(2);
+    expect(gates).toBe(4);
   } finally {
     h.dispose();
   }
@@ -168,7 +168,7 @@ test('a stabilize publish merges main into dev, keeping dev for derived files, a
   }
 });
 
-test('promotion without a stabilize branch keeps its existing failure behavior', async () => {
+test('promotion without a stabilize branch does not cut from a dev commit that fails its quick gate', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('first');
@@ -178,9 +178,10 @@ test('promotion without a stabilize branch keeps its existing failure behavior',
 
     await h.promote(async (_command, cwd) => (existsSync(join(cwd, 'bad')) ? failure : success));
 
-    expect(h.store.task(first.id).state).toBe('merged');
-    expect(h.store.task(bad.id).currentAttempt).toBe(2);
+    expect(h.store.task(first.id).state).toBe('integrated');
+    expect(h.store.task(bad.id).currentAttempt).toBe(1);
     expect(h.head('main')).not.toBe(dev);
+    expect(git(h.root, 'branch', '--list', 'stabilize')).toBe('');
   } finally {
     h.dispose();
   }
