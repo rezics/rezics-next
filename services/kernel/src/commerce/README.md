@@ -273,8 +273,11 @@ The concrete physical configuration derives from existing bounds, rather than a 
   10-dispute and 256-transaction caps retain inclusive boundaries and reject excess/nonadvancing pages.
 - Eight physically unsettled operations per process share capacity across every factory, reusing the existing
   effects worker concurrency. Admission refuses excess immediately. Public cancellation/deadline expiry
-  cannot release capacity while real fetch, body consumption or awaited body cancellation remains unsettled.
-  Capacity is released after physical settlement; native connections never span provider I/O.
+  cannot release capacity while the underlying SDK operation promise, real fetch, body consumption or awaited
+  body cancellation remains unsettled. This includes SDK retry backoff after a completed retryable response,
+  even though no fetch/body is then alive. The public deadline failure returns promptly; safe continuations
+  observe underlying settlement before reusing the slot. Pre-start, input and synchronous setup failures also
+  release their slots. Native connections never span provider I/O.
 
 Deadline, byte, transaction/object-limit, nested-object, pagination and capacity failures are sanitized `StripeUnavailableError`, never
 successful empty routing/payment evidence. Other provider errors retain existing sanitized rejection mapping.

@@ -88,6 +88,76 @@ async function eventually(predicate: () => boolean) {
   expect(predicate()).toBe(true);
 }
 
+test('public deadline and cancellation retain all eight slots through real SDK retry backoff', async () => {
+  for (const cancelled of [false, true]) {
+    const controller = new AbortController();
+    let firstResponseAt = 0;
+    const f = await fixture(
+      (_path, res, send) => {
+        if (send > 8) return json(res, locator);
+        firstResponseAt ||= performance.now();
+        res.writeHead(503, { 'content-type': 'application/json' });
+        res.end('{"error":{"type":"api_error"}}');
+      },
+      { timeoutMs: cancelled ? 2000 : 150, maxNetworkRetries: 1, signal: controller.signal },
+    );
+    const pending = Array.from({ length: 8 }, () =>
+      createStripePort(f.config)
+        .readCheckoutLocator('cs_transport')
+        .catch((error: unknown) => error),
+    );
+    try {
+      await eventually(() => f.sends() === 8 && f.closed() === 8);
+      // Let the SDK consume the complete retryable responses and schedule its real retry timers.
+      // stripe-node 23.0.1's first retry delay is 500 ms, with no clock or dependency patch here.
+      await Bun.sleep(25);
+      if (cancelled) controller.abort(new Error('sk_test_private_transport'));
+      const outcomes = await Promise.all(pending);
+      expect(outcomes.every((outcome) => outcome instanceof StripeUnavailableError)).toBe(true);
+      expect(outcomes.every((outcome) => !String(outcome).includes('sk_test_private_transport'))).toBe(true);
+      expect(performance.now() - firstResponseAt).toBeLessThan(500);
+      const laterConfig = { ...f.config, signal: undefined };
+      // The response streams have ended, but all eight underlying SDK promises are still asleep.
+      // A fresh factory/signal must not reuse their slots or send a ninth physical request.
+      await unavailable(createStripePort(laterConfig).readCheckoutLocator('cs_transport'));
+      expect(f.sends()).toBe(8);
+
+      // Await the actual 500 ms SDK delays and their rejected retry callbacks, rather than dropping them.
+      await Bun.sleep(550);
+      expect(f.sends()).toBe(8);
+      // Every slot is reusable after underlying settlement, including for an uncancelled later client.
+      const recovered = await Promise.all(
+        Array.from({ length: 8 }, () => createStripePort(laterConfig).readCheckoutLocator('cs_transport')),
+      );
+      expect(recovered.every((result) => result.sessionId === 'cs_transport')).toBe(true);
+      expect(f.sends()).toBe(16);
+      await eventually(() => f.closed() === 16);
+    } finally {
+      controller.abort();
+      await Promise.all(pending);
+      // Also settle the real SDK continuations if an assertion above failed.
+      await Bun.sleep(550);
+    }
+  }
+});
+
+test('pre-send cancellation, input inspection and synchronous SDK setup failures do not leak capacity', async () => {
+  const f = await fixture((_path, res) => json(res, locator));
+  const controller = new AbortController();
+  controller.abort();
+  for (let i = 0; i < 8; i++) {
+    await unavailable(createStripePort({ ...f.config, signal: controller.signal }).readCheckoutLocator('cs_transport'));
+    await unavailable(f.port.readCheckoutLocator('x'.repeat(BODY + 1)));
+    await unavailable(createStripePort({ ...f.config, apiKey: '' }).readCheckoutLocator('cs_transport'));
+  }
+  expect(f.sends()).toBe(0);
+  const recovered = await Promise.all(
+    Array.from({ length: 8 }, () => createStripePort(f.config).readCheckoutLocator('cs_transport')),
+  );
+  expect(recovered.every((result) => result.sessionId === 'cs_transport')).toBe(true);
+  expect(f.sends()).toBe(8);
+});
+
 test('official SDK accepts exactly the response byte limit and rejects one extra streamed byte', async () => {
   let length = BODY;
   let written = 0;

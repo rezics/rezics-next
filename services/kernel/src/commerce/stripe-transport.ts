@@ -30,6 +30,7 @@ export function stripeTransport(options: {
   let containers = 0;
   let feeDetails = 0;
   let physical = 0;
+  let operationSettled = true;
   let returned = false;
   let released = false;
   const maxBytes = BODY_BYTES * options.requests;
@@ -54,8 +55,9 @@ export function stripeTransport(options: {
     if (abort.signal.aborted) throw unavailable();
   }
   function release() {
-    // Public timeout/cancellation is not physical settlement. No slot is reused while fetch/cancel is alive.
-    if (returned && physical === 0 && !released) {
+    // SDK retry backoff can outlive both the public race and all fetch/body promises.
+    // Retain capacity until the underlying operation AND its physical cleanup have settled.
+    if (returned && operationSettled && physical === 0 && !released) {
       released = true;
       unsettledOperations--;
     }
@@ -176,7 +178,16 @@ export function stripeTransport(options: {
     async run<T>(operation: () => Promise<T>): Promise<T> {
       try {
         check();
-        const value = await Promise.race([operation(), stopped]);
+        operationSettled = false;
+        // Capture synchronous setup/input failures too. A pre-start check failure never starts an operation.
+        const pending = Promise.resolve().then(operation);
+        const settle = () => {
+          operationSettled = true;
+          release();
+        };
+        // Observe either outcome even after the public deadline/cancellation has won the race.
+        void pending.then(settle, settle);
+        const value = await Promise.race([pending, stopped]);
         check();
         return value;
       } finally {
