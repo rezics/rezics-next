@@ -68,7 +68,8 @@ export function startOrphanRecoveryTimer(
   onTick: () => void = () => {},
 ): ReturnType<typeof setInterval> {
   const timer = setInterval(() => {
-    void recoverOrphans().catch(() => {});
+    // A sweep that throws must be visible: a silent failure left 46 finished waiting attempts unwoken for hours.
+    void recoverOrphans().catch((error) => console.error('orphan sweep failed:', error));
     onTick();
   }, intervalMs);
   timer.unref();
