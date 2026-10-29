@@ -1219,13 +1219,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
             store.savePromotion(run);
           }
           if (head(settings.mainCheckout, devBranch) === run.revertBase)
-            git(
-              settings.mainCheckout,
-              'update-ref',
-              ref(devBranch),
-              run.revertCommit,
-              run.revertBase!,
-            );
+            git(settings.mainCheckout, 'update-ref', ref(devBranch), run.revertCommit, run.revertBase!);
           run.phase = 'revert-published';
           store.savePromotion(run);
         }

@@ -191,8 +191,12 @@ export class WorkerTasks {
         : this.existingVerifiedBranch();
   }
   private existingVerifiedBranch(): string {
-    try { this.branchHead('dev-verified', false); return 'dev-verified'; }
-    catch { return this.settings.integrationBranch; }
+    try {
+      this.branchHead('dev-verified', false);
+      return 'dev-verified';
+    } catch {
+      return this.settings.integrationBranch;
+    }
   }
   /**
    * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A
