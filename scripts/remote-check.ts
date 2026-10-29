@@ -677,7 +677,11 @@ ${dockerWrapper}WRAPPER
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
 cd ${directory} || exit 1
 touch ${quote(`${directory}/.alive`)}
-exec systemd-run --scope --quiet --collect --slice=${runSlice(id)} --unit=rezics-check-${id} \\
+# systemd 259 expands \${NAME} in --scope arguments by default, which broke the script's parameter expansions on c
+# (842 failed runs from 10-28 18:36 UTC); older systemd has no such flag and does not expand.
+expand_environment=
+if systemd-run --help 2>/dev/null | grep -q -- '--expand-environment'; then expand_environment=--expand-environment=no; fi
+exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlice(id)} --unit=rezics-check-${id} \\
   sh -c ${quote(systemdScript)} sh ${[cwd, ...command].map(quote).join(' ')}`;
 }
 

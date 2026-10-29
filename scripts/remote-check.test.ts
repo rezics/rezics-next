@@ -2661,7 +2661,8 @@ test('each run and every container it starts share one run slice', async () => {
   expect(bunInvocations).toHaveLength(2);
   expect(bunInvocations[0]).toEqual(['--eval', expect.any(String), expect.any(String)]);
   expect(bunInvocations[1]).toEqual(['install', '--frozen-lockfile']);
-  const scope = fixture.events().find((event) => event.command === 'systemd-run');
+  // The run script first asks systemd-run --help whether --expand-environment exists.
+  const scope = fixture.events().find((event) => event.command === 'systemd-run' && !event.args.includes('--help'));
   expect(scope.run).toMatch(/^[a-z0-9-]+$/);
   expect(scope.slice).toBe(`rezics-check-${scope.run.replaceAll('-', '_')}.slice`);
   expect(scope.args).toContain(`--slice=${scope.slice}`);
