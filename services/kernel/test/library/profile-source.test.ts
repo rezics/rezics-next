@@ -20,9 +20,23 @@ import {
 
 let db: GrowthDatabase;
 let native: NativeProfileFixture;
+let mergeBearer: string;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   native = await createProfileEntryFixture({ pool: db.pool });
+  const claims = { ...native.steward.actor, scopes: [...native.steward.actor.scopes, 'subject:merge'] };
+  const steward = await authenticateAccount(native.access, { pool: db.pool, deadline: deadlineFor(30_000) }, claims);
+  await createGrantCommands({ pool: db.pool, access: native.access, managementAction: 'access:grant' }).create(
+    { pool: db.pool, actor: steward, deadline: deadlineFor(30_000) },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: steward.accountId },
+      actions: ['subject:merge'],
+      valid: '(,)',
+      key: entryKey(),
+    },
+  );
+  mergeBearer = await accountToken(claims);
 }, 120_000);
 afterAll(async () => {
   await native?.close();
@@ -84,25 +98,22 @@ async function hide(id: string) {
   expect(response.status).toBe(200);
 }
 
-async function mergedPair() {
+async function separatePair() {
   const a = await native.createSubject('game');
   let b = await native.createSubject('game');
   while (partitionOf(routeOf(a)!) === partitionOf(routeOf(b)!)) b = await native.createSubject('game');
-  const claims = { ...native.steward.actor, scopes: [...native.steward.actor.scopes, 'subject:merge'] };
-  const steward = await authenticateAccount(native.access, { pool: db.pool, deadline: deadlineFor(30_000) }, claims);
-  await createGrantCommands({ pool: db.pool, access: native.access, managementAction: 'access:grant' }).create(
-    { pool: db.pool, actor: steward, deadline: deadlineFor(30_000) },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: steward.accountId },
-      actions: ['subject:merge'],
-      valid: '(,)',
-      key: entryKey(),
-    },
-  );
-  const response = await native.send(await accountToken(claims), 'POST', '/v1/subjects:merge', { subjects: [a, b] });
+  return [a, b] as const;
+}
+
+async function mergePair(a: string, b: string) {
+  const response = await native.send(mergeBearer, 'POST', '/v1/subjects:merge', { subjects: [a, b] });
   expect(response.status).toBe(200);
   return (await response.json()) as { survivor: string; redirected: string };
+}
+
+async function mergedPair() {
+  const [a, b] = await separatePair();
+  return mergePair(a, b);
 }
 
 test('native profile source selects the whole primary-type profile and never an unattached legacy or structural base', async () => {
@@ -166,6 +177,23 @@ test('native profile source separately authorizes redirect anchors and conceals 
   const hiddenSource = await mergedPair();
   await hide(hiddenSource.redirected);
   expect(await observe(hiddenSource.redirected)).toBeNull();
+});
+
+test('native profile source retries a redirect introduced before the final reference RR through the existing resolver', async () => {
+  const ids = await separatePair();
+  const [survivor, original] = [...ids].sort() as [string, string];
+  let preparations = 0;
+  const access = deriveAccess(native.access, {
+    async prepare(actor, action, resource, context) {
+      preparations++;
+      if (preparations === 2) expect(await mergePair(...ids)).toMatchObject({ survivor, redirected: original });
+      return native.access.prepare!(actor, action, resource, context);
+    },
+  });
+  const observed = await observe(original, { access });
+  expect(observed).toMatchObject({ kind: 'supported', subjectId: survivor, requestedSubjectId: original });
+  expect(observed?.component.partition).toBe(partitionOf(routeOf(survivor)!));
+  expect(preparations).toBeGreaterThan(2);
 });
 
 test('native profile source observes new release pins without rewriting an earlier observation', async () => {
