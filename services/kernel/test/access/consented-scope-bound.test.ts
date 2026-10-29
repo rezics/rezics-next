@@ -205,7 +205,8 @@ test('the full default website catalogue commits membership and content actor sn
     await contentConnection.query(
       `INSERT INTO content.revision
        (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-       VALUES ($1,$2,$3,$4,'scope bound',decode(repeat('00',32),'hex'),'scope bound','CC0-1.0','{}',$5,'available',$6)`,
+       VALUES ($1,$2,$3,$4,convert_to('scope bound','UTF8'),sha256(convert_to('scope bound','UTF8')),
+         'scope bound','CC0-1.0','{}',$5,'available',$6)`,
       [route, thread, post, postRevision, board, transaction],
     );
     await contentConnection.query('COMMIT');
