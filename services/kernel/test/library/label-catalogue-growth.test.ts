@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createLifecycleInternals, type ProvisioningEvidence } from '../../src/access/lifecycle.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createPersonalLabelCommands } from '../../src/library/label-commands.ts';
@@ -11,16 +12,13 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
 import {
-  assertGrowth,
   capture,
+  checkGrowth,
   catalogStatementBound,
-  costOf,
-  medianCost,
   openGrowthDatabase,
-  type Capture,
-  type Cost,
   type GrowthDatabase,
-  type GrowthSample,
+  seed,
+  type Population,
 } from '../support/growth.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
@@ -197,17 +195,83 @@ function nodes(value: unknown, result: Record<string, unknown>[] = []) {
 }
 
 test('all native catalogue operations keep point and limit-first costs at 64/512/4096 live deleted and same-partition rows', async () => {
-  const actor = f.owner.actor,
-    other = await neighbour();
+  const actor = f.owner.actor;
+  const other = await neighbour();
   const route = routeOf(actor.accountId)!;
+  const partition = partitionOf(route);
+  expect(partitionOf(routeOf(other.accountId)!)).toBe(partition);
+
+  // Every seed template comes from the real native command path under genuine owner authority.
+  async function template(owner: typeof actor, name: string, deleted: boolean) {
+    const label = (await labels.createLabel(owner, { name }, entryKey())).value.label;
+    if (deleted) await labels.deleteLabel(owner, label.id, 1, entryKey());
+    const result = await db.admin.query(
+      'SELECT route, account_id, label_id, normalized_name, revision, created_at, updated_at, transaction_id, deleted_at, purge_after FROM library.personal_label WHERE route=$1 AND account_id=$2 AND label_id=$3',
+      [routeOf(owner.accountId), owner.accountId, label.id],
+    );
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]!.deleted_at !== null).toBe(deleted);
+    return result.rows[0]!;
+  }
+  const templates = {
+    ownerLive: await template(actor, 'Growth owner live template', false),
+    ownerDeleted: await template(actor, 'Growth owner deleted template', true),
+    otherDeleted: await template(other, 'Growth neighbour deleted template', true),
+  };
+  const names = ['owner-live', 'owner-deleted', 'neighbour-deleted'] as const;
+  const population: Population = {
+    name: 'personal-label-catalogue-background',
+    hotPartition: partition,
+    hotShare: 1,
+    rows(placement) {
+      const row = (templateRow: Record<string, unknown>, category: string) => ({
+        ...templateRow,
+        label_id: newId(routeOf(String(templateRow.account_id))!),
+        normalized_name: `Background ${category} ${placement.ordinal}`,
+      });
+      return {
+        'library.personal_label': [
+          row(templates.ownerLive, names[0]),
+          row(templates.ownerDeleted, names[1]),
+          row(templates.otherDeleted, names[2]),
+        ],
+      };
+    },
+  };
+  const scales = [64, 512, 4096] as const;
+  let grownTo = 0;
+  const counts: Record<string, unknown> = {};
+  async function grow(database: GrowthDatabase, scale: number) {
+    if (scale > grownTo) {
+      await seed(database, population, { from: grownTo, to: scale });
+      grownTo = scale;
+    }
+    const expectedPerCategory = 32 * scale;
+    for (const category of names) {
+      const count = await database.admin.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM library.personal_label WHERE normalized_name LIKE $1',
+        [`Background ${category} %`],
+      );
+      expect(Number(count.rows[0]!.count)).toBe(expectedPerCategory);
+    }
+    const total = await database.admin.query<{ count: string }>('SELECT count(*)::text AS count FROM library.personal_label');
+    counts[String(scale)] = {
+      perOrdinal: 3,
+      ordinals: scale,
+      backgroundPerCategory: expectedPerCategory,
+      backgroundTotal: expectedPerCategory * names.length,
+      personalLabelRows: Number(total.rows[0]!.count),
+    };
+  }
+
+  const index = await db.admin.query<{ indexname: string }>(
+    "SELECT indexname FROM pg_indexes WHERE schemaname='library' AND tablename='personal_label' AND indexdef LIKE 'CREATE UNIQUE INDEX% (route, account_id, label_id)'",
+  );
+  expect(index.rows).toHaveLength(1);
+  const primaryKeyIndex = index.rows[0]!.indexname;
   const reader = db.openPool({ max: 1, options: '-c default_transaction_read_only=on' });
-  const samples = new Map<string, GrowthSample[]>();
-  let previous = 0,
-    deepKey = '',
-    deletedDeepKey = '';
-  const evidence: { scale: number; operation: string; capture: Capture; cost: Cost }[] = [];
   async function token(after: string, viewer = actor) {
-    const p = await readPartition(reader, partitionOf(route));
+    const p = await readPartition(reader, partitionOf(routeOf(viewer.accountId)!));
     if (!p) throw new Error('Missing partition');
     return encodeListCursor(
       f.tokens,
@@ -216,102 +280,175 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       new Date(),
     );
   }
-  for (const scale of [64, 512, 4096]) {
-    for (let n = previous; n < scale; n++) {
-      const dead = (await labels.createLabel(actor, { name: `Deleted ${n}` }, entryKey())).value.label;
-      await labels.deleteLabel(actor, dead.id, 1, entryKey());
-      if (n === scale - 16) deepKey = dead.id;
-      await labels.createLabel(actor, { name: `Live ${n}` }, entryKey());
-      const unrelated = (await labels.createLabel(other, { name: `Other ${n}` }, entryKey())).value.label;
-      await labels.deleteLabel(other, unrelated.id, 1, entryKey());
-      if (n === scale - 16) deletedDeepKey = unrelated.id;
+  async function middleDeletedId(owner: typeof actor) {
+    const result = await db.admin.query<{ label_id: string }>(
+      'SELECT label_id FROM library.personal_label WHERE route=$1 AND account_id=$2 AND deleted_at IS NOT NULL ORDER BY label_id OFFSET $3 LIMIT 1',
+      [routeOf(owner.accountId), owner.accountId, Math.floor((grownTo * 32) / 2)],
+    );
+    if (!result.rows[0]) throw new Error('Missing deleted cursor anchor');
+    return result.rows[0].label_id;
+  }
+  type State = { id?: string; name?: string; cursor?: string };
+  type Operation = {
+    name: string;
+    prepare(): Promise<State>;
+    run(state: State): Promise<unknown>;
+    assert(value: any): void;
+  };
+  const operations: Operation[] = [
+    {
+      name: 'create',
+      async prepare() { return {}; },
+      async run() { return labels.createLabel(actor, { name: `Growth create ${entryKey()}` }, entryKey()); },
+      assert(value) { expect(value.value.label.revision).toBe(1); },
+    },
+    {
+      name: 'rename',
+      async prepare() {
+        const name = `Growth rename ${entryKey()}`;
+        return { id: (await labels.createLabel(actor, { name }, entryKey())).value.label.id };
+      },
+      async run(state) { return labels.renameLabel(actor, state.id!, { name: `Renamed ${entryKey()}`, revision: 1 }, entryKey()); },
+      assert(value) { expect(value.value.label.revision).toBe(2); },
+    },
+    {
+      name: 'noop',
+      async prepare() {
+        const name = `Growth noop ${entryKey()}`;
+        return { id: (await labels.createLabel(actor, { name }, entryKey())).value.label.id, name };
+      },
+      async run(state) { return labels.renameLabel(actor, state.id!, { name: state.name!, revision: 1 }, entryKey()); },
+      assert(value) { expect(value.value.label.revision).toBe(1); },
+    },
+    {
+      name: 'read',
+      async prepare() { return { id: (await labels.createLabel(actor, { name: `Growth read ${entryKey()}` }, entryKey())).value.label.id }; },
+      async run(state) { return labels.readLabel(actor, state.id!); },
+      assert(value) { expect(value.id).toBeTruthy(); },
+    },
+    {
+      name: 'delete',
+      async prepare() { return { id: (await labels.createLabel(actor, { name: `Growth delete ${entryKey()}` }, entryKey())).value.label.id }; },
+      async run(state) { return labels.deleteLabel(actor, state.id!, 1, entryKey()); },
+      assert(value) { expect(value.value).toEqual({ deleted: true, revision: 2 }); },
+    },
+    {
+      name: 'restore',
+      async prepare() {
+        const id = (await labels.createLabel(actor, { name: `Growth restore ${entryKey()}` }, entryKey())).value.label.id;
+        await labels.deleteLabel(actor, id, 1, entryKey());
+        return { id };
+      },
+      async run(state) { return labels.restoreLabel(actor, state.id!, 2, entryKey()); },
+      assert(value) { expect(value.value.label.revision).toBe(3); },
+    },
+    {
+      name: 'list-first',
+      async prepare() { return {}; },
+      async run() { return labels.listLabels(actor, { limit: 8 }); },
+      assert(value) { expect(value.labels.length).toBeLessThanOrEqual(8); expect(value.next).toBeTruthy(); },
+    },
+    {
+      name: 'list-deep',
+      async prepare() { return { cursor: await token(await middleDeletedId(actor)) }; },
+      async run(state) { return labels.listLabels(actor, { limit: 8, cursor: state.cursor }); },
+      assert(value) { expect(value.labels.length).toBeLessThanOrEqual(8); expect(value.next).toBeTruthy(); },
+    },
+    {
+      name: 'list-empty',
+      async prepare() { return {}; },
+      async run() { return labels.listLabels(other, { limit: 8 }); },
+      assert(value) { expect(value.labels).toEqual([]); expect(value.next).toBeTruthy(); },
+    },
+    {
+      name: 'list-empty-deep',
+      async prepare() { return { cursor: await token(await middleDeletedId(other), other) }; },
+      async run(state) { return labels.listLabels(other, { limit: 8, cursor: state.cursor }); },
+      assert(value) { expect(value.labels).toEqual([]); expect(value.next).toBeTruthy(); },
+    },
+  ];
+
+  const priorProfile = process.env.GROWTH_PROFILE;
+  const profilePath = '.temp/label-catalogue/GROWTH_PROFILE.jsonl';
+  mkdirSync(dirname(profilePath), { recursive: true });
+  writeFileSync(profilePath, '');
+  process.env.GROWTH_PROFILE = profilePath;
+  const evidence: { scale: number; operation: string; capture: unknown }[] = [];
+  for (const operation of operations) {
+    const states = new Map<number, State>();
+    const report = await checkGrowth(db, {
+      name: `Personal label catalogue (${operation.name})`,
+      scales,
+      rule: 'series',
+      warmups: 1,
+      repetitions: 5,
+      includeBackends: true,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(database, scale) { await grow(database, scale); },
+      async warmup(_database, _scale, _repetition) {
+        const result = await operation.run(await operation.prepare());
+        operation.assert(result);
+      },
+      async prepare(_database, _scale, repetition) {
+        states.set(repetition, await operation.prepare());
+      },
+      async operation(_database, _scale, repetition) {
+        const state = states.get(repetition);
+        if (!state) throw new Error(`Missing fresh state for ${operation.name} repetition ${repetition}`);
+        const result = await operation.run(state);
+        operation.assert(result);
+        return result;
+      },
+    });
+    for (const sample of report.samples) {
+      const relation = sample.cost.relations['library.personal_label'];
+      expect(relation).toBeDefined();
+      expect(relation!.sequentialScans).toBe(0);
+      expect(relation!.rows).toBeLessThanOrEqual(operation.name.startsWith('list') ? 16 : 2);
+      expect(sample.cost.backgroundStatements ?? 0).toBe(0);
     }
-    previous = scale;
-    await db.admin.query('VACUUM (ANALYZE)');
-    const costs = new Map<string, Cost[]>();
-    async function measure<T>(operation: string, work: () => Promise<T>, measured: boolean) {
-      const result = await capture(db, work, { includeBackends: true });
-      const cost = costOf(result.capture);
+  }
+
+  // Plans are taken from real captured operations, with the same representative table at every scale.
+  for (const scale of scales) {
+    await grow(db, scale);
+    for (const operation of operations) {
+      const result = await capture(db, async () => operation.run(await operation.prepare()), { includeBackends: true });
+      operation.assert(result.value);
       const catalogue = catalogStatementBound(result.capture);
       expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
-      expect(cost.backgroundStatements ?? 0).toBe(0);
       const plans = result.capture.plans.flatMap((plan) => nodes(plan));
-      const labelNodes = plans.filter(
-        (node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label',
-      );
+      const labelNodes = plans.filter((node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label');
       expect(labelNodes.length).toBeGreaterThan(0);
       for (const node of labelNodes) {
-        if (node['Node Type'] === 'Seq Scan') console.error(JSON.stringify({ operation, scale, node }));
         expect(node['Node Type']).not.toBe('Seq Scan');
+        if (operation.name !== 'create' && node['Index Name'] !== undefined)
+          expect(node['Index Name']).toBe(primaryKeyIndex);
         expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(
-          operation.startsWith('list') ? 8 : 1,
+          operation.name.startsWith('list') ? 8 : 1,
         );
         expect(Number(node['Rows Removed by Filter'] ?? 0) * Number(node['Actual Loops'])).toBe(0);
       }
-      if (operation.startsWith('list')) {
-        const sql = result.capture.statements.find((s) => /WITH source AS MATERIALIZED/i.test(s));
+      if (operation.name !== 'create') expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
+      if (operation.name.startsWith('list')) {
+        const sql = result.capture.statements.find((statement) => /WITH source AS MATERIALIZED/i.test(statement));
         expect(sql).toBeDefined();
         expect(sql).not.toMatch(/deleted_at\s+IS\s+NULL|\bOFFSET\b|\bcount\s*\(/i);
         expect(sql).toMatch(/label_id\s*>/);
-        expect(plans.some((node) => node['Node Type'] === 'Limit' && Number(node['Actual Rows']) <= 8)).toBe(true);
+        expect(plans.some((node) => node['Node Type'] === 'Limit' && Number(node['Actual Rows']) === 8)).toBe(true);
+        expect(labelNodes.some((node) => Number(node['Actual Rows']) === 8)).toBe(true);
       }
-      if (operation === 'noop') {
-        expect(result.capture.statements.some((s) => /UPDATE library\.personal_label/i.test(s))).toBe(false);
-        expect(result.capture.statements.some((s) => /INSERT INTO core\.outbox/i.test(s))).toBe(false);
+      if (operation.name === 'noop') {
+        expect(result.capture.statements.some((statement) => /UPDATE library\.personal_label/i.test(statement))).toBe(false);
+        expect(result.capture.statements.some((statement) => /INSERT INTO core\.outbox/i.test(statement))).toBe(false);
       }
-      if (measured) {
-        const values = costs.get(operation) ?? [];
-        values.push(cost);
-        costs.set(operation, values);
-        evidence.push({ scale, operation, capture: result.capture, cost });
-      }
-      return result.value;
-    }
-    for (let run = 0; run < 6; run++) {
-      const measured = run > 0,
-        name = `Probe ${scale} ${run}`;
-      const created = await measure('create', () => labels.createLabel(actor, { name }, entryKey()), measured);
-      const id = created.value.label.id;
-      await measure(
-        'rename',
-        () => labels.renameLabel(actor, id, { name: `${name}!`, revision: 1 }, entryKey()),
-        measured,
-      );
-      await measure(
-        'noop',
-        () => labels.renameLabel(actor, id, { name: `${name}!`, revision: 2 }, entryKey()),
-        measured,
-      );
-      await measure('read', () => labels.readLabel(actor, id), measured);
-      await measure('delete', () => labels.deleteLabel(actor, id, 2, entryKey()), measured);
-      await measure('restore', () => labels.restoreLabel(actor, id, 3, entryKey()), measured);
-      const first = await measure('list-first', () => labels.listLabels(actor, { limit: 8 }), measured);
-      expect(first.labels.length).toBeLessThan(8);
-      const cursor = await token(deepKey);
-      const deep = await measure('list-deep', () => labels.listLabels(actor, { limit: 8, cursor }), measured);
-      expect(deep.next).toBeTruthy();
-      const empty = await measure('list-empty', () => labels.listLabels(other, { limit: 8 }), measured);
-      expect(empty.labels).toEqual([]);
-      expect(empty.next).toBeTruthy();
-      const deletedCursor = await token(deletedDeepKey, other);
-      const emptyDeep = await measure(
-        'list-empty-deep',
-        () => labels.listLabels(other, { limit: 8, cursor: deletedCursor }),
-        measured,
-      );
-      expect(emptyDeep.labels).toEqual([]);
-      expect(emptyDeep.next).toBeTruthy();
-    }
-    for (const [operation, repetitions] of costs) {
-      const series = samples.get(operation) ?? [];
-      series.push({ scale, cost: medianCost(repetitions), repetitions });
-      samples.set(operation, series);
+      evidence.push({ scale, operation: operation.name, capture: result.capture });
     }
   }
   mkdirSync('.temp/label-catalogue', { recursive: true });
   writeFileSync('.temp/label-catalogue/native-growth.json', JSON.stringify(evidence));
-  for (const [operation, series] of samples) {
-    console.info(JSON.stringify({ operation, samples: series }));
-    assertGrowth(series, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
-  }
+  appendFileSync(profilePath, `${JSON.stringify({ check: 'personal-label-catalogue-population', multiplicity: 32, rowsPerOrdinal: 3, counts })}\n`);
+  if (priorProfile === undefined) delete process.env.GROWTH_PROFILE;
+  else process.env.GROWTH_PROFILE = priorProfile;
+  await reader.end();
 }, 1800000);
