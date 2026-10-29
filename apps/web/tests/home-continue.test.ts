@@ -405,6 +405,56 @@ async function readPage(path: string, cookie?: string) {
     await browser.close();
   }
 }
+
+async function inspectHome(path: string, cookie: string, width: number) {
+  const origin = await site();
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: false });
+    await context.addCookies([
+      { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
+    ]);
+    const page = await context.newPage();
+    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
+    await page.waitForLoadState('networkidle');
+    return await page.evaluate(() => {
+      const personal = document.querySelector<HTMLElement>('[data-slot="personal"]');
+      const row = personal?.querySelector<HTMLElement>('[data-slot="cover-row"]');
+      const cards = [...(personal?.querySelectorAll<HTMLElement>('[data-slot="cover-card"]') ?? [])];
+      const next = personal?.nextElementSibling as HTMLElement | null;
+      const bounds = (element: HTMLElement | null) => {
+        const rect = element?.getBoundingClientRect();
+        return rect ? { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right } : null;
+      };
+      const style = row ? getComputedStyle(row) : null;
+      return {
+        personalClass: personal?.className ?? '',
+        personal: bounds(personal ?? null),
+        next: bounds(next),
+        row: row
+          ? {
+              clientWidth: row.clientWidth,
+              scrollWidth: row.scrollWidth,
+              snap: style?.scrollSnapType ?? '',
+              bounds: bounds(row),
+              cards: cards.map(bounds),
+            }
+          : null,
+        cardCount: cards.length,
+        titlesInCovers: cards.map((card) => card.querySelector('[data-slot="cover"]')?.textContent?.trim() ?? ''),
+        captionCount: personal?.querySelectorAll('[data-slot="cover-caption"]').length ?? 0,
+        progressCount: personal?.querySelectorAll('[data-slot="progress-row"]').length ?? 0,
+        menuButtons: [...(personal?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? [])].map((button) =>
+          button.getAttribute('aria-label'),
+        ),
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+  } finally {
+    await browser.close();
+  }
+}
 function main(html: string) {
   return /<main\b[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? html;
 }
@@ -454,7 +504,7 @@ test(
       // The row sits after the search box, and holds only entries in progress, newest first.
       const body = main(page.html);
       expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
-      // The cards are drawn twice, once for the phone row and once for the grid, so every link comes twice in order.
+      // The cards are drawn for the phone row and desktop grid, so links appear in both responsive layouts.
       const subjects = [
         ...(row ?? '').matchAll(new RegExp(`href="/${locale}/library/progress\\?subjectId=([^"]+)"`, 'g')),
       ].map((m) => m[1]);
@@ -481,6 +531,36 @@ test(
     expect([...crowd.matchAll(/href="\/en\/library\/progress\?subjectId=/g)]).toHaveLength(12);
     expect(crowd).toContain('Crowded 9');
     expect(crowd).not.toContain('Crowded 3<');
+  },
+  timeout,
+);
+
+test(
+  'Continue cards use the shared cover and progress row without an oversized empty slot',
+  async () => {
+    const cookie = await alice();
+    reset();
+    const view = await inspectHome('/en', cookie, 1280);
+    expect(view.cardCount).toBe(6); // three cards for each responsive layout
+    expect(view.titlesInCovers.every((title) => title === '')).toBe(true);
+    expect(view.captionCount).toBe(0);
+    expect(view.progressCount).toBe(6);
+    expect(view.personalClass).not.toMatch(/min-h-/);
+    expect(view.personal && view.next && view.next.top - view.personal.bottom).toBeLessThan(100);
+  },
+  timeout,
+);
+
+test(
+  'at phone width Continue is a snapping sideways row with a partial next card and no page overflow',
+  async () => {
+    const cookie = await alice();
+    reset(crowded());
+    const view = await inspectHome('/en', cookie, 390);
+    expect(view.row?.scrollWidth).toBeGreaterThan(view.row?.clientWidth ?? 0);
+    expect(view.row?.snap).toContain('x mandatory');
+    expect(view.row?.cards.some((card) => card && view.row && card.right > view.row.bounds.right)).toBe(true);
+    expect(view.scrollWidth).toBeLessThanOrEqual(390);
   },
   timeout,
 );
