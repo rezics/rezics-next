@@ -164,7 +164,10 @@ export async function rerunGrowthFailures<T>(
   return { failed };
 }
 
-export function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | undefined): GrowthFailure[] | null {
+export function classifyGrowthFailures(
+  outcome: FileOutcome<string>,
+  report: string | undefined,
+): GrowthFailure[] | null {
   if (!outcome.error || outcome.error.message.includes('Database cleanup failed:')) return null;
   if (report) {
     const failures = junitFailures(report);
@@ -462,7 +465,8 @@ export function timingsDirectory(
     cwd: moduleDirectory,
     encoding: 'utf8',
   });
-  if (result.status !== 0 || !result.stdout.trim()) return resolve(import.meta.dir, '..', `.temp/${service}-check/timings`);
+  if (result.status !== 0 || !result.stdout.trim())
+    return resolve(import.meta.dir, '..', `.temp/${service}-check/timings`);
   return resolve(dirname(result.stdout.trim()), `.temp/${service}-check/timings`);
 }
 
@@ -598,7 +602,14 @@ export async function capture(
   cwd: string,
   bounds?: { file: string; silence: number; wall: number; record?: FileTiming; progressInterval?: number },
 ): Promise<{ status: number; output: string; stopped?: string }> {
-  const child = Bun.spawn([program, ...args], { cwd, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', detached: true });
+  const child = Bun.spawn([program, ...args], {
+    cwd,
+    env,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    detached: true,
+  });
   let output = '';
   let lastOutput = Date.now();
   let stopped: string | undefined;
@@ -613,12 +624,25 @@ export async function capture(
   };
   const readers = [child.stdout, child.stderr].map(async (stream) => {
     const reader = stream.getReader();
-    try { while (true) { const { value, done } = await reader.read(); if (done) break; add(value); } }
-    finally { reader.releaseLock(); }
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        add(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   });
   const stop = async () => {
-    try { process.kill(-child.pid, 'SIGTERM'); } catch {}
-    const grace = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, 10_000);
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
+    const grace = setTimeout(() => {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {}
+    }, 10_000);
     await child.exited;
     clearTimeout(grace);
   };
@@ -632,20 +656,43 @@ export async function capture(
   while (true) {
     const now = Date.now();
     const elapsed = (now - started) / 1000;
-    if (now - lastOutput >= bounds.silence * 1000) { stopped = `printed nothing for ${bounds.silence} s`; break; }
-    if (elapsed >= bounds.wall) { stopped = `did not finish within ${bounds.wall} s`; break; }
+    if (now - lastOutput >= bounds.silence * 1000) {
+      stopped = `printed nothing for ${bounds.silence} s`;
+      break;
+    }
+    if (elapsed >= bounds.wall) {
+      stopped = `did not finish within ${bounds.wall} s`;
+      break;
+    }
     if (now >= heartbeat) {
-      process.stderr.write(`test file ${bounds.file}: elapsed ${Math.floor(elapsed)} s; silence bound ${bounds.silence} s; wall bound ${bounds.wall} s; since output ${Math.floor((now-lastOutput)/1000)} s\n`);
+      process.stderr.write(
+        `test file ${bounds.file}: elapsed ${Math.floor(elapsed)} s; silence bound ${bounds.silence} s; wall bound ${bounds.wall} s; since output ${Math.floor((now - lastOutput) / 1000)} s\n`,
+      );
       heartbeat = now + interval * 1000;
     }
-    const waitMs = Math.max(1, Math.min(250, heartbeat-now, bounds.silence*1000-(now-lastOutput), bounds.wall*1000-(now-started)));
-    const exited = await Promise.race([child.exited.then((status) => ({ status })), new Promise<{ status?: never }>((resolve) => setTimeout(() => resolve({}), waitMs))]);
-    if (exited.status !== undefined) { await Promise.all(readers); return { status: exited.status, output }; }
+    const waitMs = Math.max(
+      1,
+      Math.min(250, heartbeat - now, bounds.silence * 1000 - (now - lastOutput), bounds.wall * 1000 - (now - started)),
+    );
+    const exited = await Promise.race([
+      child.exited.then((status) => ({ status })),
+      new Promise<{ status?: never }>((resolve) => setTimeout(() => resolve({}), waitMs)),
+    ]);
+    if (exited.status !== undefined) {
+      await Promise.all(readers);
+      return { status: exited.status, output };
+    }
   }
   await stop();
   await Promise.all(readers);
-  const record = bounds.record ? JSON.stringify({ wall: bounds.record.wall, outsideTests: bounds.record.outsideTests, tests: bounds.record.tests }) : 'no record';
-  return { status: 124, output, stopped: `test file ${bounds.file} ${stopped}; recorded times: ${record}\nLast output lines:\n${tail.filter(Boolean).slice(-40).join('\n')}` };
+  const record = bounds.record
+    ? JSON.stringify({ wall: bounds.record.wall, outsideTests: bounds.record.outsideTests, tests: bounds.record.tests })
+    : 'no record';
+  return {
+    status: 124,
+    output,
+    stopped: `test file ${bounds.file} ${stopped}; recorded times: ${record}\nLast output lines:\n${tail.filter(Boolean).slice(-40).join('\n')}`,
+  };
 }
 
 /** Tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
