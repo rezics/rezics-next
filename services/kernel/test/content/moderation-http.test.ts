@@ -613,7 +613,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
         );
         await seedReportGrowth(database.admin, commandRows, [], {
           projectTargets: false,
-          commandEvents: { principalId: fixture.principal, principalKind: 'account' },
+          commandEvents: { principalId: fixture.principal, principalKind: 'account', clientId: 'web' },
         });
       },
       async operation(_database, scale, repetition) {
