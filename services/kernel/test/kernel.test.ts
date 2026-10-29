@@ -251,6 +251,7 @@ const typed = [
   'POST /v1/zones',
   'GET /v1/zones',
   'GET /v1/zones/:id',
+  'POST /v1/zones/:id/$readPage',
   'GET /v1/zones/:id/configuration',
   'PUT /v1/zones/:id/configuration',
   'POST /v1/zones/:id/$publish',
