@@ -96,19 +96,36 @@ identical runs create neither duplicates nor replay conflicts. Cached IDs and re
 not permission grants: native target admission and disclosure still check current
 authorization, including on replay and after grant revocation.
 
-These are required outcomes, not delivered runtime behavior. The current CLI supplies no
-identifier lookup, planning calls only an optional injected lookup, and the unchanged-row
-shortcut precedes conversion and resolution. [`RecordBindings`](src/record-bindings.ts)
-already retains the successful create response's subject and supports exact own-binding
-reads. Default producer wiring and dependency-aware journal/planning scheduling are still
-missing; the observation seam does not prescribe a new resolver ABI or storage format.
+The ordinary default `Importer` now supplies this handoff without an injected identifier
+provider. It point-reads the configured alias and native relation keys through
+[`RecordBindings.claim`](src/record-bindings.ts). The existing
+`run_reference_signatures(source,record_key)` table stores one bounded signature per
+acknowledged record; an unchanged record is replanned only when the exact own-reference
+outcomes change. Prepared bootstrap bytes, keys and receipts remain immutable across reopen.
+During a dependency refresh, proposals whose complete semantic statement is unchanged are
+retained, while changed relation bodies are proposed with new keys. This avoids duplicate
+candidate effects for unrelated fields such as an unchanged unknown author.
 
 The frozen [native cases](../kernel/test/imports/known-reference-refresh.test.ts) cover the
-default handoff and unchanged dependency refresh. The committed
-[known-reference report](../../docs/research/imports-audit/known-reference-refresh.md)
-records **0 pass, 2 fail, 65 assertions** at those intended assertions on unchanged product
-code. The deeper duplicate/replay, revocation, resolved adoption and retained-history
-expectations were not reached and are not passing evidence. Its exact native command is:
+default handoff and unchanged dependency refresh. On implementation revision
+`0b648d744bb80da17a70a3907233fab3168b9112`, the native command reached **1 pass and 1
+failure (145 assertions)**. The first flow passed, including the actual work claim,
+target-addressed candidate, editor adoption, stable replay, and denied replay. The late
+refresh flow reached the resolved candidate, adoption and retained-history checks; its last
+unknown-author assertion failed because the public candidate response's qualifier property
+contains `data_type: "external-id"`, while the frozen helper requires a property object with
+only `id`. See the
+[verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
+for the exact mismatch and evidence limits. The frozen native file hash is
+`9c0ec65033be4f94562f13a986bbb5873b5ea3b14f50d105bfc3bd4736ea0e51`.
+
+### Own-reference refresh cost
+
+- Touches: read at most 64 author/work relation keys from the bounded Open Library projection, with one indexed `RecordBindings.claim` point read per supplied key; compare and persist one signature for the record. A changed signature runs ordinary bounded candidate reconciliation. Existing journals and receipts are read only by their exact owner/key.
+- Bound: O(M + F log B) per supplied record for M projection bytes, F ≤ 64 native relation keys and B stored binding rows, plus existing bounded planning and writes. Durable dependency metadata is O(1) per record; source record admission retains its existing byte and field caps. No claim/history enumeration or source-wide dependency sweep is used.
+- Growth check: `services/importer/tests/own-reference-refresh.test.ts` verifies exact alias point reads and the default reopen/late-learning/stable-replay path. The frozen native case verifies target-addressed adoption and replay, but its final unknown-author response-shape assertion remains unresolved; no native growth measurement is claimed.
+
+The exact native command is:
 
 ```sh
 bun scripts/worker-check.ts -- env KERNEL_CHECK_SKIP_STALE_CLEANUP=1 bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
