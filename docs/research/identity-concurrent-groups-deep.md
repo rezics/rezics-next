@@ -10,10 +10,9 @@ per-home capacity and cleanup, and publication observations distinct from job id
 one global pending job and `admit(tx, intent)` cannot express this protocol unchanged. No account-demand bound exists.
 Keep P symbolic. Capacity exhaustion is retryable capacity refusal; `identity_epoch_busy` means an overlapping group.
 
-There are two necessary specification clarifications: the observable status/effects of safe pre-admission reservations,
-and the internal routing/observation signatures. If zero effects are required for every later overflow determination,
-including after a previously safe preparation, the cross-home counterexample below rules out that stronger promise.
-No global whole-job lock, temporary serialization fallback, distributed transaction or additional engine is recommended.
+Necessary clarifications concern safe pre-admission reservation effects/status and internal routing/observation signatures.
+If zero effects are required for later overflow after safe preparation, the counterexample below rules out that promise.
+No whole-job global lock, serialization fallback, distributed transaction or additional engine is recommended.
 
 ## Evidence boundary
 
@@ -42,6 +41,10 @@ The following names are SQL/type sketches, not delivered tables or callable expo
 one active `core.partition`, with its native ownership epoch, native T and executor fence. Release its connection before
 visiting another home. `currentCommand(tx)` is live authority only inside that attempt; captured receipts are evidence
 of past commits, never permission for a later owner. Actual [partition fencing][partition] remains authoritative.
+Birth initializes exact self/basis and singleton header in its revision-1 source command, without another checkout/Search.
+Bind `writeSubject` (including bulk/import/named agents) and direct unlabeled agent creation. Convert `mergeSubjectsInCommand`,
+move registration/repoint/member/link phases, verify/unverify/backlinks and `links.ts` relay retries. Final handoff needs
+the deferred same-TX guard AND native barrier over all old writers/queued work; a type flag or capture alone proves neither.
 
 | Native owner | Minimal retained data and indexed access |
 | --- | --- |
@@ -51,11 +54,10 @@ of past commits, never permission for a later owner. Actual [partition fencing][
 | Each participating control home | At most P occupied work slots, including preparing/cancelling/reclaim-blocked occupants; unique live claim `(home,group_incarnation)`, and attempt state keyed `(home,job,attempt)`. Reserve output/copy space here before admission. |
 | Actual effect/payload home | Native gate, expected prior/next effect scope, frontiers, transaction/component receipt and producer/consumer custody/minimization locators. Library payload remains Library-owned. |
 
-Route ordinary merge jobs by the existing redirected original's command partition; route account-agent jobs by the
-existing derived node command partition, as [current callers][agents] actually do. Resolve Accounts source intent at its
-account home separately. Group claims follow current groups, not the receipt anchor. This preserves replay after a
-survivor changes: choosing the smallest *current* terminal as job home would route the same receipt elsewhere after a split.
-An opaque operation locator retains that stable route; native ownership resolution can change the backend, not the key.
+Route ordinary jobs by the existing redirected original's command partition; account-agent jobs by the derived node's
+command partition, as [current callers][agents] do. Accounts source intent remains account-home-routed. Claims follow current
+groups, not the receipt anchor. Choosing the smallest *current* terminal would misroute receipt replay after a split.
+An opaque operation locator retains the stable route; native ownership resolution can change the backend, not the key.
 
 Use a nonreused group incarnation and monotone versions, not a terminal UUID alone. Every change to current membership,
 count, claim/readiness or routing increments the version; ownership epoch also participates in comparisons. A retired
@@ -85,9 +87,9 @@ reader must be exposed for page composition; repeatedly invoking `readMapping(po
 These changes belong to the existing Semantic/filtered-list boundaries, not a new dataProfile or permission service.
 
 Keep native `{partition,epoch,position,transactionId}` plus component/job/step/version/scope identities unchanged.
-Job epoch is an identity, not commit order. Ordinary POST remains 202 with Location and native poll; current authorization
-precedes receipt replay, hidden/unknown operation polls remain concealed. Accounts successful return shapes and idempotent
-receipt meanings remain unchanged. Ordinary Search checkpoints cannot become identity completion.
+Job epoch is an identity, not commit order. POST remains 202/Location/native poll; authorization precedes cap/busy disclosure
+and is rechecked natively before replay/final admission. Hidden/unknown polls stay concealed. Accounts success DTOs/receipt
+meanings remain unchanged. Ordinary Search checkpoints cannot become identity completion.
 
 ## Exact cap before effects, including cross-home races
 
@@ -99,8 +101,8 @@ evidence returns retryable unavailable, never overflow. SERIALIZABLE transaction
 such cross-home snapshot. PostgreSQL's [isolation rules][pg-isolation] distinguish those guarantees.
 
 Compute every RESULT group exactly at that cut, including its terminal. Distinct current groups have disjoint membership;
-same incarnation is deduplicated, not added twice. Merge sums distinct counts; repoint/split use exact retained original
-membership and the prescribed constant transform, including provenance-specific undo. No request scans 4096 members.
+same incarnation is deduplicated, not added twice. Merge sums distinct counts; repoint changes counts by exact point membership;
+specified unmerge restores its ONE explicit original, not a historical group. Its link undo uses the provenance ledger.
 Counterexample to mixed reads: moving one member from B to A preserves total 4096; reading old B=2049 then new A=2048
 would report false 4097. Validate both versions before returning overflow. Native membership/count writers must be the
 complete converted writer inventory; counts cannot be trusted while old redirect/member writers bypass them.
@@ -139,18 +141,24 @@ effects-free capture/validate/cap
 PREPARING -> CANCELLING -> cancellation custody at EVERY planned home -> FREE
 ```
 
-At a group home, one command locks its fixed slot rows/header/attempt row, checks active native ownership, cancellation,
-expected incarnation/version/sealed counts, then installs the unique claim and retained preparation receipt/wakeup.
-Use `SELECT ... FOR UPDATE` on real existing header/attempt rows and uniqueness for first absence; `INSERT ... ON CONFLICT`
-followed by locked recheck closes the absent-row race. A mere prior SELECT, UUID order or sequence allocation is no lock.
-Native command rollback rolls back the claim and its receipt/outbox. [Row locking][pg-locks] and [heap update source][pg-heap]
-support the mechanism, not an application-wide atomicity claim.
+At a group home, one command locks quota/header/attempt rows and one indexed free slot, never scans P slots. Check active
+ownership/cancellation and exact input versions, then install the unique claim and retained native receipt/wakeup:
+```sql
+SELECT * FROM group_header WHERE home=$1 AND incarnation=$2 FOR UPDATE;
+UPDATE capacity SET occupied=occupied+1 WHERE home=$1 AND occupied<$P RETURNING occupied;
+UPDATE group_header SET claim=$job,version=version+1
+ WHERE home=$1 AND incarnation=$2 AND generation=$g AND version=$v AND claim IS NULL RETURNING *;
+```
+These are sketches inside `runCommand`, with locked attempt-state UPSERT/recheck and all-or-rollback slot allocation.
+Uniqueness plus `INSERT ... ON CONFLICT`/locked recheck closes first absence. Native rollback removes claims/receipt/outbox;
+claim writes require a registered native wakeup/event, never branded `noEffect`. [Locks][pg-locks]/[heap rechecks][pg-heap]
+are local mechanisms. Timeout or skipped locked rows is contention, not proof that P slots are actually occupied.
 
 Use deterministic resource order and try/refuse rather than waiting with partially acquired slots. This also avoids
-P=1 capacity deadlock where two jobs hold one home each and need the other's home. An overlapping live claim returns
-busy; a home with P occupants but no overlapping claim returns capacity unavailable. Both preserve the same logical
-intent/receipt on retry. Disjoint group sets in the same home can use separate slots up to P; disjoint homes have no shared
-job lock. Claims and capacity are acquired before effects, not lazily as output allocation runs out midway through a job.
+P=1 deadlock where two jobs hold one home each and need the other's. Only an overlapping ADMITTED pending claim returns
+busy; preparing/cancelling overlap is retryable unavailable unless explicitly included in the pending-group definition.
+P actual occupants without overlap is capacity refusal. Preserve the same intent/receipt. Disjoint sets share a home up
+to P slots, with no shared whole-job lock. Reserve all copy capacity before effects, never halfway through execution.
 
 Before the first remote claim, the job home owns the entire planned-home set and recovery obligation. Cancellation writes
 an attempt tombstone at *every* planned home, even one with no visible claim yet; it serializes with claim creation there.
@@ -160,17 +168,16 @@ Job-home CAS chooses ADMITTED versus CANCELLING once. Final admission consumes e
 receipt wins over an uncertain HTTP result. Never say `not_applied` after a lost final commit; replay resolves the same job.
 After ADMITTED, recovery finishes the job rather than dropping claims while partial effects survive.
 
-Cancellation, publication and reclamation can run without obtaining another admission slot. They release a slot only after
-all claim/copy/minimizer custody is complete. Native resumption seeks an indexed finite set of occupied slots/jobs; no
-scan of R/L/H history is needed. Under available owners, finite inputs and fair scheduled recovery, each admitted job
-finishes finite bounded steps; failed preparation has finite cleanup. Arbitrarily sustained arrivals/failures cannot
-guarantee a refused request an age bound. P is local resource backpressure, not a bound on global verification demand.
+Cancellation/publication/reclaim need no new slot; release only after claim/copy/minimizer custody. Indexed resumption seeks
+occupied slots/jobs, not R/L/H history. With available owners, finite inputs and fair recovery, admitted jobs and cancelled
+preparations finish finite bounded steps. Sustained arrivals/failures give refused requests no age bound; P bounds local resources.
 
 ## Publication, cursors and one relevant control home
 
 For the retained global reader scalar, use a short native metadata fence, not a job lock. An idempotent OPEN before any
-structural effect increments a reader revision and active count; CLOSE after complete mapping and both participant
-custodies decrements the count and increments revision. UPDATE the actual singleton row under its native command fence;
+structural effect increments a reader revision and active count. Job home commits an immutable publish-ready manifest of
+complete expected effects/mapping/both ACKs; released marker-home custody validates that native record before CLOSE.
+CLOSE decrements count and increments revision. UPDATE the singleton under its native command fence, never caller booleans;
 the row lock lasts through commit, so committed revisions cannot invert. Per-job OPEN/CLOSE identity uses native receipt
 custody for replay. These small records are metadata/history, not group generations or another global P-sized job queue.
 Explicitly document that distinction: charging all active jobs as resident group jobs at this singleton recreates a global cap.
@@ -179,9 +186,8 @@ Many jobs execute concurrently between OPEN and CLOSE. Lists prepare while count
 Keep group/source gates pending until CLOSE's committed publication receipt is in their native custody; a crash in that
 handoff may conservatively prepare, never expose an unpublished result. Poll completion requires that same publication
 and handoff custody. CLOSE must resolve a committed OPEN once, including cancellation before domain admission.
-The marker row can be a throughput bottleneck to measure, but it serializes only short metadata commands, not entire jobs.
-An asynchronous derived zero without this ordering/barrier is unsafe: a source can change before its pending increment
-arrives. Merely taking the maximum allocated job epoch is also unsafe. [Sequences are not commit order][pg-sequences].
+Measure marker throughput: only short metadata commands serialize. Asynchronous derived zero is unsafe if source changes
+precede its pending increment. Maximum allocated job epoch is also unsafe. [Sequences are not commit order][pg-sequences].
 
 A cursor binds the existing global reader revision and existing canonical/filter/privacy bases. Check the page's existing
 start/final observations; equal clean revision excludes an intervening OPEN/CLOSE cycle. No home vector, alias sweep,
