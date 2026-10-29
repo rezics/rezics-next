@@ -23,9 +23,9 @@ export type PromotionOptions = {
   derivedFiles?: DerivedFile[];
 };
 
-// The root gate runs every workspace, and the kernel's check alone takes about 45 minutes; the runner's ten-minute
-// default stopped every full gate before it could pass.
-export const PROMOTION_GATE_TIMEOUT_MS = 2 * 60 * 60_000;
+// The root gate runs every workspace on one gate host; with every workspace grown it outlasted two hours (a timeout at
+// 2 h 05 m on 2026-10-29 blocked every promotion), so it gets four.
+export const PROMOTION_GATE_TIMEOUT_MS = 4 * 60 * 60_000;
 const STABILIZE_QUICK_GATE = [
   ['bun', 'scripts/typecheck.ts'],
   ['bun', 'run', '--cwd', 'packages/definitions', 'release'],

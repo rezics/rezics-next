@@ -46,10 +46,39 @@ function frozenFiles(task: Task): Pick<FrozenFile, 'path' | 'hash'>[] {
 }
 type FrozenCommit = { files: FrozenFile[]; formatterError?: string };
 
+function frozenFileAtBase(worktree: string, base: string, path: string): Buffer | undefined {
+  const entry = spawnSync('git', ['--literal-pathspecs', 'ls-tree', '-z', base, '--', path], {
+    cwd: worktree,
+    encoding: 'buffer',
+  });
+  if (entry.status !== 0) {
+    const detail = entry.stderr?.toString('utf8').trim() || entry.error?.message || `git exited ${entry.status}`;
+    throw new Error(`git ls-tree: ${detail}`);
+  }
+  const record = entry.stdout
+    .toString('utf8')
+    .split('\0')
+    .find((candidate) => candidate.endsWith(`\t${path}`));
+  if (!record) return undefined;
+  const metadata = record.slice(0, record.indexOf('\t')).split(' ');
+  const mode = metadata[0];
+  const type = metadata[1];
+  if (mode === '120000') throw new Error(`frozen file path crosses a symbolic link: ${path}`);
+  if (type !== 'blob') throw new Error(`frozen file path is not a file on the task base: ${path}`);
+
+  const content = spawnSync('git', ['show', `${base}:${path}`], { cwd: worktree, encoding: 'buffer' });
+  if (content.status !== 0) {
+    const detail = content.stderr?.toString('utf8').trim() || content.error?.message || `git exited ${content.status}`;
+    throw new Error(`git show: ${detail}`);
+  }
+  return content.stdout;
+}
+
 function commitFrozenFiles(
   worktree: string,
   files: readonly FrozenFile[],
   formatCommand: readonly string[],
+  base?: string,
   previous: readonly Pick<FrozenFile, 'path' | 'hash'>[] = [],
   shared = false,
 ): FrozenCommit {
@@ -74,7 +103,14 @@ function commitFrozenFiles(
     if (file) {
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, file.content, 'utf8');
-    } else if (existsSync(target)) rmSync(target, { force: true });
+    } else {
+      if (!base) throw new Error(`cannot unfreeze file without a task base: ${path}`);
+      const original = frozenFileAtBase(worktree, base, path);
+      if (original) {
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, original);
+      } else if (existsSync(target)) rmSync(target, { force: true });
+    }
   }
   if (!touched.size) return { files: [] };
   let formatterError: string | undefined;
@@ -352,7 +388,7 @@ export class WorkerTasks {
       files.every((file) => prior.some((p) => p.path === file.path && p.hash === file.hash))
     )
       return;
-    const frozen = commitFrozenFiles(task.worktree, files, this.settings.formatCommand, prior, true);
+    const frozen = commitFrozenFiles(task.worktree, files, this.settings.formatCommand, task.base, prior, true);
     this.store.updateTask({ taskId: task.id, attempt: task.currentAttempt }, (current) => {
       (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
     });
@@ -377,7 +413,10 @@ export class WorkerTasks {
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const ref = { taskId, attempt: task.currentAttempt };
-    if (this.store.retryIntent(ref)?.status === 'pending') throw new Error('a retry is already pending');
+    // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
+    // tasks and lose their branches. The pending retry then starts the amended brief.
+    if (task.state !== 'held' && this.store.retryIntent(ref)?.status === 'pending')
+      throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const attempt = this.store.attempt(ref);
       if (!['pending', 'stopped', 'exited'].includes(attempt.state))
@@ -843,7 +882,13 @@ export class WorkerTasks {
         setupStep = 'committing frozen acceptance files';
         const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);
         const priorFiles = frozenFiles(task);
-        const frozen = commitFrozenFiles(task.worktree, frozenBlocks, this.settings.formatCommand, priorFiles);
+        const frozen = commitFrozenFiles(
+          task.worktree,
+          frozenBlocks,
+          this.settings.formatCommand,
+          task.base,
+          priorFiles,
+        );
         task = this.store.updateTask(next, (current) => {
           (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
         });
