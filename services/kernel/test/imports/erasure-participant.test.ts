@@ -45,10 +45,14 @@ async function startImportsWorker() {
     stdout: 'pipe',
     stderr: 'pipe',
   });
+  if (!(runtime.stdout instanceof ReadableStream) || !(runtime.stderr instanceof ReadableStream))
+    throw new Error('Imports worker streams are unavailable');
+  const stdout = runtime.stdout;
+  const stderr = runtime.stderr;
   workerRead = (async () => {
-    for await (const chunk of runtime.stdout) workerOutput += new TextDecoder().decode(chunk);
+    for await (const chunk of stdout) workerOutput += new TextDecoder().decode(chunk);
   })();
-  workerErrors = new Response(runtime.stderr).text();
+  workerErrors = new Response(stderr).text();
   const deadline = Date.now() + 30_000;
   while (!workerOutput.includes('imports-worker-ready') && Date.now() < deadline && runtime.exitCode === null)
     await Bun.sleep(10);
