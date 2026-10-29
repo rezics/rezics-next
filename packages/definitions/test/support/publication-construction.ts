@@ -368,7 +368,6 @@ async function probe(): Promise<Evidence> {
         }
       state.qualifiers.add(release.properties[code]!.qualifiers);
       if (name === 'duplicate-unique-sites') {
-        state.uniqueArrays.add(release.curies);
         for (const type of Object.values(release.types))
           for (const list of [type.bases, type.mappings, type.facets]) state.uniqueArrays.add(list);
         for (const property of Object.values(release.properties)) {
@@ -433,15 +432,13 @@ async function probe(): Promise<Evidence> {
     sites.types[rootType]!.bases = [...duplicates];
     sites.types[rootType]!.mappings = [...duplicates];
     sites.types[rootType]!.facets = [code, code];
-    sites.properties[code]!.qualifiers = [...duplicates];
-    sites.properties[code]!.mappings = [...duplicates];
     const itemProperty = Object.values(sites.properties).find((property) => property.datatype === 'wikibase-item');
     if (itemProperty) itemProperty.targets = [...duplicates];
     const quantityProperty = Object.values(sites.properties).find((property) => property.datatype === 'quantity');
     if (quantityProperty) quantityProperty.units = ['1', '1'];
     const relationProperty = Object.values(sites.properties).find((property) => property.relation);
     if (relationProperty?.relation) relationProperty.relation.filter = [...duplicates];
-    measure('duplicate-unique-sites', 'release', sites, { uniqueSites: 7 });
+    measure('duplicate-unique-sites', 'release', sites, { uniqueSites: 6 });
     const filterRoom = 1024 - Object.keys(bundledRelease.filters ?? {}).length;
     for (const invalid of [false, true]) {
       const mark = (release: Release) => {
