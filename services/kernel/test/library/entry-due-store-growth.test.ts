@@ -12,6 +12,7 @@ import {
   checkGrowth,
   costOf,
   openGrowthDatabase,
+  settle,
   withoutCatalogTexts,
   type GrowthDatabase,
 } from '../support/growth.ts';
@@ -219,7 +220,7 @@ test('native due seeks and every exact purge branch have bounded physical work a
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(_database, scale, previous) {
         await grow(previous, scale);
-        await db.admin.query('VACUUM (ANALYZE) library.entry_deleted');
+        await settle(db, { relations: ['library.entry_deleted', 'library.entry'], analyze: true });
         const probe = await capture(db, () => operation(branch));
         const classification = catalogStatementBound(probe.capture);
         expect(classification.catalogStatements).toBeLessThanOrEqual(classification.allowedStatements);

@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-import pg from 'pg';
+import type pg from 'pg';
 import { readSitemapCandidates } from '../../src/library/sitemap-discovery.ts';
 import sitemapPage from '../../src/library/sitemap-page.sql';
+import { openGrowthDatabase, settle, type GrowthDatabase } from '../support/growth.ts';
 import { checkStatement } from '../support/partition-binding.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+let db: GrowthDatabase;
+let pool: pg.Pool;
 
 const partition = 0x7a1;
 const first = partition * 16;
@@ -40,14 +42,21 @@ async function clear(): Promise<void> {
   ]);
 }
 
-beforeAll(clear);
+beforeAll(async () => {
+  db = await openGrowthDatabase(databaseUrl);
+  pool = db.admin;
+  await clear();
+});
 beforeEach(async () => {
   generation++;
   await clear();
 });
 afterAll(async () => {
-  await clear();
-  await pool.end();
+  try {
+    await clear();
+  } finally {
+    await db?.close();
+  }
 });
 
 test('pages walk a partition in route then id order and resume after the last candidate', async () => {
@@ -199,7 +208,7 @@ test('Collection sitemap discovery seeks within one partition and never scans re
   // Neighbouring routes sit just outside the interval: a plan that did not stop at it would read or return them.
   await generate(first - 1, first - 1, 500);
   await generate(neighbour * 16, neighbour * 16, 500);
-  await pool.query('VACUUM (ANALYZE) library.collection');
+  await settle(db, { relations: ['library.collection'], analyze: true });
 
   const { rows: publicRows } = await pool.query<{ route: number; id: string }>(
     `SELECT route, collection_id::text AS id FROM library.collection
