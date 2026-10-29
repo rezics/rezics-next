@@ -173,7 +173,19 @@ The existing opt-in driver instrumentation is unchanged. Inspection reconfirms b
 the staged and acknowledged first/after SQLs, and the four reviewed importer page limits of 100.
 
 The first revalidated mandated cause-capture launch exited 1 with `Invalid check id: --`, before returning
-a check ID or executing a test. The first retry produced the same error and exit status. The final permitted
-retry follows without changing the runner, dependency configuration,
-frozen assertions, scales or runtime. Until a trace actually runs, the two-text cause remains unconfirmed and
-both the scale amendment and added exact-equality assertion remain conditional. No new native result is claimed.
+a check ID or executing a test. Both permitted retries produced the same error and exit status. All three launches failed before entering
+a check slot. The runner dispatch at `scripts/worker-check.ts:783` treats `--run` as an existing-check operation;
+`recordPath()` at line 113 rejects the supplied `--` as its ID. No alternate syntax or runner repair was used.
+The runner, dependency configuration, frozen assertions, scales and runtime remain unchanged.
+
+No cause diagnostic, final CPU test, importer typecheck or artifact acceptance reached execution in this
+revalidation. There are no new prepared SQL strings, event counts, distinct sets or three-scale values.
+The predecessor's 16/64/256 evidence (62/62/64 prepares) remains the only reached CPU result reported here.
+The exact two-site cause remains unconfirmed, so the scale amendment and independent exact-equality assertion
+are held. Usable constant-work proof still requires a passing branch-complete exact-equality run.
+
+Full final CPU diff: empty; full final driver diff for this revalidation: empty. Exact old/new formatted CPU
+SHA256 hashes are both `f0d46d44ca3cbffaf7e60a162e6aaa6356b0ffc7b034d293391505f080e1c751`.
+Only this audit changed in the revalidation; there are no outside-path files or new reference-project sources.
+This tool blocker prevents the required evidence and does not change any acceptance requirement or establish
+native/API/growth success, integration or promotion.
