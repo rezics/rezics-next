@@ -32,18 +32,21 @@ async function setup() {
   const driver = await createCommunityDriver();
   const fixture = await driver.provision();
   const { system } = communityFixtureRuntime();
-  const { space } = await call(driver, fixture.owner, 'POST', '/v1/spaces', {
+  const deletion = accountDeletionRuntime(system);
+  const persona = await deletion.person();
+  const owner = { id: persona.accountId, bearer: persona.bearer };
+  const { space } = await call(driver, owner, 'POST', '/v1/spaces', {
     title: 'Original Space',
     summary: 'Space archive',
   });
-  const { realm } = await call(driver, fixture.owner, 'POST', '/v1/realms', {
+  const { realm } = await call(driver, owner, 'POST', '/v1/realms', {
     spaceId: space.spaceId,
     contextId: fixture.contextId,
     visibility: 'public',
     title: 'Original Realm',
     summary: 'Realm archive',
   });
-  return { driver, fixture, system, space, realm };
+  return { driver, fixture, system, owner, space, realm };
 }
 
 async function eraseAll(
@@ -63,14 +66,14 @@ async function eraseAll(
 }
 
 test("account erasure keeps each Realm's and Space's current revision with its author id and erases the account's archived revisions' authored text", async () => {
-  const { driver, fixture, system, space, realm } = await setup();
+  const { driver, fixture, system, owner, space, realm } = await setup();
   const pool = system.database.pool;
   try {
     // Two edits by this editor, followed by an independent editor's head.
     const one = (
       await call(
         driver,
-        fixture.owner,
+        owner,
         'PATCH',
         `/v1/realms/${realm.realmId}`,
         { title: 'First edit', summary: 'First archived prose' },
@@ -80,14 +83,14 @@ test("account erasure keeps each Realm's and Space's current revision with its a
     const two = (
       await call(
         driver,
-        fixture.owner,
+        owner,
         'PATCH',
         `/v1/realms/${realm.realmId}`,
         { title: 'Second edit', summary: 'Second archived prose' },
         one.headRevisionId,
       )
     ).realm;
-    await call(driver, fixture.owner, 'POST', '/v1/roleGrants', {
+    await call(driver, owner, 'POST', '/v1/roleGrants', {
       resource: { route: routeOf(realm.realmId), id: realm.realmId },
       subject: { kind: 'account', id: fixture.member.id },
       role: 'community.realm.owner',
@@ -106,7 +109,7 @@ test("account erasure keeps each Realm's and Space's current revision with its a
     const currentSpace = (
       await call(
         driver,
-        fixture.owner,
+        owner,
         'PATCH',
         `/v1/spaces/${space.spaceId}`,
         { title: 'Published Space', summary: 'Keep this Space' },
@@ -114,9 +117,9 @@ test("account erasure keeps each Realm's and Space's current revision with its a
       )
     ).space;
     // A second owner's Realm proves retention of a head authored by the deleted account too.
-    const host = (await call(driver, fixture.owner, 'POST', '/v1/spaces', { title: 'Second Space' })).space;
+    const host = (await call(driver, owner, 'POST', '/v1/spaces', { title: 'Second Space' })).space;
     const ownHead = (
-      await call(driver, fixture.owner, 'POST', '/v1/realms', {
+      await call(driver, owner, 'POST', '/v1/realms', {
         spaceId: host.spaceId,
         contextId: fixture.contextId,
         visibility: 'public',
@@ -127,7 +130,7 @@ test("account erasure keeps each Realm's and Space's current revision with its a
     await drainEffects(pool, partitionOf(routeOf(space.spaceId)!));
     await drainEffects(pool, partitionOf(routeOf(host.spaceId)!));
     await driver.settle();
-    await expect(eraseAccountRevisionsPage({ pool }, fixture.owner.id, null)).rejects.toThrow();
+    await expect(eraseAccountRevisionsPage({ pool }, owner.id, null)).rejects.toThrow();
     const archivedBefore = (
       await pool.query('SELECT * FROM community.realm_revision WHERE route=$1 AND realm_id=$2 ORDER BY revision_id', [
         routeOf(realm.realmId),
@@ -143,18 +146,18 @@ test("account erasure keeps each Realm's and Space's current revision with its a
     ).rows[0];
     const locatorBefore = (
       await pool.query('SELECT * FROM community.revision_locator WHERE route=$1 AND account_id=$2', [
-        routeOf(fixture.owner.id),
-        fixture.owner.id,
+        routeOf(owner.id),
+        owner.id,
       ])
     ).rows;
     expect(locatorBefore).toHaveLength(7);
     const deletion = accountDeletionRuntime(system);
     await deletePersona(
       { pool: system.database.pool, auth: deletion.auth },
-      { accountId: fixture.owner.id, bearer: fixture.owner.bearer },
+      { accountId: owner.id, bearer: owner.bearer },
     );
-    await drainEffects(pool, partitionOf(routeOf(fixture.owner.id)!));
-    expect(await eraseAll(pool, fixture.owner.id)).toBe(7);
+    await drainEffects(pool, partitionOf(routeOf(owner.id)!));
+    expect(await eraseAll(pool, owner.id)).toBe(7);
     const archivedAfter = (
       await pool.query('SELECT * FROM community.realm_revision WHERE route=$1 AND realm_id=$2 ORDER BY revision_id', [
         routeOf(realm.realmId),
@@ -162,7 +165,7 @@ test("account erasure keeps each Realm's and Space's current revision with its a
       ])
     ).rows;
     expect(archivedAfter).toEqual(
-      archivedBefore.map((row) => (row.author === fixture.owner.id ? { ...row, title: '', summary: '' } : row)),
+      archivedBefore.map((row) => (row.author === owner.id ? { ...row, title: '', summary: '' } : row)),
     );
     expect(archivedAfter.find((row) => row.author === fixture.member.id)).toEqual(otherBefore);
     expect(
@@ -176,19 +179,19 @@ test("account erasure keeps each Realm's and Space's current revision with its a
     expect((await call(driver, fixture.member, 'GET', `/v1/spaces/${space.spaceId}`)).space).toEqual(currentSpace);
     expect((await call(driver, null, 'GET', `/v1/realms/${realm.realmId}`)).realm).toEqual(other);
     expect((await call(driver, null, 'GET', `/v1/realms/${ownHead.realmId}`)).realm).toEqual(ownHead);
-    expect(ownHead.author).toBe(fixture.owner.id);
-    expect(currentSpace.author).toBe(fixture.owner.id);
-    expect(currentSpace.creator).toBe(fixture.owner.id);
-    expect(ownHead.creator).toBe(fixture.owner.id);
+    expect(ownHead.author).toBe(owner.id);
+    expect(currentSpace.author).toBe(owner.id);
+    expect(currentSpace.creator).toBe(owner.id);
+    expect(ownHead.creator).toBe(owner.id);
     expect(
       (
         await pool.query('SELECT * FROM community.revision_locator WHERE route=$1 AND account_id=$2', [
-          routeOf(fixture.owner.id),
-          fixture.owner.id,
+          routeOf(owner.id),
+          owner.id,
         ])
       ).rows,
     ).toEqual([]);
-    expect(await eraseAccountRevisionsPage({ pool }, fixture.owner.id, null)).toEqual({
+    expect(await eraseAccountRevisionsPage({ pool }, owner.id, null)).toEqual({
       found: 0,
       pending: 0,
       next: null,
@@ -207,7 +210,7 @@ test("account erasure keeps each Realm's and Space's current revision with its a
 }, 360000);
 
 test("an account revision erasure page stays within its bound as other editors' revisions grow", async () => {
-  const { driver, fixture, system, space, realm } = await setup();
+  const { driver, fixture, system, owner, space, realm } = await setup();
   const route = routeOf(realm.realmId)!;
   let db: Awaited<ReturnType<typeof openGrowthDatabase>> | undefined;
   try {
@@ -219,19 +222,19 @@ test("an account revision erasure page stays within its bound as other editors' 
       `INSERT INTO community.realm_revision
       (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
       SELECT $1,$2,id,$3,'Archived','Private prose','public',$4,now(),$5 FROM unnest($6::uuid[]) AS id`,
-      [route, realm.realmId, realm.headRevisionId, fixture.contextId, fixture.owner.id, revisions],
+      [route, realm.realmId, realm.headRevisionId, fixture.contextId, owner.id, revisions],
     );
     await admin.query(
       `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
       SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id`,
-      [routeOf(fixture.owner.id), fixture.owner.id, route, realm.realmId, revisions],
+      [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
     );
     const deletion = accountDeletionRuntime(system);
     await deletePersona(
       { pool: system.database.pool, auth: deletion.auth },
-      { accountId: fixture.owner.id, bearer: fixture.owner.bearer },
+      { accountId: owner.id, bearer: owner.bearer },
     );
-    await drainEffects(system.database.pool, partitionOf(routeOf(fixture.owner.id)!));
+    await drainEffects(system.database.pool, partitionOf(routeOf(owner.id)!));
     await driver.settle();
     await worker.stop();
     db = await openGrowthDatabase(system.database.pool.options.connectionString!);
@@ -261,7 +264,7 @@ test("an account revision erasure page stays within its bound as other editors' 
         expect(population.rows[0].n).toBe(scale);
       },
       async operation(database) {
-        const page = await eraseAccountRevisionsPage({ pool: database.pool }, fixture.owner.id, after);
+        const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
         expect(page.found).toBe(50);
         expect(page.pending).toBe(0);
         expect(page.next).not.toBeNull();
