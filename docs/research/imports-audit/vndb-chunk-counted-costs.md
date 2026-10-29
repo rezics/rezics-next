@@ -22,13 +22,13 @@ fixture and padding are unchanged.
 
 ## Units, tolerances and populations
 
-| Actual unit | Bound | Absolute / relative slack |
-| --- | --- | --- |
-| `sqlite returned rows` | Constant on both axes | 2 / 0.1 |
-| `sqlite statements` | Constant on both axes | 0 / 0 |
-| `input byte visits` | Linear on the input axis | 2 / 0.1 |
-| `input chunks` | Linear on the input axis | 0 / 0 |
-| `admitted input bytes` | Linear on the input axis | 4 / 0.5 |
+| Actual unit            | Bound                    | Absolute / relative slack |
+| ---------------------- | ------------------------ | ------------------------- |
+| `sqlite returned rows` | Constant on both axes    | 2 / 0.1                   |
+| `sqlite statements`    | Constant on both axes    | 0 / 0                     |
+| `input byte visits`    | Linear on the input axis | 2 / 0.1                   |
+| `input chunks`         | Linear on the input axis | 0 / 0                     |
+| `admitted input bytes` | Linear on the input axis | 4 / 0.5                   |
 
 These are the previous inequalities on the same observations, with explicit tolerances because counted defaults
 are zero. The former block-like input metric was actual admitted bytes and retains its 4/50% tolerance on that unit.
