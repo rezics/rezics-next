@@ -814,7 +814,7 @@ function stableRecording(value: unknown, previous: unknown): unknown {
     ...Object.entries(before).flatMap(([name, item]) => {
       if (name === 'cover' && !Object.hasOwn(current, name)) return [];
       const recordedName = oldIds.includes(name) ? (newIds[oldIds.indexOf(name)] ?? name) : name;
-      return [name, name === 'cover' ? current[recordedName] : stableRecording(current[recordedName], item)];
+      return [[name, name === 'cover' ? current[recordedName] : stableRecording(current[recordedName], item)]];
     }),
   ]);
 }
