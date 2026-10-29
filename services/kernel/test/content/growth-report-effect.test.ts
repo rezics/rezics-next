@@ -100,13 +100,17 @@ afterAll(async () => {
   await system?.close();
 });
 
-function growthRows(population: Population, placement: { ordinal: number; route: number; partition: number }) {
+function growthRows(
+  population: Population,
+  placement: { ordinal: number; route: number; partition: number },
+  excludedPartition?: number,
+) {
   const targetRoute = routeOf(target.id)!;
   const reverse = population.name.endsWith('reverse');
   let reportPartition = placement.partition;
   if (reverse) {
     reportPartition = (partitionOf(routeOf(target.id)!) + 1) % 4096;
-    if (reportPartition === sourcePartition) reportPartition = (reportPartition + 1) % 4096;
+    if (reportPartition === excludedPartition) reportPartition = (reportPartition + 1) % 4096;
   }
   const reportRoute = reportPartition * 16 + (placement.ordinal % 16);
   const reportId = newId(reportRoute);
@@ -204,7 +208,7 @@ test('Report effect projection stays within its bound as source reports and targ
     name: `report-effect-reverse-${partition}`,
     hotPartition: partition,
     hotShare: 0,
-    rows: (place) => growthRows(reversePopulation(partition), place),
+    rows: (place) => growthRows(reversePopulation(partition), place, sourcePartition),
   });
   const report = await checkGrowth(db, {
     name: 'Report effect projection stays within its bound as source reports and target reverse-index history grow',
