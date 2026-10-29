@@ -451,7 +451,8 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   process.env.GROWTH_PROFILE = profilePath;
   const evidence: { scale: number; operation: string; capture: unknown }[] = [];
   async function assertCapturedOperation(scale: number, operation: Operation) {
-    const result = await capture(db, async () => operation.run(await operation.prepare()), { includeBackends: true });
+    const state = await operation.prepare();
+    const result = await capture(db, () => operation.run(state), { includeBackends: true });
     operation.assert(result.value);
     const catalogue = catalogStatementBound(result.capture);
     expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
