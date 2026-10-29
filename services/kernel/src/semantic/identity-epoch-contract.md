@@ -193,8 +193,8 @@ identity epoch bookkeeping alone proves current source-account eligibility acros
 Required `semantic/identity-epoch-mapping.ts` export `stepIdentityEpochMapping: IdentityEpochStep` receives only
 `(pool, {jobId, epoch})`. It reads the persisted frontier and affected changes, commits one bounded unit and returns
 `{job, frontier, state, work, receipt}` only after effects/frontier receipts have durable custody. Re-delivery after a lost
-result reads committed progress. Continuation contains at most eight scalars / 2048 JSON bytes; workflow arguments
-and results at most 4096 bytes. Group membership is stored in the work index, never workflow JSON.
+result reads committed progress. Continuation and workflow arguments/results follow the
+[kernel's bounded job step limits](../../README.md#bounded-job-steps). Group membership is stored in the work index, never workflow JSON.
 
 Mapping maintenance covers actual direct redirects, revision/account backlink effects and indexed member/link
 maintenance. A page is at most 100 raw rows; full inbound/outbound degree is paged, never scanned in one request.
@@ -454,8 +454,7 @@ frozen. Do not revive identity-basis, home vectors or per-page replay as a subst
 
 - Touches: one <=100-row indexed raw page, retained frontier/intent, exact scoped home effects and durable receipts;
   release each home before another home or engine. Search additionally captures actual engine work/bytes/incarnation.
-- Bound: <=100 raw rows per page, <=100 pages per durable segment; native command deadline <=5000ms, scalar keysets
-  <=8/2048 bytes, workflow payload <=4096 bytes. Total retained work follows changed finite input and link/support
+- Bound: follow the [kernel's bounded job step limits](../../README.md#bounded-job-steps). Total retained work follows changed finite input and link/support
   degree, independently of request-page cost. Every reread, lookahead, retry and discarded row is charged.
 - Growth check: first/deep/empty/replay/denied paths across three native scales, separately growing unrelated data
   and history while selected neighbourhood stays fixed. Measure native rows/points/statements/bytes/blocks/engine

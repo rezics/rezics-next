@@ -252,9 +252,8 @@ bounded. These are work bounds, not elapsed-time guarantees under contention.
 
 Storage is O(current source and target pairs), support rows and totals, without transition history. Terminal evidence
 is payload-free. Store revisions/support/totals as native bigints, decimal strings in durable JSON and safe integers
-in responses. Raw pages are at most 100 rows, segments at most 100 pages, native commands at most 5000ms,
-continuations at most 8 scalars/2048 JSON bytes and workflow arguments/results at most 4096 bytes. Reuse existing
-PostgreSQL commands, outbox and DBOS scheduling; no separate maintenance engine is required.
+in responses. Durable steps follow the [kernel's bounded job step limits](../services/kernel/README.md#bounded-job-steps).
+Reuse existing PostgreSQL commands, outbox and DBOS scheduling; no separate maintenance engine is required.
 
 ## Terminal deletion and minimization
 

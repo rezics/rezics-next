@@ -126,6 +126,20 @@ hotspot beyond the fixed platform resource's intentional one-time installation.
 
 ## Durable work
 
+### Bounded job steps
+
+| Limit | Maximum |
+| --- | --- |
+| Raw rows per page | 100 rows |
+| Pages per durable workflow segment | 100 pages |
+| Native command deadline | 5000 ms; a shorter caller deadline wins |
+| Continuation (keyset cursor or frontier) | 8 scalars and 2048 UTF-8 JSON bytes, including full unique tie keys; never OFFSET |
+| Workflow arguments and results | 4096 UTF-8 JSON bytes each, independent of population and input size |
+
+These limits make every step constant, and a job's total work follows its finite input. A contract may adopt smaller
+limits but never larger ones; a larger limit is a performance decision. The deadline bounds waiting, not work, so each
+step still needs its own growth check on rows, blocks and statements.
+
 Run `bun run worker` for the kernel's single durable-work process. It requires `DATABASE_URL` and accepts
 `KERNEL_EXECUTOR_ID`, falling back to `NOMAD_JOB_NAME` plus `NOMAD_ALLOC_INDEX` when configured, or the SDK's local
 identity. `KERNEL_WORKER_POOL_SIZE` defaults to 10 and must be between 1 and 100; the module pool, enqueue client and

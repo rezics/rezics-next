@@ -60,12 +60,10 @@ build generation, sets rebuilding and checkpoints `drain` with runnable intent. 
 reserved run ID; drain atomically binds its new epoch. Before drain it must not authorize derived pages. Concurrent
 rebuild requests coalesce or fail retryably; they never create competing builds. No account scan occurs at start.
 
-Each native command has a finite 5000ms deadline (shorter caller deadline wins), at most100 source/cleanup rows or100
-trie edges, at most100 pages per workflow segment. Keyset cursor: <=8 scalars, <=2048 UTF-8 JSON bytes, including full
-unique tie keys; never OFFSET. Counts, epochs and page sequences stay native bigint; JSON uses canonical nonnegative
+Each native command follows the [kernel's bounded job step limits](../../README.md#bounded-job-steps). Each page has at most
+100 trie edges. Counts, epochs and page sequences stay native bigint; JSON uses canonical nonnegative
 decimal strings without Number conversion; numeric cursor scalars must be safe integers. Each source phase has its own exhaustion checkpoint. Limits on rows,
 statements, transferred bytes and whole-value initialization/publication are separate; page100 alone is no byte bound.
-Maintenance segment arguments/results each serialize to <=4096 UTF-8 JSON bytes, independent of population/input size.
 This bound excludes initial tombstone effect envelopes and shared history, whose retention is separate evidence.
 
 The bounded phase order is:
