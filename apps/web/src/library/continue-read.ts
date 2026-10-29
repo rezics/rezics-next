@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
+import { createServerOnlyFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
 import { personalRead } from '../kernel/query';
 import type { SubjectSummary } from '../media/summary';
@@ -219,11 +220,11 @@ export async function loadLegacyContinue(
   }
 }
 
-async function progressProfiles(request: Request) {
+const progressProfiles = createServerOnlyFn(async (request: Request) => {
   const release = await import('../subject/definitions')
     .then(({ readRelease }) => readRelease())
     .catch(() => undefined);
   const locale = (await import('../kernel/client')).requestLocale(request) ?? 'en';
   const { progressSessionProfile } = await import('./progress-profile');
   return { release, locale, progressSessionProfile };
-}
+});
