@@ -12,14 +12,14 @@ Every compared unit has explicit `{absolute: 0, relative: 0}` slack. This preser
 overrides, including input and retention; the generic returned-row tolerance of 2/10% does not apply here.
 There was no measured block-like byte unit in this file requiring the generic 4/50% tolerance.
 
-| Consumer | Actual named units | Bound | Exact obligations retained |
-| --- | --- | --- | --- |
-| Rejected fixed staging | `sqlite statements`, `sqlite returned rows` | Constant separately | Executions equal the raw plan-evidence delta; returned rows positive; rejection cleanup included. |
-| Ready fixed staging | `sqlite statements`, `sqlite returned rows` | Constant separately | Same raw execution identity and positive returned rows. |
-| Ready live buffers | `line capacity bytes`, `input backing bytes` | Constant separately | Exactly 65536 and 128 bytes respectively at every scale. |
-| Entry-budget input | `input bytes`, `entry and body events` | Linear separately | Bytes equal the budget; events remain the original sum of entries and bodies. |
-| Byte-budget input | `input bytes`, `entry and body events` | Linear separately | Independent byte budget with the same exact counters and combined-event identity. |
-| Both budget modes' retention | `retained total bytes` | Constant | Actual peak of the existing retention observer; zero slack, without a fabricated zero statement count. |
+| Consumer                     | Actual named units                           | Bound               | Exact obligations retained                                                                             |
+| ---------------------------- | -------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| Rejected fixed staging       | `sqlite statements`, `sqlite returned rows`  | Constant separately | Executions equal the raw plan-evidence delta; returned rows positive; rejection cleanup included.      |
+| Ready fixed staging          | `sqlite statements`, `sqlite returned rows`  | Constant separately | Same raw execution identity and positive returned rows.                                                |
+| Ready live buffers           | `line capacity bytes`, `input backing bytes` | Constant separately | Exactly 65536 and 128 bytes respectively at every scale.                                               |
+| Entry-budget input           | `input bytes`, `entry and body events`       | Linear separately   | Bytes equal the budget; events remain the original sum of entries and bodies.                          |
+| Byte-budget input            | `input bytes`, `entry and body events`       | Linear separately   | Independent byte budget with the same exact counters and combined-event identity.                      |
+| Both budget modes' retention | `retained total bytes`                       | Constant            | Actual peak of the existing retention observer; zero slack, without a fabricated zero statement count. |
 
 The async `stageProbe` sums actual `sample.counts` from each synchronous execution while staging is active
 across awaits. Its preparation/capture boundary and active interval are unchanged. Full SQL, binds,
@@ -85,10 +85,10 @@ under `.temp/goal/checks/`.
 
 Both commands tested executable revision `55bf3a9224`; only this report is amended afterward.
 
-| Managed command from the worktree root | Terminal result | Log |
-| --- | --- | --- |
-| `bun scripts/worker-check.ts -- bun test services/importer/tests/vndb-archive-limits-growth.test.ts` | Exit 0; 4 pass, 0 fail, 466 assertions, one file; 222 ms. | `.temp/goal/checks/worker-check-2026-10-29T13-32-09.049Z-4d5fb16f.log` |
-| `bun scripts/worker-check.ts -- bun run --cwd services/importer typecheck` | Exit 0; no type errors in 133 files, 367.66 ms; remote command 0.384 s, peak 235 MiB. | `.temp/goal/checks/worker-check-2026-10-29T13-32-15.196Z-515c5e85.log` |
+| Managed command from the worktree root                                                               | Terminal result                                                                       | Log                                                                    |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `bun scripts/worker-check.ts -- bun test services/importer/tests/vndb-archive-limits-growth.test.ts` | Exit 0; 4 pass, 0 fail, 466 assertions, one file; 222 ms.                             | `.temp/goal/checks/worker-check-2026-10-29T13-32-09.049Z-4d5fb16f.log` |
+| `bun scripts/worker-check.ts -- bun run --cwd services/importer typecheck`                           | Exit 0; no type errors in 133 files, 367.66 ms; remote command 0.384 s, peak 235 MiB. | `.temp/goal/checks/worker-check-2026-10-29T13-32-15.196Z-515c5e85.log` |
 
 The focused run passed all four original scenarios: fixed rejection/ready SQL and buffers; independent
 entry/byte budgets; unsafe declarations/bodies/backings; and pre-schema option validation. The scoped
