@@ -259,7 +259,7 @@ export async function createProfileEntryFixture(options: { clock?: KernelClock; 
       expect(active?.digest).toBe(digest);
       return active!;
     }
-    async function createSubject(vertical: ProfileVertical, label = vertical) {
+    async function createSubject(vertical: ProfileVertical, label: string = vertical) {
       const response = await send('owner', 'POST', '/v1/subjects', {
         type: entryTypes[vertical],
         labels: { en: label },
