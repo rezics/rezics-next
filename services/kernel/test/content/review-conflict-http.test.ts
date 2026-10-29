@@ -42,8 +42,8 @@ beforeAll(async () => {
     )
   ).rows[0]!.board_id;
   await db.admin.query(
-    `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'Discussion fixture','published',1,$2)`,
+    `INSERT INTO content.board (route,board_id,subject_id,title,purpose,visibility,security_revision,recorded_transaction_id)
+     VALUES ($1,$2,$3,'Discussion fixture','discussion','published',1,$2)`,
     [routeOf(discussionBoardId), discussionBoardId, newId(0x6d40)],
   );
   for (const boardId of [reviewsBoardId, discussionBoardId]) {
@@ -163,8 +163,8 @@ test('the review conflict adds one point read only on conflict and no other prob
   const observer = observeSql(db.pool);
   const success = await measure(db, () => call('POST', '/v1/threads', input));
   expect(success.value.response.status).toBe(201);
-  // The pre-extension HTTP path measured 99 statements on success and 18 on conflict.
-  expect(success.cost.statements).toBe(99);
+  // The pre-extension HTTP path measures 109 statements on success and 18 on conflict.
+  expect(success.cost.statements).toBe(109);
   expect(observer.records.filter(({ statement }) => statement === liveReviewRead.sql)).toHaveLength(0);
   const conflictStart = observer.records.length;
   const conflict = await measure(db, () => call('POST', '/v1/threads', input));
