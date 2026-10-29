@@ -422,20 +422,19 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 bun scripts/worker-check.ts -- bun scripts/typecheck.ts
 ```
 
-The source cases were frozen at `637f28a6d1`. The first native check at `b0ed7c4e8d` stopped before
-execution on two caller capture-type errors; `83a13e8b7b` corrects those types without changing the frozen
-assertions. The next native run reached all three cases but stopped before input acquisition when its module
-observation resolved a package undeclared by the kernel workspace; root typecheck identified the same undeclared
-import. `300beac120` uses the exact repository converter paths; root typecheck passed. Its native run reached
-public candidates in all three cases (904 assertions), then exposed a caller expectation that compared a native
-property to the command-input shape `{ id }`. The corrected native citation and sameAs expectations require
-`{ id, data_type: 'url' }`, matching the public `SnakSchema`; exact citation/value checks are retained. The next run
-at `930fde0fe3` made 1,635 assertions and passed root typecheck, exposing two further caller issues: selection
-used JSON member order rather than strict value equality, and failed acquisition incorrectly expected token
-renewal despite the credential provider renewing lazily on a public request. The caller now compares exact values
-without member-order dependence and requires zero Auth calls for the safe stops. Replacement native results are
-pending. The edition expectation was corrected from `schema:BookEdition` to the existing native
-field observation `bf:Instance`. The feed fixtures omit cover acquisition, retaining separate
+The source cases were frozen at `637f28a6d1`. At tested revision `02fa3231fc`, the native command passed all
+three cases with 3,392 assertions (check `db222e74-09b0-47e4-83f6-025e202ba014`), and root typecheck passed
+(check `15bbed60-7e96-4489-9965-ba862c069b0c`). Captured first-input bytes were 1,263 / 762 / 3,105 for
+Bangumi / Open Library / Wikidata, with 3 / 2 / 2 subjects and 17 / 22 / 21 immutable importer receipts after
+refresh. Each source's malformed, truncated and mass-disappearance inputs produced zero public writes and
+preserved its completed baseline. Exact consumed-byte and seal counters are emitted in the native check log.
+
+Caller corrections retain exact values and public contracts: the edition type expectation changed from
+`schema:BookEdition` to the existing native observation `bf:Instance`; native URL/sameAs property expectations
+changed from command-input `{ id }` to public `SnakSchema`'s `{ id, data_type: 'url' }`. Candidate selection uses
+strict structural equality instead of JSON member order. Safe acquisition stops require zero Auth requests,
+matching lazy token renewal on the first public request. Converter observations use exact repository paths.
+The feed fixtures omit cover acquisition, retaining separate
 Bangumi CC-BY-SA summary rights and the omission of unknown-licensed Open Library prose. This proves the scalar
 operator entrypoint only; it does not add general SourceRecord metadata, words, form/classification, VNDB archive
 or statistics, or the deferred cross-surface discovery matrix.
