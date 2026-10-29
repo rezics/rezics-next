@@ -9,9 +9,10 @@ import {
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
+  type CommandAttempt,
   type CommandAuthorization,
-  type CommandEvent,
   type CommandOutcome,
+  type CommandResult,
   type CommandTransaction,
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
@@ -30,7 +31,7 @@ type CommandContext = { transactionId: string; time: AuthoritativeTime };
 export type LibraryCommandBody<T> = (
   tx: CommandTransaction,
   command: CommandContext,
-) => Promise<{ value: T; events: CommandEvent[] }>;
+) => Promise<CommandResult<T>>;
 
 export type OwnAccountCommand = {
   action: string;
@@ -100,10 +101,11 @@ function activeAccountAuthorization(accountId: string, route: number): CommandAu
 export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelClock }) {
   const { pool, clock } = config;
 
-  async function ownAccount<T>(
+  async function runOwnAccount<T>(
     actor: Actor,
     request: OwnAccountCommand,
     body: LibraryCommandBody<T>,
+    prepare?: CommandAuthorization['prepare'],
   ): Promise<CommandOutcome<T>> {
     const owner = ownActor(actor);
     const route = routeOf(owner.accountId);
@@ -113,6 +115,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       action: request.action,
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => new GrantDeniedError(),
+      ...(prepare ? { prepare } : {}),
       async authorize(tx) {
         try {
           await shareAccount(tx, owner.accountId);
@@ -154,6 +157,39 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     );
   }
 
+  async function ownAccount<T>(
+    actor: Actor,
+    request: OwnAccountCommand,
+    body: LibraryCommandBody<T>,
+  ): Promise<CommandOutcome<T>> {
+    return runOwnAccount(actor, request, body);
+  }
+
+  /** Trusted read preparation precedes owner checkout; current owner authorization
+   * still precedes receipt replay. Return deferred business errors as evidence
+   * and throw them in the fresh body, so they cannot invalidate an exact replay.
+   */
+  async function ownAccountPrepared<P, T>(
+    actor: Actor,
+    request: OwnAccountCommand & { prepare: (attempt: CommandAttempt) => Promise<P> },
+    body: (tx: CommandTransaction, context: CommandContext, prepared: P) => Promise<CommandResult<T>>,
+  ): Promise<CommandOutcome<T>> {
+    // Native T is fresh on retry. Evidence belongs only to this invocation and T.
+    const preparations = new WeakMap<AuthoritativeTime, { value: P }>();
+    return runOwnAccount(
+      actor,
+      request,
+      (tx, context) => {
+        const prepared = preparations.get(context.time);
+        if (!prepared) throw new Error('Missing Library command preparation for native attempt');
+        return body(tx, context, prepared.value);
+      },
+      async (attempt) => {
+        preparations.set(attempt.time, { value: await request.prepare(attempt) });
+      },
+    );
+  }
+
   async function trustedAccount<T>(
     accountId: string,
     request: TrustedAccountCommand,
@@ -184,5 +220,5 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     );
   }
 
-  return { ownAccount, trustedAccount };
+  return { ownAccount, ownAccountPrepared, trustedAccount };
 }
