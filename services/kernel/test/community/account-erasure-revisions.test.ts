@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import type { Pool, QueryResultRow } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import type { Account, CommunityDriver } from '../../../../specs/community-driver.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { eraseAccountRevisionsPage } from '../../src/community/account-erasure-revisions.ts';
@@ -10,7 +10,7 @@ import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver, 
 
 afterAll(closeCommunityDrivers);
 
-type NativePool = Pick<Pool, 'connect'>;
+type NativePool = { connect(): Promise<PoolClient> };
 
 function stageMarker(stage: string, event: string, detail?: unknown) {
   console.error(
@@ -25,7 +25,7 @@ function stageMarker(stage: string, event: string, detail?: unknown) {
 }
 
 async function nativeWaitEvidence(pool: NativePool, stage: string): Promise<void> {
-  let client: Awaited<ReturnType<NativePool['connect']>> | undefined;
+  let client: PoolClient | undefined;
   try {
     client = await pool.connect();
     await client.query("SET application_name = 'account-erasure-revisions-diagnostic'");
@@ -496,7 +496,7 @@ test("an account revision erasure page stays within its bound as other editors' 
                 ),
               system.database.pool,
             );
-            expect(population.rows[0].n).toBe(scale);
+            expect(population.rows[0]!.n).toBe(scale);
             stageMarker(`grow scale ${scale}`, 'done');
           },
           async operation(database) {
