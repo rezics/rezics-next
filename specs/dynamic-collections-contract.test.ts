@@ -207,7 +207,9 @@ test('members GET cache fill is a bounded derived exception to domain-read purit
   expect(reads).toContain('preparation is never cached authority');
   expect(driver).not.toContain('GET never enqueues/repairs');
   expect(driver).toContain('Only members GET may idempotently fill the derived');
-  expect(driver).toContain('preparation record/work intent for (viewer, Collection, validated filter, sort, accepted release/meaning)');
+  expect(driver).toContain(
+    'preparation record/work intent for (viewer, Collection, validated filter, sort, accepted release/meaning)',
+  );
   expect(driver).toContain('never writes resource headers, user state, domain events,');
   expect(driver).toContain('grants or receipts');
   expect(driver).toContain('Continue GET remains no-work and Zone POST');
@@ -219,7 +221,7 @@ test('useful pages preserve the closed raw preparing wire and retry the captured
   expect(specification).toContain('closed `application/json` body `{preparing:true}`');
   expect(specification).toContain('client retries the same validated URL and cursor');
   expect(specification).toContain('unavailable work remains 503');
-  expect(wire).toContain("expect(response.status).toBe(202)");
+  expect(wire).toContain('expect(response.status).toBe(202)');
   expect(wire).toContain("expect(response.headers.get('content-type')).toBe('application/json')");
   expect(wire).toContain("expect(response.headers.get('retry-after')).toMatch(/^\\d+$/)");
   expect(wire).toContain("expect(response.headers.get('cache-control')).toBe('private, no-store')");
@@ -228,9 +230,11 @@ test('useful pages preserve the closed raw preparing wire and retry the captured
   expect(wire.match(/queryPath\(collectionId, input\)/g)).toHaveLength(1);
   expect(wire.match(/driver\.measure\(\(\) => get\(as, path\)\)/g)).toHaveLength(3);
   expect(wire.indexOf('await preparing(measured.value)')).toBeLessThan(wire.indexOf('preparation = await settle()'));
-  expect(wire).toContain("else expect(repeated.value.status).toBe(200)");
+  expect(wire).toContain('else expect(repeated.value.status).toBe(200)');
   expect(wire).toContain('const page = await json<CollectionMembersPage>(measured.value.clone())');
-  expect(wire).toContain("if (as === 'owner') expect(measured.value.headers.get('cache-control')).toBe('private, no-store')");
+  expect(wire).toContain(
+    "if (as === 'owner') expect(measured.value.headers.get('cache-control')).toBe('private, no-store')",
+  );
   expect(outcomes).toContain('expect(empty.page).toEqual({ members: [], next: null })');
   expect(outcomes).toContain('expect(first.page.members).toHaveLength(2)');
   expect(outcomes).toContain('expect(final.page.members).toHaveLength(1)');
@@ -238,7 +242,10 @@ test('useful pages preserve the closed raw preparing wire and retry the captured
 });
 
 test('cache fill retains separate native cost charges and observable domain idempotence without claiming native proof', () => {
-  const useful = outcomes.slice(outcomes.indexOf('async function usefulPage('), outcomes.indexOf('function pageGrowth('));
+  const useful = outcomes.slice(
+    outcomes.indexOf('async function usefulPage('),
+    outcomes.indexOf('function pageGrowth('),
+  );
   expect(useful.match(/pageCost\(measured, input\?\.limit \?\? 100\)/g)).toHaveLength(2);
   expect(useful).toContain('pageCost(repeated, input?.limit ?? 100)');
   expect(useful).toContain('preparation = await settle()');
