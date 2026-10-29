@@ -271,10 +271,18 @@ upperBound. The serialized property has no exact flag. Use the
 exact-quantity validation, independent of property names or holder types.
 Ordinary quantity and default conversion semantics remain unchanged.
 
+Wikidata applies this rule in converter revision `wikidata-4`. It detects
+unmapped qualifier keys on exact quantities without reading their bodies, and
+withholds the measurement if any qualifier was omitted or cannot be carried
+losslessly. Detection uses the admitted fixed value schema, not the source
+property name. Focused pure controls live in
+`tests/wikidata-exact-quantity.test.ts`; frozen native and receipt evidence is
+recorded in the linked audit report.
+
 The current bundle admits schema:wordCount with exact P6570 mapping, integer
 amount, unit 1, minimum 0 and qualifiers[]. Its mapping alone is unsafe provider
-support: Wikidata snaks() projects only mapped qualifier keys; emission diagnoses
-and skips property-unsupported and item qualifiers before pushing the amount.
+support: Wikidata now diagnoses projection and emission loss and skips the whole
+exact measurement whenever either stage cannot preserve all qualifiers.
 P1545 maps to the existing string position but is not admitted on wordCount.
 P459 method is unmapped; current P518 has no executable exact mapping and targets
 StoryArc only, so it cannot stand for an arbitrary counted text part. Do not narrow that scope, widen P518, invent
@@ -290,7 +298,7 @@ source count likewise proves neither admitted whole-holder coverage nor a genuin
 measurement producer. Positive provider support and whole-scope discovery
 eligibility remain unresolved. The word-evidence boundary above is orthogonal to
 qualifier preservation; negative rejection proves no measurement/index coverage
-or double-index exactness. Converter repair is separate successor work.
+or double-index exactness.
 
 ## Covers, candidate identity, and trust boundaries
 

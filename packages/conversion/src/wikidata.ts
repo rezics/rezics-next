@@ -12,7 +12,7 @@ import {
   type ConversionContext,
 } from './support';
 
-export const converter_revision = 'wikidata-3';
+export const converter_revision = 'wikidata-4';
 export const wikidataLimits = Object.freeze({
   bytes: 128 * 1024,
   statements: 64,
@@ -32,6 +32,7 @@ type Claim = {
   qualifiers?: Record<string, Snak[]>;
   references?: { snaks: Record<string, Snak[]> }[];
 };
+const qualificationLoss = new WeakSet<Claim>();
 type Term = { language: string; value: string };
 type NormalizedEntity = {
   id: string;
@@ -59,6 +60,29 @@ const mappings = new Map(
       .map((mapping) => [mapping.slice(3), { id, definition }] as const),
   ),
 );
+function exactQuantity(definition: PropertyDefinition): boolean {
+  if (definition.datatype !== 'quantity') return false;
+  const value = definition.value as {
+    type?: unknown;
+    required?: unknown;
+    properties?: Record<string, unknown>;
+    additionalProperties?: unknown;
+  };
+  return (
+    value.type === 'object' &&
+    value.additionalProperties === false &&
+    Array.isArray(value.required) &&
+    value.required.length === 2 &&
+    value.required.includes('amount') &&
+    value.required.includes('unit') &&
+    !!value.properties &&
+    Object.keys(value.properties).length === 2 &&
+    Object.hasOwn(value.properties, 'amount') &&
+    Object.hasOwn(value.properties, 'unit') &&
+    !Object.hasOwn(value.properties, 'lowerBound') &&
+    !Object.hasOwn(value.properties, 'upperBound')
+  );
+}
 const types = new Map(
   Object.entries(bundledRelease.types).flatMap(([id, definition]) =>
     definition.mappings.map((mapping) => [mapping.replace(/^wd:/, ''), id] as const),
@@ -266,11 +290,17 @@ export function convertWikidata(
   }
 
   // Iterate the fixed supported vocabulary rather than traversing unknown property bodies.
-  function snaks(value: unknown, reference: boolean, pointer: string) {
+  function snaks(value: unknown, reference: boolean, pointer: string, exact = false) {
     const body = object(value, pointer);
     const result = dictionary<Snak[]>();
     let count = 0;
-    for (const property of reference ? referenceProperties : mappings.keys()) {
+    let omitted = false;
+    const supported = reference ? referenceProperties : mappings.keys();
+    const supportedSet = new Set(supported);
+    if (exact && !reference) {
+      for (const property of Object.keys(body)) if (!supportedSet.has(property)) omitted = true;
+    }
+    for (const property of supportedSet) {
       const entries = read(body, property, pointer);
       if (entries === undefined) continue;
       const items = list(entries, wikidataLimits.snaks, pointer);
@@ -281,7 +311,7 @@ export function convertWikidata(
         return parsed === undefined ? [] : [parsed];
       });
     }
-    return result;
+    return { result, omitted };
   }
 
   const normalizedRecord: NormalizedEntity = {
@@ -319,12 +349,16 @@ export function convertWikidata(
         if (!new RegExp(`^${id}\\$[0-9a-fA-F-]{36}$`).test(result.id)) fail('Invalid Wikidata statement ID', pointer);
       }
       const qualifiers = read(body, 'qualifiers', pointer);
-      if (qualifiers !== undefined) result.qualifiers = snaks(qualifiers, false, pointer);
+      if (qualifiers !== undefined) {
+        const projected = snaks(qualifiers, false, pointer, exactQuantity(mappings.get(property)!.definition));
+        result.qualifiers = projected.result;
+        if (projected.omitted) qualificationLoss.add(result);
+      }
       const references = read(body, 'references', pointer);
       if (references !== undefined)
         result.references = list(references, wikidataLimits.references, pointer).map((referenceEntry) => {
           const reference = object(referenceEntry, pointer);
-          return { snaks: snaks(read(reference, 'snaks', pointer), true, pointer) };
+          return { snaks: snaks(read(reference, 'snaks', pointer), true, pointer).result };
         });
       kept.push(result);
     }
@@ -459,6 +493,9 @@ export function convertWikidata(
         continue;
       }
       const relation = definition.datatype === 'wikibase-item';
+      const exact = exactQuantity(definition);
+      let lostQualifier = qualificationLoss.has(claim);
+      if (lostQualifier) diagnose('Exact quantity has an unmapped qualifier', pointer);
       if (relation && claim.mainsnak.snaktype !== 'value') {
         diagnose('Relation has no source identity', pointer);
         continue;
@@ -471,20 +508,32 @@ export function convertWikidata(
         const qualifier = mappings.get(key)!;
         if (!definition.qualifiers.includes(qualifier.id)) {
           diagnose('Qualifier is unsupported by the mapped property', pointer);
+          if (exact) lostQualifier = true;
           continue;
         }
         for (const snak of snaks) {
           if (qualifier.definition.datatype === 'wikibase-item') {
             diagnose('Item qualifier is unsupported', pointer);
+            if (exact) lostQualifier = true;
             continue;
           }
           const value = valueOf(snak, qualifier.definition, pointer);
+          if (!value) {
+            if (exact) lostQualifier = true;
+            continue;
+          }
+          if (exact && value.type === 'somevalue') {
+            diagnose('Exact quantity qualifier has no resolved value', pointer);
+            lostQualifier = true;
+            continue;
+          }
           if (value)
             qualifiers.push(
               value.type === 'value' ? part(qualifier.id, value.content) : { property: { id: qualifier.id }, value },
             );
         }
       }
+      if (exact && lostQualifier) continue;
       if (target && value.type === 'somevalue') {
         if (!definition.qualifiers.includes('schema:sameAs')) {
           diagnose('Unresolved relation lacks an approved identity qualifier', pointer);
