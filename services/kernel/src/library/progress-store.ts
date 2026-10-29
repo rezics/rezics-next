@@ -1,5 +1,7 @@
 import type { PoolClient } from 'pg';
-import type { ProgressMode, ProgressState, ProgressUnit } from './progress.ts';
+import type { ProgressMode, ProgressState } from './progress.ts';
+import { decodeLibraryProfilePin } from './profile-pin.ts';
+import type { LibraryProfilePin } from './profile.ts';
 import changeAppend from './progress-store-change-append.sql';
 import changePage from './progress-store-change-page.sql';
 import sessionInsert from './progress-store-session-insert.sql';
@@ -24,10 +26,14 @@ import {
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };
-type SessionResult = Omit<NonNullable<Awaited<ReturnType<typeof sessionRead.run>>>, 'mode' | 'unit' | 'state'> & {
+type SessionResult = Omit<
+  NonNullable<Awaited<ReturnType<typeof sessionRead.run>>>,
+  'mode' | 'unit' | 'state' | 'libraryProfilePin'
+> & {
   mode: string;
   unit: string;
   state: string;
+  libraryProfilePin?: unknown;
 };
 type ChangeResult = NonNullable<Awaited<ReturnType<typeof changeAppend.run>>>;
 type UnitResult = Awaited<ReturnType<typeof unitPage.run>>[number];
@@ -55,14 +61,23 @@ function asState(value: string): ProgressState {
 }
 
 function asSession(row: SessionResult): ProgressSession {
-  const { route: _route, ...session } = row;
   return {
-    ...session,
-    mode: asMode(session.mode),
-    unit: session.unit,
-    state: asState(session.state),
-    startedAt: iso(session.startedAt),
-    completedAt: session.completedAt === null ? null : iso(session.completedAt),
+    id: row.id,
+    accountId: row.accountId,
+    subjectId: row.subjectId,
+    versionSubjectId: row.versionSubjectId,
+    mode: asMode(row.mode),
+    unit: row.unit,
+    total: row.total,
+    amount: row.amount,
+    locator: row.locator,
+    position: row.position,
+    completedUnitCount: row.completedUnitCount,
+    state: asState(row.state),
+    revision: row.revision,
+    startedAt: iso(row.startedAt),
+    completedAt: row.completedAt === null ? null : iso(row.completedAt),
+    transactionId: row.transactionId,
   };
 }
 
@@ -80,8 +95,9 @@ function assertMode(mode: string): void {
   if (!MODES.has(mode as ProgressMode)) throw new TypeError('Unknown progress mode');
 }
 
-function assertUnit(unit: string): void {
-  if (!UNITS.has(unit as ProgressUnit)) throw new TypeError('Unknown progress unit');
+function assertUnit(unit: string, pinned: boolean): void {
+  if (typeof unit !== 'string' || (pinned ? unit.length === 0 : !UNITS.has(unit)))
+    throw new TypeError('Unknown progress unit');
 }
 
 function assertState(state: string): void {
@@ -111,9 +127,11 @@ export async function insertSession(
   route: number,
   session: ProgressSessionDraft,
   context: WriteContext,
+  pin?: LibraryProfilePin,
 ): Promise<ProgressSession> {
   assertMode(session.mode);
-  assertUnit(session.unit);
+  const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
+  assertUnit(session.unit, acceptedPin !== null);
   const row = await sessionInsert.run(queryClient(client), {
     route,
     session_id: session.id,
@@ -126,6 +144,7 @@ export async function insertSession(
     time: context.time,
     last_changed_at: context.time,
     transaction_id: context.transactionId,
+    library_profile_pin: acceptedPin,
   });
   return asSession(row);
 }
@@ -133,6 +152,15 @@ export async function insertSession(
 export async function readSession(client: Client, route: number, sessionId: string): Promise<ProgressSession | null> {
   const row = await sessionRead.run(queryClient(client), { route, session_id: sessionId });
   return row ? asSession(row) : null;
+}
+
+export async function readSessionFact(
+  client: Client,
+  route: number,
+  sessionId: string,
+): Promise<{ session: ProgressSession; pin: LibraryProfilePin | null } | null> {
+  const row = await sessionRead.run(queryClient(client), { route, session_id: sessionId });
+  return row ? { session: asSession(row), pin: decodeLibraryProfilePin(row.libraryProfilePin) } : null;
 }
 
 export async function updateSession(
