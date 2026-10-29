@@ -74,14 +74,25 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
   const scopes = IMPORTER_SCOPES.filter((scope) => !scope.startsWith('media:'));
   let account: Awaited<ReturnType<SemanticOutcomeDriver['fixtures']['person']>> | undefined;
   let session: string | undefined;
-  const wire = (response: Awaited<ReturnType<SemanticOutcomeDriver['request']>>): WireResponse => ({
-    status: response.status,
-    body: response.body,
-    headers: [...response.headers],
-  });
+  let firstImportFailure: Error | undefined;
+  function wire(response: Awaited<ReturnType<SemanticOutcomeDriver['request']>>): WireResponse {
+    const headers: [string, string][] = [];
+    for (const [key, value] of response.headers) if (key.toLowerCase() !== 'set-cookie') headers.push([key, value]);
+    for (const value of response.headers.getSetCookie()) headers.push(['set-cookie', value]);
+    return { status: response.status, body: response.body, headers };
+  }
+  function nativeFailure(response: WireResponse, path: string, request?: unknown) {
+    return Object.assign(
+      new Error(`Released Book ${path}: HTTP ${response.status}: ${JSON.stringify(response.body)}`),
+      {
+        path,
+        response,
+        ...(request === undefined ? {} : { request }),
+      },
+    );
+  }
   function required(response: WireResponse, status: number, path: string) {
-    if (response.status !== status)
-      throw new Error(`Released Book ${path}: HTTP ${response.status}: ${JSON.stringify(response.body)}`);
+    if (response.status !== status) throw nativeFailure(response, path);
     return response;
   }
   async function sendImport(method: 'GET' | 'POST', path: string, body?: unknown) {
@@ -89,7 +100,12 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
       ...(session ? { 'rezics-session-token': session } : {}),
     });
     session = response.headers.get('rezics-session-token') ?? session;
-    return required(wire(response), 200, path);
+    const observation = wire(response);
+    if (response.status !== 200) {
+      firstImportFailure ??= nativeFailure(observation, path, body);
+      throw firstImportFailure;
+    }
+    return observation;
   }
   async function request(persona: 'anonymous' | 'editor' | 'acceptor', path: string, body?: unknown) {
     return required(
@@ -119,6 +135,7 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
   }
   async function perform(): Promise<ReleasedBookReceipt> {
     try {
+      firstImportFailure = undefined;
       const active = await request('anonymous', '/v1/definitions/active');
       if (active.body.digest !== bundledDigest)
         throw new Error('Released Book requires the actual active bundled release');
@@ -143,6 +160,8 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
             async batchWrite(body) {
               const response = await sendImport('POST', '/v1/subjects:batchWrite', body);
               const native = response.body as BatchWriteResult;
+              if (native.results.some((result) => result.status !== 200 && result.status !== 201))
+                firstImportFailure ??= nativeFailure(response, '/v1/subjects:batchWrite', body);
               batches.push({ request: structuredClone(body), response: { ...response, body: native } });
               return native;
             },
@@ -172,7 +191,8 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
           ),
           { collectionLimit: 1 },
         );
-        if (run.status !== 'committed') throw new Error(`Released Book import: ${JSON.stringify(run)}`);
+        if (run.status !== 'committed')
+          throw firstImportFailure ?? new Error(`Released Book import: ${JSON.stringify(run)}`);
         const binding = importer.session.bindings.claim(owner);
         const candidates = FIELD_GROUPS.flatMap((group) =>
           importer!.session.bindings.candidates(owner, group, { limit: 100 }),
