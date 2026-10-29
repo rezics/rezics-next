@@ -129,6 +129,11 @@ for (const person of ['other people', 'same person history'] as const) {
                  SELECT $1,id,$2,'member','subject:write','(,)',$3 FROM unnest($4::uuid[]) id`,
                 [f.target.route, group, f.id, targetIds],
               );
+              await db.admin.query(
+                `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+                 SELECT $1,id,$2,'subject:write','(,)',$2 FROM unnest($3::uuid[]) id`,
+                [f.target.route, f.id, targetIds],
+              );
             }
             const count = (scale - previous) * 500;
             const ids = Array.from({ length: count }, () =>
