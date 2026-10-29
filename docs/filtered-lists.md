@@ -67,7 +67,7 @@ includes all 4,096 homes, including excluded subjects and foreign dependencies, 
 path in [Cost](#cost), not start/final head vectors or a scan hidden in an aggregate/hash/JSON. Native start evidence
 must detect a reduction committed during execution **even if repaired and ACKed before final observation**; current
 clean/dirty state alone is insufficient. Missing, moved or unavailable owners cannot become pristine zero homes.
-Changed relevant safety, incomplete coverage, pending ACK or the independent pending identity epoch yields
+Changed relevant safety, incomplete coverage, pending ACK or pending identity work within the ACTUAL source's complete query dependencies yields
 preparation. Current Access, source/population authorization and candidate/field checks remain independently
 required. Neither an index nor key narrowing can supply that authority.
 
@@ -76,15 +76,18 @@ This is a required future native boundary; current ports do not establish it. Th
 operations, missing primitives and pending integration scenarios. It adds no permission certificate or identity
 basis sweep. Coarse global blocking may be an initial launch slice, but completion requires native 64/512/4,096
 checks with reduction arrival rate rising with population, actual repair/ACK latency, and served share that does
-not fall between scales. Permanent preparation or absent native data cannot satisfy that gate.
+not fall between scales. This privacy rollout allowance does not permit a global identity marker or universal
+identity page gate. Permanent preparation or absent native data cannot satisfy that gate.
 
 Omit unsafe engine totals and facet counts over unchecked populations. Approximate or `as_of` labels give no privacy
 exemption. Do not substitute zero or returned-row length for an unavailable safe aggregate. No new common list DTO
 is selected: owners preserve their envelopes and provide concrete execution through reviewed native contracts.
 
-Suspended valid bearers receive `403 account_suspended` everywhere, including public and unlisted pages. `401` is
-for missing, invalid or revoked credentials where authentication is required. Invalid credentials never silently
-downgrade to anonymous. Suspended personas have no anonymous-floor exception.
+Native suspension revokes pre-existing bearers: held-token requests return `401 invalid_credentials` and
+`WWW-Authenticate: Bearer error="invalid_token"`, including public/unlisted requests with those credentials.
+Auth cannot mint a valid suspended bearer; suspended correct-password sign-in is `403 {"error":"account_suspended"}` without
+a session. Kernel `403 account_suspended` is defensive only. Missing/invalid/revoked required credentials retain
+native 401, insufficient scope retains `403 insufficient_scope`, and invalid credentials never downgrade to anonymous.
 
 ## Freshness
 
@@ -130,30 +133,54 @@ and canonical subject. Collection browsing shows one card per canonical subject;
 IDs, original subject IDs, notes, order and multiplicity. Do not canonicalize after paging in stored-ID order:
 `[a,c,z]` with `a → z` would produce `[z,c,z]`, not canonical `[c,z]`.
 
-The shared catalogue identity epoch is pending during serialized durable merge/unmerge/repoint maintenance.
-The fixed `library-private-follow-counts` publication participant covers all Library canonical source drivers,
-owner candidates and structural-support directory rekeys, including concurrent first apply, as well as follows,
-support, totals and pending/published fences. A follow-only ACK cannot publish; every prior removal/addition and
-directory effect needs exact native custody under the [identity contract](../services/kernel/src/semantic/identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant).
-Accounts owns the missing fenced owner operational transaction/atomic-intent Core primitive; Commerce consumes
-its actual exports for Members GET preparation. Missing delivery supplies neither a ready empty list nor an ACK.
-Canonical list reads prepare while pending. Cursors bind the published epoch and restart after changes. At most
-**4,096 originals** belong to a group, admitted before effects. Published redirects point directly to active
-terminals. There is no request-time 4,096-home sweep, exhaustive alias walk or per-page identity-basis protocol.
-Current original and terminal disclosure still applies; a withheld original cannot be laundered through a public
-terminal or an arbitrary group representative. Native plans must support list and direct-target disclosure even
-when the only eligible original is the last in a large group, through maintained access paths and finite preparation.
+Changed disjoint identity group sets run concurrently under local fixed symbolic capacity P. PREPARING is affected
+pending/overlap-busy; capacity/reclaim pressure is local. There is no global active marker, sole pending job or
+universal canonical-page gate. Each resulting group has at most **4,096 originals**, checked from a coherent
+immutable non-ABA double collection before ALL new admission effects. Missing/moved/incomplete state is unavailable,
+never zero/self. Durable preparation followed by drift/cancellation retains recovery, never effect-free overflow.
 
-Direct mapping uses the existing Semantic Pool port, releasing source before ONE bounded indexed current-control
-pending observation and ONE coherent epoch probe, then revalidating source. An admission after source read is
-visible at that control snapshot; publication or a newer job cannot reuse stale mapped success. Unaffected points
-and fresh Search-absent self identities wait for neither list preparation nor publication, but source/control
-availability is required. Missing/unready/moved metadata yields unavailable. This is charged control I/O, not a
-source-only lookup or a new authorization path. Current original AND terminal privacy remains independent.
-Immutable full group inputs are retained atomically with pending intent; next generations are flat before later
-admission. The [native owner contract](../services/kernel/src/semantic/identity-epoch-contract.md#native-cutover-adoption)
-defines finite full-generation retention, minimized undo/custody, all-home cutover and final writer handoff.
+Canonical preparation/publication/cursor currentness follows the ACTUAL source and its COMPLETE expanded query
+dependencies, including excluded/NOT/order-only originals, source population, pins/meaning and physical-query
+privacy dependencies. A finite unchanged owner source must settle and return useful pages under continuous disjoint
+jobs. A genuinely all-group catalogue can have broad dependencies without blocking that owner source. Partition
+summaries carry committed SCOPED reader revisions; lower-job publication after higher publication/cancellation must
+still change the current source basis. No max allocated epoch, per-job global history, cursor vector/crypto or
+hidden source-wide global marker is allowed. Start/final validation and cursor currentness use the same complete
+source observation. Returned hits or per-ID positive samples cannot prove completeness.
 
+The [identity owner](../services/kernel/src/semantic/identity-epoch-contract.md#scoped-reader-publication-and-complete-query-dependencies)
+derives required native dependency registration/arm/finish/repair custody from actual Collection/Library structural
+keys and Search producer observations. Complete native owner/Collection/Search Source bindings and summary consumption
+are still missing; this adoption does not invent them or freeze the old global TypeScript sketches. Missing binding
+means honest unavailable/preparation, not ready-empty. Full excluded/order/FOREIGN physical-query safety and current
+ORIGINAL AND terminal admission remain independent. A public terminal cannot expose a withheld original; maintained
+support must find the last eligible original in a large group without an alias walk, 4,096-home sweep or arbitrary
+representative. No mapping provides SourceAccess or a reusable permission certificate.
+
+The SAME fixed version-1 `library-private-follow-counts` identity participant covers ALL six canonical drivers,
+structural directory/candidates/support, first apply, follows/totals, OLD withdrawal/NEW addition, pending/published
+fences and prior custody. One `(owner,canonical)` candidate plus structural `(original,scope)` existence/extrema
+is the directory plan; a million same-original/profile/lifecycle sessions cannot create a million directory rows.
+No per-fact witness/copy or required canonical_source_fact write proves this directory. Actual follow ACK with
+directory incomplete refuses publication; no third identity participant or A5 ownership transfer is introduced.
+
+Standalone mapping routes ONE relevant current control home from source basis, not a guessed terminal or remote
+admission query. Same backend uses one RR/eight statements; cross-backend releases source/control/source visits,
+source<=10/control<=6,total16 or11 pending. Inside a filtered page mapping rides existing shared batched owner/epoch
+observations plus TWO probes and source candidate points, with NO extra snapshot/client/control statement or per-ID
+loop: direct<=12 statements/backend or composed8+4R and one connection/backend remain unchanged. Raw100 is a durable
+job-step bound only; public raw work derives from its operation class, decision 5 and actual Source plan allowance.
+No separate two-probe public raw100 allowance is adopted.
+
+The [native cutover owner](../services/kernel/src/semantic/identity-epoch-contract.md#native-cutover-adoption)
+requires all-home bootstrap/writer closure, immutable flat inputs and exact native custody. Each partition q retains
+Gq+4P full generations and Aq+4P·4096 memberships at EVERY durable/crash/replay/abandon step, including bootstrap,
+unsealed/export/partial-deleted/abandoned copies. Local unreclaimed copies block new local admission until locked
+native empty proof; other partitions progress. Live undo/reversal/move/cursor obligations need actual minimizer
+custody, not hidden full groups. Accounts uses actual Core runOperationalTransaction/enqueueIntent for derived
+owner work/DBOS intent; Core adds no event/receipt/outbox/write-basis/position/intent table/relay. Its DBOS history
+belongs to shared-history and Library derived data to Library A5. Missing owner producers cannot manufacture ACKs.
+This specification integration needs full coowner and ALL-nine-item Performance confirmation before types or runtime.
 Stored personal originals are not rewritten. Canonical personal views select the owner's latest state while keeping
 conflict visible, union labels, and keep copies and sessions separate. New writes address current terminals.
 [Semantic](../services/kernel/src/semantic/README.md#identity) owns creation and durable identity publication;

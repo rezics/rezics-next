@@ -270,91 +270,115 @@ Full native creation and merge-command implementation/acceptance remain required
 
 ### Durable publication and caller contract
 
-Ordinary merge, unmerge and repoint, plus `verifyAccountAgent` and `unverifyAccountAgent`, run through the same
-serialized durable identity-epoch job on existing infrastructure. Admit at most 4,096 originals per group before
-any effects. Mark the shared catalogue identity epoch pending, complete bounded mapping/index maintenance and
-required participant acknowledgements, then publish the next epoch. Every published redirect points directly to
-an active terminal. A crashed job remains pending and resumes its retained frontier; it cannot publish a chain,
-a ready epoch, fabricated zero/missing metadata or a partial group.
+Merge, unmerge, repoint, `verifyAccountAgent` and `unverifyAccountAgent` use the same native durable mechanism.
+Jobs with disjoint changed group sets run concurrently; claims, fixed symbolic capacity P and reclaim pressure
+are partition-local. PREPARING is affected pending/overlap-busy. No global sole pending job, whole-job lock,
+active marker or universal page gate is allowed. Coherent immutable non-ABA double collection checks at most
+4,096 originals per resulting group before ALL new admission effects. Missing/moved/incomplete evidence is
+unavailable. Later drift after durable preparation retains recovery, never effect-free overflow/not_applied.
 
-Verification and reversal retain their current successful subject/component DTO, wait for the published epoch,
-and are idempotent for the existing receipt. Accounts calls them from durable DBOS steps, approving/clearing
-pending only after return. A crash resumes that same step. There is no pending DTO or caller polling loop.
-Fresh current authority is required, including on receipt replay; success is recorded only after the actual job
-and required mapping/index maintenance publish. Existing kind, catalogue-survivor, back-link and exact moved-link
-reversal rules in [Account agents](#account-agents) remain. An earlier revision event alone is not job completion.
+Ordinary `POST /v1/subjects:merge` keeps its native body, Global authorization and quoted Idempotency-Key.
+Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`.
+Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
+unknown/denied behavior remain; a redirect/revision alone cannot complete it. Native held pre-suspension tokens
+return `401 invalid_credentials` with Bearer `invalid_token`; Auth suspended sign-in returns its actual 403.
+Kernel suspended-account 403 is defensive, not a reachable valid-suspended-bearer fixture.
+
+Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
+uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
+before approval/page/finish/pending-clear. No worker is held through an outage. Busy/capacity/handoff retries the
+same intent, never denies review. Accounts owns the missing immutable account-home decision/reversal intent and
+delivery boundary in the original native transaction/receipt; exact keys and custody are in the owning contract.
+No queue, public pending DTO, permission change or second operation protocol is introduced.
 
 ### Lists, point reads and personal references
 
-Canonical lists read maintained canonical-ID indexes, with one public terminal document and unique prepared rows.
-They prepare while the shared epoch is pending; cursors restart after epoch changes. No request-time exhaustive
-alias walking, 4,096-home sweep or standalone identity-basis observation is a list prerequisite. Original AND
-terminal current eligibility remains mandatory. An index or epoch cannot authorize a withheld original through
-its readable terminal. Bounded preparation/access paths must support the last eligible original in large groups.
+Canonical lists use maintained canonical-ID indexes and unique prepared rows. Observation, publication and cursor
+currentness are scoped to the ACTUAL source and its COMPLETE expanded query dependencies, including excluded,
+NOT and order-only originals. A finite unchanged owner source must make useful-page progress while disjoint jobs
+run continuously. A genuinely all-group catalogue can have broad dependencies without stalling that owner source.
+Partition summaries carry committed scoped reader revisions, never max allocated epoch or global job history.
 
-Unaffected point reads do not sweep or depend on global list readiness. An affected unready identity gives truthful
-readiness. Existing one-anchor `readSubjectReference`, item identity metadata and type reads retain their separate
-contracts and do not become display resolvers or permission caches. Point authorization stays on the actual native
-anchor and same read client, with native time passed unchanged; release one partition before visiting another.
-Missing/denied identities stay concealed and unavailable dependencies are not fabricated self-mappings.
+The [owning contract](identity-epoch-contract.md#scoped-reader-publication-and-complete-query-dependencies)
+derives native registration, arm/finish custody, reordered lower-job publication/cancel handling and start/final/
+current cursor checks from existing source keys/observations. Actual complete native Collection/owner/Search
+bindings remain missing. Returned-hit samples, broad owner-fact mutation alarms and unavailable source stubs are
+not completeness proof. No new cursor vector/crypto, source ABI or hidden source-wide global marker is assumed.
 
-Stored personal original IDs, notes and multiplicity remain. Canonical personal views use the owner's latest state
-with conflict visible, union labels, and keep copies/sessions separate. Collection browsing shows one canonical
-card; editing preserves every stored occurrence. New writes address current terminals. Corrections create new
-revisions and never roll back unrelated later edits. Stored references are not rewritten.
+No request-time alias walk, 4,096-home sweep or separate per-page readMapping prerequisite is allowed. Pages use
+existing shared batched owner/epoch reads plus two probes and existing candidate source points, with no extra
+snapshot/client/control statements or per-ID loop, inside filtered-list budgets. Current original AND terminal
+eligibility and full excluded/order/FOREIGN physical-query admission remain independent of identity metadata.
+
+Unaffected and fresh self point reads remain useful; source basis routes ONE relevant current control home per
+original. Missing/moved/retired state is unavailable, never self/zero or a guessed terminal route. Same-backend
+standalone mapping uses one RR/eight statements; cross-backend released observations use source<=10/control<=6,
+16 total or 11 pending. Original/terminal privacy is separately charged. Existing one-anchor readSubjectReference,
+item metadata and type reads retain their native anchor/client/time contracts; no permission cache is created.
+
+Stored personal original IDs, notes, dates, order and multiplicity remain. Canonical views choose the highest live
+native owner_write_seq with conflict visible, union labels and keep copies/sessions distinct. Undo is a new owner
+write. The actual Commerce sequence producer remains required; timestamps/UUIDs do not substitute. Collection
+browsing shows one canonical card while editing preserves every stored occurrence. New writes address current
+terminals and corrections preserve unrelated later edits.
 
 ### Native cutover and retained evidence
 
-The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) adopts complete immutable group
-input references plus a constant transform as the atomic pending index. Admission checks exact capped counts
-before effects; it does not insert an entire group in one step. Current generations are flat, with at most G+4
-full generations for G current groups, bounded reclamation before subsequent admission, and native minimized
-custody/undo records preserving live evidence. Current reads never traverse historical generations.
+The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) requires all 4096 homes, including
+empty/unselected homes and actual owner epochs, every birth/writer/queued continuation, native source export,
+receiving custody BEFORE exact-head ACK, and home barrier plus deferred SAME-TX final guard. Ordinary/import
+births initialize self at the SUBJECT source home; account-agent births use account home. Real scheduler/bootstrap
+must close coverage; readEpoch side effects, seeded rows or preset readiness are insufficient. Actual guard races
+cover verify AND reversal in flight; an owner move proves retryable availability, not the final guard.
 
-`IdentityEpochStore.readMapping` takes the existing Pool. It releases source before ONE indexed fixed-control
-pending observation and ONE coherent epoch probe, then revalidates source against that basis. Unaffected and fresh
-points wait for neither list preparation nor publication; they still depend on current source/control availability.
-Missing/unready/moved ownership cannot become a self mapping. Source original/terminal privacy remains independent.
+Immutable input refs plus a constant transform form the affected index before effect gates run. Current generations
+are flat. At EVERY durable/crash/replay/abandon state, each partition q retains at most Gq+4P full generations and
+Aq+4P·4096 memberships, including bootstrap/unsealed/export/partial-delete/abandoned/move copies. Native ref locks,
+minimized undo/reversal/move/cursor custody and locked empty-range reclaim proof are required. Unreclaimed local
+copies block new local admission; other partitions progress. R/L/H obligations remain history-proportional storage,
+not hidden full groups. General physical owner transfer is a named missing bounded native custody/storage proof.
 
-Cutover covers all 4096 native homes and their owner epochs, including empty and unselected homes, every birth
-path, structural writer and queued continuation. Source exports become ACKable only after durable control custody;
-later/lower-key dirty heads survive exact-head ACK. The source barrier and deferred SAME-transaction final handoff
-guard preserve in-flight verification and reversal through retryable unavailability or native durable redrive.
-Accounts owns immutable decision/reversal intent production and delivery before the existing Store admission port;
-that delivery is currently MISSING. The exact record, native locators, terminal-erasure inventory and proposed
-existing-participant amendment are in the owning contract, not a new permission or deletion participant.
-
-Delivery order is Store, mapping and fixed Search/Library producers, coordinator, then real caller handoff. Primitive
-pending/cap proof cannot activate full publication. Native cutover cases remain red where producers are absent;
-co-owner review, Performance review of every Cost row and approved formatted-byte freeze precede runtime work.
+Ordered capacity begins at the FIRST ordered resource INCLUDING actual job home. Compact receipt-to-job binding
+is indexed history with retention/erasure accounting, not a free full job/claim/input. Native attempt locks close
+EVERY planned home against delayed/uncertain acquire; job-home CAS selects admitted versus cancelling. P=1 progress
+follows strictly ordered waits, not leases or try/unwind timing. See the contract for costs and required schedules.
 
 ### Library canonical publication participant
 
-The SAME fixed `library-private-follow-counts` participant covers EVERY Library canonical record for affected
-originals and new terminals: all six canonical source drivers, owner candidates, structural-support directory,
-concurrent first-apply custody, follows, support, totals and pending/published fences. Its name, version and receipt
-ABI do not change; there is no third participant or queue. Durable re-key steps of at most 100 raw rows ACK before
-epoch publication; stored personal originals remain unchanged. Publication rejects a missing directory rekey or
-first-apply effect even when follow work is complete. The complete prior removal/addition/fence custody manifest,
-negative native schedule and terminal-erasure inventory are in the [owning contract](identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant).
-Support is per (canonical target, follower); totals change only on support transitions 0-to-1 or 1-to-0. Derived
-pairs, support and totals live in the canonical-target partition and counts remain private. Stale-destination
-applies must fail epoch admission, then reread actual source and mapping on retry. The store authority is
-[Private follow counts](../../../../docs/private-follow-counts.md); this section copies neither SQL nor a step ABI.
-Native crash/replay and crossing-epoch/terminal-cleanup no-resurrection proof are required before completion.
-Accounts owns the missing event-free fenced owner operational transaction/atomic durable intent Core primitive
-and its native specification. Semantic invents no export for it; Commerce consumes actual delivered exports for
-Members GET preparation. Missing owner producers cannot supply a no-data ACK or advertise publication readiness.
+The SAME version-1 `library-private-follow-counts` identity participant covers ALL six member/entry/label/session/
+copy/output canonical drivers, directory/candidates/support, first apply, follows/totals, OLD withdrawal/NEW add,
+fences and exact prior custody. A follow-only ACK cannot publish; no third participant or Library A5 transfer.
+Directory proof is ONE `(owner,canonical)` candidate plus structural `(original,scope)` existence/extrema with
+indexed inverse discovery. A million same-original/profile/lifecycle sessions cannot create a million directory
+rows. No per-fact witness/copy or required legacy canonical_source_fact write is adopted as directory proof.
 
-### Superseded implementation and remaining acceptance
+Support per `(canonical target,follower)` changes totals at 0-to-1/1-to-0; derived data stays in target home and
+stored follows in source home. Legitimate first apply versus gate installation is serialized in the same native
+transaction; stale delivery rereads current source, account eligibility and mapping. Complete prior effect custody,
+crash/replay and terminal no-resurrection remain required. [Private follow counts](../../../../docs/private-follow-counts.md)
+owns that store. Missing native adapters/locators cannot supply a noData ACK.
 
-Old `identity-basis.ts`, home metadata/sweep, sealed repair and alias-window exported implementations/contracts
-are superseded scaffolding for list execution. They remain until replacement native acceptance permits removal;
-their existence or old proof results do not establish this durable epoch job. No cancelled home-certificate ABI is
-revived. Native job code and acceptance must prove admission before effects, serialized crash/replay, complete
-mapping/index publication, current authority, verification/reversal DTO and DBOS semantics, cross-page uniqueness,
-pending-epoch readiness, truthful affected point readiness and follow-count participation. Unrelated semantic core,
-graph/history/command/lifecycle acceptance remains required.
+Core OP is the actual `command/operational.ts:runOperationalTransaction` and `enqueueIntent`, with native fencing
+and atomic DBOS intent. It has no Core receipt/event/outbox/write-basis/position/intent table/relay. Access owns its
+separate account-home verify/reversal intent TABLE; shared-history owns operational DBOS history; Library A5 owns
+derived Library data. Semantic inventories its physical identity stores and receiving cleanup locators; exhausting
+Semantic refs does not certify Library purge. Fixed A5 participants are distinct from identity publication ones.
+Participant-own erasure ACK is acyclic; overall completion separately waits frontier/no-open-late/allACK.
+
+### Specification closure and remaining native acceptance
+
+This document and the [sole native owner](identity-epoch-contract.md) adopt scoped concurrency, not runtime or
+formatted-byte freeze. Adjacent global contract TS and old native sketches are explicitly superseded proposals;
+they do not fit unchanged. Performance confirmation of ALL nine Cost items and full coowner review of these
+corrected document hashes precede types/native implementation. P remains symbolic. No numeric budget changes.
+
+The contract retains REQUIRED admission/publication/HTTP/cutover native schedules, scoped finite-owner progress,
+complete excluded/order dependencies, coherent cap/ABA, P=1 claims, uncertain cancellation, legitimate first apply,
+all-home bootstrap, all-table overflow, physical retention/ref/reclaim every step, verify/reversal in flight and
+actual late/failed locator/custody. Primitive negatives are separate from full Search/Library completion; no
+consumer cycle or fake ACK. No formatter or earlier setup red is native performance or publication proof.
+Old identity-basis/home-sweep/sealed-repair scaffolding supplies neither readiness nor a revived certificate ABI.
+Unrelated core/graph/history/command/lifecycle and existing concurrent CPU-validation adoption remain unchanged.
 
 ## Cost
 
@@ -375,7 +399,7 @@ A sourced batch has at most 100 commands. T is the number of distinct source tup
 Counts below exclude the separately listed authorization cost unless a subsection includes it. A page read uses BEGIN, SET timeout, partition SELECT, one page SELECT, COMMIT (five statements); link and relation pages add one `SET LOCAL enable_seqscan = off` before their indexed projection range. Inverse link pages also probe pending merge work for at most `4 × limit + 1` scanned holder ids, then reread the page after that work finishes. A subject read checks the current partition's projection checkpoint before its snapshot, then adds one `SET LOCAL enable_seqscan = off` when its type has relation properties, one statement per descriptive slot view, one 13-row outbound range and one counter probe per relation property, 12 relation slot views per property, and one batched read per related partition. The checkpoint wait includes a pending merge-member probe.
 For commands, K denotes seven framework statements per successful fresh attempt: BEGIN, two SETs, time SELECT, another SET, fence SQL, COMMIT; add one receipt SELECT when configured and the body statements below.
 The fence statement updates one `core.partition` row through `partition_pkey`, inserts one `core.outbox` row per event through `outbox_pkey`, and optionally one `core.receipt` and one `editorial.write_basis` row through `receipt_pkey`, `write_basis_pkey` and `write_basis_partition_no_position_key`; their partition foreign keys probe `partition_pkey`.
-Contention retries stop at three attempts; fence waits and retries use the deadline (default two seconds), so the stated counts are per attempt, with extra constant-size partition polls, rather than a claim about machine speed.
+Counts are per attempt. runCommand and the operational executor retry contention until the original deadline with jittered backoff up to 100 ms and no attempt-count cap; fence waits and extra constant-size partition polls remain charged. The default deadline and executor behavior do not change.
 
 ### Subject identity reference
 
@@ -385,15 +409,18 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 ### Identity epoch publication and canonical access
 
-- Touches: actual original/terminal native points and Access, epoch/control reads, bounded durable mapping/index
-  changes and participant acknowledgements, including Library private follow-count re-key work.
-- Bound: per-plan page bounds and separately bounded retained maintenance steps follow
-  [Filtered lists](../../../../docs/filtered-lists.md#cost). The 4,096-original admission limit bounds a group;
-  it does not authorize a request-time group or home sweep. Follow-count steps are at most 100 rows. Total
-  maintenance may grow with affected finite input; publication waits for actual completion.
-- Growth check: native first/deep canonical pages and affected/unaffected point reads at three geometric scales,
-  alias/duplicate/history axes, crash/replay, crossing epochs, verification/reversal and terminal cleanup. Old
-  fixed-home digest and alias-window proof tests do not establish the replacement job or list acceptance.
+- Touches: actual source/current-route/control points, coherent cap collection, ordered local claims/attempt locks,
+  fixed native mapping/Search/Library custody, complete structural scope registration and committed reader summaries.
+- Bound: [the owning Cost derivation](identity-epoch-contract.md#cost) names A/G/M/E/R/L/H, actual K+body and distinct
+  OP costs, local Gq+4P/Aq+4P·4096 retention, page-fit/in-unit continuation and examined rows/blocks/statements.
+  Same-backend standalone mapping is one RR/eight statements; cross-backend source<=10/control<=6,total16/pending11.
+  Filtered pages share batched observations/two probes/candidate points within existing <=12/backend or8+4R composed
+  budgets and one connection. Raw100 applies to durable steps only. No global observation or per-ID loop is hidden.
+- Growth check: REQUIRED `test/semantic/growth-identity-publication.test.ts` named cases in the owning Cost section,
+  using checkGrowth series/leading SQL tags/native EXPLAIN, three-scale group/support and independent control/history/
+  live-obligation axes. Reclaim/wakeup is in prepare and its own measured case. Native table counts and relation/index
+  byte deltas cover every retained/crash/replay/abandon state; continuous disjoint jobs cannot stall finite owner pages.
+  Actual producer/body/c_MAX bindings and Performance confirmation of all nine items remain required BEFORE types or runtime.
 
 ### Command and receipt
 

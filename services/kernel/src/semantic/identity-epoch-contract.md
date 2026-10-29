@@ -1,653 +1,329 @@
-# Native identity epoch job
+# Native identity publication contract
 
-This is the type-only implementation boundary for the adopted [Identity](README.md#identity) mechanism.
-[Canonical identity](../../../../docs/filtered-lists.md#canonical-identity-and-personal-references) owns list semantics;
-[private follow counts](../../../../docs/private-follow-counts.md) owns private contributions and counts.
-The adjacent TypeScript file emits no runtime producer, registry, route, schema or permission result.
-All producer names below are **MISSING**, unless explicitly identified as existing. They are required exports to
-implement, not declarations that the current checkout can call. Old identity-basis and terminal producer tasks
-supply no authority, dependency or substitute implementation.
+This is the sole owning specification for concurrent identity admission, publication and native cutover.
+[Canonical lists](../../../../docs/filtered-lists.md#canonical-identity-and-personal-references) own list semantics;
+[Library owner queries](../../../../docs/library-owner-queries.md) own structural private support;
+[private follow counts](../../../../docs/private-follow-counts.md) own private contributions and counts.
+This document adopts scoped concurrent publication. It is **not a formatted-byte freeze, Cost confirmation,
+type delivery, runtime delivery, publication completion or root-gate completion**. Performance must confirm all
+nine review items and all coowners must review these corrected bytes before types or executable native work.
+P remains symbolic until the capacity owner adopts it. No new numeric budget is selected here.
+
+The adjacent `identity-epoch-contract.ts` and existing native fixtures describe a superseded globally serialized
+proposal. In particular, one `controlPartition`, one pending `readEpoch` and its sole-job admission sketch do not
+fit this contract unchanged. Existing native cases remain evidence and required outcomes; they are not the new
+frozen boundary. Missing producers below mean actual missing native implementation and proof, never permission
+to manufacture a callable, receipt, ready state or successful adapter from this prose.
 
 ## Invariants
 
-A permanent ID names a catalogue original and is never reused. Creation needs actual Global `subject:create`,
-including import batch authority where applicable, and writes native revision 1 independently of Search.
-Only duplicate identity is mergeable. Editions, translations and formats retain separate identities and relations.
-Every published redirect is direct to an active terminal. A requested larger-UUID survivor is legal.
+A permanent catalogue original is never reused. Creation requires actual Global `subject:create`, import batch
+authority where applicable and native revision 1, independently of Search. Only duplicate identity is mergeable;
+editions, translations and formats keep separate identities and relations. Published redirects are direct to an
+active terminal; a requested larger-UUID survivor is legal. Stored personal originals, occurrence IDs, notes,
+dates, order, multiplicity and accepting pins are preserved. Only derived mappings and canonical indexes rekey.
 
-One durable structural job serializes merge, unmerge, repoint and both account-agent operations across the catalogue.
-The exact union of the affected groups, including their terminals, is admitted at **4096 originals maximum per
-resulting group**, before pending epoch, revision, redirect, mapping, index, participant or outbox effects.
-Two input IDs do not imply two originals. Unmerge binds the prior `undoJob` and the original to restore to self; its verificationReceipt is non-null only
-for an Accounts reversal. Repoint moves one original to the named terminal. A split checks all resulting groups; overlapping membership counts once.
-Overflow is `identity_group_overflow`. Missing/incomplete/moved ownership cannot become a small or empty group.
-No structural effects occur while another job is pending; another intent receives `identity_epoch_busy` and retries
-with current truth. The same immutable receipt and intent find the same job instead of allocating another epoch.
-Conflicting reuse is the existing idempotency conflict. Authorization still precedes receipt lookup.
+Merge, unmerge, repoint, account-agent verification and reversal use the same native job mechanism. Changed
+**disjoint group sets run concurrently**. Pending claims and capacity are partitioned by changed groups, with a
+fixed per-partition cap P. `identity_epoch_busy` means overlapping groups only, including a PREPARING claim.
+Local capacity or reclamation pressure is retryable local unavailability, not overlap and not a global lock.
+No sole pending job, whole-job global lock, global active marker or universal read-page gate is allowed.
 
-The control command commits the pending epoch, immutable admitted intent, affected-original work index and durable
-wakeup before structural effects begin. It retains the last published epoch. No lease, workflow timeout, ordinary
-projection checkpoint, elapsed time or failed I/O can mark completion. A crash remains pending; resumption starts
-from the committed frontier and exact job identity. Publish once, only after mapping/index maintenance and both
-fixed participants have actual durable ACKs for that job and epoch. Failure leaves truthful pending state.
+Each resulting group has at most **4096 originals**, counting terminal/self and all unselected members, counting
+overlap once. Missing, incomplete, moved, retired or unsealed evidence is unavailable, never zero or self.
+Initial `409 identity_group_overflow` at 4097 precedes ALL new Semantic effects: job, binding history, claim,
+capacity slot, control, epoch allocation, receipt, outbox, revision, mapping, participant and reader revision.
+Safe preparation is durable recovery work; later drift, capacity loss, cancellation or RPC uncertainty cannot be
+relabelled effect-free overflow or `not_applied`. Replay always retains the same original intent and receipt.
 
-Canonical lists prepare while pending; their signed cursors bind the published epoch and restart after a change.
-An affected point reports pending while its required mapping is unready. Unaffected points and fresh creation remain
-usable without waiting for the catalogue's list barrier. Mapping explicitly depends on one bounded current-control
-observation and coherent epoch revalidation, with released source connections as specified below. Source privacy and eligibility are independent
-of job completion: both the original and terminal need current native admission. A public terminal never exposes
-a hidden original; an arbitrary representative cannot stand for all originals. Preparation must find the last
-eligible original through maintained support, without a page-local deduplication claim or repeated home sweep.
+A crash resumes retained native frontiers. Leases, timeouts, elapsed time, ordinary projection checkpoints and
+failed I/O cannot publish or erase work. Publication requires exact native mapping custody and both fixed
+version-1 identity participants, `search-canonical-index` and `library-private-follow-counts`. Source export,
+local completion, function return and overall account erasure are different boundaries. Every prior withdrawal,
+addition and fence must have receiving native custody before its owning participant can ACK.
 
-Entries, labels, sessions, copies, follows and Collection occurrences keep stored ORIGINAL IDs, notes, dates, order
-and multiplicity, with each original still addressable for editing. Only derived mappings, support and canonical
-indexes re-key. New writes resolve the current terminal with native admission. Canonical state chooses the highest
-native `entry.owner_write_seq`, retaining conflicts, unions labels and keeps sessions/copies distinct. The owner
-partition counter increments in the SAME successful set, clear or Undo transaction; Undo is a NEW write despite
-historic user dates and retained accepting pin. Epoch maintenance reads that sequence and never allocates it.
-The actual Commerce counter/schema/helper producer is missing. No timestamp, UUID, per-slot revision,
-`type_source_position`, zero initialization or invented legacy backfill order can substitute for it.
+Current ORIGINAL and terminal privacy are independent of identity metadata. A public terminal cannot launder a
+hidden original; neither mapping nor a job receipt grants Access or SourceAccess. Complete excluded/NOT/order
+and FOREIGN physical-query safety remain required before enumeration. No anonymous downgrade, permission
+certificate, per-ID positive sample, new cursor vector/cryptography or replacement query engine is introduced.
 
-## Exact existing callable compatibility
+## Existing caller compatibility
 
-`merges.ts` exports `mergeSubjects(pool: Pool, options)` with `subjects: string[]`, optional `survivor`, actual
-`AccountActor`, `idempotencyKey`, `Uint8Array digest`, `{digest, release: Release}`, `CommandAuthorization`, optional
-`deadline` and `clock`. It returns `{survivor, redirected, revision, component}`; component is
-`{partition: number, epoch: number, position: bigint}`. `mergeSubjectsInCommand(tx, transactionId, options)` shares
-revision/redirect work with account verification; its options are survivor, redirected, release, optional
-verificationReceiptId and allowAccountAgent. That existing helper is evidence of effects, not the new job admission.
-The type aliases `MergeSubjects`, `VerifyAccountAgent` and `UnverifyAccountAgent` reference actual exports so their
-callable types cannot silently diverge in this specification.
+`merges.ts` exports `mergeSubjects(pool, options)` with subjects, optional survivor, actual AccountActor,
+idempotencyKey, Uint8Array digest, `{digest, release: Release}`, CommandAuthorization and optional deadline/clock.
+Its completed native fields remain `{survivor, redirected, revision, component}` with component
+`{partition: number, epoch: number, position: bigint}`. `mergeSubjectsInCommand` shares revision/redirect work
+with verification; that effect helper is not concurrent job admission. Native bigint JSON is canonical decimal
+text, never Number. Native transactionId AND component identify effects; a noEffect position can be reused.
 
-`account-agents.ts` exports:
+`ensureAccountAgent(pool, {account, kind, name, language?})` keeps `{subject, created}`. Deterministic
+`accountAgentId(account)` and person/organization/software creation rules remain. `verifyAccountAgent(pool,
+{account, catalogue, receipt})` and `unverifyAccountAgent(pool, {account, receipt})` keep exactly
+`{survivor, redirected, revision, subject: Item, component}`. Every successful path, including already-verified
+same-receipt and reversal replay, waits for its actual job publication. Current catalogue revision/component on
+replay need not equal the historic response byte for byte. Matching Person/Organization, catalogue survivor,
+reciprocal backlink, verification receipt and software rejection remain unchanged. Reversal restores only exact
+verification-scoped moved links, including Context/filter identity, and preserves unrelated subsequent facts.
 
-- `ensureAccountAgent(pool, {account, kind, name, language?}) -> {subject: Item, created: boolean}`;
-  account is `string | Pick<AccountActor, 'accountId'>`; kind is person, organization or software.
-- `verifyAccountAgent(pool, {account, catalogue: string, receipt: string})`;
-- `unverifyAccountAgent(pool, {account, receipt: string})`.
+Ordinary merge keeps `POST /v1/subjects:merge`, body `{subjects: [id, id]}`, actual Global `subject:merge` via
+`authorizeSemanticWrite`/`globalContextAnchor`, quoted structured-field Idempotency-Key and current anchor checks.
+Only ACTUAL ADMISSION returns `202 {operation: {id}}` and
+`Location: /v1/subjectIdentityOperations/{id}`. PREPARING alone is not a 202. Lost response or request deadline
+retains durable preparation/admission and replay recovery; it cannot create a second operation or claim no effect.
+Authorized identical replay returns the same operation/Location after publication too. Different body under the
+same key remains `422 idempotency_conflict`. Authorization precedes receipt lookup, including replay.
 
-The latter two return exactly `{survivor, redirected, revision, subject: Item, component}` with the component above.
-Their successful inputs and DTOs remain unchanged, with no pending DTO or polling. Each successful return MUST wait
-for its job to publish, including the already-verified/same-receipt branch and the reversal replay branch. A mapping
-or merge revision alone cannot satisfy replay. Idempotence means the same job/receipt and no repeated structural
-effect; the existing already-verified branch can report the current catalogue revision/component. Do not impose
-byte-identical historical DTO values or freeze the native component position as a new replay contract. Keep the deterministic `accountAgentId(account)`, native kinds,
-matching Person/Organization restriction, catalogue survivor, reciprocal backlink and verification receipt on the
-merge revision. Software verification remains rejected. Reversal restores only exact recorded moved links, including
-Context/filter identity, without undoing unrelated subsequent facts or creating an account lifecycle generation.
+`GET /v1/subjectIdentityOperations/{id}` reauthorizes CURRENT native merge authority and original/terminal
+visibility. Unknown and denied are the same concealed `404 not_found`, without result or session component.
+Authorized responses remain `200 {operation: {id, done: false}}` or, only after durable publication,
+`200 {operation: {id, done: true, result: {survivor, redirected, revision}}}`. No participant/frontier/vector leaks.
+Existing deadlines, evidence TTL and Problem effect_status vocabulary remain unchanged. Recovery is through the
+original locator/receipt; no fake successful completion or new public cancellation protocol is added.
 
-Existing `access/agent-verification.ts` has `mergeVerifiedAgent(pool, AgentVerificationWorkflowRequest &
-{receiptId: string}): Promise<void>` and `unmergeVerifiedAgent(pool, AgentVerificationReversal): Promise<void>`.
-They call those exact native Semantic inputs. `registerAgentVerificationWork` registers durable
-`accounts.agent-verification.merge` and `accounts.agent-verification-reversal.unmerge` DBOS steps. Publication wait
-belongs INSIDE the same step, before success lets the workflow write its public page/approve/finish or remove the
-page/finish reversal/clear pending. A crash resumes that same receipt-bound step, including after effects committed
-but before its output was journalled. Do not add another Accounts status, decision receipt or intermediate approval.
-The current reversal's pending receipt/catalogue comparison still prevents an old delivery undoing newer review.
+Actual suspension revokes pre-suspension bearers: held-token requests return `401 invalid_credentials` with
+`WWW-Authenticate: Bearer error="invalid_token"`. Invalid required credentials never become anonymous. Auth
+cannot mint a valid suspended bearer; correct-password suspended sign-in is `403 {"error":"account_suspended"}` without a
+session. Kernel `403 account_suspended` remains defensive only. Native suspension is the revocation producer;
+SQL token/account fabrication is not acceptance evidence.
 
-Ordinary merge uses real Global `subject:merge` through `authorizeSemanticWrite` and `globalContextAnchor` in
-`semantic/http/subjects.ts`, preserving native current required anchor checks. `runCommand` mints native time and
-calls `authorization.authorize` before `readReceipt`, even on replay; `currentCommand(tx)` exposes the completed
-binding only on that live transaction. Never serialize that binding as permission. Replaying a user response must
-re-authorize the current request. In contrast, admitted immutable job intent is trusted internal durable work
-already committed by that admission, not a fresh command on behalf of a fabricated user. Existing platform work
-uses `runCommand` without a user basis, and account verification/reversal checks `currentCommand(tx).basis === null`.
-Bind job execution to the persisted job, exact scope and native home fences, through the existing outbox/DBOS
-composition. This is not a new bypass port or a kernel-wide rule about user authorization after admission.
-Account/follow effects retain their real active/terminal account locks and current nativeT contract.
+`runCommand` authorizes before readReceipt and exposes currentCommand only on the live transaction. Do not
+serialize that binding as permission. Admitted immutable internal work resumes its persisted job and native
+home fences, not a fabricated user. Existing platform verify/reversal requires `currentCommand(tx).basis === null`;
+this is a specific owner path, not a generic actor bypass. User response replay still reauthorizes. Account and
+follow effects retain active/terminal account locks independently of identity publication.
 
-## Ordinary HTTP asynchronous identity operation
+## Concurrent control and coherent admission
 
-Ordinary merge keeps `POST /v1/subjects:merge`, body `{subjects: [id, id]}`, the current native Global
-`subject:merge` authorization and quoted structured-field `Idempotency-Key`. After durable admission it answers
-**202** `{operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`. This acknowledges admission only.
-The opaque operation ID identifies the same durable native identity job and receipt, not a separate HTTP scheduler.
-Identical authorized replay returns the same operation and Location, including after publication. Different-body
-reuse remains `422 idempotency_conflict`; authorization precedes receipt lookup. Admission commits the immutable
-intent, pending control/epoch and wakeup atomically before returning the locator. No completed merge DTO is returned
-from this POST. An overflow is `409 identity_group_overflow` before ANY job, control, epoch, revision, redirect,
-mapping, participant, receipt or outbox effect; the cap stays 4096 originals per resulting group.
+### Immutable cut before any new effect
 
-`GET /v1/subjectIdentityOperations/{id}` uses CURRENT native authorization on every request, including after
-publication. It requires the ordinary merge authority and current disclosure of the original and terminal subjects;
-operation possession and an old admission receipt provide no authority. A hidden original cannot be exposed through
-a public terminal. Unknown and denied operations return the same concealed `404 not_found`, without a session
-component or result disclosure. Authentication remains native: a valid suspended bearer receives
-`403 account_suspended`, while revoked credentials receive `401`; invalid credentials never become anonymous.
+Resolve the at-most-two input groups to immutable, non-ABA current generation/source versions and exact counts.
+Perform an effects-free double collection: capture EVERY input header/source version, then validate EVERY captured
+version remains current, ready and under the same native owner/generation. A common cut lies between last capture
+and first validation when all versions match. A version cannot return to an earlier value after a change. A
+single mixed read is insufficient: moving an original can expose a new 2048 count with an old 2049 count even
+when the coherent union is 4096. Immutable data alone does not make differently timed current pointers coherent.
 
-An authorized GET answers exactly one of:
+Use that coherent cut and constant transform to check EVERY resulting cardinality, including split/repoint and
+undo's explicit restored original. Shared generation references collapse once. No caller original vector,
+privacy-filtered member count, whole-group scan or generated input copy precedes this check. Missing bootstrap or
+source custody is unavailable. Overflow snapshots include ALL installed tables, indexes' logical inputs and
+partition state, including new history/job/claim/slot/generation/scope/revision/effect/ACK/wakeup records; existing
+legacy subject/revision/redirect/member/receipt/outbox snapshots alone cannot prove this boundary.
 
-- `200 {operation: {id, done: false}}` while the native identity epoch is pending.
-- `200 {operation: {id, done: true, result: {survivor, redirected, revision}}}` ONLY after the epoch is durably published.
+After the check, prepare with durable immutable input references and a constant transform. Claims later revalidate
+those exact versions before admission. Drift after safe preparation follows native cancellation/recovery of that
+attempt; a new coherent attempt keeps the original binding. An Accounts decision/reversal source intent already
+committed in its native transaction is not a new Semantic admission effect and is never erased by overflow.
 
-The result uses the native completed merge fields. Neither response includes affected-original vectors, private
-participant state, work frontiers or internal receipt details. A committed redirect/revision, mapping step,
-ordinary Search checkpoint or local participant completion is insufficient for `done: true`. Completion requires
-control custody of mapping and BOTH fixed version-1 Search/Library receipts, covering every prior home removal,
-addition and fence installation before publication. Receipt verification binds native `transactionId` together
-with `{partition, epoch, position}` and job/step/version/scope. A native `noEffect` command may reuse a position;
-position alone cannot identify a transaction or certify completion.
+### Receipt history, ordered capacity and P=1 progress
 
-The existing request deadline, Access evidence TTL, global problem `effect_status` and its
-`not_applicable | not_applied` values do not change. Do not report a durably admitted operation as `not_applied`
-when a request deadline expires: after admission, recovery is through the same receipt and locator. A lost response
-or process crash leaves the operation pending and replay recovers that same admission; neither failure cancels
-committed work nor declares early success. This response binding is required implementation work, not permission
-to extend deadlines or add a global problem status.
+The stable original receipt-to-job binding is compact indexed **HISTORY**. It binds original receipt, normalized
+intent digest, immutable job/attempt home and replay disposition, with account-role locators and native cleanup
+custody. It is not a free full job, hidden input generation, group snapshot, claim or unbounded active-control
+slot. Its retained bytes/indexes belong to H under existing receipt/erasure policy. Retain the minimal immutable
+binding needed for replay after full job minimization; cleanup cannot let the same original receipt mint a new job.
 
-Accounts verify/unverify use this SAME native job and publication boundary. Their callable successful DTO remains
-unchanged. The existing durable DBOS merge/unmerge step waits internally for publication before approval or clearing
-pending; Accounts adds no polling step, pending success DTO or second operation protocol.
+For an immutable attempt, order all planned control resources deterministically by native partition and key,
+INCLUDING job home. Changed group control homes come from their actual source/current-group bases (incarnation, immutable generation,
+monotone version and native owner epoch), not from a currently visible representative. The actual job home is the
+FIRST ordered resource. Do not reserve an arbitrary receipt-hash
+home out of order. The compact binding can be established only after cap validation; its unique native CAS
+selects the one attempt/home before remote delivery. A full job, claim, full copy and slot are charged where
+physically stored, even when another home retains a locator. Acquisition at the first resource reserves local
+P-capacity and the job there atomically; later acquisitions proceed strictly in order. At every home, native
+partition-owner fence, attempt lock, capacity counter/unique slot and group overlap predicate are checked in the
+same transaction as the claim. A read followed by an unlocked insert is insufficient.
 
-## Native STORE and effect boundary
+Crash before first acquisition: lookup binding, then indexed native job/attempt state; absent acquisition resumes
+at the same first resource. Crash after sending a remote acquire: lookup that same binding/job, retain the uncertain
+planned home, and reconcile the exact attempt there. Do not allocate a replacement job because an RPC result was
+lost. Binding history cannot certify that remote admission occurred, and mapping cannot query remote admission.
 
-Required `semantic/identity-epoch-store.ts` export `identityEpochStore: IdentityEpochStore` owns:
+At P=1, a blocked attempt holds only resources lower than the next one it awaits. Every wait-for edge strictly
+increases this total order, including job homes, so a finite cycle is impossible. The highest held resource has no
+lower successor to wait on; with fair bounded native scheduling and eventual available owners it completes or
+cancels and releases, inductively enabling lower attempts. Native slot checks/fences/locks must realize those
+edges. A long unavailable owner may pause its dependent attempts, not disjoint partitions. No lease expiry,
+timing luck or repeated try/unwind is the liveness proof. Cancellation and reclamation allocate no new slot and
+must be runnable while capacity is full. Native schedules must prove both the ordering and those reserve-free paths.
 
-1. A fixed native control partition; a durable job ID, native bigint target epoch, immutable intent and existing
-   receipt reference; last published epoch and sole pending job; exact group cardinality and affected-original index.
-   Durable JSON serializes bigint as canonical decimal strings, never Number. A job contains no client result vector.
-2. `admit(tx, {intent, receipt}) -> CommandResult<IdentityJobRef>` under a live native control command. It verifies
-   real ordinary authorization (or the exact persisted platform decision), receipt/intent equality, complete group
-   membership and the cap before writes. Pending plus wakeup are atomic. The final user DTO receipt cannot be
-   manufactured as successful by this internal admission result. Typed failure codes are `identity_group_overflow`,
-   `identity_epoch_busy`, and `identity_participants_incomplete` for the conditions named here.
-3. `initializeSubject(tx, original)` in the real revision-1 creation transaction. It records an exact initial-self
-   mapping from actual creation; it does not infer self from a missing row, touch Search or advance a structural epoch.
-   All creation paths, including account-agent and imports, must bind it. No per-read lazy write.
-4. `readEpoch`, `readJob`, `findJob` and `readMapping` are native observation, not permission. `absent` is established
-   native absence, `unavailable` names bootstrap/missing/moved owner, and `pending` names the affected job. Unaffected
-   point reads inspect their indexed local mapping; they do not enumerate the affected group or all homes.
-5. `pageChanges(client, job, after)` uses the immutable affected-original keyset and returns at most 100 changes with
-   before/after terminals and a bounded continuation, including self rows/destinations needed for split and repoint.
-   It does not return personal references or a privacy-filtered representative vector. This is the concrete input
-   shared by Search and Library; both consume the same job and page through the store themselves.
-6. `admitHomeEffect(tx, effect)` locks/compares the persisted job/mapping gate in the SAME native home transaction
-   as the effect. Structural effects bind job+original; follow-count effects bind original+destination+epoch.
-   It returns void, never a cached certificate. Wrong native partition, obsolete mapping, stale epoch or out-of-scope
-   job rejects. A global pre-read followed by a later other-home write is insufficient.
-7. `publish(tx, job)` consumes durable native completion records for mapping and the fixed participant version.
-   It reconciles participant ACK receipts with exact job/epoch/version/work scope before atomically publishing.
-   `reconcileStepReceipt(pool, receipt)` first resolves the exact committed native producer record identified by
-   `{job, step, version: 1, native: {partition, epoch, position, transactionId}}`, validates its work scope and
-   observation, and takes control-home custody with idempotent ACK delivery. Missing/uncommitted/conflicting
-   locators reject; the locator alone does not certify completion. It takes no caller booleans, result vectors, callback assertions, elapsed leases or noData claims.
+### Admission versus cancellation, including uncertain delivery
 
-Bootstrap must establish complete membership/cardinality/mapping and readiness for actual legacy originals and
-redirects through indexed bounded work, capture/drain concurrent creation and structural admissions, and reject
-uncovered writers at cutover. A missing aggregate, absent mapping or default epoch zero is not ready. Moved/missing
-owners use native partition availability and routing; the job remains pending until actual ownership resolves.
-The bootstrap producer and its concrete cursor/export remain MISSING implementation work; this specification does
-not invent a legacy ordering or claim that a fixture SQL insert has completed bootstrap.
+PREPARING is affected pending and overlap-busy from its first native claim. The job retains EVERY planned home,
+not only successful responses. At each planned home, delayed acquire and cancellation serialize on the SAME
+native attempt lock, including first absence (unique insertion plus locked recheck). Cancellation installs an
+irreversible closed-attempt fence even if no claim exists yet. An uncertain RPC cannot remove a home from this set.
+The retained native job-home CAS selects exactly one disposition: admitted or cancelling. Admission consumes exact
+native claim receipts and revalidated source versions; cancellation closes every planned home and reconciles
+receipts/slots before releasing custody. Admitted work cannot be cancelled by a stale delivery. Delayed acquisition
+cannot resurrect a closed attempt. No new attempt overlaps the old one's uncertain claims without that proof.
 
-The home fence has a required ordering proof. Install the pending gate at each affected destination before mapping
-or participant effects there. Installation serializes against old-epoch apply in that home: an apply committed first
-is included in the retained re-key input; an apply after installation is rejected atomically. Cross-home removal and
-addition retain page intent and per-home effect receipts, so crash/retry cannot forget either half. Before releasing
-the pending gate, publication proves all retained changes/withdrawals have ACKs and installs the published mapping
-fence. A stale old-destination delivery rereads CURRENT source, account eligibility and mapping on retry, rather
-than relabelling a saved positive. Source-account terminal fencing is separate and still required. No amount of
-identity epoch bookkeeping alone proves current source-account eligibility across released reads.
+The admitted record atomically binds immutable intent, inputs, affected pending descriptor, native receipt and
+wakeup. That descriptor is authoritative before home gates or participants run; it need not materialize 4096 rows
+in admission. Initial capacity failure with no committed preparation remains retryable; once any preparation has
+committed, disposition and cleanup are durable recovery work. No failed step discards retained generations.
 
-## Bounded native mapping and fixed participants
+### One current mapping route per original
 
-Required `semantic/identity-epoch-mapping.ts` export `stepIdentityEpochMapping: IdentityEpochStep` receives only
-`(pool, {jobId, epoch})`. It reads the persisted frontier and affected changes, commits one bounded unit and returns
-`{job, frontier, state, work, receipt}` only after effects/frontier receipts have durable custody. Re-delivery after a lost
-result reads committed progress. Continuation and workflow arguments/results follow the
-[kernel's bounded job step limits](../../README.md#bounded-job-steps). Group membership is stored in the work index, never workflow JSON.
+The actual source mapping/birth basis names ONE relevant current control home per original. Routing is not a
+terminal hash guess, all previous homes, a history traversal or remote admission query. A route handoff keeps old
+routing pending/unavailable until the new current basis and native custody can be installed coherently. Missing,
+moved or retired source/control state is unavailable, never a fresh self mapping. Birth has exact same-transaction
+self evidence at its source home; absent Search is irrelevant. Unaffected points continue during disjoint jobs.
 
-Mapping maintenance covers actual direct redirects, revision/account backlink effects and indexed member/link
-maintenance. A page is at most 100 raw rows; full inbound/outbound degree is paged, never scanned in one request.
-Each native transaction visits ONE actual home. Release it before another home or Search engine, recording enough
-intent and per-home receipts to resume a partially applied cross-home page safely. Do not keep one 4096-home
-transaction. Existing `moveMergePage` uses phases links/outbound/members/done with 100-row SQL keysets and native
-commands. It is behavioral evidence; its old numeric-UUID preference, bare projection events and old completion
-condition do not implement the new admission or publication protocol. `reverseAccountAgentLinks` records/restores
-only verification-scoped Context/property/source/statement/filter rows; its synchronous loop needs durable frontier
-binding, not a full-degree request loop. Stored personal references are never move inputs.
+An affected original observes its pending immutable descriptor from the relevant home, including PREPARING.
+Mapping reads no ancestor generations and exposes no Access. An admission after a released source snapshot must
+be caught by the control cut; publication/newer pending before final validation must invalidate stale success.
+Native same-backend and cross-backend observation costs are derived below.
 
-`IdentityEpochParticipants` is the EXACT closed trusted composition object: version 1, `search-canonical-index`
-and `library-private-follow-counts`, each `IdentityEpochStep`. Participant functions receive job reference only and
-obtain affected originals/new terminals through `pageChanges`, plus their own persisted native progress. No caller
-page/epoch override, arbitrary HTTP callback, request-selected participant, or default successful adapter is legal.
-Each owns effect/frontier atomicity, monotonic native progress and durable ACK delivery. The returned receipt uses `IdentityStepReceipt`; the producer must persist its frontier, scoped completion
-observation and effect references atomically with that native receipt. `reconcileStepReceipt` runs only after releasing
-that home, rereads this actual record, and records control custody. The ACK is a persisted
-job+epoch+participant-version completion record backed by exact per-home/engine receipts. Crash between local
-commit and control ACK must redeliver the SAME receipt; a lost ACK cannot permit early publication. Local receipts
-and retained work cannot be discarded before control has safe custody. The coordinator reconciles actual records,
-not the function's returned `complete` field alone. Concrete ACK storage/delivery lives with STORE and producers;
-no generic caller-facing `ack(true)` port is exposed.
+## Scoped reader publication and complete query dependencies
 
-The existing Search binding is `searchWorkModule` -> `startSearchIndexing` -> `createSubjectIndexer`, using
-`semantic/search-source.ts`'s `subjectSource`, `subjectIndexName`/`subjectAlias` and per-generation `subjectConsumer`.
-The indexer uses 256-ID source chunks and `refresh: wait_for` bulk before its ordinary partition checkpoint.
-Those are actual subject index surfaces, not a complete epoch observation or a private/public disclosure grant.
-Search must export a real `IdentityEpochStep` adapter for its canonical index and prepared rows. Its actual module
-path/export is MISSING; do not guess evolving public-filter source/export names. It must bind the physical target,
-incarnation and complete canonical observation at this epoch, keep one public terminal document and unique prepared
-rows per generation+canonical ID, and preserve original support and last-eligible-original behavior. This ACK is
-DISTINCT from ordinary projection checkpoint and privacy-reduction ACK. Source/public projection and current privacy
-narrowing remain separately owned work; do not fork their public-filter contract or require a new engine/certificate.
+### Source scope is an owner plan, not returned hits
 
-Library must export a real `IdentityEpochStep` adapter under the existing fixed `library-private-follow-counts`
-name for ALL Library canonical records; its concrete module path/export is MISSING. It receives the same
-affected-original/new-terminal stream, re-keys in <=100-row steps, and ACKs before
-publication. Support is per (canonical target, follower); totals change only at 0->1 / 1->0. Derived pair/support/total
-rows live in the canonical-target home; stored follows stay in the source owner home. Admission uses
-`admitHomeEffect` in the destination effect transaction. A global epoch pre-read is not an atomic fence. Old-destination
-applies reject, then reread current source+mapping. Crossing-epoch cleanup, delayed first positive and terminal account
-purge must never resurrect a pair or total. Existing follow/listing helpers do not provide that proof; neither an
-assumed noData ACK nor a new account generation or private-fact mirror substitutes for it. The required bounded
-owner-candidate and structural-support directory is covered by this SAME participant, as specified below.
+Use ACTUAL native plan keys and observations. Library's existing Collection header has `(route,collectionId)`,
+incarnation, sourceGeneration, revision, listing stamp, accepted release/profile/state pins and factFence;
+its raw ranges are stored-original keysets. The existing Source observation additionally binds normalized query,
+order, projection and accepted meaning. Scope those observations to their actual authority/population and COMPLETE
+expanded query. Expand saved filters before gathering dependencies, including false/excluded originals, NOT,
+order-only originals, membership, labels/parents, pins/meaning, identity support and public/FOREIGN dependencies.
+One candidate's returned positive witness is not complete-query evidence. A broad catalogue plan can genuinely
+depend on all groups; that cannot impose its barrier on an unrelated finite owner source.
 
-Required `semantic/identity-epoch-coordinator.ts` exports `resumeIdentityEpochJob: ResumeIdentityEpochJob` and
-`waitIdentityEpochPublished: WaitIdentityEpochPublished`. The final binding serially drains mapping, invokes the fixed
-participants, reconciles their committed ACKs and publishes once. It registers through existing `WorkModule.register`
-and `WorkContext.addEffects`, `DBOS.registerStep/registerWorkflow`, `WorkClient.enqueue` with stable job workflow ID
-and `return-existing`. `composeWork` owns the single DBOS launch; `KERNEL_WORK_MODULES` owns default binding and
-`startWorker` owns lifecycle. No scheduler/process/second launch or independently invented maintenance engine.
-STORE and mapping import only native dependencies and these types; participant producers import STORE/types;
-only final coordinator composition imports concrete participants. Neither participant waits for or imports coordinator.
-Accounts and ordinary callers bind last, after their actual response contracts and native prerequisites exist.
+Library's adopted structural plan has ONE candidate per `(owner,canonical)` and structural `(original,scope)`
+existence/extrema, with inverse `(original,owner,scope)` access. Scope dimensions follow accepted family/profile/
+lifecycle/label/state/holding and order meaning; facts remain native. A million sessions for the same original,
+profile and lifecycle cannot make a million directory rows. Native session/copy/fact indexes find extrema and the
+next surviving top after withdrawal. No per-fact witness/copy, membership mirror or required legacy
+`canonical_source_fact` write is the directory proof. That existing table is physical inventory only.
+
+### Required registration, arm and finish protocol
+
+A ready scope must first establish full dependency registration under the SAME native source mutation frontier
+and owner/generation as its observation. Bounded bootstrap scans the source population, including excluded/order
+support, while native indexed OLD/NEW dirty capture retains changes behind the frontier. Registration is not ready
+until captured work and a final writer fence close the scan. Source edits atomically update structural registration
+or retain exact bounded repair work and invalidate readiness. A plain broad `readOwnerFactVersion` mutation alarm
+cannot certify that this registration is complete. No silent full-source scan moves into a public request.
+
+The two existing batched page probes must observe an affected pending claim/arm even before asynchronous
+source-summary delivery. A source cannot remain readable with an old clean summary during that gap. The actual
+owner plan must bind its complete registered dependency cut to those probes and native registration frontier,
+without enumerating dependencies on the page. Closing that gap within existing SQL/row allowances is a REQUIRED
+missing native producer proof, not a claimed consequence of an eventually delivered summary. If an actual plan
+cannot do so, its native case stays red; prose cannot turn a mutation version into a complete observation.
+
+Jobs discover affected scopes through the native inverse dependency index. Scope registration racing a claim
+must handshake with that claim under the source/attempt fence: either the registered scope is included in arm
+custody, or registration stays unready until it consumes the job's current mapping/publication. Before canonical
+effects for a scope, its affected partition summary must durably ARM that exact job/attempt/version, with native
+source ownership and receiving custody. A first registration cannot slip between discovery and effects. Fanout
+to many scopes is retained bounded work, not synchronous admission enumeration or uncharged per-page SQL.
+
+Each partition summary is keyed by actual scope and native source incarnation. It carries a COMMITTED SCOPED
+reader revision and truthful active/repair state. Arm/finish messages have exact native receipt custody; duplicate
+and delayed delivery compare immutable attempt identity under the same fence as cancellation. Finish is accepted
+only after all scope-specific OLD withdrawal, NEW addition, first-apply, source handoff and participant effects
+are in custody. A cancelled attempt cannot arm later or publish a source change. A published lower-numbered job
+finishing after a higher one must still advance the committed scope revision: `max(allocated epoch)` loses that
+change. A cancellation after a higher publication cannot regress the revision or overwrite active state.
+
+The existing source observation must consume these partition summaries through retained, indexed repair and a
+native source-local publication CAS. A new accepted summary advances the source's COMMITTED scoped scalar revision
+and retains pending work until all covered dependencies are current; it does not copy a per-job global history.
+That CAS is local to the actual source, not a source-wide catalogue marker. Reordered messages are compared by
+committed summary version and exact custody, never job allocation order. Replacing a summary must preserve
+unfinished arm/finish obligations until the receiver durably covers them. Registration retirement, source moves
+and cursor expiry release refs only after exact receiving custody. Unknown summaries keep that source unavailable.
+
+At page start, validate current source authority/incarnation/query/order/pins and a clean committed scoped reader
+revision using the existing observation. At final page validation compare the SAME complete basis and revision;
+any intervening relevant arm/finish/repair invalidates it even if the source is clean again. A continuation is
+current only against that source's current clean observation. Existing opaque cursor signing binds that scalar
+basis; no new vector/crypto is selected. Continuous disjoint jobs cannot change it. For finite unchanged owner
+input and eventual successful I/O/fair work, relevant preparation settles and useful pages continue. Global active
+count gating fails this progress condition, even if each individual job is finite.
+
+### Exact missing native bindings and required red boundaries
+
+The protocol above is an owner obligation, not an invented exported interface. The following actual sources do
+NOT yet supply complete scoped observations or registration/summary custody:
+
+| Owner and actual source                                                      | Delivered evidence                                                | Required native boundary before readiness                                                                                                                             |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library `collection-source.ts:createCollectionSource`                        | Source shape/observations; methods return unavailable             | Complete admitted native prepare/prefix/containsSubject/readRawStoredPrefix binding for structural owner and Collection plans, including false/NOT/order dependencies |
+| Library `collection-source-native.ts` and its header/members/facts/probe SQL | Actual header, stored-original ranges and bounded points          | Structural inverse directory, first registration/fence, source-local scoped summary consumption and final coherent observation                                        |
+| Library `owner-fact-version.ts:readOwnerFactVersion`                         | Indexed account-home mutation version                             | Complete dependency capture/registration and summary custody; broad mutation alarm alone is insufficient                                                              |
+| Search `scope-source.ts`                                                     | Admission scaffolding, unavailable native prepare/prefix/evaluate | Complete native canonical Source and physical namespace/source authorization, including negative/excluded/order population                                            |
+| Search `source.ts:SubjectSource`, Semantic `search-source.ts:subjectSource`  | Subject chunks/snapshots and bounded facet samples/probes         | Complete scoped producer observation and native canonical-index participant, not sampled returned IDs                                                                 |
+| Semantic native STORE/mapping                                                | Superseded types and missing producers                            | Current-route/control fences, ordered capacity, attempt closure, registration handshake, native committed partition summaries and receipt reconciliation              |
+
+Search's actual `searchWorkModule -> startSearchIndexing -> createSubjectIndexer`, subjectIndexName/subjectAlias,
+per-generation subjectConsumer, 256-ID chunks and `refresh: wait_for` bulk precede ordinary checkpoints. They do
+not supply complete canonical/negative-query observation or SourceAccess. Native namespace/query admission must
+prevent FOREIGN private lookup before engine work; current original/terminal admission and privacy-reduction
+ACKs remain independent. Full Search/Library publication cannot be proved by producer-focused missing-capability
+cases. Each missing row needs an owner-native red case and actual SQL/engine binding, before types/runtime; Root's
+scoped ruling supplies none of those exports. It selects this boundary rather than freezing the old global types.
+
+## Native effects and fixed participant custody
+
+A native effect checks and locks job/original/destination mapping gate in the SAME home transaction as the write.
+Global pre-read is insufficient. Installation serializes against legitimate old-epoch first apply: if apply commits
+first, include its effect in retained rekey input; if gate installs first, reject/redrive that apply atomically.
+Wrong destination, native transaction, scope, owner or obsolete epoch rejects. Release each home before visiting
+another home or engine. Persist cross-home OLD withdrawal/NEW addition intent and both receipts; neither half
+can disappear at an empty frontier. A stale delivery rereads current source, account eligibility and mapping.
+
+Mapping work covers direct redirect/revision/account backlink and indexed member/link maintenance. Existing
+`moveMergePage` links/outbound/members/done phases and `reverseAccountAgentLinks` provenance are behavior evidence,
+not this protocol's publication condition. Retain bounded frontiers instead of synchronous degree exhaustion.
+Affected changes keyset-merge at most two flat immutable streams plus constant exceptions, with one shared durable
+step allowance including overlap, duplicates, lookahead, rereads and retries. Never fetch the full allowance from
+each stream or inspect row 101 free. Equal keys are consumed together; exact before/after includes terminal/self,
+split/repoint and explicit restored original. No personal reference becomes a move input.
+
+At first absence the native gate/guard uses at most one indexed handoff-state probe/write in the effect
+transaction, with native unique insertion/locked recheck. A lock-timeout or skipped row is contention, not proof
+that capacity is full or an effect is complete. Capture that work and any trigger/index/FK work in native Cost.
+
+Each producer atomically commits its effect/frontier/native receipt and exact job/version/scope completion
+observation. After releasing the home, control resolves that ACTUAL record by transactionId AND component and
+takes receiving custody. Lost ACK redelivers the same receipt. Receipt or function `complete` alone is not proof.
+No arbitrary callbacks, caller booleans, request-selected participant or default noData ACK is legal.
 
 ### Complete Library canonical coverage under the fixed participant
 
-The fixed version-1 `library-private-follow-counts` step covers EVERY Library canonical record. Its historical
-name does not restrict its ACK to follows. There is no third participant, identity job, queue, component shape,
-transaction-ID shape or callback ABI. The same job/epoch/input descriptor and native receipt protocol applies.
-Coverage includes:
+The SAME version-1 `library-private-follow-counts` identity participant covers every canonical directory,
+candidate, support, first-apply registration, follow, total, pending/published fence and prior-effect custody.
+All six member, entry, label, session, copy and output drivers are included, with working/ready bases, accepted
+meaning and exhaustion evidence. Owner state chooses the highest live native `entry.owner_write_seq`, preserves
+conflicts, unions labels and keeps sessions/copies distinct. That sequence increments in the SAME successful
+set/clear/Undo transaction; Undo is a new write despite historic dates. The actual Commerce sequence/schema/helper
+producer remains missing; timestamps, UUIDs, type_source_position, per-slot revisions or invented legacy ordering
+cannot substitute. Clear and replay retain their native meaning.
 
-- Canonical source facts for all six existing drivers: member, entry, label, session, copy and output; their
-  working/ready generations, source/identity bases, checkpoints, candidate seeks and pending/exhaustion state.
-  Existing physical `library.canonical_source_fact` keys are `(route,collection_id,generation,basis_digest,
-  canonical_subject_id,stored_subject_id,driver,fact_id)`; `canonical_source_state` is keyed by
-  `(route,collection_id)`. Their presence is storage evidence, not a working producer or readiness certificate.
-- Owner candidate records keyed by owner/source incarnation and canonical subject, and their structural-support
-  directory keyed by original and exact owner/source/driver/fact locator. Cover every supporting original, including
-  a hidden original, negative/tombstone support and a never-positive first apply. The directory is an internal
-  maintenance locator, not Access, membership authority or a new private-fact mirror. It must discover affected
-  owners through indexed bounded work, never an identity-job scan of all Libraries or a per-request home sweep.
-- Canonical entry state/conflict winners under the existing native owner write sequence, union-label support,
-  independent session/copy support and curated occurrence/output candidate support. Preserve every stored original,
-  occurrence, note, date, order, multiplicity, accepting pin and unrelated later write. A source's ready pointer
-  alone cannot authorize a canonical candidate or prove all support was rekeyed.
-- Follow source-replacement delivery, old/new canonical target pairs, per-target/follower support and totals,
-  pending/published identity fences and independent current source-account terminal fences. Canonical totals count
-  a follower once at positive support; only 0->1 and 1->0 transitions change the total. Negative first applies and
-  delayed deliveries retain revision/fence protection. No ready zero is inferred from missing producer data.
+Directory discovery is structural `(original,scope)` existence/extrema, not one locator per fact. It covers never-
+positive first apply and hidden/excluded/order support too. Its EOF requires drained native registrations and
+custodied OLD/NEW work. Follow support is per `(canonical target,follower)`; totals change at 0-to-1/1-to-0 only.
+Derived pairs/support/totals live in target home, stored follows in source owner home. Current account terminal
+fences remain separate. Actual follow ACK with directory incomplete MUST refuse publication; an interrupted legacy
+canonical_source_fact insert without a follow ACK does not establish this negative. No third identity participant,
+follow-only ACK or transfer to the Library A5 erasure participant is allowed.
 
-Before dispatching a page, persist its COMPLETE expected effect manifest: each old canonical removal, each new
-addition, owner-candidate replacement, directory OLD-key removal and NEW-key insertion, source-basis invalidation,
-pending fence and eventual published fence. Include all preceding pages and retained half-effects. Identity work
-uses exact old/new terminal and source locator, not just its endpoint vector or the observed count of follow rows.
-Each home commits effects, manifest progress and exact native receipt together under the actual same-effect
-gate/account fences. Release ALL source/Library clients before another home/control/engine checkout. The receiving
-control command takes durable custody of every expected receipt; an empty manifest created without authoritative
-directory coverage is incomplete. No blanket `noData`, callback return or missing-row-as-empty inference is legal.
-
-FIRST APPLY is part of this invariant. Directory registration/support application and identity gate installation
-serialize in the actual destination home, including first-absent gate insertion. If first apply commits first,
-its directory and support are included in the retained input/dirty head and rekey manifest. If installation wins,
-the stale apply atomically rejects and retries from current source/mapping/account truth, or commits durable
-retry responsibility under the new epoch. A source command already committed but not yet registered must have
-durable delivery custody visible to closure; it cannot fall between enumeration and directory publication. Directory
-rekey is not complete until both OLD removal and NEW insertion, concurrent registrations, pending/published fences
-and all first-apply obligations have receiving-owner/control custody. Saved empty pages do not close newer work.
-
-The final Library ACK binds the SAME native transaction ID AND component, job, epoch, step/version and complete
-scope. `publish` rejects `identity_participants_incomplete` when even ONE canonical-directory, candidate, support,
-first-apply or prior-page effect lacks custody, EVEN IF every follow pair/support/total effect is complete. A
-follow-only ACK is invalid for this scope and cannot be upgraded by relabelling its receipt or by the coordinator.
-The minimized completion manifest retains proof of directory coverage and all prior effects through reclamation,
-replay and terminal erasure. Local published fences may be installed while the global job is pending; no reader
-treats that local installation as permission to bypass the global publication predicate.
-
-Native negative schedule: retain a real owner with canonical candidates and a follow, admit the real job, complete
-actual follow effects, then interrupt directory OLD removal/NEW addition or concurrent first-apply custody. Attempt
-reconciliation/publication with the real saved producer receipt: it must reject and remain pending. Also race first
-apply on BOTH sides of gate installation and crash between directory halves/source commit/control custody/ACK.
-Full completion requires actual directory, canonical driver, follow, support, total and fence receipts and all prior
-effects; resume the SAME job, idempotently redeliver lost receipts, publish once, then assert canonical reads and
-unchanged stored originals. Actual missing directory/Core producers keep these cases RED, not skipped or satisfied
-by follow-only completion. The cutover suite's native interruption uses actual owner input and coordinator SQL;
-the full follow-complete/directory-incomplete schedule additionally needs the owner's delivered receipt layout.
-
-Accounts owns the additive event-free fenced owner operational transaction plus atomic durable intent Core
-primitive and its native specification. Existing `noEffect` forbids domain writes and CANNOT implement this
-primitive. Semantic declares neither a guessed callable export nor an operational callback/permission receipt.
-That owner producer is **MISSING**; source intent/operational rows remain Access-owned. Commerce alone consumes its
-ACTUAL delivered exports for Members GET derived preparation. This specification adds no Core, Accounts, Library,
-Search, schema or SQL implementation. Directory/first-apply production cannot be counted as `noData` while missing.
-
-## Independently landable producer boundaries
-
-| Producer                  | Required surface / evidence                                                                                                  | Present |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bootstrap completeness, per-home fences, ACK custody   | MISSING |
-| Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING |
-| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | MISSING |
-| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | MISSING |
-| Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | MISSING |
-| Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | MISSING |
-
-These are real capability dependencies, not task identifiers. Store/native-step acceptance must not require a fake
-Search or Library completion. It can prove pending and refusal to publish independently. Full successful publication
-and full persona/API/default-worker/growth coverage remain required until all actual consumer ports exist.
-
-## Acceptance and required integration matrix
-
-The two new native suites run against migrated PostgreSQL, production pools/partition guards, actual native
-creation/merge/verification APIs and `createRealAccess`. They do not import cancelled producer fixtures.
-The admission suite builds two legacy native groups of 2048/2049 originals and attempts an actual two-input merge,
-checks no revision/redirect/member/receipt/outbox effect, and retains an actual stored follow original. That population
-is fixture data, not a readiness certificate: STORE bootstrap must cover it before allowing admission, and a generic
-bootstrap-unavailable error cannot pass the required overflow-code assertion. Another native test preserves stored
-follow IDs on successful merge and requires current Global authority even for the same receipt replay.
-
-The publication suite first executes unchanged Accounts inputs and checks actual subject/component DTO and receipt
-idempotence, then requires real STORE records with mapping and both actual participant ACKs. The STORE-only case
-admits a native authorized job, requires pending before mapping, rejects another receipt, reads affected/unaffected
-points, retries saved mapping progress, and refuses publication without participants. A missing producer fails
-explicitly at its native load; no fallback mapping, stub ACK, skip/todo or permanent unconditional throw test is used.
-Native repeated delivery covers lost-result replay, not process-death or full DBOS recovery proof.
-
-The cutover suite adds source-command rollback/retry, explicit larger-survivor/overlap/split/repoint replay,
-independent in-flight reversal, both export/custody/ACK interruption boundaries, OLD/NEW-key capture and saved-empty
-reopening. Its reclamation schedule preserves active immutable inputs, interrupts an actual native membership
-DELETE after publication, resumes first/deep generations, repeats empty work, and replays minimized receipts before
-later admission. The existing history schedule grows completed generations independently at 1/8/64. Erasure starts
-with actual signed Access and account/agent creation plus native tombstone; missing control custody must leave the
-same Semantic obligation pending. It does not claim cleanup completion from a status read or fabricate an erasure
-ACK. The missing cleanup producer and the full directory/first-apply receipt schedule remain explicit owner
-integration obligations; these tests do not certify those absent producers.
-
-The named suite is deliberately red on the current runtime. Required scenarios that need absent consumers stay in
-this matrix rather than pretending passing partial coverage establishes the whole outcome:
-
-| Required native schedule                                                                                                                                                                 | Needed producers                                             |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Fresh Global creation revision 1, exact self mapping without Search, denied/import authority; legacy coverage/moved/missing homes                                                        | STORE + creation hooks + bootstrap                           |
-| 64/512/4096-original groups; 4096 admitted, 4097 rejected before pending/effects; overlapping groups and concurrent admissions                                                           | STORE + native mapping                                       |
-| Larger survivor, merge->merge flat redirects, unmerge/repoint split after intervening revisions                                                                                          | STORE + mapping + caller binding                             |
-| Pending-before-first-effect, crash before/after each home commit/frontier/ACK/publication, duplicate delivery same job, no competing epoch                                               | STORE + mapping + actual fixed participants + DBOS           |
-| Affected point pending, unrelated point/creation stays local; cursors restart and lists prepare then fill after finite work                                                              | STORE + Search/prepared/list readers                         |
-| One public terminal doc and unique canonical generation rows; hidden original with public terminal and last eligible original; immediate privacy narrowing                               | actual Search canonical + public-filter producers            |
-| Entries/labels/sessions/copies/Collection originals, order/notes/multiplicity, latest seq conflict, Undo as new write, terminal new writes                                               | actual Commerce ordering + owner APIs                        |
-| Follow support 0/1 transitions, merge/split, >100 rows, crash between withdrawal/addition, stale old-destination first apply, epoch-crossing terminal cleanup no resurrection            | actual Library producer + native source/account fencing      |
-| Accounts same receipt waits pending->published in SAME DBOS merge/unmerge step, crash after effects before journal, no early approval/clear, exact moved-link reversal and unchanged DTO | coordinator + Accounts durable binding + actual participants |
-| Ordinary API durable 202 admission, current authorized polling/replay, no false not_applied; native actor/denial/hidden/default worker personas                                          | async HTTP operation binding + final caller composition      |
-
-No test changes a pre-existing/frozen acceptance or treats missing native ports as successful readiness.
-
-### Mounted HTTP acceptance and unbound schedules
-
-`test/semantic/identity-operations-http.test.ts` uses the actual shared `createSemanticDriver()` with its real
-Accounts registration/token/suspension producer, Access, migrated kernel database and mounted production kernel.
-Its support creates subjects through HTTP, uses actual grant administration for revocation, and writes personal
-follows, entries and repeated Collection occurrences through their native HTTP routes. It creates no second fixture
-database, substitute participant, fabricated runtime option or completion override. The overflow population follows
-the existing native epoch helper's migrated historical rows in that same shared database; it is not a bootstrap ACK.
-Existing native Search 13+6 outcomes and both epoch suites/support remain required and unchanged.
-
-The frozen HTTP scenario titles are:
-
-- `merge admission returns one durable operation with same-key replay and different-body conflict`
-- `currently authorized pending poll exposes only operation id and done false`
-- `polling after current merge grant revocation is concealed and denied replay has no identity effects`
-- `polling a hidden original cannot disclose its public terminal or operation result`
-- `cap4097 rejects before any pending job control epoch revision redirect receipt or outbox effects`
-- `fresh unrelated revision1 creation remains usable without Search while an identity operation is pending`
-- `admission and replay preserve stored follows entries and repeated Collection occurrences`
-- `a valid natively suspended bearer receives403 rather than an authentication or anonymous response`
-- `unknown operation GET is concealed and valid suspended polling receives403`
-
-The first identity assertion is the actual POST status/DTO, before any absent-producer assertion. An absent STORE or
-participant therefore exposes the current HTTP red, rather than failing only on a future export. Effect snapshots
-include installed native identity tables, control partition, revisions, redirects, membership, receipts, outbox and
-stored references. Missing identity tables are NOT evidence that the pending/control/epoch portion has passed.
-The shared driver's own ordinary link relay is paused before effect snapshots so its unrelated commands cannot
-race identity denial assertions; this neither pauses nor acknowledges an identity participant. Personal owner
-authority comes from the production owner formulas, not fabricated Global grants. Receipt replay compares native
-transaction ID AND component. The suite has no skip, todo, permanent throw or
-successful test adapter. Admission preservation is not proof of preservation through completed maintenance.
-
-The following exact integration cells are **NOT YET FROZEN**. They remain required outcomes; their prose is not a
-claim of executable coverage. STORE, mapping, fixed Search/Library adapters and coordinator exports above are still
-missing. Do not invent their schema, participant paths or barrier exports to make this suite green.
-
-| Scenario title                                                              | Required native schedule and missing prerequisite for owner review                                                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Published completed DTO only after actual fixed Search and Library receipts | Hold mapping, Search and Library separately before ACK custody; poll pending with either ACK absent; reconcile both actual receipts, publish once, then assert the exact completed DTO. Requires real adapters, STORE/coordinator and a controlled hold/release at each native ACK reconciliation and immediately before publication. Ordinary projection pause is not this port.                                                                                               |
-| Pending crash restart and same receipt                                      | Kill/restart the actual identity worker after admission commit/before dispatch; before and after each mapping/home-effect commit, frontier commit, local ACK commit, control ACK custody, publication commit and DBOS result journal. Replay the same POST and compare operation, job/epoch and native transaction ID plus component of every retained receipt. Requires worker lifecycle control and durable commit barriers; a lost returned promise is not process recovery. |
-| Completion custody includes every prior removal addition and fence          | Interrupt between withdrawal and addition at different homes, after each gate install and before published fence installation. Deliver duplicate, stale, wrong-transaction/same-position, wrong-component, wrong-job/epoch/version/scope and missing receipts; none may publish or forget a prior half-effect. Requires home effect/fence receipt enumeration and controlled barriers on the actual producers, plus real Search target/incarnation receipts.                    |
-| Fresh creation has exact self mapping independent of Search                 | Hold actual Search unavailable during pending work; create revision 1 and read the exact native self mapping without advancing the structural epoch. Requires STORE creation hooks and actual Search outage control. The frozen HTTP case proves revision/read behavior with the shared driver's absence of a Search worker only.                                                                                                                                               |
-| Completed maintenance preserves personal originals                          | Run the real published merge/split/repoint with nonempty follows, entries and repeated occurrences, retaining stored IDs, notes, order and multiplicity byte for byte. Requires actual participants/publication; the frozen admission case does not certify completion.                                                                                                                                                                                                         |
-| Revoked bearer401 differs from valid suspended bearer403                    | Revoke an actual issued credential through Accounts/Auth, then exercise POST and GET with that credential; separately exercise the still-valid suspended bearer. Requires an exposed actual credential-revocation fixture producer in the shared driver; do not forge authn epochs, account state or tokens. The suspended POST assertion already uses its real suspension producer.                                                                                            |
-| Accounts same native operation waits within its existing DBOS step          | Hold publication, crash after effects before step journalling, redeliver the same verify/unverify receipt and prove no approval/clear pending until publication, with unchanged successful DTO. Requires actual publication barriers and Accounts workflow inspection; no extra polling step.                                                                                                                                                                                   |
-
-These are missing controlled observation/lifecycle prerequisites, not proposed test-only completion APIs. The owning
-STORE/coordinator, Search, Library and Accounts producers must supply actual controls before these schedules can be
-frozen. Do not revive identity-basis, home vectors or per-page replay as a substitute.
-
-## Cost
-
-### Admit structural intent
-
-- Touches: native authorization/receipt/control point, indexed complete group cardinalities and retained affected work.
-- Bound: exact maintained cardinality points before effects; retained affected work <=4096 originals per resulting
-  group, produced in bounded native steps. The cap does not authorize a request-time all-home scan. No link-degree scan.
-- Growth check: retain the native 64/512/4096 group axis; independently grow unrelated subjects, owner pools,
-  group/history/receipts/outbox and denied/replay paths. Capture actual rows, points, statements, bytes and blocks.
-  Existing numbers are not changed; final measured budgets need Performance capture, not this type-only document.
-
-### Poll an ordinary identity operation
-
-- Touches: current native account/Global merge authority and original/terminal disclosure, indexed operation/job,
-  published control epoch and the durable result after publication.
-- Bound: indexed operation/control and current eligibility points; no affected-original response vector, participant
-  enumeration, all-home sweep or reusable allow. Reuse the native Access and publication bounds above.
-- Growth check: pending/completed, unknown/denied, revoked authority and hidden original while unrelated jobs,
-  receipts, groups and history grow independently. Full measured native evidence remains required.
-
-### Advance mapping or participant step
-
-- Touches: one <=100-row indexed raw page, retained frontier/intent, exact scoped home effects and durable receipts;
-  release each home before another home or engine. Search additionally captures actual engine work/bytes/incarnation.
-- Bound: follow the [kernel's bounded job step limits](../../README.md#bounded-job-steps). Total retained work follows changed finite input and link/support
-  degree, independently of request-page cost. Every reread, lookahead, retry and discarded row is charged.
-- Growth check: first/deep/empty/replay/denied paths across three native scales, separately growing unrelated data
-  and history while selected neighbourhood stays fixed. Measure native rows/points/statements/bytes/blocks/engine
-  calls and retained work, including two-home crash schedules and Library pages of 100/101. No planner pins or
-  altered 64/512/4096 axes/captures; actual owner pools and current source-account locks are required.
-
-### Publish and observe
-
-- Touches: exact control/job and fixed participant-version ACK receipts; point readers release source mapping before the fixed-control pending observation
-  and coherent epoch probe, then revalidate source and native original/terminal eligibility. Canonical readers inspect published epoch and maintained canonical indexes.
-- Bound: fixed participant count and indexed job/control points; no per-page 4096-home sweeps, whole follow/source
-  scans, cached allow or stored-personal-reference moves. Incomplete ACK/readiness cannot manufacture a ready zero.
-- Growth check: affected/unaffected points, publication/replay and cursor restart while unrelated groups, histories,
-  private support and completed workflow state grow independently. Full native growth evidence remains required.
-
-### Library canonical directory and first-apply custody
-
-- Touches: the SAME affected-input pages, indexed original-to-owner/source/driver/fact directory, owner candidates,
-  all canonical driver records and source working/ready bases, follow pair/support/totals, old/new home gates,
-  current source-account fences, expected effect manifest, native receipts and released control custody.
-- Bound: charge raw directory fanout BEFORE filtering/deduplication, including empty seeks and concurrent first
-  registrations; fanout follows finite relevant support, never all owners. One rekey locator has two input reads
-  (affected original and directory locator), two directory changes (OLD removal/NEW insertion), two candidate
-  changes, two canonical support changes, two fence effects, and at least four native receipt/custody writes for
-  the old/new effects: at least 14 raw row touches before metadata and retries. Consequently a page containing
-  c metadata/frontier/owner/account/receipt/outbox rows admits AT MOST floor((100-c)/14) such locators; extra
-  driver/follow/total or native receipt rows reduce it further. This is a ceiling, not a claim that 14 suffices
-  for every driver. Each native one-home effect command includes BEGIN/SERIALIZABLE setup, native time, owner
-  checks, gate/claim, effect SQL, callbacks, native fence, receipt/outbox and COMMIT. Every statement is charged;
-  batching OLD/NEW keys cannot erase their raw row cost. At most one indexed HOME handoff-state lookup per guarded
-  write remains mandatory; first-absent gate uniqueness/locking and source-account terminal locks are additional
-  work under existing bounds. Directory EOF needs a bounded indexed empty seek plus all pending registrations
-  and deliveries in custody, not a returned empty page alone. Retained space includes one directory row per live
-  source-support locator, negative work until safe minimization, both halves of each unfinished rekey, and the
-  minimized per-effect completion/custody skeleton. Native B-tree/MVCC/catalogue/physical bytes are measured.
-  Keep 100 raw rows/page, 100 pages/segment, 5000ms command deadline, eight scalars/2048 cursor JSON bytes and
-  4096 workflow bytes. Owner operational transaction costs require the actual Accounts Core producer; existing
-  `noEffect` is not an allowance to omit that transaction, its durable intent or source/control delivery.
-- Growth check: fixed selected support while unrelated owners, directory rows, original groups, completed jobs and
-  receipt history grow 1/8/64; separately 64/512/4096 originals and 100/101 raw support boundaries. Native first,
-  deep, empty, replay, OLD/NEW key deletion, concurrent first apply on either side of gate insertion, terminal
-  purge, source->custody->ACK crash and follow-complete/directory-incomplete publication refusal are mandatory.
-  Capture all source/Library/control pools, statements, rows, index/heap/catalogue blocks, payload bytes and live
-  retained evidence. No new participant, sweep, global creation lock, deadline allowance or passed budget follows
-  from these proposed bounds; Performance reviews actual formatted rows before runtime release.
-
-### Released mapping control observation
-
-- Touches: existing Pool, native source owner/mapping/creation basis, ONE fixed pending-membership indexed probe,
-  ONE coherent epoch/current-original indexed probe, and final source owner/basis revalidation. These are named,
-  charged CONTROL READs. Existing original/terminal privacy and Access work remains independently charged.
-- Bound: one attempt uses at most three released read snapshots. Existing `withReadTransaction` costs BEGIN,
-  SET LOCAL timeout and COMMIT per snapshot (nine statements), plus one owner point and one mapping/basis point
-  at each source visit (four statements), plus one control owner point and two indexed probes (three statements):
-  **16 statements**, or 11 if pending returns before final source visit. Combine native provenance/gate fields
-  in those point records, not extra queries. Each control probe returns at most one basis per requested original;
-  the pending descriptor has at most two input references and constant exceptions. A batched page has the same
-  two control statements, not two statements per ID, and <=100 total raw basis records INCLUDING both probes,
-  owner/descriptor rows and lookahead; reduce the requested batch accordingly. No second engine/helper/budget.
-  Indexed depth is bounded by actual membership/epoch B-tree height; heap/index blocks and physical bytes include
-  transaction setup, initial catalogue/plan reads, cold/warm owner checks and final revalidation. This statement
-  envelope is a proposed implementation constraint, not evidence that missing runtime meets existing budgets.
-- Growth check: pending memberships and published epochs independently 1/8/64 at fixed requested originals,
-  actual pools and fixed privacy data. Capture rows, statements, index/heap/catalogue blocks and bytes for source
-  miss/unready/moved, control miss/unready/moved, pending-after-source, publication-between-reads, newer pending,
-  unaffected and Search-absent fresh-self paths. Constant returned rows/statements and constant or logarithmic
-  physical index work must fit the existing declared budget; no remote availability exclusion or cache/TTL.
-
-### Immutable current generation and bounded reclamation
-
-- Touches: current-original indexed locator, its ONE flat sealed generation, shared-budget keyset input pages;
-  retained generations, indexed reference counts, native minimizer/custody records and reclamation frontier/receipt.
-- Bound: current access reads no parent/ancestor/history and at most 100 raw entries including lookahead, overlap
-  and retries. At fixed current group count G, retain at most G+4 full generations and 4096(G+4) membership rows,
-  plus actual index/tuple/page overhead. If B is the measured physical bytes per membership plus its index entries,
-  full payload is <=4096(G+4)B plus G+4 generation headers/index entries; R minimized obligations and L scoped
-  effects add their actual retained bytes, not zero. One reclamation command locks one retired generation/header,
-  checks its indexed live-reference count, reads/deletes a keyset batch and commits one frontier/native receipt
-  and wakeup. Budget owner/header/ref/frontier/receipt rows first; if that consumes c raw rows, delete at most
-  floor((100-c)/2) members, charging both selected and deleted rows. The point-header transaction work and all
-  ref/minimizer lookups count, including a refused live-reference attempt. Reclaim header only after an indexed
-  empty page and zero references in the same locked command. A crash replays that native receipt/frontier; no
-  saved empty result can close a later generation or skip a newly retained reference. Reference acquisition is
-  serialized with retirement; no hidden full-generation copy or unbounded cascade/delete is allowed.
-- Growth check: independently grow earlier completed job history 1/8/64 with current generation fixed; first,
-  deep, empty, replay, live-reference refusal, native minimizer and crash-before/after-frontier paths. Grow G and
-  R/L separately, recording retained rows/bytes/index blocks, all statements/transaction/catalogue reads and raw
-  deletions. Reclamation advances bounded steps over the retained-generation index, never scans all history.
-  Backpressure preserves this finite full-generation bound; it is not a passed Performance budget or time expiry.
-
-### Final handoff guard
-
-- Touches: guarded native source write, existing source barrier/claims/command fence and the home's handoff state;
-  deferred SAME-transaction guard at commit, with old writer and queued continuation scope retained in custody.
-- Bound: at most ONE indexed HOME handoff-state lookup per guarded write, including its deferred check; use the
-  same transaction's captured basis/lock, not a second lookup or global effect permission. Key-changing updates
-  charge both OLD/NEW capture rows; deletion retains a negative key. Installation/catalogue locks and waiting
-  are measured separately from completed work and cannot be represented as a constant trigger-function call.
-  If implementation probes active transactions, there is NO assumed bound on active XIDs: charge each probe and
-  preserve the required fixed-data 1/8/64 OPEN native `pg_current_xact_id()` transaction axis. A timeout is WAITING,
-  never successful handoff. No active-XID axis is imposed on a mechanism that does not inspect active XIDs.
-- Growth check: old DML before barrier, old/queued work after final handoff, first absent gate racing insertion,
-  same-position wrong TX, wrong owner/scope and unfinished previous page. Capture statement/row/index/physical
-  work with actual owner pools; include the active-XID axis exactly when the chosen native mechanism needs it.
-
-### Birth, topology, custody, admission and effects
-
-- Touches: real `writeSubject`/import claim and named/unnamed account-agent creation; native source barrier,
-  indexed base/member/dirty schedules for all 4096 owner epochs; source export, control custody, exact-head ACK;
-  immutable input/header/cardinality refs, pending+intent+wakeup; scoped effects and native complete receipts.
-- Bound: birth adds one self mapping in the SAME source transaction as revision 1; source fence/claim/receipt
-  work remains charged and rollback removes both. No control/Search checkout or statement outside account home.
-  Bootstrap scheduling keyset-reads at most 100 raw owner slots per step (including empty homes), persists exact
-  owner epochs/cuts, and releases source before control. It cannot claim closure in fewer than ceil(4096/100)
-  owner-slot pages, and actual metadata/lookahead rows reduce each page's capacity. For every saved page custody
-  requires a source export read, control insert/receipt/frontier command, then released exact-head source ACK
-  command: THREE transactions, never a free export ACK. If c native metadata/receipt/frontier rows are touched,
-  payload allowance is floor((100-c)/k), where k counts EACH payload read, retained copy and effect/ACK row in
-  that step; c and k must be captured from the actual calls, not excluded. Admission uses <=2 sealed group
-  headers/counts plus <=2 retained input refs, one intent/job, one pending descriptor and one native wakeup,
-  atomically; no 4096-row admission insert. Existing authorization-before-receipt, native command fence/time,
-  receipt lookup/write and all outbox/catalogue statements are additive and measured. Exact all-result group
-  counts enforce 4096 admitted/4097 refused before ALL effects. Mapping/effect steps reserve metadata then
-  divide the remaining 100 raw allowance across input, OLD/NEW capture, effect, frontier and native receipt
-  writes. A statement returning zero still counts, and replay/retry consumes the same shared allowance.
-  Every operation keeps 100 rows/page, 100 pages/segment, 5000ms command deadline, <=8 scalar/2048-byte cursor
-  JSON, <=4096 workflow bytes. No request/workflow original vector, planner pin or larger allowance.
-- Growth check: preserve original native 64/512/4096 groups, actual account creation growth and actual pools;
-  all4096/empty/missing/moved owners, lower-key births/deletions/key moves, dirty h+1 after export/control ACK,
-  source->custody->ACK crash, saved empty replay, same-effect fence and complete prior-effect custody. Record
-  native statement counts from runCommand/read transactions INCLUDING authorization, transaction setup, native
-  time/fence/receipt/outbox, catalogue/index/heap blocks, physical payload/index bytes and retained history.
-  The shared limits are unchanged even though this baseline kernel README lacks its planned Bounded job steps
-  subsection. These are derived admission/work ceilings for review; actual producers and Performance evidence
-  remain required before runtime activation. Deadline bounds waiting and does not waive work bounds.
-
-## Inspected native evidence
-
-Read the full identity shaping ledger and settled identity decision, Semantic Identity/Account agents sections,
-filtered-list canonical identity, Library README, private-follow-counts and library-profile-consumers documents.
-Native evidence inspected: `merges.ts`, `merge-moves.ts` and its member/redirect/page SQL, redirect migration and
-outbound-relation phase migration, `account-agents.ts`, `links.ts`, `command/command.ts` (currentCommand/native time,
-authorization-before-receipt/replay), `access/agent-verification.ts` and `agent-verification-work.ts`, Library follows
-and work registration, `work/registry.ts`, `work/modules.ts`, `worker.ts`, `rating/merge-job.ts` durable work, Search work/runner/indexer/source and generation helpers, native
-creation SQL, and ordinary merge HTTP/problem schemas. For cutover adoption, also read the already cloned PostgreSQL `src/backend/commands/trigger.c`
-(from its local git object) and `indexcmds.c` (trigger installation locking, old-writer draining and older-snapshot
-waits), and DBOS `src/dbos-executor.ts` (`runInternalStep`, body-before-result journalling and replay). These are
-read-only evidence under the reference paths listed in the integrated reports; no implementation was copied.
+The final coordinator composes native STORE/mapping and these TWO fixed producers, reconciles native custody and
+publishes once. Existing WorkModule.register/WorkContext.addEffects, DBOS registerStep/registerWorkflow,
+WorkClient.enqueue stable job workflow ID with return-existing, composeWork, KERNEL_WORK_MODULES and startWorker
+own launch/lifecycle. No second scheduler/engine. STORE/mapping depend on native primitives; producers depend on
+STORE; final composition imports producers. Neither producer waits for/imports the coordinator. Caller handoff
+comes last. Actual revised exports/signatures remain unfrozen until Cost confirmation.
 
 ## Native cutover adoption
 
-The two complete integrated reports [current](../../../../docs/research/identity-store-cutover-current.md) and
-[deep](../../../../docs/research/identity-store-cutover-deep.md) supply evidence. This section adopts the native
-choices below; it does not adopt their illustrative SQL, their observed statement counts or the preserved partial
-producer as runtime. Both reports identify the same missing writer boundary and dependency direction. Where their
-dirty-export timing differs, **control custody precedes source ACK**. Where their enforcement sketches differ,
-**both the home barrier and deferred same-transaction structural validation apply at final real caller handoff**.
-The corrected released-control meaning below replaces any interpretation of “stay local” as source-only I/O.
-
-The integrated report revisions inspected are `a73bcefb2fe9a901d22478bb4e3d774c06186c55` (current)
-and `e9ae39f06176b66a4026533812f07c6e00e46dec` (deep). Their integration changed Markdown formatting only.
-Neither report ran native probes. The preserved, unintegrated `49a51f6350` Store/bootstrap, four source queries,
-migration and native-store suite are evidence only: admission, home admission, reconciliation and publication
-still unconditionally throw, the cutover reader hardcodes missing writers, and no actual creation caller binds
-self initialization. In particular, its source export updates captured heads BEFORE control custody and its
-key-changing UPDATE capture selects only NEW. Both conflict with the adopted protocol below. Do not copy those
-behaviors into an implementation or infer delivery from their presence in a git object.
-
-The comparison's complete co-owner appendix and subsequent Library ruling apply together. This specification
-does not release runtime implementation: full parent review, Accounts/Search/Commerce confirmation, Performance
-review of every Cost subsection and freezing the formatted native bytes precede producer activation. An honest
-red native schedule is missing-capability evidence; it supplies neither a passed budget nor an ACK.
-
-### Primitive delivery and final activation
-
-Source creation/capture, complete topology bootstrap, ordinary pending/cap admission and all four Store tails
-(`admit`, `admitHomeEffect`, `reconcileStepReceipt`, `publish`) belong to the same owning implementation. A primitive
-may land and prove ordinary pending/cap/fencing independently of consumers. It MUST NOT claim activated Store,
-all-writer coverage, full publication or successful Accounts compatibility from that proof.
-
-The consumption order is Store -> mapping and fixed participants -> coordinator -> final caller handoff.
-Store never imports coordinator or consumers. Mapping imports actual Store; fixed Search/Library producers consume
-Store/Step; coordinator imports those actual producers; final callers bind last. No `noData`, default ACK, readiness
-setter or process declaration fills an absent producer. Every original positive native/API/default-worker/DBOS/growth
-outcome remains mandatory, including the already adopted ordinary 202/Location/poll and unchanged Accounts success.
-Final native guards are enforced with actual caller binding and custody of all old work, not with creation primitives.
-
-### Source birth and writer inventory
-
-Every birth below writes subject, revision 1, exact self mapping, singleton creation provenance, dirty delivery and
-native receipt/outbox in the SAME actual source command. Rollback removes all of them. There is no statement outside
-the account home during an account birth, control checkout, Search checkout, global creation lock or structural epoch
-allocation. An existing redirected agent/claim replay must retain its existing identity, never reset to self.
+All 4096 native partition homes, including empty and unselected homes, require actual scheduler/bootstrap closure
+and native owner epochs; each has sixteen routes. Fixture seeding is before final guards. `readEpoch` is not an
+implicit scheduler, preset bootstrapReady is not proof, and an unsealed bootstrap group is not G=0/free storage.
+Birth initialization, source capture, OLD/NEW dirty export, native custody and deferred writer guard are required
+in the actual owners. The following actual writer inventory retains native source bindings.
 
 - `subject.ts:createSubject -> writeSubject`: actual current Global `subject:create`, authored installation and
   native source fences remain in force. Bind `initializeSubject` after actual revision-1 insertion; same executor
@@ -661,10 +337,13 @@ allocation. An existing redirected agent/claim replay must retain its existing i
   its current definition/kind constraints. Native platform creation is a specific existing owner path, not arbitrary
   `basis === null` permission. No generic actor bypass or new action is introduced.
 
-Mandatory birth-hook growth acceptance is the existing Access-owned `test/access/growth-commands.test.ts`, named
-`Account and organization creation stays within its bound as A grows`. The requested Semantic path does not exist;
-use that existing exact named test rather than duplicate or weaken it. It must still pass after actual birth-hook
-delivery; account-agent ensure cost and type/registry assertions cannot replace it.
+Birth hooks retain `test/access/growth-commands.test.ts`, `Account and organization creation stays within its bound as A grows`.
+That case does not call `ensureAccountAgent`. Its actual birth coverage is
+`test/access/growth-account-agent-effect.test.ts`, `account agent effect growth stays within its bound at [256, 1024, 4096]`,
+for named and unnamed person, organization and software. Verification/unverification additionally retain
+`test/access/growth-agent-verification.test.ts`. None substitutes for another or changes an existing bound.
+Ordinary and imported subjects initialize at the SUBJECT SOURCE HOME, not their creator account home;
+account-agent/account births use the account home. Birth and revision-1 initialization roll back together.
 
 Every structural mutation and continuation below is in final writer coverage. Capture the logical source keys for
 INSERT, DELETE and BOTH OLD/NEW keys for key-changing UPDATE, retaining negative/tombstone evidence after deletion:
@@ -725,7 +404,7 @@ receipt. A page has three separate states:
    transaction ID plus component and taken complete durable page custody. Duplicate delivery verifies that SAME
    identity/payload and changes counts/frontier once. Only now may the source ACK run.
 3. **Published:** complete all-home closure plus mapping and all fixed participant custody permits the structural
-   published epoch. Source export or control custody alone does not publish a job.
+   publication. Source export or control custody alone does not publish a job.
 
 After actual control custody, a separate source command ACKs ONLY the captured h with the current-head predicate.
 A concurrently advanced h+1 remains pending. A crash source-commit -> control-custody, or control-custody -> source-ACK,
@@ -739,217 +418,336 @@ Post-conversion births continue source-locally with exact self evidence. They ne
 permanently open. Structural admission on a new original waits for actual enrollment custody and never guesses a
 singleton from a missing control row. Current mapping observation does not wait for list/preparation/publication.
 
-### Atomic affected index and flat generations
+### Flat generations, retention and local reclaim
 
-Admission retains, atomically with pending+immutable intent+native wakeup, complete immutable input-generation
-references and a CONSTANT transform. This ONE affected index is authoritative even before any home gate or consumer
-runs. It is not a promise to insert 4096 rows in that transaction. Canonical groups are disjoint through the unique
-current-original index; identical group references collapse once. Merge takes at most two input generations;
-repoint/split binds the explicit original, prior/destination terminal and exact prior undo scope. No caller original
-vector or whole-group scan is permitted. Check exact maintained counts of EVERY resulting group before effects;
-4096 is admitted, 4097 refused, including unselected cross-home originals and terminals/self.
+For each partition q, let Gq and Aq be its current groups and originals. At EVERY durable/crash/replay/abandon step,
+full generations are at most **Gq + 4P**, and physically retained memberships at most **Aq + 4P·4096**. Count actual
+physical home, not logical job locator. Bootstrap uses actual native source group/original counts for Gq/Aq, never only the count of already sealed
+new headers. Source legacy memberships, their retained exports and new shadow rows are included in the physical
+copy ledger before each allocation. A bootstrap that cannot reserve the next bounded copy must reclaim or pause
+locally; bootstrapReady does not excuse storage. Current groups share unchanged flat generations; each charged attempt
+needs at most two retained inputs and two outputs. Current inputs are not double-counted as extra until retired.
+Merge reduces G by one, split increases it by one and repoint changes at most two groups; former current inputs
+then consume the reserved extra allowance. Birth increases actual G/A with its singleton. Allocation reserves
+against the post-transition bound before writing; no fifth copy or allocation-on-retry is possible.
 
-`pageChanges` retains its existing DTO. It keyset-merges at most two flat input streams and constant point exceptions,
-with a shared **100 RAW-entry** allowance covering overlap, discarded duplicates, sentinel/lookahead and retries.
-Do not fetch 100 from each stream. Use indexed disjoint original intervals/stream identity to avoid duplicates;
-continuation is the greatest fully consumed original, with equal-key contributions consumed together. Reserve space
-for that fixed overlap or return fewer rows. A page exactly at the cap may return a continuation and then an empty
-terminal page; it may not read row 101 for free. Exact uniqueness and before/after terminal transformation preserve
-self, split, repoint and undo. Build each next generation fully flat in bounded native mapping steps; it is ineligible
-as a later admission input until fully sealed. Current reads never follow a delta, parent or generation-history chain.
+The allowance includes bootstrap, unsealed/partially built output, source export, retained input, abandoned work,
+partially deleted generations and ALL physically retained copies on source and destination. A full export copy
+consumes that allowance too; reuse/ref/chunk custody must be proved, not hidden as R or L. General physical owner
+transfer still lacks an actual bounded custody/memory/storage producer: keep it a named missing boundary until
+native copy reservation and one-connection bounded streaming prove the same bound on BOTH homes through failure.
+No transfer exception, hidden generation or full-group workflow JSON is accepted.
 
-### Released mapping observation and coherent basis
+At a partition with unreclaimed retired or abandoned full copy, do not admit a NEW local attempt until that copy's
+native empty-range proof commits. Existing P charged attempts recover/cancel/reclaim under their reservations;
+reclamation needs no new slot. Other partitions admit and progress independently. Publication does not abandon
+retained reclaim work on its fast path. Repeated jobs at fixed A/G cannot accumulate full-generation history.
 
-There is ONE existing `IdentityEpochStore.readMapping(pool, original)`, now typed with the existing Pool.
-It adds no Source ABI, permission helper, action, engine, public job/page DTO or budget. “Stay local” means **no wait
-for list preparation or publication**, with explicit dependence on current control availability and these charged
-bounded reads. It must never be described as source-only I/O.
+Before retirement, minimize every live undo, reversal, move, replay, consumer and cursor reference into exact
+native bounded scope/effect records with receiving-owner custody. Unmerge retains its explicit original and prior
+before/after terminals, not an arbitrary historical group. Verification reversal retains exact moved-link ledger
+Context/property/source/statement/filter provenance. Consumers finish or accept minimal remaining obligations;
+no callable full-generation reader survives as an allegedly minimized locator. R live obligations and L effect
+keys are history-proportional storage, as H receipts are, not constant space or a disguised group archive.
 
-The native algorithm has one attempt, not an unbounded retry-until-stable loop:
+Reference acquire and reclaim share the SAME native generation lock. A reclaimable generation is noncurrent,
+not prepared/active input, published or durably abandonment-fenced, with completed native minimizer custody and
+indexed zero live references. Missing locator/minimizer blocks reclaim. Bounded keyset deletion commits frontier,
+receipt and wakeup together. Child membership precedes header removal; final indexed empty-range proof and zero
+refs occur under that same lock. Saved empty replay cannot close a newer generation or race a new ref. Before
+commit a crash changes nothing; after commit it resumes exact progress. Delete.rowCount is not physical proof:
+assert native table counts and relation/index size deltas through partial deletion/MVCC retention too.
 
-1. Read the original's source owner epoch, exact local mapping/write basis and local gate/creation provenance in a
-   native source read snapshot; release that source before control checkout. Native absence is established by the
-   real source reader, not missing mapping. A legacy missing/unready mapping is unavailable.
-2. In ONE fixed-control repeatable-read snapshot, read pending membership with **ONE indexed fixed-pending-index
-   observation**, then coherent published/local basis with **ONE indexed epoch revalidation probe** on existing
-   call keys. The first probe seeks current original membership and compares its generation against the sole
-   pending descriptor's at most two immutable inputs/point exceptions. Admission updates descriptor and pending
-   atomically, so no per-original fanout at admission is required. The second probe returns that snapshot's
-   published epoch, original current generation/terminal and control owner epoch, not an unrelated latest epoch.
-   Batch requested keys in one statement per probe per page, NEVER a per-ID control query loop. Release control.
-3. If affected pending at that snapshot, report that exact job, even before its first home gate. Otherwise perform
-   ONE source revalidation against the captured native owner epoch, mapping/write basis and the control snapshot's
-   original generation/terminal (or the same-TX creation provenance where enrollment is not yet custodied).
-   An unchanged older local epoch is usable only when that current original basis proves no intervening mapping
-   change; merely comparing numeric epochs or matching receipt strings is insufficient. Source owner/mapping change
-   or inconsistent publication yields unavailable for this attempt, not a cached/self/zero result.
+## Accounts source intent and workflow boundary
 
-The linearization point is the fixed-control snapshot, provided final source revalidation establishes the same
-mapping/creation basis. If admission commits after initial source read but before that snapshot, return pending.
-If publication intervenes, revalidate the newly published original basis and actual source; stale local mapping
-cannot be blessed by a latest control epoch. If a newer job exists after prior publication, inspect the NEW pending
-scope, never return a previous job's saved mapped success. An admission after the snapshot can linearize later than
-this read; subsequent writes still require SAME-effect-TX home admission. If source/control ownership is missing,
-moved or unready, report unavailable, including for unaffected and fresh-self observations. A true absent original
-may return absent only on coherent native source/control absence. Original AND terminal privacy checks remain
-independent and current; this metadata never authorizes disclosure or a destination effect.
+Access owns an immutable-except-erasure account-HOME intent TABLE keyed exactly
+`(route, account_id, direction, receipt_id)`. It is separate from Core operational delivery. Verification records
+it in `recordPendingAgentVerification`, reversal in `commitReversal`, in the ORIGINAL native decision/reversal
+transaction with its ORIGINAL receipt. Canonical Semantic key is UTF-8 JSON `[direction,accountId,receiptId]`,
+using exact native UUID values: verify receiptId is the original decision transactionId; reversal receiptId
+is the original reversal command transactionId. Indexed role-first account_id/requested_by/decided_by access supports actual erasure;
+this means actual account-role indexes, not a new generic relation table or mutable pending fields as history.
 
-### Accounts immutable native intent record and delivery
+Verify direction `account-agent.verify` retains deterministic agent/account/kind/catalogue, requestId/requestedBy,
+Global `(route=0,request_id,decision_receipt_id)` native decision locator, pending-account receipt, accepted release,
+source owner epoch, native transactionId/component, normalized digest and delivery custody/job locator. Reversal
+`account-agent.unverify` retains receiptId, verificationReceipt, catalogue, requestedBy, released/revoked/reason
+disposition, native reversal locator and prior published undoJob. Source intent custody precedes admission and
+must survive pending state replacement. Existing `mergeVerifiedAgent` forwards exact native Semantic inputs;
+`unmergeVerifiedAgent` compares pending receipt/catalogue to avoid undoing newer review. Those checks remain, but
+are not immutable old-delivery custody. Actual source record/delivery binding is still missing.
 
-These are **data requirements**, not a new callable/export or successful permission receipt. The existing
-`access.agent_verification_request` (route 0, request_id) holds account_id, account_kind, requested_by,
-catalogue_subject_id, state and decision_receipt_id/decided_by. `decide()` sets state `approving` and
-`decision_receipt_id = transactionId` and emits the existing approval event in the SAME native command.
-`recordPendingAgentVerification()` then binds `access.account` in its actual account home using
-pending_agent_subject_id/pending_agent_receipt_id and its native pending command receipt. `commitReversal()`
-atomically moves the previous catalogue/verification receipt into a reversal value and the account pending fields,
-emitting the reversing event. Those callbacks/rows are the actual authorities to consume.
+The SAME Accounts workflow performs bounded delivery/admission steps, then bounded indexed native published-state
+probes and durable `DBOS.sleep` OUTSIDE a step, before existing approval/page write/finish or removal/reversal finish/
+pending clear. No worker or transaction is held through an outage, and no new queue, permission, DTO or public poll
+protocol is introduced. DBOS callback-before-result journalling requires same-receipt replay after effects commit.
+Busy/overlap, local capacity, guarded handoff or source unavailability retry the SAME intent/receipt with backoff;
+they never become denied review or AccountAgentVerificationError. Success requires actual publication, not a
+redirect revision or fake readiness. The exact owner-native polling/sleep composition remains required delivery.
 
-Persist one immutable owner intent RECORD with:
+Core OP is the delivered `command/operational.ts:runOperationalTransaction` and `enqueueIntent` (5b5c3be17ea1).
+Use that actual live transaction, fenced account set and DBOS enqueueInTransaction; no invented Core intent table,
+receipt, event, outbox, write-basis, component position or relay. Access owns its verification/reversal intent,
+Accounts shared-history owns operational DBOS history, and Library A5 owns derived Library data. Access does not
+own Core operational records or Library payload. The no-intent-table statement applies ONLY to Core OP.
 
-- Direction `account-agent.verify` or `account-agent.unverify`; account ID, deterministic derived agent ID, account
-  kind, catalogue ID, release digest and exact native merge/unmerge intent. No name, statement or public-page body.
-- Verify: request ID, requestedBy, existing decisionReceiptId (equal to delivered receiptId), native decision locator
-  and pending-account command locator; immutable binding of request/catalogue/account/kind to that decision.
-- Reversal: existing receiptId, verificationReceiptId, catalogueSubjectId, requestedBy, kind `released | revoked`,
-  reason disposition under Access retention, native reversal locator and the exact prior published verification job
-  (`undoJob`). The immutable undo binding preserves the old verification scope, not a newly read representative.
-- Both: source owner partition/epoch, native `{transactionId,partition,epoch,position}` for the committed source,
-  canonical binding key, normalized immutable fields/digest, native delivery/custody locator and associated semantic
-  job reference once admitted. Preserve original native receipt identity across redrive and commit-to-journal crash.
+## Terminal erasure and custody inventory
 
-The canonical key is UTF-8 JSON of the fixed tuple
-`[direction, accountId, receiptId]`, with canonical lowercase native UUIDs; verify receiptId is the EXISTING
-approval decision transaction ID, reversal receiptId is the EXISTING reversal command transaction ID. Tuple encoding
-avoids separator ambiguity. Normalize all effect-relevant fields once; conflicting reuse is a conflict, never a new
-approval. Ordinary keys retain the existing actor/kind/idempotency-key/digest identity. Scope does not come from
-`basis === null`, receipt string equality, a forged actor, extra approval status or a new decision receipt.
+Amend the EXISTING Semantic/Access inventories under existing erasure policy; no new participant or retention
+policy. Semantic owns its physical job/binding/attempt/claim/slot, source capture heads/tombstones/export payload,
+topology/frontier/legacy manifest, flat input/output membership, mapping gates/effects, scope registration/inverse
+keys/partition summaries/repair custody, native completion/ACK, minimized reference/reversal/reclaim records.
+For EACH new store native delivery must bind its actual owner, key, indexed account roles, own minimizer and
+shared receiving custody before that owner can ACK.
+Requester, operator, reviewed account, source author and acting human are all roles, not just primary account ID.
+Source keys are route/original/terminal/head/page/native transaction; control keys include home/job/attempt/version/
+scope/generation/effect; effect keys include destination/original/job/step/native transaction. Missing concrete
+new schema/role index/minimizer is an explicit unfinished producer obligation, not `none`.
 
-Access owns the source intent and its indexed account/decision/reversal locators. For verification, read/retain
-Global decision authority, release it, then bind the pending account receipt at the account home; for reversal bind
-the committed account reversal and prior verification/undo. The owner commits immutable intent and delivery in its
-native transaction; release ALL owner connections. Native delivery next resolves that exact committed record and
-receipt and durably takes **control custody BEFORE admission**. Control custody retains immutable input and exact
-source identity idempotently; missing/moved/stale source is retryable unavailable. No cross-home transaction exists.
-The EXACT consuming port is existing **`IdentityEpochStore.admit(tx, {intent, receipt})`** in a live native control
-command. It resolves already-custodied owner intent by the canonical key and compares the exact fields/native scope.
-No caller-supplied serialized assertion is accepted as authority.
+Library owns candidate `(owner,canonical)`, structural `(original,scope)` support/extrema, six native driver payloads,
+first-apply work, OLD/NEW rekey and follow/support/totals/fences and their native minimizers. Semantic retains exact
+Library cleanup/custody locators; exhausting Semantic refs cannot certify Library purge. Access owns intent key
+`(route,account_id,direction,receipt_id)`, its role indexes, native Global decision and account-home reversal/pending
+locators. Shared receipt/outbox/editorial write-basis and DBOS copies require the ACTUAL shared owner's minimizer
+ACK, not dispatch. Operational DBOS history belongs to shared-history; no nonexistent Core OP record is inventoried.
 
-**MISSING Accounts owner callable:** current `mergeVerifiedAgent` forwards account/catalogue/receipt to
-`verifyAccountAgent`; `unmergeVerifiedAgent` checks current pending receipt/catalogue then forwards to unverify.
-Neither currently persists/delivers this immutable record or transfers it to native control custody. No guessed
-export, generic setter, receipt constructor or new permission port is declared here. Accounts must deliver that
-owner binding and confirm its actual locator before producer activation. Current mutable pending fields alone
-cannot retain old verified/reversal work across a newer decision. A stale reversal after newer verification must
-still fail the existing comparison; durable in-flight custody must retain responsibility for already accepted work.
+Use the delivered account terminal T, account locator fence/registration, `recordLateErasureItem`,
+`resolveLateErasureItem`, `acknowledgeErasure`, `advanceErasureCompletion`, `readErasureStatus` and erasureWorkModule.
+A participant's own ACK follows its own exhausted locators and receiving cleanup custody; it does NOT wait for
+overall frontier/all other ACKs (a cycle). OVERALL completion separately requires effects frontier, no open late
+items and ALL fixed A5 ACKs. Late items arriving behind enumeration remain outstanding until actual resolution.
+Use the actual ERASURE_LOCATOR_EFFECTS/locator-effects queue registration and frontier snapshot/delivered/work
+queries: freeze the database timestamp only after recorded effects checkpoints, then probe the existing indexed
+ENQUEUED/PENDING frontier. Unrelated or failed workflows do not extend that finite frontier. Separately, a failed
+workflow/fork that owns a missing locator or unacknowledged copy leaves its PARTICIPANT unfinished, never no-data;
+passing the coordinator frontier cannot absolve that custody. Existing work/retention.ts terminal-history deletion
+is not erasure/minimizer evidence or authority to forget an unfinished identity obligation. Actual source
+locator/failed-work integration remains a required native owner binding, not a prose certificate.
 
-Both existing durable steps (`accounts.agent-verification.merge` and
-`accounts.agent-verification-reversal.unmerge`) wait for PUBLISHED inside the SAME step, including exact receipt
-replay. A transient handoff refusal must escape as retryable unavailable or resume native durable work, never as
-`AccountAgentVerificationError` converted to failed/denied review. No page write, approve/complete, finish or pending
-clear occurs before publication. Retrying after native commit/before DBOS journal recovers the same job. Both
-in-flight verification AND in-flight reversal across final barrier/guard are mandatory native schedules.
+The fixed A5 participant registry is distinct from the two identity publication participants. Identity publication
+does not certify erasure, and Library A5 does not take over identity directory ACK. Immediate terminal account
+fencing applies independently of asynchronous cleanup. Minimize personal labels/reasons/private linkage and all
+copies under existing policy; preserve only necessary de-identified immutable replay/no-resurrection skeletons
+and communal originals/terminals. A digest is not an exemption for private links. Actual Auth deletePersona and
+owner minimizer schedules are required; a direct native tombstone call observes only the barrier, not full A5 proof.
 
-### Finite full-generation retention and reclamation
+## Cost
 
-This is owner data policy and proposed native proof, **not a passed space/work budget**. Let G be the number of
-CURRENT sealed groups, A their unique originals, and J the sole pending job. A group has at most 4096 originals.
-At every durable state retain at most **G + 4 full generations**, and at most **4096(G + 4) full membership rows**:
-G current, at most two next flat outputs under construction, and at most two retired inputs awaiting reclamation.
-In actual publish transitions these categories overlap, so this is a conservative upper bound. No new admission
-starts while the previous job's retired full inputs or abandoned prepared outputs remain unreclaimed. Births add
-one current singleton, increasing G/A explicitly; repeated jobs at fixed A cannot grow full-generation history.
-Unchanged groups share their existing sealed generation; no whole-catalogue generation is copied per job.
+The SINGLE limit authority is [Bounded job steps](../../README.md#bounded-job-steps). All durable job operations
+below adopt it, including continuation, workflow bytes, raw work and deadline. Raw 100 is a DURABLE STEP bound,
+not a universal public page allowance. Public operation class, filtered-lists decision 5 and the ACTUAL Source
+plan allowance govern public reads; Source's 256 per-call input cap is not proof of engine or complete-query work.
+The proposed public two-probe raw-100 argument is rejected. Existing page budgets and executor behavior do not change.
 
-Only J/mapping/fixed producers may hold full input references while J is active. Before publication all affected
-consumer work/fences and receipts are custodied and outputs sealed. Before reclamation, convert every still-live
-undo/replay/receipt/consumer/owner-move reference to its owner's **native minimized record**, with exact native
-locator, immutable intent, job/version/scope digest, resulting basis and complete effect-custody manifest. For the
-specified unmerge, retain its explicit original and prior before/after terminals plus verification-scoped moved-link
-ledger; it restores that original, not an arbitrary historical group snapshot. Record exact per-effect provenance
-for reversal, including Context/property/source/statement/filter. Other consumers must either finish under J or
-retain their exact bounded remaining scope/effect records with custody. They cannot retain a callable full-generation
-reader after J. No historical group-membership archive, disguised full-generation copy, vector in workflow JSON or
-ancestor walk is permitted. A requirement to enumerate an arbitrary historical full group after publication would
-contradict this policy and needs an owning contract change before activation; existing receipts/undo do not grant it.
+Define A current originals, G current groups, M pending memberships, E published epochs, R live minimized
+obligations, L live scoped effect keys and H receipt/outbox/binding history. Let D registered dependency rows,
+S scopes, F relevant native structural fact rows and n raw entries actually examined in a bounded step. q denotes
+an actual physical partition; P is its symbolic fixed capacity. Logs mean log(2+size). Rows include filtered,
+discarded, deleted, joined/materialized, overlap, lookahead and replay work; blocks include shared index/heap/
+payload/catalogue work, not cache misses. O(n log X) means keyed points/writes against named X indexes, not scans.
+R/L/H retain O(R+L+H) actual rows/payload plus indexes, while a point on them is O(1) rows and O(log(R+L+H)) blocks.
 
-Minimization preserves live evidence rather than deleting undo. For R live minimized native obligations and L live
-verification-scoped link/effect keys, retained evidence is explicitly O(R + L), plus their actual payload bytes and
-native/shared custody. These records may outlive many jobs; this is NOT a constant total-history-space claim. Their
-identities/digests and de-identified public skeletons survive as existing receipt/provenance policy requires;
-personal/private fragments follow existing terminal erasure. No arbitrary time expiry, account grace, legal hold or
-second retention/custody engine is added. Physical MVCC/index/vacuum space remains measured, never inferred away.
+### Native statement accounting per attempt
 
-A generation becomes reclaimable ONLY when it is not current/prepared/active input, its job is published or its
-abandonment durably fenced, every live reference has completed minimization with native receiving-owner custody,
-and an indexed live-reference count is zero. Protect that predicate with the same native generation lock used to
-acquire a reference: reclamation versus new reference races serialize. A failed minimization or missing locator
-blocks reclamation and therefore later admission, not evidence deletion or a free additional full generation.
-Consumer/API replay reads minimized receipts, never resurrects a retired generation or reopens completed effects.
+Use current `runCommand`, not an imagined cheap command. The kernel Command-and-receipt derivation gives K=7
+unreceipted and K=8 fresh receipted framework statements (transaction setup/timeout, native time, receipt lookup
+when configured, partition fence, COMMIT). Authorization preparation/finalization, acting-account gate queries,
+body SQL and separate wakeup SQL are ADDITIVE. The existing fence SQL already writes result receipt/event/outbox/
+write-basis in that SAME statement: count those rows/index/FK effects, not another statement per inserted row. Replay's framework differs
+(the kernel derives six plus current authorization); do not count fresh writes on a receipt hit or omit current
+authority. Counts are PER ATTEMPT; contention retries to original deadline with jitter up to 100ms and no count cap.
 
-The existing `resumeIdentityEpochJob` coordinator also resumes retained reclamation work for a published job;
-its published fast path cannot discard that work. It returns after the available reclamation segment commits or
-reports retryable unavailability, with further bounded segments retained by the same native work registration.
-This adds no callable port or completion flag: publication is still read from native custody and reclamation from
-its native frontier/receipt. Admission remains fenced until that prior reclamation actually completes.
+For actual future SQL, let j be job/attempt lock/read statements, g exact group/version/header statements, v exact
+claim/custody validation statements, i input/ref statements, p pending/summary/CAS statements, w wakeup statements,
+r EXTRA receipt-result statements and o EXTRA event/outbox/write-basis statements beyond the existing fence SQL.
+For the existing normal runCommand fence, r=o=0: these writes are already in K; only actual separate body SQL
+can make those terms nonzero. These count executed SQL, including zero results,
+not function calls; a batched statement may cover several fixed keys but still charges their rows. They are
+schema-derived body terms to bind and measure, not invented existing exports or a new numeric allowance.
 
-Use existing native job work to reclaim by indexed `(generation,original)` frontier, with at most 100 TOTAL raw
-keys per step including reference/lookahead/deletion work. Delete membership/index rows in bounded batches and
-commit deletion frontier, native receipt and wakeup atomically. Children precede descriptor; descriptor becomes a
-minimized tombstone only after a native empty-range proof and zero live references under lock. Repeated empty
-replay returns the same receipt; it cannot create a fresh generation or advance newer work. Crash before deletion
-commit changes nothing; after commit resumes its exact saved frontier. First/deep/empty/replay/live-ref-refusal and
-crash paths grow retained-generation count independently of membership size. The reclaim executor/locator schema
-is MISSING implementation, not a new public helper or manual checkpoint.
+| Operation                  | Native normal-path statements per attempt                            | Derivation obligation                                                                                                                                                                                                                                   |
+| -------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admit final local command  | K_receipted + j + g + v + i + p + w + r + o + authorization/gate     | Exact at-most-two headers/refs; planned-home receipts are fixed scope. Prior ordered acquire commands each pay their own K and body; they are not free or folded into one remote command.                                                               |
+| Poll operation native read | K_read + owner + job + scoped-publication/result + current authority | K_read=3 from withReadTransaction BEGIN/SET/COMMIT; one actual owner point. No mutation receipt or durable wakeup. If implemented with a native command instead, pay that executor's K plus this body and prove why; no cheaper assumed port.           |
+| Publish local command      | K_receipted + j + v + p + w + r + o + authorization/gate             | v validates mapping plus TWO versioned participant completion records and prior-home custody; p covers admitted-to-published CAS and committed scoped-summary work. Summary fanout happens in retained bounded steps, never all scopes in this command. |
 
-The bound also covers failures of publication and minimization. If the current job cannot finish, its at most
-two inputs and two flat outputs remain the only extra full generations; retry resumes those identities. Once
-published, a live consumer reference prevents deleting its input until that consumer accepts the exact minimized
-scope under native custody. Subsequent admission waits for reclamation even though point reads of the published
-generation remain usable. There is no allocation-on-retry or unbounded abandoned-output list. This is backpressure
-on structural admission, not a timeout that discards undo. For a merge G decreases by one at publication; at most
-two former current inputs become retired while the new output becomes current. For a split G increases by one;
-one input retires and at most two outputs become current. Repoint changes at most two groups. Thus each transition
-preserves G+4 without counting a retired generation as current or excluding partially deleted membership rows.
+These algebraic totals name EVERY statement category before measurement. Exact j/g/v/i/p/w/r/o native SQL counts
+and c_MAX values are MISSING until native storage/producer plans bind them; Performance must confirm them before
+types or runtime. This is not a measured K+body pass. Bounded body size follows constant descriptors and
+indexed point/continued work, not a blanket claim that a multi-command acquisition is one transaction.
 
-### Existing terminal-erasure inventory amendment
+Actual OP has a different framework: initial time snapshot BEGIN/SET/time/COMMIT =4; serializable transaction
+BEGIN, lock-timeout SET, initial timeout SET, partition fence, final timeout SET, COMMIT =6. Thus OP pays
+**10 + account fences + authorization/finalization + derived body + actual DBOS enqueue SQL** per attempt, plus
+gate work. At most two actual fenced accounts are sorted by the executor; fenceOperationalAccount executes the actual
+account-share.sql point once per account (one statement each), including its lock/owner rows and FK/index work. OP adds no command receipt/event/outbox/write-basis/position. DBOS SDK statements
+and shared history are not zero and must be captured from actual WorkClient on the SAME native connection.
 
-Adoption text for the existing Semantic terminal-erasure participant (and the existing Access participant), to be
-incorporated by the account-erasure owner into its inventory; no second erasure contract/participant is created:
+### Touches, Bound and Growth check for every operation
 
-> Semantic's single existing terminal-erasure participant owns every account-bearing identity-epoch record:
-> immutable semantic intent/receipt binding; source capture head/tombstone and saved page payload; affected-input
-> descriptor, flat generation membership and pending membership; topology/work/frontier and unfinished legacy
-> manifest; mapping/home gate/effect record; native receipt and editorial write-basis reference; control page,
-> effect and participant ACK custody; undo/reversal provenance and minimizer/reference/reclamation records.
-> This explicitly includes Library canonical owner-candidate and structural-support directory locators, every
-> driver support row, pending/published fence, concurrent FIRST-APPLY delivery/registration work, directory OLD/NEW
-> rekey manifest, prior-half receipt, Library ACK coverage manifest and all minimized/shared custody copies.
-> Each producer atomically records an indexed account-role-to-exact-locator relation, including requester,
-> operator, reviewed account, source author and acting human, not just the primary account key. Owners/keys are:
-> source home `(route,original[,terminal],head/page/native transaction)`; control home `(job,epoch,version,scope,
-> original/generation/page/effect)`; effect home `(destination,original,job,step,native transaction)`; and shared
-> core/editorial/work stores by exact native receipt/outbox/write-basis/workflow key. Access owns Accounts source
-> intent by `(direction,account,receipt)` plus Global `(route=0,request_id,decision_receipt_id)` and account-home
-> reversal/pending native locator. All copies and shared custody retain exact producer/consumer owner locators.
-> Library remains the payload owner of canonical data: `(route,collection_id,generation,basis_digest,canonical,
-> stored_original,driver,fact)` and owner-candidate `(owner,source_incarnation,canonical)`; its directory is indexed
-> by `(original,owner,source_incarnation,driver,fact)`. The Semantic participant inventories its identity work and
-> exact Library payload/minimizer locators; it does not claim that clearing Semantic rows erased Library copies.
-> First-apply/work/receipt locators include source revision, job/epoch/version and exact native transaction plus
-> component; both OLD and NEW directory keys remain cleanup obligations until receiving custody is acknowledged.
-> Access additionally owns the Accounts Core operational transaction/atomic-intent source records and their
-> account-role/native receipt/delivery indexes. A missing callable or locator is unfinished, never noData.
->
-> Clear personal labels, request/reason bodies, private provenance and account attribution payload according to
-> existing account terminal policy; preserve communal originals/terminals and only the necessary de-identified
-> immutable skeleton (job/epoch/version/scope identity, native transaction/component, nonpersonal intent transform,
-> minimized complete custody and reversal binding) needed for replay/no resurrection. A private identity linkage
-> cannot survive merely because it is in a digest or locator. Minimize private links and their copies through the
-> existing owner policy without discarding unfinished cleanup responsibility. Shared receipt/outbox/editorial/DBOS
-> payload copies require the existing shared owner's actual minimizer ACK, not dispatch. Missing account-role index,
-> source/shared locator, minimizer or custody is **unfinished/unknown**, never `none`, erased or a no-data ACK.
+Every growth entry below names REQUIRED tests on activation under `test/semantic/growth-identity-publication.test.ts`
+(abbreviated **GI**). That file is not delivered here. It must use existing `test/support/growth.ts:checkGrowth`
+with `rule: 'series'` and native EXPLAIN examined rows/shared blocks/statements, all actual pools/engine captures.
+Leading SQL tags `/* identity:source:<operation> */` and `/* identity:control:<operation> */` distinguish growing
+statements. Returned/affected row helpers cannot replace plans. Periodic reclaim/wakeup belongs in `prepare` AND
+its own growth case, with no subtraction, local catalogue classifier or exemption for untagged setup. Cold/warm
+catalogue/DDL/trigger costs and installation waiting remain visible in their actual phase.
 
-These are obligations before release; their owner-key index/minimizer delivery is MISSING. The existing terminal
-account fence remains immediate and independent of this cleanup. A reclaimed full generation cannot erase a live
-native undo obligation, and retained undo cannot retain erased personal payload by cloning it into control history.
+1. **Coherent cap, ordered prepare/acquire, admit and cancel.** Touches: double-collected at-most-two current
+   headers/source versions, compact binding, local owner/slot/attempt/group claims, immutable refs and native
+   receipts/closed-home fences. Bound: O(1) rows PER home command and O(log A + log G + log M + log E +
+   log(R+L+H)) blocks; statement sums above per command, plus both effects-free collection passes. No full member
+   scan or global history walk. Planned homes are a fixed descriptor from inputs, job home included. Growth check:
+   GI `coherent admission and ordered cancellation stay indexed`, pending/control/history independently 1/8/64,
+   group sizes 64/512/4096, P=1 cross-home contention, mixed-count/ABA, uncertain RPC and all-table 4097 no-effects.
+2. **Poll, reconcile and publish.** Touches: indexed original receipt/job, current auth/disclosure, actual native
+   mapping/two participant receipts, scope frontier and CAS/wakeup. Bound: O(1) rows per fixed native completion
+   point; O(log M + log E + log(R+L+H) + log S) blocks; K+body per table, EACH released custody command separately.
+   Growing scope/receipt fanout is a continued operation, not a poll scan. Growth check: GI `poll and publication
+   custody stay indexed`, unrelated groups, E and H independently 1/8/64; native pending/completed/replay/revoked/
+   hidden/unknown and out-of-order lower publication/cancel paths.
+3. **Standalone current mapping.** Touches: source owner and mapping/birth basis, one relevant control owner,
+   batched pending-membership probe and coherent current/scoped-revision probe; final source validation when
+   cross-backend. Bound: O(b) rows for b requested originals, O(b(log A+log M+log E)) blocks, plus independently
+   charged current privacy/Access. Same backend uses ONE RR: BEGIN, SET, source owner, source basis, control owner,
+   TWO probes, COMMIT = **8 statements**. A snapshot is a coherent cut; no extra reread/snapshot without an actual
+   counterexample. Cross-backend releases source before control and then revalidates source: source<=10,
+   control<=6, **16 total**, or **11** pending before final source visit. A batch keeps TWO probes, not per-ID
+   queries. Growth check: GI `current mapping remains scoped across released snapshots`, M/E/history independently
+   1/8/64; all missing/moved paths, pending-after-source, publish-between-reads, newer pending and fresh self.
+4. **Filtered page and cursor validation.** Touches: existing shared batched owner/epoch observation plus TWO
+   control probes, existing per-candidate source points and complete source observation. Bound: no separate
+   readMapping, extra snapshot/client/control SQL or per-ID loop. Fit direct<=12 statements/backend or composed
+   `8+4R_page` (R_page is source references, not retained obligations), one connection/backend; existing candidate,
+   Access, raw/native plan and physical-query allowances apply. Work is page-derived; no S/D scan. Growth check:
+   GI `finite owner pages progress under continuous disjoint identity work`, source size/query support 64/512/4096,
+   unrelated A/G/M/E and R/L/H independently 1/8/64, complete excluded/NOT/order changes and cursor start/final/
+   current checks. The native Source bindings above are required reds until delivered; samples cannot make it pass.
+5. **Register, arm, summary finish, revalidate and repair scopes.** Touches: actual source headers/structural
+   dependency index, inverse `(original,owner,scope)`, OLD/NEW dirty capture, native claims, committed summary/CAS,
+   receipts and source-local repair. Bound: O(n) examined dependency/effect rows, O(n(log D+log S+log A+
+   log(R+L+H))) blocks and K_or_OP+body SQL per native home. Registration scans finite relevant source input in
+   retained steps; discovery fanout is continued by original/scope, not a per-page scan. A source with arbitrarily
+   many scopes gets in-unit keyset continuation with OLD/NEW custody retained. Growth check: GI `complete scope
+   registration and reordered summaries stay bounded`, D/S/unrelated history 1/8/64, support 64/512/4096,
+   registration versus first claim, move/cancel/delayed messages, all-group versus owner-source isolation.
+6. **Mapping, Search and Library canonical effect steps.** Touches: shared immutable affected streams, actual
+   source/engine records, structural directory/candidate/extrema, six drivers, OLD/NEW gate/effect/follow/support/
+   total and exact native receipts. Bound: O(n) examined rows, O(n(log A+log G+log F+log D+log(R+L+H))) blocks;
+   each one-home command pays K or ACTUAL OP plus all effect/wakeup SQL, Search pays native engine work/bytes too.
+   Structural fanout follows relevant original/scope existence, not number of repeated session facts. No fixed
+   per-fact 14-row formula is valid. Divide remaining durable allowance by captured actual elementary-unit cost;
+   any original/scope/extrema with unbounded support has IN-UNIT keyset continuation for support/OLD/NEW halves,
+   no requirement that the entire original fit once. Growth check: GI `canonical effect and first-apply custody
+   stay bounded`, originals 64/512/4096, raw boundary 100/101, unrelated owner/support/history 1/8/64, million same-
+   scope sessions, first/deep/empty/replay, legitimate first apply in both orders and follow ACK/directory negative.
+7. **Birth and final writer guard.** Touches: actual revision-1/self mapping, native source fence/claim, OLD/NEW
+   capture and same-TX deferred home handoff guard. Bound: O(1) additional fixed birth/guard rows, O(log A+
+   log(R+L+H)) blocks; at most ONE indexed home-handoff-state lookup per guarded write including deferred check,
+   actual native command body/receipt/event SQL additive. No Search/control checkout for birth; correct SOURCE
+   home. Capture fanout uses continued dirty work. Growth check: exact Access birth/verify files above plus GI
+   `native writer handoff covers old and queued transactions`, fixed-data open-XID 1/8/64 ONLY if mechanism probes
+   active transactions; otherwise no invented active-XID axis. Catalogue locking and waits are not a free trigger.
+8. **Bootstrap, export, receiving custody and exact-head ACK.** Touches: indexed topology slots, base/member/dirty
+   keysets, source export, native control receipt/frontier, released source ACK. Bound: O(n) examined rows,
+   O(n(log A+log G+log(R+L+H))) blocks, EACH actual command's K+body. Each saved page costs THREE distinct native
+   transactions: export, custody, ACK. At least ceil(4096/100) topology pages before metadata, with empty homes
+   included; actual capacity is smaller after metadata/lookahead. Large page payload/custody subdivides within
+   unit, retaining exact source receipt/head across steps. Growth check: GI `all-home cutover retains exact dirty
+   custody`, 64/512/4096 group/support and 1/8/64 export/history; h+1, lower keys, deletion/move/saved empty,
+   crash export->custody->ACK and native failed/control-owner moves. No hidden export full-copy exemption.
+9. **Minimize, reference acquire, reclaim and wakeup.** Touches: locked generation/ref/header, actual owner/shared
+   minimizers, indexed retired generation and member keyset, frontier/receipt/wakeup. Bound: O(n) examined rows,
+   O(n(log A+log G+log(R+L+H))) blocks and native K+body SQL including refusal/empty/wakeup. Reclaim selects and
+   deletes each member (k_MAX=2 for that payload); metadata c_MAX explicitly equals the actual plan's owner/fence
+   rows + locked header/ref rows + frontier rows + native receipt rows + wakeup/outbox rows + minimizer/custody
+   point rows + empty-range sentinel work. These categories ALL count, including executor gate/body FK work.
+   Exact maxima for each are a MISSING native plan binding, not c=0. Allocate at most floor((100-c_MAX)/2)
+   members ONLY after Performance confirms c_MAX+2<=100. If metadata cannot fit, split minimization/custody into
+   prior bounded native units with locked retained state; no zero-progress reclaim loop. Growth check: GI
+   `reclaim and wakeup retain local physical bounds`, retained generations and R/L/H independently 1/8/64,
+   memberships 64/512/4096, first/deep/empty/replay/ref refusal/minimizer failure/crash and other-partition progress.
+
+10. **Accounts intent, delivery and durable publication probe.** Touches: one account-home intent insert in the
+    existing decision/reversal transaction, primary and three role-first indexes, exact source/control custody,
+    same-workflow indexed publication state. Bound: one additional intent statement with O(1) examined rows and
+    O(log(R+L+H)) blocks, plus actual native command/authorization/receipt work already charged to that owner.
+    Delivery commands each pay their actual K+body; each bounded read probe pays K_read plus native owner/job
+    points, O(1) rows and O(log E+log H) blocks, never a history scan or request-held wait. Durable sleep adds real
+    DBOS shared-history work, captured independently, no command effects. Growth check: existing
+    `test/access/growth-agent-verification.test.ts` for verify/unverify and the unchanged birth tests named above;
+    GI `account intent replay and publication probes stay indexed`, source intent/history and completed jobs
+    independently 1/8/64, in-flight verify/reversal, outage/sleep and same-receipt busy/capacity recovery.
+
+Every other page division `floor((100-c_MAX)/k_MAX)` above requires a captured finite c_MAX+k_MAX fit before
+activation OR in-unit keyset continuation for arbitrarily supported originals. Continuations retain exact
+original/scope/subphase/OLD-NEW custody in native storage and use existing bounded cursor/workflow limits; no
+original vector in JSON. A unit too large to ever fit is a failed design, not permanent preparation.
+
+At each three-scale capture, measure B as membership table PLUS ALL index `pg_relation_size` deltas per retained
+membership; record generation headers and other relation/index deltas separately. Full membership payload bound
+is `(Aq+4P·4096)B`, plus at most Gq+4P headers/indexes and actual O(R+L+H+D+S) payload/index bytes. Record physical
+native counts after EVERY durable/crash/replay/abandon state, including bootstrap, unsealed/export/partial-delete/
+abandoned and move copies. MVCC/index/vacuum residue is measured, not inferred from logical deletes. This is a
+measurement column, not a new budget or a claim that a formatter/earlier setup red confirms native Cost.
+
+## Required native schedule matrix before executable closure
+
+These are REQUIRED native SPEC cases, not tests delivered or weakened by this documentation change. Retain the
+original admission/publication/HTTP cases and all nineteen cutover outcomes, with honest actual producer bindings.
+Primitive/capacity/negative producer cases run separately from full coordinator/Search/Library publication so a
+missing consumer cannot create a cycle or force fake ACK. An unavailable primitive may establish a specific red,
+never full publication success. Native setup failures before a named assertion are not reached-case evidence.
+
+| Native surface               | Required schedule and assertion                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admission fixtures           | Native 4096 success and 4097 no-ALL-table effects, coherent mixed count and non-ABA validation, hidden/unselected member and terminal/self, immutable inputs, native authorization before receipt and conflicting replay; no seeded readiness.                                                                                                                                                                                                                                      |
+| Concurrent control           | Disjoint changed groups progress together; overlap alone busy including PREPARING; P=1 cross-home claims include first ordered job home. Crash/replay before/after remote acquire, uncertain RPC, cancel versus delayed acquire in BOTH orders at EVERY planned home, CAS admitted/cancelling exclusivity, no stranded capacity and no free binding/full job.                                                                                                                       |
+| Mapping                      | Released real source connection; one relevant current route; pending-after-source, publish-between-reads/new pending, wrong/missing/moved/retired owner unavailable, unaffected/fresh Search-absent self; one-RR same backend and cross-backend cost capture.                                                                                                                                                                                                                       |
+| Complete scoped Source       | Finite unchanged owner source produces useful pages while continuous disjoint jobs run. Complete excluded/NOT/order-only dependencies change before start, between start/final and before continuation. All-group catalogue's broader scope does not block that source. No returned-hit completeness proof.                                                                                                                                                                         |
+| Scope summary custody        | First dependency registration versus claim/arm in both orders; lower allocated job publishes after higher, lower cancels after higher, delayed arm/finish/cancel, source move and repair, scope retirement/cursor ref release. Native committed scoped revision detects clean-to-clean change and has no global active marker.                                                                                                                                                      |
+| Native receipt/effect        | Same position wrong transactionId, wrong owner/scope, unfinished prior page, actual per-home withdrawal/addition/fence custody. Crash after effect commit before DBOS result journal and before control ACK resumes SAME receipt once.                                                                                                                                                                                                                                              |
+| First apply and Library      | LEGITIMATE old-epoch apply at the actual destination commits before gate and is included in rekey; gate-first atomically rejects/redrives it. A stale epoch at a guessed NEW destination is insufficient. Real follow ACK with directory incomplete refuses publication; all six structural drivers/first registrations/last eligible original then complete under SAME participant. No canonical_source_fact write assertion substitutes.                                          |
+| Public HTTP                  | Native POST body/Auth/quoted key/202 ONLY after admitted/Location and same authorized replay; conflicting key; poll pending/completed/unknown/denied/revoked/hidden original concealment. Native held pre-suspension token 401 invalid_credentials/Bearer invalid_token and Auth sign-in 403 actual shape, never invented valid suspended bearer.                                                                                                                                   |
+| Accounts publication         | Verify and reversal keep successful DTO and wait before approval/page/finish/clear. Busy/capacity retry same native decision/reversal intent, crash before/after job return; already-verified/reversal replay waits publication; no worker held during durable sleep.                                                                                                                                                                                                               |
+| Cutover topology and birth   | EXPLICIT real scheduler/bootstrap closure on all 4096 including empty/unselected homes and actual owner epochs; lower-key births after frontier, failed birth rollback/revision1, ordinary/import correct source home and named/unnamed person/org/software account-agent births. Legacy seed before final guard. Missing native bootstrap callable remains red.                                                                                                                    |
+| Writer final handoff         | Actual verify AND reversal in flight before/after installed home barrier/deferred SAME-TX guard, queued merge/move/link/reversal continuations. Owner move shows availability retry only; separate legitimate native guard race proves handoff. Active-XID1/8/64 only when inspected.                                                                                                                                                                                               |
+| Native structural semantics  | Larger survivor, split/restore/repoint, overlapping undo/replay preserve direct terminals and exact immutable counts; first/deep/empty/shared100/101 changes include overlap/lookahead/retries without free row101; current flat lookup never follows ancestors.                                                                                                                                                                                                                    |
+| Export/custody               | Lower dirty head, OLD+NEW key-changing update, delete negative, saved empty replay, source export crash before custody and custody before source ACK; failed ACK of h leaves h+1; failed/moved control custody retains exact page and native receipt.                                                                                                                                                                                                                               |
+| Retention EVERY step         | Assert Gq+4P and Aq+4P4096 from ALL native tables after every commit/crash/replay/abandon/bootstrap/unsealed/export/partial deletion/move; no fifth copy, false G=0 or R/L group. Minimize real undo/reversal/move/cursor refs, generation ref-lock races and missing-minimizer refusal. Local admission refused before native empty proof, succeeds after it; another partition progresses. Relation/index byte deltas and examined work, not three small jobs or delete.rowCount. |
+| Terminal/late/failed custody | Actual account terminal T/locator fence, late item registration behind enumeration, failed-work/fork missing locator, owner/shared minimizer custody, participant-own ACK independent of overall frontier, then overall no-open-late/allACK/frontier. Native Auth deletePersona proves full flow; direct tombstone proves barrier observation only. No Semantic ref exhaustion claiming Library purge.                                                                              |
+| Full publication             | Actual mapping + fixed Search + full Library receipts with all prior effects/fences custodied; missing/delayed receipt stays pending, crash/replay publishes once, public canonical uniqueness and cursor currentness, crossing-epoch delayed first positive/terminal purge cannot resurrect support.                                                                                                                                                                               |
+
+Existing `test/semantic/identity-epoch-admission.test.ts`, `identity-epoch-publication.test.ts`,
+`identity-operations-http.test.ts`, `identity-epoch-cutover.test.ts` and their three native support files are evidence.
+Their globally sole-job assertion, implicit bootstrap via readEpoch, legacy-only snapshot, stale wrong-destination
+first-apply case, legacy fact-table directory assertion and hypothetical suspended-bearer expectations cannot freeze
+the new boundary. Preserve the original safety/DTO/custody outcomes in the REQUIRED schedules above; revise native
+SPEC/executables only AFTER Cost confirmation and owner review. Earlier bootstrap P1114/setup reds did not execute
+the nineteen cutover scenarios and supply neither a native pass nor Cost confirmation. No costly retry is part of
+this documentation closure.
+
+## Evidence and review boundary
+
+Read the full current owning documents, existing contract types, admission/publication/HTTP/cutover cases and
+support, actual native writer/command/read/operational/work bindings, Library structural owner/source/fact-version
+and Search source/scope-source/producer-consumer/privacy contracts. The two integrated cutover reports (current
+`a73bcefb2fe9a901d22478bb4e3d774c06186c55`, deep `e9ae39f06176b66a4026533812f07c6e00e46dec`) and both independent
+concurrent reports identify candidate mechanisms, not native performance evidence. The integrated current report
+also exists at `docs/research/identity-concurrent-groups-current.md`; the absolute reviewed copies, comparison,
+full coowner review, single-closure master and Performance/Accounts/Search reviews supplied the corrected adoption.
+Their superseded global-summary alternatives do not remain a second contract.
+
+Read-only reference evidence: PostgreSQL `src/backend/commands/trigger.c`, `indexcmds.c`,
+`src/backend/utils/time/snapmgr.c`, `src/backend/access/heap/heapam.c` in
+`.reference/library-shelf-maintenance/postgres` (sparse files read from git objects where needed), and DBOS
+`src/dbos.ts`, `src/dbos-executor.ts:runInternalStep` in `.reference/search-worker-outcome-harness/dbos-transact-ts`.
+Native installation locking/snapshot rules and body-before-result journalling motivate the required schedules;
+no reference implementation was copied and no new external research is claimed.
+
+Review proceeds on hashes of these formatted owner documents: Semantic and all coowners review complete-query
+producer bindings, native custody and ownership; Performance confirms ALL nine items and actual derived body/
+metadata/page-fit plans BEFORE types or runtime. Missing scope producers, owner-transfer bound, account source
+intent/delivery, native bootstrap/guard/minimizer/locator and fixed participant bindings remain exact native red
+obligations, not approval requests for alternate product policy. Formatter success checks bytes only. Integration
+does not freeze a signature, attest native performance, complete publication or satisfy a main/root runtime gate.
