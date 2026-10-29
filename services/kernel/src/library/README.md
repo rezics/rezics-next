@@ -1157,7 +1157,9 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   The local `growth.json` evidence retains populations, every repetition and the actual series verdict;
   `plans.json` retains the actual auto_explain documents, including nested plans, rows/removals, loops and buffers.
   Synthetic negative growth cardinality and isolated rollback/overflow/DDL invariants remain primitive-only,
-  separate from native positive fixture/HTTP/owner-command evidence. Calibrated acceptance is pending execution.
+  separate from native positive fixture/HTTP/owner-command evidence. Calibrated acceptance remains unverified:
+  the focused native check failed during `pg_dump` schema preparation before executing tests, so it produced no
+  calibrated series verdict.
 
 ### Follow read
 
