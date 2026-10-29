@@ -10,22 +10,21 @@ async function runGeneration(failures: number, message: string, code?: string) {
   const directory = mkdtempSync(join(tmpdir(), 'web-generate-'));
   const attempts = join(directory, 'attempts');
   const output = join(directory, 'output');
-  const preload = join(directory, 'preload.ts');
+  const fakeCompiler = join(directory, 'compiler.ts');
   writeFileSync(
-    preload,
-    `import { mock } from 'bun:test';\n` +
-      `import { appendFileSync, writeFileSync } from 'node:fs';\n` +
-      `mock.module('@inlang/paraglide-js', () => ({ compile: async () => {\n` +
+    fakeCompiler,
+    `import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';\n` +
+      `export async function compile() {\n` +
       `  appendFileSync(${JSON.stringify(attempts)}, 'attempt\\n');\n` +
       `  const count = readFileSync(${JSON.stringify(attempts)}, 'utf8').trim().split('\\n').length;\n` +
       `  if (count <= ${failures}) { const error = new Error(${JSON.stringify(message)}); ${code ? `error.code = ${JSON.stringify(code)};` : ''} throw error; }\n` +
       `  writeFileSync(${JSON.stringify(output)}, 'generated');\n` +
-      `} }));\n` +
-      `import { readFileSync } from 'node:fs';\n`,
+      `}\n`,
   );
 
-  const child = Bun.spawn(['bun', '--preload', preload, generator], {
+  const child = Bun.spawn(['bun', generator], {
     cwd: app,
+    env: { ...process.env, REZICS_PARAGLIDE_COMPILER_MODULE: fakeCompiler },
     stdout: 'pipe',
     stderr: 'pipe',
   });

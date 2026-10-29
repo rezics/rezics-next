@@ -1,5 +1,7 @@
-import { compile } from '@inlang/paraglide-js';
 import options from '../project.inlang/paraglide.config';
+
+const compilerModule = process.env.REZICS_PARAGLIDE_COMPILER_MODULE ?? '@inlang/paraglide-js';
+const { compile } = await import(compilerModule);
 
 const workerEnvironment = 'REZICS_PARAGLIDE_GENERATE_WORKER';
 const errorMarker = '\0REZICS_PARAGLIDE_GENERATE_ERROR\0';
