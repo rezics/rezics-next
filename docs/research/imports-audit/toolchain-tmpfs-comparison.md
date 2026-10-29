@@ -16,8 +16,10 @@ On continuation, the checkout is already at `ef2a1f3e3fc42b7ea2580e2ca8aaa16c148
 `packages/definitions/src/index.ts` and `compile.ts`, generated client declarations, kernel source, lockfile and
 check tooling changed. Importer source/tests themselves have no diff. Running the remaining commands directly
 here would mix product inputs; no such commands have been admitted. The remaining pairs require the captured
-source, including its workspace dependencies, before execution. A temporary Git archive can preserve those bytes
-without replacing the checkout, editing frozen files or changing installed dependencies.
+source, including its workspace dependencies, before execution. This continuation has not restored product files
+or constructed a substitute dependency/placement environment: its contract permits only the new report and
+requires the same original package cwd and options. Remaining commands are withheld rather than measuring
+changed product bytes and presenting them as the captured tree.
 
 The four retained result records were revalidated as `finished`, exit 0. PIDs 4095808, 4095814 and 1693512 are
 absent. No completion is inferred from elapsed time, and none of those four commands is rerun.
@@ -57,13 +59,24 @@ it prints child output only on failure. The following paths are relative to `.te
 
 Growth scenarios are binding lookup, candidate page, media projection, binding write and media write staying
 within their growth bounds. All five pass in both runtimes. Outcome scenarios cover durable public-result
-bindings, media journals, hostile JSON rejection, capped candidate pages and the fifth source specification case;
+bindings, media journals, hostile JSON rejection, capped candidate pages and indexed fixed binding operations
+against growing same-source SQLite history;
 all five are required by the unchanged wrapper. Neither completed suite has a failure identity.
 
 Retained check IDs in execution order are `66c6c995-a3fc-4b2e-9456-6f7705f0b727`,
 `7e46935a-fb6c-41a2-8c30-8ef4ec8f0784`, `57aefcc3-3666-4edd-bef7-1c5ba27c79b3`,
 `ac3abd57-e86d-4cb3-8ac9-3fa10f09073c`. Exact commands, exits and status are in
 `.temp/goal/checks/results/<id>.json`; original order is `.temp/toolchain-tmpfs-comparison/order.txt`.
+
+## Continuation source conflict
+
+The first partial report was committed as `3e493d9b0ddd82c2848e50683774dd13466196b5` before any further
+check admission. Revalidation found the source conflict above before invoking a remaining suite. The supplied
+checkout and the required captured product tree differ in executable workspace dependencies, while the contract
+forbids product/dependency changes and rerunning completed measurements. The remaining four pairs cannot be
+claimed on that captured source using the supplied normal package setup. A checkout/setup containing the captured
+product bytes is needed to continue all six pairs coherently. This is unavailable evidence, not a runtime failure,
+a passing comparison, or an elapsed-time diagnosis. No remaining pair was started; `order.txt` still has four entries.
 
 ## Remaining pairs and accounting correction
 
