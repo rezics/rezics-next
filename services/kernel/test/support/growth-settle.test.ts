@@ -126,9 +126,10 @@ test('settle disables autovacuum on relations created after the growth database 
   expect(result.rows[0]!.toast_reloptions).toContain('autovacuum_enabled=false');
   const enabled = await db.admin.query<{ count: string }>(
     `SELECT count(*)::text AS count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      LEFT JOIN pg_class t ON t.oid=c.reltoastrelid
       WHERE c.relkind='r' AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
         AND (c.reloptions IS NULL OR NOT c.reloptions @> ARRAY['autovacuum_enabled=false']
-          OR NOT c.reloptions @> ARRAY['toast.autovacuum_enabled=false'])`,
+          OR (c.reltoastrelid<>0 AND (t.reloptions IS NULL OR NOT t.reloptions @> ARRAY['autovacuum_enabled=false'])))`,
   );
   expect(enabled.rows[0]!.count).toBe('0');
 });

@@ -673,10 +673,18 @@ function qualifiedIdentifier(value: string): string {
 
 async function tableNames(
   database: GrowthDatabase,
-): Promise<{ schema: string; name: string; kind: string; options: string[] | null }[]> {
-  const result = await database.admin.query<{ schema: string; name: string; kind: string; options: string[] | null }>(
-    `SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options
+): Promise<{ schema: string; name: string; kind: string; options: string[] | null; toast_disabled: boolean }[]> {
+  const result = await database.admin.query<{
+    schema: string;
+    name: string;
+    kind: string;
+    options: string[] | null;
+    toast_disabled: boolean;
+  }>(
+    `SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options,
+            c.reltoastrelid=0 OR COALESCE(t.reloptions @> ARRAY['autovacuum_enabled=false'],false) AS toast_disabled
        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+       LEFT JOIN pg_class t ON t.oid=c.reltoastrelid
       WHERE c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_'
       ORDER BY n.nspname,c.relname`,
   );
@@ -684,9 +692,9 @@ async function tableNames(
 }
 
 async function disableAutovacuum(database: GrowthDatabase): Promise<void> {
-  for (const { schema, name, kind, options } of await tableNames(database)) {
+  for (const { schema, name, kind, options, toast_disabled } of await tableNames(database)) {
     if (kind !== 'r') continue;
-    if (options?.includes('autovacuum_enabled=false') && options.includes('toast.autovacuum_enabled=false')) continue;
+    if (options?.includes('autovacuum_enabled=false') && toast_disabled) continue;
     await database.admin.query(
       `ALTER TABLE ${qualifiedIdentifier(`${schema}.${name}`)} SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)`,
     );
