@@ -540,7 +540,7 @@ test(
     }
     reset(crowded());
     const crowd = personal((await readPage('/en', cookie)).html) ?? '';
-    expect([...crowd.matchAll(/Crowded [1-9]/g)]).toHaveLength(12);
+    expect([...crowd.matchAll(/data-slot="cover-card"/g)]).toHaveLength(12);
     expect(crowd).toContain('Crowded 9');
     expect(crowd).not.toContain('Crowded 3<');
   },
