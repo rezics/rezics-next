@@ -404,7 +404,9 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   `300beac120` uses exact repository converter paths and passed root typecheck. Its native run reached public
   candidates in all three cases (904 assertions), exposing a caller property-shape mismatch. Native URL/sameAs
   expectations now require `{ id, data_type: 'url' }` instead of the command-input `{ id }`, matching public
-  `SnakSchema` while retaining exact citations/values. Replacement native execution is pending. The edition
+  `SnakSchema` while retaining exact citations/values. At `930fde0fe3`, root typecheck passed and the native run
+  made 1,635 assertions. Selection now compares strict values independently of JSON member order; safe acquisition
+  stops require zero Auth requests, matching lazy renewal on public requests. Replacement native execution is pending. The edition
   expectation was corrected from `schema:BookEdition` to the native contract's `bf:Instance`. The exact acceptance is
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts`,
   with `bun scripts/worker-check.ts -- bun scripts/typecheck.ts` for the root typecheck.

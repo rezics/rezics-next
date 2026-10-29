@@ -429,8 +429,12 @@ observation resolved a package undeclared by the kernel workspace; root typechec
 import. `300beac120` uses the exact repository converter paths; root typecheck passed. Its native run reached
 public candidates in all three cases (904 assertions), then exposed a caller expectation that compared a native
 property to the command-input shape `{ id }`. The corrected native citation and sameAs expectations require
-`{ id, data_type: 'url' }`, matching the public `SnakSchema`; exact citation/value checks are retained. Replacement
-native results are pending. The edition expectation was corrected from `schema:BookEdition` to the existing native
+`{ id, data_type: 'url' }`, matching the public `SnakSchema`; exact citation/value checks are retained. The next run
+at `930fde0fe3` made 1,635 assertions and passed root typecheck, exposing two further caller issues: selection
+used JSON member order rather than strict value equality, and failed acquisition incorrectly expected token
+renewal despite the credential provider renewing lazily on a public request. The caller now compares exact values
+without member-order dependence and requires zero Auth calls for the safe stops. Replacement native results are
+pending. The edition expectation was corrected from `schema:BookEdition` to the existing native
 field observation `bf:Instance`. The feed fixtures omit cover acquisition, retaining separate
 Bangumi CC-BY-SA summary rights and the omission of unknown-licensed Open Library prose. This proves the scalar
 operator entrypoint only; it does not add general SourceRecord metadata, words, form/classification, VNDB archive

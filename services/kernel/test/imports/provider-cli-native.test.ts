@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { isDeepStrictEqual } from 'node:util';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import bangumi from '../../../../specs/fixtures/imports/bangumi/subject.json';
 import edition from '../../../../specs/fixtures/imports/open-library/edition.json';
@@ -143,7 +144,7 @@ async function journey(feed: Feed) {
       (candidate) =>
         candidate.source.external_id === feed.target &&
         candidate.statement.property.id === feed.property &&
-        JSON.stringify(candidate.statement.value) === JSON.stringify({ type: 'value', content: feed.oldValue }),
+        isDeepStrictEqual(candidate.statement.value, { type: 'value', content: feed.oldValue }),
     )!;
     expect(selected).toBeDefined();
     // An actual retrieved candidate is accepted/adopted by the independent native editor.
@@ -172,9 +173,8 @@ async function journey(feed: Feed) {
     ).toBe(true);
     expect(commands(refreshed).every((command) => command.source.record_revision === feed.newRevision)).toBe(true);
     const freshRows = await cli.candidates(id, feed.property);
-    const fresh = freshRows.find(
-      (candidate) =>
-        JSON.stringify(candidate.statement.value) === JSON.stringify({ type: 'value', content: feed.newValue }),
+    const fresh = freshRows.find((candidate) =>
+      isDeepStrictEqual(candidate.statement.value, { type: 'value', content: feed.newValue }),
     )!;
     expect(fresh).toBeDefined();
     expect(fresh.id).not.toBe(selected.id);

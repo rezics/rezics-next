@@ -231,8 +231,8 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
       expect(consumed, diagnostic).toBe(bytes.length);
       expect(observed, diagnostic).toBe(bytes.length);
       expect(bytes).toEqual(original);
-      expect(authPaths.slice(authOffset).filter((path) => path === '/signin/key')).toHaveLength(1);
-      expect(authPaths.slice(authOffset).filter((path) => path === '/token')).toHaveLength(1);
+      // Credentials renew lazily on the first public request, after acquisition seals.
+      expect(authPaths.slice(authOffset)).toEqual(result.code === 0 ? ['/signin/key', '/token'] : []);
       for (const name of await readdir(directory!))
         expect((await stat(join(directory!, name))).mode & 0o777).toBe(0o600);
       const captured = exchanges.slice(offset);
