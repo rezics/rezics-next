@@ -121,7 +121,7 @@ export async function seedLegacyRoot(f: EpochFixture, route: number) {
  * Roots are actual createSubject results. All members, revision history and direct redirects exist.
  * The STORE owner must cover this population during its real bootstrap before permitting admission.
  */
-export async function seedLegacyGroup(f: EpochFixture, root: string, members: number) {
+export async function seedLegacyGroup(f: Pick<EpochFixture, 'admin'>, root: string, members: number) {
   const ids = Array.from({ length: members }, () => newId(routeOf(root)!)).sort();
   const route = routeOf(root)!;
   const tx = await f.admin.connect();
