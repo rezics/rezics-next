@@ -46,6 +46,7 @@ export type DerivedFile = {
 export type IntegrationCheck = { paths: string[]; command: string[] };
 import { resolveImportConflicts } from './import-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
+const defaultJsonMessageConflicts = defaults.jsonMessageConflicts as string[];
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
 
@@ -466,6 +467,16 @@ export function resolveMechanicalConflicts(
       } finally {
         rmSync(scratch, { recursive: true, force: true });
       }
+    } else if (matchesPath(file, defaultJsonMessageConflicts)) {
+      const stages = ([1, 2, 3] as const).map((stage) => {
+        const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
+        if (stage === 1 && result.status !== 0) return '{}';
+        if (result.status !== 0) throw new Error(`Cannot read conflict stage ${stage} for ${file}`);
+        return result.stdout;
+      });
+      const merged = mergeFlatJsonMessage(stages[0]!, stages[1]!, stages[2]!);
+      if (!merged.ok) return false;
+      text = `${JSON.stringify(merged.value, null, 2)}\n`;
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
     resolved.set(path, text);
@@ -475,6 +486,60 @@ export function resolveMechanicalConflicts(
   if (!format[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(format[0]!))
     spawnSync(format[0]!, [...format.slice(1), ...paths], { cwd, encoding: 'utf8' });
   return unionResolved;
+}
+
+type JsonObject = Record<string, unknown>;
+type JsonMergeResult = { ok: true; value: JsonObject } | { ok: false; key: string };
+
+function parseFlatJsonObject(text: string): JsonObject | undefined {
+  try {
+    const value: unknown = JSON.parse(text);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    return value as JsonObject;
+  } catch {
+    return undefined;
+  }
+}
+
+function comparableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(comparableJson).join(',')}]`;
+  if (value && typeof value === 'object')
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${comparableJson((value as JsonObject)[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+/** Three-way merge flat message catalogs, retaining ours' catalog order and appending theirs' new keys. */
+function mergeFlatJsonMessage(baseText: string, oursText: string, theirsText: string): JsonMergeResult {
+  const base = parseFlatJsonObject(baseText);
+  const ours = parseFlatJsonObject(oursText);
+  const theirs = parseFlatJsonObject(theirsText);
+  if (!base || !ours || !theirs) return { ok: false, key: '<invalid JSON catalog>' };
+  const absent = Symbol('absent');
+  const equal = (left: unknown | typeof absent, right: unknown | typeof absent) =>
+    left === absent || right === absent ? left === right : comparableJson(left) === comparableJson(right);
+  const keys = [...Object.keys(ours), ...Object.keys(theirs).filter((key) => !(key in ours))];
+  const value: JsonObject = {};
+  for (const key of keys) {
+    const b = Object.hasOwn(base, key) ? base[key] : absent;
+    const o = Object.hasOwn(ours, key) ? ours[key] : absent;
+    const t = Object.hasOwn(theirs, key) ? theirs[key] : absent;
+    const chosen = equal(o, t) ? o : equal(o, b) ? t : equal(t, b) ? o : undefined;
+    if (chosen === undefined && !equal(o, b) && !equal(t, b)) return { ok: false, key };
+    if (chosen !== absent && chosen !== undefined) value[key] = chosen;
+  }
+  return { ok: true, value };
+}
+
+function jsonMessageConflictError(cwd: string, paths: readonly string[]): Error | undefined {
+  for (const file of paths.filter((path) => matchesPath(path, defaultJsonMessageConflicts))) {
+    const stages = ([1, 2, 3] as const).map((stage) => {
+      const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
+      return result.status === 0 ? result.stdout : '{}';
+    });
+    const result = mergeFlatJsonMessage(stages[0]!, stages[1]!, stages[2]!);
+    if (!result.ok) return new Error(`JSON message conflict in ${file}: key ${result.key}`);
+  }
+  return undefined;
 }
 
 function rebaseWithDerivedFiles(
@@ -497,7 +562,7 @@ function rebaseWithDerivedFiles(
       // Validate all ordinary conflicts before choosing a generated side or running a generator.
       if (textConflicts.length) {
         const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union');
-        if (!unionResolved) return rebaseError;
+        if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts) ?? rebaseError;
         const markdownUnion = unionResolved.length ? `; Markdown union: ${unionResolved.join(', ')}` : '';
         appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${textConflicts.join(', ')}${markdownUnion}\n`);
         stagePaths(cwd, new Set(textConflicts));
