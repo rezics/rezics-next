@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { runDeployment } from '../scripts/storybook-deploy.ts';
@@ -8,6 +8,7 @@ import { smokeStorybook } from '../scripts/storybook-smoke.ts';
 const root = resolve(import.meta.dir, '../../../');
 const app = resolve(root, 'apps/web');
 const output = resolve(app, 'storybook-static');
+const cloudflareOutput = resolve(app, '.cloudflare/output');
 let browser: Browser;
 let previewServer: ReturnType<typeof Bun.serve>;
 let expectedCommit: string;
@@ -22,6 +23,7 @@ function countStories(directory: string): number {
 }
 
 beforeAll(async () => {
+  rmSync(cloudflareOutput, { recursive: true, force: true });
   const gitCommit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root });
   expectedCommit = gitCommit.exitCode === 0 ? gitCommit.stdout.toString().trim() : '0'.repeat(40);
   const build = Bun.spawnSync(['bun', 'run', '--cwd', 'apps/web', 'storybook:build'], {
@@ -31,6 +33,7 @@ beforeAll(async () => {
     stderr: 'inherit',
   });
   expect(build.exitCode).toBe(0);
+  expect(existsSync(cloudflareOutput)).toBe(false);
   browser = await chromium.launch({ headless: true });
   previewServer = Bun.serve({
     hostname: '127.0.0.1',
@@ -101,6 +104,40 @@ describe('storybook review build', () => {
 });
 
 describe('deployment sequencing', () => {
+  test('removes leftover Cloudflare build output before Wrangler in real and dry-run deployments', async () => {
+    mkdirSync(resolve(root, '.temp'), { recursive: true });
+    for (const dryRun of [false, true]) {
+      const cloudflareOutputDir = mkdtempSync(resolve(root, '.temp/storybook-cloudflare-output-'));
+      const calls: string[][] = [];
+      const outputLines: string[] = [];
+      try {
+        await runDeployment({
+          dryRun,
+          commit: 'a'.repeat(40),
+          cloudflareOutputDir,
+          build: async () => {
+            mkdirSync(cloudflareOutputDir, { recursive: true });
+            writeFileSync(resolve(cloudflareOutputDir, 'worker.js'), 'leftover');
+          },
+          smoke: async () => {},
+          wrangler: async (args) => {
+            expect(existsSync(cloudflareOutputDir)).toBe(false);
+            calls.push(args);
+            return dryRun
+              ? 'dry run'
+              : 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev';
+          },
+          fetchBuild: async () => ({ commit: 'a'.repeat(40) }),
+          print: (line) => outputLines.push(line),
+        });
+        expect(calls.length).toBeGreaterThan(0);
+        expect(outputLines.some((line) => line.includes('Removed leftover Cloudflare build output'))).toBe(true);
+      } finally {
+        rmSync(cloudflareOutputDir, { recursive: true, force: true });
+      }
+    }
+  });
+
   test('uploads only after build and smoke pass, then routes and prints that version preview URL', async () => {
     const calls: string[] = [];
     const events: string[] = [];
