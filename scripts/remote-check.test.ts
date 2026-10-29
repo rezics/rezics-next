@@ -2410,11 +2410,10 @@ test('multi-slot waiters on one host start in the order they began waiting', asy
     younger = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo younger'], ['--slots', '2']);
     await waitForCondition(() => events().filter((event) => event.kind === 'multi-marker').length === 2);
     const youngerMarker = events().find((event) => event.kind === 'multi-marker' && event.id !== olderMarker.id)!;
-    await waitForCondition(
-      () =>
-        events().some(
-          (event) => event.kind === 'probe' && event.multiWaitingId === olderMarker.id && event.multiWaitingSlots === 2,
-        ),
+    await waitForCondition(() =>
+      events().some(
+        (event) => event.kind === 'probe' && event.multiWaitingId === olderMarker.id && event.multiWaitingSlots === 2,
+      ),
     );
 
     writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish));
@@ -2877,7 +2876,13 @@ async function generatedRun(command = ['sh', '-c', 'docker run database; docker 
 }
 
 test('systemd 259 keeps the run script parameter expansions intact', async () => {
-  const { run } = await generatedRun(['sh', '-c', 'value=${1#prefix}; test "$value" = suffix; printf "%s" "$value"', 'sh', 'prefixsuffix']);
+  const { run } = await generatedRun([
+    'sh',
+    '-c',
+    'value=${1#prefix}; test "$value" = suffix; printf "%s" "$value"',
+    'sh',
+    'prefixsuffix',
+  ]);
   const fixture = runFixture('systemd-259');
   const result = fixture.execute(run);
   expect(result.status, result.stderr).toBe(0);
