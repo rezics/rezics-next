@@ -211,7 +211,10 @@ describe('deployment sequencing', () => {
         calls.push('fetch');
         return { commit };
       },
-      isTreeClean: async () => [],
+      isTreeClean: async () => {
+        calls.push('clean');
+        return [];
+      },
       print: () => {},
     });
     expect(calls).toEqual(['clean', 'build', 'smoke', 'upload', 'deploy', 'deploy', 'fetch']);
@@ -265,6 +268,7 @@ describe('deployment sequencing', () => {
               : 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev';
           },
           fetchBuild: async () => ({ commit: 'a'.repeat(40) }),
+          isTreeClean: async () => [],
           print: (line) => outputLines.push(line),
         });
         expect(calls.length).toBeGreaterThan(0);
