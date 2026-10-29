@@ -24,6 +24,28 @@ CREATE SCHEMA content;
 
 
 --
+-- Name: account_upload; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.account_upload (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    phase text NOT NULL,
+    id uuid NOT NULL,
+    CONSTRAINT account_upload_phase_check CHECK ((phase = ANY (ARRAY['media'::text, 'fields'::text]))),
+    CONSTRAINT account_upload_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11))))
+);
+
+
+--
+-- Name: account_upload account_upload_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.account_upload
+    ADD CONSTRAINT account_upload_pkey PRIMARY KEY (route, account_id, phase, id);
+
+
+--
 -- Name: board_thread_active_rank(integer, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: content; Owner: -
 --
 
