@@ -181,7 +181,7 @@ export const routes: FakeRoute[] = [
         .clone()
         .json()
         .catch(() => undefined);
-      return isRecord(body) && languageList(body.languages).length > 0
+      return isRecord(body) && body.sort !== 'rating' && languageList(body.languages).length > 0
         ? ({ ...fixtureSearch(fixtures, body), status: 200 } as KernelRecording)
         : undefined;
     },

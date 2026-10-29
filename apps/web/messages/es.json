@@ -500,7 +500,6 @@
   "subject_posts": "Publicaciones",
   "subject_qualifiers": "Calificadores",
   "subject_ratings": "Valoraciones",
-
   "subject_ratings_count": "{count} valoraciones en {population}",
   "subject_ratings_distribution": "Distribución de valoraciones",
   "subject_ratings_empty": "Aún no hay valoraciones",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "Faltan {count} valoraciones para mostrar la puntuación",
   "subject_ratings_reviews": "Reseñas",
   "subject_ratings_yours": "Tu valoración: {score}",
-
   "subject_reactions_unavailable": "No se pudieron cargar las reacciones.",
   "subject_relation_group_association": "Relacionadas",
   "subject_relation_group_derivation": "Adaptaciones y ediciones",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "Cargar más",
   "settings_privacy_conflict_title": "Esta colección cambió en otro lugar",
   "settings_privacy_conflict_text": "No se guardó el cambio. Vuelve a cargar esta colección para ver su visibilidad actual.",
-  "settings_privacy_reload_row": "Volver a cargar la colección"
+  "settings_privacy_reload_row": "Volver a cargar la colección",
+  "search_facet_index_not_ready": "Los filtros todavía se están preparando.",
+  "search_facet_retry": "Reintentar",
+  "search_facet_unavailable": "No se pudieron cargar los filtros.",
+  "search_global_score": "Puntuación global",
+  "search_sort_label": "Ordenar por",
+  "search_sort_rating": "Mejor valorados",
+  "search_sort_relevance": "Relevancia",
+  "search_stale_cursor_restarted": "Los resultados han cambiado. Se muestra la primera página."
 }

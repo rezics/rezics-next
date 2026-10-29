@@ -68,6 +68,7 @@ export const pagePaths = {
   'order-failed': `/orders/${orderFailedRecording.order.id}`,
   search: `/search?q=${encodeURIComponent(searchRecording.query)}`,
   'search-typed': `/search?q=${encodeURIComponent(searchTypedRecording.query)}&type=${encodeURIComponent(searchTypedRecording.filterType)}`,
+  'search-rating': '/search?q=Kokoro&sort=rating',
   'search-empty': `/search?q=${encodeURIComponent(searchEmptyRecording.query)}`,
   'search-facets': searchFacetStoryPaths.results,
   'search-facet-active': searchFacetStoryPaths.active,
@@ -321,6 +322,7 @@ export async function searchReady(context: { canvasElement: HTMLElement }) {
   await view.findByRole('heading', { level: 1, name: m.search_heading() });
   await expect(view.getByRole('textbox', { name: m.search_label() })).toHaveValue(searchRecording.query);
   await view.findByRole('button', { name: m.search_submit() });
+  await expect(view.getByLabelText(m.search_sort_label())).toHaveValue('relevance');
   await listItemWithLink(view, label);
 }
 
@@ -331,6 +333,20 @@ export async function searchTypedReady(context: { canvasElement: HTMLElement }) 
   await view.findByRole('heading', { level: 1, name: m.search_heading() });
   await expect(view.getByRole('textbox', { name: m.search_label() })).toHaveValue(searchTypedRecording.query);
   await listItemWithLink(view, label);
+}
+
+export async function searchRatingReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  await view.findByRole('heading', { level: 1, name: m.search_heading() });
+  await expect(view.getByLabelText(m.search_sort_label())).toHaveValue('rating');
+  await view.findByText(m.search_global_score());
+  await listItemWithLink(view, getLocale() === 'zh-Hans' ? '心' : 'Kokoro');
+  await expect(view.getByText('8.6', { exact: true })).toBeVisible();
+  const unscoredTitle = getLocale() === 'zh-Hans' ? '尚无评分的故事' : 'An Unscored Story';
+  const unscoredLink = await view.findByRole('link', { name: unscoredTitle });
+  const unscoredRow = unscoredLink.closest('[data-slot="list-row"]');
+  await expect(unscoredRow?.querySelector('[data-slot="public-rating-figure"]')).toBeNull();
 }
 
 export async function searchEmptyReady(context: { canvasElement: HTMLElement }) {

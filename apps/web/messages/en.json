@@ -500,7 +500,6 @@
   "subject_posts": "Posts",
   "subject_qualifiers": "Qualifiers",
   "subject_ratings": "Ratings",
-
   "subject_ratings_count": "{count} ratings on {population}",
   "subject_ratings_distribution": "Rating distribution",
   "subject_ratings_empty": "No ratings yet",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "{count} more ratings to show a score",
   "subject_ratings_reviews": "Reviews",
   "subject_ratings_yours": "Your rating: {score}",
-
   "subject_reactions_unavailable": "Reactions could not be loaded.",
   "subject_relation_group_association": "Related",
   "subject_relation_group_derivation": "Adaptations and editions",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "Load more",
   "settings_privacy_conflict_title": "This Collection changed elsewhere",
   "settings_privacy_conflict_text": "Your change was not saved. Reload this Collection to see its current visibility.",
-  "settings_privacy_reload_row": "Reload Collection"
+  "settings_privacy_reload_row": "Reload Collection",
+  "search_facet_index_not_ready": "Filters are still being prepared.",
+  "search_facet_retry": "Try again",
+  "search_facet_unavailable": "Filters could not be loaded.",
+  "search_global_score": "Global score",
+  "search_sort_label": "Sort by",
+  "search_sort_rating": "Top rated",
+  "search_sort_relevance": "Relevance",
+  "search_stale_cursor_restarted": "Results changed. Showing the first page."
 }

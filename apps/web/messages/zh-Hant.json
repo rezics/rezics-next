@@ -500,7 +500,6 @@
   "subject_posts": "貼文",
   "subject_qualifiers": "限定條件",
   "subject_ratings": "評分",
-
   "subject_ratings_count": "{population}的 {count} 個評分",
   "subject_ratings_distribution": "評分分布",
   "subject_ratings_empty": "暫無評分",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "還需 {count} 個評分才能顯示分數",
   "subject_ratings_reviews": "評論",
   "subject_ratings_yours": "你的評分：{score}",
-
   "subject_reactions_unavailable": "暫時無法載入表態。",
   "subject_relation_group_association": "相關",
   "subject_relation_group_derivation": "改編與版本",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "載入更多",
   "settings_privacy_conflict_title": "此收藏集已在其他地方變更",
   "settings_privacy_conflict_text": "變更未儲存。請重新載入此收藏集以查看目前的可見範圍。",
-  "settings_privacy_reload_row": "重新載入收藏集"
+  "settings_privacy_reload_row": "重新載入收藏集",
+  "search_facet_index_not_ready": "篩選條件仍在準備中。",
+  "search_facet_retry": "重試",
+  "search_facet_unavailable": "無法載入篩選條件。",
+  "search_global_score": "全球評分",
+  "search_sort_label": "排序方式",
+  "search_sort_rating": "評分最高",
+  "search_sort_relevance": "相關度",
+  "search_stale_cursor_restarted": "結果已更新，現顯示第一頁。"
 }

@@ -500,7 +500,6 @@
   "subject_posts": "投稿",
   "subject_qualifiers": "修飾子",
   "subject_ratings": "評価",
-
   "subject_ratings_count": "{population}の評価 {count}件",
   "subject_ratings_distribution": "評価の分布",
   "subject_ratings_empty": "まだ評価はありません",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "スコアの表示まであと{count}件",
   "subject_ratings_reviews": "レビュー",
   "subject_ratings_yours": "あなたの評価: {score}",
-
   "subject_reactions_unavailable": "リアクションを読み込めませんでした。",
   "subject_relation_group_association": "関連",
   "subject_relation_group_derivation": "翻案・版",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "さらに読み込む",
   "settings_privacy_conflict_title": "このコレクションは別の場所で変更されました",
   "settings_privacy_conflict_text": "変更は保存されませんでした。再読み込みして現在の公開範囲を確認してください。",
-  "settings_privacy_reload_row": "コレクションを再読み込み"
+  "settings_privacy_reload_row": "コレクションを再読み込み",
+  "search_facet_index_not_ready": "絞り込みを準備しています。",
+  "search_facet_retry": "再試行",
+  "search_facet_unavailable": "絞り込みを読み込めませんでした。",
+  "search_global_score": "全体の評価",
+  "search_sort_label": "並べ替え",
+  "search_sort_rating": "高評価順",
+  "search_sort_relevance": "関連度順",
+  "search_stale_cursor_restarted": "検索結果が更新されました。1ページ目を表示しています。"
 }

@@ -32,6 +32,8 @@ import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
 import { fieldLabel } from '../features/pages/shared';
 import { hitYear, localizedLabel, ResultList, SubjectMeta, type Fact, type ResultHit } from './results.tsx';
+import { SearchSort } from './sort.tsx';
+import { readSearchPage } from './search-request.ts';
 import type { SuggestionResult } from './suggestions.ts';
 type SearchBody = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
   descriptions?: boolean;
@@ -43,22 +45,21 @@ type SearchResult = Omit<SearchData, 'subjects'> & {
   subjects: (SearchData['subjects'][number] & {
     descriptions?: Record<string, string>;
     facts?: Record<string, Fact[]>;
-  } & Pick<ResultHit, 'summary'>)[];
+  } & Pick<ResultHit, 'summary' | 'publicRating' | 'storyOverlay'>)[];
 };
 type FacetBody = Parameters<KernelClient['subjects']['$facets']['post']>[0] & { languages?: string[] };
 type FacetResult = {
   facets: {
     property: string;
-    relation: 'exact' | 'lower_bound';
-    values: { value: string; count: number; labels: Record<string, string> }[];
+    values: { value: string; labels: Record<string, string> }[];
   }[];
-  total: { value: number; relation: 'exact' | 'lower_bound' };
   as_of: string;
 };
 type SearchParams = {
   query: string;
   locale: string;
   cursor?: string;
+  sort?: 'rating';
   type?: string;
   facetValues: Record<string, string[]>;
 };
@@ -69,13 +70,12 @@ type SearchPageData = {
   hitTypes: Record<string, Record<string, string>>;
   /** The properties whose time values give a hit its year, in the order the search asked for them. */
   yearProperties: string[];
-  typeChoices: { id: string; labels: Record<string, string>; count?: number }[];
+  typeChoices: { id: string; labels: Record<string, string> }[];
   groups: {
     property: string;
     labels: Record<string, string>;
     values: {
       value: string;
-      count: number;
       labels: Record<string, string>;
       parentTypeLabels?: Record<string, string>;
     }[];
@@ -83,6 +83,10 @@ type SearchPageData = {
   selectedFacets: Record<string, string[]>;
   selectedFacetLabels: Record<string, Record<string, string>>;
   facetsAvailable: boolean;
+  facetRetry: boolean;
+  facetIndexNotReady: boolean;
+  staleCursorRestarted: boolean;
+  sort: 'relevance' | 'rating';
 };
 /** At most this many facet properties are asked for on a single-type search. */
 const FACT_PROPERTIES = 2;
@@ -181,6 +185,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     if (typeof input.locale !== 'string' || input.locale.length === 0 || input.locale.length > 35)
       throw new Error('Invalid locale');
     if (input.cursor !== undefined && typeof input.cursor !== 'string') throw new Error('Invalid cursor');
+    if (input.sort !== undefined && input.sort !== 'rating') throw new Error('Invalid sort');
     if (input.type !== undefined && typeof input.type !== 'string') throw new Error('Invalid type');
     const facetValues: Record<string, string[]> = Object.create(null);
     if (isRecord(input.facetValues)) {
@@ -196,6 +201,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       query: input.query,
       locale: input.locale,
       ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+      ...(input.sort === 'rating' ? { sort: 'rating' as const } : {}),
       ...(typeof input.type === 'string' ? { type: input.type } : {}),
       facetValues,
     };
@@ -215,6 +221,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const languages = requestLanguages(data.locale);
     const years = release ? yearProperties(release, type) : [];
     const properties = release ? [...new Set([...(type ? factProperties(release, type) : []), ...years])] : [];
+    let staleCursorRestarted = false;
     const searchPromise: Promise<SearchResult | undefined> = hasSearch
       ? (async () => {
           const body: SearchBody = {
@@ -224,9 +231,13 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             languages,
             ...(properties.length > 0 ? { properties } : {}),
             ...(data.cursor ? { cursor: data.cursor } : {}),
+            ...(data.sort ? { sort: data.sort } : {}),
             ...(filter ? { filter } : {}),
           };
-          const response = await kernelClient(data.locale).subjects.$search.post(body);
+          const { response, restarted } = await readSearchPage(body, (request) =>
+            kernelClient(data.locale).subjects.$search.post(request),
+          );
+          staleCursorRestarted = restarted;
           if (response.error) throw new Error('Search failed');
           return response.data as SearchResult;
         })()
@@ -239,12 +250,16 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       languages,
       facets: facetPropertiesForType.map((property) => ({ property, size: 10 })),
     };
+    let facetIndexNotReady = false;
     const facetsPromise: Promise<FacetResult | null | undefined> =
       release && type && facetPropertiesForType.length > 0
         ? kernelClient(data.locale)
             .subjects.$facets.post(facetBody)
             .then((response) => {
-              if (response.error) return null;
+              if (response.error) {
+                facetIndexNotReady = isRecord(response.error) && response.error.code === 'index_not_ready';
+                return null;
+              }
               return response.data as FacetResult;
             })
             .catch(() => null)
@@ -258,25 +273,22 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
           )
           .map(([id, definition]) => ({ id, labels: definition.labels ?? {} }))
       : [];
+    const typeFacetRequested = Boolean(release && !type && data.query && typeChoices.length > 0);
     const typeBody: FacetBody = { text: data.query, languages, facets: [{ property: 'type', size: 20 }] };
-    // The count of each type among the matches, when the facets read has one; without it the types are listed by name.
-    const typeFacetPromise: Promise<Map<string, { count: number; labels: Record<string, string> }> | null> =
-      release && !type && data.query && typeChoices.length > 0
-        ? kernelClient(data.locale)
-            .subjects.$facets.post(typeBody)
-            .then((response) => {
-              if (response.error) return null;
-              return new Map(
-                (response.data as FacetResult).facets
-                  .find((facet) => facet.property === 'type')
-                  ?.values.map((entry): [string, { count: number; labels: Record<string, string> }] => [
-                    entry.value,
-                    { count: entry.count, labels: entry.labels },
-                  ]) ?? [],
-              );
-            })
-            .catch(() => null)
-        : Promise.resolve(null);
+    const typeFacetPromise: Promise<{ value: string; labels: Record<string, string> }[] | null> = typeFacetRequested
+      ? kernelClient(data.locale)
+          .subjects.$facets.post(typeBody)
+          .then((response) => {
+            if (response.error) {
+              facetIndexNotReady ||= isRecord(response.error) && response.error.code === 'index_not_ready';
+              return null;
+            }
+            return ((response.data as FacetResult).facets.find((facet) => facet.property === 'type')?.values ?? []).map(
+              ({ value, labels }) => ({ value, labels }),
+            );
+          })
+          .catch(() => null)
+      : Promise.resolve(null);
 
     const [result, facetResult, typeFacets] = await Promise.all([searchPromise, facetsPromise, typeFacetPromise]);
     const facetsAvailable = !release || !type || facetResult !== null;
@@ -286,9 +298,9 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ? facetPropertiesForType.map((property) => ({
             property,
             labels: release!.properties[property]?.labels ?? {},
-            values: (valuesByProperty.get(property) ?? []).map((entry) => {
-              const parentLabels = parentTypeLabels(release!, entry.value);
-              return { ...entry, ...(parentLabels ? { parentTypeLabels: parentLabels } : {}) };
+            values: (valuesByProperty.get(property) ?? []).map(({ value, labels }) => {
+              const parentLabels = parentTypeLabels(release!, value);
+              return { value, labels, ...(parentLabels ? { parentTypeLabels: parentLabels } : {}) };
             }),
           }))
         : [];
@@ -296,23 +308,15 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     if (release)
       for (const subject of result?.subjects ?? [])
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
-    // One entry per type term, never merged by name: the most matches first, then by name in the reader's language.
-    const collator = new Intl.Collator(data.locale);
-    const orderedTypes = typeChoices
-      .map((choice) => {
-        const facet = typeFacets?.get(choice.id);
-        const labels = facet && Object.keys(facet.labels).length > 0 ? facet.labels : choice.labels;
-        return { ...choice, labels, ...(facet ? { count: facet.count } : {}) };
-      })
-      .sort(
-        (left, right) =>
-          (right.count ?? 0) - (left.count ?? 0) ||
-          collator.compare(
-            localizedLabel(left.labels, data.locale).text || left.id,
-            localizedLabel(right.labels, data.locale).text || right.id,
-          ) ||
-          (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
-      );
+    // Keep the kernel's facet order; counts are not a public ordering signal.
+    const facetChoiceIds = new Set(typeFacets?.map(({ value }) => value) ?? []);
+    const orderedTypes = [
+      ...(typeFacets ?? []).flatMap(({ value, labels }) => {
+        const choice = typeChoices.find(({ id }) => id === value);
+        return choice ? [{ ...choice, labels: Object.keys(labels).length > 0 ? labels : choice.labels }] : [];
+      }),
+      ...typeChoices.filter(({ id }) => !facetChoiceIds.has(id)),
+    ];
 
     return {
       ...(result ? { result } : {}),
@@ -330,6 +334,10 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ]),
       ),
       facetsAvailable: release !== undefined && facetsAvailable,
+      facetRetry: facetResult === null || (typeFacetRequested && typeFacets === null),
+      facetIndexNotReady,
+      staleCursorRestarted,
+      sort: data.sort ?? 'relevance',
     };
   });
 
@@ -339,10 +347,12 @@ function searchHref(
   type: string | undefined,
   facets: Record<string, string[]>,
   cursor?: string,
+  sort?: 'rating',
 ): string {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
   if (type) params.set('type', type);
+  if (sort) params.set('sort', sort);
   for (const [property, values] of Object.entries(facets))
     for (const value of values) params.append(`f.${property}`, value);
   if (cursor) params.set('cursor', cursor);
@@ -352,7 +362,7 @@ function searchHref(
 
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
 
-export function SearchPage({ query, cursor, data }: { query: string; cursor?: string; data?: SearchPageData }) {
+export function SearchPage({ query, data }: { query: string; data?: SearchPageData }) {
   const [formQuery, setFormQuery] = useState(query);
   const [hydrated, setHydrated] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -372,18 +382,22 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
   const hasFilterPanel = Boolean(
     query && result?.subjects.length && data?.facetsAvailable && (data.typeChoices.length || type),
   );
-  const results = renderResults(query, cursor, result, locale, type, selectedFacets, data);
+  const results = renderResults(query, result, locale, type, selectedFacets, data);
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="space-y-5 pt-3 lg:pt-0">
       <input type="hidden" name="q" value={query} />
       {type && <input type="hidden" name="type" value={type} />}
+      {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {type ? (
         <section className="space-y-3">
           <h2 className="font-medium">
             {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
           </h2>
-          <a className={linkClass} href={searchHref(locale, query, undefined, {})}>
+          <a
+            className={linkClass}
+            href={searchHref(locale, query, undefined, {}, undefined, data?.sort === 'rating' ? 'rating' : undefined)}
+          >
             {m.search_clear_type()}
           </a>
           {Object.entries(selectedFacets).length > 0 && (
@@ -402,6 +416,8 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
                           query,
                           type,
                           Object.fromEntries(Object.entries(selectedFacets).filter(([key]) => key !== property)),
+                          undefined,
+                          data?.sort === 'rating' ? 'rating' : undefined,
                         )}
                       >
                         {m.search_clear_facet()}
@@ -475,7 +491,18 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
               const label = localizedLabel(choice.labels, locale);
               return (
                 <li key={choice.id}>
-                  <a className={linkClass} href={searchHref(locale, query, choice.id, {})} lang={label.lang}>
+                  <a
+                    className={linkClass}
+                    href={searchHref(
+                      locale,
+                      query,
+                      choice.id,
+                      {},
+                      undefined,
+                      data?.sort === 'rating' ? 'rating' : undefined,
+                    )}
+                    lang={label.lang}
+                  >
                     {label.text || choice.id}
                   </a>
                 </li>
@@ -510,6 +537,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
           </Button>
         </div>
         {type && <input type="hidden" name="type" value={type} />}
+        {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       </form>
       {hasFilterPanel ? (
         <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -552,7 +580,6 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
 
 function renderResults(
   query: string,
-  cursor: string | undefined,
   result: SearchResult | undefined,
   locale: string,
   type: string | undefined,
@@ -560,30 +587,71 @@ function renderResults(
   data: SearchPageData | undefined,
 ) {
   if (!result) return null;
-  if (result.subjects.length === 0)
-    return (
-      <Empty className="border">
-        <EmptyHeader>
-          <EmptyTitle className="text-base font-normal">{m.search_no_results()}</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
-    );
   return (
     <>
-      <p className="text-sm text-muted-foreground">{m.search_results()}</p>
-      <ResultList
-        hits={result.subjects}
-        locale={locale}
-        hitTypes={data?.hitTypes ?? {}}
-        yearProperties={data?.yearProperties ?? []}
-      />
-      {result.next && (
-        <a
-          href={searchHref(locale, query, type, selectedFacets, result.next)}
-          className={buttonVariants({ variant: 'outline' })}
-        >
-          {m.search_more()}
-        </a>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{m.search_results()}</p>
+        <SearchSort
+          sort={data?.sort ?? 'relevance'}
+          locale={locale}
+          query={query}
+          type={type}
+          facets={selectedFacets}
+        />
+      </div>
+      {data?.staleCursorRestarted && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_stale_cursor_restarted()}
+        </p>
+      )}
+      {data?.facetRetry && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {data.facetIndexNotReady ? m.search_facet_index_not_ready() : m.search_facet_unavailable()}{' '}
+          <a
+            className={linkClass}
+            href={searchHref(
+              locale,
+              query,
+              type,
+              selectedFacets,
+              undefined,
+              data.sort === 'rating' ? 'rating' : undefined,
+            )}
+          >
+            {m.search_facet_retry()}
+          </a>
+        </p>
+      )}
+      {result.subjects.length === 0 ? (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyTitle className="text-base font-normal">{m.search_no_results()}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <>
+          <ResultList
+            hits={result.subjects}
+            locale={locale}
+            hitTypes={data?.hitTypes ?? {}}
+            yearProperties={data?.yearProperties ?? []}
+          />
+          {result.next && (
+            <a
+              href={searchHref(
+                locale,
+                query,
+                type,
+                selectedFacets,
+                result.next,
+                data?.sort === 'rating' ? 'rating' : undefined,
+              )}
+              className={buttonVariants({ variant: 'outline' })}
+            >
+              {m.search_more()}
+            </a>
+          )}
+        </>
       )}
     </>
   );

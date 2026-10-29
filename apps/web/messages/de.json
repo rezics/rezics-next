@@ -500,7 +500,6 @@
   "subject_posts": "Beiträge",
   "subject_qualifiers": "Qualifikatoren",
   "subject_ratings": "Bewertungen",
-
   "subject_ratings_count": "{count} Bewertungen auf {population}",
   "subject_ratings_distribution": "Verteilung der Bewertungen",
   "subject_ratings_empty": "Noch keine Bewertungen",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "Noch {count} Bewertungen bis zur Anzeige einer Note",
   "subject_ratings_reviews": "Rezensionen",
   "subject_ratings_yours": "Deine Bewertung: {score}",
-
   "subject_reactions_unavailable": "Die Reaktionen konnten nicht geladen werden.",
   "subject_relation_group_association": "Verwandt",
   "subject_relation_group_derivation": "Adaptionen und Ausgaben",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "Weitere laden",
   "settings_privacy_conflict_title": "Diese Sammlung wurde an anderer Stelle geändert",
   "settings_privacy_conflict_text": "Deine Änderung wurde nicht gespeichert. Lade diese Sammlung neu, um die aktuelle Sichtbarkeit zu sehen.",
-  "settings_privacy_reload_row": "Sammlung neu laden"
+  "settings_privacy_reload_row": "Sammlung neu laden",
+  "search_facet_index_not_ready": "Filter werden noch vorbereitet.",
+  "search_facet_retry": "Erneut versuchen",
+  "search_facet_unavailable": "Filter konnten nicht geladen werden.",
+  "search_global_score": "Globale Bewertung",
+  "search_sort_label": "Sortieren nach",
+  "search_sort_rating": "Am besten bewertet",
+  "search_sort_relevance": "Relevanz",
+  "search_stale_cursor_restarted": "Die Ergebnisse wurden aktualisiert. Die erste Seite wird angezeigt."
 }

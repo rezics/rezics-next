@@ -500,7 +500,6 @@
   "subject_posts": "게시물",
   "subject_qualifiers": "수식어",
   "subject_ratings": "평점",
-
   "subject_ratings_count": "{population}의 평점 {count}개",
   "subject_ratings_distribution": "평점 분포",
   "subject_ratings_empty": "아직 평점이 없습니다",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "점수를 표시하려면 평점 {count}개가 더 필요합니다",
   "subject_ratings_reviews": "리뷰",
   "subject_ratings_yours": "내 평점: {score}",
-
   "subject_reactions_unavailable": "반응을 불러오지 못했습니다.",
   "subject_relation_group_association": "관련",
   "subject_relation_group_derivation": "각색 및 판본",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "더 불러오기",
   "settings_privacy_conflict_title": "이 컬렉션이 다른 곳에서 변경되었습니다",
   "settings_privacy_conflict_text": "변경 사항이 저장되지 않았습니다. 다시 불러와 현재 공개 범위를 확인하세요.",
-  "settings_privacy_reload_row": "컬렉션 다시 불러오기"
+  "settings_privacy_reload_row": "컬렉션 다시 불러오기",
+  "search_facet_index_not_ready": "필터를 준비하고 있습니다.",
+  "search_facet_retry": "다시 시도",
+  "search_facet_unavailable": "필터를 불러오지 못했습니다.",
+  "search_global_score": "전체 평점",
+  "search_sort_label": "정렬 기준",
+  "search_sort_rating": "평점 높은 순",
+  "search_sort_relevance": "관련도순",
+  "search_stale_cursor_restarted": "결과가 업데이트되어 첫 페이지를 표시합니다."
 }

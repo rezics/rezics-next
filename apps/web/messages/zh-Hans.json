@@ -500,7 +500,6 @@
   "subject_posts": "帖子",
   "subject_qualifiers": "限定条件",
   "subject_ratings": "评分",
-
   "subject_ratings_count": "{population}的 {count} 个评分",
   "subject_ratings_distribution": "评分分布",
   "subject_ratings_empty": "暂无评分",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "还需 {count} 个评分才能显示分数",
   "subject_ratings_reviews": "评论",
   "subject_ratings_yours": "你的评分：{score}",
-
   "subject_reactions_unavailable": "暂时无法加载表态。",
   "subject_relation_group_association": "相关",
   "subject_relation_group_derivation": "改编与版本",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "加载更多",
   "settings_privacy_conflict_title": "此收藏集已在其他地方更改",
   "settings_privacy_conflict_text": "更改未保存。请重新加载此收藏集以查看当前可见范围。",
-  "settings_privacy_reload_row": "重新加载收藏集"
+  "settings_privacy_reload_row": "重新加载收藏集",
+  "search_facet_index_not_ready": "筛选条件仍在准备中。",
+  "search_facet_retry": "重试",
+  "search_facet_unavailable": "无法加载筛选条件。",
+  "search_global_score": "全球评分",
+  "search_sort_label": "排序方式",
+  "search_sort_rating": "评分最高",
+  "search_sort_relevance": "相关性",
+  "search_stale_cursor_restarted": "结果已更新，现显示第一页。"
 }

@@ -500,7 +500,6 @@
   "subject_posts": "Messages",
   "subject_qualifiers": "Qualificatifs",
   "subject_ratings": "Notes",
-
   "subject_ratings_count": "{count} notes sur {population}",
   "subject_ratings_distribution": "Répartition des notes",
   "subject_ratings_empty": "Pas encore de notes",
@@ -509,7 +508,6 @@
   "subject_ratings_remaining": "Encore {count} notes pour afficher un score",
   "subject_ratings_reviews": "Critiques",
   "subject_ratings_yours": "Votre note : {score}",
-
   "subject_reactions_unavailable": "Les réactions n’ont pas pu être chargées.",
   "subject_relation_group_association": "Liées",
   "subject_relation_group_derivation": "Adaptations et éditions",
@@ -649,5 +647,13 @@
   "settings_privacy_load_more": "Afficher plus",
   "settings_privacy_conflict_title": "Cette collection a été modifiée ailleurs",
   "settings_privacy_conflict_text": "Votre modification n’a pas été enregistrée. Rechargez cette collection pour voir sa visibilité actuelle.",
-  "settings_privacy_reload_row": "Recharger la collection"
+  "settings_privacy_reload_row": "Recharger la collection",
+  "search_facet_index_not_ready": "Les filtres sont en cours de préparation.",
+  "search_facet_retry": "Réessayer",
+  "search_facet_unavailable": "Les filtres n’ont pas pu être chargés.",
+  "search_global_score": "Note globale",
+  "search_sort_label": "Trier par",
+  "search_sort_rating": "Mieux notées",
+  "search_sort_relevance": "Pertinence",
+  "search_stale_cursor_restarted": "Les résultats ont changé. La première page est affichée."
 }

@@ -15,6 +15,7 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
           ...(params.type ? { type: params.type } : {}),
           facetValues: params.facets,
           ...(params.cursor ? { cursor: params.cursor } : {}),
+          ...(params.sort ? { sort: params.sort } : {}),
         },
       }),
   });

@@ -22,6 +22,7 @@ export const searchParams = v.objectWithRest(
     q: v.fallback(v.pipe(v.string(), v.maxLength(256)), ''),
     type: v.fallback(v.optional(v.pipe(v.string(), v.maxLength(128))), undefined),
     cursor: v.fallback(v.optional(v.pipe(v.string(), v.maxLength(2048))), undefined),
+    sort: v.fallback(v.optional(v.picklist(['rating'])), undefined),
   },
   facetValue,
 );
@@ -34,6 +35,7 @@ export type SearchLoaderDeps = {
   type: string | undefined;
   facets: SearchFacetValues;
   cursor: string | undefined;
+  sort: 'rating' | undefined;
 };
 
 export function facetValuesFromSearch(search: Record<string, unknown>): SearchFacetValues {
@@ -55,5 +57,6 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
     type: typeof search.type === 'string' ? search.type : undefined,
     facets: facetValuesFromSearch(search),
     cursor: typeof search.cursor === 'string' ? search.cursor : undefined,
+    sort: search.sort === 'rating' ? 'rating' : undefined,
   };
 }
