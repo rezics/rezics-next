@@ -107,6 +107,25 @@ test('check-wide compiler and test phases are retained with file timings', async
   });
 });
 
+test('test-emitted fixture boundaries are retained separately from hooks and test cases', async () => {
+  const recorder = createRecorder();
+  const runner = recorder.wrap(
+    {
+      create: () => undefined,
+      run: () =>
+        'REZICS_KERNEL_FIXTURE_PHASES={"databaseSetup":0.25,"authSetup":0.5}\nREZICS_KERNEL_FIXTURE_PHASES={"workerBoot":0.75}',
+      drop: () => undefined,
+    },
+    async () => [],
+  );
+  await scheduleFiles(['fixture.test.ts'], 1, runner);
+  expect(recorder.timings()['fixture.test.ts']?.fixturePhases).toEqual({
+    databaseSetup: 0.25,
+    authSetup: 0.5,
+    workerBoot: 0.75,
+  });
+});
+
 test('the JUnit report gives each test’s name and time', () => {
   expect(parseJunit(junit)).toEqual([
     { name: 'group one', time: 0.1 },

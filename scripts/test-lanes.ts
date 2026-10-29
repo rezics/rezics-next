@@ -19,6 +19,8 @@ export type FileTiming = {
   drop: number;
   /** Test module import time measured from the preload until the first beforeAll hook. */
   moduleLoad?: number;
+  /** Explicit application, Auth, worker, and fixture boundaries emitted by the test itself. */
+  fixturePhases?: Record<string, number>;
   outsideTests: number;
   result: 'pass' | 'fail';
   peakConnections?: number;
@@ -451,6 +453,8 @@ export function createRecorder() {
             if (typeof output === 'string') {
               const moduleLoad = readModuleLoad(output);
               if (moduleLoad !== undefined) timing.moduleLoad = moduleLoad;
+              const fixturePhases = readFixturePhases(output);
+              if (fixturePhases !== undefined) timing.fixturePhases = fixturePhases;
             }
             timing.result = 'pass';
             return output;
@@ -458,6 +462,8 @@ export function createRecorder() {
             if (cause instanceof Error) {
               const moduleLoad = readModuleLoad(cause.message);
               if (moduleLoad !== undefined) timing.moduleLoad = moduleLoad;
+              const fixturePhases = readFixturePhases(cause.message);
+              if (fixturePhases !== undefined) timing.fixturePhases = fixturePhases;
             }
             throw cause;
           } finally {
@@ -488,6 +494,26 @@ function readModuleLoad(output: string): number | undefined {
   if (marker === undefined) return undefined;
   const seconds = Number(marker);
   return Number.isFinite(seconds) && seconds >= 0 ? round(seconds) : undefined;
+}
+
+function readFixturePhases(output: string): Record<string, number> | undefined {
+  const markers = Array.from(output.matchAll(/^REZICS_KERNEL_FIXTURE_PHASES=(\{[^\r\n]*\})$/gm), (match) => match[1]!);
+  if (markers.length === 0) return undefined;
+  const phases: Record<string, number> = {};
+  for (const marker of markers) {
+    try {
+      const parsed: unknown = JSON.parse(marker);
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+      for (const [name, seconds] of Object.entries(parsed)) {
+        if (/^[a-z][a-zA-Z0-9]*$/.test(name) && typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0) {
+          phases[name] = seconds;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return phases;
 }
 
 const variable = (service: string, name: string): string => `${service.toUpperCase()}_CHECK_${name}`;

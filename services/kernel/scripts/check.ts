@@ -343,7 +343,7 @@ export function invokeTypecheck<T>(
     files === null
       ? ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json']
       : ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'];
-  const environment = { ...baseEnvironment, REYLO_CONFIG: baseEnvironment.REYLO_CONFIG ?? reyloConfig };
+  const environment = { ...baseEnvironment, REYLO_CONFIG: reyloConfig };
   return invoke(program, args, environment);
 }
 
@@ -821,7 +821,8 @@ async function main(): Promise<void> {
   mkdirSync(temporaryRoot, { recursive: true });
   reyloDirectory = mkdtempSync(resolve(temporaryRoot, 'reylo-'));
   const reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
-  const compilerConfig = process.env.REYLO_CONFIG ?? resolve(directory, '.reylo.yaml');
+  const analysisEnvironment = { ...env, REYLO_CONFIG: reyloConfig };
+  const compilerConfig = reyloConfig;
   const compilerEntriesBefore = reyloEntryCount(compilerConfig);
 
   const tsc = resolve(directory, '../../node_modules/.bin/tsc');
@@ -832,15 +833,15 @@ async function main(): Promise<void> {
     async () => {
       if (plan.files === null) {
         let phaseStarted = performance.now();
-        invokeTypecheck(tsc, null, env, reyloConfig, run);
+        invokeTypecheck(tsc, null, analysisEnvironment, reyloConfig, run);
         compilerSeconds += seconds(phaseStarted);
         phaseStarted = performance.now();
-        run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], env);
-        run(oxfmt, ['--check', '.'], env);
+        run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], analysisEnvironment);
+        run(oxfmt, ['--check', '.'], analysisEnvironment);
         qualitySeconds += seconds(phaseStarted);
       } else {
         const compilerStarted = performance.now();
-        const typecheck = await invokeTypecheck(tsc, plan.files, env, reyloConfig, capture);
+        const typecheck = await invokeTypecheck(tsc, plan.files, analysisEnvironment, reyloConfig, capture);
         compilerSeconds += seconds(compilerStarted);
         const diagnostics = ownDiagnostics(
           typecheck.output,
@@ -854,10 +855,15 @@ async function main(): Promise<void> {
         const qualityStarted = performance.now();
         const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
         if (lintFiles.length)
-          run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles], env);
+          run(
+            process.execPath,
+            ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles],
+            analysisEnvironment,
+          );
 
         const formatFiles = formattedFiles(plan.files);
-        if (formatFiles.length) run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], env);
+        if (formatFiles.length)
+          run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], analysisEnvironment);
         qualitySeconds += seconds(qualityStarted);
       }
     },
@@ -956,7 +962,7 @@ async function main(): Promise<void> {
       createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
       dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
       environment: (database) =>
-        fileEnvironment(env, { url, database, ...(searchUrl ? { searchUrl } : {}), reyloConfig }),
+        fileEnvironment(analysisEnvironment, { url, database, ...(searchUrl ? { searchUrl } : {}), reyloConfig }),
       onFileComplete: (outcome, timing) => {
         if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
         else outputByFile.delete(outcome.file);
@@ -965,7 +971,7 @@ async function main(): Promise<void> {
         filePeaks.set(outcome.file, peak);
         const testCases = timing.tests.reduce((total, test) => total + test.time, 0);
         process.stdout.write(
-          `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s\n`,
+          `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s fixture-phases=${timing.fixturePhases === undefined ? 'unmeasured' : JSON.stringify(timing.fixturePhases)}\n`,
         );
         process.stdout.write(`${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`);
       },

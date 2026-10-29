@@ -17,6 +17,9 @@ const workerEnvironment = {
   AUTH_AUDIENCE: 'https://kernel.worker.test',
   AUTH_JWKS_URL: 'https://auth.worker.test/.well-known/jwks.json',
 };
+const elapsedSeconds = (started: number) => Math.round(((performance.now() - started) / 1000) * 10_000) / 10_000;
+const reportFixturePhases = (phases: Record<string, number>) =>
+  process.stdout.write(`REZICS_KERNEL_FIXTURE_PHASES=${JSON.stringify(phases)}\n`);
 
 test('worker configuration names invalid variables without revealing values', () => {
   expect(KERNEL_WORK_MODULES.filter((module) => module === commerceWorkModule)).toHaveLength(1);
@@ -165,11 +168,15 @@ test('API enqueue before startup survives, duplicate IDs execute once, and SIGTE
     const handle = await client.enqueue(options, workflowID);
     await client.enqueue(options, workflowID);
     expect((await handle.getStatus())?.status).toBe('ENQUEUED');
+    const workerBootStarted = performance.now();
     runtime = fixture('worker');
     await runtime.until('worker-ready');
+    reportFixturePhases({ workerBoot: elapsedSeconds(workerBootStarted) });
     await runtime.until(`started:${workflowID}`);
+    const workerDrainStarted = performance.now();
     runtime.child.kill('SIGTERM');
     const output = await runtime.finish();
+    reportFixturePhases({ workerDrain: elapsedSeconds(workerDrainStarted) });
     expect(output.match(/started:/g)).toHaveLength(1);
     expect(output).toContain(`finished:${workflowID}`);
     expect(await handle.getResult()).toBe(workflowID);

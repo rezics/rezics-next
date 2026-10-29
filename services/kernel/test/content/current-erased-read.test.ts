@@ -36,9 +36,16 @@ let access: ReturnType<typeof createAccess>;
 let sign: (accountId: string, scopes: readonly string[]) => Promise<string>;
 const deps = (selected: Access = access) => ({ pool: database.pool, access: selected, tokens });
 const ctx = (actor: Actor = { kind: 'anonymous' }) => ({ actor, deadline: Date.now() + 10_000 });
+const elapsedSeconds = (started: number) => Math.round(((performance.now() - started) / 1000) * 10_000) / 10_000;
+const reportFixturePhases = (phases: Record<string, number>) =>
+  process.stdout.write(`REZICS_KERNEL_FIXTURE_PHASES=${JSON.stringify(phases)}\n`);
 
 beforeAll(async () => {
+  const fixturePhases: Record<string, number> = {};
+  let phaseStarted = performance.now();
   database = await openGrowthDatabase();
+  fixturePhases.databaseFixture = elapsedSeconds(phaseStarted);
+  phaseStarted = performance.now();
   const pair = await generateKeyPair('ES256');
   const publicKey = { ...(await exportJWK(pair.publicKey)), kid: 'read-test', alg: 'ES256' };
   const issuer = 'https://auth.example.test';
@@ -69,6 +76,8 @@ beforeAll(async () => {
       .setIssuedAt()
       .setExpirationTime('3m')
       .sign(pair.privateKey);
+  fixturePhases.authSetup = elapsedSeconds(phaseStarted);
+  phaseStarted = performance.now();
   for (const id of [author, reader])
     await database.admin.query(
       `INSERT INTO access.account (route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)`,
@@ -80,6 +89,8 @@ beforeAll(async () => {
     if (bytes.equals(retained) || bytes.equals(retainedHead)) decodedBodies++;
     return bytes;
   });
+  fixturePhases.accountFixture = elapsedSeconds(phaseStarted);
+  reportFixturePhases(fixturePhases);
 });
 afterAll(async () => {
   pg.types.setTypeParser(17, 'text', parseBytea);
