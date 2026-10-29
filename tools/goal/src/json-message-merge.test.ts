@@ -41,7 +41,7 @@ test('train resolves conflicting flat message catalog appends and keeps both sid
     expect(h.store.task(task.id).state).toBe('integrated');
     expect(h.outcomes[0]?.passed).toBe(true);
     expect(git(h.root, ['show', `dev:${catalog}`])).toBe(
-      format({ existing: 'base', shared: 'base', target: 'target value', worker: 'worker value' }),
+      format({ existing: 'base', shared: 'base', target: 'target value', worker: 'worker value' }).trimEnd(),
     );
   } finally {
     h.dispose();
@@ -57,7 +57,7 @@ test('retry rebase resolves a flat message catalog conflict and continues', asyn
 
     expect(git(task.worktree, ['status', '--porcelain'])).toBe('');
     expect(git(task.worktree, ['show', `HEAD:${catalog}`])).toBe(
-      format({ existing: 'base', shared: 'base', target: 'target value', worker: 'worker value' }),
+      format({ existing: 'base', shared: 'base', target: 'target value', worker: 'worker value' }).trimEnd(),
     );
   } finally {
     h.dispose();
