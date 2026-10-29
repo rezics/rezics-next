@@ -327,7 +327,7 @@ export const SharedPlaceholders: Story = {
                 meta={index % 2 === 0 ? 'Finished yesterday' : undefined}
                 state={index === 1 || index === 5 ? 'Reading' : undefined}
                 progress={index === 0 ? { value: 0.42, label: '42%' } : undefined}
-                menuEntries={index < 3 ? [{ label: 'Remove', onSelect: () => {} }] : undefined}
+                menuEntries={index < 3 ? [{ type: 'item', label: 'Remove', onSelect: () => {} }] : undefined}
               />
             ))}
           </CoverGrid>
