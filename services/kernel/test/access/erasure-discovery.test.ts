@@ -405,7 +405,10 @@ test('missing and uncommitted obligations are refused before progress or native 
         LifecycleDeniedError,
       );
     });
-    expect(measured.statements.filter((sql) => /SELECT|INSERT|UPDATE/i.test(sql))).toHaveLength(1);
+    const accesses = measured.statements.filter((sql) => /\b(?:FROM|INTO|UPDATE)\s+access\./i.test(sql));
+    expect(accesses).toHaveLength(1);
+    expect(accesses[0]).toContain('FROM access.erasure ');
+    expect(costOf(measured).relations['access.erasure_progress']).toBeUndefined();
     expect(costOf(measured).relations['access.organization_member']).toBeUndefined();
   }
   const id = await account();
