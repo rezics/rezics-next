@@ -402,7 +402,13 @@ test("an account upload and field erasure page stays within its bound as other u
   const owner = personas.orgOwner;
   await field(owner, 'Growth field');
   const web = await website(owner);
-  await media(web, owner.accountId, 'avatar');
+  const post = await thread(web);
+  const retained = await media(web, post.id);
+  await ok(web, 'POST', `/v1/threads/${post.id}/posts`, {
+    body: fromPlainText('Retained growth image'),
+    mediaIds: [retained],
+    licence: 'CC0-1.0',
+  });
   await deletePersona(options(), owner);
   await flush();
   const body = Buffer.from(JSON.stringify(fromPlainText('Other author')));
