@@ -35,10 +35,13 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
     await h.start(first);
     await h.start(second);
 
-    const checked: { command: string[]; cwd: string }[] = [];
+    const checked: { command: string[]; files: string[] }[] = [];
     const runner: GateRunner = async (command, cwd) => {
       if (command[1] === 'test')
-        checked.push({ command: [...command], cwd });
+        checked.push({
+          command: [...command],
+          files: ['first.txt', 'second.txt'].filter((file) => existsSync(join(cwd, file))),
+        });
       return passingRunner(command, cwd, join(h.settings.stateDirectory, 'acceptance.log'));
     };
     await h.train(runner);
@@ -51,8 +54,8 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
       ['bun', 'test'],
       ['bun', 'test'],
     ]);
-    expect(existsSync(join(checked[0]!.cwd, 'first.txt'))).toBe(true);
-    expect(existsSync(join(checked[1]!.cwd, 'second.txt'))).toBe(true);
+    expect(checked[0]!.files).toEqual(['first.txt']);
+    expect(checked[1]!.files).toEqual(['first.txt', 'second.txt']);
     expect(git(h.root, 'merge-base', '--is-ancestor', h.head('stabilize'), 'dev')).toBe('');
   } finally {
     h.dispose();
