@@ -113,12 +113,13 @@ async function makeProtectedRealm(): Promise<{ realm: Realm; boardId: string }> 
   await worker.stop();
   try {
     const join = await driver.request({
-      actor: fixture.member,
+      actor: fixture.owner,
       method: 'POST',
-      path: `/v1/realms/${assigned.realm.realmId}/membership`,
+      path: `/v1/realms/${assigned.realm.realmId}/members`,
       key: JSON.stringify(randomUUID()),
+      body: { accountId: fixture.member.id },
     });
-    expect(join.status).toBe(202);
+    expect(join.status, await join.clone().text()).toBe(202);
   } finally {
     await restartWorker();
   }
