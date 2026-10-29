@@ -119,15 +119,21 @@ afterAll(async () => {
   if (db) await within(db.close(), 'database close');
 });
 
-async function source(options: { fail?: boolean; held?: boolean; partition?: number; other?: boolean } = {}) {
+async function source(
+  options: { fail?: boolean; held?: boolean; partition?: number; other?: boolean; clock?: () => Date } = {},
+) {
   const id = newId(0x7351);
   const control: Control = { entered: barrier(), gate: barrier(), fail: options.fail ?? false, attempts: 0 };
   controls.set(id, control);
   if (!options.held) control.gate.release();
-  const result = await runCommand(db.pool, { partition: options.partition ?? nextPartition++, basis }, async () => ({
-    value: id,
-    events: [{ type: options.other ? CONTEXT : CREATED, data: { id } }],
-  }));
+  const result = await runCommand(
+    db.pool,
+    { partition: options.partition ?? nextPartition++, basis, clock: options.clock },
+    async () => ({
+      value: id,
+      events: [{ type: options.other ? CONTEXT : CREATED, data: { id } }],
+    }),
+  );
   const envelope: Envelope = { ...result, events: [] };
   return { ...result, control, workflowId: effectWorkflowId(envelope, 0, options.other ? other : locator) };
 }
@@ -180,7 +186,7 @@ async function expectHeld(accountId: string) {
 }
 
 test('ERROR holds every subsequent erasure, survives resume and a successful fork, and clears only by named platform resolution', async () => {
-  const failed = await source({ fail: true });
+  const failed = await source({ fail: true, clock: () => new Date('2099-01-01T00:00:00Z') });
   await relayAll();
   await expect(within(DBOS.retrieveWorkflow(failed.workflowId).getResult(), 'failed workflow')).rejects.toThrow();
   expect(failed.control.attempts).toBe(10);
@@ -214,9 +220,10 @@ test('ERROR holds every subsequent erasure, survives resume and a successful for
   await relayAll();
   for (const accountId of accounts) expect((await advance(accountId)).value).toBe(true);
   // Replay of a resolved origin cannot reopen it, even though its DBOS result remains ERROR.
-  await db.admin.query("UPDATE core.consumer_checkpoint SET position=0 WHERE consumer='effects' AND partition_no=$1", [
-    failed.partition,
-  ]);
+  await db.admin.query(
+    "UPDATE core.consumer_checkpoint SET position=0,epoch=NULL WHERE consumer='effects' AND partition_no=$1",
+    [failed.partition],
+  );
   await relayAll();
   expect((await row(failed.workflowId)).state).toBe('resolved');
 }, 180000);
@@ -229,6 +236,10 @@ test('retention deletes failed DBOS history before the first tombstone without l
   ).rejects.toThrow();
   const old = Date.now() - 40 * 86400000;
   await db.admin.query('UPDATE dbos.workflow_status SET created_at=$2,completed_at=$2 WHERE workflow_uuid=$1', [
+    failed.workflowId,
+    old,
+  ]);
+  await db.admin.query('UPDATE access.erasure_locator_work SET opened_at=$2 WHERE workflow_id=$1', [
     failed.workflowId,
     old,
   ]);
@@ -283,7 +294,7 @@ for (const ending of ['CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'] as const) {
     expect(queued.control.attempts).toBe(1);
     expect((await advance(accountId)).value).toBe(true);
     await db.admin.query(
-      "UPDATE core.consumer_checkpoint SET position=0 WHERE consumer='effects' AND partition_no=$1",
+      "UPDATE core.consumer_checkpoint SET position=0,epoch=NULL WHERE consumer='effects' AND partition_no=$1",
       [partition],
     );
     await relayAll();
