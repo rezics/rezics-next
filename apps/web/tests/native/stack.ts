@@ -18,6 +18,10 @@ export type NativeWebStack = {
   kernelOrigin: string;
   authIssuer: string;
   web: string;
+  /** Read fixture identity for form entry, without creating a website session. */
+  authPersona(persona: string): Promise<{ accountId: string; email: string }>;
+  /** Install the Auth page app on the issuer; undefined removes the page routing. */
+  routeAuthPages(handler?: (request: Request) => Response | Promise<Response>): Promise<string>;
   kernel(path: string, init?: RequestInit, persona?: string): Promise<Response>;
   request(url: string, persona?: string, headers?: Record<string, string>): Promise<Response>;
   credentials(persona: string): Promise<NativeCredentials>;
@@ -211,7 +215,9 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{ pid
   }
 }
 
-async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>> {
+async function startStack(): Promise<
+  Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages'> & { routeAuthPages(origin?: string): Promise<string> }
+> {
   let kernelServer: ReturnType<typeof Bun.serve> | undefined;
   let authServer: ReturnType<typeof Bun.serve> | undefined;
   const activeKernelRequests = new Set<Promise<Response>>();
@@ -221,6 +227,7 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
   let postgresContainer: string | undefined;
   let runtimeDirectory: string | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
+  let closePageWorkflows: (() => Promise<void>) | undefined;
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
@@ -280,6 +287,7 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
       // Auth holds the harness's kernel Access and registration ports. Drain it
       // while those ports and their pool still exist, then release the kernel.
       console.info('Native web stack cleanup: closing Auth fixture');
+      await attempt(() => closePageWorkflows?.());
       await attempt(() => closeAuth?.());
       console.info('Native web stack cleanup: closing kernel fixture');
       await attempt(() => driver?.close());
@@ -363,7 +371,33 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
     // website code flow. Never copy fixture passwords or manufacture sessions.
     const authCookies = new Map<string, string>();
     const authHandler = auth.service.handler.bind(auth.service);
+    let pageOrigin: string | undefined;
+    let signupHandler: ((request: Request) => Promise<Response>) | undefined;
+    const pagePaths = new Set([
+      '/login',
+      '/signup',
+      '/consent',
+      '/recovery',
+      '/security',
+      '/step-up',
+      '/account/delete',
+      '/organizations/new',
+    ]);
     auth.service.handler = async (request) => {
+      const url = new URL(request.url);
+      // The development app serves its source modules at Vite's standard paths.
+      // Production bundles instead use only /auth-assets/.
+      const asset =
+        ['/auth-assets/', '/@vite/', '/@id/', '/@fs/', '/src/', '/node_modules/', '/_serverFn/'].some((prefix) =>
+          url.pathname.startsWith(prefix),
+        ) || url.pathname === '/@react-refresh';
+      if (pageOrigin && ((['GET', 'HEAD'].includes(request.method) && pagePaths.has(url.pathname)) || asset)) {
+        const target = new URL(url.pathname + url.search, pageOrigin);
+        const forwarded = new Request(target, request);
+        forwarded.headers.set('x-native-auth-url', request.url);
+        return fetch(forwarded, { redirect: 'manual' });
+      }
+      if (pageOrigin && request.method === 'POST' && url.pathname === '/signup') return signupHandler!(request);
       const response = await authHandler(request);
       if (
         new URL(request.url).pathname === '/token' &&
@@ -498,6 +532,65 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
       kernelOrigin,
       authIssuer: authServer.url.origin,
       web: webOrigin,
+      async authPersona(persona) {
+        const { accountId } = await getAccount(persona);
+        const result = await auth.database.query<{ email: string }>('SELECT email FROM "user" WHERE id=$1', [
+          accountId,
+        ]);
+        if (!result.rows[0]?.email) throw new Error(`Native ${persona} has no sign-in email`);
+        return { accountId, email: result.rows[0].email };
+      },
+      async routeAuthPages(origin) {
+        if (origin && !signupHandler) {
+          // Replace the fixture's workflow executor once, on the same database and
+          // native registration ports, adding only public signup's Siteverify port.
+          // Two Auth workflow executors cannot coexist in one process.
+          const { createAccountWorkflows } = await import('../../../../services/auth/src/index.ts');
+          const { createRegistrationPorts } =
+            await import('../../../../services/kernel/test/support/registration-ports.ts');
+          const runtime = driver!.fixtures.runtime;
+          const keys = new Map(
+            runtime.sessionKeys.split(',').map((entry) => {
+              const [id, key] = entry.split(':');
+              return [Number(id), Buffer.from(key!, 'base64url')] as const;
+            }),
+          );
+          const { ports } = createRegistrationPorts({
+            pool: driver!.fixtures.pool,
+            authPool: auth.database,
+            routeKey: Buffer.from(runtime.routeKey, 'base64url'),
+            referenceKeys: { current: Math.max(...keys.keys()), keys },
+          });
+          await auth.host.workflows.close();
+          const workflows = createAccountWorkflows({
+            database: auth.database,
+            systemDatabaseUrl: auth.database.options.connectionString!,
+            systemDatabasePool: auth.database,
+            stagingKey: randomBytes(32),
+            auth: auth.service,
+            access: ports,
+            handleSignals: false,
+            turnstile: {
+              secret: '1x0000000000000000000000000000000AA',
+              // An explicit test provider boundary, as in Auth's own signup tests.
+              fetch: (async (_url, init) => {
+                const form = new URLSearchParams(String(init?.body));
+                return Response.json({
+                  success: form.get('response') === 'native-test-token',
+                  action: 'signup',
+                  hostname: new URL(auth.issuer).hostname,
+                });
+              }) as typeof fetch,
+            },
+          });
+          closePageWorkflows = () => workflows.close();
+          await workflows.start();
+          auth.host.workflows = workflows;
+          signupHandler = workflows.handler;
+        }
+        pageOrigin = origin;
+        return auth.issuer;
+      },
       async credentials(persona) {
         const { bearer } = await getAccount(persona);
         let cookie = webCookies.get(persona);
@@ -545,7 +638,7 @@ type HostReply =
   | { analysisDatabase: string };
 type HostCall = {
   id: number;
-  method: 'credentials' | 'restartWeb' | 'observe' | 'stop';
+  method: 'credentials' | 'authPersona' | 'routeAuthPages' | 'restartWeb' | 'observe' | 'stop';
   argument?: string;
   options?: { publicOrigin: string; authIssuer?: string };
 };
@@ -560,6 +653,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     env: { ...process.env, NATIVE_WEB_STACK_HOST: '1' },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
+  let pageBridge: ReturnType<typeof Bun.serve> | undefined;
   let output = '';
   for (const stream of [host.stdout, host.stderr])
     stream?.on('data', (chunk: Buffer) => {
@@ -652,6 +746,24 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
       authIssuer,
       web,
       credentials,
+      authPersona: (persona) => call('authPersona', persona) as Promise<{ accountId: string; email: string }>,
+      async routeAuthPages(handler) {
+        await pageBridge?.stop(true);
+        pageBridge = handler
+          ? Bun.serve({
+              hostname: '127.0.0.1',
+              port: 0,
+              fetch(request) {
+                const url = request.headers.get('x-native-auth-url');
+                if (!url) return new Response('Missing issuer URL', { status: 400 });
+                const forwarded = new Request(url, request);
+                forwarded.headers.delete('x-native-auth-url');
+                return handler(forwarded);
+              },
+            })
+          : undefined;
+        return (await call('routeAuthPages', pageBridge?.url.origin)) as string;
+      },
       kernelRequests: () => observation.requests.slice(),
       peakMemoryBytes: () => observation.peakMemory,
       async kernel(path, init = {}, persona) {
@@ -692,6 +804,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
             await call('stop');
           } finally {
             try {
+              await pageBridge?.stop(true);
               await terminate();
               if (originalDatabaseUrl === undefined && process.env.DATABASE_URL === databaseUrl)
                 delete process.env.DATABASE_URL;
@@ -729,6 +842,8 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
       try {
         let value: unknown;
         if (method === 'credentials') value = await stack.credentials(argument!);
+        else if (method === 'authPersona') value = await stack.authPersona(argument!);
+        else if (method === 'routeAuthPages') value = await stack.routeAuthPages(argument);
         else if (method === 'restartWeb') await stack.restartWeb(options!);
         else if (method === 'stop') await stack.stop();
         send({ id, value, observation: observation() } satisfies HostReply, method === 'stop' ? 0 : undefined);

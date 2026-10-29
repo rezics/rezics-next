@@ -35,16 +35,6 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-async function nativeEmail(stack: NativeWebStack, issuer: string, persona: AuthPersona): Promise<string> {
-  const credentials = await stack.credentials(persona);
-  if (!credentials.cookie) throw new Error(`Native ${persona} persona has no Auth cookie`);
-  const response = await fetch(`${issuer}/api/auth/get-session`, { headers: { cookie: credentials.cookie } });
-  if (!response.ok) throw new Error(`Could not read native ${persona} identity: ${response.status}`);
-  const value = (await response.json()) as { user?: { email?: string } } | null;
-  if (!value?.user?.email) throw new Error(`Native ${persona} Auth session did not expose its sign-in email`);
-  return value.user.email;
-}
-
 async function waitForPage(origin: string, child: ChildProcess, getOutput: () => string): Promise<void> {
   const deadline = Date.now() + 150_000;
   while (Date.now() < deadline) {
@@ -83,17 +73,17 @@ async function hydrate(page: Page): Promise<void> {
 
 export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthStack> {
   const startupStarted = performance.now();
-  const authIssuer = stack.authIssuer;
 
   const port = await freePort();
-  const origin = `http://127.0.0.1:${port}`;
+  const appOrigin = `http://127.0.0.1:${port}`;
+  let origin: string | undefined;
   const turnstile = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
     fetch(request) {
       if (new URL(request.url).pathname !== '/api.js') return new Response('Not Found', { status: 404 });
       return new Response(
-        `window.turnstile={render:function(node,options){queueMicrotask(function(){options.callback('native-test-token')});return 'native-widget'},reset:function(){},remove:function(){}};`,
+        `window.turnstile={ready:function(callback){callback()},render:function(node,options){queueMicrotask(function(){options.callback('native-test-token')});return 'native-widget'},reset:function(){},remove:function(){}};`,
         { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } },
       );
     },
@@ -105,7 +95,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
-      AUTH_ORIGIN: authIssuer,
+      AUTH_ORIGIN: stack.authIssuer,
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
       TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
     },
@@ -115,10 +105,43 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
   const contexts = new Map<AuthPersona, BrowserContext>();
   let browser: Browser | undefined;
   let stopping: Promise<void> | undefined;
+  let browserPeakMemoryBytes = 0;
+  let memorySampler: ReturnType<typeof setInterval> | undefined;
+  let sampling = false;
+  let sampleMemory = async () => {};
   try {
-    await waitForPage(origin, child, () => output);
+    await waitForPage(appOrigin, child, () => output);
+    origin = await stack.routeAuthPages((request) => {
+      const source = new URL(request.url);
+      const target = new URL(source.pathname + source.search, appOrigin);
+      return fetch(new Request(target, request), { redirect: 'manual' });
+    });
     browser = await chromium.launch();
-    await stack.restartWeb({ publicOrigin: stack.web, authIssuer: origin });
+    const cdp = await browser.newBrowserCDPSession();
+    sampleMemory = async () => {
+      if (sampling) return;
+      sampling = true;
+      try {
+        const { processInfo } = await cdp.send('SystemInfo.getProcessInfo');
+        const pids = processInfo.map(({ id }) => id).join(',');
+        if (!pids) return;
+        const result = Bun.spawnSync(['ps', '-o', 'rss=', '-p', pids]);
+        if (result.exitCode === 0) {
+          const bytes = result.stdout
+            .toString()
+            .trim()
+            .split(/\s+/)
+            .map(Number)
+            .reduce((sum, rss) => sum + rss * 1024, 0);
+          browserPeakMemoryBytes = Math.max(browserPeakMemoryBytes, bytes);
+        }
+      } finally {
+        sampling = false;
+      }
+    };
+    memorySampler = setInterval(() => void sampleMemory().catch(() => {}), 500);
+    await sampleMemory();
+    await stack.restartWeb({ publicOrigin: stack.web });
     console.info(`Native Auth app startup: ${Math.round(performance.now() - startupStarted)}ms`);
     const context = async (persona: AuthPersona) => {
       let value = contexts.get(persona);
@@ -148,7 +171,8 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       page.on('response', (response) => {
         if (new URL(response.url()).pathname === '/signin') authResponses.push(response);
       });
-      const email = signup ? `${crypto.randomUUID()}@example.test` : await nativeEmail(stack, authIssuer, persona);
+      const email = signup ? `${crypto.randomUUID()}@example.test` : (await stack.authPersona(persona)).email;
+      const formPassword = signup ? `newcomer-${crypto.randomUUID()}` : password;
       await page.goto(`${stack.web}/auth/sign-in`, { waitUntil: 'domcontentloaded' });
       await hydrate(page);
       if (signup) {
@@ -158,11 +182,11 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         await hydrate(page);
         await page.getByLabel('Handle', { exact: true }).fill(`newcomer-${crypto.randomUUID().slice(0, 8)}`);
         await page.getByLabel('Email', { exact: true }).fill(email);
-        await page.getByLabel('Password', { exact: true }).fill(password);
+        await page.getByLabel('Password', { exact: true }).fill(formPassword);
         await page.getByRole('button', { name: 'Create an account', exact: true }).click();
       } else {
         await page.getByLabel(/email/i).fill(email);
-        await page.locator('input[name="password"]').fill(password);
+        await page.locator('input[name="password"]').fill(formPassword);
         await Promise.all([
           page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
           page.getByRole('button', { name: 'Sign in', exact: true }).click(),
@@ -171,9 +195,10 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       if (persona !== 'suspended')
         await page.waitForURL((url) => url.origin === new URL(stack.web).origin, { timeout: 30_000 });
       await page.waitForLoadState('domcontentloaded');
+      await sampleMemory();
       if (!signup)
         console.info(
-          `Native Auth sign-in: ${Math.round(performance.now() - journeyStarted)}ms; browser peak RSS unavailable from Playwright`,
+          `Native Auth sign-in: ${Math.round(performance.now() - journeyStarted)}ms; browser peak RSS: ${browserPeakMemoryBytes}bytes`,
         );
       const current = page.url();
       const response = () => {
@@ -202,6 +227,9 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       },
       stop() {
         return (stopping ??= (async () => {
+          clearInterval(memorySampler);
+          await sampleMemory();
+          console.info(`Native Auth browser peak RSS: ${browserPeakMemoryBytes}bytes`);
           const errors: unknown[] = [];
           for (const item of contexts.values())
             try {
@@ -216,6 +244,11 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
             errors.push(error);
           }
           try {
+            await stack.routeAuthPages();
+          } catch (error) {
+            errors.push(error);
+          }
+          try {
             await stopChild(child);
           } catch (error) {
             errors.push(error);
@@ -226,6 +259,8 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       },
     };
   } catch (error) {
+    clearInterval(memorySampler);
+    if (origin) await stack.routeAuthPages().catch(() => {});
     await browser?.close().catch(() => {});
     await stopChild(child).catch(() => {});
     turnstile.stop(true);
