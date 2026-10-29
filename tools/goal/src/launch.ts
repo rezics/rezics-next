@@ -230,6 +230,9 @@ export function workerPrompt(
     'Never write under node_modules: bun install hardlinks package files from a shared cache, so an edit there changes the package for every worktree and check host. To instrument a dependency, copy it under .temp and load the copy through a preload or a patchedDependencies entry.',
     'Before changing any package.json or bun.lock, run `bun tools/goal/src/cli.ts deps private` to replace the shared dependency link with a private install in this worktree.',
     evidenceText ? `Continue from this retry manifest:\n${evidenceText}` : '',
+    evidenceText
+      ? 'The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command before reporting any blocker about that failure.'
+      : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`

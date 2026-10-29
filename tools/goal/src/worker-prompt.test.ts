@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { workerPrompt } from './launch.ts';
 import type { Task } from './types.ts';
 
@@ -145,6 +148,24 @@ test('a worker reports persistent tool and infrastructure failures as a tool blo
   expect(prompt).toContain(
     'When a tool or infrastructure failure blocks the work (SSH or rsync to a check host, network, out of disk or memory, file watchers, a service that will not start), retry it at most twice, then finish with a `tool` blocker whose detail starts with the exact error line; do not work around it by weakening the check.',
   );
+});
+
+test('the retry prompt says a manifest failure is history and must be rerun before reporting it as a blocker', () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'goal-retry-prompt-'));
+  try {
+    writeFileSync(join(evidence, 'failure.json'), JSON.stringify({ manifest: 'First failing command: bun test broken.test.ts' }));
+    const task = {
+      worktree: '/work/trees/t1',
+      branch: 'worker/t1',
+      brief: { markdown: 'Do the thing.', acceptance: { command: ['bun', 'test'], tests: ['x'] } },
+    } as unknown as Task;
+    const prompt = workerPrompt(task, evidence, undefined, [], '/repo/main');
+    expect(prompt).toContain('The retry manifest records a failure from an earlier attempt');
+    expect(prompt).toContain('Hosts and tools may have been fixed since then');
+    expect(prompt).toContain('Rerun the failing command before reporting any blocker');
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
 });
 
 test('stabilize and critical-path starts skip the worker cap but not the memory floor', async () => {
