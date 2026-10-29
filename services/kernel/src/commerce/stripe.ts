@@ -1,6 +1,8 @@
 import Stripe from 'stripe';
+import { stripeTransport } from './stripe-transport.ts';
 import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
 import {
+  MAX_ORDER_TRANSACTIONS,
   StripeRejectedError,
   StripeUnavailableError,
   type CheckoutLocator,
@@ -19,6 +21,8 @@ export type StripePortConfig = {
   protocol?: 'http' | 'https';
   timeoutMs?: number;
   maxNetworkRetries?: number;
+  /** Attempt/process cancellation; never used as authority for native mutation. */
+  signal?: AbortSignal;
   clock: () => Date;
 };
 
@@ -79,18 +83,35 @@ async function boundedList<T extends { id: string }>(
 }
 
 export function createStripePort(config: StripePortConfig): StripePort & StripeCheckoutLocatorPort {
-  // stripe-node 23.0.1 package.json's bun export uses WebPlatformFunctions (fetch and SubtleCrypto).
-  const stripe = new Stripe(config.apiKey, {
-    ...(config.host === undefined ? {} : { host: config.host }),
-    ...(config.port === undefined ? {} : { port: config.port }),
-    ...(config.protocol === undefined ? {} : { protocol: config.protocol }),
-    timeout: config.timeoutMs ?? 20_000,
-    maxNetworkRetries: config.maxNetworkRetries ?? 2,
-  });
+  const timeoutMs = config.timeoutMs ?? 20_000;
+  const retries = config.maxNetworkRetries ?? 2;
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs < 1 ||
+    timeoutMs > 20_000 ||
+    !Number.isSafeInteger(retries) ||
+    retries < 0 ||
+    retries > 2
+  ) {
+    throw new StripeUnavailableError('Stripe transport configuration is unavailable');
+  }
 
-  async function call<T>(operation: () => Promise<T>): Promise<T> {
+  async function call<T>(requests: number, input: unknown, operation: (stripe: Stripe) => Promise<T>): Promise<T> {
     try {
-      return await operation();
+      const transport = stripeTransport({ timeoutMs, retries, requests, signal: config.signal });
+      return await transport.run(async () => {
+        transport.inspectInput({ input, apiKey: config.apiKey, host: config.host });
+        // One SDK instance binds the supported fetch hook to this physical operation, including retries/pages.
+        const stripe = new Stripe(config.apiKey, {
+          ...(config.host === undefined ? {} : { host: config.host }),
+          ...(config.port === undefined ? {} : { port: config.port }),
+          ...(config.protocol === undefined ? {} : { protocol: config.protocol }),
+          timeout: timeoutMs,
+          maxNetworkRetries: retries,
+          httpClient: Stripe.createFetchHttpClient(transport.fetch),
+        });
+        return operation(stripe);
+      });
     } catch (error) {
       // https://docs.stripe.com/api/errors; stripe-node esm/Error.js maps HTTP errors to these classes.
       // Fixed messages also prevent Stripe's diagnostic text (or connection causes) from leaking credentials.
@@ -108,7 +129,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
 
   return {
     createCheckoutSession(request, idempotencyKey) {
-      return call(async () => {
+      return call(1, { request, idempotencyKey }, async (stripe) => {
         // https://docs.stripe.com/api/checkout/sessions/create: inline price_data, one item, order correlation.
         const params: Stripe.Checkout.SessionCreateParams = {
           mode: 'payment',
@@ -144,7 +165,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
     },
 
     readCheckoutLocator(sessionId): Promise<CheckoutLocator> {
-      return call(async () => {
+      return call(1, sessionId, async (stripe) => {
         // https://docs.stripe.com/api/checkout/sessions/retrieve: one logical GET, no expansions or child reads.
         const session = await stripe.checkout.sessions.retrieve(sessionId);
         if (session.payment_intent !== null && typeof session.payment_intent !== 'string') {
@@ -162,7 +183,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
     },
 
     readCheckout(sessionId) {
-      return call(async () => {
+      return call(111, sessionId, async (stripe) => {
         // https://docs.stripe.com/api/checkout/sessions/object: completion and payment status are independent.
         // https://docs.stripe.com/api/payment_intents/object: latest_charge is expandable and may be null.
         // https://docs.stripe.com/api/charges/object: the balance transaction represents the captured charge.
@@ -192,19 +213,24 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
             )
           : [];
         const transactions: StripeTransaction[] = [];
+        const addTransaction = (balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string) => {
+          if (transactions.length === MAX_ORDER_TRANSACTIONS)
+            throw new StripeUnavailableError('Stripe transaction limit exceeded');
+          transactions.push(transaction(balance, kind, sourceId));
+        };
         const chargeBalance = charge ? expanded(charge.balance_transaction) : null;
-        if (charge && chargeBalance) transactions.push(transaction(chargeBalance, 'charge', charge.id));
+        if (charge && chargeBalance) addTransaction(chargeBalance, 'charge', charge.id);
         // https://docs.stripe.com/api/refunds/object: failed refunds can have a separate failure reversal.
         for (const refund of refunds) {
           const balance = expanded(refund.balance_transaction);
           const failure = expanded(refund.failure_balance_transaction ?? null);
-          if (balance) transactions.push(transaction(balance, 'refund', refund.id));
-          if (failure) transactions.push(transaction(failure, 'refund_reversal', refund.id));
+          if (balance) addTransaction(balance, 'refund', refund.id);
+          if (failure) addTransaction(failure, 'refund_reversal', refund.id);
         }
         // https://docs.stripe.com/api/disputes/object: balance_transactions includes withdrawals and reinstatements.
         for (const dispute of disputes) {
           for (const balance of dispute.balance_transactions) {
-            transactions.push(transaction(balance, balance.amount < 0 ? 'dispute' : 'dispute_reversal', dispute.id));
+            addTransaction(balance, balance.amount < 0 ? 'dispute' : 'dispute_reversal', dispute.id);
           }
         }
         assertTransactionBound(transactions);
@@ -241,9 +267,12 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
     },
 
     findCheckoutSession(paymentIntentId) {
-      return call(async () => {
+      return call(1, paymentIntentId, async (stripe) => {
         // https://docs.stripe.com/api/checkout/sessions/list: filter by the PaymentIntent that Checkout created.
         const sessions = await stripe.checkout.sessions.list({ payment_intent: paymentIntentId, limit: 1 });
+        if (sessions.data.length > 1 || sessions.has_more) {
+          throw new StripeUnavailableError('Stripe Session locator limit exceeded');
+        }
         return sessions.data[0]?.id ?? null;
       });
     },

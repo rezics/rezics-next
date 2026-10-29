@@ -244,16 +244,46 @@ discarding cached snapshots and delegating with the original stable apply intent
 against an incompatible step graph. A cancelled status alone is not physical drain. Preserve completion metadata
 for supported replay lifetimes, coordinating minimization/retirement with shared retention owners.
 
-Bound provider, transport and native attempts physically, including abandoned promises. A shared process-local
-inflight admission may cap actually unsettled bodies; hold capacity until the real body settles and refuse excess
-instead of accumulating an unbounded waiting list. It supplies no durable authority or queue engine. Combine
-provider-unavailability and native command retry predicates with a finite attempt budget; spreading policies must
-not discard either predicate. Charge SDK network retries, including its special closed-connection retry.
-Propagate remaining deadlines through resolution, child admission, every provider page/retry and native attempts.
-Reuse Stripe's supported constructor `httpClient` and `Stripe.createFetchHttpClient(fetch)` hooks for abort and
-streamed byte limits, binding context per operation rather than a mutable shared deadline. Enforce input, nested
-expansion, fee-detail and response-byte bounds before buffering unbounded data. Timeouts alone do not prove those
-bounds; no numeric plan allowance is inferred. No native connection spans provider I/O.
+Bound provider, transport and native attempts physically, including abandoned promises. The actual
+[Stripe adapter](stripe.ts) now binds a fresh [transport](stripe-transport.ts) to each public create, locator,
+full-read or filtered-find invocation through the supported constructor `httpClient` and
+`Stripe.createFetchHttpClient(fetch)` hooks. No global fetch or SDK internals are changed; the pinned SDK/API
+version, inline captured-price Managed Payments request and provider idempotency key remain unchanged.
+
+The concrete physical configuration derives from existing bounds, rather than a SQL growth allowance:
+
+- One monotonic deadline defaults to the existing 20,000 ms timeout; `timeoutMs` may select 1–20,000 ms.
+  Every page, SDK retry delay/send, expansion, body read and cancellation shares it. Optional factory
+  `signal` cancels an attempt-scoped client or process client; it is not native mutation authority.
+- One response body is at most 256 KiB, reusing webhook intake's finite byte envelope. A fixed-size buffer
+  admits each streamed chunk before copying or decoding it, including chunked and decompressed output.
+  Oversized Content-Length is refused at headers. Response/request headers are independently at most
+  16 KiB (one sixteenth of that envelope); redirects are refused, preventing forwarded credentials.
+- Full read has at most `1 + 100 + 10 = 111` logical requests; the other methods have one. A physical operation
+  shares `logical maximum × 256 KiB` response bytes and separately the same outgoing body/URL byte budget.
+  Retry bodies consume the original allowance, including discarded HTTP errors. Each send also has the
+  256 KiB body bound. Input strings collectively fit 16 KiB before SDK form serialization, reserving
+  headroom for percent encoding/keys, and actual serialized payloads and request headers are checked again.
+- `maxNetworkRetries` defaults to two and accepts 0–2. Total sends are limited to
+  `logical maximum × max(2, 1 + retries)`, counting the SDK's special closed-connection retry even at zero.
+  A stopped operation refuses every later retry callback before fetch, even if SDK sleep is still alive.
+- Nested JSON has at most 4096 containers (`256 transactions × 16`) and depth 16, shared across responses;
+  all expanded `fee_details` arrays collectively contain at most 256 entries (one snapshot-key envelope).
+  Inspection follows byte-limited decoding and precedes SDK/financial normalization. Existing 100-refund,
+  10-dispute and 256-transaction caps retain inclusive boundaries and reject excess/nonadvancing pages.
+- Eight physically unsettled operations per process share capacity across every factory, reusing the existing
+  effects worker concurrency. Admission refuses excess immediately. Public cancellation/deadline expiry
+  cannot release capacity while real fetch, body consumption or awaited body cancellation remains unsettled.
+  Capacity is released after physical settlement; native connections never span provider I/O.
+
+Deadline, byte, nested-object, pagination and capacity failures are sanitized `StripeUnavailableError`, never
+successful empty routing/payment evidence. Other provider errors retain existing sanitized rejection mapping.
+[Native loopback transport acceptance](../../test/commerce/stripe-transport.test.ts) uses the official SDK,
+streamed HTTP, real sends/termination and existing provider fixture exports. It checks boundaries, transient
+and closed connections, cancellation, shared capacity and fixed selected reads with unrelated provider growth.
+This establishes the adapter operation's resource boundary only. Session-native claim/read/apply consumption,
+remaining-deadline propagation across resolver/native work and one combined finite native/provider retry budget
+remain separate implementation requirements. No numeric plan allowance is inferred.
 
 Actual [work implementation](work.ts) uses the unpartitioned `workflows` queue and Session-plus-event child IDs.
 It durably clocks, reads and applies in separate steps. Those identities deduplicate triggers but do not serialize
@@ -262,7 +292,7 @@ back without retaining that observation. A delayed old pending-full-refund respo
 therefore revoke after a newer canceled-refund no-op. Equal clocks also supply no ordering proof. Receipt-aware
 admission and mandatory apply revision checks are now available through the additional native ports documented above.
 The live split-step path remains unfenced. Fresh combined retries, Session routing, native locator binding,
-provider transport bounds and compatible cutover remain unimplemented; neither native prerequisite tests nor the
+compatible cutover and combined native/provider attempt bounds remain unimplemented; neither native prerequisite tests nor the
 [current](../../../../docs/research/commerce-session-refresh-recovery-current.md) and
 [deep reports](../../../../docs/research/commerce-session-refresh-recovery-deep.md) prove runtime acceptance.
 
@@ -431,9 +461,9 @@ The criterion is an anchor with a bounded number of hops and results, costing ab
 `L(N) = O(log(2+N))` shared blocks for a B-tree probe, with constant rows examined for a unique key; `k` indexed changes cost `O(k L(N))` blocks.
 Bounds below distinguish rows examined (`R`), shared blocks (`B`) and SQL statements (`S`); all unqualified counts exclude the separately listed command envelope and authorization, which must be added where invoked.
 `PK` means the relation's `_pkey`; commerce PKs are B-trees beginning with `route`, and a partition is `route >>> 4`, not a physically partitioned SQL table.
-Index bounds assume selective indexed access and fixed row width; unbounded JSON fee details, provider arrays and receipt payloads add their byte/element costs, and cache warmth does not make block touches constant.
+Index bounds assume selective indexed access and fixed row width; JSON fee details, provider arrays and receipt payloads add their byte/element costs, and cache warmth does not make block touches constant. The physical provider limits above do not establish SQL or receipt-storage bounds.
 HTTP and store entitlement pages cap `s` at 100; HTTP and payout pages fetch at most `s+1 = 101` rows, while the entitlement store helper fetches at most 100.
-The adapter and trusted snapshot command cap balance transactions at 256 per complete snapshot; the Stripe adapter also caps refund objects at 100 and dispute objects at 10. Settlement and royalty recording read only named transaction keys, at most 256 per run. Fee details remain uncapped.
+The adapter and trusted snapshot command cap balance transactions at 256 per complete snapshot; the Stripe adapter also caps refund objects at 100 and dispute objects at 10. Settlement and royalty recording read only named transaction keys, at most 256 per run. The real provider adapter additionally caps aggregate fee details at 256 and enforces the physical byte/object bounds above; injected trusted snapshots remain a separate boundary.
 The checkout recorder permits pending → unknown once, then a session or failed outcome; unchanged outcomes roll back, and session/failed/paid orders exit before counting, so successful numbered receipts have `c <= 2` (the range count itself has no LIMIT).
 
 | Operation                              | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Bound                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Growth check                                                                                                                            |
@@ -470,12 +500,12 @@ Parent/root authorization and royalty source reads are separate anchored checkou
 - Touches: one exact provider Session retrieval through the same official SDK client, six normalized correlation
   fields and existing sanitized error mapping. No SQL or native connection is involved.
 - Bound: one logical GET with no `expand`, Session listing, history enumeration or financial child reads,
-  regardless of payment/refund/dispute or unrelated Session history. SDK network retries still count; response
-  bytes, sends and remaining deadlines are separately unproven and require transport enforcement.
+  regardless of payment/refund/dispute or unrelated Session history. The shared physical transport above
+  enforces response bytes, nested objects, sends and the one operation deadline, including SDK retries.
 - Growth check: [adapter-boundary acceptance](../../test/commerce/stripe-locator.test.ts) inspects every actual
   request and the closed DTO for open and paid provider fixture Sessions, growing refunds/disputes at 1/4/16.
   It preserves foreign/missing correlation for later native validation and checks provider rejection. This proves
-  neither native authorization/binding nor forged webhook refusal, queue/CAS, transport bounds or runtime wiring.
+  neither native authorization/binding nor forged webhook refusal, queue/CAS or runtime wiring.
   Three-scale native resolver and combined transport capture remain release requirements alongside combined
   refresh, compatible cutover and paid-order/event repair.
 
@@ -488,8 +518,8 @@ Parent/root authorization and royalty source reads are separate anchored checkou
   connection; all retries, claims, no-ops, events, payload bytes and pool time are charged.
 - Bound: constant keyed claim/lookup work plus bounded named apply work, using existing maximum 256 transactions
   and 257-key total-count lookahead. Current provider caps are 100 refunds and 10 disputes, with advancing-page
-  validation; source pagination, nested expansion/fee-detail bytes, total sends and remaining deadlines need real
-  enforced/measured bounds. Stripe steps currently allow five attempts plus SDK network retries; no combined
+  validation. The actual provider adapter now enforces pagination, nested expansion/fee-detail bytes, total
+  sends and its operation deadline as above; combined native/provider attempts still need enforcement/evidence. Stripe steps currently allow five attempts plus SDK network retries; no combined
   attempt budget is implemented. Shared DBOS partition walks/sorts, backlog and fork/rewind history work require
   measurement; fixed wrappers or timeouts alone prove none of those bounds. No numeric plan allowance is invented.
 - Growth check: retain the existing named-key histories 1/64/255 and 256/257 boundary evidence in
