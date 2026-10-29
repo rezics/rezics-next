@@ -13,6 +13,7 @@ export type AuthPersona = 'alice' | 'bob' | 'suspended' | 'newcomer';
 export type AuthJourney = {
   url: string;
   context: BrowserContext;
+  visitedUrls: string[];
   response(): Promise<PlaywrightResponse>;
   requestHeaders(): Promise<Headers[]>;
 };
@@ -138,6 +139,10 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       const page = await browserContext.newPage();
       page.setDefaultTimeout(15_000);
       const authResponses: PlaywrightResponse[] = [];
+      const visitedUrls: string[] = [];
+      page.on('framenavigated', (frame) => {
+        if (frame === page.mainFrame()) visitedUrls.push(frame.url());
+      });
       const pageRequests: import('playwright').Request[] = [];
       page.on('request', (request) => pageRequests.push(request));
       page.on('response', (response) => {
@@ -163,17 +168,9 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
           page.getByRole('button', { name: 'Sign in', exact: true }).click(),
         ]);
       }
-      if (new URL(page.url()).origin === origin && new URL(page.url()).pathname === '/consent') {
-        await hydrate(page);
-        const approval = page.getByRole('button', { name: /approve|allow/i }).first();
-        if (await approval.count()) await approval.click();
-      }
-      await page.waitForURL((url) => url.origin === new URL(stack.web).origin, { timeout: 30_000 }).catch(() => {});
-      await page.waitForLoadState('domcontentloaded').catch(() => {});
-      if (signup) {
-        const consent = page.getByRole('button', { name: /approve|allow|continue/i }).first();
-        if (await consent.count()) await consent.click();
-      }
+      if (persona !== 'suspended')
+        await page.waitForURL((url) => url.origin === new URL(stack.web).origin, { timeout: 30_000 });
+      await page.waitForLoadState('domcontentloaded');
       if (!signup)
         console.info(
           `Native Auth sign-in: ${Math.round(performance.now() - journeyStarted)}ms; browser peak RSS unavailable from Playwright`,
@@ -187,6 +184,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       return {
         url: current,
         context: browserContext,
+        visitedUrls,
         response,
         async requestHeaders() {
           return Promise.all(pageRequests.map(async (request) => new Headers(await request.allHeaders())));
