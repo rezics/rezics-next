@@ -24,6 +24,7 @@ import type { Candidate, Owner } from './record-bindings.ts';
 import type { RecordRow } from './record-store.ts';
 import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
+import { resolveOwnReferences } from './own-references.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
@@ -536,8 +537,21 @@ export class Importer {
     const { row } = staged;
     const owner = { source: row.source, external_id: row.recordKey };
     let omissions = await this.fences(owner, signal);
-    const acknowledged = store.key(row.source, row.recordKey).acknowledged;
-    if (isDeepStrictEqual(acknowledged, row)) {
+    const recordState = store.key(row.source, row.recordKey, run);
+    const acknowledged = recordState.acknowledged;
+    const ownReferences = this.options.identifierLookup
+      ? null
+      : resolveOwnReferences(staged.projection, row.source, this.session.bindings);
+    if (ownReferences) {
+      const prior = store.referenceSignature(row.source, row.recordKey);
+      // A resolved entry belongs to this run's immutable command plan. If another
+      // record taught a binding after that entry resolved, the next input pass refreshes it.
+      if (recordState.resolved) return { kind: recordState.kind ?? 'unchanged', deferredCover: false };
+      if (isDeepStrictEqual(acknowledged, row) && prior === ownReferences.signature) {
+        return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
+      }
+      store.stageReferenceSignature(run, row.recordKey, ownReferences.signature);
+    } else if (isDeepStrictEqual(acknowledged, row)) {
       return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
     }
     const candidates = this.current(owner);
@@ -560,7 +574,9 @@ export class Importer {
       }
       if (subject) {
         omissions = await this.fences(owner, signal);
-        const resolvedReferences = await this.options.identifierLookup?.resolve({ owner, conversion, signal });
+        const resolvedReferences = this.options.identifierLookup
+          ? await this.options.identifierLookup.resolve({ owner, conversion, signal })
+          : ownReferences?.resolvedReferences;
         const context = { subjectId: subject, ...(resolvedReferences ? { resolvedReferences } : {}) };
         conversion = this.convert(registration, staged, context);
         const intents =
@@ -685,9 +701,12 @@ export class Importer {
     if (claim?.state !== 'bound') return { outcome: 'failed', kind: deferred.kind };
     // The context-free conversion exists only as input to identifier lookup.
     const lookup = this.options.identifierLookup;
+    const ownReferences = lookup
+      ? null
+      : resolveOwnReferences(deferred.projection, row.source, this.session.bindings);
     const resolvedReferences = lookup
       ? await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal })
-      : undefined;
+      : ownReferences?.resolvedReferences;
     const context = {
       subjectId: claim.subject,
       ...(resolvedReferences ? { resolvedReferences } : {}),

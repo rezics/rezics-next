@@ -68,6 +68,7 @@ type Entry = {
   pending: number;
   remaining: number;
   cover_pending: number;
+  reference_signature: string | null;
 };
 type Member = { source: string; record_key: string; active: number; seen: number; row_json: string };
 type Command = {
@@ -334,6 +335,8 @@ export class RunStore<Projection = BatchStatement[]> {
       const entryColumns = this.database.query('PRAGMA table_info(run_entries)').all() as { name: string }[];
       if (!entryColumns.some((column) => column.name === 'cover_pending'))
         this.database.exec('ALTER TABLE run_entries ADD COLUMN cover_pending INTEGER NOT NULL DEFAULT 0');
+      if (!entryColumns.some((column) => column.name === 'reference_signature'))
+        this.database.exec('ALTER TABLE run_entries ADD COLUMN reference_signature TEXT');
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_pending ON run_entries(source,run_id,pending,record_key)`);
       this.database.exec(
         'CREATE INDEX IF NOT EXISTS run_cover_pending ON run_entries(source,run_id,cover_pending,record_key)',
@@ -347,6 +350,9 @@ export class RunStore<Projection = BatchStatement[]> {
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_acknowledged (
         source TEXT NOT NULL, record_key TEXT NOT NULL, row_json TEXT NOT NULL,
         projection_json TEXT NOT NULL, PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_reference_signatures (
+        source TEXT NOT NULL, record_key TEXT NOT NULL, signature TEXT NOT NULL,
+        PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_commands (
         source TEXT NOT NULL, run_id TEXT NOT NULL, command_key TEXT NOT NULL,
         record_key TEXT NOT NULL, field_group TEXT NOT NULL, op TEXT NOT NULL,
@@ -664,10 +670,42 @@ export class RunStore<Projection = BatchStatement[]> {
       entry.row_json,
       entry.projection_json,
     );
+    if (entry.reference_signature !== null)
+      this.write(
+        `INSERT INTO run_reference_signatures(source,record_key,signature) VALUES(?,?,?)
+        ON CONFLICT(source,record_key) DO UPDATE SET signature=excluded.signature`,
+        run.source,
+        entry.record_key,
+        entry.reference_signature,
+      );
     this.write('UPDATE run_generations SET resolved=resolved+1 WHERE source=? AND id=?', run.source, run.id);
   }
   classify(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
     return this.plan(run, key, input, false);
+  }
+  referenceSignature(source: string, key: string): string | null {
+    sourceId(source);
+    keyId(key);
+    return this.get<{ signature: string }>(
+      'SELECT signature FROM run_reference_signatures WHERE source=? AND record_key=?',
+      source,
+      key,
+    )?.signature ?? null;
+  }
+  stageReferenceSignature(run: Run, key: string, signature: string): void {
+    validateRun(run);
+    keyId(key);
+    if (!/^[a-f0-9]{64}$/u.test(signature)) fail();
+    this.transaction(() => {
+      if (!this.entry(run, key)) throw new Error('Reference signature requires a staged record');
+      this.write(
+        'UPDATE run_entries SET reference_signature=? WHERE source=? AND run_id=? AND record_key=?',
+        signature,
+        run.source,
+        run.id,
+        key,
+      );
+    });
   }
   /**
    * Trusted coordinator disposition after classification: only a pure converter ignored
@@ -1240,6 +1278,7 @@ export class RunStore<Projection = BatchStatement[]> {
     staged: Staged<Projection> | null;
     omissions: Omission[];
     coverPending: boolean;
+    resolved: boolean;
     kind: Kind | null;
   } {
     sourceId(source);
@@ -1263,6 +1302,7 @@ export class RunStore<Projection = BatchStatement[]> {
       staged: e ? { row: JSON.parse(e.row_json), projection: JSON.parse(e.projection_json) } : null,
       omissions: e ? JSON.parse(e.omissions_json) : [],
       coverPending: e?.cover_pending === 1,
+      resolved: e?.resolved === 1,
       kind: e?.kind ?? null,
     };
   }
