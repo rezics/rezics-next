@@ -28,16 +28,15 @@ export async function readRelationsPage(
   client: KernelClient,
   input: { id: string; locale?: string | undefined; property?: string | undefined; cursor?: string | undefined },
 ) {
-  const [overview, links] = await Promise.all([
-    loadSubjectPage(client, input.id, undefined, input.locale ?? 'en'),
-    client.subjects({ id: input.id }).links.get({
-      query: {
-        limit: PAGE_LIMIT,
-        ...(input.property ? { property: input.property } : {}),
-        ...(input.cursor ? { cursor: input.cursor } : {}),
-      },
-    }),
-  ]);
+  const overview = await loadSubjectPage(client, input.id, undefined, input.locale ?? 'en');
+  if (overview.kind !== 'page') return { overview, links: null };
+  const links = await client.subjects({ id: input.id }).links.get({
+    query: {
+      limit: PAGE_LIMIT,
+      ...(input.property ? { property: input.property } : {}),
+      ...(input.cursor ? { cursor: input.cursor } : {}),
+    },
+  });
   return { overview, links };
 }
 

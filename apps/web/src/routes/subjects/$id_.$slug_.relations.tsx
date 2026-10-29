@@ -51,18 +51,7 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
-    const canonical = await loadSubject(client, data.id, data.locale as never);
-    if (canonical.kind === 'missing') throw notFound();
-    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
-      throw redirect({
-        href: keepSearch(subjectUrlForView(canonical.value, 'relations'), data.search),
-        statusCode: 301,
-      });
-
-    const [{ overview, links }, reader] = await Promise.all([
-      readRelationsPage(client, data),
-      loadReader(client, getRequest(), env as Partial<SessionEnv>),
-    ]);
+    const { overview, links } = await readRelationsPage(client, data);
     if (overview.kind === 'missing') throw notFound();
     if (overview.kind === 'redirect') {
       if (overview.target === 'account')
@@ -80,6 +69,15 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
         statusCode: 301,
       });
     }
+    if (!links) throw notFound();
+    const canonical = await loadSubject(client, data.id, data.locale as never);
+    if (canonical.kind === 'missing') throw notFound();
+    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
+      throw redirect({
+        href: keepSearch(subjectUrlForView(canonical.value, 'relations'), data.search),
+        statusCode: 301,
+      });
+    const reader = await loadReader(client, getRequest(), env as Partial<SessionEnv>);
     const frame = subjectFrame(overview.page, data.locale);
     if (!frame) throw notFound();
     const type = subjectPageType(overview.page);

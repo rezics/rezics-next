@@ -17,10 +17,20 @@ function recording(source: KernelRecording | undefined): KernelRecording | undef
     profile.operatorId = OPERATOR;
   }
   page.handle = HANDLE;
+  page.template = { scope: 'type', key: 'schema:SoftwareApplication' };
   return page;
 }
 
 async function body(request: Request): Promise<Record<string, unknown> | undefined> {
+  // A followed 308 retains the POST body; its Location replaces the target through the query.
+  const target = new URL(request.url).searchParams.get('target');
+  if (target) {
+    try {
+      return { target: JSON.parse(target) };
+    } catch {
+      return;
+    }
+  }
   const value: unknown = await request
     .clone()
     .json()

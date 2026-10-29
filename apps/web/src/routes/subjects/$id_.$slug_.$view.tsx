@@ -59,15 +59,7 @@ const readView = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
-    const canonical = await loadSubject(client, data.id, data.locale as never);
-    if (canonical.kind === 'missing') throw notFound();
-    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
-      throw redirect({ href: keepSearch(subjectUrlForView(canonical.value, data.view), data.search), statusCode: 301 });
-
-    const [loaded, reader] = await Promise.all([
-      loadViewPages(client, data.id, data.view, data.locale),
-      loadReader(client, getRequest(), env as Partial<SessionEnv>),
-    ]);
+    const loaded = await loadViewPages(client, data.id, data.view, data.locale);
     if (loaded.kind === 'missing') throw notFound();
     if (loaded.kind === 'redirect') {
       if (loaded.target === 'account')
@@ -82,6 +74,11 @@ const readView = createServerFn({ method: 'GET', strict: false })
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({ href: keepSearch(subjectUrlForView(survivor.value, data.view), data.search), statusCode: 301 });
     }
+    const canonical = await loadSubject(client, data.id, data.locale as never);
+    if (canonical.kind === 'missing') throw notFound();
+    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
+      throw redirect({ href: keepSearch(subjectUrlForView(canonical.value, data.view), data.search), statusCode: 301 });
+    const reader = await loadReader(client, getRequest(), env as Partial<SessionEnv>);
     const frame = subjectFrame(loaded.overview, data.locale);
     if (!frame) throw notFound();
     const tabs = subjectTabs(loaded.overview);

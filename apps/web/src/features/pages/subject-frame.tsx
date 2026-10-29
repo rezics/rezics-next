@@ -87,14 +87,10 @@ export async function loadViewPages(
   view: View,
   locale = 'en',
 ): Promise<ViewPagesLoad> {
-  const [result, overview] = await Promise.all([
-    loadSubjectPage(client, id, view, locale),
-    loadSubjectPage(client, id, undefined, locale),
-  ]);
-  if (result.kind === 'missing' || overview.kind === 'missing') return { kind: 'missing' };
-  if (result.kind === 'redirect')
-    return { kind: 'redirect', id: result.id, ...(result.target ? { target: result.target } : {}) };
-  if (overview.kind === 'redirect') return { kind: 'missing' };
+  const result = await loadSubjectPage(client, id, view, locale);
+  if (result.kind !== 'page') return result;
+  const overview = await loadSubjectPage(client, id, undefined, locale);
+  if (overview.kind !== 'page') return overview;
   return { kind: 'page', page: result.page, overview: overview.page };
 }
 

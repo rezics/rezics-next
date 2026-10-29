@@ -228,7 +228,10 @@ test('a redirected subject view stops after its page read without loading the ov
     target: 'account',
   });
   expect(requests).toEqual([
-    { target: { subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', view: 'reviews' }, languages: ['zh-Hans'] },
+    {
+      target: { subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', view: 'reviews' },
+      languages: ['zh-Hans', 'zh', 'zh-Hant'],
+    },
   ]);
 });
 
