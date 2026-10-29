@@ -117,7 +117,7 @@ export function installedPackageCacheCheck(
   const marker = `${directory}/.bun-install-complete`;
   const packageTree = `${directory}/node_modules/.bun`;
   return `
-    modified_files=$(find ${quote(packageTree)} -type f -links +1 -newer ${quote(marker)} -print 2>/dev/null)
+    modified_files=$(find ${quote(packageTree)} -type f -links +1 -cnewer ${quote(marker)} -print 2>/dev/null)
     if [ -n "$modified_files" ]; then
       modified_count=$(printf '%s\n' "$modified_files" | wc -l | tr -d ' ')
       printf 'remote-check: the run modified %s installed package files shared with the host package cache on %s:\n' "$modified_count" ${quote(hostName)} >&2

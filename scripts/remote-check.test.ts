@@ -2360,8 +2360,8 @@ test('a multi-slot reservation blocks new runs when existing work already fills 
     a: { available: 0, slots: 4, cpuQuotaPercent: 800 },
     b: {
       available: 20e9,
-      memoryMax: 6 * 2 ** 30,
-      memoryMaxGiB: 6,
+      memoryMax: 8 * 2 ** 30,
+      memoryMaxGiB: 8,
       slots: 4,
       cpuQuotaPercent: 800,
       hang: true,
@@ -2465,8 +2465,8 @@ test('a multi-slot waiter that stops waiting releases its reservation', async ()
   const { env, events } = scenario({
     a: {
       available: 20e9,
-      memoryMax: 6 * 2 ** 30,
-      memoryMaxGiB: 6,
+      memoryMax: 8 * 2 ** 30,
+      memoryMaxGiB: 8,
       slots: 4,
       hang: true,
       hangRuns: 1,
@@ -2549,7 +2549,14 @@ test('a waiting gate keeps priority over a waiting multi-slot run on the same ho
 test('multi-slot waiters on one host start in the order they began waiting', async () => {
   const durationMs = 10;
   const { env, events } = scenario({
-    b: { available: 20e9, slots: 6, cpuQuotaPercent: 1200, runDurationMs: durationMs },
+    b: {
+      available: 20e9,
+      memoryMax: 20 * 2 ** 30,
+      memoryMaxGiB: 20,
+      slots: 6,
+      cpuQuotaPercent: 1200,
+      runDurationMs: durationMs,
+    },
   });
   const workspaceDirectory = workspace();
   const holders = [
@@ -2843,21 +2850,23 @@ test('while a gate waits for a host, single-slot runs prefer other hosts', async
     a: { available: 20e9, slots: 2, cpuQuotaPercent: 400 },
     b: {
       available: 20e9,
-      slots: 4,
-      cpuQuotaPercent: 800,
+      slots: 6,
+      memoryMax: 10 * 2 ** 30,
+      memoryMaxGiB: 10,
+      cpuQuotaPercent: 1200,
       hang: true,
-      hangRuns: 1,
+      hangRuns: 3,
       memoryHeadroomOnHang: CHECK_SLOT_MEMORY_BYTES,
       memoryHeadroomAfterHang: 20e9,
     },
   });
   const waitFile = join(env.FAKE_DIR!, 'gate-wait-ms');
   env.GOAL_CHECK_WAIT_FILE = waitFile;
-  const first = startRemote(env, workspace(), ['sleep', '120']);
+  const holders = Array.from({ length: 3 }, () => startRemote(env, workspace(), ['sleep', '120']));
   let gateRun: ReturnType<typeof startRemote> | undefined;
   let single: ReturnType<typeof startRemote> | undefined;
   try {
-    await waitFor(() => events().some((event) => event.kind === 'run' && event.address === 'ops@b.test'));
+    await waitFor(() => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 3);
     gateRun = startRemote(env, workspace(), ['true'], ['--gate', '--slots', '2']);
     await waitFor(() => events().some((event) => event.kind === 'gate-marker' && event.address === 'ops@b.test'));
     await waitFor(() =>
@@ -2877,10 +2886,10 @@ test('while a gate waits for a host, single-slot runs prefer other hosts', async
     await waitFor(() =>
       events().some((event) => event.kind === 'gate-marker-release' && event.address === 'ops@b.test'),
     );
-    first.child.kill('SIGTERM');
-    await first.child.exited;
+    for (const holder of holders) holder.child.kill('SIGTERM');
+    await Promise.all(holders.map((holder) => holder.child.exited));
   } finally {
-    for (const run of [single, gateRun, first]) {
+    for (const run of [single, gateRun, ...holders]) {
       if (!run) continue;
       try {
         run.child.kill('SIGTERM');
