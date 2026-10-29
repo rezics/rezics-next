@@ -160,6 +160,8 @@ async function ownedMeasurement() {
       kind: 'trusted contributor measurement assertion',
       holder: holder.id,
       manuscript: manuscript.url,
+      producer: producer.id,
+      version: realizationVersion,
       measuredText: digest(body),
       language: 'en',
       coverage: { kind: 'partial', included: ['authored summary'], excluded: ['whole holder not declared'] },
@@ -176,7 +178,7 @@ test('native measured word and character assertions preserve holder text version
   const { holder, producer, record, m, time } = await ownedMeasurement();
   const wordInput = measurement(words, '+6', m.word.id, record, time);
   const characterInput = measurement(characters, '+33', m.character.id, record, time);
-  const supplied: CountProducerInput = {
+  const supplied = {
     kind: 'supplied-text',
     holder: holder.id,
     producer: producer.id,
@@ -190,11 +192,11 @@ test('native measured word and character assertions preserve holder text version
     statement: {
       property: { id: 'schema:wordCount' },
       value: { type: 'value', content: { amount: '+6', unit: '1' } },
-      qualifiers: wordInput.qualifiers,
+      qualifiers: wordInput.qualifiers!,
       references: wordInput.references!,
       rank: 'preferred',
     },
-  };
+  } satisfies CountProducerInput;
   expect(producerInput.Check(supplied)).toBe(true);
   const { digest: omittedDigest, ...missingDigest } = supplied;
   expect(omittedDigest).toBe(digest(body));
@@ -244,7 +246,19 @@ test('native measured word and character assertions preserve holder text version
   expect(compactWord.references).toMatchObject(compactInput.references!);
   // A second reference belongs to its candidate, never to the selected one implicitly.
   const alternate = structuredClone(wordInput);
-  alternate.references!.push({ parts: [part('schema:url', record.url + '?competing=1')] });
+  const competingHolder = await fixture.createSubject('schema:Book', 'Controlled incomplete competing citation');
+  const competingRecord = await authored(
+    competingHolder,
+    JSON.stringify({
+      holder: holder.id,
+      language: 'ja',
+      version: 'controlled-v2',
+      kind: 'Controlled incomplete citation; supplies no method or whole-holder declaration',
+    }),
+  );
+  alternate.references!.push({
+    parts: [part('schema:url', competingRecord.url), part('schema:version', competingRecord.digest)],
+  });
   alternate.qualifiers = alternate.qualifiers!.map((q) =>
     q.property.id === textVersion
       ? part(textVersion, digest(body + ' Again.'))
@@ -386,7 +400,7 @@ test('controlled threshold values remain independent from proof of owned measure
       statement: {
         property: { id: 'schema:wordCount' },
         value: { type: 'value', content: { amount, unit: '1' } },
-        qualifiers: input.qualifiers,
+        qualifiers: input.qualifiers!,
         references: input.references!,
         rank: 'preferred',
       },
