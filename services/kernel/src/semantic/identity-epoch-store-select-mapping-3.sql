@@ -1,4 +1,4 @@
-SELECT m.terminal,m.epoch,m.origin,m.recorded_transaction_id,g.recorded_transaction_id AS gate_transaction_id,
+SELECT m.terminal,m.epoch,m.owner_epoch,m.origin,m.recorded_transaction_id,g.recorded_transaction_id AS gate_transaction_id,
           g.pending_job,g.pending_epoch
         FROM semantic.identity_epoch_mapping m
         LEFT JOIN semantic.identity_epoch_home_gate g

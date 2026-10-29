@@ -34,6 +34,7 @@ import bootstrapUpdateBootstrapTopology from './identity-epoch-bootstrap-update-
 import closeHome from './identity-epoch-bootstrap-close-home.sql';
 import closureReceipt from './identity-epoch-bootstrap-closure-receipt.sql';
 import advanceCursor from './identity-epoch-bootstrap-advance-cursor.sql';
+import installGate from './identity-epoch-bootstrap-install-gate.sql';
 import type { Pool } from 'pg';
 import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -263,7 +264,7 @@ export async function stepIdentityEpochBootstrap(
   // Empty exports still require real receiving custody, never a count-only closure.
   if (!homes.size) homes.set(partition, []);
   for (const [destination, rows] of homes) {
-    await runCommand(pool, { partition: destination }, async (tx) => {
+    await runCommand(pool, { partition: destination }, async (tx, { transactionId }) => {
       const duplicate = (
         await query(tx, bootstrapSelectBootstrapCustody.sql, [
           destination,
@@ -302,6 +303,10 @@ export async function stepIdentityEpochBootstrap(
             row.present,
           ]);
           if (changed) await query(tx, bootstrapUpdateGroup2.sql, [row.terminal, row.present ? 1 : previous ? -1 : 0]);
+          if (
+            (await query(tx, installGate.sql, [destination, row.terminal, row.original, transactionId])).rowCount !== 1
+          )
+            throw fail();
         }
       } else {
         await query(tx, bootstrapWithLegacyMember.sql, [

@@ -1902,6 +1902,13 @@ CREATE INDEX identity_epoch_preparing_home ON semantic.identity_epoch_job USING 
 
 
 --
+-- Name: identity_epoch_scoped_generation_original; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_scoped_generation_original ON semantic.identity_epoch_original USING btree (generation, terminal, original) WHERE present;
+
+
+--
 -- Name: identity_epoch_topology_open_home; Type: INDEX; Schema: semantic; Owner: -
 --
 

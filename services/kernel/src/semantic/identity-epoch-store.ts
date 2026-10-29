@@ -348,7 +348,8 @@ export const identityEpochStore: IdentityEpochStore = {
     if (existing) {
       if (
         existing.terminal === original &&
-        BigInt(existing.epoch) === BigInt(owner.epoch) &&
+        existing.owner_epoch === owner.epoch &&
+        BigInt(existing.epoch) > 0n &&
         existing.origin === 'creation' &&
         existing.recorded_transaction_id === source.recorded_transaction_id &&
         existing.gate_transaction_id === source.recorded_transaction_id &&
@@ -358,16 +359,22 @@ export const identityEpochStore: IdentityEpochStore = {
         return;
       throw new TypeError('Identity self mapping already exists outside this exact creation transaction');
     }
+    const header = (await tx.query(storeInsertGroup.sql, [command.partition, original, owner.epoch])).rows[0];
+    if (!header) throw unavailable();
     await tx.query(storeInsertMapping.sql, [
       originalRoute,
       original,
       owner.epoch,
       source.recorded_transaction_id,
       command.partition,
+      header.published_epoch,
     ]);
-    await tx.query(storeInsertHomeGate.sql, [originalRoute, original, owner.epoch, source.recorded_transaction_id]);
-    const header = (await tx.query(storeInsertGroup.sql, [command.partition, original, owner.epoch])).rows[0];
-    if (!header) throw unavailable();
+    await tx.query(storeInsertHomeGate.sql, [
+      originalRoute,
+      original,
+      header.published_epoch,
+      source.recorded_transaction_id,
+    ]);
     await tx.query(storeInsertOriginal.sql, [command.partition, header.generation, original]);
     await tx.query(storeUpdateDirty.sql, [originalRoute, original]);
     registerCommandCallback(tx, async (transactionId) => {

@@ -233,6 +233,18 @@ test('native cross-home redirect withdraws its old group before the Library curr
     ])
   ).rows;
   expect(copies).toEqual([{ terminal, partition_no: home(terminal) }]);
+  const mapping = await store.readMapping(f.pool, original);
+  if (mapping.state !== 'mapped') throw new Error('Expected the actual current bootstrap mapping');
+  await runCommand(f.pool, { partition: home(terminal) }, async (tx) => {
+    await store.admitHomeEffect(tx, { kind: 'follow-count', original, terminal, epoch: mapping.epoch });
+    return noEffect(null);
+  });
+  await expect(
+    runCommand(f.pool, { partition: home(original) }, async (tx) => {
+      await store.admitHomeEffect(tx, { kind: 'follow-count', original, terminal: original, epoch: mapping.epoch });
+      return noEffect(null);
+    }),
+  ).rejects.toMatchObject({ code: 'identity_effect_stale' });
   const counts = (
     await f.admin.query(
       'SELECT terminal,observed_count::text FROM semantic.identity_epoch_group WHERE terminal=ANY($1::uuid[]) ORDER BY terminal',
