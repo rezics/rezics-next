@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
-const phaseBudgets = { ready: 180_000, firstResponse: 150_000, warmUp: 180_000 };
+const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
 type Phase = 'ready' | 'first response' | 'warm-up';
 type PhaseTiming = { phase: Phase; path: string; elapsedMs: number };
 export type DevServerOptions = {
@@ -69,8 +69,9 @@ export async function startDevServer(
     ready = resolve;
   });
   const keep = (chunk: Buffer) => {
-    output = (output + chunk.toString()).slice(-8000);
-    if (readyAt === undefined && /\bready in\s+[\d.]+\s*(?:ms|s)\b/i.test(output.replace(/\x1b\[[0-9;]*m/g, ''))) {
+    const combined = output + chunk.toString();
+    output = combined.slice(-8000);
+    if (readyAt === undefined && /\bready in\s+[\d.]+\s*(?:ms|s)\b/i.test(combined.replace(/\x1b\[[0-9;]*m/g, ''))) {
       readyAt = Date.now();
       ready();
     }
@@ -97,7 +98,12 @@ export async function startDevServer(
   };
   const stop = () =>
     (stopped ??= (async () => {
-      await browser?.close();
+      let browserError: unknown;
+      try {
+        await browser?.close();
+      } catch (error) {
+        browserError = error;
+      }
       signalGroup('SIGTERM');
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -113,6 +119,7 @@ export async function startDevServer(
         signalGroup('SIGKILL');
         await exited;
       }
+      if (browserError) throw browserError;
     })());
 
   const record = (started: number) => {
