@@ -49,7 +49,9 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
 
       expect(retried.attempt.attempt).toBe(current.currentAttempt + 1);
       expect(git(task.worktree, 'show', `${task.branch}:bun.lock`)).toBe('installed from integration');
-      expect((await Bun.file(installLog).text()).trim().split('\n')).toEqual(['install']);
+      expect((await Bun.file(installLog).text()).trim().split('\n')).toEqual([
+        'install',
+      ]);
       expect(git(task.worktree, 'diff', '--name-only', '--diff-filter=U')).toBe('');
     } finally {
       process.env.PATH = originalPath;
@@ -100,10 +102,7 @@ test('a bun.lock conflict mixed with another file stays with the worker', async 
     h.ensureDev();
     const task = h.tasks.dispatch(briefFile(h, ['bun.lock', ordinary]));
     mkdirSync(join(task.worktree, '.temp'), { recursive: true });
-    writeFileSync(
-      join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({ file: 'bun.lock', content: 'worker lock\n' }),
-    );
+    writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file: 'bun.lock', content: 'worker lock\n' }));
     await h.start(task);
     git(task.worktree, 'reset', '--soft', 'HEAD^');
     writeFileSync(join(task.worktree, 'bun.lock'), 'worker lock\n');
