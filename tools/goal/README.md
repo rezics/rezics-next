@@ -24,6 +24,12 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
+Every landing also runs the sibling test for each changed source file that has one: `<name>.test.ts` beside the source,
+or `tests/<name>.test.ts` at the workspace root when no same-directory test exists. The command prefix is configured by
+`siblingTests.command` in `defaults.json` and receives the selected test paths. If a sibling test fails on the candidate,
+the train reruns the failing test files on the landing base; a failure already present there is recorded as pre-existing.
+Kernel changes continue to use the kernel affected-test command, which selects its own affected tests.
+
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. The integration stage regenerates files
 during rebase. Promotion-stage files may declare `inputs`; a dev landing that changes one of those inputs runs the
 declared generator against the rebased candidate and includes changed outputs in its landing commit. Promotion still

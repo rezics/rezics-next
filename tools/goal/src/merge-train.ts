@@ -35,6 +35,7 @@ import {
 
 import type { AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
+import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 
 export type DerivedFile = {
   path: string;
@@ -1597,10 +1598,19 @@ export class MergeTrain {
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
+        const affectedChecks = workspace
+          ? (o.affectedTests ?? defaults.affectedTests).filter((check) =>
+              result.changedFiles.some((path) => matchesPath(path, check.paths)),
+            )
+          : [...(request.affectedTests ?? [])];
+        const siblings = siblingTestCommand(
+          siblingTestFiles(result.changedFiles, trainTree),
+          defaults.siblingTests.command,
+        );
+        if (siblings) affectedChecks.push({ paths: [], command: siblings });
         const affectedResults = workspace
           ? await Promise.all(
-              (o.affectedTests ?? defaults.affectedTests)
-                .filter((check) => result.changedFiles.some((path) => matchesPath(path, check.paths)))
+              affectedChecks
                 .map((check) =>
                   runAffectedTest(check.command, trainTree, logPath, {
                     ...gateEnvironment(process.env, o.stateDirectory),
