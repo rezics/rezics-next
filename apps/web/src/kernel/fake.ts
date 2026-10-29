@@ -117,7 +117,7 @@ export type FixtureAccount = {
   collections?: Record<string, unknown>[];
 };
 
-export type KernelRecording = { status: number; headers?: Record<string, string>; [key: string]: unknown };
+export type KernelRecording = { status: number; [key: string]: unknown };
 
 /** A fake-kernel request summary for bounded-read and anonymous-render tests. */
 export type FakeKernelCall = {
@@ -209,10 +209,7 @@ function recordedResponse(recording: KernelRecording): Response {
   if (isRecord(recording.headers)) return Response.json(body, { status: recording.status, headers: recordedHeaders });
   return Response.json(body, {
     status: recording.status,
-    headers: {
-      'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json',
-      ...recording.headers,
-    },
+    headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
   });
 }
 
