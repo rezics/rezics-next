@@ -1,9 +1,45 @@
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
-import { Pool } from 'pg';
+import { Pool, type PoolClient, type QueryResult } from 'pg';
+import { WORK_QUEUES, type WorkQueueName } from './queues.ts';
 
 export const DBOS_SCHEMA = 'dbos';
 export const WORK_APPLICATION = 'rezics-kernel';
 export type WorkClient = DBOSClient & { close(): Promise<void> };
+
+export type WorkIntent = Readonly<{
+  queue: WorkQueueName;
+  workflowName: string;
+  workflowId: string;
+  /** Locators only; consumer modules own their input schema. */
+  input: Readonly<{ accounts: readonly string[]; [locator: string]: unknown }>;
+}>;
+
+/** Executor internals. The SDK uses this very connection; no pool checkout or relay. */
+export async function enqueueWorkIntent(work: WorkClient, client: PoolClient, intent: WorkIntent): Promise<void> {
+  if (!Object.hasOwn(WORK_QUEUES, intent.queue) || !intent.workflowName || !intent.workflowId)
+    throw new TypeError('An operational intent requires an existing queue, workflow name and deterministic id');
+  // 5.4.6 checks the returned name but merely warns for a queue mismatch. Inspect
+  // its upsert result on the same pg client, adding no statement or connection.
+  const checked = new Proxy(client, {
+    get(target, property) {
+      if (property !== 'query') return Reflect.get(target, property, target);
+      return async (sql: string, values: unknown[]) => {
+        const result: QueryResult = await target.query(sql, values);
+        if (result.fields.some(({ name }) => name === 'queue_name')) {
+          const row = result.rows[0];
+          if (row && (row.name !== intent.workflowName || row.queue_name !== intent.queue))
+            throw new TypeError(`Conflicting workflow name or queue for ${intent.workflowId}`);
+        }
+        return result;
+      };
+    },
+  });
+  await work.enqueueInTransaction(
+    checked,
+    { queueName: intent.queue, workflowName: intent.workflowName, workflowID: intent.workflowId },
+    intent.input,
+  );
+}
 
 /** Enqueue without launching an executor. A supplied pool remains the caller's responsibility. */
 export async function createWorkClient(databaseUrl: string, pool?: Pool): Promise<WorkClient> {

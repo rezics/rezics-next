@@ -92,3 +92,121 @@ Test barriers observe and control timing; they never replace native receipt, que
   actual plans, rows, buffers, statements and wire bytes for matching/absent/conflicting/minimized cases and a denied
   zero-lookup path. It requires constant rows/statements/bytes, logarithmic blocks and no receipt sequential scan.
   The separate expired-context test requires zero receipt statements. The check log records the measured samples.
+
+## Operational transactions
+
+The additive [operational executor](operational.ts) supports the Collection members GET exception in
+[dynamic Collections](../../../../docs/dynamic-collections.md). It is not a command. It writes only the
+consumer module's derived preparation records and durable work intents. It writes no receipt, domain event,
+grant, resource header, outbox envelope or write basis, and never advances the partition position.
+`runCommand`, including replay, `noEffect` and its statements per attempt, is unchanged.
+
+The frozen entry signatures are:
+
+```ts
+runOperationalTransaction<T>(
+  pool: Pool,
+  options: OperationalOptions,
+  body: (tx: OperationalTransaction) => Promise<T>,
+): Promise<T>
+
+enqueueIntent(tx: OperationalTransaction, intent: {
+  queue: WorkQueueName;
+  workflowName: string;
+  workflowId: string;
+  input: Readonly<{ accounts: readonly string[]; [locator: string]: unknown }>;
+}): Promise<void>
+```
+
+Both functions are exported by `command/operational.ts`. `OperationalTransaction` exposes only `query` and
+is branded separately from command transactions. Common options are `partition` (0–4095), `kind` (1–255
+printable ASCII characters identifying the operation), `accounts` (at most two distinct routed account ids),
+`workClient` (the existing `createWorkClient` result), optional absolute `deadline`, and optional trusted
+service `clock`. There is no receipt option. The executor copies and sorts account ids before any attempt.
+
+Request mode adds `mode: 'request'`, native account `principal` and `basis` from
+`principalCommandIdentity(verifiedActor)`, and mandatory `authorization` from the same
+`accessCommandAuthorization` path as `runCommand`. The authorization binds the actual request actor, action
+and resource; its resource route must belong to `partition`. No separate body principal or partition is
+accepted. Access verifies the attribution against the authenticated request actor. There is no anonymous,
+staff, receipt-only or identity-free request bypass.
+
+Work-step mode adds only `mode: 'work-step'`. It has no actor, bearer, principal, basis or authorization.
+The registered DBOS step passes the intent's recorded partition and account ids again. This mode authorizes
+no disclosure: later requests must obtain current Access authorization before disclosing prepared data.
+
+Each attempt enters the command gate, mints one authoritative time, then prepares Access evidence without
+holding a resource connection. On resource checkout it starts SERIALIZABLE with the executor's 200ms
+`lock_timeout` and remaining deadline as `statement_timeout`. Access final authorization runs at this same
+time before any write; receipt-only authorization denies. Next a receipt-free sibling of the no-effect
+fence probes the active partition primary key `FOR SHARE`, followed by each named account primary key in
+id order. These use `shareAccount`'s exact SQL and active/unfenced rule and retain their locks until commit.
+`shareAccount` itself continues to require a live command transaction. Only then does the body run; any
+supplied authorization finalizer must succeed before commit as well.
+
+The operational executor lends Access its attempt time but never installs command, callback or receipt
+owner authority. `currentCommand`, `registerCommandCallback`, `hasOwnCommandCompletion` and command event
+emission are unavailable and throw. Copied or completed operational transactions cannot enqueue work.
+Body errors, fence refusals and deadlines roll back derived records and workflows together. Serialization
+failures (`40001`), deadlocks (`40P01`) and lock timeouts retry with fresh time and Access evidence until the
+same `deadlineFor` request budget, with native backoff. Access contention retains its typed error on expiry.
+Inactive partitions and expired deadlines raise the existing retryable `CommandUnavailableError` (503).
+An account fence refusal raises `LifecycleDeniedError`; consumers map it as Access maps that account's reads.
+
+### Atomic intent and recovery
+
+`enqueueIntent` passes the transaction's own pg connection to DBOS 5.4.6
+`DBOSClient.enqueueInTransaction`; it checks the live exact operational transaction. The input must name
+exactly the fenced `accounts`. All other input fields are consumer-owned locators only (ids, keys,
+generation), never private facts or payloads. Only existing native queues are accepted.
+
+[Server composition](../server.ts) creates both kernel pool and work client from the same `DATABASE_URL`.
+[Worker composition](../worker.ts) also passes that kernel URL and pool to `createWorkClient` and
+[composeWork](../work/registry.ts). DBOS uses schema `dbos` in this same kernel database; there is no separately
+configured system database. Enqueue acquires no second connection, adds no intent table, relay, scheduler or
+queue, and commits or rolls back with the consumer record.
+
+Use a deterministic `workflowId` and no `deduplicationID` or `duplicationPolicy`. The SDK's
+`ON CONFLICT (workflow_uuid) DO UPDATE` returns an existing workflow and preserves its original input.
+Conflicting workflow name or queue is a programming error. The work client checks the name and queue in
+the SDK's returned upsert row, adding no query; the SDK alone only warns about a different queue.
+Concurrent workflow inserts can raise serialization failures, which the operational executor retries.
+
+The body owns idempotence using its derived record's uniqueness. For example, use
+`INSERT ... ON CONFLICT DO NOTHING RETURNING`, then enqueue only when a record was created. A duplicate
+request returns the existing preparation without another write. Never enqueue after commit: that loses
+intent custody if the producer crashes. An already committed intent is an ordinary DBOS workflow. The
+existing registered work modules and runtime recover it after restart. [Workflow retention](../work/retention.ts)
+deletes only terminal workflows; an ENQUEUED or PENDING intent survives retention.
+
+An operational intent is a **shared-history record kind** (durable work naming accounts), covered by
+accounts' `shared-history` erasure participant. Its input contains locators only. The consumer's derived
+records belong to that consumer's own erasure participant.
+
+The [native test](../../test/command/operational-transaction.test.ts) uses PostgreSQL, Auth/JWKS, installed
+Access grants, actual captured SQL and a test workflow registered through the existing work runtime. It
+proves atomic commit/rollback, refusal before body, permission denial, deadline expiry, concurrent uniqueness,
+unchanged command state, separate capabilities, name/queue conflicts, producer process crash and runtime
+stop/restart, and account fencing between intent commit and work-step apply. Concurrency and crash schedules
+use barriers, not elapsed-time guesses.
+
+### Cost: operational transaction attempt
+
+- Touches: one gate entry, one time mint; request-mode Access preparation and finalization as `runCommand`;
+  one partition primary-key probe `FOR SHARE`; one account primary-key probe `FOR SHARE` per fenced account
+  (at most two); the body's statements; per intent, one `dbos.workflow_status` insert and one
+  `dbos.workflow_input` insert. No receipt lookup or partition position update.
+- Bound: constant statements and examined rows for fixed body and intent count; logarithmic blocks in
+  partition, account and workflow tables; retries bounded by the request deadline.
+- Growth check: [request and work-step measurements](../../test/command/operational-transaction-growth.test.ts)
+  grow unrelated workflows, receipts and accounts through 512/4,096/32,768, holding the selected key, body
+  and input fixed. They require constant statements and rows, logarithmic buffers and no sequential scan
+  of `dbos.workflow_status`, `core.receipt` or `access.account`.
+
+### Cost: intent recovery
+
+- Touches: existing DBOS queue dequeue and recovery for one workflow; no kernel statement beyond the
+  work-step transaction above.
+- Bound: unchanged DBOS per-workflow recovery; no kernel history scan.
+- Growth check: the work-step measurement above covers kernel cost. Native process/runtime restart is a
+  correctness test, not a recovery cost measurement.

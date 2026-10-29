@@ -236,6 +236,29 @@ export function commandTime(tx: CommandTransaction): AuthoritativeTime | undefin
   return attempts.get(tx)?.time;
 }
 
+/** Executor internals: lend Access an attempt time without granting command authority.
+ * Operational attempts never enter commands, receiptOwners or the callback registry.
+ */
+export async function withOperationalAttempt<T>(
+  tx: CommandTransaction,
+  attempt: CommandAttempt,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (attempts.has(tx) || hasLiveCommandTransaction(tx)) throw new TypeError('Transaction already has an attempt');
+  attempts.set(tx, attempt);
+  try {
+    return await run();
+  } finally {
+    attempts.delete(tx);
+    times.delete(attempt.time);
+  }
+}
+
+/** Release an executor time when preparation fails before resource checkout. */
+export function releaseOperationalTime(time: AuthoritativeTime): void {
+  times.delete(time);
+}
+
 const transactionCallbacks = Symbol('command callbacks');
 type CallbackState = { active: boolean; callbacks: CommandCallback[] };
 type CallbackTransaction = CommandTransaction & { [transactionCallbacks]?: CallbackState };
