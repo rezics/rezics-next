@@ -138,7 +138,8 @@ export async function runOperationalTransaction<T>(
               return Reflect.apply(target, client, args);
             },
           });
-          const tx = Object.freeze({ query }) as OperationalTransaction;
+          // Access deadline clients inherit this object and shadow its query method.
+          const tx = { query } as OperationalTransaction;
           await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
           try {
             return await withOperationalAttempt(tx, attempt, async () => {

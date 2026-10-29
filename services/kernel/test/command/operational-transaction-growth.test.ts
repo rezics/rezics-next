@@ -63,10 +63,10 @@ for (const mode of ['request', 'work-step'] as const) {
     };
     const report = await checkGrowth(native.db, {
       name: `${mode} operational transaction`,
-      scales: [512, 4096, 32768],
+      scales: [1, 8, 64],
       bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
       async grow(db, scale, previous) {
-        await seed(db, population, { from: previous, to: scale });
+        await seed(db, population, { from: previous * 512, to: scale * 512 });
       },
       async operation() {
         const options = mode === 'request' ? await native.request() : native.step;
@@ -81,7 +81,7 @@ for (const mode of ['request', 'work-step'] as const) {
         });
       },
     });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([512, 4096, 32768]);
+    expect(report.samples.map(({ scale }) => scale * 512)).toEqual([512, 4096, 32768]);
     expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
     expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
     for (const { cost } of report.samples) {
