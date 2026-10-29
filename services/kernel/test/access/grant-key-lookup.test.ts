@@ -86,6 +86,33 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
           (node) => node['Relation Name'] === 'resource_grant' && Number(node['Actual Loops']) > 0,
         );
         expect(scans.length).toBeGreaterThan(0);
+        if (scans.some((node) => node['Index Name'] !== 'resource_grant_pkey_lookup')) {
+          console.error(
+            'grant lookup indexes',
+            (
+              await database.admin.query(`
+            SELECT i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid) AS definition
+            FROM pg_index i WHERE i.indrelid = 'access.resource_grant'::regclass
+          `)
+            ).rows,
+          );
+          console.error(
+            'literal grant lookup',
+            (
+              await database.admin.query(
+                `
+            EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+            SELECT valid FROM access.resource_grant
+            WHERE route=0 AND resource_id=$1 AND subject_kind='identity'
+              AND subject_id=$2 AND subject_role='' AND action='organization:create'
+              AND valid <= tstzrange('2030-01-01T12:00:00Z',NULL,'[)')
+            ORDER BY valid DESC LIMIT 1
+          `,
+                [resource, actor],
+              )
+            ).rows,
+          );
+        }
         for (const node of scans) {
           expect(node['Node Type'], JSON.stringify({ scale, scans })).toBe('Index Only Scan');
           expect(node['Index Name']).toBe('resource_grant_pkey_lookup');
