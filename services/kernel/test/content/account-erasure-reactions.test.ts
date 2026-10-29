@@ -12,6 +12,7 @@ import { setupContent } from '../../src/content/setup.ts';
 import { projectBatch } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
@@ -135,7 +136,9 @@ beforeAll(async () => {
       201,
     )
   ).realm;
+  await settle();
   await call('PUT', `/v1/realms/${realm.realmId}/boardScheme`, people.staff, { schemeId }, 200, realm.headRevisionId);
+  await settle();
   boardId = (
     await call(
       'POST',
@@ -200,7 +203,9 @@ async function settle() {
         },
       });
       if (batch.status !== 'read') throw new Error('Effects partition unavailable');
-      advanced ||= batch.envelopes > 0;
+      const links = await linkProjection(db.pool).run(row.partition_no);
+      if (links.status !== 'read') throw new Error('Semantic links partition unavailable');
+      advanced = advanced || batch.envelopes > 0 || links.envelopes > 0;
     }
     if (!advanced) {
       for (const row of rows) await drainEffects(db.pool, row.partition_no);
