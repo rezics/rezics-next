@@ -9,6 +9,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createApp } from '../../src/http/app.ts';
 import { bodyBytes, bodyWireBytes, DEFAULT_BODY_LIMIT, MAX_BODY_LIMIT, requestBody } from '../../src/http/body.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { customMethodPath } from '../../src/http/custom-method.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 
 const pool = createPool('postgres://kernel.invalid/openapi');
@@ -320,7 +321,7 @@ test('all mounted body routes use the shared cap or an explicitly listed bounded
       },
       { highWaterMark: 0 },
     );
-    const path = route.path.replace(/:[^/]+/g, '019a1b2c-3d4e-7000-8000-000000000001');
+    const path = customMethodPath(route.path.replace(/:[^/]+/g, '019a1b2c-3d4e-7000-8000-000000000001'));
     const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method: route.method,
