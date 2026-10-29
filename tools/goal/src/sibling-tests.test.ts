@@ -41,10 +41,13 @@ test('remote check contract', () => expect(readFileSync('scripts/remote-check.ts
     );
     h.settings.affectedTests = [];
     const task = h.dispatch('scripts/remote-check.ts');
-    writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({
-      file: 'scripts/remote-check.ts',
-      content: 'broken',
-    }));
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({
+        file: 'scripts/remote-check.ts',
+        content: 'broken',
+      }),
+    );
     await h.start(task);
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(false);
@@ -68,10 +71,13 @@ test('remote check contract', () => expect(readFileSync('scripts/remote-check.ts
     );
     h.settings.affectedTests = [];
     const task = h.dispatch('scripts/remote-check.ts');
-    writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({
-      file: 'scripts/remote-check.ts',
-      content: 'branch-broken',
-    }));
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({
+        file: 'scripts/remote-check.ts',
+        content: 'branch-broken',
+      }),
+    );
     await h.start(task);
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);

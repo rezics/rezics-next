@@ -8,7 +8,8 @@ const TEST_EXTENSION = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 export function siblingTestFiles(changedPaths: readonly string[], candidate: string): string[] {
   const tests = new Set<string>();
   for (const source of changedPaths) {
-    if (source.startsWith('services/kernel/') || !SOURCE_EXTENSION.test(source) || TEST_EXTENSION.test(source)) continue;
+    if (source.startsWith('services/kernel/') || !SOURCE_EXTENSION.test(source) || TEST_EXTENSION.test(source))
+      continue;
     const name = parse(source).name;
     const sameDirectory = join(dirname(source), `${name}.test.ts`);
     const workspaceTest = join('tests', `${basename(source, parse(source).ext)}.test.ts`);
@@ -18,6 +19,9 @@ export function siblingTestFiles(changedPaths: readonly string[], candidate: str
   return [...tests].sort();
 }
 
-export function siblingTestCommand(files: readonly string[], runner: readonly string[] = ['bun', 'test']): string[] | undefined {
+export function siblingTestCommand(
+  files: readonly string[],
+  runner: readonly string[] = ['bun', 'test'],
+): string[] | undefined {
   return files.length ? [...runner, ...files] : undefined;
 }
