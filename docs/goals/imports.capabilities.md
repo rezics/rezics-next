@@ -399,7 +399,9 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   `Wikidata account-key CLI imports refreshes reopens and safely stops the synthetic native scalar feed`.
   The initial caller revision is `637f28a6d1`. Check `36acd013-ee93-416c-b091-987e5c171d42` at
   `b0ed7c4e8d` stopped before scenarios on two caller capture-type errors. `83a13e8b7b` corrects those types
-  without changing the frozen assertions; replacement execution is pending. The exact acceptance is
+  without changing the frozen assertions. The next native run reached three case setups but stopped before input
+  acquisition on the caller module observation; root typecheck identified its undeclared package import.
+  `300beac120` uses exact repository converter paths; replacement execution is pending. The exact acceptance is
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts`,
   with `bun scripts/worker-check.ts -- bun scripts/typecheck.ts` for the root typecheck.
   These call production `runImportCli`, native key stage/approve/apply and native Auth/Access/public writes.
