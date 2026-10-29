@@ -51,6 +51,15 @@ Current implementation evidence is narrower than the capability:
   Content reaction commands exist, but inspected worktree/dev has no `readLiked`/`readLikedVersion` implementation;
   obtain actual raw/version and DDL receipts rather than inferring delivery from an earlier receipt description.
 
+### Scoped subject-search status
+
+[Owner consumer requirements](../../../../docs/library-owner-queries.md#scoped-subject-search-consumption-required-runtime-pending)
+adopt existing `subject.search` with Library/Collection scope plus all owner/catalogue/text conditions.
+Search's sole `docs/subject-search-conditions.md` contract is pending adoption here; Semantic's one pure request
+grammar producer follows its freeze. Verified request/logical-owner authorization bridges, native owner text
+index/analyzer/ranking, complete Source2a/privacy/identity and runtime remain pending. The linked owner section
+owns exact one-Library-scope preparation, Everything basis reuse, Cost and future native evidence requirements.
+
 ### Required built-ins and personal space
 
 Use one Collection members service/surface for curated, Everything, state and Liked. Native personal facts remain
@@ -60,10 +69,11 @@ repair design, shared by Everything/state/Continue/Liked and admitted owner quer
 cache or copied exact-fact-witness store. Every qualifying producer must insert discovery coverage atomically or establish
 readiness through bounded durable preparation. Missing coverage returns preparing, never false empty. Stale positive
 candidates lose membership/disclosure immediately under current native checks. Logical Library/Collection list and
-detail reads are pure: no repair, header/grant creation, receipt or domain event. Only the common members GET may
-start bounded idempotent derived preparation and its work intent, keyed by actual viewer, Collection, validated
+detail reads are pure: no repair, header/grant creation, receipt or domain event. The common members GET and the
+precisely admitted subject-search consumer above may start the SAME bounded idempotent derived preparation and
+work intent, keyed by actual viewer, Collection, validated
 filter/sort and accepted release/meaning, under [Dynamic Collections](../../../../docs/dynamic-collections.md#model-and-identity).
-It writes no domain state, header, grant, event or receipt. Retained preparation returns `202 application/json`,
+It writes no domain state, header, grant, event or receipt. Members GET preparation returns `202 application/json`,
 exactly `{preparing:true}`, `Retry-After` and owner-private `no-store`; retry the same validated URL and cursor.
 No members, next, operation ID or partial data accompanies `202`. Genuine exhaustion stays
 `200 {members:[],next:null}`; unavailable runtime/work stays `503`. Zone POST remains unchanged.

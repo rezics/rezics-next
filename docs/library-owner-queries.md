@@ -163,6 +163,135 @@ including sparse matches, must reach useful full/final output after finite prepa
 success chains over raw candidate windows do not satisfy this contract. All direct, prepared, composed-page and
 maintenance work is charged under [Filtered lists cost](filtered-lists.md#cost); no numeric allowances are added here.
 
+## Scoped subject-search consumption (required; runtime pending)
+
+Search owns the sole condition authority, `docs/subject-search-conditions.md`, pending adoption in this checkout,
+and its Search README integration. Semantic later supplies ONE pure shared grammar producer after that freeze.
+This section adopts Library consumer requirements only; it creates no alternative grammar, ABI or runtime.
+The site's one header field uses existing `POST /v1/subjects:search`, operation `subject.search`. Its chip adds a
+shared Boolean subtree to `body.filter`; `text`, `languages`, `sort`, `limit`, `cursor` and subject result DTO remain.
+No personal/account parameter, per-scope endpoint, browser filtering, private public-Search mirror or second
+Boolean/text interpreter is admitted. Scope, ALL owner leaves, catalogue type/tag/exact quantity and text compose
+in ONE native source/filter/order admission, with complete exclusion/order and current original AND terminal privacy.
+Never drop nonowner OR branches or conjoin implicit owner presence to make a query fit.
+
+Library uses existing viewer-self `owner.presence` with exactly [the qualifying union](#presence).
+Collection uses request-only closed `{"collection":{"id":"UUID"}}`, with one native UUID, no other selectors;
+its shared grammar producer is still pending.
+Curated membership is canonical eligible-occurrence EXISTS: duplicate occurrences yield one search subject while
+retaining every occurrence/note/edit identity. A manual-only subject absent Everything MUST match Collection scope.
+Own private dynamic reads use current authorized native facts/pins. Another reader uses complete currently authorized
+published/ready output, never fresh curator-private predicates. Count actual own combined private expansion/work
+within shared 32 leaves/depth 4/OR 16; public ready output never expands or reveals the hidden private predicate.
+Stored saved/dynamic definitions continue rejecting Collection/Zone/Realm resource operands, preventing recursion.
+Structural admission grants no source/private SQL authority. Authorize EVERY resource before candidates, including
+inside true OR/NOT; concealed missing sources never fold false to make NOT true.
+
+Text keeps actual [parseText](../services/kernel/src/search/text.ts) and
+[Search planning](../services/kernel/src/search/README.md#search-planning-and-engine-page) expression limits,
+implicit AND, `|` OR, unary `-`, phrases and escapes. Raw validated expression binds the cursor: no transport trim,
+NFC or casefold. [Document fields](../services/kernel/src/search/document.ts) and the
+[index analyzer](../services/kernel/db/search/indices/subjects.json) define public labels/aliases AND descriptions
+in `search_text`: `cjk_bigram_v2` uses ICU NFKC_CF, standard tokenization, Traditional-Simplified/Hiragana-Katakana
+folding, CJK bigrams and stopwords. Analyzer normalization does not rewrite transport values. Native owner PostgreSQL
+execution must preserve term/phrase/Boolean semantics, default relevance with text/name without text, stable ties
+and encrypted cursors. Substring/title-only matching or local relevance is insufficient. Private notes, progress
+and label names add no public text fields. Owner-local text/index/analyzer/ranking and complete Source ports remain
+REQUIRED missing capabilities; neither public catalogue top-N intersected with owner IDs nor one point per subject
+is an owner plan. Missing ports do not make all normal text unsupported or establish completion.
+
+### Native preparation admission
+
+Exactly ONE Library scope may admit the SAME Library derived preparation: one viewer-owned Collection condition OR
+one positive viewer-self presence scope, never both/several. Negative/absent/foreign presence, foreign Collections
+(public, curated or even co-located), anonymous/string viewers and other shapes take the direct path with its
+existing bounded outcome and ZERO derived rows/workflows. Full Boolean population must genuinely be anchored in
+the admitted source; presence under OR does not prove the whole query ranges over Everything. Direct capability
+remains required; absence of preparation permission neither proves direct fits nor closes mixed-query support.
+
+Endpoint `subject:read` on Global remains its route gate, not operational authority. The operational transaction
+receives the REAL verified Actor/native source eligibility and `accessCommandAuthorization` for ACTUAL Collection
+`collection:read`; principal/basis come from `principalCommandIdentity`. Resource partition equals owner/preparation
+partition, with the same at-most-two-account native active fences (own Collection fences the viewer). No new grant,
+override, Actor, resource, Access port, engine or queue. Current Actor/request/source/family grants/gates/consent
+precede private work. Search's [actual service](../services/kernel/src/search/service.ts) accepts a viewer STRING;
+the REAL verified request authority bridge is missing, must declare its callers/tests/root typecheck, and cannot
+reconstruct an Actor from `account:ID` or infer a signature here.
+
+Positive own presence uses REAL logical Everything's ID through
+[builtin-identity.ts](../services/kernel/src/library/builtin-identity.ts): existing `derivedId`, owner namespace/route,
+`['library.collection.builtin', 1, 'everything']`. Admission NEVER materializes. Actual native logical-owner read
+authorization as an operational input is NOT YET delivered; the helper/string account ID supplies no permission.
+Until that producer exists this shape retains its direct bounded outcome. Canonicalize only the recognized scope
+identity to the SAME Everything Collection ID: presence, `collection.id=Everything` and Members GET reuse ONE
+preparation/basis `(viewer, source, filter, text, sort, release)`, quota 32, write rate and fences. This approved
+scope equivalence is not arbitrary AST Boolean equivalence or permission to discard user terms. Preserve current
+quota/expiry/idempotence/retained-frontier rules. Work-intent locators plus basis key fit 4096 UTF-8 JSON bytes,
+with NO raw query text; work-step discloses nothing. Retained Library text/current typed work requires exact
+Library/shared-history custody and viewer erasure, without exception.
+
+Authentication is unchanged: public anonymous direct is not 401. Missing required credentials yield
+`401 authentication_required` with bare Bearer; invalid/expired/revoked/pre-suspension bearers yield
+`401 invalid_credentials` with Bearer `invalid_token` BEFORE the route. Verified-suspension 403 is defensive only;
+never fabricate a valid suspended bearer. Operational `LifecycleDeniedError` maps as Access's current account reads,
+without HTTP rewrite.
+
+### Native text physical requirements
+
+Keep the ONE structural candidate/support directory, native fact/pin authority, selective dependency repair and
+full canonical Library participant/custody below. The source-only native text design pair remains evidence pending;
+no report name selects a title projection, per-Collection cache, engine or schema. A copied public text derivative
+is neither native authority nor permission. Before runtime derive physical copies/indexes/bytes, inverse affected
+dependencies, retention/reclaim/source withdrawals, owner A5/shared-history custody and bootstrap/crash proof.
+If text is copied later, every subject text change fans out to holders in paged bounded steps, total LINEAR in
+affected owner rows, never synchronously in the subject write.
+
+### Cost: native owner text read
+
+- Touches: owner-partition source/text/predicate/order indexes, native facts/pins, complete original/terminal and
+  exclusion/order disclosure, resolution/auth/head/release/control/fields/currentness and cursor work.
+- Bound: [Filtered-list budgets](filtered-lists.md#budgets) apply to the WHOLE read: same fixed terms, 12 statements
+  per backend or composed `8 + 4R`, no per-leaf allowance. Direct must prove BOTH large owner pool/sparse text AND
+  many text matches/small owner pool; neither pool scan nor global-matches scan meets the bound. Otherwise only
+  actually authorized retained owner results (same quota 32), or current 422 before enumeration until the required
+  port exists. Finite preparation yields filled/final pages, not repeated short/empty success or endless preparing
+  under disjoint identity jobs. Another reader's complete Collection output is ready-result read: `2s + 2`
+  candidates/2 index reads, with no hidden predicate expansion.
+- Growth check: REQUIRED FUTURE native cases below; no direct bound or native pass is claimed.
+
+### Cost: preparation admission
+
+- Touches: verified request/source authority, exact scope recognition, canonical basis lookup, quota/rate/fences,
+  derived row plus same-client durable intent, current denial/finalization and retained frontier.
+- Bound: same [preparation budgets](filtered-lists.md#budgets) and
+  [Kernel job-step authority](../services/kernel/README.md#bounded-job-steps); only the admission above writes.
+  Resolution/auth/head/release/control/currentness share the fixed terms; no new allowance or cached permission.
+- Growth check: REQUIRED FUTURE same-query alias forms reuse ONE preparation; denied/anonymous and inadmissible
+  shapes write ZERO derived rows/DBOS workflows; queued owner terminal T defeats admission/replay.
+
+### Cost: text maintenance
+
+- Touches: actual changed subject text, indexed inverse holder/dependency ranges, owner index/result rows,
+  frontier and durable work, withdrawal/reclaim and Library/shared-history erasure custody.
+- Bound: [maintenance budgets](filtered-lists.md#cost) and Kernel job-step caps apply per step; total work is linear
+  in affected owner rows, charging retries/discarded work. No synchronous holder fanout or unrelated-owner sweep.
+- Growth check: REQUIRED FUTURE holder-fanout steps AND total work, bootstrap/crash replay, text edits/reveals
+  behind frontiers, withdrawals and erasure; retained progress must converge on finite current input.
+
+### Required future native cases and delivery gaps
+
+Use actual `checkGrowth`, explicit series 64/512/4096, warm-up plus measured repetitions, production-sized growing
+relations, `GROWTH_PROFILE`, named needed indexes and rows/blocks/statements plus ALL engine work under
+[shared growth checks](filtered-lists.md#three-scale-checks). A fixed small-table scan is not universally banned.
+Required FUTURE cases include both text-selectivity axes; manual duplicates/absent Everything; label-only and
+completed-session-without-state; mixed type/tag/>1M words/text; raw phrases/CJK/analyzer/ranking conformance;
+negative/excluded/order/withheld original AND terminal; text edit/reveal behind frontier; source/release/cursor
+changes; queued owner T; holder fanout steps/total work/crash replay; denied/anonymous ZERO writes/DBOS; and
+same-query scope aliases sharing ONE preparation. These cases are not asserted written, frozen or passed.
+Complete Source2a/privacy/identity, logical-owner authorization bridge, verified request bridge, native index and
+runtime remain pending. This adoption creates no readiness, ABI, type or dependency and preserves all existing
+first-public outcomes and scoped concurrent identity rules, including no global marker/universal page gate.
+
 ## Native candidate support and complete observations
 
 Adopt the independently compared [current investigation](research/library-owner-index-observation-current.md) and

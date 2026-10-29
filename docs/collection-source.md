@@ -46,12 +46,25 @@ is rejected before any Source actor is created with HTTP 401 `invalid_credential
 valid native suspended bearer: correct-password sign-in returns 403 `ACCOUNT_SUSPENDED` without a session, while a
 wrong password remains ordinary 401. Kernel's verified-suspended 403 `account_suspended` branch is defensive only,
 not a native fixture persona. Do not substitute anonymous access for a suspended bearer.
+Authentication follows [the owner admission boundary](library-owner-queries.md#viewer-self-binding-and-admission):
+pre-suspension bearers are invalid credentials before routing, never valid suspended-bearer fixtures or anonymous fallback.
 
 Every later call reauthorizes actor and source and checks actual current original AND terminal eligibility,
 Access, consent, foreign targets and tuple fences. A Zone mount, terminal grant, prepared handle, indexed row or
 earlier witness cannot replace these checks. Native read time is supplied by the actual owner/Core boundary,
 not a client date or fabricated cast. Owners release a partition transaction before visiting another partition;
 this does not promise a simultaneous cross-owner snapshot at network delivery.
+
+## Scoped subject-search integration
+
+[Owner consumer requirements](library-owner-queries.md#scoped-subject-search-consumption-required-runtime-pending)
+adopt Library/Collection conditions in existing `subject.search`, without another source or interpreter.
+Search's sole `docs/subject-search-conditions.md` authority is pending adoption here; the request-only resource
+grammar producer follows its freeze. Manual membership is eligible canonical occurrence EXISTS, including subjects
+absent Everything; own private dynamics use native facts/pins, other readers complete authorized published output.
+Authorize every resource even under true OR/NOT before candidates. The exact one-Library-scope preparation rule,
+Everything basis equivalence, missing verified/logical-owner bridges and native text/Cost obligations are in that
+owner section; generic prepared-plan vocabulary below grants no wider request-time operational permission.
 
 ## Admitted access and publication
 
