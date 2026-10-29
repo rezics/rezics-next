@@ -213,7 +213,7 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
              VALUES ($1,clock_timestamp()+interval '5 minutes 10 seconds')
              ON CONFLICT (account_id) DO NOTHING`,
     'COMMIT',
-  ];
+  ] as const;
   const relations = [
     'account',
     'auth_barrier_proof',
@@ -236,7 +236,7 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
   const clients = new Set<PoolClient>();
   let observing: NativePlan[] | undefined;
   // Read the notices checkGrowth already captures; no extra native capture or SQL.
-  const observe = (notice: { message?: string }) => {
+  const observe = (notice: { message?: string | undefined }) => {
     const message = notice.message;
     if (observing && message?.startsWith('duration:') && message.includes('plan:\n'))
       observing.push(JSON.parse(message.slice(message.indexOf('plan:\n') + 'plan:\n'.length)) as NativePlan);
