@@ -411,7 +411,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
           {m.library_collection_members()}
         </h2>
         {members.length ? (
-          <CoverGrid ratio={ratio}>
+          <CoverGrid ratio={ratio} density="large">
             {members.map((member, index) => {
               const subject = member.subject;
               const locale = getLocale();
@@ -670,7 +670,7 @@ function MemberRow({
             ) : null}
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="block min-w-48 flex-1">
+            <label className="block min-w-0 flex-1">
               {m.library_member_note()}
               <textarea
                 className={fieldClass}
