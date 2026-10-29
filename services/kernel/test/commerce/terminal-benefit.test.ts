@@ -77,7 +77,8 @@ servicePool.on('connect', (client: PoolClient) => {
     try {
       return await (query as (...values: unknown[]) => Promise<unknown>)(...args);
     } catch (error) {
-      row.code = (error as { code?: string }).code;
+      const code = (error as { code?: string }).code;
+      if (code !== undefined) row.code = code;
       throw error;
     } finally {
       if (/^(COMMIT|ROLLBACK)/i.test(sql)) tx = 0;
