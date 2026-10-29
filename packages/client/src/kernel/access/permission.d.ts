@@ -1,4 +1,4 @@
-import type { Account } from './account-data.ts';
+import { type Account } from './account-data.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
 import { type AccessRealmRoleReader, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
 import { type ResourceRoleCatalogue } from './resource-roles.ts';
@@ -14,6 +14,8 @@ export type PermissionConfig = {
     /** Retrieve the already-read account from the request; do not query again here. */
     accountEvidence: (actor: AccountActor, context: PermissionContext) => Account | null | undefined;
     authenticate?: Access['authenticate'];
+    /** Private, per-factory standing evidence shared with the main Access adapter. */
+    standingAccounts?: WeakMap<AccountActor, Account>;
     /** Server-owned Realm integration. Read only this Realm/member anchor on the
      * supplied released connection. Return positive and negative proofs for the existing ACL subject roles
      * using native current/next temporal seeks, never an interval-history scan.

@@ -29,7 +29,7 @@ export declare function within<T>(deadline: number, work: () => Promise<T>): Pro
 /** Preserve pg's decoding capabilities when wrapping reylo's query transport. */
 export declare function deadlineClient(client: AccessClient, deadline: number): AccessClient;
 /** Each factory owns its key cache and its opaque, immutable request identities. */
-export declare function createAuthenticator(configuration?: AuthenticationConfig, clock?: KernelClock, knownScopeCount?: number): {
+export declare function createAuthenticator(configuration?: AuthenticationConfig, clock?: KernelClock): {
     authenticate: (token: string, context: AccessContext) => Promise<AccountActor>;
     approvalScope: Readonly<{}>;
     durableScope: Readonly<{}>;

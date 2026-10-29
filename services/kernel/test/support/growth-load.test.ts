@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from './growth.ts';
+import { checkGrowth, openGrowthDatabase, settle, type GrowthDatabase } from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -21,7 +21,7 @@ beforeAll(async () => {
   await db.admin.query(`CREATE SCHEMA ${schema}`);
   await db.admin.query(`CREATE TABLE ${table} (id integer NOT NULL) WITH (autovacuum_enabled = false)`);
   await db.admin.query(`INSERT INTO ${table} SELECT generate_series(1, 16)`);
-  await db.admin.query('VACUUM (ANALYZE)');
+  await settle(db, { analyze: true });
   client = await db.pool.connect();
   // Keep the warmup plan enabled so its notice can arrive during a later capture.
   await client.query('SET auto_explain.log_min_duration = 0');

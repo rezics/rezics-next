@@ -335,3 +335,21 @@ required for measurement, and memory outside a run slice is not counted.
 - The remote module header describes gate progress without qualifications.
   The implemented reservation bounds draining after marker acquisition; it does not bound competing-marker waits,
   unreachable hosts, nonterminating holders or insufficient memory headroom.
+
+## Check cost
+
+The [check cost report](../docs/research/check-cost.md) observed 141 check-hours in one 24-hour window, led by
+kernel checks and root typechecks. These totals show exposure, not savings; overlapping ceilings must never be added.
+
+Run experiments in this order: first reuse compilation and typecheck work within each landing dependency closure;
+second publish an assembled dependency tree per host; then reduce outbound sync and plan documentation-only
+typechecks before placement. Two-lane browser scheduling is a separate latency experiment: it can shorten the
+critical path, not host-hours. Defer one long-lived Postgres per host until phase timings establish its return.
+
+Count a change as a saving only after matched cold and warm comparisons at controlled concurrency, with equal
+diagnostics and test results. Report check-hours and memory GiB-hours from the run ledger. Cache keys must include
+compiler and runtime revisions, configuration, generated inputs, dependency state and schema identity; a base commit
+alone is not a cache key. Keep shared entries immutable and give each run a private copy.
+
+Fix proven infrastructure failures as reliability work; do not claim saved hours for those fixes. The run ledger is
+required for measurement, and memory outside a run slice is not counted.

@@ -419,7 +419,10 @@ each measured repetition, the harness captures each warm-up or preceding run's M
 targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE in every
 database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db, scale,
 repetition)` hook runs outside capture after settling and before every measured repetition, never before warm-ups. A
-fixture that measures outside `checkGrowth` calls the exported `settle` API instead of issuing a bare VACUUM.
+fixture that writes during warm-up, `prepare`, or a direct capture settles after that write and immediately before the
+capture. Work captured inside `grow` is never settled. A fixture that measures outside `checkGrowth` calls the exported
+`settle` API instead of issuing a bare VACUUM: bare VACUUM neither waits for older snapshots nor verifies visibility
+([growth bare VACUUM sites](../docs/research/growth-bare-vacuum-sites.md)).
 
 When a bound fails, `GrowthBoundError` keeps its scale and relation summary and adds the statements with the largest
 first-to-last-scale growth for each failing metric. Each statement line shows its normalized first line, its value at
