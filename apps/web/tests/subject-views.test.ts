@@ -313,7 +313,7 @@ test('the host renders a tab bar of the views that have data in the documented o
   expect(tabs.find(({ view }) => view === 'editions')).toBeUndefined();
   expect(tabs.find(({ view }) => view === 'lists')!.count).toEqual({
     value: 9,
-    exact: true,
+    relation: 'exact',
   });
   expect(tabs.find(({ view }) => view === 'reviews')).toBeUndefined();
   expect(tabs.find(({ view }) => view === 'discussion')).toBeUndefined();

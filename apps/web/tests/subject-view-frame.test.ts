@@ -181,10 +181,10 @@ test('every subject view URL renders the compact subject header: xs cover, title
     expect(html.match(new RegExp(`<a[^>]*href="${overviewHref}"[^>]*>The Little Prince</a>`, 'g'))).toHaveLength(1);
   }
   expect(pages.at(-1)).toMatch(/<h1[^>]*>Relations<\/h1>/);
-  expect(pages.at(-1)).toContain('5 total');
+  expect(pages.at(-1)).toContain('>5</span>');
 });
 
-test('every subject view renders the same sticky view tabs as the overview with the current view marked active and its count', async () => {
+test('every subject view renders the same sticky view tabs as the overview with the current view marked active', async () => {
   const overview = await overviewOf();
   const tabs = subjectTabs(overview);
   const reference = tabLinks(renderToString(frameFor(overview, 'overview')));
@@ -198,7 +198,10 @@ test('every subject view renders the same sticky view tabs as the overview with 
     expect(current).toHaveLength(1);
     expect(current[0]![0]).toContain(`href="${overviewHref}/${view}"`);
     const count = tabs.find((tab) => tab.view === view)?.count;
-    if (count) expect(nav).toMatch(new RegExp(`aria-current="page"[\\s\\S]*?data-slot="count"[^>]*>${count.value}`));
+    if (count)
+      expect(nav).toContain(
+        `data-slot="count" class="text-xs tabular-nums">${count.value}${count.relation === 'lower_bound' ? '+' : ''}`,
+      );
   }
 });
 

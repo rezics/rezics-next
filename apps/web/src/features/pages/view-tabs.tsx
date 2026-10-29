@@ -2,16 +2,13 @@ import type { View } from '@rezics/composition';
 import { Tabs, TabsList, TabsTrigger } from '@rezics/ui/shadcn/tabs';
 import { useEffect, useRef } from 'react';
 import type { ViewTab } from './views';
+import { formatCount } from '../count';
 
 export type ViewTabLabels = { views: string; names: Record<View, string> };
 
 const barClass = 'sticky top-16 z-30 -mx-6 border-b border-border/60 bg-background/90 px-6 backdrop-blur';
 // The inactive color is the muted foreground: the 60% foreground the component defaults to does not clear 4.5:1.
 const triggerClass = 'h-11 flex-none px-3 text-muted-foreground data-active:text-foreground';
-
-function countText(count: NonNullable<ViewTab['count']>, locale: string): string {
-  return `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}`;
-}
 
 /**
  * The views a subject page offers, as links styled as tabs. The bar stays in view under the top bar, scrolls
@@ -54,7 +51,7 @@ export function ViewTabs({
                 {labels.names[view]}
                 {count && (
                   <span data-slot="count" className="text-xs tabular-nums">
-                    {countText(count, locale)}
+                    {formatCount(count, locale)}
                   </span>
                 )}
               </TabsTrigger>

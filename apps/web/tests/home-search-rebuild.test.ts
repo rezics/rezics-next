@@ -62,6 +62,7 @@ const families = new Map<string, Family>();
 const assertions = new Set<string>();
 const accessTokens: string[] = [];
 let counter = 0;
+let homeSearchResponses = 0;
 
 const json = (body: unknown, status = 200, problem = false) =>
   Response.json(body, {
@@ -422,11 +423,17 @@ const fake = Bun.serve({
     if (url.pathname === '/v1/subjects:search' && request.method === 'POST') {
       if (body?.text === 'boom') return json(problem(503, 'index_not_ready'), 503, true);
       if (body?.text === 'nothing')
-        return json({ subjects: [], total: { value: 0, relation: 'exact' }, next: null, as_of: stampAt(0) });
+        return json({
+          subjects: [],
+          ...(homeSearchResponses++ % 2 === 0 ? { total: { value: 0, relation: 'exact' } } : {}),
+          next: null,
+          as_of: stampAt(0),
+        });
       const properties = body?.properties as string[] | undefined;
+      const includeTotal = homeSearchResponses++ % 2 === 0;
       return json({
         subjects: hits.map((hit) => hitBody(hit, !!properties?.includes(published))),
-        total: { value: hits.length, relation: 'exact' },
+        ...(includeTotal ? { total: { value: hits.length, relation: 'exact' } } : {}),
         next: null,
         as_of: stampAt(0),
       });
@@ -723,7 +730,7 @@ const sections: Section[] = home
 const fixtureSubjects = (fixtures as { subjects: { id: string; type: string; cover?: unknown }[] }).subjects;
 
 test(
-  'each vertical section on home is a cover row with a count and a See all link to its search',
+  'each vertical section on home is a cover row without a search count and with a See all link to its search',
   async () => {
     expect(sections.map((section) => section.id)).toEqual(['books', 'anime', 'visual-novels', 'recipes']);
     for (const locale of locales) {
@@ -738,11 +745,7 @@ test(
           );
           expect(subjects.length).toBeGreaterThan(0);
           expect(squash(await list.locator('h2').innerText())).toBe(section.title[locale]);
-          // The count is the read's total, in the reader's language.
-          const count = await messageOf(locale, 'home_section_count', {
-            count: new Intl.NumberFormat(locale).format(subjects.length),
-          });
-          expect(squash(await list.locator('[data-slot="type-count"]').innerText())).toBe(count);
+          expect(await list.locator('[data-slot="type-count"]').count()).toBe(0);
           // A row of covers: one frame per subject, one ratio for the whole row, an image only where there is one.
           const items = list.locator('article');
           expect(await items.count()).toBe(Math.min(subjects.length, 12));

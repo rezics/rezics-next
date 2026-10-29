@@ -5,7 +5,8 @@ import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { RELATION_GROUPS, type RelationDefinition } from '../../subject/relations';
 import { CoverList } from './cover-list';
-import { countText, GROUP_TITLES, holderItems, yearText, type Item, type RowValue } from './overview';
+import { GROUP_TITLES, holderItems, yearText, type Item, type RowValue } from './overview';
+import { formatCount } from '../count';
 import { ViewHeading } from './subject-frame';
 import { loadSubjectPage } from './subject';
 import { subjectViewHref, type SubjectHrefInput } from '../../subject/subject-href';
@@ -94,7 +95,7 @@ export function RelationsView({
         count={
           listed?.count && (
             <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
-              {countText(listed.count, locale)}
+              {formatCount(listed.count, locale)}
             </span>
           )
         }

@@ -95,6 +95,9 @@ type Fixtures = {
   accounts?: FixtureAccount[];
   /** Page reads whose relation total is unavailable in this fixture. */
   linksWithoutCount?: { subject: string; property: string }[];
+  /** Search and facet fixtures use the public count-free response shape. */
+  searchWithoutTotal?: boolean;
+  facetsWithoutCounts?: boolean;
 };
 
 export type { Fixtures };
@@ -826,6 +829,27 @@ function searchHit(fixtures: Fixtures, subject: FixtureSubject) {
 /** Subjects with a statement of that property naming one of the filter's subjects. */
 function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search' }>) {
   const filter = read.body.filter;
+  if (fixtures.searchWithoutTotal) {
+    const named = 'statement' in filter ? filter.statement : undefined;
+    const ids = new Set(named?.in ?? []);
+    const matched = fixtures.subjects.filter((subject) =>
+      'type' in filter
+        ? filter.type.in.includes(subject.type)
+        : !!named &&
+          !!subject.statements[named.property]?.some(
+            (statement) =>
+              statement.value.type === 'value' &&
+              typeof statement.value.content === 'string' &&
+              ids.has(statement.value.content),
+          ),
+    );
+    matched.sort(byEnglishLabel);
+    return {
+      subjects: matched.slice(0, read.body.limit).map((subject) => searchHit(fixtures, subject)),
+      next: null,
+      as_of: '2026-10-26T00:00:00.000Z',
+    };
+  }
   if ('type' in filter) {
     const types = new Set(filter.type.in);
     const matched = fixtures.subjects.filter((subject) => types.has(subject.type)).sort(byEnglishLabel);

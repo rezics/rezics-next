@@ -184,7 +184,7 @@ test('relation group totals are omitted for an uncounted member and retain exact
   });
   const countedHtml = renderPage(allCounted);
   const relationSection = section(countedHtml, 'relation-groups');
-  expect(countTextValues(relationSection)).toEqual(['9+ total', '5+ total', '4 total']);
+  expect(countTextValues(relationSection)).toEqual(['9+', '5+', '4']);
 
   const oneUncounted = page(nodes, {
     [properties[0]]: {
@@ -201,9 +201,9 @@ test('relation group totals are omitted for an uncounted member and retain exact
   });
   const html = renderPage(oneUncounted);
   const sectionHtml = section(html, 'relation-groups');
-  expect(countTextValues(sectionHtml)).toEqual(['4 total']);
+  expect(countTextValues(sectionHtml)).toEqual(['4']);
   expect(countTextValues(groupBlock(html, 'order'))).toEqual([]);
-  expect(countTextValues(groupBlock(html, 'world'))).toEqual(['4 total']);
+  expect(countTextValues(groupBlock(html, 'world'))).toEqual(['4']);
 });
 
 test('the relations page omits an absent heading count and keeps its next page link', () => {
@@ -238,9 +238,9 @@ test('the relations page omits an absent heading count and keeps its next page l
 
 test('counted links keep their plain or plus count and never show less than returned items', () => {
   const cases = [
-    { count: { value: 2, exact: true }, expected: ['2 total'] },
-    { count: { value: 3, exact: false }, expected: ['3+ total'] },
-    { count: { value: 1, exact: true }, expected: ['2 total'] },
+    { count: { value: 2, exact: true }, expected: ['2'] },
+    { count: { value: 3, exact: false }, expected: ['3+'] },
+    { count: { value: 1, exact: true }, expected: ['2'] },
   ];
   for (const current of cases) {
     const data = page([subjectList('works', 'schema:author', 2)], {

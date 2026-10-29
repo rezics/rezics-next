@@ -86,17 +86,23 @@ const fake = Bun.serve({
           property,
           relation: 'exact',
           values:
-            property === author
+            property === 'type'
               ? [
-                  { value: authorOne, count: 7, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
-                  { value: authorOne, count: 2, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
-                  { value: authorTwo, count: 4, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                  { value: 'schema:Recipe', count: 1, labels: { en: 'recipe', es: 'receta' } },
+                  { value: book, count: 9, labels: { en: 'book', es: 'libro' } },
+                  { value: 'schema:CreativeWork', count: 4, labels: { en: 'creative work', es: 'obra creativa' } },
                 ]
-              : property === genre
-                ? [{ value: genreOne, count: 3, labels: { en: 'Historical novel', es: 'novela histórica' } }]
-                : property === 'schema:datePublished'
-                  ? [{ value: '2020-01-01T00:00:00Z', count: 1, labels: {} }]
-                  : [],
+              : property === author
+                ? [
+                    { value: authorTwo, count: 1, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                    { value: authorOne, count: 7, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                    { value: authorOne, count: 2, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                  ]
+                : property === genre
+                  ? [{ value: genreOne, count: 3, labels: { en: 'Historical novel', es: 'novela histórica' } }]
+                  : property === 'schema:datePublished'
+                    ? [{ value: '2020-01-01T00:00:00Z', count: 1, labels: {} }]
+                    : [],
         })),
         total: { value: 1, relation: 'exact' },
         as_of: asOf,
@@ -189,12 +195,27 @@ const callsAt = (since: number, path: string) => calls.slice(since).filter((call
 test(
   'an unrestricted search offers type choices, and a chosen type shows localized facet checkboxes without counts',
   async () => {
+    const callsBefore = calls.length;
     const page = await open('/es/search?q=Kokoro');
     try {
       const main = page.getByRole('main');
       expect(await main.getByRole('link', { name: 'Libro', exact: true }).count()).toBe(1);
       expect(await main.getByRole('link', { name: 'Receta', exact: true }).count()).toBe(1);
       expect(await main.getByRole('link', { name: 'persona', exact: true }).count()).toBe(0);
+      const typeChoices = await main
+        .locator('a[href*="type="]')
+        .evaluateAll((anchors) =>
+          anchors.map((anchor) => new URL((anchor as HTMLAnchorElement).href).searchParams.get('type')),
+        );
+      expect(typeChoices).toEqual(['schema:Recipe', book, 'schema:CreativeWork']);
+      const typeFacetCalls = calls
+        .slice(callsBefore)
+        .filter(
+          (call) =>
+            call.path === '/v1/subjects:facets' &&
+            call.body?.facets?.some((facet: { property: string }) => facet.property === 'type'),
+        );
+      expect(typeFacetCalls).toHaveLength(1);
       await main.getByRole('link', { name: 'Libro', exact: true }).click();
       await page.waitForURL((url) => url.searchParams.get('type') === book);
       expect(new URL(page.url()).searchParams.get('q')).toBe('Kokoro');
@@ -202,6 +223,11 @@ test(
       expect(await main.getByRole('group', { name: 'Género' }).count()).toBe(1);
       expect(await main.getByRole('checkbox', { name: 'Natsume Sōseki (libro)' }).count()).toBe(1);
       expect(await main.getByRole('checkbox', { name: 'Natsume Sōseki (receta)' }).count()).toBe(1);
+      expect(
+        await main
+          .locator(`input[name="f.${author}"]`)
+          .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)),
+      ).toEqual([authorTwo, authorOne]);
       expect(await main.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(0);
     } finally {
       await page.context().close();

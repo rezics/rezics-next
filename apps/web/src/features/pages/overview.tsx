@@ -30,6 +30,8 @@ import {
   type Stmt,
 } from './shared';
 import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
+import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
+export type { Count } from '../count';
 
 /** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */
 export type Section = { ok: false } | { ok: true; read: PageRead; body: Record<string, unknown>; sources?: Sources };
@@ -96,10 +98,8 @@ export type Item = {
   property?: string;
   date?: string;
 };
-export type Count = { value: number; exact: boolean };
-
 function hasMore(count: Count | undefined, returned: number): boolean {
-  return count !== undefined && (!count.exact || count.value > returned);
+  return count !== undefined && (count.relation === 'lower_bound' || count.value > returned);
 }
 
 export function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
@@ -112,13 +112,6 @@ function subjectRead(section: Section | undefined): SubjectRead | undefined {
   if (!section?.ok || section.read.kind !== 'subject') return;
   const { body } = section;
   return isRecord(body.subject) && isRecord(body.related) ? (body as unknown as SubjectRead) : undefined;
-}
-
-export function countText(count: Count, locale: string): string {
-  return m.home_section_count(
-    { count: `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}` },
-    { locale: locale as never },
-  );
 }
 
 export function viewHref(value: OverviewValue, view: string, property?: string): string | null {
@@ -199,7 +192,7 @@ export function Preview({
           </h2>
           {count && (
             <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
-              {countText(count, locale)}
+              {formatCount(count, locale)}
             </span>
           )}
         </div>
@@ -274,10 +267,10 @@ export function holderItems(
         ]
       : [],
   );
-  const total =
-    typeof count?.value === 'number'
-      ? { value: Math.max(count.value, items.length), exact: count.exact === true }
-      : undefined;
+  const total = countFromLinks(
+    typeof count?.value === 'number' ? { value: count.value, exact: count.exact === true } : undefined,
+    body.links.length,
+  );
   return {
     items,
     ...(total ? { count: total } : {}),
@@ -329,7 +322,7 @@ function statementItems(
       gated: spoilerLevel(statement) > value.reader.spoilerLevel,
     };
   });
-  return { items, count: { value: statements.length, exact: true } };
+  return { items, count: { value: statements.length, relation: 'exact' } };
 }
 
 function LinkSection(props: Record<string, unknown>, slot: string, title: string, view: string, forward: boolean) {
@@ -388,34 +381,27 @@ export function RelationGroups(props: Record<string, unknown>) {
   const id = String(props.id);
 
   const entries: RelationEntry[] = [];
-  const groupTotals = new Map<RelationGroup, { value: number; exact: boolean; hasCount: boolean }>();
-  let totalValue = 0;
-  let totalExact = true;
-  let totalHasCount = true;
+  const groupParts = new Map<RelationGroup, (Count | undefined)[]>();
+  const totalParts: (Count | undefined)[] = [];
   let failed = 0;
   for (const node of nodes) {
     const section = value.sections.get(node.id);
-    const listed = linkItems(section, limitOf(node.props));
-    if (!listed) {
-      failed += 1;
-      continue;
-    }
     const property = typeof node.props.property === 'string' ? node.props.property : '';
     const definition = Object.hasOwn(value.relations, property) ? value.relations[property] : undefined;
     const group = definition?.group ?? 'other';
-    const total = groupTotals.get(group) ?? { value: 0, exact: true, hasCount: true };
-    if (listed.count) {
-      if (listed.items.length > 0) {
-        total.value += listed.count.value;
-        total.exact = total.exact && listed.count.exact;
-        totalValue += listed.count.value;
-        totalExact = totalExact && listed.count.exact;
-      }
-    } else {
-      total.hasCount = false;
-      totalHasCount = false;
+    const listed = linkItems(section, limitOf(node.props));
+    if (!listed) {
+      failed += 1;
+      const parts = groupParts.get(group) ?? [];
+      parts.push(undefined);
+      groupParts.set(group, parts);
+      totalParts.push(undefined);
+      continue;
     }
-    groupTotals.set(group, total);
+    const parts = groupParts.get(group) ?? [];
+    parts.push(listed.count);
+    groupParts.set(group, parts);
+    totalParts.push(listed.count);
     if (listed.items.length > 0)
       entries.push({
         property,
@@ -432,7 +418,7 @@ export function RelationGroups(props: Record<string, unknown>) {
     const members = entries.filter((entry) => entry.group === group);
     return members.length ? [{ group, members }] : [];
   });
-  const total = totalHasCount ? { value: totalValue, exact: totalExact } : undefined;
+  const total = sumCounts(totalParts);
   return (
     <section data-slot="relation-groups" aria-labelledby={`${id}-title`} className={sectionClass}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -441,7 +427,7 @@ export function RelationGroups(props: Record<string, unknown>) {
         </h2>
         {total && (
           <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
-            {countText(total, value.locale)}
+            {formatCount(total, value.locale)}
           </span>
         )}
       </div>
@@ -452,8 +438,7 @@ export function RelationGroups(props: Record<string, unknown>) {
             return { ...item, notes: [entry.label, year ?? ''].filter(Boolean) };
           }),
         );
-        const total = groupTotals.get(group);
-        const count = total?.hasCount ? { value: total.value, exact: total.exact } : undefined;
+        const count = sumCounts(groupParts.get(group) ?? []);
         const more = members.filter((entry) => entry.more);
         return (
           <div key={group} data-slot="relation-group" data-group={group} className="min-w-0 space-y-3">
@@ -464,7 +449,7 @@ export function RelationGroups(props: Record<string, unknown>) {
                 )}
                 {groups.length > 1 && count && (
                   <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
-                    {countText(count, value.locale)}
+                    {formatCount(count, value.locale)}
                   </span>
                 )}
               </div>
@@ -578,8 +563,8 @@ export function CollectionList(props: Record<string, unknown>) {
       id={id}
       title={title.text}
       titleLang={title.lang}
-      count={{ value: total, exact: true }}
-      more={props.paged !== true && hasMore({ value: total, exact: true }, collections.length)}
+      count={{ value: total, relation: 'exact' }}
+      more={props.paged !== true && hasMore({ value: total, relation: 'exact' }, collections.length)}
       href={viewHref(value, 'lists')}
       locale={value.locale}
     >

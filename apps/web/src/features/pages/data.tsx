@@ -104,7 +104,6 @@ type SearchHit = Pick<Subject, 'id' | 'labels'> & {
 };
 type SearchRead = {
   subjects: SearchHit[];
-  total?: { value: number; relation: 'exact' | 'lower_bound' };
 };
 type PreparedRead = {
   header?: ReactNode;
@@ -112,9 +111,8 @@ type PreparedRead = {
   more?: ReactNode[];
   /** The subject's tags, as chips; a tag above the reader's spoiler level waits behind a reveal. */
   tags?: ReactNode;
-  /** The hits of a search read with their cover summaries, and the read's total count. */
+  /** The hits of a search read with their cover summaries. */
   hits?: SearchHit[];
-  total?: SearchRead['total'];
   sources?: Sources;
 };
 
@@ -637,11 +635,7 @@ export function PageData({
       }
     } else if (planned.kind === 'search' && Array.isArray(result.body.subjects)) {
       const subjects = (result.body as SearchRead).subjects.slice(0, planned.body.limit);
-      const total = (result.body as SearchRead).total;
-      prepared.set(key, {
-        hits: subjects,
-        ...(total ? { total } : {}),
-      });
+      prepared.set(key, { hits: subjects });
     }
   }
   const nodes = new Map<string, PreparedRead>();
@@ -772,13 +766,8 @@ function MoreStatements(props: Record<string, unknown>) {
   return groups?.length ? <dl className={listClass}>{groups}</dl> : null;
 }
 
-/** The bounded count of a search read: a lower bound is shown with a plus sign. */
-function countText(total: NonNullable<PreparedRead['total']>, locale: string): string {
-  return `${new Intl.NumberFormat(locale).format(total.value)}${total.relation === 'lower_bound' ? '+' : ''}`;
-}
-
 /**
- * One vertical of the home: a row of cover cards with the section's count and a link to the whole search. The row
+ * One vertical of the home: a row of cover cards and a link to the whole search. The row
  * shares one frame ratio, so a mixed row stays aligned; the heading names the type for every card in the row.
  */
 function TypeList(props: Record<string, unknown>) {
@@ -809,11 +798,6 @@ function TypeList(props: Record<string, unknown>) {
           <SectionHeading id={`${id}-title`} lang={title.lang}>
             {title.text}
           </SectionHeading>
-          {read.total && (
-            <span data-slot="type-count" className="text-sm text-muted-foreground tabular-nums">
-              {m.home_section_count({ count: countText(read.total, locale) }, { locale: locale as never })}
-            </span>
-          )}
         </div>
         {type && (
           <a

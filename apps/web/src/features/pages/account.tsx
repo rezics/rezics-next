@@ -181,7 +181,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
       slot={spec.slot}
       id={id}
       title={title}
-      count={next === null ? { value: items.length, exact: true } : undefined}
+      count={next === null ? { value: items.length, relation: 'exact' } : undefined}
       more={next !== null}
       href={viewHref(value, spec.view)}
       locale={value.locale}

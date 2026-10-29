@@ -12,15 +12,14 @@ export const searchFacetStoryPaths = {
   emptyQuery: '/search',
 };
 
-const storyValues: Record<string, { value: string; count: number; labels: Record<string, string> }[]> = {
+const storyValues: Record<string, { value: string; labels: Record<string, string> }[]> = {
   'schema:author': [
     {
       value: '00000000-0000-4000-8000-000000000101',
-      count: 1,
       labels: { en: 'Antoine de Saint-Exupéry', 'zh-Hans': '安托万·德·圣埃克苏佩里' },
     },
   ],
-  'schema:genre': [{ value: 'wd:Q24925', count: 1, labels: { en: 'Fantasy', 'zh-Hans': '奇幻' } }],
+  'schema:genre': [{ value: 'wd:Q24925', labels: { en: 'Fantasy', 'zh-Hans': '奇幻' } }],
   'schema:datePublished': [],
 };
 
@@ -46,10 +45,8 @@ async function storyFacets(request: Request): Promise<KernelRecording | undefine
     status: 200,
     facets: (body.facets ?? []).map(({ property }) => ({
       property,
-      relation: 'exact',
       values: storyValues[property] ?? [],
     })),
-    total: { value: 1, relation: 'exact' },
     as_of: '2026-10-26T18:21:56.818Z',
   };
 }
@@ -89,7 +86,6 @@ function responseFromRecording(recording: KernelRecording, requested: Record<str
       const limited = values.slice(0, typeof request.size === 'number' ? Math.max(0, Math.min(request.size, 20)) : 20);
       return {
         property,
-        relation: isRecord(stored) && stored.relation === 'lower_bound' ? 'lower_bound' : 'exact',
         values: limited,
       };
     }),
@@ -110,6 +106,16 @@ function localized(response: FacetsResponse, languages: readonly string[]): Face
   };
 }
 
+function withoutCounts(response: FacetsResponse): FacetsResponse {
+  return {
+    facets: response.facets.map((facet) => ({
+      property: facet.property,
+      values: facet.values.map((value) => ({ value: value.value, labels: value.labels })),
+    })),
+    as_of: response.as_of,
+  };
+}
+
 function fixtureResponse(
   fixtures: Fixtures,
   recordings: Record<string, KernelRecording>,
@@ -121,8 +127,7 @@ function fixtureResponse(
   const matched = fixtures.subjects.filter(
     (subject) => (!type || subject.type === type) && queryMatches(subject, query),
   );
-  const counts = new Map<string, number>();
-  for (const subject of matched) counts.set(subject.type, (counts.get(subject.type) ?? 0) + 1);
+  const types = new Set(matched.map((subject) => subject.type));
   const release = isRecord(recordings['definitions-release']?.release)
     ? (recordings['definitions-release']!.release as Record<string, unknown>)
     : undefined;
@@ -130,15 +135,14 @@ function fixtureResponse(
   const requested = Array.isArray(body.facets) ? body.facets.filter(isRecord) : [];
   const facets = requested.map((facet) => {
     const property = typeof facet.property === 'string' ? facet.property : '';
-    if (property !== 'type') return { property, relation: 'exact' as const, values: [] };
+    if (property !== 'type') return { property, values: [] };
     const size = typeof facet.size === 'number' ? Math.max(0, Math.min(facet.size, 20)) : 20;
-    const values = [...counts]
-      .map(([value, count]) => {
+    const values = [...types]
+      .map((value) => {
         const definition = definitions[value];
         const labels = isRecord(definition) && isRecord(definition.labels) ? definition.labels : {};
         return {
           value,
-          count,
           labels: chosenLabels(
             Object.fromEntries(
               Object.entries(labels).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
@@ -147,9 +151,9 @@ function fixtureResponse(
           ),
         };
       })
-      .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value))
+      .sort((left, right) => left.value.localeCompare(right.value))
       .slice(0, size);
-    return { property, relation: 'exact' as const, values };
+    return { property, values };
   });
   return {
     facets,
@@ -181,12 +185,14 @@ export const routes: FakeRoute[] = [
       if (!requested.some((facet) => facet.property === 'type')) return undefined;
       const recording = recordings['search-facets'];
       if (!recording) return undefined;
-      return { ...localized(responseFromRecording(recording, requested), languages), status: recording.status };
+      const response = localized(responseFromRecording(recording, requested), languages);
+      return { ...withoutCounts(response), status: recording.status };
     },
     fixture: async ({ request, recordings, fixtures }) => {
       const body = await requestBody(request);
       if (!body || languageList(body.languages).length === 0 || !Array.isArray(body.facets)) return undefined;
-      return { ...fixtureResponse(fixtures, recordings, body), status: 200 };
+      const response = fixtureResponse(fixtures, recordings, body);
+      return { ...(fixtures.facetsWithoutCounts ? withoutCounts(response) : response), status: 200 };
     },
   },
 ];

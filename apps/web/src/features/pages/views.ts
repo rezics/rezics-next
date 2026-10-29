@@ -1,6 +1,6 @@
 import { isView, planReads, platformRegistry, VIEWS, type CompositionDocument, type View } from '@rezics/composition';
 import { accountOf, viewIsPublic, type AccountProfile } from './account-read';
-import type { Count } from './overview';
+import { countFromLinks, sumCounts, type Count } from '../count';
 import { bestRank, isRecord, type Stmt } from './shared';
 
 /** One tab of a subject page: a view, and how many items its data has when that is known. */
@@ -103,23 +103,18 @@ function previewCount(
   if (!read || result?.status !== 200 || !isRecord(result.body)) return;
   const body = result.body;
   if (read.kind === 'links' && Array.isArray(body.links)) {
-    const count = isRecord(body.count) ? body.count : undefined;
+    const count =
+      isRecord(body.count) && typeof body.count.value === 'number'
+        ? { value: body.count.value, exact: body.count.exact === true }
+        : undefined;
+    const mappedCount = countFromLinks(count, body.links.length);
     return {
       items: Math.min(body.links.length, previewLimit(node, read)),
-      ...(typeof count?.value === 'number'
-        ? { count: { value: Math.max(count.value, body.links.length), exact: count.exact === true } }
-        : {}),
+      ...(mappedCount ? { count: mappedCount } : {}),
     };
   }
   if (read.kind === 'search' && Array.isArray(body.subjects)) {
-    const total = isRecord(body.total) ? body.total : undefined;
-    return {
-      items: body.subjects.length,
-      count: {
-        value: typeof total?.value === 'number' ? Math.max(total.value, body.subjects.length) : body.subjects.length,
-        exact: total ? total.relation !== 'lower_bound' : true,
-      },
-    };
+    return { items: body.subjects.length };
   }
   const listed =
     read.kind === 'accountPosts'
@@ -132,7 +127,7 @@ function previewCount(
   if (read.kind.startsWith('account') && Array.isArray(listed)) {
     // A list has no total, only a continuation: a shown count is exact when nothing follows.
     const items = Math.min(listed.length, previewLimit(node, read));
-    return { items, count: { value: listed.length, exact: body.next == null } };
+    return { items, count: { value: listed.length, relation: body.next == null ? 'exact' : 'lower_bound' } };
   }
   if (read.kind === 'collections' && Array.isArray(body.collections)) {
     const count = isRecord(body.count) ? body.count : undefined;
@@ -142,7 +137,7 @@ function previewCount(
       count: {
         value:
           typeof count?.value === 'number' ? Math.max(count.value, body.collections.length) : body.collections.length,
-        exact: true,
+        relation: 'exact',
       },
     };
   }
@@ -159,7 +154,7 @@ function previewCount(
         typeof statement.value.content === 'string',
     );
     const items = Math.min(statements.length, previewLimit(node, read));
-    return { items, count: { value: statements.length, exact: true } };
+    return { items, count: { value: statements.length, relation: 'exact' } };
   }
   return;
 }
@@ -190,12 +185,10 @@ export function subjectTabs(page: {
     View,
     {
       items: number;
-      value: number;
-      exact: boolean;
+      counts: (Count | undefined)[];
       previews: number;
       counted: number;
       fits: boolean;
-      hasCount: boolean;
     }
   >();
   const openReads = new Set<View>();
@@ -204,12 +197,10 @@ export function subjectTabs(page: {
     if (!view || !defined.has(view)) continue;
     const sum = sums.get(view) ?? {
       items: 0,
-      value: 0,
-      exact: true,
+      counts: [],
       previews: 0,
       counted: 0,
       fits: true,
-      hasCount: true,
     };
     sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
@@ -219,14 +210,11 @@ export function subjectTabs(page: {
     if (counted) {
       sum.counted += 1;
       sum.items += counted.items;
-      if (counted.count) {
-        sum.value += counted.count.value;
-        sum.exact = sum.exact && counted.count.exact;
-      } else {
-        sum.hasCount = false;
-      }
-      sum.fits = sum.fits && !!counted.count && counted.count.exact && counted.count.value === counted.items;
+      sum.counts.push(counted.count);
+      sum.fits =
+        sum.fits && !!counted.count && counted.count.relation === 'exact' && counted.count.value === counted.items;
     } else {
+      sum.counts.push(undefined);
       sum.fits = false;
     }
     sums.set(view, sum);
@@ -236,12 +224,14 @@ export function subjectTabs(page: {
     if (OPEN_READ_VIEWS.has(view)) {
       if (!openReads.has(view)) return [];
       const sum = sums.get(view);
-      return [{ view, ...(sum && sum.items > 0 ? { count: { value: sum.value, exact: sum.exact } } : {}) }];
+      const count = sum ? sumCounts(sum.counts) : undefined;
+      return [{ view, ...(sum && sum.items > 0 && count ? { count } : {}) }];
     }
     if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
     if (!sum || sum.items === 0) return [];
     if (!ALWAYS.has(view) && sum.fits && sum.previews === sum.counted) return [];
-    return [{ view, ...(sum.hasCount ? { count: { value: sum.value, exact: sum.exact } } : {}) }];
+    const count = sumCounts(sum.counts);
+    return [{ view, ...(count ? { count } : {}) }];
   });
 }

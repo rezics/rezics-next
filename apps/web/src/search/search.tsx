@@ -272,32 +272,32 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             .catch(() => null)
         : Promise.resolve(undefined);
 
-    const typeChoices = release
-      ? Object.entries(release.types)
-          .filter(
-            ([, definition]) =>
-              isRecord(definition) && Array.isArray(definition.facets) && definition.facets.length > 0,
-          )
-          .map(([id, definition]) => ({ id, labels: definition.labels ?? {} }))
-      : [];
-    const typeFacetRequested = Boolean(release && !type && data.query && typeChoices.length > 0);
+    const typeChoicesAvailable = release
+      ? Object.values(release.types).some(
+          (definition) => isRecord(definition) && Array.isArray(definition.facets) && definition.facets.length > 0,
+        )
+      : false;
     const typeBody: FacetBody = { text: data.query, languages, facets: [{ property: 'type', size: 20 }] };
-    const typeFacetPromise: Promise<{ value: string; labels: Record<string, string> }[] | null> = typeFacetRequested
-      ? kernelClient(data.locale)
-          .subjects.$facets.post(typeBody)
-          .then((response) => {
-            if (response.error) {
-              facetIndexNotReady ||= problemCode(response.error) === 'index_not_ready';
-              return null;
-            }
-            return ((response.data as FacetResult).facets.find((facet) => facet.property === 'type')?.values ?? []).map(
-              ({ value, labels }) => ({ value, labels }),
-            );
-          })
-          .catch(() => null)
-      : Promise.resolve(null);
-
-    const [result, facetResult, typeFacets] = await Promise.all([searchPromise, facetsPromise, typeFacetPromise]);
+    const typeChoicesPromise: Promise<{ id: string; labels: Record<string, string> }[] | null> =
+      release && !type && data.query && typeChoicesAvailable
+        ? kernelClient(data.locale)
+            .subjects.$facets.post(typeBody)
+            .then((response) => {
+              if (response.error) return null;
+              const values = (response.data as FacetResult).facets.find((facet) => facet.property === 'type')?.values;
+              return (values ?? []).map(({ value, labels }) => ({
+                id: value,
+                labels: Object.keys(labels).length > 0 ? labels : (release!.types[value]?.labels ?? {}),
+              }));
+            })
+            .catch(() => null)
+        : Promise.resolve(null);
+    const [result, facetResult, typeChoicesResult] = await Promise.all([
+      searchPromise,
+      facetsPromise,
+      typeChoicesPromise,
+    ]);
+    const typeChoices = typeChoicesResult ?? [];
     const facetsAvailable = !release || !type || facetResult !== null;
     const valuesByProperty = new Map((facetResult?.facets ?? []).map((facet) => [facet.property, facet.values]));
     const groups =
@@ -305,9 +305,13 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ? facetPropertiesForType.map((property) => ({
             property,
             labels: release!.properties[property]?.labels ?? {},
-            values: (valuesByProperty.get(property) ?? []).map(({ value, labels }) => {
-              const parentLabels = parentTypeLabels(release!, value);
-              return { value, labels, ...(parentLabels ? { parentTypeLabels: parentLabels } : {}) };
+            values: (valuesByProperty.get(property) ?? []).map((entry) => {
+              const parentLabels = parentTypeLabels(release!, entry.value);
+              return {
+                value: entry.value,
+                labels: entry.labels,
+                ...(parentLabels ? { parentTypeLabels: parentLabels } : {}),
+              };
             }),
           }))
         : [];
@@ -315,23 +319,13 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     if (release)
       for (const subject of result?.subjects ?? [])
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
-    // Keep the kernel's facet order; counts are not a public ordering signal.
-    const facetChoiceIds = new Set(typeFacets?.map(({ value }) => value) ?? []);
-    const orderedTypes = [
-      ...(typeFacets ?? []).flatMap(({ value, labels }) => {
-        const choice = typeChoices.find(({ id }) => id === value);
-        return choice ? [{ ...choice, labels: Object.keys(labels).length > 0 ? labels : choice.labels }] : [];
-      }),
-      ...typeChoices.filter(({ id }) => !facetChoiceIds.has(id)),
-    ];
-
     return {
       ...(result ? { result } : {}),
       ...(type ? { type } : {}),
       ...(type && release ? { typeLabels: release.types[type]?.labels ?? {} } : {}),
       hitTypes,
       yearProperties: years,
-      typeChoices: orderedTypes,
+      typeChoices,
       groups,
       selectedFacets: selected?.selected ?? {},
       selectedFacetLabels: Object.fromEntries(

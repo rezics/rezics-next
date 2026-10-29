@@ -190,8 +190,9 @@ test('a subject view stays tabbed with its count and See all link when its previ
   ]) {
     const partial = page({ editions: list, relations: list });
     const tabs = subjectTabs(partial);
-    expect(tabs.find(({ view }) => view === 'editions')?.count).toEqual({ value: list.count, exact: list.exact });
-    expect(tabs.find(({ view }) => view === 'relations')?.count).toEqual({ value: list.count, exact: list.exact });
+    const relation = list.exact ? 'exact' : 'lower_bound';
+    expect(tabs.find(({ view }) => view === 'editions')?.count).toEqual({ value: list.count, relation });
+    expect(tabs.find(({ view }) => view === 'relations')?.count).toEqual({ value: list.count, relation });
 
     const html = render(partial);
     for (const id of ['editions', 'relations']) {

@@ -86,7 +86,6 @@ const fake = Bun.serve({
         const nextPage = body?.cursor === cursor;
         const response: Search = {
           subjects: empty ? [] : nextPage ? [third] : [first, second],
-          total: { value: empty ? 0 : 3, relation: 'exact' },
           next: empty || nextPage ? null : cursor,
           as_of: asOf,
         };
