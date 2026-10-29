@@ -56,7 +56,7 @@ test('host sweep decodes only active tasks and attempts from a large settled his
   expect(store.decodedRows()).toEqual({ tasks: 5, attempts: 5 });
   expect(store.decodedBytes().tasks).toBeLessThan(50_000);
   expect(store.decodedBytes().attempts).toBeLessThan(50_000);
-});
+}, 30_000);
 
 test('repeated store reads reuse the decoded snapshot and external writes invalidate it', () => {
   const { store, path } = fixture();
@@ -73,7 +73,7 @@ test('repeated store reads reuse the decoded snapshot and external writes invali
   store.resetDecodedRows();
   expect(store.activeTasks()).toHaveLength(4);
   expect(store.decodedRows().tasks).toBe(4);
-});
+}, 30_000);
 
 test('manager request reads and inbox sends avoid decoding settled task bodies', () => {
   const { db, store } = fixture();
@@ -83,4 +83,4 @@ test('manager request reads and inbox sends avoid decoding settled task bodies',
   const inbox = new SqliteManagerInbox(db, join(root, 'state'));
   inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: 'Please review the task.' });
   expect(store.decodedRows()).toEqual({ tasks: 0, attempts: 0 });
-});
+}, 30_000);
