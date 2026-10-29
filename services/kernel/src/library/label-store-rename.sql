@@ -8,7 +8,8 @@ WITH current AS (
   SET normalized_name = current.next_name, revision = label.revision + 1,
       updated_at = :time::timestamptz, transaction_id = :transaction_id
   FROM current
-  WHERE label.route = current.route AND label.account_id = current.account_id AND label.label_id = current.label_id
+  WHERE label.route = :route AND label.account_id = :account_id AND label.label_id = :label_id
+    AND label.route = current.route AND label.account_id = current.account_id AND label.label_id = current.label_id
     AND label.revision = current.revision AND current.normalized_name <> current.next_name
   RETURNING label.label_id AS id, label.normalized_name AS name, label.revision,
             label.created_at::text AS "createdAt", label.updated_at::text AS "updatedAt",

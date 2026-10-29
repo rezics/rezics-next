@@ -203,14 +203,15 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   const reader = db.openPool({ max: 1, options: '-c default_transaction_read_only=on' });
   const samples = new Map<string, GrowthSample[]>();
   let previous = 0,
-    deepKey = '';
+    deepKey = '',
+    deletedDeepKey = '';
   const evidence: { scale: number; operation: string; capture: Capture; cost: Cost }[] = [];
-  async function token(after: string) {
+  async function token(after: string, viewer = actor) {
     const p = await readPartition(reader, partitionOf(route));
     if (!p) throw new Error('Missing partition');
     return encodeListCursor(
       f.tokens,
-      { route: 'library_label.list', viewer: actor.accountId, query: { owner: actor.accountId, limit: 8 } },
+      { route: 'library_label.list', viewer: viewer.accountId, query: { owner: viewer.accountId, limit: 8 } },
       { epoch: p.epoch, after: [after, p.position.toString()] },
       new Date(),
     );
@@ -222,7 +223,8 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       if (n === scale - 16) deepKey = dead.id;
       await labels.createLabel(actor, { name: `Live ${n}` }, entryKey());
       const unrelated = (await labels.createLabel(other, { name: `Other ${n}` }, entryKey())).value.label;
-      if (n % 2 === 0) await labels.deleteLabel(other, unrelated.id, 1, entryKey());
+      await labels.deleteLabel(other, unrelated.id, 1, entryKey());
+      if (n === scale - 16) deletedDeepKey = unrelated.id;
     }
     previous = scale;
     await db.admin.query('VACUUM (ANALYZE)');
@@ -239,6 +241,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       );
       expect(labelNodes.length).toBeGreaterThan(0);
       for (const node of labelNodes) {
+        if (node['Node Type'] === 'Seq Scan') console.error(JSON.stringify({ operation, scale, node }));
         expect(node['Node Type']).not.toBe('Seq Scan');
         expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(
           operation.startsWith('list') ? 8 : 1,
@@ -287,6 +290,17 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       const cursor = await token(deepKey);
       const deep = await measure('list-deep', () => labels.listLabels(actor, { limit: 8, cursor }), measured);
       expect(deep.next).toBeTruthy();
+      const empty = await measure('list-empty', () => labels.listLabels(other, { limit: 8 }), measured);
+      expect(empty.labels).toEqual([]);
+      expect(empty.next).toBeTruthy();
+      const deletedCursor = await token(deletedDeepKey, other);
+      const emptyDeep = await measure(
+        'list-empty-deep',
+        () => labels.listLabels(other, { limit: 8, cursor: deletedCursor }),
+        measured,
+      );
+      expect(emptyDeep.labels).toEqual([]);
+      expect(emptyDeep.next).toBeTruthy();
     }
     for (const [operation, repetitions] of costs) {
       const series = samples.get(operation) ?? [];
