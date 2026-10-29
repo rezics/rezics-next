@@ -1,7 +1,7 @@
 # Own-reference refresh verification
 
-Implementation was tested on base revision `ef2a1f3e3fc42b7ea2580e2ca8aaa16c1483835a` plus the reviewed working-tree
-changes. The frozen native acceptance remains byte-for-byte unchanged; its SHA-256 is
+Implementation revision: `e52f0780dc0793acfba7e77beb8c08c0b0a8f655`. Checks ran against the identical source and test
+tree immediately before that commit. The frozen native acceptance remains byte-for-byte unchanged; its SHA-256 is
 `8cce3c28e9bd9ad933a7b9881f3af320c1d337129e20e65c10e19cc77ec5635b`.
 
 ## Implementation
