@@ -32,6 +32,32 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
   }
 }, 60_000);
 
+test('when dev tip fails its quick gate, cuts the newest earlier dev commit that passes', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const green = h.advanceDev('green');
+    const broken = h.advanceDev('broken');
+    const checked: string[] = [];
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      runGate: async (command, cwd) => {
+        const commit = git(cwd, 'rev-parse', 'HEAD');
+        checked.push(`${command[0]}:${commit}`);
+        return command[0] === 'bun' && commit === broken
+          ? failure
+          : success;
+      },
+    });
+    expect(h.head('stabilize')).toBe(green);
+    expect(checked).toContain(`bun:${broken}`);
+    expect(checked).toContain(`bun:${green}`);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
 test('a passing candidate finishes its gate across control-plane main commits and reconciles before publish', async () => {
   const h = integrationHarness();
   try {

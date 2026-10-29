@@ -973,7 +973,7 @@ function pausedAt(settings: Settings): boolean {
 }
 
 /** Create the next frozen candidate only from a dev snapshot that passes the short preflight. */
-async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promise<boolean> {
+async function stabilizeQuickGate(options: PromotionOptions, dev: string, expectedDevHead = dev): Promise<boolean> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
   const tree = join(settings.worktreeRoot, `promotion-quick-${randomUUID()}`);
@@ -992,7 +992,7 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
       );
       if (!result.passed || git(tree, 'rev-parse', 'HEAD') !== dev || git(tree, 'status', '--porcelain')) return false;
     }
-    return head(checkout, settings.integrationBranch) === dev;
+    return head(checkout, settings.integrationBranch) === expectedDevHead;
   } finally {
     git(checkout, 'worktree', 'remove', '--force', tree);
   }
@@ -1002,19 +1002,25 @@ async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Pr
   const { settings } = options;
   const checkout = settings.mainCheckout;
   const prepared = await regenerateDerivedHead(options, dev, settings.integrationBranch);
-  if (
-    prepared.retry ||
-    !(await stabilizeQuickGate(options, prepared.head)) ||
-    optionalHead(checkout, settings.stabilizeBranch) !== undefined
-  )
-    return false;
-  if (head(checkout, settings.integrationBranch) !== prepared.head) return false;
+  if (prepared.retry || optionalHead(checkout, settings.stabilizeBranch) !== undefined) return false;
+  // If dev's tip is red, use the newest first-parent commit whose quick gate passes. The long candidate
+  // gate must never be spent on a known-broken tip when a recent green commit is available.
+  const candidates = git(checkout, 'rev-list', '--first-parent', prepared.head).split('\n').filter(Boolean);
+  let passed: string | undefined;
+  for (const candidate of candidates) {
+    if (await stabilizeQuickGate(options, candidate, prepared.head)) {
+      passed = candidate;
+      break;
+    }
+    if (head(checkout, settings.integrationBranch) !== prepared.head) return false;
+  }
+  if (!passed || optionalHead(checkout, settings.stabilizeBranch) !== undefined) return false;
   try {
     git(
       checkout,
       'update-ref',
       ref(settings.stabilizeBranch),
-      prepared.head,
+      passed,
       '0000000000000000000000000000000000000000',
     );
     return true;
