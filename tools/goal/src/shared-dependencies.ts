@@ -76,11 +76,18 @@ function copySkeleton(template: string, worktree: string): void {
   symlinkSync(join(template, 'node_modules', '.bun'), join(target, '.bun'), 'dir');
   localWorkspaceLinks(worktree);
 }
-export function installPrivate(worktree: string): void { rmSync(join(worktree, 'node_modules'), { recursive: true, force: true }); runInstall(worktree); localWorkspaceLinks(worktree); writeFileSync(join(worktree, '.goal-private-dependencies'), dependencyKey(worktree)); }
+export function installPrivate(worktree: string): void {
+  const nodeModules = join(worktree, 'node_modules');
+  rmSync(nodeModules, { recursive: true, force: true });
+  runInstall(worktree);
+  localWorkspaceLinks(worktree);
+  mkdirSync(nodeModules, { recursive: true });
+  writeFileSync(join(nodeModules, '.goal-private-dependencies'), dependencyKey(worktree));
+}
 export function installShared(worktree: string, storeRoot = join(dirname(worktree), '..', 'dependency-stores')): void {
   if (!existsSync(join(worktree, 'package.json'))) return;
   const key = dependencyKey(worktree); const prior = readlinkStore(worktree);
-  const marker = join(worktree, '.goal-private-dependencies');
+  const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
   if (existsSync(marker)) {
     if (readFileSync(marker, 'utf8') === key) return;
     installPrivate(worktree);

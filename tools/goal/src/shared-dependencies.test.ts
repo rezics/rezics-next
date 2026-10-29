@@ -81,16 +81,30 @@ test('an interrupted store build is discarded and the next use builds it cleanly
   } finally { h.close(); }
 });
 
-test('an install without node_modules/.bun stays private and publishes no store', () => {
+test('an install without node_modules/.bun stays private and publishes no store', async () => {
   const h = fixture();
   try {
-    const a = h.tree('a'), stores = join(h.root, 'stores');
-    installShared(a, stores);
-    expect(existsSync(join(a, '.goal-private-dependencies'))).toBe(true);
-    expect(existsSync(join(stores, dependencyKey(a)))).toBe(false);
+    const a = h.tree('a'), stores = join(h.root, 'stores'), bin = join(h.root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'bun'), '#!/bin/sh\nif [ "$1" = "--version" ]; then echo fixture-bun; exit 0; fi\nmkdir -p node_modules\n');
+    chmodSync(join(bin, 'bun'), 0o755);
+    const module = new URL('./shared-dependencies.ts', import.meta.url).href;
+    const source = `import { installShared } from ${JSON.stringify(module)}; installShared(process.cwd(), ${JSON.stringify(stores)});`;
+    const childEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GOAL_')));
+    const child = Bun.spawn([process.execPath, '-e', source], {
+      cwd: a,
+      env: { ...childEnv, PATH: `${bin}:${process.env.PATH ?? ''}` },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await child.exited).toBe(0);
+    expect(existsSync(join(a, 'node_modules', '.goal-private-dependencies'))).toBe(true);
+    expect(readdirSync(stores).filter((name) => /^[a-f0-9]{64}$/.test(name))).toEqual([]);
     expect(lstatSyncSafe(join(a, 'node_modules', '.bun'))).toBe(false);
   } finally { h.close(); }
 });
+
+function lstatSyncSafe(path: string): boolean { try { lstatSync(path); return true; } catch { return false; } }
 
 test('concurrent first uses of the same key build one shared store', async () => {
   const h = fixture();
