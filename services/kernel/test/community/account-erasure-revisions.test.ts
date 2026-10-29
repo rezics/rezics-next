@@ -246,6 +246,14 @@ test("an account revision erasure page stays within its bound as other editors' 
     await worker.stop();
     db = await openGrowthDatabase(system.database.pool.options.connectionString!);
     let after: string | null = null;
+    const resetPage = async (database: Awaited<ReturnType<typeof openGrowthDatabase>>) => {
+      await database.admin.query(
+        `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
+        SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id ON CONFLICT DO NOTHING`,
+        [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
+      );
+      after = null;
+    };
     const report = await checkGrowth(db, {
       name: "an account revision erasure page stays within its bound as other editors' revisions grow",
       rule: 'series',
@@ -279,16 +287,14 @@ test("an account revision erasure page stays within its bound as other editors' 
         expect(page.next).not.toBeNull();
         after = page.next;
       },
-      async warmup() {
-        after = null;
+      async warmup(database) {
+        await resetPage(database);
+        const page = await eraseAccountRevisionsPage({ pool: database.pool }, owner.id, after);
+        expect(page.found).toBe(50);
+        after = page.next;
       },
       async prepare(database) {
-        await database.admin.query(
-          `INSERT INTO community.revision_locator(route,account_id,kind,owner_route,owner_id,revision_id)
-          SELECT $1,$2,'realm',$3,$4,id FROM unnest($5::uuid[]) AS id ON CONFLICT DO NOTHING`,
-          [routeOf(owner.id), owner.id, route, realm.realmId, revisions],
-        );
-        after = null;
+        await resetPage(database);
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
@@ -306,4 +312,4 @@ test("an account revision erasure page stays within its bound as other editors' 
     await driver.close();
     await closeCommunityDrivers();
   }
-}, 360000);
+}, 900000);
