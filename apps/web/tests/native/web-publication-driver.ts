@@ -1,7 +1,8 @@
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
+import { readFile } from 'node:fs/promises';
 import { startNativeWebStack } from './stack';
-import type { WebPublicationDriver, PublicationFixture } from '../../../../specs/web-publication-driver';
+import type { WebPublicationDriver, PublicationFixture, Persona } from '../../../../specs/web-publication-driver';
 
 const defaultPublicOrigin = 'https://rezics.example.test';
 const typeByKey: Record<string, string> = {
@@ -41,6 +42,74 @@ const globalContext = '00000000-0000-8000-8000-000000000000';
 // Every command performs source-fence and authorization work under the same
 // two-second request deadline. Give each creation its own native request budget.
 const fixtureBatchSize = 1;
+
+type ProcessInfo = { pid: number; command: string; environment: string[] };
+
+async function processInfo(pid: number): Promise<ProcessInfo | undefined> {
+  try {
+    const [command, environment] = await Promise.all([
+      readFile(`/proc/${pid}/cmdline`, 'utf8'),
+      readFile(`/proc/${pid}/environ`, 'utf8'),
+    ]);
+    return { pid, command: command.replaceAll('\0', ' '), environment: environment.split('\0') };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ESRCH')
+      return undefined;
+    throw error;
+  }
+}
+
+async function childPids(pid: number): Promise<number[]> {
+  try {
+    const children = await readFile(`/proc/${pid}/task/${pid}/children`, 'utf8');
+    return children.trim().split(/\s+/).filter(Boolean).map(Number);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ESRCH')
+      return [];
+    throw error;
+  }
+}
+
+async function ownedStackHost(): Promise<ProcessInfo> {
+  for (const pid of await childPids(process.pid)) {
+    const info = await processInfo(pid);
+    if (
+      info?.command.includes('tests/native/stack.ts') &&
+      info.environment.includes('NATIVE_WEB_STACK_HOST=1')
+    ) return info;
+  }
+  throw new Error('Could not find this publication driver\'s native stack host process');
+}
+
+async function durableWorker(hostPid: number): Promise<ProcessInfo> {
+  for (const pid of await childPids(hostPid)) {
+    const info = await processInfo(pid);
+    if (
+      info?.command.includes('services/kernel/src/worker.ts') &&
+      info.environment.some((entry) => /^KERNEL_EXECUTOR_ID=native-web-/.test(entry))
+    ) return info;
+  }
+  throw new Error('Could not find this publication driver\'s durable-work worker process');
+}
+
+async function waitForProcessState(pid: number, stopped: boolean): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const status = await readFile(`/proc/${pid}/status`, 'utf8').catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ESRCH')
+        return '';
+      throw error;
+    });
+    if (!status) {
+      if (stopped) throw new Error(`Owned process ${pid} exited before interruption took effect`);
+      return;
+    }
+    const state = /^State:\s+(\S+)/m.exec(status)?.[1];
+    if ((state === 'T' || state === 't') === stopped) return;
+    await Bun.sleep(10);
+  }
+  throw new Error(`Owned process ${pid} did not ${stopped ? 'stop' : 'resume'} in time`);
+}
 
 function accountIdFromAuthorization(authorization: string): string {
   const token = authorization.match(/^Bearer ([^.]+)\.([^.]+)\./)?.[2];
@@ -83,6 +152,9 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   const stack = await startNativeWebStack();
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
+  const interruptionRestores = new Set<() => Promise<void>>();
+  const directCredentials = new Map<Persona, Awaited<ReturnType<typeof stack.credentials>>>();
+  let ownerReadInterrupted = false;
   let provisioned:
     | { data: typeof import('../../../../specs/fixtures/web-publication.json'); fixture: PublicationFixture }
     | undefined;
@@ -111,7 +183,30 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   };
   const request: WebPublicationDriver['request'] = async (url, persona, headers) => {
     const before = stack.kernelRequests().length;
-    const response = await stack.request(url, persona, headers);
+    let response: Response;
+    if (ownerReadInterrupted) {
+      const requested = new URL(url, publicOrigin);
+      const target = new URL(stack.web);
+      target.pathname = requested.pathname;
+      target.search = requested.search;
+      const supplied = new Headers(headers);
+      if (persona && persona !== 'anonymous') {
+        let credentials = directCredentials.get(persona);
+        if (!credentials) {
+          credentials = await stack.credentials(persona);
+          directCredentials.set(persona, credentials);
+        }
+        supplied.set('authorization', credentials.authorization);
+        if (credentials.cookie)
+          supplied.set('cookie', [supplied.get('cookie'), credentials.cookie].filter(Boolean).join('; '));
+      }
+      // The stack host is intentionally paused during owner-read. Send this real
+      // HTTP request to the same production Worker without asking that paused host
+      // to acknowledge its diagnostic observation before returning the Response.
+      response = await fetch(target, { headers: supplied, redirect: 'manual' });
+    } else {
+      response = await stack.request(url, persona, headers);
+    }
     console.info(
       `web-publication-driver-document: path=${new URL(url, publicOrigin).pathname} kernel-requests=${stack.kernelRequests().length - before}`,
     );
@@ -440,14 +535,47 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       await stack.restartWeb({ publicOrigin: origin });
       publicOrigin = origin;
     },
-    async interrupt() {
-      throw new Error('interrupt is delivered by a later task');
+    async interrupt(kind) {
+      const host = await ownedStackHost();
+      const target = kind === 'subject-view' ? await durableWorker(host.pid) : host;
+      if (kind === 'owner-read') {
+        // Cache fixture credentials before stopping the stack host. The served
+        // page request remains ordinary HTTP through the production web Worker.
+        for (const persona of ['alice', 'bob', 'editor', 'suspended'] as const)
+          directCredentials.set(persona, await stack.credentials(persona));
+      }
+      try {
+        process.kill(target.pid, 'SIGSTOP');
+      } catch (error) {
+        throw new Error(`Could not stop owned ${kind} process ${target.pid}: ${String(error)}`, { cause: error });
+      }
+      await waitForProcessState(target.pid, true);
+      if (kind === 'owner-read') ownerReadInterrupted = true;
+
+      let restored = false;
+      const restore = async () => {
+        if (restored) return;
+        restored = true;
+        interruptionRestores.delete(restore);
+        if (kind === 'owner-read') ownerReadInterrupted = false;
+        try {
+          process.kill(target.pid, 'SIGCONT');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
+        await waitForProcessState(target.pid, false);
+      };
+      interruptionRestores.add(restore);
+      return restore;
     },
     async nativeSearch() {
       throw new Error('nativeSearch is delivered by a later task');
     },
     close() {
-      return (closed ??= stack.stop());
+      return (closed ??= (async () => {
+        for (const restore of [...interruptionRestores]) await restore();
+        await stack.stop();
+      })());
     },
   };
 }
