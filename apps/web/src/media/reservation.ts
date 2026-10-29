@@ -10,7 +10,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 function imageFields(fields: Record<string, unknown>) {
   if (
-    fields.purpose !== 'post-image' ||
+    (fields.purpose !== 'post-image' && fields.purpose !== 'avatar') ||
     typeof fields.mediaType !== 'string' ||
     !imageTypes.includes(fields.mediaType) ||
     typeof fields.byteCount !== 'number' ||
@@ -20,7 +20,7 @@ function imageFields(fields: Record<string, unknown>) {
   )
     throw invalidRequest();
   const shared = {
-    purpose: 'post-image' as const,
+    purpose: fields.purpose as 'post-image' | 'avatar',
     mediaType: fields.mediaType as ReservationInput['mediaType'],
     byteCount: fields.byteCount,
   };
@@ -87,9 +87,11 @@ async function reservationInput(request: Request): Promise<ReservationInput> {
   const shared = imageFields(fields);
   if (hasContainer) {
     if (typeof fields.containerId !== 'string') throw invalidRequest();
+    if (shared.purpose === 'avatar' && !contentId.test(fields.containerId)) throw invalidRequest();
     return { containerId: fields.containerId, ...shared };
   }
-  return { newThread: futureThread(fields.newThread), ...shared };
+  if (shared.purpose === 'avatar') throw invalidRequest();
+  return { newThread: futureThread(fields.newThread), ...shared, purpose: 'post-image' };
 }
 
 function publicMedia({ id, state, mediaType, byteCount, sha256, containerId }: Media) {

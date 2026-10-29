@@ -47,6 +47,18 @@ const calls: Call[] = [];
 const revocations: string[] = [];
 let counter = 0;
 let stored: Stored = { spoilerLevel: 0, suitability: 'blur', version: 3 };
+const profile = {
+  id: 'alice',
+  kind: 'actor',
+  handle: 'alice',
+  displayName: 'Alice',
+  bio: 'A short bio',
+  avatar: null,
+  links: [],
+  publicViews: { posts: true, reviews: true, collections: true, realms: true },
+  verified: false,
+  subject: null,
+};
 
 function reset() {
   calls.length = 0;
@@ -190,6 +202,8 @@ const fake = Bun.serve({
       key: request.headers.get('idempotency-key'),
       body,
     });
+    if (url.pathname === '/v1/accounts' && request.method === 'GET') return json({ accounts: [profile], next: null });
+    if (url.pathname === '/v1/accounts/alice' && request.method === 'PATCH') return json({ accountId: 'alice' });
     if (url.pathname !== '/v1/accounts/alice/preferences') return json(apiProblem(404, 'not_found'), 404, true);
     if (request.method === 'GET') return json(stored);
     if (request.method === 'PATCH') {

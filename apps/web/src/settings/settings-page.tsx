@@ -11,6 +11,8 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, savePreferences } from './actions';
+import { ProfileSection } from './profile';
+import { PublicViewsSection } from './public-views';
 import type { ReadingPreferences, SettingsPage, SpoilerLevel } from './preferences';
 import { CollectionPrivacySection } from './collection-privacy';
 import { useOperation } from '../kernel/exposure';
@@ -196,23 +198,11 @@ export function SettingsPageView({
       <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
         <nav aria-label={m.settings_sections_label()} className="hidden lg:block">
           <ul className="sticky top-6 space-y-2 border-l border-border pl-4 text-sm">
-            <li>
-              <a className="text-muted-foreground hover:text-foreground" href="#reading">
-                {m.settings_reading_heading()}
-              </a>
-            </li>
-            {collectionsAdmitted ? (
-              <li>
-                <a className="text-muted-foreground hover:text-foreground" href="#privacy">
-                  {m.settings_privacy_heading()}
-                </a>
-              </li>
-            ) : null}
-            <li>
-              <a className="text-muted-foreground hover:text-foreground" href="#account">
-                {m.settings_account_heading()}
-              </a>
-            </li>
+            <li><a className="text-muted-foreground hover:text-foreground" href="#reading">{m.settings_reading_heading()}</a></li>
+            {collectionsAdmitted ? <li><a className="text-muted-foreground hover:text-foreground" href="#privacy">{m.settings_privacy_heading()}</a></li> : null}
+            <li><a className="text-muted-foreground hover:text-foreground" href="#profile">{m.settings_profile_heading()}</a></li>
+            <li><a className="text-muted-foreground hover:text-foreground" href="#public-activity">{m.settings_public_activity_heading()}</a></li>
+            <li><a className="text-muted-foreground hover:text-foreground" href="#account">{m.settings_account_heading()}</a></li>
           </ul>
         </nav>
         <div className="min-w-0 space-y-8">
@@ -220,6 +210,8 @@ export function SettingsPageView({
             <ReadingCard key={page.preferences.version} initial={page.preferences} />
           </section>
           <CollectionPrivacySection />
+          <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6"><ProfileSection /></section>
+          <section id="public-activity" aria-label={m.settings_public_activity_heading()} className="scroll-mt-6"><PublicViewsSection /></section>
           <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6">
             <AccountCard securityHref={page.securityHref} csrfToken={csrfToken} />
           </section>

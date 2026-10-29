@@ -290,6 +290,51 @@ test(
 );
 
 test(
+  'an avatar reservation keeps the account container and avatar purpose through the site upload route',
+  async () => {
+    const alice = await signIn('0192f3a0-6c1e-7b2a-9d4e-000000000001');
+    const bytes = new Uint8Array([9, 8, 7, 6]);
+    const body = {
+      containerId: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
+      purpose: 'avatar',
+      mediaType: 'image/png',
+      byteCount: bytes.byteLength,
+    };
+    const before = calls.length;
+    const reserveResponse = await fetch(`${alice.origin}/media`, {
+      method: 'POST',
+      headers: { ...alice.headers, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    expect(reserveResponse.status, await reserveResponse.clone().text()).toBe(201);
+    expect(calls[before]).toMatchObject({
+      method: 'POST',
+      path: '/v1/media',
+      authorization: alice.authorization,
+      body,
+    });
+    const reserved = (await reserveResponse.json()) as { media: { id: string } };
+    const uploaded = await fetch(`${alice.origin}/media/${reserved.media.id}`, {
+      method: 'PUT',
+      headers: { ...alice.headers, 'content-type': body.mediaType },
+      body: bytes,
+    });
+    expect(uploaded.status, await uploaded.clone().text()).toBe(200);
+    expect(
+      calls.slice(before + 1).map(({ method, path, body: requestBody }) => ({ method, path, body: requestBody })),
+    ).toEqual([
+      { method: 'GET', path: `/v1/media/${reserved.media.id}`, body: null },
+      {
+        method: 'POST',
+        path: `/v1/media/${reserved.media.id}:complete`,
+        body: expect.objectContaining({ containerId: body.containerId }),
+      },
+    ]);
+  },
+  timeout,
+);
+
+test(
   'reservations are read through the site by their uploader only',
   async () => {
     const alice = await signIn('alice');

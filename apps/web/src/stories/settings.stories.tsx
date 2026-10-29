@@ -37,6 +37,13 @@ async function settingsReady(context: { canvasElement: HTMLElement }) {
   await view.findByRole('link', { name: 'Books to revisit' });
   await view.findByRole('link', { name: /unusually long Collection title/i });
   await view.findByRole('combobox', { name: m.settings_privacy_visibility_label() });
+  await view.findByRole('heading', { level: 2, name: m.settings_profile_heading() });
+  await view.findByRole('textbox', { name: m.settings_profile_display_name() });
+  await view.findByRole('textbox', { name: m.settings_profile_biography() });
+  await view.findByRole('heading', { level: 2, name: m.settings_public_activity_heading() });
+  for (const label of [m.settings_public_posts(), m.settings_public_reviews(), m.settings_public_collections(), m.settings_public_realms()])
+    await view.findByRole('switch', { name: label });
+  await expect(view.queryByRole('switch', { name: m.settings_public_speakers() })).toBeNull();
 }
 
 export const SignedIn: Story = {
@@ -127,4 +134,33 @@ export const SignedOut: Story = {
     await expect(view.queryByRole('radio')).toBeNull();
   },
   render: () => <PageStory visitor="Signed Out" path="/settings" />,
+};
+
+export const PersonProfileWithAvatarAndFiveLinks: Story = {
+  name: 'Person / Long Biography / Avatar / Five Links',
+  play: settingsReady,
+  render: () => <PageStory visitor="Signed In" path="/settings?profile=extended" />,
+};
+
+export const OrganizationProfile: Story = {
+  name: 'Organization / Speakers Listed',
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await view.findByRole('heading', { level: 2, name: m.settings_profile_heading() });
+    await view.findByRole('switch', { name: m.settings_public_speakers() });
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings?profile=organization" />,
+};
+
+export const OrganizationWithAvatarAndFiveLinks: Story = {
+  name: 'Organization / Long Biography / Avatar / Five Links',
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await view.findByRole('heading', { level: 2, name: m.settings_profile_heading() });
+    await view.findByRole('switch', { name: m.settings_public_speakers() });
+    await expect((await view.findAllByRole('textbox')).length).toBeGreaterThanOrEqual(12);
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings?profile=organization-extended" />,
 };

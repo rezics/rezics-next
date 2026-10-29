@@ -3,6 +3,8 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { loadProfileRecord, saveProfileRecord, type ProfileValues } from './profile-data';
 import {
   changePreferences,
   changeCollectionVisibility,
@@ -78,4 +80,36 @@ export const savePreferences = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<PreferenceWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return changePreferences(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+/** The public identity read starts only when the browser hydrates the signed-in settings view. */
+export const readProfile = createServerFn({ method: 'GET' }).handler(async (): Promise<ProfileValues> => {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  await prepareSession(request, env as Partial<SessionEnv>);
+  const authorization = viewerCredential(request);
+  const accountId = sessionSubject(request);
+  if (!authorization || !accountId) throw new Error('Profile unavailable');
+  return loadProfileRecord(kernelClient(), authorization, accountId);
+});
+
+export const saveProfile = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid profile change');
+    const value = input as { before?: ProfileValues; after?: ProfileValues; idempotencyKey?: string };
+    if (!value.before || !value.after || !/^[0-9a-f-]{36}$/i.test(value.idempotencyKey ?? ''))
+      throw new Error('Invalid profile change');
+    return value as { before: ProfileValues; after: ProfileValues; idempotencyKey: string };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId)
+      return { ok: false as const, status: 403, message: 'Sign in to change your profile.' };
+    if (data.before.accountId !== accountId || data.after.accountId !== accountId)
+      return { ok: false as const, status: 403, message: 'You can only change your own profile.' };
+    return saveProfileRecord(kernelClient(), authorization, accountId, data.before, data.after, data.idempotencyKey);
   });
