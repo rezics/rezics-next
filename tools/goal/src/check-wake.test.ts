@@ -210,10 +210,11 @@ test('worker instructions start detached checks, keep working, and return waitin
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(prompt).toContain('keep working while checks run');
-    expect(prompt).toContain('{"status":"waiting","checks":["<id>",...]}');
-    expect(prompt).toContain('Never poll');
-    expect(prompt).not.toContain('wait on that same check');
+    expect(prompt).toContain('run your acceptance command once after your last relevant edit');
+    expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
+    expect(prompt).toContain('landing batch runs the root typecheck, affected checks for every changed path');
+    expect(prompt).not.toContain('{"status":"waiting","checks":["<id>",...]}');
+    expect(prompt).not.toContain('Never poll');
   } finally {
     h.dispose();
   }

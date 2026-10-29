@@ -131,14 +131,18 @@ test('the worker protocol starts checks asynchronously and suspends until the ho
     } as unknown as Task;
     // A base without the check runner (main, where control-plane tasks start) runs its checks directly.
     const bare = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(bare).toContain('this base has no check runner');
+    expect(bare).toContain('has no scripts/worker-check.ts');
+    expect(bare).toContain('run your acceptance command once after your last relevant edit');
+    expect(bare).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
     expect(bare).not.toContain('bun scripts/worker-check.ts -- <command...>');
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(prompt).toContain('{"status":"waiting","checks":["<id>",...]}');
-    expect(prompt).toContain('Never poll');
+    expect(prompt).toContain('run your acceptance command once after your last relevant edit');
+    expect(prompt).toContain('wait on that same check with `bun scripts/worker-check.ts --wait <id>`');
+    expect(prompt).not.toContain('{"status":"waiting","checks":["<id>",...]}');
+    expect(prompt).not.toContain('Never poll');
   } finally {
     h.dispose();
   }

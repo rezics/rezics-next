@@ -54,11 +54,11 @@ const defaultJsonMessageConflicts = defaults.jsonMessageConflicts as string[];
 /** Keep control-plane train fixtures hermetic even if package defaults name real workspace checks. */
 export function landingAffectedChecks(
   changed: readonly string[],
-  workspace: boolean,
+  _workspace: boolean,
   explicit: readonly AffectedTestCheck[] | undefined,
 ): AffectedTestCheck[] {
   const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
-  const checks = workspace ? [...(explicit ?? (testDefaults ? [] : defaults.affectedTests))] : [];
+  const checks = [...(explicit ?? (testDefaults ? [] : defaults.affectedTests))];
   return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths)));
 }
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
@@ -1366,6 +1366,16 @@ export class MergeTrain {
         const integrationChecks = configuredChecks.filter((check) =>
           changed.some((path) => matchesPath(path, check.paths)),
         );
+        const batchAffectedChecks = (o.affectedTests ?? defaults.affectedTests).filter((check) =>
+          changed.some((path) => matchesPath(path, check.paths)),
+        );
+        const batchSibling = siblingTestCommand(siblingTestFiles(changed, trainTree), defaults.siblingTests.command);
+        const batchChecks = [
+          ...integrationChecks,
+          ...(batchSibling ? [{ paths: [], command: batchSibling }] : []),
+        ].filter((check, index, checks) => checks.findIndex((candidate) => JSON.stringify(candidate.command) === JSON.stringify(check.command)) === index);
+        if (batchAffectedChecks.length && !batchChecks.some((check) => check.command[0] === 'bun' && check.command[1] === 'install'))
+          batchChecks.unshift({ paths: [], command: ['bun', 'install', '--frozen-lockfile'] });
         let failedBatch:
           | { kind: 'acceptance' | 'integration'; output: string; timedOut: boolean; failedCommand?: readonly string[] }
           | undefined;
@@ -1445,17 +1455,24 @@ export class MergeTrain {
         await Promise.all(Array.from({ length: Math.min(concurrency, acceptanceJobs.length) }, runAcceptance));
         if (retry) continue;
         git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
-        if (devChecks && integrationChecks.length) {
-          const commands = integrationChecks.map((check) =>
+        if (devChecks && batchChecks.length) {
+          const commands = batchChecks.map((check) =>
             check.command.join(' ').includes('scripts/typecheck.ts')
               ? ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, ...check.command]
               : check.command,
           );
           const candidate = prepared[prepared.length - 1]!.candidate;
+          // The combined train worktree is fresh. Give affected and sibling checks the same installed workspace tools
+          // that workers and acceptance worktrees have; integration checks may already have installed them above.
+          if (!existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
           for (const member of prepared)
             appendFileSync(member.result.logPath, `\nBatch integration check on ${candidate}, dev ${base}\n`);
           const batchLog = logPaths.get(prepared[0]!.entry.id)!;
-          const checked = await runIntegrationChecks(commands, trainTree, batchLog);
+          let checked = await runIntegrationChecks(commands, trainTree, batchLog);
+          if (checked.timedOut) {
+            appendFileSync(batchLog, 'Batch check infrastructure timeout; retrying the same batch checks once\n');
+            checked = await runIntegrationChecks(commands, trainTree, batchLog);
+          }
           for (const member of prepared)
             appendFileSync(
               member.result.logPath,
@@ -1483,7 +1500,7 @@ export class MergeTrain {
           }
           if (!checked.passed) {
             const scoped = commands.some((command) => command[0] === 'env');
-            const key = `integration-check:${JSON.stringify(integrationChecks)}${scoped ? `:${Bun.hash(changed.join('\n')).toString(16)}` : ''}`;
+            const key = `integration-check:${JSON.stringify(batchChecks)}${scoped ? `:${Bun.hash(changed.join('\n')).toString(16)}` : ''}`;
             let baseline = o.queue.baseline(base, key);
             o.queue.saveBaseline(candidate, key, checked);
             if (!baseline) {
@@ -1523,6 +1540,33 @@ export class MergeTrain {
                   member.result.logPath,
                   'dev already fails the integration check, with the same errors\n',
                 );
+          }
+        }
+
+        if (!failedBatch && batchAffectedChecks.length) {
+          const batchLog = logPaths.get(prepared[0]!.entry.id)!;
+          const results = await Promise.all(
+            batchAffectedChecks.map((check) =>
+              runAffectedTest(check.command, trainTree, batchLog, {
+                ...gateEnvironment(process.env, o.stateDirectory),
+                KERNEL_CHECK_AFFECTED: base,
+              }),
+            ),
+          );
+          for (const checked of results) {
+            if (checked.status === 'unverified') {
+              appendFileSync(batchLog, `Batch affected check unverified (landing allowed): ${checked.command.join(' ')}\n`);
+              continue;
+            }
+            if (checked.status === 'failed') {
+              failedBatch = {
+                kind: 'integration',
+                output: checked.output,
+                timedOut: false,
+                failedCommand: checked.command,
+              };
+              break;
+            }
           }
         }
 
@@ -1954,32 +1998,54 @@ export class MergeTrain {
           refuseNoEffect(result, noEffect, logPath);
           return finish();
         }
-        const affectedFailures: string[] = [];
-        let baseTreeFiles: Set<string> | undefined;
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
         // With devLandingChecks off, a dev landing is mechanical: dev is verified after the merge, not before it.
         const skipDevChecks =
           o.integration?.devLandingChecks === false && integratesIntoDev && !controlPlane && !stabilize;
         if (skipDevChecks)
           appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+        const configuredIntegrationChecks =
+          typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
+        const matchingIntegrationChecks = configuredIntegrationChecks.filter((check) =>
+          result.changedFiles.some((path) => matchesPath(path, check.paths)),
+        );
+        const affectedFailures: string[] = [];
+        let baseTreeFiles: Set<string> | undefined;
         const affectedChecks = skipDevChecks
           ? []
           : landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
-        const priorAffectedResults: AffectedTestResult[] = workspace ? [] : [...(request.affectedTests ?? [])];
         const siblings = siblingTestCommand(
           siblingTestFiles(result.changedFiles, trainTree),
           testDefaults ? undefined : defaults.siblingTests.command,
         );
         if (siblings && !skipDevChecks) affectedChecks.push({ paths: [], command: siblings });
-        const landingAffectedResults = await Promise.all(
-          affectedChecks.map((check) =>
-            runAffectedTest(check.command, trainTree, logPath, {
-              ...gateEnvironment(process.env, o.stateDirectory),
-              KERNEL_CHECK_AFFECTED: base,
-            }),
-          ),
-        );
-        const affectedResults = [...priorAffectedResults, ...landingAffectedResults];
+        const landingAffectedResults: AffectedTestResult[] = [];
+        if (
+          affectedChecks.length &&
+          !matchingIntegrationChecks.some((check) => check.command[0] === 'bun' && check.command[1] === 'install')
+        ) {
+          // A fresh landing worktree has no postinstall outputs. Prepare it once before affected commands run.
+          landingAffectedResults.push(
+            await runAffectedTest(
+              ['bun', 'install', '--frozen-lockfile'],
+              trainTree,
+              logPath,
+              gateEnvironment(process.env, o.stateDirectory),
+            ),
+          );
+        }
+        if (!landingAffectedResults.some((checked) => checked.status !== 'passed'))
+          landingAffectedResults.push(
+            ...(await Promise.all(
+              affectedChecks.map((check) =>
+                runAffectedTest(check.command, trainTree, logPath, {
+                  ...gateEnvironment(process.env, o.stateDirectory),
+                  KERNEL_CHECK_AFFECTED: base,
+                }),
+              ),
+            )),
+          );
+        const affectedResults = landingAffectedResults;
         for (const checked of affectedResults) {
           if (checked.status === 'unverified') {
             appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);
