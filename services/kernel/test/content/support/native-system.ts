@@ -217,8 +217,13 @@ async function createNativeContentSystemWithOptions(
     });
     nativeAuth = host.service;
     const ordinaryClient = { id: `${namespace}_ordinary`, kind: 'first-party' as const };
-    const scopes = [...actions.keys()].filter((action) => action !== 'media:complete').sort();
-    await nativeAuth.internal.registerClient({ clientId: ordinaryClient.id, firstParty: true, scopes });
+    const registeredScopes = [...actions.keys()].filter((action) => action !== 'media:complete').sort();
+    const scopes = options.ordinaryScopes ?? registeredScopes;
+    await nativeAuth.internal.registerClient({
+      clientId: ordinaryClient.id,
+      firstParty: true,
+      scopes: registeredScopes,
+    });
     await host.start();
 
     const requestAuth = async (path: string, body: unknown, cookie = '') => {

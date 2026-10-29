@@ -31,6 +31,7 @@ import { observeSql, type SqlExecution, type SqlObserver } from '../content/supp
 import { assertSetupResponse } from '../content/support/setup-response.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { productionActions } from '../support/production-actions.ts';
 import { startConsentServer } from './membership-fixture.ts';
 
 const AUDIENCE = 'https://content.test';
@@ -191,7 +192,15 @@ export async function restartWorker(): Promise<void> {
 
 async function buildShared(databaseUrl = process.env.DATABASE_URL): Promise<SharedCommunity> {
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  const system = await createContentSystem({ databaseUrl });
+  // Durable operations preserve the exact authenticated scope ceiling, which is
+  // bounded at 100 tokens. Request this fixture's product scopes through Auth
+  // rather than every unrelated action mounted on Kernel.
+  const ordinaryScopes = [...productionActions().keys()].filter((action) =>
+    /^(account|access|space|realm|board|thread|post|subject|context|definitions|statement|document|copy|moderation|exposure|report|rating):/.test(
+      action,
+    ),
+  );
+  const system = await createContentSystem({ databaseUrl, ordinaryScopes });
   let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
   let work: WorkClient | undefined;
   let observer: SqlObserver | undefined;

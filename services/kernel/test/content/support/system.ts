@@ -36,6 +36,8 @@ export interface ContentSystemOptions {
   readonly databaseUrl: string;
   /** Optional isolated database namespace for deterministic fixture assertions. */
   readonly namespace?: string;
+  /** Requested scopes for ordinary fixture credentials; omitted to request all ordinary actions. */
+  readonly ordinaryScopes?: readonly string[];
 }
 
 export interface ContentSystem {
