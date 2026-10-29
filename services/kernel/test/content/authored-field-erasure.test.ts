@@ -11,7 +11,7 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { writeProposal } from '../../src/semantic/candidates.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
-import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 
 setDefaultTimeout(120_000);
 
@@ -230,64 +230,65 @@ test('authored document erasure', async () => {
   const growthIds: { route: number; id: string }[] = [];
   const document = Buffer.from('growth probe');
   const digest = createHash('sha256').update(document).digest();
+  const baseline = 4096;
+  const population: Population = {
+    name: 'authored documents in one partition',
+    hotPartition: partitionOf(subjectRoute),
+    hotShare: 1,
+    rows: ({ route, ordinal }) => {
+      const id = newId(route);
+      if (ordinal >= baseline) growthIds.push({ route, id });
+      return {
+        'content.authored_field': [
+          {
+            route,
+            id,
+            subject: newId(route),
+            candidate: newId(route),
+            revision: 1,
+            author_account_id: authorId,
+            body: document,
+            body_sha256: digest,
+            licence: 'CC-BY-4.0',
+            language: 'en',
+            availability: 'available',
+          },
+        ],
+        'access.resource_initialization': [
+          {
+            route,
+            resource_id: id,
+            resource_type: 'content.authored_field',
+            creator_id: authorId,
+            initialized_at: new Date(),
+          },
+        ],
+        'access.resource_role_grant': [
+          {
+            route,
+            resource_id: id,
+            subject_kind: 'identity',
+            subject_id: authorId,
+            subject_role: '',
+            grant_role: 'content.authored_field.owner',
+            valid: '(,)',
+            transaction_id: randomUUID(),
+          },
+        ],
+      };
+    },
+  };
+  // Fresh tombstones at every run; committed document and owner-role histories already use indexed plans.
+  await seed(db, population, { from: 0, to: baseline });
   const report = await checkGrowth(db, {
     name: 'authored document erasure',
+    rule: 'series',
     scales: [64, 512, 4096],
     warmups: 1,
     repetitions: 1,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(target, scale, previous) {
-      await seed(
-        target,
-        {
-          name: 'authored documents in one partition',
-          hotPartition: partitionOf(subjectRoute),
-          hotShare: 1,
-          rows: ({ route }) => {
-            const id = newId(route);
-            growthIds.push({ route, id });
-            return {
-              'content.authored_field': [
-                {
-                  route,
-                  id,
-                  subject: newId(route),
-                  candidate: newId(route),
-                  revision: 1,
-                  author_account_id: authorId,
-                  body: document,
-                  body_sha256: digest,
-                  licence: 'CC-BY-4.0',
-                  language: 'en',
-                  availability: 'available',
-                },
-              ],
-              'access.resource_initialization': [
-                {
-                  route,
-                  resource_id: id,
-                  resource_type: 'content.authored_field',
-                  creator_id: authorId,
-                  initialized_at: new Date(),
-                },
-              ],
-              'access.resource_role_grant': [
-                {
-                  route,
-                  resource_id: id,
-                  subject_kind: 'identity',
-                  subject_id: authorId,
-                  subject_role: '',
-                  grant_role: 'content.authored_field.owner',
-                  valid: '(,)',
-                  transaction_id: randomUUID(),
-                },
-              ],
-            };
-          },
-        },
-        { from: previous, to: scale },
-      );
+      await seed(target, population, { from: baseline + previous, to: baseline + scale });
     },
     async warmup(_target, scale) {
       const probe = growthIds[scale - 1]!;
@@ -300,5 +301,11 @@ test('authored document erasure', async () => {
   });
   expect(growthIds).toHaveLength(4096);
   expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
-  for (const sample of report.samples) expect(sample.cost.statements).toBeGreaterThan(0);
+  expect(report.rule).toBe('series');
+  for (const sample of report.samples) {
+    expect(sample.cost.statements).toBeGreaterThan(0);
+    for (const cost of sample.repetitions)
+      for (const relation of ['content.authored_field', 'access.resource_role_grant'])
+        expect(cost.relations[relation]?.sequentialScans).toBe(0);
+  }
 });

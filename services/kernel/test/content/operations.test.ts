@@ -719,22 +719,41 @@ test('checkGrowth measures production initiation and status with fixed Access th
       { operationId: operation.value.operationId },
     );
   expect((await client.getWorkflow(workflowId))?.status).toBe('ENQUEUED');
+  const baseline = 4096;
+  // Pad the small content/native histories, without changing the fixed roster or the already-large ACL axis.
+  await seed(
+    db,
+    {
+      ...population,
+      rows: (placement) =>
+        Object.fromEntries(
+          Object.entries(population.rows!(placement)).filter(([table]) => table.startsWith('content.')),
+        ),
+    },
+    { from: 0, to: baseline },
+  );
+  const growNative = async (from: number, to: number) => {
+    for (let ordinal = from; ordinal < to; ordinal++)
+      await client.enqueue(
+        {
+          queueName: 'governance',
+          workflowName: 'content.authorErase',
+          workflowID: `operations-growth-${ordinal}`,
+        },
+        { operationId: id(`noise-${ordinal}`) },
+      );
+  };
+  await growNative(0, baseline);
+  // Every run initiates a fresh operation; the full native poll keeps the same workflow identity.
   const report = await checkGrowth(db, {
     name: 'author erasure initiation and status',
+    rule: 'series',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     grow: async (_db, scale, previous) => {
-      await seed(db, population, { from: previous, to: scale });
+      await seed(db, population, { from: baseline + previous, to: baseline + scale });
       // Grow native identities too; the observed target and its bounded inputs stay fixed.
-      for (let ordinal = previous; ordinal < scale; ordinal++)
-        await client.enqueue(
-          {
-            queueName: 'governance',
-            workflowName: 'content.authorErase',
-            workflowID: `operations-growth-${ordinal}`,
-          },
-          { operationId: id(`noise-${ordinal}`) },
-        );
+      await growNative(baseline + previous, baseline + scale);
       await db.admin.query('ANALYZE dbos.workflow_status');
     },
     operation: async () => {
@@ -743,6 +762,14 @@ test('checkGrowth measures production initiation and status with fixed Access th
       expect((await readOperation(nativeDeps, actor, operation.value.operationId, context()))?.done).toBe(false);
     },
   });
+  expect(report.rule).toBe('series');
+  for (const sample of report.samples)
+    for (const cost of sample.repetitions) {
+      expect(cost.relations['content.post']?.sequentialScans).toBe(0);
+      expect(cost.relations['content.post']?.rows).toBe(2);
+      expect(cost.relations['content.operation']?.sequentialScans).toBe(0);
+      expect(cost.relations['dbos.workflow_status']?.sequentialScans).toBe(0);
+    }
   expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
   expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
   const largest = report.samples.at(-1)!.cost;

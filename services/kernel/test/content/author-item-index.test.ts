@@ -370,15 +370,15 @@ test('author item index', async () => {
     name: `author-items-${randomUUID()}`,
     hotPartition: partitionOf(authorRoute),
     hotShare: 1,
-    rows: () => {
+    rows: ({ ordinal }) => {
       const thread = newId(threadRoute);
       return {
         'content.author_item': [
           {
             route: authorRoute,
             author_account_id: author,
-            item_kind: 'thread',
-            item_id: thread,
+            item_kind: ordinal % 2 ? 'post' : 'thread',
+            item_id: ordinal % 2 ? newId(threadRoute) : thread,
             thread_id: thread,
             thread_kind: 'discussion',
             created_at: at,
@@ -415,6 +415,9 @@ test('author item index', async () => {
     },
     { from: 0, to: 4096 },
   );
+  // Representative post/thread history precedes the first scale; each event sequence still uses fresh keys.
+  const baseline = 4096;
+  await seed(db, population, { from: 0, to: baseline });
   const measured: Awaited<ReturnType<typeof storedPost>>[] = [];
   const spare: Awaited<ReturnType<typeof storedPost>>[] = [];
   for (let index = 0; index < 18; index++) {
@@ -428,12 +431,17 @@ test('author item index', async () => {
   };
   const report = await checkGrowth(db, {
     name: 'author item index',
+    rule: 'series',
     scales: [64, 512, 4096],
     warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    grow: (database, scale, previous) => seed(database, population, { from: previous, to: scale }),
+    grow: (database, scale, previous) =>
+      seed(database, population, { from: baseline + previous, to: baseline + scale }),
     warmup: async () => apply(spare.shift()!),
     operation: async () => apply(measured.shift()!),
   });
+  expect(report.rule).toBe('series');
+  for (const sample of report.samples)
+    for (const cost of sample.repetitions) expect(cost.relations['content.author_item']?.sequentialScans).toBe(0);
   expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
 });

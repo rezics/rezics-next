@@ -398,13 +398,37 @@ test('checkGrowth stays independent of unrelated operations and author history',
     } finally {
       client.release();
     }
+    // Fresh operations (including the warm-up) share a representative committed lookup history.
+    const baseline = 4096;
+    await seed(db, population, { from: 0, to: baseline });
+    const assertIndex = async (sql: string, values: unknown[], index: string, keys: string[]) => {
+      const result = await db.admin.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${sql}`, values);
+      const nodes: Record<string, unknown>[] = [];
+      const visit = (node: Record<string, unknown>) => {
+        nodes.push(node);
+        for (const child of (node.Plans ?? []) as Record<string, unknown>[]) visit(child);
+      };
+      visit(result.rows[0]['QUERY PLAN'][0].Plan);
+      const probes = nodes.filter((node) => node['Index Name'] === index);
+      expect(probes).toHaveLength(1);
+      for (const key of keys) expect(probes[0]!['Index Cond']).toContain(key);
+    };
     const report = await checkGrowth(db, {
       name: 'operation identity and author endpoints',
+      rule: 'series',
       scales: [32, 256, 2048],
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 3,
       grow: async (_db, scale, previous) => {
-        await seed(db, population, { from: previous, to: scale });
+        await seed(db, population, { from: baseline + previous, to: baseline + scale });
+        await db.admin.query('ANALYZE content.operation; ANALYZE content.post');
+        await assertIndex(read, [route, operation.operation_id], 'operation_pkey', ['route', 'operation_id']);
+        for (const direction of ['ASC', 'DESC'] as const)
+          await assertIndex(endpoint(direction), [route, thread, author], 'post_thread_author_page_idx', [
+            'route',
+            'thread_id',
+            'author_account_id',
+          ]);
       },
       operation: async (_db, _scale, repetition) => {
         // Real insert and immutable binding, not a progress initialization scan.
@@ -421,6 +445,13 @@ test('checkGrowth stays independent of unrelated operations and author history',
         }
       },
     });
+    expect(report.rule).toBe('series');
+    for (const sample of report.samples)
+      for (const cost of sample.repetitions) {
+        expect(cost.relations['content.operation']?.sequentialScans).toBe(0);
+        expect(cost.relations['content.post']?.sequentialScans).toBe(0);
+        expect(cost.relations['content.post']?.rows).toBe(2);
+      }
     expect(report.samples.map((sample) => sample.scale)).toEqual([32, 256, 2048]);
     expect(report.samples.every((sample) => sample.cost.statements === 6)).toBe(true);
   } finally {
