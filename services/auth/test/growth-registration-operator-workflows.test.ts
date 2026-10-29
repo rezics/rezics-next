@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -134,6 +135,7 @@ async function fixture() {
     db,
     auth,
     workflows,
+    ports,
     accounts,
     released,
     openings,
@@ -295,88 +297,175 @@ async function pending(f: Fixture, key: string) {
   return ref;
 }
 
-function expectedGrowthFailure(operation: () => Promise<void>) {
-  return async () => {
-    try {
-      await operation();
-    } catch (error) {
-      if (error instanceof GrowthBoundError) throw error;
-      console.error('Unexpected workflow growth failure:', error);
-      // Returning makes test.failing fail with an unexpected pass.
-    }
-  };
-}
-
-// The due-stage page filters growing stage history, and the automated-request lookup scans growing request history.
-test.failing(
-  'Auth expired registration release stays within its bound as stage, request and workflow history grows',
-  expectedGrowthFailure(async () => {
-    const f = await fixture();
-    const population = history('release-history');
-    let candidates: Awaited<ReturnType<typeof pending>>[] = [];
-    try {
-      // B=1 due registration, one credential, and a fixed number of durable steps:
-      // R,S=O(1), indexed blocks O(log N); B never grows with retained history.
-      await checkGrowth(f.db, {
-        name: 'native Auth expired registration release',
-        bounds,
-        repetitions,
-        async grow(db, scale, previous) {
-          await seed(db, population, { from: previous * 512, to: scale * 512 });
-          const start = f.getClock();
-          candidates = [];
-          for (let i = 0; i <= repetitions; i++) {
-            const ref = await pending(f, `release-${scale}-${i}`);
-            candidates.push(ref);
-            f.setClock(Date.parse(ref.expiresAt) + 1);
-          }
-          f.setClock(start);
-        },
-        async operation() {
-          const ref = candidates.shift()!;
+test('Auth expired registration release stays within its bound as stage, request and workflow history grows', async () => {
+  const f = await fixture();
+  const population = history('release-history');
+  let candidates: Awaited<ReturnType<typeof pending>>[] = [];
+  try {
+    // B=1 due registration, one credential, and a fixed number of durable steps:
+    // R,S=O(1), indexed blocks O(log N); B never grows with retained history.
+    await checkGrowth(f.db, {
+      name: 'native Auth expired registration release',
+      bounds,
+      repetitions,
+      async grow(db, scale, previous) {
+        await seed(db, population, { from: previous * 512, to: scale * 512 });
+        const start = f.getClock();
+        candidates = [];
+        for (let i = 0; i <= repetitions; i++) {
+          const ref = await pending(f, `release-${scale}-${i}`);
+          candidates.push(ref);
           f.setClock(Date.parse(ref.expiresAt) + 1);
-          await f.workflows.expireDueRegistrations();
-          expect(f.released.has(ref.accountId)).toBe(true);
-          expect((await f.db.admin.query('SELECT id FROM "user" WHERE id=$1', [ref.accountId])).rows).toHaveLength(0);
-          expect(
-            (
-              await f.db.admin.query(
-                'SELECT expired_at,ciphertext FROM auth_registration_stage WHERE registration_id=$1',
-                [ref.registrationId],
-              )
-            ).rows[0],
-          ).toMatchObject({ expired_at: expect.any(Date), ciphertext: null });
-        },
-      });
-    } catch (error) {
-      if (error instanceof GrowthBoundError) {
-        const ref = await pending(f, 'release-diagnostic');
+        }
+        f.setClock(start);
+      },
+      async operation() {
+        const ref = candidates.shift()!;
         f.setClock(Date.parse(ref.expiresAt) + 1);
-        const measured = await capture(f.db, () => f.workflows.expireDueRegistrations());
-        const sql = measured.capture.statements.filter(
-          (sql) =>
-            sql.includes("request->>'registrationId'") ||
-            (sql.includes('auth_registration_stage') && sql.includes('LIMIT 64')),
-        );
-        const plans = measured.capture.plans.filter((plan) => {
-          const text = JSON.stringify(plan);
-          return (
-            text.includes('auth_workflow_request') ||
-            (text.includes('auth_registration_stage') && text.includes('LIMIT 64'))
-          );
-        });
-        console.info(
-          'Expired registration release growth defect:',
-          JSON.stringify({ samples: error.samples, sql, plans }),
-        );
-      }
-      throw error;
-    } finally {
-      await f.close();
+        await f.workflows.expireDueRegistrations();
+        expect(f.released.has(ref.accountId)).toBe(true);
+        expect((await f.db.admin.query('SELECT id FROM "user" WHERE id=$1', [ref.accountId])).rows).toHaveLength(0);
+        expect(
+          (
+            await f.db.admin.query(
+              'SELECT expired_at,ciphertext FROM auth_registration_stage WHERE registration_id=$1',
+              [ref.registrationId],
+            )
+          ).rows[0],
+        ).toMatchObject({ expired_at: expect.any(Date), ciphertext: null });
+      },
+    });
+  } finally {
+    await f.close();
+  }
+}, 600000);
+
+test('Expired registration pages seek through equal expiry times and send both manual messages exactly once', async () => {
+  const f = await fixture();
+  const send = spyOn(DBOS, 'send');
+  try {
+    await seed(f.db, history('release-page-history'), { from: 0, to: 512 });
+    const registrations = [];
+    for (let i = 0; i < 67; i++)
+      registrations.push(await f.workflows.beginRegistration({ key: `page-${i}`, handle: `page-${i}` }));
+    registrations.sort((a, b) => a.registrationId.localeCompare(b.registrationId));
+    const expiry = Date.parse(registrations[0]!.expiresAt);
+    // Put the smallest ID last and the largest first. The other 65 deadlines
+    // coincide, spanning the page boundary; timestamp precision must survive it.
+    await f.db.admin.query(
+      `UPDATE auth_registration_stage SET expires_at=$2::timestamptz + interval '0.000123 seconds'
+       WHERE registration_id=ANY($1::text[])`,
+      [registrations.map((ref) => ref.registrationId), new Date(expiry)],
+    );
+    await f.db.admin.query('UPDATE auth_registration_stage SET expires_at=$2 WHERE registration_id=$1', [
+      registrations[0]!.registrationId,
+      new Date(expiry + 1),
+    ]);
+    await f.db.admin.query('UPDATE auth_registration_stage SET expires_at=$2 WHERE registration_id=$1', [
+      registrations.at(-1)!.registrationId,
+      new Date(expiry - 1),
+    ]);
+    await f.db.admin.query('VACUUM (ANALYZE)');
+    f.setClock(expiry + 2);
+    const measured = await capture(f.db, () => f.workflows.expireDueRegistrations());
+    const expected = [registrations.at(-1)!, ...registrations.slice(1, -1), registrations[0]!];
+    expect(send.mock.calls).toEqual(
+      expected.flatMap((ref) => [
+        [ref.workflowId, 'expire', 'credential', `${ref.workflowId}:expire-credential`],
+        [ref.workflowId, 'expire', 'activation', `${ref.workflowId}:expire-activation`],
+      ]),
+    );
+    expect(f.released).toEqual(new Set(registrations.map((ref) => ref.accountId)));
+    expect(
+      (
+        await f.db.admin.query(
+          'SELECT count(*)::integer AS n FROM auth_registration_stage WHERE registration_id=ANY($1::text[]) AND expired_at IS NOT NULL',
+          [registrations.map((ref) => ref.registrationId)],
+        )
+      ).rows,
+    ).toEqual([{ n: 67 }]);
+    const pages = measured.capture.plans.filter((plan) => {
+      const text = JSON.stringify(plan);
+      return text.includes('auth_registration_stage') && text.includes('LIMIT 64');
+    });
+    expect(pages).toHaveLength(2);
+    for (const plan of pages) {
+      const text = JSON.stringify(plan);
+      expect(text).toContain('"Index Name":"auth_registration_stage_due"');
+      expect(text).toContain('"Index Cond":');
+      expect(text).not.toContain('"Node Type":"Sort"');
     }
-  }),
-  600000,
-);
+    const lookups = measured.capture.plans.filter((plan) =>
+      JSON.stringify(plan).includes('SELECT workflow_id FROM auth_workflow_request WHERE'),
+    );
+    expect(lookups).toHaveLength(67);
+    for (const plan of lookups) {
+      const text = JSON.stringify(plan);
+      expect(text).toContain('"Index Name":"auth_workflow_request_automated_registration"');
+      expect(text).toContain('"Index Cond":');
+    }
+  } finally {
+    send.mockRestore();
+    await f.close();
+  }
+}, 600000);
+
+test('Expired automated registration resumes its stored request without manual expiry messages', async () => {
+  const f = await fixture();
+  const send = spyOn(DBOS, 'send');
+  const rewind = spyOn(DBOS, 'rewindWorkflow');
+  try {
+    f.ports.authorizeOperation = async (reference, operation) => {
+      expect(reference).toBe('approval:automated-expiry');
+      expect(operation.kind).toBe('automated');
+      return { actor: { accountId: 'operator' } };
+    };
+    f.ports.reserveResponsibility = async (input) => ({ value: { ...input, reservationId: 'operator-reservation' } });
+    f.ports.recordOperatorRelation = async (input) => ({ value: { ...input, version: '1' } });
+    f.ports.retireResponsibility = async (input) => ({ value: input });
+    f.ports.releaseResponsibility = async (input) => ({ value: input });
+    f.ports.provisioningReference = async () => {
+      throw new Error('Provisioning interrupted');
+    };
+    await expect(
+      f.workflows.createAutomated({
+        key: 'automated-expiry',
+        authorization: 'approval:automated-expiry',
+        operatorAccountId: 'operator',
+        handle: 'automated-expiry',
+        credential: { email: 'automated-expiry@example.test', password },
+      }),
+    ).rejects.toThrow();
+    const stage = (
+      await f.db.admin.query<{ registration_id: string; account_id: string; expires_at: Date }>(
+        'SELECT registration_id,account_id,expires_at FROM auth_registration_stage',
+      )
+    ).rows[0]!;
+    const request = (
+      await f.db.admin.query<{ workflow_id: string }>(
+        "SELECT workflow_id FROM auth_workflow_request WHERE request->>'registrationId'=$1",
+        [stage.registration_id],
+      )
+    ).rows[0]!;
+    f.setClock(stage.expires_at.getTime() + 1);
+    // Native expiry completes cleanup and retains the existing registration refusal.
+    await expect(f.workflows.expireDueRegistrations()).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+    expect(rewind.mock.calls.map(([id]) => id)).toEqual([request.workflow_id]);
+    expect(f.released.has(stage.account_id)).toBe(true);
+    expect(
+      (
+        await f.db.admin.query('SELECT expired_at,ciphertext FROM auth_registration_stage WHERE registration_id=$1', [
+          stage.registration_id,
+        ])
+      ).rows[0],
+    ).toMatchObject({ expired_at: expect.any(Date), ciphertext: null });
+  } finally {
+    send.mockRestore();
+    rewind.mockRestore();
+    await f.close();
+  }
+}, 60000);
 
 async function operatorInput(f: Fixture, key: string) {
   const human = `${key}-human`;

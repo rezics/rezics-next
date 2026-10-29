@@ -1345,12 +1345,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     },
     async expireDueRegistrations() {
       active();
-      let after = '';
+      let afterExpiry = '-infinity';
+      let afterId = '';
       while (true) {
         const rows = (
-          await database.query<Stage>(
-            'SELECT registration_id,request_key,handle,account_id,reservation_id,expires_at,completed_at,expired_at FROM auth_registration_stage WHERE completed_at IS NULL AND expired_at IS NULL AND expires_at<=$1 AND registration_id>$2 ORDER BY registration_id LIMIT 64',
-            [now(), after],
+          await database.query<Stage & { due_expires_at: string }>(
+            'SELECT registration_id,request_key,handle,account_id,reservation_id,expires_at,completed_at,expired_at,expires_at::text AS due_expires_at FROM auth_registration_stage WHERE completed_at IS NULL AND expired_at IS NULL AND expires_at<=$1 AND (expires_at,registration_id)>($2::timestamptz,$3) ORDER BY expires_at,registration_id LIMIT 64',
+            [now(), afterExpiry, afterId],
           )
         ).rows;
         for (const row of rows) {
@@ -1376,7 +1377,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           } else await DBOS.retrieveWorkflow(ref.workflowId).getResult();
         }
         if (rows.length < 64) return;
-        after = rows.at(-1)!.registration_id;
+        afterExpiry = rows.at(-1)!.due_expires_at;
+        afterId = rows.at(-1)!.registration_id;
       }
     },
     revokeSessions: (input: Command & { authorization?: string }) =>
