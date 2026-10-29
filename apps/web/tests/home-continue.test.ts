@@ -520,7 +520,7 @@ test(
       const body = main(page.html);
       expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
       // Cards keep titles in CoverCard and expose their subject destination only through the menu.
-      expect((row ?? '').match(/Newest read/g)).toHaveLength(6);
+      expect([...(row ?? '').matchAll(/data-slot="cover-card"/g)]).toHaveLength(6);
       const hrefs = linksIn(row ?? '').map((link) => link.href);
       expect(hrefs).toHaveLength(6);
       expect(new Set(hrefs).size).toBe(3);
