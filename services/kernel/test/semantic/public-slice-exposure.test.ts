@@ -258,8 +258,13 @@ test('native platform grants expose real development commands while preserving r
   const served = ids((await call('editor', 'GET', '/v1/openapi.json')).body);
   expect(served.sort()).toEqual(visible.map((operation) => operation.operationId).sort());
   for (const id of gated) expect(served).toContain(id);
-  const published = await call('editor', 'POST', '/v1/definitions/releases', { release: bundledRelease });
-  status(published, 200);
+  const developmentRelease = structuredClone(bundledRelease);
+  developmentRelease.catalogue.version = '999.0.0';
+  const published = await call('editor', 'POST', '/v1/definitions/releases', { release: developmentRelease });
+  status(published, 201);
+  expect((await call('anonymous', 'GET', `/v1/definitions/releases/${published.body.digest}`)).body.release).toEqual(
+    developmentRelease,
+  );
   const active = (await call('anonymous', 'GET', '/v1/definitions/active')).body;
   status(
     await call('editor', 'POST', `/v1/definitions/releases/${published.body.digest}:activate`, {

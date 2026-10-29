@@ -95,6 +95,7 @@ test('native static configured pages are public while direct targets and source-
   const reads = f.access.readChecks.length;
   notReady(await f.read(dynamicZone.id, 'editor'));
   notReady(await f.read(staticZone.id, 'editor', { subject: newId(0x7111) }));
+  expect(f.access.readChecks.slice(reads)).toHaveLength(2);
   expect(f.access.readChecks.slice(reads).every((check) => check.action === 'zone:read')).toBe(true);
   closed(await f.read(dynamicZone.id, 'owner'));
   closed(await f.read(dynamicZone.id, 'anonymous'));
