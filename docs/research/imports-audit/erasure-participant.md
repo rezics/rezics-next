@@ -145,6 +145,6 @@ evidence; no runtime assertion has been reached.
 A subsequent admission rechecked the current runner and all sixteen final hashes above. The exact prescribed
 focused acceptance submission was attempted twice and the typecheck submission once; all exited 1 with
 `Invalid check id: --` before allocating a check ID. The runner still treats `--run` as execution of an
-existing UUID. The final typecheck retry is recorded in the attempt result. No native assertion, SDK workflow
+existing UUID. The final typecheck retry also exited 1 with the same exact error before allocating a check ID. No native assertion, SDK workflow
 or typecheck was reached, and no check is live. The acceptance, fixture child and preserved files were not
 changed in this admission. The submission interface remains the concrete blocker.
