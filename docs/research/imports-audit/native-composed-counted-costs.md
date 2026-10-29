@@ -103,7 +103,7 @@ Tested executable revision: `2093ab2dfa` (subsequent changes only record evidenc
 | --- | --- | --- |
 | Focused kernel command above | exit 1 | `.temp/goal/checks/worker-check-2026-10-29T14-34-09.976Z-104fb41c.log` |
 | Root `bun run typecheck` through worker-check | exit 0 | `.temp/goal/checks/worker-check-2026-10-29T14-34-24.381Z-05d36756.log` |
-| Report-presence acceptance | executed after committing this completed report; terminal result in worker handoff | `test -s` command above |
+| Report-presence acceptance | exit 0 | `.temp/goal/checks/worker-check-2026-10-29T15-09-19.552Z-fd8f10ae.log` |
 
 The focused command queued for **575.216 s** before acquiring host b; waiting was not treated as a failure.
 The initial API child completed **22 pass / 1 fail / 20374 assertions**, failing its fixed-growth case in setup
@@ -126,7 +126,8 @@ After the automatic isolated rerun, remote cleanup also emitted this exact tool 
 remote-check: could not remove /srv/rezics-check/runs/mvtnlpge-6c64db7f on b
 ```
 
-The wrapper subsequently reached terminal **exit 1**; both started checks have finished. This is retained as a
+The focused wrapper subsequently reached terminal **exit 1**. All three started checks have finished; the
+report-presence acceptance and root typecheck each reached terminal **exit 0**. This is retained as a
 tool blocker under the contract's infrastructure-after-rerun rule, independent of the delivered unit specification.
 The scoped migration, typecheck and passing named unit case do not erase the failing native outcomes or setup error.
 
