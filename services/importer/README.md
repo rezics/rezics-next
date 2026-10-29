@@ -426,8 +426,12 @@ The source cases were frozen at `637f28a6d1`. The first native check at `b0ed7c4
 execution on two caller capture-type errors; `83a13e8b7b` corrects those types without changing the frozen
 assertions. The next native run reached all three cases but stopped before input acquisition when its module
 observation resolved a package undeclared by the kernel workspace; root typecheck identified the same undeclared
-import. `300beac120` uses the exact repository converter paths. Replacement results are pending. The edition expectation follows the
-existing native field observation `bf:Instance`. The feed fixtures omit cover acquisition, retaining separate
+import. `300beac120` uses the exact repository converter paths; root typecheck passed. Its native run reached
+public candidates in all three cases (904 assertions), then exposed a caller expectation that compared a native
+property to the command-input shape `{ id }`. The corrected native citation and sameAs expectations require
+`{ id, data_type: 'url' }`, matching the public `SnakSchema`; exact citation/value checks are retained. Replacement
+native results are pending. The edition expectation was corrected from `schema:BookEdition` to the existing native
+field observation `bf:Instance`. The feed fixtures omit cover acquisition, retaining separate
 Bangumi CC-BY-SA summary rights and the omission of unknown-licensed Open Library prose. This proves the scalar
 operator entrypoint only; it does not add general SourceRecord metadata, words, form/classification, VNDB archive
 or statistics, or the deferred cross-surface discovery matrix.

@@ -401,7 +401,11 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   `b0ed7c4e8d` stopped before scenarios on two caller capture-type errors. `83a13e8b7b` corrects those types
   without changing the frozen assertions. The next native run reached three case setups but stopped before input
   acquisition on the caller module observation; root typecheck identified its undeclared package import.
-  `300beac120` uses exact repository converter paths; replacement execution is pending. The exact acceptance is
+  `300beac120` uses exact repository converter paths and passed root typecheck. Its native run reached public
+  candidates in all three cases (904 assertions), exposing a caller property-shape mismatch. Native URL/sameAs
+  expectations now require `{ id, data_type: 'url' }` instead of the command-input `{ id }`, matching public
+  `SnakSchema` while retaining exact citations/values. Replacement native execution is pending. The edition
+  expectation was corrected from `schema:BookEdition` to the native contract's `bf:Instance`. The exact acceptance is
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts`,
   with `bun scripts/worker-check.ts -- bun scripts/typecheck.ts` for the root typecheck.
   These call production `runImportCli`, native key stage/approve/apply and native Auth/Access/public writes.

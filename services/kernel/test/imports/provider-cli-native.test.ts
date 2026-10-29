@@ -31,6 +31,11 @@ const lines = (records: unknown[]) => records.map((record) => JSON.stringify(rec
 const apiFixture = (name: string) =>
   Bun.file(new URL(`../../../../specs/fixtures/imports/api/${name}`, import.meta.url)).text();
 const part = (id: string, content: unknown) => ({ property: { id }, value: { type: 'value', content } });
+// Retrieved native statements resolve property datatypes; command input parts do not.
+const nativeUrlPart = (id: 'schema:url' | 'schema:sameAs', content: string) => ({
+  property: { id, data_type: 'url' },
+  value: { type: 'value', content },
+});
 function cited(candidate: Candidate, feed: Feed, key: string, revision: string) {
   expect(candidate.source).toMatchObject({
     source: feed.source,
@@ -42,7 +47,9 @@ function cited(candidate: Candidate, feed: Feed, key: string, revision: string) 
   expect(candidate.source.digest).toMatch(/^[a-f0-9]{64}$/);
   expect(candidate.statement.references).toContainEqual(
     expect.objectContaining({
-      parts: expect.arrayContaining([expect.objectContaining(part('schema:url', feed.citation(key, revision)))]),
+      parts: expect.arrayContaining([
+        expect.objectContaining(nativeUrlPart('schema:url', feed.citation(key, revision))),
+      ]),
     }),
   );
 }
@@ -515,7 +522,7 @@ test('Wikidata account-key CLI imports refreshes reopens and safely stops the sy
       for (const author of authors) {
         expect(author.statement.value).toEqual({ type: 'somevalue' });
         expect(author.statement.qualifiers).toContainEqual(
-          expect.objectContaining(part('schema:sameAs', `http://www.wikidata.org/entity/${qid}`)),
+          expect.objectContaining(nativeUrlPart('schema:sameAs', `http://www.wikidata.org/entity/${qid}`)),
         );
       }
       expect(await outcome.cli.claim(qid)).toEqual([]);
