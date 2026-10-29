@@ -16,17 +16,28 @@ test('a long-running control-plane process chooses with the current local pool p
     const changed = reloader.read();
     const pool = changed[0]!;
     expect(pool.policy.reservePercent).toBe(12);
-    const selection = () => choosePoolWithFallback(
-      { cli: 'codex', model: 'sol', effort: 'medium', poolClass: 'codex' }, [], changed, [reading(pool, 88)], { now: Date.now() },
-    );
+    const selection = () =>
+      choosePoolWithFallback(
+        { cli: 'codex', model: 'sol', effort: 'medium', poolClass: 'codex' },
+        [],
+        changed,
+        [reading(pool, 88)],
+        { now: Date.now() },
+      );
     expect(selection).toThrow('no allowed pool available');
     local.pools[0].policy.reservePercent = 0;
     writeFileSync(h.settings.localFile, JSON.stringify(local));
     utimesSync(h.settings.localFile, new Date(Date.now() + 4000), new Date(Date.now() + 4000));
     const latest = reloader.read();
-    expect(choosePoolWithFallback(
-      { cli: 'codex', model: 'sol', effort: 'medium', poolClass: 'codex' }, [], latest, [reading(latest[0]!, 88)], { now: Date.now() },
-    ).pool.name).toBe(pool.name);
+    expect(
+      choosePoolWithFallback(
+        { cli: 'codex', model: 'sol', effort: 'medium', poolClass: 'codex' },
+        [],
+        latest,
+        [reading(latest[0]!, 88)],
+        { now: Date.now() },
+      ).pool.name,
+    ).toBe(pool.name);
   } finally {
     h.dispose();
   }
