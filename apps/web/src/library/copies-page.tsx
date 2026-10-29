@@ -474,7 +474,10 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
           onClose={() => setEditing(undefined)}
           onKey={setAddKey}
           onCreated={(copy) =>
-            setCopies((current) => [...current, { ...copy, subject: null, idempotencyKey: crypto.randomUUID() }])
+            setCopies((current) => [
+              ...current,
+              { ...copy, kind: copy.kind ?? null, subject: null, idempotencyKey: crypto.randomUUID() },
+            ])
           }
           onSaved={(next) => setCopies((current) => current.map((item) => (item.id === next.id ? next : item)))}
           onRemoved={(id) => setCopies((current) => current.filter((item) => item.id !== id))}
