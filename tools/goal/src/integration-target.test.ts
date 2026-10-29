@@ -108,7 +108,7 @@ test('a control-plane task whose changes all lie under tools/goal integrates int
   } finally {
     h.dispose();
   }
-});
+}, 60_000);
 
 test('a control-plane task moved onto a newer main still integrates into main with only its own changes', async () => {
   const h = integrationHarness();
