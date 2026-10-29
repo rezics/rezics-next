@@ -1,3 +1,4 @@
+import { agentAdapter, isAgentCli } from './agents.ts';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { AttemptRecord, Profile, Tokens } from './types.ts';
@@ -28,6 +29,7 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
   )
     throw new Error('cannot import over a running or waiting attempt');
   const measured = measureLog(readFileSync(log, 'utf8'), {
+    adapter: agentAdapter(options.profile.cli),
     startedAt: options.startedAt,
     endedAt: options.endedAt,
     ...(options.baseline ? { baseline: options.baseline } : {}),
@@ -88,7 +90,8 @@ export function importRunDirectory(tasks: WorkerTasks, directory: string): Attem
   const start = JSON.parse(readFileSync(join(directory, 'meta.start.json'), 'utf8'));
   const end = JSON.parse(readFileSync(join(directory, 'meta.end.json'), 'utf8'));
   if (
-    !['codex', 'grok', 'cursor'].includes(start.cli) ||
+    !isAgentCli(start.cli) ||
+    agentAdapter(start.cli).canImport === false ||
     !['low', 'medium', 'high', 'xhigh', 'max'].includes(start.effort) ||
     typeof start.pool !== 'string' ||
     typeof start.task !== 'string' ||
