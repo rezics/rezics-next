@@ -771,7 +771,7 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 
 - Touches: one statement reads the erasure record, at most P acknowledgements and their exceptions in one snapshot,
   and probes the open-late-item partial index. An unfinished erasure with a delivered frontier adds one open locator-work
-  existence probe bounded by T; completed erasures need no locator-work lookup.
+  existence probe bounded by `workflow_until`; completed erasures need no locator-work lookup.
 - Bound: at most two statements; O(P·X + log A + log W), W the open locator-work rows. Neither outbox nor DBOS history is read.
 - Growth check: `test/access/growth-erasure-coordinator.test.ts`, the same three scales; statements and rows stay constant.
 

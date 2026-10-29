@@ -46,7 +46,7 @@ const effects = registerEffects([
       starts.push(event.subject!);
       if (event.subject === 'blocked') {
         blockedStarted();
-        await blocked;
+        await within(blocked, 'blocked effect release');
       }
     },
   },
@@ -54,11 +54,11 @@ const effects = registerEffects([
 
 beforeAll(async () => {
   growth = await openGrowthDatabase(databaseUrl);
-  await launchWork({ databaseUrl, systemDatabasePool: growth.openPool({ max: 4 }) });
+  await within(launchWork({ databaseUrl, systemDatabasePool: growth.openPool({ max: 4 }) }), 'executor launch');
 });
 afterAll(async () => {
   releaseBlocked();
-  await shutdownWork();
+  await within(shutdownWork(), 'executor shutdown');
   (ERASURE_LOCATOR_EFFECTS as Set<string>).delete(locator);
   await growth.close();
   await pool.end();
@@ -84,7 +84,7 @@ function envelope(partition: number, position: bigint, subject: string): Envelop
 
 async function enqueueAndWait(item: Envelope, name = 'ordered'): Promise<void> {
   await effects.enqueue([item]);
-  await DBOS.retrieveWorkflow(effectWorkflowId(item, 0, name)).getResult();
+  await within(DBOS.retrieveWorkflow(effectWorkflowId(item, 0, name)).getResult(), 'effect result');
 }
 
 const GROWTH_SCALES = [256, 1024, 4096] as const;
@@ -130,21 +130,22 @@ test('a blocked effect in one partition does not delay effects of another partit
   const first = envelope(a, 1n, 'blocked');
   const second = envelope(b, 1n, 'other-partition');
   await effects.enqueue([first]);
-  await started;
+  await within(started, 'blocked effect start');
   await effects.enqueue([second]);
-  await DBOS.retrieveWorkflow(effectWorkflowId(second, 0, 'ordered')).getResult();
+  await within(DBOS.retrieveWorkflow(effectWorkflowId(second, 0, 'ordered')).getResult(), 'other partition result');
   expect(starts).toContain('other-partition');
   releaseBlocked();
-  await DBOS.retrieveWorkflow(effectWorkflowId(first, 0, 'ordered')).getResult();
-}, 30_000);
+  await within(DBOS.retrieveWorkflow(effectWorkflowId(first, 0, 'ordered')).getResult(), 'released effect result');
+}, 60_000);
 
 test('effects of one partition start in position order', async () => {
   const partition = freshPartition();
   const earlier = envelope(partition, 10n, 'position-10');
   const later = envelope(partition, 11n, 'position-11');
   await effects.enqueue([later, earlier]);
-  await Promise.all(
-    [earlier, later].map((item) => DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult()),
+  await within(
+    Promise.all([earlier, later].map((item) => DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult())),
+    'ordered effect results',
   );
   expect(starts.slice(-2)).toEqual(['position-10', 'position-11']);
 }, 30_000);
