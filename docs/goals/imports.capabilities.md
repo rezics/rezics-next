@@ -19,8 +19,8 @@ Missing acceptance below stays owned work, not a claim that a required capabilit
 
 | Capability                       | Specification validated red                                                                                         | Native driver registered                                                     | Implementation exposed                                                                                                                     | User-case pass at named revision                                                                                                                    | Promoted                            |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| Ordinary provider import/refresh | Existing executable suites; API fixture README records historical missing-driver red evidence, not revalidated here | API, identity and media wrappers registered; VNDB statistics remains unbound | Ordinary batch, fence, subject/candidate and media routes visible; full metadata ordering, lifecycle and composed refresh remain open      | Bangumi launch scope: 5 unchanged cases pass, 424 assertions; Open Library fields: 1 case passes, 541 assertions. Neither closes all-source refresh | Missing: imports promotion evidence |
-| Import-to-discovery              | 13 independent native cases delivered; native reds recorded; remaining matrix not yet frozen                        | Actual discovery suite/helper registered; command and bytes below            | Four provider Context-selected reads are exposed in code; sourceRecords runtime producer and production Search lifecycle/binding missing   | Old environment-qualified run: 6 pass / 7 fail. Newest tmpfs run: 0 pass / 13 fail before importer assertions at Collection exposure setup 403      | Missing: imports promotion evidence |
+| Ordinary provider import/refresh | Existing executable suites; API fixture README records historical missing-driver red evidence, not revalidated here | API, identity and media wrappers registered; VNDB statistics remains unbound | Ordinary batch, fence, subject/candidate and media routes visible; full metadata ordering, lifecycle and composed refresh remain open      | Bangumi launch scope: 5 unchanged cases pass, 424 assertions; Open Library fields: 1 case passes, 541 assertions; VNDB optional-Latin: 6 unchanged cases pass, 484 assertions on pinned `a0cc096ce`. These slices do not close all-source refresh | Missing: imports promotion evidence |
+| Import-to-discovery              | 13 independent native cases delivered; native reds recorded; remaining matrix not yet frozen                        | Actual discovery suite/helper registered; command and bytes below            | Four provider Context-selected reads are exposed in code; helper setup is available, but sourceRecords runtime producer and production Search lifecycle/binding are missing   | Historical environment-qualified run: 6 pass / 7 fail. Newest tmpfs run: 0 pass / 13 fail before importer assertions at Collection exposure setup 403      | Missing: imports promotion evidence |
 | Cover-native-recovery            | Three native crash/replacement/fence scenarios frozen; local regressions retained                                   | Native composition registered; see execution evidence below                  | Actual receipt/media/SQLite and subject/page/download assertions; distinct supplied image inputs now covered; consumer matrix remains open | Recovery: 3 cases pass, 326 assertions. Distinct inputs: 134 pixel assertions and all 14 boundary cases pass at recorded revision                   | Missing: imports promotion evidence |
 
 “Specification validated red” requires recorded failing execution; distinguish missing binding from native product red.
@@ -43,17 +43,25 @@ These released schemas are not delivered runtime subject populations. The actual
 introduced at `f3d11d3f95fc5bbb4062f29c7e7b4b48b91afe60`, with its
 [closed interface and prerequisites](../../packages/definitions/src/released-discovery-fixtures.md).
 It uses native Auth/Access, republishes the identical bundled release, creates real identities and returns actual
-candidate/acceptance/adoption/revision/release receipts when admission succeeds. It is not wholly absent.
-Its link projection drain proves neither Search indexing nor readiness; this inspected factory still lacks the
-production Search lifecycle/binding. Prerequisite descriptors do not create runtime data.
+candidate/acceptance/adoption/revision/release receipts when admission succeeds. The canonical shared release is
+`eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702`. It includes Book `schema:wordCount`/P6570
+with a closed integer amount and unit (minimum zero), plus the `schema:wordCount` and `schema:keywords` predicates,
+the `wdt:P7937` Concept form facet and Recipe diet terms. The controlled native release check passed 10 cases,
+257 assertions, and root typecheck; this proves schema/data availability only, not genuine whole-holder
+measurements, producer characters, native discovery, numeric-index exactness or imports/six-surface closure.
+The helper exposes only closed `setup.openFeatures` for `personal_library` and `reading_progress`, named Space
+creation, same-account narrowed scoped transport and read-only inspection. Its native five-new/three-frozen helper
+cases (105 assertions) prove setup only. Collections remain the defaults; there is no new constructor, writable
+pool, export/default Search lifecycle, history, profile-pin or Liked proof. Link projection drain proves neither
+Search indexing nor readiness. Prerequisite descriptors do not create runtime data.
 
 | Required fixture/data                     | Actual delivery and missing closure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Owner                                                                              |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Genuine words                             | `schema:wordCount` is admitted in the released Book schema (released definition receipt `29841f473c75270247f835c1cc8af15fa2618240`). The generic exact-quantity primitive and released property do not establish admitted data, whole-holder coverage, provider support or index exactness. Builder amounts are controlled editorial assertions; native producer declarations and holder/language/version association remain missing                                                                                                                             | Semantic release/measurement producer; imports reviewed mappings                   |
-| Book range controls                       | Builder specifies `B-long` 1,200,001, `B-edge` 1,000,000, `B-short` 999,999, `B-unknown` absent and `B-characters` without words. Six discovery consumers fail at word admission before enumeration in the old run; newest run fails earlier in shared setup. Separate character 1,400,000 producer and crossed/unknown measurement controls remain missing; edition pages never fill work words                                                                                                                                                                 | Semantic shared builder/definitions                                                |
+| Genuine words                             | Released Book `schema:wordCount` maps to P6570 and admits a closed integer amount plus unit 1/min 0; `schema:keywords` and `wdt:P7937` Concept facet are released. The exact-quantity primitive and released properties do not establish admitted facts, genuine whole-holder measurements, provider support or numeric-index exactness. Controlled builder amounts are editorial assertions; producer declarations and holder/language/version association remain missing                                                                                          | Semantic release/measurement producer; imports reviewed mappings                   |
+| Book range controls                       | Builder specifies `B-long` 1,200,001, `B-edge` 1,000,000, `B-short` 999,999, `B-unknown` absent and `B-characters` without words. The old environment-qualified run's six discovery consumers failed at word admission before enumeration; newest run fails earlier in shared setup. Separate character 1,400,000 producer and crossed/unknown measurement controls remain missing; edition pages never fill work words                                                                                                                                 | Semantic shared builder/definitions                                                |
 | Form/tag controls                         | Actual builder creates public scheme/Concept receipts and selects `FORM = wdt:P7937`, `LN`/`HAREM` actual created IDs. `B-long`/`B-edge`/`B-characters` both; `B-short` form only; `B-unknown` harem/unknown form; alternate-form `B-tag-only`; `B-form-only` no harem. Complete Book group/discovery still fails word admission; logical names are never IDs                                                                                                                                                                                                    | Semantic definitions/Concept receipts; imports reviewed bindings                   |
 | Recipe controls, separate editorial input | Released recipe/diet and cook-time terms are admitted, but the fixture's required authored values are not a successful native population. Require `R-quick` vegetarian/25, `R-edge`/30, `R-slow`/31, `R-meat` nonvegetarian/20, `R-unknown` unknown diet/20, `R-cooked`/20 Alice-completed and `R-other-cooked`/20 Bob-only completed. Registration is not execution                                                                                                                                                                                             | Semantic editorial/release data; commerce completion facts                         |
-| Platform release qualifiers               | gamePlatform is released; shared platform field is a prerequisite descriptor. [Statement-grain proposal and two frozen native producer cases](../../services/kernel/src/semantic/platform-tuple-contract.md#frozen-api-evidence-and-pending-consumers) now exist. Qualifier release admission, string-filter adoption and actual consumer results remain missing. Switch/Japanese and PC/English must not imply Switch/English                                                                                                                                   | Semantic definitions/producer; imports mappings; Search consumers                  |
+| Platform release qualifiers               | gamePlatform is released; shared platform field is a prerequisite descriptor. [Statement-grain proposal and two frozen native producer cases](../../services/kernel/src/semantic/platform-tuple-contract.md#frozen-api-evidence-and-pending-consumers) exist. Release/producer prerequisites do not prove an imports consumer. Switch/Japanese and PC/English must not imply Switch/English                                                                                                                                                                                                    | Semantic definitions/producer; imports mappings; Search consumers                  |
 | Personal/source/privacy controls          | Bundled libraryProfiles and type bindings now exist; this does not supply historical accepting releases or native consumers. [Registered Library population extension](../../services/kernel/test/library/support/released-library-population.md) and [helper](../../services/kernel/test/library/support/released-library-population.ts) name state/label/session/holding and curated controls. No native pass is credited here. Empty shell, read-only bearer, historical profiles, published dynamic/Zone and privacy producers remain explicit prerequisites | Commerce population; Semantic profiles/Zone; Accounts authority; Search disclosure |
 
 Genuine word and character scopes remain separate: no pages, characters, translated estimate, reading duration or
@@ -267,11 +275,17 @@ unused. Native Auth hosts were closed between the released and importer groups. 
 failed at `Collection exposure setup failed: 403` before importer SQLite opened; its log is
 `.temp/goal/checks/worker-check-2026-10-28T19-26-21.691Z-0029a0f9.log`.
 
-The Open Library edition is a separate `bf:Instance`; unsupported native `number_of_pages` stays unknown.
-The runtime lacks `identifierLookup`, so its `schema:exampleOfWork` candidate remains `somevalue`, never a
-client-injected work ID. Bangumi observed manga metadata and separate ordinary novel-tag controls establish
-non-inference only. No imported genuine words, resolved four-provider release identities, reviewed classification
-mapping or complete import-to-discovery capability is established.
+The Open Library edition is a separate `bf:Instance`; unsupported native `number_of_pages` stays unknown. The
+default importer now has bounded own-reference refresh: it point-reads relation keys through its configured source
+alias, records a bounded signature, and replans unchanged input when that signature changes. This repairs the prior
+permanent-unknown assumption in code, but the native attempt reached the property-only candidate page and failed
+to expose the resolved candidate; resolved candidate acceptance/adoption, old history, stable replay and grant
+denial remain unproved. The authorized next proof uses separate real known-target/unresolved-history pages,
+retrieved-candidate adoption/head and bounded real links relay, with no observer-side fallback. The immutable
+old-bootstrap regression is still undelivered. No client-injected work ID is allowed. Bangumi observed manga
+metadata and separate ordinary novel-tag controls establish non-inference only. No imported genuine words,
+resolved four-provider release identities, reviewed classification mapping or complete import-to-discovery
+capability is established.
 
 [Source record attribution](../../services/kernel/src/semantic/source-record-attribution-contract.md) owns a closed
 metadata specification and `GET /v1/subjects/{id}` → `subject.sourceRecords` projection. The native runtime
@@ -369,27 +383,37 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   is registered but has no execution receipt.
 - **CLI Auth and lifecycle:** the exact native test is
   `the real CLI account-key and public-write journey is frozen against native Auth and Access` in
-  [`cli-native-auth.test.ts`](../../services/kernel/test/imports/cli-native-auth.test.ts). The earlier report's
-  missing-Origin denial is historical. After the preserved Auth Origin implementation, the first real signin,
-  token and import succeeded; the latest acceptance stopped when its read-only observer queried the nonexistent
-  `candidate.retracted` column. The only approved correction is a latest-anchored lateral observation of
-  `semantic.retraction`, preserving the existing selected fields, order, limit and assertions; it is not yet
-  landed or passing. Credential-outcome placement did not execute its cases because its driver environment was
-  missing. No lifecycle or revocation pass follows from the initial import.
-- **VNDB optional Latin:** [native report](../research/imports-audit/vndb-optional-latin-acceptance.md) records
-  the exact-empty source policy as adopted and the latest completed native suite at four pass/two red. The pinned
-  dump report found no exact-empty Latin row, so the accepted empty-cell case remains a schema-edge witness, not
-  observed dump replay. A later repair execution is still in progress; there is no newer completed receipt here.
-  VNDB statistics remains unbound: its existing [native scenarios](../../specs/imports-vndb-statistics.test.ts)
-  have no executable native driver, and the [metadata projection reshape](../research/imports-audit/vndb-statistics-contract.md)
-  is waiting with no native statistic pass.
+  [`cli-native-auth.test.ts`](../../services/kernel/test/imports/cli-native-auth.test.ts). The earlier missing-Origin
+  denial and observer-column failure are historical. On the corrected observer, native attempt 2 reached initial
+  import, unchanged reopen and actual 403/not-applied with prior effects and pending work preserved, then failed
+  at the fourth invocation's blanket `consumed == 57` assertion (0 passed, 1 failed, 287 assertions). The sealed
+  resume contract and existing import-session test require zero supplied newer-input consumption on resume. The
+  authorized correction is limited to fourth resume, zero input passes, exact three input bytes and result
+  diagnostics. No recovered code/key/body/receipt/final-effect pass is earned. The changed-brief retry is pending
+  capacity. Existing nine local credential-outcome cases passed with correct parent environment placement; that
+  is not native recovery proof. No lifecycle or revocation pass follows from the initial import.
+- **VNDB optional Latin:** [verification report](../research/imports-audit/vndb-optional-latin-verification.md)
+  records converter `vndb@7`: exact empty is preserved distinctly from null, omitted as a Romanized name, and
+  whitespace-only, missing, wrong-type and invalid primary values remain strict errors. The frozen native file
+  hash is `c96e29014e1d1a3fb92c9f15b2ecff1c9637048c41cb5ed3c6b6f8f91b21e7d5`; six unchanged scenarios passed,
+  484 assertions on pinned `a0cc096ce`. Exact-empty import/reopen/idempotence and NULL-to-empty digest receipts
+  passed. The pinned dump contains no exact-empty/whitespace Latin cells, so this is schema-edge handling, not
+  observed-record repair. Pure optional-Latin, language, bootstrap and citation regressions passed; the combined
+  pure command was 9 pass/1 fail because the unchanged outcome wrapper's child lacked `IMPORT_VNDB_DRIVER` before
+  conversion. Do not describe the whole VNDB/source suite as green. Root typecheck passed once; a later
+  generation-only Lix timeout produced no compiler diagnostics and no source-regression inference. VNDB statistics
+  remains unbound: its existing [native scenarios](../../specs/imports-vndb-statistics.test.ts) have no executable
+  native driver, and the [metadata projection reshape](../research/imports-audit/vndb-statistics-contract.md)
+  remains open.
 - **Measurement and qualifier status:** the owner adopted a generic admitted whole-holder declaration carrying
   holder, language and version; only supplied text requires a text digest. A source-declared total for a whole
   work, serial or publisher may qualify without full-text ingestion when that declaration meets those terms.
-  Characters, pages and time never become words. Exact quantity support and released `schema:wordCount` remain
-  distinct from admitted producer data, provider support and index exactness. Native qualifier-loss rejection is
-  held after the quantity/release work; no positive grammar or qualifier binding is claimed. The reviewed
-  statement-binding specification is registered, not a delivered runtime or native binding.
+  Characters, pages and time never become words. The shared release now contains `schema:wordCount`/P6570 with
+  closed integer amount/unit 1/min 0; this is schema/data proof, not genuine whole-holder measurement, producer
+  characters, native imports or numeric-index exactness. The exact-quantity qualifier-loss specification is ready
+  against the actual released bundle. Every real qualifier must survive on the same statement through reviewed
+  mappings/schema or whole exact measurement is withheld. No positive input or runtime binding is claimed; do not
+  add `property.exact`, invented grammar/vocabulary or a SourceRegistration option.
 - **Source-record metadata:** the closed
   [Semantic contract](../../services/kernel/src/semantic/source-record-attribution-contract.md) exists, but its
   storage, route, read/write producer and generated consumer projection are absent from the current kernel.
@@ -398,11 +422,18 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   need current-run catch-up and earlier receipt bytes remain immutable. Four reviewed scopes remain distinct.
   Do not infer metadata from aliases or URLs, use facts rights, or conflate source-record licence with summary or
   cover licences.
+- **Definitions and semantic checks:** wildcard IRI proof preserved all release, schema and recording blobs;
+  functional native proof is 39 cases/267 assertions, kernel publication 7/55 and root typecheck 0. This is
+  independent definitions/functional proof, not an import input, metadata, privacy or measurement pass; the
+  unconditional validation-policy union remains separate owner work, and the full package was not green.
 - **Growth and cleanup limits:** local counted-unit migration is pending and supplies no new global unit pass.
   The integrated 100-command server-width witness passes its STEP rule; SERIES is not proved, and the full-file
-  witness has a separate disclosure-scan failure. The imports A5 participant is registered after actual
-  coordinator/helper work and expects no remaining entries after its all-role inventory, but cleanup/ACK is not
-  delivered.
+  witness has a separate disclosure-scan failure. The A5 participant remains ready without native ACK. Actual
+  schema and pending own-reference signature inventory have no account-owned copy locator/effect-written account
+  lookup; truthful expected locator inventory is empty, not erased. The coordinator's effect-locator fence,
+  late-item and frontier rule applies if a participant has such locators. The Imports participant must still
+  recheck all roles at admission and prove durable delivery plus immutable ACK; registration proves neither and
+  does not discharge another owner's cleanup.
 
 ### Cover-native-recovery
 
@@ -546,10 +577,12 @@ Public output never reads Alice's private completion history; permitted private 
   continuation, conflicting with the useful-page contract. Owners reconcile through acceptance ownership; preserve
   frozen bytes and do not bless that behaviour in new scenarios.
 
-This refresh records the newest discovery setup failure and preserves the older environment-qualified six-pass/
-seven-red result as history; the discovery suite has no current execution pass. Bangumi launch-scope, Open Library
-field and native cover recovery slices pass within their stated boundaries. Distinct media pixels pass in a separate
-slice, while crash-plus-pixels, CLI lifecycle/revocation, VNDB optional-empty completion, VNDB statistics, positive
-source attribution, the six-surface matrix, full Imports capability and promotion remain open. No acceptance bytes
-or product behaviour changed. Only this manifest's scoped formatter and the required root typecheck are run for
-this documentation delivery; no product suite, whole-kernel check or root gate is part of this acceptance.
+The current discovery execution is run 13's setup 403: 0 pass/13 fail before importer assertions. Preserve the
+older environment-qualified six-pass/seven-red result as history. Bangumi launch-scope, Open Library field, VNDB
+optional-Latin and native cover-recovery slices pass only within their stated boundaries. Distinct media pixels
+pass separately, while crash-plus-pixels, resumed CLI effects, VNDB statistics, positive source attribution,
+producer measurements, all six surface cells, privacy obligations, full Imports capability and promotion remain
+open. The six-cell matrix above retains catalogue, curated, Everything without state, own state, mounted Zone and
+configured TypeList duties, including persona and disclosure controls; setup and registration do not close them.
+No product suite, root typecheck, whole-kernel check or root gate is part of this documentation acceptance. Its
+sole check is the scoped formatter named above.
