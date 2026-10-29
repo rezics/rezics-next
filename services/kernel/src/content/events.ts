@@ -43,7 +43,7 @@ export const CONTENT_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.content.board.created.v1': Type.Object(
-    { boardId: UUID, realmId: UUID, conceptId: UUID, actorId: UUID },
+    { boardId: UUID, realmId: Type.Union([UUID, Type.Null()]), conceptId: UUID, actorId: UUID },
     { additionalProperties: false },
   ),
   'com.rezics.content.authored-field.created.v1': Type.Object(

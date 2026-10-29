@@ -129,7 +129,7 @@ export declare const CONTENT_EVENTS: {
     }>;
     readonly 'com.rezics.content.board.created.v1': Type.TObject<{
         boardId: Type.TString;
-        realmId: Type.TString;
+        realmId: Type.TUnion<[Type.TString, Type.TNull]>;
         conceptId: Type.TString;
         actorId: Type.TString;
     }>;

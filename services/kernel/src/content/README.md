@@ -5,6 +5,19 @@ Content owns boards, threads, posts, immutable documents, media state and public
 A `BoardView` includes `realmId`, which is the containing Realm id or `null` for a board without a Realm. The field is
 output-only and comes from the board row used for disclosure.
 
+## Global boards
+
+`POST /v1/boards` creates a board in Global Context. It requires `Idempotency-Key` and the strict body
+`{ conceptId, title, purpose, visibility }`, with purpose `discussion | reviews` and visibility
+`published | protected`. It returns 201 `{ board }` using the Realm board DTO, with `realmId: null`, and the
+same problem codes as Realm board creation. The actor needs `board:create` on Global Context and `subject:read`
+on the Concept; no Realm role reaches this authority and Global Context has no board scheme. Governance holds
+the creation permission through grants. Creation checks the Concept's type and read authority directly, without
+waiting for subject-link projections. A board is placed at `newId(routeOf(conceptId))` and initialized with the
+same resource grants as a Realm board. Protected Global boards require explicit read and write grants.
+There is no uniqueness by concept or purpose; each new key creates a separate board and a replay returns its board.
+`POST /v1/realms/{realmId}/boards` retains its Realm scheme and uniqueness rules.
+
 ## Notifications
 
 Content owns minimal in-app notices for `reply`, `mention` and `moderation_decision`, using the names in accounts'
@@ -94,6 +107,8 @@ The executable API contract is `specs/content-notification-outcomes.test.ts`, wi
 implementation exist. The specification verifier checks this intentional red state without substituting a driver.
 
 ## Reviews
+
+Global Context may hold several reviews boards, and a Realm one.
 
 A review is a thread of kind `review` on a reviews board, with exactly one target subject. Its opening post may
 cite the author's current vote by question, units and revision. Each citation is stored on an immutable post
@@ -422,6 +437,7 @@ A malformed media ID list is a 400 `invalid_request`. Any well-formed reference 
 | Subject reaction merge            | Process one page of source slots and update target slots/count events.                                                          | Constant rows/statements per fixed page; linear in changed slots across pages.                                                 | `test/content/subject-reaction-merge.test.ts`: “one merge page”                                                                                                                                                                                                                                                                |
 | Realm board listing               | Keyset-read boards and native Realm/member/grant disclosure.                                                                    | Linear rows in fixed limit; constant statements and logarithmic blocks.                                                        | `test/content/realm-boards.test.ts`: “Realm board keyset listing stays bounded as other Realms add boards”                                                                                                                                                                                                                     |
 | Protected Realm thread read       | Resolve membership/access and disclose bounded thread ancestry.                                                                 | Constant rows/statements for fixed ancestry; logarithmic blocks in grant/member/board history.                                 | `test/content/realm-boards.test.ts`: “Protected Realm member thread read”                                                                                                                                                                                                                                                      |
+| Global board creation             | Read Concept type, read authority and Global anchor; insert the board, grants and command state in the Concept partition.       | O(1) statements and rows, independent of boards, Concepts and threads.                                                         | `test/content/global-board-create-http.test.ts`: “a governance account creates published and protected Global boards over HTTP and authors post reviews and discussions on them”                                                                                                                                               |
 | Concept board creation            | Read concept/Realm and insert board with Access and command state.                                                              | Constant rows/statements; logarithmic blocks; known defect, owner fix pending.                                                 | `test/content/growth-boards.test.ts`: “Concept board creation stays within its bound as boards grow”                                                                                                                                                                                                                           |
 | Realm board point read            | Resolve one board by its Realm/concept keys.                                                                                    | Constant rows/statements; logarithmic blocks in board history.                                                                 | Missing: no native growth check covers this point read.                                                                                                                                                                                                                                                                        |
 | Media reserve                     | Validate bounded ancestry; read/write reservation/object keys, Access and command.                                              | Constant rows/statements; logarithmic blocks in uploader history.                                                              | `test/content/growth-media.test.ts`: “Media reserve stays within its bound as u grows”                                                                                                                                                                                                                                         |

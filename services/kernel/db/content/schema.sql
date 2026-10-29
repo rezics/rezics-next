@@ -1455,13 +1455,6 @@ CREATE INDEX author_item_post_page_idx ON content.author_item USING btree (route
 
 
 --
--- Name: board_one_global_reviews_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE UNIQUE INDEX board_one_global_reviews_idx ON content.board USING btree (purpose) WHERE ((realm_id IS NULL) AND (purpose = 'reviews'::text));
-
-
---
 -- Name: board_one_realm_reviews_idx; Type: INDEX; Schema: content; Owner: -
 --
 

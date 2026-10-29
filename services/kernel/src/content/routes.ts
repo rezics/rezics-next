@@ -173,6 +173,16 @@ const boardCreateInput = t.Object(
   { additionalProperties: false },
 );
 const boardCreateBody = strictContentSchema(boardCreateInput);
+const globalBoardCreateBody = strictContentSchema(
+  t.Object(
+    {
+      ...boardCreateInput.properties,
+      visibility: t.Union([t.Literal('published'), t.Literal('protected')]),
+      purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
+    },
+    { additionalProperties: false },
+  ),
+);
 const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
 const sitemapQuery = strictContentSchema(SitemapQuerySchema);
@@ -359,6 +369,47 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     ),
     dependencies,
   )
+    .post(
+      '/v1/boards',
+      {
+        parse: [parseBody, 'json'],
+        transform: rejectOversized,
+        headers: commandHeaders,
+        body: globalBoardCreateBody,
+        response: {
+          201: withHeaders(boardResponse, { ...sessionHeader, location: t.String() }),
+          ...writeFailures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          operationId: 'board.create_global',
+          'x-exposure': 'public',
+          'x-action': 'board:create',
+          'x-resource-types': ['content.board'],
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ actor, body, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const context = requestContext(request, job.deadline);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const result = await createBoard(dependencies, actor, { realmId: null, ...body }, context);
+            const board = await readRealmBoard(dependencies, result.value.boardId, {
+              actor,
+              deadline: job.deadline,
+            });
+            if (!board.value) throw new ProblemError('not_found');
+            session.record(result);
+            session.record(sessionComponent(board.anchor));
+            set.status = 201;
+            set.headers.location = `/v1/boards/${result.value.boardId}`;
+            return { board: board.value };
+          }),
+        );
+      },
+    )
     .post(
       '/v1/realms/:realmId/boards',
       {
