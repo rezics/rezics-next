@@ -2360,8 +2360,8 @@ test('a multi-slot reservation blocks new runs when existing work already fills 
     a: { available: 0, slots: 4, cpuQuotaPercent: 800 },
     b: {
       available: 20e9,
-      memoryMax: 8 * 2 ** 30,
-      memoryMaxGiB: 8,
+      memoryMax: 6 * 2 ** 30,
+      memoryMaxGiB: 6,
       slots: 4,
       cpuQuotaPercent: 800,
       hang: true,
@@ -2465,8 +2465,8 @@ test('a multi-slot waiter that stops waiting releases its reservation', async ()
   const { env, events } = scenario({
     a: {
       available: 20e9,
-      memoryMax: 8 * 2 ** 30,
-      memoryMaxGiB: 8,
+      memoryMax: 6 * 2 ** 30,
+      memoryMaxGiB: 6,
       slots: 4,
       hang: true,
       hangRuns: 1,
