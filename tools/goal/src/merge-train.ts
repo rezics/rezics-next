@@ -797,6 +797,8 @@ export type TrainOptions = {
   sink: GateOutcomeSink;
   derivedFiles?: DerivedFile[];
   runGate?: GateRunner;
+  /** Real launch smoke seam; production uses the bounded candidate smoke after control-plane checks. */
+  runLaunchSmoke?: GateRunner;
   gateIdentity?: string;
   mainBranch?: string;
   integrationBranch?: string;
@@ -2175,7 +2177,7 @@ export class MergeTrain {
               [['bun', 'tools/goal/scripts/launch-smoke.ts']],
               trainTree,
               logPath,
-              gateRunner(300_000),
+              o.runLaunchSmoke ?? gateRunner(300_000),
             );
             if (!smoke.passed) {
               result.firstFailure = firstFailure(smoke.output);

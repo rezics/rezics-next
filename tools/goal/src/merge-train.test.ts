@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
@@ -8,6 +8,8 @@ import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { firstFailure, gateRunner, git } from './merge.ts';
+import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { WorkerStore } from './store.ts';
 import { repository } from './test-support.ts';
 
 function setup() {
@@ -247,4 +249,126 @@ test('a gate does not inherit the identity of the process that drives the train'
     if (saved.manager === undefined) delete process.env.GOAL_MANAGER; else process.env.GOAL_MANAGER = saved.manager;
     if (saved.thread === undefined) delete process.env.CODEX_THREAD_ID; else process.env.CODEX_THREAD_ID = saved.thread;
   }
+});
+
+function controlPlaneLanding(path: string) {
+  const s = setup();
+  mkdirSync(join(s.main, path, '..'), { recursive: true });
+  writeFileSync(join(s.main, path), 'base\n');
+  git(s.main, 'add', '--', path);
+  git(s.main, 'commit', '-m', 'Control-plane base');
+  git(s.main, 'branch', 'dev', 'main');
+  const request = s.branch('alpha', path, 'candidate\n');
+  mkdirSync(s.options.stateDirectory, { recursive: true });
+  const goalDb = openDb(join(s.options.stateDirectory, 'goal.sqlite'));
+  const store = new WorkerStore(goalDb);
+  const brief = parseBrief(
+    `---
+goal: control-plane
+kind: implementation
+paths: [${path}]
+riskAreas: []
+acceptance:
+  command: ["true"]
+  tests: [smoke]
+  failing: true
+estimate:
+  lines: 1
+  files: 1
+criticalPath: false
+waiting: []
+---
+Update the control plane.
+`,
+    readRiskOwnership(join(import.meta.dir, '../risk-areas.json')),
+  );
+  store.createTask(
+    brief,
+    {
+      briefPath: join(s.options.stateDirectory, 'alpha.md'),
+      worktree: request.worktree,
+      branch: request.branch,
+      base: git(s.main, 'rev-parse', 'main'),
+    },
+    'implementation',
+    request.taskId,
+  );
+  s.queue.enqueue(request);
+  return { ...s, request, goalDb };
+}
+
+describe('control-plane launch smoke gate', () => {
+  test('runs after control-plane checks for a launch-path candidate', async () => {
+    const s = controlPlaneLanding('tools/goal/src/launch.ts');
+    try {
+      const order: string[] = [];
+      await new MergeTrain({
+        ...s.options,
+        integrationBranch: 'dev',
+        runGate: async (command, cwd) => {
+          order.push(`check:${command.join(' ')}`);
+          expect(existsSync(join(cwd, 'tools/goal/src/launch.ts'))).toBe(true);
+          return { passed: true, output: '', timedOut: false };
+        },
+        runLaunchSmoke: async (command, cwd) => {
+          order.push('smoke');
+          expect(command).toEqual(['bun', 'tools/goal/scripts/launch-smoke.ts']);
+          expect(readFileSync(join(cwd, 'tools/goal/src/launch.ts'), 'utf8')).toBe('candidate\n');
+          return { passed: true, output: 'start: passed\nwake: passed\nsuccess: passed\n', timedOut: false };
+        },
+      }).run();
+      expect(order.at(-1)).toBe('smoke');
+      expect(order.filter((entry) => entry.startsWith('check:')).length).toBeGreaterThan(1);
+      expect(s.outcomes[0]?.passed).toBe(true);
+      expect(readFileSync(join(s.main, 'tools/goal/src/launch.ts'), 'utf8')).toBe('candidate\n');
+    } finally {
+      s.goalDb.close();
+      s.close();
+    }
+  });
+
+  test('does not run the smoke for a control-plane candidate outside the launch path', async () => {
+    const s = controlPlaneLanding('tools/goal/src/other.ts');
+    try {
+      let smokeRuns = 0;
+      await new MergeTrain({
+        ...s.options,
+        integrationBranch: 'dev',
+        runGate: async () => ({ passed: true, output: '', timedOut: false }),
+        runLaunchSmoke: async () => {
+          smokeRuns++;
+          return { passed: true, output: '', timedOut: false };
+        },
+      }).run();
+      expect(smokeRuns).toBe(0);
+      expect(s.outcomes[0]?.passed).toBe(true);
+      expect(readFileSync(join(s.main, 'tools/goal/src/other.ts'), 'utf8')).toBe('candidate\n');
+    } finally {
+      s.goalDb.close();
+      s.close();
+    }
+  });
+
+  test('returns a smoke failure with its step output and does not land the candidate', async () => {
+    const s = controlPlaneLanding('tools/goal/src/job.ts');
+    try {
+      await new MergeTrain({
+        ...s.options,
+        integrationBranch: 'dev',
+        runGate: async () => ({ passed: true, output: '', timedOut: false }),
+        runLaunchSmoke: async () => ({
+          passed: false,
+          output: 'start: passed\nwake: failed: resume session mismatch\n',
+          timedOut: false,
+        }),
+      }).run();
+      expect(s.outcomes[0]?.passed).toBe(false);
+      expect(s.outcomes[0]?.stage).toBe('gate');
+      expect(s.outcomes[0]?.firstFailure?.assertion).toContain('wake: failed: resume session mismatch');
+      expect(existsSync(join(s.main, 'tools/goal/src/job.ts'))).toBe(false);
+    } finally {
+      s.goalDb.close();
+      s.close();
+    }
+  });
 });
