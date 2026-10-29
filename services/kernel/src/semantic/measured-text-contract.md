@@ -189,8 +189,9 @@ population/state support. The test's grammar assertion deliberately exposes the
 missing released qualifier admission without pretending that it executes that query.
 There is no second fixture/search engine or new endpoint in this proposal.
 
-Release/export gaps: count properties, allowed qualifiers and facets are absent
-or unadopted; actual measurement instants need the string term above; exact bounds
+Release/export gaps: bundled Book `schema:wordCount` already has the exact integer,
+minimum-zero, unit-1 value schema. It has no measurement qualifiers; edition admission,
+character property and helper vocabulary remain missing or unadopted; actual measurement instants need the string term above; exact bounds
 are supported by the delivered shared primitive. Data gaps: no trusted native million-word Book batch,
 provider import record or production Concept binding is supplied. Runtime gaps:
 qualifier-safe conversion, indexed complete associations, disclosure dependencies

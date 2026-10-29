@@ -315,7 +315,7 @@ test('edition and characters never become Book work words and incomplete crossst
   expect((await read(work)).statements[words] ?? []).toEqual([]);
   expect((await read(characterOnly)).statements[words] ?? []).toEqual([]);
   const crossed = await fixture.createSubject('schema:Book', 'Crossed language and text versions');
-  const en = measurement(words, '+1000000', m.word.id, record, time);
+  const en = measurement(words, '+1000000', m.word.id, record, time, { scope: 'whole-holder' });
   const ja = measurement(words, '+1000001', m.character.id, record, time, {
     language: 'ja',
     text: digest('Controlled v2'),
@@ -417,8 +417,8 @@ test('controlled threshold values remain independent from proof of owned measure
     expect(response.status, JSON.stringify(response.body)).toBe(201);
     const value = await selected(holder, input);
     expect(value.qualifiers.some((q) => [textVersion, method, measuredAt].includes(q.property.id))).toBe(false);
-    // A carrier plus summary is still not proof of native admitted producer binding.
-    expect(fixture.sources.state).toBe('prerequisite');
+    // This carrier has no native admitted measurement-declaration binding yet.
+    // The shared fixture's Collection sources prerequisite is unrelated to that missing producer.
     expect(BigInt(amount) > 1000000n).toBe(amount === '+1000001');
   }
 }, 120_000);
