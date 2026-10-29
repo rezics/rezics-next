@@ -624,9 +624,33 @@ export class Importer {
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
     }
+    const retainedCandidates = new Set<Candidate>();
+    const retainedProposals = new Set<BatchCommand>();
+    for (const candidate of candidates) {
+      if (
+        omissions.some((o) => o.field_group === candidate.field_group) ||
+        (skipCover && candidate.field_group === 'cover')
+      )
+        continue;
+      const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
+      if (prior.op !== 'propose') throw new Error('Owned candidate lacks its actual proposal');
+      const unchanged = conversion?.proposals.find(
+        (command) =>
+          command.op === 'propose' &&
+          command.source.field_group === candidate.field_group &&
+          command.subject === candidate.subject &&
+          isDeepStrictEqual(command.statement, prior.statement) &&
+          !retainedProposals.has(command),
+      );
+      if (unchanged) {
+        retainedCandidates.add(candidate);
+        retainedProposals.add(unchanged);
+      }
+    }
     const commands: BatchCommand[] = [];
     for (const candidate of candidates) {
       if (
+        retainedCandidates.has(candidate) ||
         omissions.some((o) => o.field_group === candidate.field_group) ||
         (skipCover && candidate.field_group === 'cover')
       )
@@ -651,6 +675,7 @@ export class Importer {
     }
     for (const command of conversion?.proposals ?? []) {
       if (
+        retainedProposals.has(command) ||
         command.op === 'create' ||
         omissions.some((o) => o.field_group === command.source.field_group) ||
         (skipCover && command.source.field_group === 'cover')
