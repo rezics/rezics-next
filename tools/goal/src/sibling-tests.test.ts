@@ -55,6 +55,41 @@ test('remote check contract', () => expect(readFileSync('scripts/remote-check.ts
   }
 }, 60_000);
 
+test('a landing runs its acceptance beside the sibling test on the merged candidate', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.advanceDev('scripts/remote-check.ts', 'candidate');
+    h.advanceDev(
+      'scripts/remote-check.test.ts',
+      `import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+test('remote check candidate', () => expect(readFileSync('scripts/remote-check.ts', 'utf8')).toBe('candidate'));
+`,
+    );
+    h.settings.affectedTests = [];
+    const acceptanceLog = join(h.settings.stateDirectory, 'acceptance.json');
+    const task = h.dispatch('scripts/remote-check.ts', [], [
+      'bun',
+      '-e',
+      `const fs = require('node:fs'); fs.writeFileSync(${JSON.stringify(acceptanceLog)}, JSON.stringify({ cwd: process.cwd(), source: fs.readFileSync('scripts/remote-check.ts', 'utf8') }));`,
+    ]);
+    writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({
+      file: 'scripts/remote-check.ts',
+      content: 'candidate',
+    }));
+    await h.start(task);
+    await h.train(undefined, false);
+    expect(h.outcomes[0]!.passed).toBe(true);
+    expect(JSON.parse(readFileSync(acceptanceLog, 'utf8'))).toEqual({
+      cwd: expect.stringContaining('train-'),
+      source: 'candidate',
+    });
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
 test('a sibling failure also present on the base is reported as pre-existing', async () => {
   const h = integrationHarness();
   try {
