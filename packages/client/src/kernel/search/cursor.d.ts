@@ -16,5 +16,5 @@ export type SearchCursorResult = {
 export declare function encodeSearchCursor(ring: KeyRing, binding: SearchCursorBinding, cursor: {
     generation: number;
     after: readonly SearchSortValue[];
-}, now?: number): string;
-export declare function decodeSearchCursor(ring: KeyRing, binding: SearchCursorBinding, token: string, now?: number): SearchCursorResult;
+}, now?: number): Promise<string>;
+export declare function decodeSearchCursor(ring: KeyRing, binding: SearchCursorBinding, token: string, now?: number): Promise<SearchCursorResult>;

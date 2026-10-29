@@ -20,5 +20,5 @@ export declare function encodeRatingCursor(ring: KeyRing, binding: SearchCursorB
     generation: number;
     phase: RatingPhase;
     after: readonly SearchSortValue[];
-}, now?: number): string;
-export declare function decodeRatingCursor(ring: KeyRing, binding: SearchCursorBinding, context: RatingCursorContext, token: string, now?: number): RatingCursorResult;
+}, now?: number): Promise<string>;
+export declare function decodeRatingCursor(ring: KeyRing, binding: SearchCursorBinding, context: RatingCursorContext, token: string, now?: number): Promise<RatingCursorResult>;

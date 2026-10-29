@@ -6,10 +6,26 @@ export declare const ERASURE_PARTICIPANTS: Readonly<{
 }>;
 export declare const ERASURE_PARTICIPANT_VERSION = 1;
 export type ErasureOutcome = 'erased' | 'none';
+export type RetentionException = {
+    store: string;
+    fields: readonly string[];
+    purpose: string;
+    expiresAt: Date;
+};
+type StoredException = Omit<RetentionException, 'expiresAt'> & {
+    expiresAt: string;
+};
 export type ErasureStatus = {
+    state: 'pending' | 'retention-outstanding' | 'complete';
     version: number;
     at: string;
-    participants: Record<string, ErasureOutcome | 'pending'>;
+    participants: Record<string, {
+        outcome: ErasureOutcome | 'pending';
+        retained: (StoredException & {
+            resolvedAt: string | null;
+            overdue: boolean;
+        })[];
+    }>;
     completedAt: string | null;
 };
 /** Internal platform work, called only after the owner's final purge transaction commits.
@@ -22,10 +38,25 @@ export declare function acknowledgeErasure(deps: {
     accountId: string;
     participant: string;
     outcome: ErasureOutcome;
+    retained?: readonly RetentionException[];
 }): Promise<import("../command/command.ts").CommandOutcome<{
     accountId: string;
     participant: string;
     outcome: ErasureOutcome;
 }>>;
+/** The owner calls this in a separate platform command after its expiry purge commits. */
+export declare function resolveRetention(deps: {
+    pool: Pool;
+    clock?: () => Date;
+}, input: {
+    accountId: string;
+    participant: string;
+    store: string;
+}): Promise<import("../command/command.ts").CommandOutcome<{
+    accountId: string;
+    participant: string;
+    store: string;
+}>>;
 /** Internal/test read. One snapshot covers both the record and its bounded acknowledgement range. */
 export declare function readErasureStatus(client: AccessClient, accountId: string): Promise<ErasureStatus | null>;
+export {};

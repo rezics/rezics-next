@@ -11,7 +11,12 @@ test('every workspace without SQL content mappers selects the measured Bun check
     const manifest = await Bun.file(resolve(root, path)).json();
     const config = await Bun.file(resolve(root, path, '../tsconfig.json')).text();
     if (config.includes('"contentMappers"')) {
-      expect(manifest.scripts.typecheck, path).toContain('tsc --noEmit --runExternalCode');
+      // A workspace may run the same tsc through its own scripts/typecheck.ts (the kernel places it on a check host).
+      const script: string = manifest.scripts.typecheck;
+      const typecheck = script.startsWith('bun scripts/typecheck.ts')
+        ? await Bun.file(resolve(root, path, '../scripts/typecheck.ts')).text()
+        : script;
+      expect(typecheck.replace(/['",]/g, '').replace(/\s+/g, ' '), path).toContain('tsc --noEmit --runExternalCode');
       mapped += 1;
     } else {
       expect(manifest.scripts.typecheck, path).toContain('bun check --no-script -p tsconfig.json');

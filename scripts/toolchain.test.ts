@@ -180,7 +180,12 @@ test('bun check preserves TypeScript diagnostics, strict options and imported ty
 for (const workspace of ['services/kernel', 'services/auth']) {
   test(`${workspace} retains tsc because Bun cannot run its SQL content mapper`, async () => {
     const manifest = await Bun.file(join(root, workspace, 'package.json')).json();
-    expect(manifest.scripts.typecheck).toContain('tsc --noEmit --runExternalCode');
+    // The kernel's script places itself on a check host and runs the same tsc from scripts/typecheck.ts.
+    const script: string = manifest.scripts.typecheck;
+    const typecheck = script.startsWith('bun scripts/typecheck.ts')
+      ? await Bun.file(join(root, workspace, 'scripts/typecheck.ts')).text()
+      : script;
+    expect(typecheck.replace(/['",]/g, '').replace(/\s+/g, ' ')).toContain('tsc --noEmit --runExternalCode');
     const result = run([
       bun,
       'check',
