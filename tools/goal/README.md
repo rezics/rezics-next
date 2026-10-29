@@ -258,6 +258,9 @@ The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `so
 `backgroundTerminalMaxTimeoutMs`. Codex worker launches enable unified exec and pass this timeout as
 `background_terminal_max_timeout`, the maximum empty `write_stdin` wait; its default is 7,200,000 ms, matching the
 two-hour limit of the longest worker class. Workers run checks with `bun scripts/worker-check.ts -- <command...>`.
+Goal writes the current priority to `.temp/goal/task-priority` in the task worktree at attempt start and whenever
+`goal priority <task> critical|normal` changes it. Performance's `worker-check` reads this file and passes
+`REMOTE_CHECK_PRIORITY=critical` for remaining checks when its contents are `critical`.
 It writes command output to `.temp/goal/checks/`, records the check duration for the worker deadline and silence monitor,
 then prints the exit status, a short failure summary when needed, and the log path. See the
 [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) for unified exec and

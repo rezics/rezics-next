@@ -116,6 +116,10 @@ export async function runWorkerCommand(
         if (!(error instanceof BriefContractUnchangedError)) throw error;
         print(error.message);
       }
+    } else if (command === 'priority') {
+      if (!arg || argv.length !== 2 || !['critical', 'normal'].includes(argv[1]!))
+        throw new Error('usage: priority <task> critical|normal');
+      tasks.setPriority(arg, argv[1] as 'critical' | 'normal');
     } else if (command === 'stop' || command === 'cancel' || command === 'consult') {
       if (!arg || argv.length !== 1) throw new Error(`usage: ${command} <task>`);
       if (command === 'stop') await tasks.stop(arg);
