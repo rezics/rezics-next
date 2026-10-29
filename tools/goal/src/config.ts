@@ -251,6 +251,10 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       inboxDirectory: path(integration.inboxDirectory, join(stateDirectory, 'inboxes')),
       batchSize: positiveInteger(integration.batchSize, 'batchSize'),
       batchAcceptanceConcurrency: positiveInteger(integration.batchAcceptanceConcurrency, 'batchAcceptanceConcurrency'),
+      devLandingChecks: (() => {
+        if (typeof integration.devLandingChecks !== 'boolean') throw new Error('devLandingChecks must be a boolean');
+        return integration.devLandingChecks;
+      })(),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
       tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),

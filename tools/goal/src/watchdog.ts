@@ -403,9 +403,9 @@ function head(checkout: string, branch: string): string | undefined {
 
 /** The violations present now, keyed so that one violation is reported once per period. */
 export function violations(
-  store: Pick<WorkerStore, 'tasks' | 'attempt' | 'retryIntents'>,
+  store: Pick<WorkerStore, 'attempt' | 'retryIntents'> & Partial<Pick<WorkerStore, 'tasks' | 'activeTasks'>>,
   now: number,
-  tasks = store.tasks(),
+  tasks = store.activeTasks?.() ?? store.tasks?.() ?? [],
   stateDirectory?: string,
 ): { key: string; summary: string }[] {
   const found: { key: string; summary: string }[] = [];
@@ -439,7 +439,8 @@ export function violations(
 
 /** Report violations to the supermanager; returns how many were delivered. */
 export function watch(
-  store: Pick<WorkerStore, 'tasks' | 'attempt' | 'retryIntents' | 'attemptsEndedBetween'>,
+  store: Pick<WorkerStore, 'attempt' | 'retryIntents' | 'attemptsEndedBetween'> &
+    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks'>>,
   checkout: string,
   branches: { stabilize: string; integration: string },
   stateDirectory: string,
@@ -462,7 +463,7 @@ export function watch(
   } catch {
     /* Alert again rather than never. */
   }
-  const tasks = store.tasks();
+  const tasks = store.activeTasks?.() ?? store.tasks?.() ?? [];
   const longAttempts = longAttemptIncidents(store, tasks, now, limitFor);
   const found = [
     ...violations(store, now, tasks, stateDirectory),
