@@ -2208,14 +2208,6 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         );
         return json({ success: response.ok }, response.status, response.headers.getSetCookie());
       } catch (error) {
-        if (new URL(request.url).pathname === '/consent') {
-          console.error('Consent reduction diagnostic', {
-            class: error instanceof Error ? error.constructor.name : typeof error,
-            message: error instanceof Error ? error.message : String(error),
-            status: error instanceof Denied ? error.status : undefined,
-            stack: error instanceof Error ? error.stack : undefined,
-          });
-        }
         if (error instanceof SuspendedSignIn) return json({ error: 'account_suspended' }, 403);
         if (error instanceof StepUpRequired)
           return json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);

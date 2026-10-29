@@ -10,7 +10,7 @@ import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { COMMITTED_CONTINUATION_ACTIONS } from '../../src/access/committed-continuations.ts';
@@ -149,8 +149,14 @@ async function openWorld(
   auth.on('connect', instrument('auth'));
   for (const pool of [facts, auth, proofs]) pool.on('error', () => {});
   let service: AuthService | undefined;
-  // The mounted routes declare their own actions; later entries only add what no route declares.
-  const actions = new Map([...LIFECYCLE_ACTIONS, ...COMMITTED_CONTINUATION_ACTIONS, ...productionActions()]);
+  // Native bindings and restored operator management must resolve the same roles as Access.
+  // Keep internal metadata authoritative, including actions without mounted routes.
+  const actions = new Map([
+    ...LIFECYCLE_ACTIONS,
+    ...COMMITTED_CONTINUATION_ACTIONS,
+    ...productionActions(),
+    ...INTERNAL_ACTIONS,
+  ]);
   for (const scope of [...registeredScopes, managementAction])
     if (!actions.has(scope)) actions.set(scope, { anonymous: false });
   const access = createAccess({
