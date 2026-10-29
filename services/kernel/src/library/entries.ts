@@ -363,7 +363,7 @@ export function createEntryCommands(config: Dependencies) {
             transaction_id: current.transactionId,
             incarnation_id: incarnation,
           });
-          if (stamped.length !== 1) throw new LibraryEntryLifecycleConflictError('stale');
+          if (stamped?.incarnationId !== incarnation) throw new LibraryEntryLifecycleConflictError('stale');
         }
         await allocateOwnerWriteSeq(tx, owner.accountId);
         const removed = await retainEntryDeletion(
