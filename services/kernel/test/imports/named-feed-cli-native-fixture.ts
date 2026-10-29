@@ -1,4 +1,4 @@
-import { expect } from 'bun:test';
+import { expect, spyOn } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
@@ -119,6 +119,7 @@ export async function openNamedFeeds() {
       await writeFile(dump, bytes, { mode: 0o600 });
       let consumed = 0;
       const start = exchanges.length;
+      let restoreConversion = () => {};
       const result = await runImportCli(
         [
           '--source',
@@ -160,9 +161,16 @@ export async function openNamedFeeds() {
               expect(registration.sourceKind).toBe('openlibrary');
               // Observe the converter actually called by this CLI, preserving its output unchanged.
               const convert = registration.convert;
-              registration.convert = (input, context) => {
+              const conversion = spyOn(registration, 'convert').mockImplementation((input, context) => {
                 const output = convert(input, context);
-                const metadata = Reflect.get(output, 'sourceMetadata');
+                const metadata = output.sourceMetadata;
+                if (
+                  typeof metadata !== 'object' ||
+                  metadata === null ||
+                  !('bibliographyPermission' in metadata) ||
+                  !('recordUrl' in metadata)
+                )
+                  throw new Error('Missing native Open Library bibliographic metadata');
                 expect(metadata.bibliographyPermission).toBe('CC0-1.0');
                 expect(metadata.recordUrl).toBe(`https://openlibrary.org${input.external_id}`);
                 bibliographies.push({
@@ -172,7 +180,8 @@ export async function openNamedFeeds() {
                   url: metadata.recordUrl,
                 });
                 return output;
-              };
+              });
+              restoreConversion = () => conversion.mockRestore();
             },
           },
           fetch: (async (input: Request | string | URL, init?: RequestInit) => {
@@ -216,7 +225,7 @@ export async function openNamedFeeds() {
             return response;
           }) as typeof fetch,
         },
-      );
+      ).finally(() => restoreConversion());
       expect(result.openHandles, JSON.stringify(result)).toBe(0);
       expect((await stat(state)).mode & 0o777).toBe(0o600);
       return { ...result, exchanges: exchanges.slice(start), consumed, bytes };
