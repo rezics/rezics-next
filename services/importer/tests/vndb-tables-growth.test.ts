@@ -19,8 +19,8 @@ const GROWING_TABLES = ['vndb_table_runs', 'vndb_table_rows', 'vndb_table_spool'
 const SCALES = [1, 8, 64] as const;
 const BACKGROUND_ROWS_PER_SOURCE = 250;
 type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
-const check: CountedCheck<CountedValues> = {
-  read: (counts) => counts,
+const check: CountedCheck = {
+  read: (counts) => counts as CountedValues,
   bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
   slack: {
     'sqlite returned rows': { absolute: 2, relative: 0.1 },

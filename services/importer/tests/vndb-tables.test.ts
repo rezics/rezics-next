@@ -13,19 +13,22 @@ const source = 'vndb';
 const encode = (value: string) => new TextEncoder().encode(value);
 type SqliteCounts = ReturnType<ReturnType<typeof sqliteEvidence>['finish']>;
 type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
-const fixedCheck: CountedCheck<SqliteCounts> = {
-  read: (raw) => ({ 'sqlite returned rows': raw.rows, 'sqlite statements': raw.statements }),
+const fixedCheck: CountedCheck = {
+  read: (value) => {
+    const raw = value as SqliteCounts;
+    return { 'sqlite returned rows': raw.rows, 'sqlite statements': raw.statements };
+  },
   bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
   slack: {
     'sqlite returned rows': { absolute: 2, relative: 0.1 },
     'sqlite statements': { absolute: 0, relative: 0 },
   },
 };
-const stageCheck: CountedCheck<SqliteCounts> = {
+const stageCheck: CountedCheck = {
   ...fixedCheck,
   bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'linear' },
 };
-const payloadCheck: CountedCheck<SqliteCounts> = {
+const payloadCheck: CountedCheck = {
   ...fixedCheck,
   bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'constant' },
 };
