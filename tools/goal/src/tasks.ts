@@ -454,6 +454,8 @@ export class WorkerTasks {
     try {
       const task = this.store.task(taskId);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
+      // Persist a held task's amendment under its lease before any capacity wait.
+      if (task.state === 'held' && reshaped) return { hold: true, first: startsFirst(task) };
       if (task.currentAttempt > 0 && reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
         return { hold: true, first: startsFirst(task) };
       const next = { ...task, brief: reshaped?.brief ?? task.brief, taskClass: reshaped?.taskClass ?? task.taskClass };
@@ -472,7 +474,7 @@ export class WorkerTasks {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
     if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId);
-    const lease = leased
+    let lease = leased
       ? undefined
       : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
@@ -498,9 +500,26 @@ export class WorkerTasks {
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
       if (!nextBrief.acceptance.command.length)
         throw new Error('Imported attempts need a dispatchable contract before retry');
+      const heldAmendment = task.state === 'held' && reshaped !== undefined;
+      if (heldAmendment) {
+        const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
+        mkdirSync(dirname(briefPath), { recursive: true });
+        writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
+        task = this.store.updateHeldRetryTask(
+          { taskId, attempt: task.currentAttempt },
+          (current) => {
+            current.brief = nextBrief;
+            current.briefPath = briefPath;
+            current.taskClass = nextTaskClass;
+            if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
+          },
+          { abandonPending: true },
+        );
+      }
       const byId = new Map(this.store.tasks().map((candidate) => [candidate.id, candidate]));
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
       if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief }, [...byId.values()])) {
+        if (!heldAmendment) {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
@@ -515,7 +534,19 @@ export class WorkerTasks {
           },
           { abandonPending: true },
         );
+        }
         return null;
+      }
+      if (heldAmendment) {
+        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
+          current.state = 'ready';
+        });
+        // Leave the amended task available to stop or reshape while it waits for capacity.
+        lease?.release();
+        lease = undefined;
+        const startOptions = { ...options };
+        delete startOptions.brief;
+        return this.retryTask(taskId, startOptions);
       }
       this.ensureWorktree(task);
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
