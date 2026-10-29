@@ -91,7 +91,10 @@ test('a tsc failure returns its status and diagnostics without running construct
   const bin = join(directory, 'bin');
   mkdirSync(bin);
   const tsc = join(bin, 'tsc');
-  writeFileSync(tsc, '#!/bin/sh\nprintf "%s\\n" "src/example.ts(2,3): error TS2322: diagnostic stays exact" >&2\nexit 23\n');
+  writeFileSync(
+    tsc,
+    '#!/bin/sh\nprintf "%s\\n" "src/example.ts(2,3): error TS2322: diagnostic stays exact" >&2\nexit 23\n',
+  );
   chmodSync(tsc, 0o755);
   const bun = join(bin, 'bun');
   writeFileSync(bun, `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(join(directory, 'bun.log'))}\nexit 19\n`);
