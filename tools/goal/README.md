@@ -329,7 +329,7 @@ Implement the behavior described by the failing acceptance test.
 Use the actual declared files and machine acceptance tests for the task. `manager` defaults to `goal`. Additional
 observable features are `inseparable`, `citesSources` and `hostileInput`. Kinds are `implementation`, `interface`,
 `bulk-text`, `claim`, `specification`, `research` and `mechanical`. A specified implementation must declare failing
-acceptance tests and fit within 400 lines and eight files. Mechanical work is refused by model dispatch. Risk paths,
+acceptance tests and fit within 1,500 lines and 24 files: one complete user-visible slice, never padded. Mechanical work is refused by model dispatch. Risk paths,
 source citations and hostile input take precedence over cheaper classes. Critical-path classification additionally
 requires waiting tasks and `inseparable`.
 
