@@ -177,7 +177,19 @@ async function probe(): Promise<Evidence> {
     const filterPath = join(root, 'packages/filter/src/filter.ts');
     const typeboxPath = join(root, 'packages/definitions/node_modules/typebox');
     const uniquePath = join(typeboxPath, 'build/schema/engine/uniqueItems.mjs');
-    cpSync(typeboxPath, join(directory, 'typebox'), { recursive: true, dereference: true });
+    const copiedDirectories: string[] = [];
+    cpSync(typeboxPath, join(directory, 'typebox'), {
+      recursive: true,
+      dereference: true,
+      filter(source, destination) {
+        if (statSync(source).isDirectory()) copiedDirectories.push(destination);
+        return true;
+      },
+    });
+    // The installed cache is read-only. Change modes only on the disposable copy,
+    // using the copy's manifest, so instrumentation and finally cleanup can write.
+    for (const destination of copiedDirectories) chmodSync(destination, 0o700);
+    chmodSync(join(directory, 'typebox/build/schema/engine/uniqueItems.mjs'), 0o600);
     const counter = 'globalThis.__publicationConstruction';
     let unique = read(uniquePath);
     unique = replaceOnce(
