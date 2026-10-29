@@ -61,7 +61,7 @@ async function collection(db: Pool, subjectId: string, visibility: CollectionVis
 // Store fixtures still publish through the native command fence: stamps are core positions.
 async function sourceWrite(
   collectionId: string,
-  body: (client: Parameters<typeof store.readCollection>[0], context: ReturnType<typeof context>) => Promise<void>,
+  body: (client: Parameters<typeof store.readCollection>[0], writeContext: ReturnType<typeof context>) => Promise<void>,
 ) {
   await runCommand(pool, { partition: partitionOf(sourceRoute), clock }, async (tx, command) => {
     await body(tx, { time: authoritativeTimeValue(command.time), transactionId: command.transactionId });
