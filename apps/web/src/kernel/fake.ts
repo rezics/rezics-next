@@ -183,7 +183,7 @@ async function pageRecording(
 }
 
 function requestedRecording(name: string, request: Request, recordings: Record<string, KernelRecording>) {
-  const locale = request.headers.get('accept-language')?.split(',')[0]?.trim().split('-q=')[0];
+  const locale = request.headers.get('Accept-Language')?.split(',')[0]?.trim().split('-q=')[0];
   const localized = locale ? recordings[`${name}-${locale}`] : undefined;
   return localized ?? recordings[name];
 }
@@ -398,7 +398,7 @@ async function selectRecording(
           (candidate.filterType ?? undefined) === type &&
           Array.isArray(candidate.subjects),
       );
-      const locale = request.headers.get('accept-language')?.split(',')[0]?.trim();
+      const locale = request.headers.get('Accept-Language')?.split(',')[0]?.trim();
       const recording = candidates.find(([name]) => locale && name.endsWith(`-${locale}`))?.[1] ?? candidates[0]?.[1];
       if (recording) {
         const languages = languageList(body.languages);
