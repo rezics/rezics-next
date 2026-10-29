@@ -145,9 +145,12 @@ test('explicit named Realm setup grants only native Global realm create and pres
 
 test('Realm setup leaves scopes defaults existing Space setup and unscoped denial unchanged', async () => {
   const original = structuredClone(fixture.personas);
-  const originalScopes = Object.fromEntries(
-    (Object.keys(original) as DiscoveryAccountName[]).map((name) => [name, scopes(name)]),
-  );
+  const originalScopes = {
+    alice: scopes('alice'),
+    bob: scopes('bob'),
+    outsider: scopes('outsider'),
+    unscoped: scopes('unscoped'),
+  };
   expect(originalScopes.unscoped).toEqual([]);
   expect((await fixture.inspect('SELECT "group" FROM access.exposure_opening ORDER BY "group"')).rows).toEqual([
     { group: 'collections' },
