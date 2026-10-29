@@ -196,3 +196,30 @@ test('entry writes stay centralized in entries-read.ts', async () => {
   );
   expect(violations.filter(Boolean)).toEqual([]);
 });
+
+test('the story fake accepts omitted guards and refuses stale incarnations without changing its entry', async () => {
+  const { createRecordedKernelFetch } = await import('../src/kernel/fake');
+  const fetch = createRecordedKernelFetch({});
+  const url = `https://kernel.test/v1/libraryEntries/${subjectId}`;
+  const before = await (await fetch(url)).json();
+  for (const method of ['PUT', 'DELETE']) {
+    const stale = await fetch(method === 'DELETE' ? `${url}?revision=1&incarnationId=${currentIncarnationId}` : url, {
+      method,
+      ...(method === 'PUT'
+        ? {
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ state: 'paused', revision: 1, incarnationId: currentIncarnationId }),
+          }
+        : {}),
+    });
+    expect(stale.status).toBe(409);
+    expect(await (await fetch(url)).json()).toEqual(before);
+    const legacy = await fetch(method === 'DELETE' ? `${url}?revision=1` : url, {
+      method,
+      ...(method === 'PUT'
+        ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: 'paused', revision: 1 }) }
+        : {}),
+    });
+    expect(legacy.status).toBe(method === 'PUT' ? 200 : 204);
+  }
+});
