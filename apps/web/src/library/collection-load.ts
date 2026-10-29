@@ -84,9 +84,15 @@ export async function loadDynamicMembers(
   cursor?: string,
   headers: { headers: { authorization: string } } | Record<string, never> = {},
 ): Promise<DynamicMembersResult> {
-  const result = await client
-    .collections({ collectionId: id })
-    .members.get({ query: libraryListQuery(cursor), ...headers });
+  let result: unknown;
+  try {
+    result = await client
+      .collections({ collectionId: id })
+      .members.get({ query: libraryListQuery(cursor), ...headers });
+  } catch (error) {
+    if (resultStatus(error) !== 202 && resultStatus(error) !== 503) throw error;
+    result = error;
+  }
   const status = resultStatus(result);
   if (status === 202)
     return { members: [], next: null, preparing: true, retryAfterMs: retryAfterMs(result), unavailable: false };
@@ -145,6 +151,7 @@ export async function loadEditableCollectionPage(
       (page) => (isStaleCursorResult(page) ? { stale: true as const } : { stale: false as const, page }),
       (error: unknown) => {
         if (error instanceof StaleCursorError) return { stale: true as const };
+        if (resultStatus(error) === 202 || resultStatus(error) === 503) return { stale: false as const, page: error };
         throw error;
       },
     ),
