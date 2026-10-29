@@ -190,10 +190,79 @@ and exhaustive-retention gates, current lease and immutable/pending/deferred gua
 exact route/key admission under unchanged budgets, and redacted failure diagnostics.
 The reviewer ran no tests; native behavior remained a verification limit.
 
+## Final native result
+
 Native acceptance `3641609f-917a-40df-b98e-c5f3603a4311` was submitted once at
-`b231910991`, after this local preflight, for only the two declared files. Its
-terminal result and actual bundle/receipt/journal evidence will be recorded below;
-local success is not native delivery.
+`b231910991`, after the local preflight, for only the two declared files. It
+returned exit 0, with no load reruns or skipped/todo cases. Log:
+`.temp/goal/checks/worker-check-2026-10-29T23-11-29.679Z-2ad1fc71.log`.
+Only review/evidence documentation changed after the tested implementation.
+
+The command was:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-statistics-outcomes.test.ts test/imports/vndb-cli-native.test.ts
+```
+
+Actual child output, on the same pinned Bun
+`v1.4.4-canary.1 (a0cc096ce)` as the wrapper:
+
+```text
+(pass) pinned COPY reaches seven-scope Auth, real Access, public bulk identity and statistic PUT/current GET
+(pass) reimport and reopen are no-ops; changed native average updates once without native votes
+(pass) lost committed response retries original bytes and idempotency identity with one effect
+(pass) zero votes invent neither statistic nor native votes
+(pass) reduced real Auth scope denies before persistence; revoked grant denies original-bearer receipt replay
+(pass) source acquisition and mass disappearance failure send no statistic and preserve baseline
+
+6 pass
+0 fail
+91 expect() calls
+Ran 6 tests across 1 file.
+```
+
+The child exited 0; the wrapper passed its five assertions. The CLI caller passed
+one test with 249 assertions. The kernel compiler completed and wrote 804 Reylo
+analysis entries. This is the declared two-file native check, not another root
+or whole-kernel gate. Both frozen hashes at the start of this report remain exact
+and unchanged after this run.
+
+The CLI evidence records bundle version `1.0.0` and actual bundle digest
+`sha256:943ceadcf70fe1bd71382c2f88ca782cbf946a2c1c1097d748d273482eb7b318`,
+converter `vndb@7`, source entry revision 7 and date 2026-10-25. It consumed three
+input passes, 21,504 input bytes and 57 input chunks across initial, unchanged and
+synthetically changed mean inputs. Each invocation used actual key signin and
+token exchange, all status 200; each requested the unchanged seven VNDB scopes.
+The key was mode 0600 on tmpfs. No bearer or private JWK is printed in this report.
+
+Initial publication exposes mean 7.35/count 20 through the real anonymous GET.
+Unchanged close/reopen preserves the identity, statistic effect and bulk receipts.
+Synthetic mean 8.1 at the same native revision commits once despite the injected
+lost response; normal retry assertions compare exact bytes, path, key, bearer and
+receipt. Current-grant revocation denies exact original-bearer replay with the
+native 403/not_applied problem, no successful receipt disclosure and unchanged
+stored observations. The six cases additionally prove genuine reduced-scope
+denial and rejected acquisition/mass-loss baseline preservation.
+
+Final independently anchored native CLI observations:
+
+- Maintained baseline: generation pointer `3`, present count 2.
+- Native vote rows: 0. Immutable bulk receipt identities: 10, unchanged through refresh.
+- Current statistic transaction: `01a189f0-b460-70db-9b2b-15047ea2a2fc`.
+- Historical statistic changed events: `01a189f0-b1b7-7499-8d0e-ca615d5f9260`
+  and `01a189f0-b461-76e2-9b3e-5385bb124c82`.
+- Two historical composite statistic receipts, both with partition `1258`,
+  principal kind `account`, principal ID `764ada75-62ac-8c41-a37c-c3298c0cfe2a`
+  and command kind `rating.source_statistic.write`. Exact idempotency keys:
+  `vndb:v123:c31277a492cb1976a61d6382473dfdb48d29a5dd8a41b9d3af1c5deabe330c57`
+  and `vndb:v123:94c97545c91493ae3a1e3f88f859dbdebfa36678945d89b8a9c2c9bfd379ff1a`.
+
+These identities are read from actual receipt/outbox/statistic rows using captured
+command anchors. They are distinct from the native entry revision and the local
+completed-generation pointer. The scalar/own-reference/rights/erasure/CPU changes
+already present in the assigned checkout were retained. No production/shared
+helper outside the declared paths was edited by this repair. Broad regression
+and promoted-revision checks remain the landing batch's responsibility.
 
 ## Cost and limits
 

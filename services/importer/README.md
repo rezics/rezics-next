@@ -45,7 +45,11 @@ and observe public responses and exact native receipt/event anchors. The binding
 file across close/reopen in the same native server and Auth world. Its reported source baseline uses
 RunStore's maintained complete-generation pointer and present count; it is distinct from an entry revision
 and from a statistic transaction. See the [verification record](../../docs/research/imports-audit/vndb-statistics-native-verification.md)
-for check results and limits. This six-case binding is separate from the fourteen-case table/growth port.
+for check results and limits. Native acceptance `3641609f-917a-40df-b98e-c5f3603a4311`
+passed the unchanged six cases (91 assertions), the CLI caller (249 assertions) and its wrapper;
+local focused regressions and the importer compiler also passed. The native CLI observed two
+statistic receipts/events, ten unchanged bulk receipts and zero native votes through refresh/retry/revocation.
+This six-case binding is separate from the fourteen-case table/growth port.
 
 Keep the same SQLite state path when resuming. Prepared writes and receipts are durable, and a retry reuses their original command keys and request bodies. Do not replace or clear the state file after an interrupted or uncertain request. Exit codes are 0 for committed/help, 2 for invalid input, 3 for mass disappearance, 4 for authorization denial, 5 for a busy source, and 130 for interruption; other unresolved import failures exit 1. Diagnostics contain only bounded maintained counters.
 
