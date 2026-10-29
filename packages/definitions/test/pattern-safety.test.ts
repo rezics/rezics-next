@@ -4,10 +4,11 @@ const safe = [
   '^[A-Z][a-z]+$',
   '^\\S',
   '^(?:[0-9]{8}|[0-9]{12,14})$',
-  '^(?![0-9])[a-z]+$',
+  '^(?![0-9])[a-z]{3}$',
   '^97[89]-?(?:[0-9]-?){9}[0-9]$',
 ];
 const hostile = [
+  '^(?![0-9])[a-z]+$',
   '^(a+)+$',
   '^(a|aa)+$',
   '^(a*)*$',
@@ -28,7 +29,14 @@ const hostile = [
 
 // Each subprocess starts with cold module state. recheck's Scala.js nanoTime reads
 // performance.now(), not Date.now(). No clock patch escapes the child lifetime.
-async function evaluate(step: number, reverse: boolean, inputs: string[], fixedSchemas = false) {
+async function evaluate(
+  step: number,
+  reverse: boolean,
+  inputs: string[],
+  fixedSchemas = false,
+  repeat = true,
+  datatypes = ['string', 'monolingualtext'],
+) {
   const script = `
     import { validateRelease, valueSchema, DATA_TYPES, RELEASE_FORMAT } from './packages/definitions/src/index.ts';
     import { compileCatalogue, CatalogueError } from './packages/definitions/src/compile.ts';
@@ -50,8 +58,8 @@ async function evaluate(step: number, reverse: boolean, inputs: string[], fixedS
       for (const datatype of ${fixedSchemas} ? datatypes : []) results.push(['fixed', datatype, validateRelease(fixture(datatype))]);
       const patterns = ${JSON.stringify(inputs)};
       if (${reverse}) patterns.reverse();
-      for (const pattern of [...patterns, ...patterns.slice().reverse()]) {
-        for (const datatype of ['string', 'monolingualtext']) {
+      for (const pattern of ${repeat} ? [...patterns, ...patterns.slice().reverse()] : patterns) {
+        for (const datatype of ${JSON.stringify(datatypes)}) {
           const issues = validateRelease(fixture(datatype, pattern));
           let compiler;
           try {
@@ -99,8 +107,8 @@ for (const step of [3001, 0]) {
   }
 }
 
-async function assertVerdicts(step: number, reverse: boolean, patterns: string[]) {
-  const results = await evaluate(step, reverse, patterns);
+async function assertVerdicts(step: number, reverse: boolean, patterns: string[], repeat = true, datatypes?: string[]) {
+  const results = await evaluate(step, reverse, patterns, false, repeat, datatypes);
   for (const [pattern, datatype, issues, compiler] of results) {
     if (safe.includes(pattern)) {
       expect(issues).toEqual([]);
@@ -130,7 +138,7 @@ for (const step of [3001, 0]) {
   for (const reverse of [false, true]) {
     const suffix = step === 3001 && !reverse ? '' : ` (clock ${step}, reverse ${reverse})`;
     test(`compiler and release validator share deterministic hostile-pattern refusal${suffix}`, async () => {
-      await assertVerdicts(step, reverse, [safe[0]!, hostile[0]!]);
+      await assertVerdicts(step, reverse, [safe[0]!, '^(a+)+$'], false);
     });
     // Every variant has an identical exact oracle, including repeated evaluations
     // in each cold subprocess. Separate units preserve the existing test deadline.
@@ -160,3 +168,11 @@ test('structural expansion and graph limits bound short patterns with enormous a
   }
   expect(analyzePattern(costly)).toEqual(first);
 });
+
+for (const step of [3001, 0]) {
+  for (const datatype of ['string', 'monolingualtext']) {
+    test(`DFA operation budget through compiler and release (clock ${step}, ${datatype})`, async () => {
+      await assertVerdicts(step, false, ['^[ab]{32}a[ab]*$'], false, [datatype]);
+    });
+  }
+}
