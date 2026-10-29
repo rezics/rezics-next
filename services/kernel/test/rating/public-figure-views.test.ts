@@ -112,12 +112,15 @@ test('batched figure views use two statements for 1, 64 and 256 subjects across 
   await fixture.drain();
   for (const size of [1, 64, 256]) {
     const ids = fixture.subjectIds.slice(0, size);
-    const measured = await snapshot((client) => measure(fixture.database, () => readPublicFigureViews(client, ids)));
+    const measured = await measure(fixture.database, () => snapshot((client) => readPublicFigureViews(client, ids)));
+    const evidence = JSON.stringify(measured.cost);
     expect(measured.value?.size).toBe(size);
-    expect(measured.cost.statements).toBe(2);
-    expect(measured.cost.controlStatements).toBe(0);
+    expect(measured.cost.statements, evidence).toBe(2);
+    expect(measured.cost.plans, evidence).toBe(2);
+    // Only the caller's BEGIN and ROLLBACK; the batched reader adds no transaction control.
+    expect(measured.cost.controlStatements, evidence).toBe(2);
     const figures = Object.entries(measured.cost.relations).filter(([name]) => name.endsWith('public_figure'));
-    expect(figures.length).toBeGreaterThan(0);
+    expect(figures.length, evidence).toBeGreaterThan(0);
     expect(figures.reduce((sum, [, cost]) => sum + cost.rows, 0)).toBeLessThanOrEqual(size);
     for (const [, cost] of figures) expect(cost.sequentialScans).toBe(0);
   }
