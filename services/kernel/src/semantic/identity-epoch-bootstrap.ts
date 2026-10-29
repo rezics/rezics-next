@@ -32,6 +32,8 @@ import sql31 from './identity-epoch-store-select-bootstrap-home.sql';
 import sql32 from './identity-epoch-bootstrap-select-bootstrap-topology-3.sql';
 import sql33 from './identity-epoch-bootstrap-insert-topology-custody.sql';
 import sql34 from './identity-epoch-bootstrap-update-bootstrap-topology.sql';
+import closeHome from './identity-epoch-bootstrap-close-home.sql';
+import closureReceipt from './identity-epoch-bootstrap-closure-receipt.sql';
 import type { Pool } from 'pg';
 import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -201,9 +203,14 @@ export async function stepIdentityEpochBootstrap(pool: Pool, partition: number):
     await query(tx, sql27.sql, [partition, retained.native.transactionId]);
     let sealed=false;
     if (retained.caughtUp) {
+      recordIdentityEpochNativeCommit(tx,'bootstrap');
       const closed=await query(tx, sql28.sql,
         [partition, retained.generation.toString(), partition * 16, partition * 16 + 15]);
       sealed=closed.rowCount===1;
+      if (sealed) registerCommandCallback(tx,async transactionId=>{
+        const receipt=await query(tx,closeHome.sql,[partition,transactionId]);
+        if(receipt.rowCount!==1) throw fail();
+      });
     }
     return { value: sealed, events: [{...identityBootstrapWake(partition, retained.generation),type:IDENTITY_EPOCH_PROGRESS}] };
   });
@@ -220,14 +227,16 @@ export async function stepIdentityEpochBootstrapWork(pool: Pool): Promise<Identi
   const progress = await stepIdentityEpochBootstrap(pool, partition);
   const evidence = await withConnection(pool, async (tx) => {
     const owner = await readPartition(tx, partition);
-    const home = (await tx.query(sql31.sql, [partition])).rows[0];
-    return owner?.writeState === 'active' && owner.epoch === home?.owner_epoch && home.sealed_generation !== null;
+    const home = (await tx.query(closureReceipt.sql, [partition])).rows[0];
+    return owner?.writeState === 'active' && owner.epoch === home?.sealed_epoch &&
+      BigInt(home.sealed_position)<=owner.position ? home : null;
   });
   await runCommand(pool, { partition: 0 }, async (tx) => {
     const state = (await tx.query(sql32.sql)).rows[0];
     if (state.remaining===0) return {value:null,events:[identityBootstrapWake(partition,progress.generation)]};
-    if (state.next_partition !== partition) return noEffect(null);
-    const inserted = evidence ? (await tx.query(sql33.sql, [partition, progress.generation.toString(), progress.native.epoch])).rowCount : 0;
+    // Concurrent scheduler deliveries may have advanced the cursor, but receipt custody is idempotent per source.
+    // A raced delivery cannot close a different source or decrement remaining twice.
+    const inserted = evidence ? (await tx.query(sql33.sql, [partition, evidence.sealed_generation, evidence.sealed_epoch, evidence.sealed_transaction_id, evidence.sealed_position])).rowCount : 0;
     await tx.query(sql34.sql, [partition, inserted]);
     return { value: null, events: [identityBootstrapWake(partition, progress.generation)] };
   });

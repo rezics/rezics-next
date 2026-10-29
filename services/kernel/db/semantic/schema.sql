@@ -24,24 +24,45 @@ CREATE SCHEMA semantic;
 
 
 --
+-- Name: capture_identity_epoch_key(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_key(r integer, id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL WHERE partition_no=r/16;
+  INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES(r,id)
+  ON CONFLICT(route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
+  UPDATE semantic.identity_epoch_group SET ready=false,version=version+1
+  WHERE partition_no=r/16 AND terminal=id AND pending_job IS NULL;
+END; $$;
+
+
+--
 -- Name: capture_identity_epoch_source(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
 CREATE FUNCTION semantic.capture_identity_epoch_source() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-DECLARE r integer; id uuid;
 BEGIN
-  IF TG_OP='DELETE' THEN r=OLD.route; id=OLD.subject_id;
-  ELSE r=NEW.route; id=NEW.subject_id; END IF;
   IF TG_TABLE_NAME='merge_member' THEN
-    INSERT INTO semantic.identity_epoch_member_dirty(route,terminal,original)
-    VALUES (r,id,CASE WHEN TG_OP='DELETE' THEN OLD.member_id ELSE NEW.member_id END)
-    ON CONFLICT (route,terminal,original) DO UPDATE SET revision=semantic.identity_epoch_member_dirty.revision+1;
-    IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    IF TG_OP='UPDATE' AND (OLD.route,OLD.subject_id,OLD.member_id)=(NEW.route,NEW.subject_id,NEW.member_id) THEN RETURN NEW; END IF;
+    IF TG_OP IN ('UPDATE','DELETE') THEN
+      INSERT INTO semantic.identity_epoch_member_dirty(route,terminal,original) VALUES(OLD.route,OLD.subject_id,OLD.member_id)
+      ON CONFLICT(route,terminal,original) DO UPDATE SET revision=semantic.identity_epoch_member_dirty.revision+1;
+      PERFORM semantic.capture_identity_epoch_key(OLD.route,OLD.subject_id);
+    END IF;
+    IF TG_OP IN ('UPDATE','INSERT') THEN
+      INSERT INTO semantic.identity_epoch_member_dirty(route,terminal,original) VALUES(NEW.route,NEW.subject_id,NEW.member_id)
+      ON CONFLICT(route,terminal,original) DO UPDATE SET revision=semantic.identity_epoch_member_dirty.revision+1;
+      PERFORM semantic.capture_identity_epoch_key(NEW.route,NEW.subject_id);
+    END IF;
+  ELSE
+    IF TG_OP IN ('UPDATE','DELETE') THEN PERFORM semantic.capture_identity_epoch_key(OLD.route,OLD.subject_id); END IF;
+    IF TG_OP IN ('UPDATE','INSERT') THEN PERFORM semantic.capture_identity_epoch_key(NEW.route,NEW.subject_id); END IF;
   END IF;
-  INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES (r,id)
-  ON CONFLICT (route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
   IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END; $$;
 
@@ -456,7 +477,6 @@ CREATE TABLE semantic.identity_epoch_ack (
     native_epoch integer NOT NULL,
     native_position bigint NOT NULL,
     native_transaction_id uuid NOT NULL,
-    CONSTRAINT identity_epoch_ack_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT identity_epoch_ack_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text]))),
     CONSTRAINT identity_epoch_ack_version_check CHECK ((version = 1))
 );
@@ -472,8 +492,7 @@ CREATE TABLE semantic.identity_epoch_bootstrap_custody (
     source_generation bigint NOT NULL,
     native_transaction_id uuid NOT NULL,
     native_epoch integer NOT NULL,
-    native_position bigint NOT NULL,
-    CONSTRAINT identity_epoch_bootstrap_custody_partition_no_check CHECK ((partition_no = 0))
+    native_position bigint NOT NULL
 );
 
 
@@ -488,6 +507,9 @@ CREATE TABLE semantic.identity_epoch_bootstrap_home (
     after_original uuid NOT NULL,
     after_member uuid NOT NULL,
     generation bigint DEFAULT 0 NOT NULL,
+    owner_epoch integer,
+    needs_work boolean DEFAULT true NOT NULL,
+    sealed_generation bigint,
     CONSTRAINT identity_epoch_bootstrap_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT identity_epoch_bootstrap_home_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
 );
@@ -502,6 +524,8 @@ CREATE TABLE semantic.identity_epoch_bootstrap_page (
     transaction_id uuid NOT NULL,
     generation bigint NOT NULL,
     phase text NOT NULL,
+    caught_up boolean DEFAULT false NOT NULL,
+    acknowledged boolean DEFAULT false NOT NULL,
     CONSTRAINT identity_epoch_bootstrap_page_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
 );
 
@@ -522,6 +546,20 @@ CREATE TABLE semantic.identity_epoch_bootstrap_row (
 
 
 --
+-- Name: identity_epoch_bootstrap_topology; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_bootstrap_topology (
+    partition_no integer NOT NULL,
+    next_partition integer DEFAULT 0 NOT NULL,
+    remaining integer DEFAULT 4096 NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_topology_next_partition_check CHECK (((next_partition >= 0) AND (next_partition <= 4095))),
+    CONSTRAINT identity_epoch_bootstrap_topology_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT identity_epoch_bootstrap_topology_remaining_check CHECK (((remaining >= 0) AND (remaining <= 4096)))
+);
+
+
+--
 -- Name: identity_epoch_change; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -530,8 +568,7 @@ CREATE TABLE semantic.identity_epoch_change (
     job_id uuid NOT NULL,
     original uuid NOT NULL,
     previous_terminal uuid NOT NULL,
-    terminal uuid NOT NULL,
-    CONSTRAINT identity_epoch_change_partition_no_check CHECK ((partition_no = 0))
+    terminal uuid NOT NULL
 );
 
 
@@ -544,9 +581,8 @@ CREATE TABLE semantic.identity_epoch_control (
     published_epoch bigint NOT NULL,
     pending_job uuid,
     pending_epoch bigint,
+    allocated_epoch bigint DEFAULT 1 NOT NULL,
     CONSTRAINT identity_epoch_control_check CHECK (((pending_job IS NULL) = (pending_epoch IS NULL))),
-    CONSTRAINT identity_epoch_control_check1 CHECK (((pending_epoch IS NULL) OR (pending_epoch = (published_epoch + 1)))),
-    CONSTRAINT identity_epoch_control_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT identity_epoch_control_published_epoch_check CHECK ((published_epoch >= 0))
 );
 
@@ -582,7 +618,6 @@ CREATE TABLE semantic.identity_epoch_effect_receipt (
     CONSTRAINT identity_epoch_effect_receipt_check1 CHECK (((native_transaction_id IS NULL) = (native_epoch IS NULL))),
     CONSTRAINT identity_epoch_effect_receipt_check2 CHECK (((native_transaction_id IS NULL) = (native_position IS NULL))),
     CONSTRAINT identity_epoch_effect_receipt_kind_check CHECK ((kind = ANY (ARRAY['remove'::text, 'add'::text, 'pending-fence'::text, 'published-fence'::text]))),
-    CONSTRAINT identity_epoch_effect_receipt_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT identity_epoch_effect_receipt_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text])))
 );
 
@@ -595,8 +630,13 @@ CREATE TABLE semantic.identity_epoch_group (
     partition_no integer DEFAULT 0 NOT NULL,
     terminal uuid NOT NULL,
     observed_count bigint NOT NULL,
-    CONSTRAINT identity_epoch_group_observed_count_check CHECK ((observed_count >= 0)),
-    CONSTRAINT identity_epoch_group_partition_no_check CHECK ((partition_no = 0))
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    ready boolean DEFAULT false NOT NULL,
+    published_epoch bigint DEFAULT 1 NOT NULL,
+    pending_job uuid,
+    pending_epoch bigint,
+    CONSTRAINT identity_epoch_group_observed_count_check CHECK ((observed_count >= 0))
 );
 
 
@@ -621,6 +661,20 @@ CREATE TABLE semantic.identity_epoch_home_gate (
 
 
 --
+-- Name: identity_epoch_input; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_input (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    terminal uuid NOT NULL,
+    generation uuid NOT NULL,
+    basis_version bigint NOT NULL,
+    original_count bigint NOT NULL
+);
+
+
+--
 -- Name: identity_epoch_job; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -635,7 +689,6 @@ CREATE TABLE semantic.identity_epoch_job (
     state text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     CONSTRAINT identity_epoch_job_epoch_check CHECK ((epoch > 0)),
-    CONSTRAINT identity_epoch_job_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT identity_epoch_job_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'published'::text])))
 );
 
@@ -649,8 +702,7 @@ CREATE TABLE semantic.identity_epoch_legacy_member (
     terminal uuid NOT NULL,
     original uuid NOT NULL,
     source_partition integer NOT NULL,
-    source_generation bigint NOT NULL,
-    CONSTRAINT identity_epoch_legacy_member_partition_no_check CHECK ((partition_no = 0))
+    source_generation bigint NOT NULL
 );
 
 
@@ -665,6 +717,10 @@ CREATE TABLE semantic.identity_epoch_mapping (
     epoch bigint NOT NULL,
     origin text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    control_partition integer,
+    control_group uuid,
+    source_revision bigint DEFAULT 0 NOT NULL,
+    owner_epoch integer DEFAULT 1 NOT NULL,
     CONSTRAINT identity_epoch_mapping_check CHECK ((route = ((get_byte(uuid_send(original), 10) * 256) + get_byte(uuid_send(original), 11)))),
     CONSTRAINT identity_epoch_mapping_epoch_check CHECK ((epoch >= 0)),
     CONSTRAINT identity_epoch_mapping_origin_check CHECK ((origin = ANY (ARRAY['creation'::text, 'published'::text]))),
@@ -712,7 +768,7 @@ CREATE TABLE semantic.identity_epoch_original (
     source_partition integer NOT NULL,
     source_generation bigint NOT NULL,
     present boolean NOT NULL,
-    CONSTRAINT identity_epoch_original_partition_no_check CHECK ((partition_no = 0))
+    generation uuid NOT NULL
 );
 
 
@@ -737,6 +793,18 @@ CREATE TABLE semantic.identity_epoch_step (
     CONSTRAINT identity_epoch_step_state_check CHECK ((state = ANY (ARRAY['more'::text, 'complete'::text]))),
     CONSTRAINT identity_epoch_step_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text]))),
     CONSTRAINT identity_epoch_step_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: identity_epoch_topology_custody; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_topology_custody (
+    source_partition integer NOT NULL,
+    source_generation bigint NOT NULL,
+    source_epoch integer NOT NULL,
+    CONSTRAINT identity_epoch_topology_custody_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
 );
 
 
@@ -1199,7 +1267,7 @@ ALTER TABLE ONLY semantic.identity_epoch_ack
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_bootstrap_custody
-    ADD CONSTRAINT identity_epoch_bootstrap_custody_pkey PRIMARY KEY (source_partition, source_generation);
+    ADD CONSTRAINT identity_epoch_bootstrap_custody_pkey PRIMARY KEY (partition_no, source_partition, source_generation);
 
 
 --
@@ -1232,6 +1300,14 @@ ALTER TABLE ONLY semantic.identity_epoch_bootstrap_page
 
 ALTER TABLE ONLY semantic.identity_epoch_bootstrap_row
     ADD CONSTRAINT identity_epoch_bootstrap_row_pkey PRIMARY KEY (partition_no, transaction_id, original, terminal);
+
+
+--
+-- Name: identity_epoch_bootstrap_topology identity_epoch_bootstrap_topology_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_topology
+    ADD CONSTRAINT identity_epoch_bootstrap_topology_pkey PRIMARY KEY (partition_no);
 
 
 --
@@ -1283,11 +1359,11 @@ ALTER TABLE ONLY semantic.identity_epoch_home_gate
 
 
 --
--- Name: identity_epoch_job identity_epoch_job_epoch_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+-- Name: identity_epoch_input identity_epoch_input_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
-ALTER TABLE ONLY semantic.identity_epoch_job
-    ADD CONSTRAINT identity_epoch_job_epoch_key UNIQUE (epoch);
+ALTER TABLE ONLY semantic.identity_epoch_input
+    ADD CONSTRAINT identity_epoch_input_pkey PRIMARY KEY (job_id, terminal);
 
 
 --
@@ -1351,7 +1427,7 @@ ALTER TABLE ONLY semantic.identity_epoch_native_commit
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_original
-    ADD CONSTRAINT identity_epoch_original_pkey PRIMARY KEY (original);
+    ADD CONSTRAINT identity_epoch_original_pkey PRIMARY KEY (generation, original);
 
 
 --
@@ -1360,6 +1436,14 @@ ALTER TABLE ONLY semantic.identity_epoch_original
 
 ALTER TABLE ONLY semantic.identity_epoch_step
     ADD CONSTRAINT identity_epoch_step_pkey PRIMARY KEY (partition_no, transaction_id, job_id, step);
+
+
+--
+-- Name: identity_epoch_topology_custody identity_epoch_topology_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_topology_custody
+    ADD CONSTRAINT identity_epoch_topology_custody_pkey PRIMARY KEY (source_partition);
 
 
 --
@@ -1534,10 +1618,45 @@ CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id
 
 
 --
+-- Name: identity_epoch_bootstrap_repair; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_bootstrap_repair ON semantic.identity_epoch_bootstrap_home USING btree (partition_no) WHERE needs_work;
+
+
+--
+-- Name: identity_epoch_bootstrap_unacknowledged; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_bootstrap_unacknowledged ON semantic.identity_epoch_bootstrap_page USING btree (partition_no, generation) WHERE (NOT acknowledged);
+
+
+--
+-- Name: identity_epoch_current_original; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_current_original ON semantic.identity_epoch_original USING btree (partition_no, original) WHERE present;
+
+
+--
 -- Name: identity_epoch_dirty_pending; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX identity_epoch_dirty_pending ON semantic.identity_epoch_dirty USING btree (route, original) WHERE (revision > captured_revision);
+
+
+--
+-- Name: identity_epoch_generation_original; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_generation_original ON semantic.identity_epoch_original USING btree (generation, original) WHERE present;
+
+
+--
+-- Name: identity_epoch_job_home_epoch; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_job_home_epoch ON semantic.identity_epoch_job USING btree (partition_no, epoch);
 
 
 --
@@ -1551,7 +1670,7 @@ CREATE INDEX identity_epoch_member_dirty_pending ON semantic.identity_epoch_memb
 -- Name: identity_epoch_one_pending; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX identity_epoch_one_pending ON semantic.identity_epoch_job USING btree (state) WHERE (state = 'pending'::text);
+CREATE UNIQUE INDEX identity_epoch_one_pending ON semantic.identity_epoch_job USING btree (partition_no) WHERE (state = 'pending'::text);
 
 
 --
@@ -1559,6 +1678,13 @@ CREATE UNIQUE INDEX identity_epoch_one_pending ON semantic.identity_epoch_job US
 --
 
 CREATE INDEX identity_epoch_original_group ON semantic.identity_epoch_original USING btree (terminal, original) WHERE present;
+
+
+--
+-- Name: identity_epoch_original_source; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_original_source ON semantic.identity_epoch_original USING btree (source_partition, original) WHERE present;
 
 
 --
@@ -1765,17 +1891,10 @@ CREATE TRIGGER identity_epoch_bootstrap_custody_immutable BEFORE DELETE OR UPDAT
 
 
 --
--- Name: identity_epoch_bootstrap_page identity_epoch_bootstrap_page_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+-- Name: account_agent_subject identity_epoch_capture_backlink; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER identity_epoch_bootstrap_page_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_page FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
-
-
---
--- Name: identity_epoch_bootstrap_row identity_epoch_bootstrap_row_immutable; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER identity_epoch_bootstrap_row_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_row FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+CREATE TRIGGER identity_epoch_capture_backlink AFTER DELETE OR UPDATE ON semantic.account_agent_subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_source();
 
 
 --
@@ -2048,6 +2167,14 @@ ALTER TABLE ONLY semantic.identity_epoch_change
 
 ALTER TABLE ONLY semantic.identity_epoch_effect_receipt
     ADD CONSTRAINT identity_epoch_effect_receipt_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+
+
+--
+-- Name: identity_epoch_input identity_epoch_input_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_input
+    ADD CONSTRAINT identity_epoch_input_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
 
 
 --

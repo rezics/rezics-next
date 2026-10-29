@@ -51,6 +51,12 @@ CREATE TABLE semantic.identity_epoch_bootstrap_topology (
   remaining integer NOT NULL DEFAULT 4096 CHECK(remaining BETWEEN 0 AND 4096)
 );
 INSERT INTO semantic.identity_epoch_bootstrap_topology(partition_no) VALUES(0);
+CREATE TABLE semantic.identity_epoch_bootstrap_topology_home (
+  source_partition integer PRIMARY KEY CHECK(source_partition BETWEEN 0 AND 4095),
+  closed boolean NOT NULL DEFAULT false
+);
+INSERT INTO semantic.identity_epoch_bootstrap_topology_home(source_partition) SELECT n FROM generate_series(0,4095) n;
+CREATE INDEX identity_epoch_topology_open_home ON semantic.identity_epoch_bootstrap_topology_home(source_partition) WHERE NOT closed;
 ALTER TABLE semantic.identity_epoch_bootstrap_custody DROP CONSTRAINT identity_epoch_bootstrap_custody_pkey;
 ALTER TABLE semantic.identity_epoch_bootstrap_custody ADD PRIMARY KEY(partition_no,source_partition,source_generation);
 CREATE TABLE semantic.identity_epoch_topology_custody (
@@ -62,6 +68,11 @@ ALTER TABLE semantic.identity_epoch_bootstrap_home ADD COLUMN owner_epoch intege
 ALTER TABLE semantic.identity_epoch_bootstrap_home ADD COLUMN needs_work boolean NOT NULL DEFAULT true;
 CREATE INDEX identity_epoch_bootstrap_repair ON semantic.identity_epoch_bootstrap_home(partition_no) WHERE needs_work;
 ALTER TABLE semantic.identity_epoch_bootstrap_home ADD COLUMN sealed_generation bigint;
+ALTER TABLE semantic.identity_epoch_bootstrap_home ADD COLUMN sealed_transaction_id uuid;
+ALTER TABLE semantic.identity_epoch_bootstrap_home ADD COLUMN sealed_epoch integer;
+ALTER TABLE semantic.identity_epoch_bootstrap_home ADD COLUMN sealed_position bigint;
+ALTER TABLE semantic.identity_epoch_topology_custody ADD COLUMN source_transaction_id uuid NOT NULL;
+ALTER TABLE semantic.identity_epoch_topology_custody ADD COLUMN source_position bigint NOT NULL;
 ALTER TABLE semantic.identity_epoch_bootstrap_page ADD COLUMN caught_up boolean NOT NULL DEFAULT false;
 ALTER TABLE semantic.identity_epoch_bootstrap_page ADD COLUMN acknowledged boolean NOT NULL DEFAULT false;
 CREATE INDEX identity_epoch_bootstrap_unacknowledged ON semantic.identity_epoch_bootstrap_page(partition_no,generation) WHERE NOT acknowledged;
@@ -70,7 +81,7 @@ DROP TRIGGER identity_epoch_bootstrap_row_immutable ON semantic.identity_epoch_b
 -- Export payloads are reclaimed only after actual receiving custody, followed by source ACK.
 CREATE FUNCTION semantic.capture_identity_epoch_key(r integer,id uuid) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
-  UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL WHERE partition_no=r/16;
+  UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL,sealed_transaction_id=NULL,sealed_epoch=NULL,sealed_position=NULL WHERE partition_no=r/16;
   INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES(r,id)
   ON CONFLICT(route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
   UPDATE semantic.identity_epoch_group SET ready=false,version=version+1

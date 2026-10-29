@@ -6,7 +6,7 @@ import { writeSubject } from '../../src/semantic/subject.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
 import { readIdentityEpochCutover, stepIdentityEpochBootstrap, stepIdentityEpochBootstrapWork } from '../../src/semantic/identity-epoch-bootstrap.ts';
-import { resolveSubject } from '../../src/library/subject-anchor.ts';
+import { resolveSubject, readableSubjects } from '../../src/library/subject-anchor.ts';
 import {
   digest,
   epochFixture,
@@ -296,3 +296,47 @@ test('stale home effect and fabricated step receipt cannot publish identity epoc
     ]);
   }
 });
+
+
+test('partition P=1 refuses a second local reservation without effects while disjoint Library members progress', async () => {
+  const left=(await f.create('First native reservation',0x6110)).subject.id;
+  const right=(await f.create('First native input',0x6110)).subject.id;
+  const job=(await (await admission({kind:'merge',survivor:left,redirected:right,release:release.digest})).execute()).value;
+  expect(await store.readMapping(f.pool,left)).toEqual({state:'pending',original:left,job});
+  expect(await resolveSubject({pool:f.pool,access:f.access},await f.actor(),left)).toBeNull();
+  const localA=(await f.create('Independent same-home group',0x6110)).subject.id;
+  const localB=(await f.create('Independent same-home input',0x6110)).subject.id;
+  const before=await storeSnapshot([localA,localB]);
+  await expect((await admission({kind:'merge',survivor:localA,redirected:localB,release:release.digest})).execute())
+    .rejects.toMatchObject({code:'identity_epoch_unavailable'});
+  expect(await storeSnapshot([localA,localB])).toEqual(before);
+  const disjoint=(await f.create('Disjoint shelf source',0x6120)).subject.id;
+  expect(await readableSubjects({pool:f.pool,access:f.access},await f.actor(),[left,disjoint])).toEqual([disjoint]);
+  const other=(await f.create('Disjoint merge input',0x6120)).subject.id;
+  const second=(await (await admission({kind:'merge',survivor:disjoint,redirected:other,release:release.digest})).execute()).value;
+  expect(second.jobId).not.toBe(job.jobId);
+  expect(await store.readMapping(f.pool,disjoint)).toEqual({state:'pending',original:disjoint,job:second});
+  expect((await store.readJob(f.pool,job))?.state).toBe('pending');
+  for (const pending of [job,second]) await expect(runCommand(f.pool,{partition:home(pending.jobId)},tx=>store.publish(tx,pending)))
+    .rejects.toMatchObject({code:'identity_participants_incomplete'});
+});
+
+test('complete resulting group of exactly 4096 originals is admitted and remains pending without participant custody', async () => {
+  const survivor=(await f.create('4096 terminal',0x6130)).subject.id;
+  const redirected=(await f.create('4096 merged root',0x6130)).subject.id;
+  await seedLegacyGroup(f,redirected,4094);
+  await requireCutover([survivor,redirected]);
+  const job=(await (await admission({kind:'merge',survivor,redirected,release:release.digest})).execute()).value;
+  let after:string|null=null;
+  let total=0;
+  do {
+    const page=await store.pageChanges(f.pool,job,after);
+    expect(page.changes.length).toBeLessThanOrEqual(100);
+    total+=page.changes.length;
+    after=page.next;
+  } while(after!==null);
+  expect(total).toBe(4096);
+  expect(await store.readMapping(f.pool,redirected)).toEqual({state:'pending',original:redirected,job});
+  await expect(runCommand(f.pool,{partition:home(job.jobId)},tx=>store.publish(tx,job)))
+    .rejects.toMatchObject({code:'identity_participants_incomplete'});
+},600_000);

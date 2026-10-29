@@ -9,9 +9,9 @@ type delivery, runtime delivery, publication completion or root-gate completion*
 nine review items and all coowners must review these corrected bytes before types or executable native work.
 The initial production capacity is P=1: one admitted or PREPARING job reservation per native control partition, charged once per (home, job). Capacity is local; recovery, cancellation and reclamation require no new reservation.
 
-The adjacent `identity-epoch-contract.ts` exposes the scoped native storage protocol. Earlier globally serialized
-proposal. In particular, one `controlPartition`, one pending `readEpoch` and its sole-job admission sketch do not
-fit this contract unchanged. Existing native cases remain evidence and required outcomes; they are not the new
+The adjacent `identity-epoch-contract.ts` exposes the scoped native storage protocol. `controlPartition` identifies
+bootstrap topology only; job IDs encode their native control home. `readEpoch(client, partition)` observes that
+home independently. The earlier globally serialized proposal is superseded. Existing native cases remain evidence and required outcomes; they are not the new
 frozen boundary. Missing producers below mean actual missing native implementation and proof, never permission
 to manufacture a callable, receipt, ready state or successful adapter from this prose.
 
