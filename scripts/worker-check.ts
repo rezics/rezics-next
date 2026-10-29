@@ -76,7 +76,10 @@ export function processTreeCpuTicks(rootPid: number, procRoot = '/proc'): number
         const stat = readFileSync(join(procRoot, entry, 'stat'), 'utf8');
         const close = stat.lastIndexOf(')');
         if (close < 0) continue;
-        const fields = stat.slice(close + 2).trim().split(/\s+/);
+        const fields = stat
+          .slice(close + 2)
+          .trim()
+          .split(/\s+/);
         const parent = Number(fields[1]);
         const cpuTicks = Number(fields[11]) + Number(fields[12]);
         if (!Number.isInteger(parent) || !Number.isFinite(cpuTicks)) continue;

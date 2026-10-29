@@ -724,10 +724,7 @@ test('a quiet local command with CPU progress is not stopped as stalled and its 
   process.env.REZICS_CHECK_PROGRESS_PID_FILE = marker;
   try {
     await withQuietAdmission(async () => {
-      const id = startWorkerCheck(
-        ['bun', '-e', 'const end = Date.now() + 700; while (Date.now() < end) {}'],
-        root,
-      );
+      const id = startWorkerCheck(['bun', '-e', 'const end = Date.now() + 700; while (Date.now() < end) {}'], root);
       const resultPath = join(root, '.temp/goal/checks/results', `${id}.json`);
       const originalLog = JSON.parse(readFileSync(resultPath, 'utf8')).log as string;
       await untilRecorded(() => existsSync(marker));
@@ -744,7 +741,11 @@ test('a quiet local command with CPU progress is not stopped as stalled and its 
         writeFileSync(statFile, `${commandPid} (quiet-command) ${advancingStat}\n`);
       }, 20);
       const out: string[] = [];
-      const result = await waitWorkerCheck(id, root, 2_000, { stallMs: 200, pollMs: 5, write: (line) => out.push(line) });
+      const result = await waitWorkerCheck(id, root, 2_000, {
+        stallMs: 200,
+        pollMs: 5,
+        write: (line) => out.push(line),
+      });
       clearInterval(cpuProgress);
       const record = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
       const log = readFileSync(join(root, originalLog), 'utf8');
@@ -777,9 +778,21 @@ test('a quiet local command with no CPU progress is stopped by the stall rule', 
   await withQuietAdmission(async () => {
     const id = startWorkerCheck(['bun', '-e', 'setInterval(() => {}, 1000)'], root);
     const out: string[] = [];
-    expect(await waitWorkerCheck(id, root, 2_000, { stallMs: 50, rerunStallMs: 50, pollMs: 5, write: (line) => out.push(line) })).toBe(1);
+    expect(
+      await waitWorkerCheck(id, root, 2_000, {
+        stallMs: 50,
+        rerunStallMs: 50,
+        pollMs: 5,
+        write: (line) => out.push(line),
+      }),
+    ).toBe(1);
     expect(out.join('')).toContain('infrastructure failure (log did not grow for 50 ms)');
-    expect(readFileSync(join(root, JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).log), 'utf8')).not.toContain('worker-check: running');
+    expect(
+      readFileSync(
+        join(root, JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).log),
+        'utf8',
+      ),
+    ).not.toContain('worker-check: running');
   });
 });
 

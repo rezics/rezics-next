@@ -3211,7 +3211,14 @@ test('the run checks installed packages after the command and before recording i
 
 test('a quiet remote command reports CPU progress and the progress loop exits with it', () => {
   const fixture = runFixture();
-  const script = runScript('remote-progress', '/srv/rezics-check/runs/remote-progress', '.', ['/bin/sleep', '0.35'], 'check-a', 10);
+  const script = runScript(
+    'remote-progress',
+    '/srv/rezics-check/runs/remote-progress',
+    '.',
+    ['/bin/sleep', '0.35'],
+    'check-a',
+    10,
+  );
   const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'check-a' });
   expect(result.status).toBe(0);
   expect(result.stderr).toMatch(/remote-check: running on check-a, \d+ CPU seconds/);
@@ -3221,7 +3228,14 @@ test('a quiet remote command reports CPU progress and the progress loop exits wi
 
 test('a quiet remote command without CPU progress writes no progress line', () => {
   const fixture = runFixture();
-  const script = runScript('remote-idle', '/srv/rezics-check/runs/remote-idle', '.', ['/bin/sleep', '0.3'], 'check-a', 10);
+  const script = runScript(
+    'remote-idle',
+    '/srv/rezics-check/runs/remote-idle',
+    '.',
+    ['/bin/sleep', '0.3'],
+    'check-a',
+    10,
+  );
   const result = fixture.execute(script, { REMOTE_CHECK_HOST: 'check-a' });
   expect(result.status).toBe(0);
   expect(result.stderr).not.toContain('remote-check: running on check-a');
@@ -3252,25 +3266,51 @@ test('a quiet remote command reports every interval with at least one CPU second
     reports.map((_, index) => Math.floor((500_000 + (index + 1) * 1_200_000) / 1_000_000)),
   );
   expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
-  expect(result.stderr.lastIndexOf('remote-check: running on')).toBeLessThan(result.stderr.indexOf('remote-check: command'));
+  expect(result.stderr.lastIndexOf('remote-check: running on')).toBeLessThan(
+    result.stderr.indexOf('remote-check: command'),
+  );
 });
 
 test('remote CPU reports accumulate subsecond work across intervals', () => {
   const fixture = runFixture();
   // End after six completed samples, independent of process startup time on a loaded host.
-  const command = ['sh', '-c', 'until [ -f "$1" ] && [ "$(wc -l < "$1")" -ge 7 ]; do /bin/sleep 0.005; done', 'progress-command', '/srv/rezics-check/sleep-pids'];
-  const script = runScript('remote-fractional', '/srv/rezics-check/runs/remote-fractional', '.', command, 'check-a', 10);
+  const command = [
+    'sh',
+    '-c',
+    'until [ -f "$1" ] && [ "$(wc -l < "$1")" -ge 7 ]; do /bin/sleep 0.005; done',
+    'progress-command',
+    '/srv/rezics-check/sleep-pids',
+  ];
+  const script = runScript(
+    'remote-fractional',
+    '/srv/rezics-check/runs/remote-fractional',
+    '.',
+    command,
+    'check-a',
+    10,
+  );
   const result = fixture.execute(script, { PROGRESS_INCREMENT: '400000', REMOTE_CHECK_HOST: 'check-a' });
   expect(result.status, result.stderr).toBe(0);
-  const reports = [...result.stderr.matchAll(/remote-check: running on check-a, (\d+) CPU seconds/g)].map((match) => Number(match[1]));
+  const reports = [...result.stderr.matchAll(/remote-check: running on check-a, (\d+) CPU seconds/g)].map((match) =>
+    Number(match[1]),
+  );
   expect(reports.length).toBeGreaterThanOrEqual(2);
   expect(reports.every((seconds, index) => index === 0 || seconds > reports[index - 1]!)).toBe(true);
-  expect(result.stderr.lastIndexOf('remote-check: running on')).toBeLessThan(result.stderr.indexOf('remote-check: command'));
+  expect(result.stderr.lastIndexOf('remote-check: running on')).toBeLessThan(
+    result.stderr.indexOf('remote-check: command'),
+  );
 });
 
 test('a signal to the remote command wrapper reaps its progress loop and sleeper', () => {
   const fixture = runFixture();
-  const script = runScript('remote-signal', '/srv/rezics-check/runs/remote-signal', '.', ['sh', '-c', '/bin/sleep 0.15; kill -TERM "$PPID"; exec /bin/sleep 0.5'], 'check-a', 10);
+  const script = runScript(
+    'remote-signal',
+    '/srv/rezics-check/runs/remote-signal',
+    '.',
+    ['sh', '-c', '/bin/sleep 0.15; kill -TERM "$PPID"; exec /bin/sleep 0.5'],
+    'check-a',
+    10,
+  );
   const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'check-a' });
   expect(result.status, result.stderr).toBe(143);
   const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
