@@ -1,8 +1,8 @@
 # Own-reference refresh verification
 
 Implementation revision: `0b648d744b3ed6f34bf435866606c102d1b0707d`. Current frozen installation:
-`7067483fa8371b76b6e1ec6c6cb4e9df72de2b05`. Its SHA-256 is
-`0df9043bf4316fe51014a836a680e902f0a84a7a9b6174622143d31479cc0077`, exactly matching the
+`34f4833079b8faa11fa1ee5ec5a4137b6ec4a235`. Its SHA-256 is
+`c2a3e80acba22a911bc2d118b07286ceb7494c6c528da7be4572c8fa76b65bf7`, exactly matching the
 controller registry and the approved combined raw file. No worker formatting or amendment was applied.
 The controller committed the observation correction; this continuation preserves all frozen bytes.
 
@@ -21,6 +21,19 @@ second candidate while the work relation refreshes. Source revision, digest and 
 The stored dependency signature is importer coordination metadata; it does not add account, bearer or owner data.
 
 ## Current verification
+
+The controller installed the authorized three type-only edits: import native `Statement` with `import type`,
+type `Candidate.statement` as `Statement`, and accept `BatchStatement | Statement` in the unresolved helper.
+The complete three-hunk diff changes no executable expression or assertion. The exact installed worker hash
+matches the approved raw hash and the read-only frozen registry entry. No worker formatting was applied.
+The existing `SnakSchema` and `StatementSchema` require the native read datatype; portable proposals remain id-only.
+The focused native acceptance and root typecheck are pending on this installation.
+
+Importer runtime, storage and the local regression are byte-identical to `c79e538dfd`. Reuse the qualified
+local 2-case/16-assertion receipt and post-retention adjacent 11-case/158-assertion receipts below; no rerun is
+required for this erased-type correction. No rebase, merge, host change or dependency change was performed.
+
+## Previous combined-file verification
 
 Native and first recovery invocation revision: `2d8d4ee5fda226a3ebbaf52a39ef9b0c6616880d`.
 Root typecheck and missing extra-file invocation revision: `c3c8c337d35f4df3d150c87421418c31feeff8d3` (documentation changes only).
@@ -125,7 +138,7 @@ passes predate candidate retention and do not establish current recovery behavio
 
 Preserve existing semantically unchanged candidates and every immutable journal/bootstrap byte. Reuse qualified
 local evidence because its relevant product/test bytes are unchanged. Current shared-base differences require a
-fresh root typecheck; run the named native and adjacent coverage without repeating the two passing adjacent files. Do not rebase or merge this assigned branch. Existing Cost ceilings remain; candidate retention adds
+fresh root typecheck and focused native acceptance after the authorized type-only correction; reuse the completed adjacent coverage. Do not rebase or merge this assigned branch. Existing Cost ceilings remain; candidate retention adds
 at most C × Q full-statement comparisons, C ≤ 300 current owned candidates and Q ≤ 100 actual Open Library proposals,
 with existing bounded statement bytes. This is local bounded work, with no new history scan or server query.
 

@@ -111,16 +111,14 @@ default handoff and unchanged dependency refresh. Original implementation locato
 `0b648d744b3ed6f34bf435866606c102d1b0707d`. The installed combined observation correction
 preserves proposal property objects and requires the native read datatype only on native
 responses; a busy partition relay consumes one of the same 16 calls and is never readiness.
-Its unchanged SHA-256 is
-`0df9043bf4316fe51014a836a680e902f0a84a7a9b6174622143d31479cc0077`, matching the frozen registry.
-The focused native check stops before test execution at a frozen-helper TypeScript error:
-its native-only `data_type` expectation is contextually checked as a proposal property.
-All three adjacent recovery files pass (11 cases, 158 assertions), with the extra recovery file
-run separately after a filename correction. The current-tree root typecheck fails at the same
-frozen-helper error. The earlier local
-reopen regression passed (2 cases, 16 assertions); its exact runtime/test bytes are unchanged.
-The prior successful root typecheck remains historical evidence; the fresh run reports no
-other workspace errors.
+Its unchanged installed SHA-256 is
+`c2a3e80acba22a911bc2d118b07286ceb7494c6c528da7be4572c8fa76b65bf7`, matching the frozen registry.
+The controller's three type-only corrections use the native `Statement` type for read observations and
+permit both proposal and native statements in the helper. No executable expression or assertion changed.
+The focused native acceptance and root typecheck are pending on this installation. All three adjacent
+recovery files passed (11 cases, 158 assertions), with the extra recovery file run separately after a
+filename correction. The local reopen regression passed (2 cases, 16 assertions); the runtime and local
+regression bytes remain unchanged, so those qualified results are reused.
 See the [verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
 for revisions, receipts, reached transitions and evidence limits.
 
