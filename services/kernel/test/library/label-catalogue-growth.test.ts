@@ -521,12 +521,23 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
       for (const operation of operations) operation.assert(await operation.run(await operation.prepare()));
     },
     async prepare(_database, _scale, repetition) {
-      states.set(repetition, await Promise.all(operations.map((operation) => operation.prepare())));
+      const prepared = new Array<State>(operations.length);
+      for (const [index, operation] of operations.entries())
+        if (!operation.name.startsWith('list')) prepared[index] = await operation.prepare();
+      for (const [index, operation] of operations.entries())
+        if (operation.name.startsWith('list')) prepared[index] = await operation.prepare();
+      states.set(repetition, prepared);
     },
     async operation(_database, _scale, repetition) {
       const prepared = states.get(repetition);
       if (!prepared) throw new Error(`Missing fresh operation states for repetition ${repetition}`);
-      for (const [index, operation] of operations.entries()) operation.assert(await operation.run(prepared[index]!));
+      const ordered = [
+        ...operations.map((operation, index) => ({ operation, state: prepared[index]! }))
+          .filter(({ operation }) => operation.name.startsWith('list')),
+        ...operations.map((operation, index) => ({ operation, state: prepared[index]! }))
+          .filter(({ operation }) => !operation.name.startsWith('list')),
+      ];
+      for (const { operation, state } of ordered) operation.assert(await operation.run(state));
     },
   });
   for (const sample of report.samples) {
