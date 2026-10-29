@@ -237,6 +237,7 @@ board in it through the kernel's public API, inserts one thread of two posts, an
 board's threads, the thread and its posts. Name all five to write only them.
 
 Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
+The tool uses Storybook's test build, which has no docs pages.
 The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
 full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS pixels.
 Files are named `<story id>.<locale>.<theme>.png` and land in `.temp/screenshots/` at the repository root.

@@ -68,7 +68,10 @@ test(
         );
         expect(result.code, `${mode} build failed:\n${result.stdout}\n${result.stderr}`).toBe(0);
       }
-      expect(storyIds(join(builds, 'test'))).toEqual(storyIds(join(builds, 'full')));
+      const fullStories = storyIds(join(builds, 'full'));
+      const testStories = new Set(storyIds(join(builds, 'test')));
+      const missing = fullStories.filter((id) => !testStories.has(id));
+      expect(missing, `The test build omitted stories: ${missing.join(', ')}`).toEqual([]);
     } finally {
       rmSync(builds, { recursive: true, force: true });
     }

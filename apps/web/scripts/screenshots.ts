@@ -151,7 +151,7 @@ function serve(directory: string) {
 async function build(directory: string, cacheDir: string): Promise<void> {
   const storybook = join(app, 'node_modules/.bin/storybook');
   await mkdir(cacheDir, { recursive: true });
-  const child = Bun.spawn([storybook, 'build', '--output-dir', directory, '--disable-telemetry', '--quiet'], {
+  const child = Bun.spawn([storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'], {
     cwd: app,
     stdin: 'ignore',
     stdout: 'pipe',
