@@ -7,15 +7,29 @@ import type { Item } from './item.ts';
 const closed = { additionalProperties: false } as const;
 const text = Type.String({ minLength: 1, maxLength: 1500 });
 const nativeId = Type.Unsafe<Item['id']>(valueSchema('wikibase-item'));
+// checkSubjectStructure/valueLimits in definitions/src/validate.ts also apply.
 const exact = valueSchema('quantity', { exact: true, integer: true, units: ['1'] });
 const count = Type.Unsafe<{ amount: string; unit: '1' }>({
   ...exact,
   // Counts narrow the generic signed integer primitive to nonnegative amounts.
-  allOf: [{ properties: { amount: { pattern: '^(?:\\+(?:0|[1-9][0-9]*)|-0)$' } } }],
+  allOf: [{ properties: { amount: { pattern: '^(?:\\+(?:0|[1-9][0-9]*)|-0)$', maxLength: 127 } } }],
 });
 const statement = Type.Object(
   {
     ...BatchStatementSchema.properties,
+    qualifiers: Type.Optional(Type.Array(BatchStatementSchema.properties.qualifiers.items, { maxItems: 16 })),
+    references: Type.Array(
+      Type.Object(
+        {
+          parts: Type.Array(BatchStatementSchema.properties.references.items.properties.parts.items, {
+            minItems: 1,
+            maxItems: 16,
+          }),
+        },
+        closed,
+      ),
+      { minItems: 1, maxItems: 16 },
+    ),
     property: Type.Object(
       { id: Type.Union([Type.Literal('schema:wordCount'), Type.Literal('rezics:characterCount')]) },
       closed,
@@ -31,7 +45,10 @@ const statement = Type.Object(
 const common = {
   holder: nativeId,
   producer: nativeId,
-  language: Type.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' }),
+  // Exact native schema:inLanguage scalar (catalogue/core.yaml), without normalization.
+  language: Type.Unsafe<string>(
+    valueSchema('string', { pattern: '^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$' }),
+  ),
   version: Type.Union([
     Type.Object({ kind: Type.Literal('declared'), value: text }, closed),
     Type.Object({ kind: Type.Literal('unversioned') }, closed),
@@ -44,8 +61,8 @@ const common = {
         Type.Literal('unknown'),
         Type.Literal('unsupported-multilingual'),
       ]),
-      included: Type.Array(text, { minItems: 1, maxItems: 64 }),
-      excluded: Type.Array(text, { maxItems: 64 }),
+      included: Type.Array(text, { minItems: 1 }),
+      excluded: Type.Array(text),
     },
     closed,
   ),
@@ -60,7 +77,9 @@ export const CountProducerInputSchema = Type.Union([
     {
       ...common,
       kind: Type.Literal('supplied-text'),
-      text: Type.String(),
+      // Necessary character ceiling for the 32 KiB authored-field fixture path.
+      // NOT a UTF-8/snapshot byte check or an admitted source-input transport.
+      text: Type.String({ maxLength: 32_768 }),
       digest: Type.String({ pattern: '^sha256:[0-9a-f]{64}$' }),
       measuredAt: Type.String({ pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$' }),
       method: Type.Object({ concept: nativeId, version: text, definition: text }, closed),

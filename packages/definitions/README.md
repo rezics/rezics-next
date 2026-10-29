@@ -483,6 +483,17 @@ upper uncertainty bound. It does not establish the counted holder, scope, produc
 method or eligibility for discovery. Portable/native amount storage and admissible
 filter evidence remain distinct.
 
+The next versioned measurement definitions adopt **multivalued** `schema:wordCount`
+and distinct `rezics:characterCount`, using the existing generic selected-candidate
+mechanism. One holder can simultaneously select en/v1/1000000 and ja/v2/1000001;
+each value, qualifiers and references remain one association. No latest, maximum,
+sum or cross-candidate qualifier donation is implied. Historical pinned releases
+keep their cardinality and bytes; old scalar facts remain valid. The current bundled
+wordCount is still singular until a real future versioned data producer changes it.
+The [association contract](../../services/kernel/src/semantic/measured-text-contract.md)
+owns the corrected source-input/native proposal; exact freeze, trusted admission,
+query conformance and all six consumer cells await actual current owner bindings.
+
 Word-count discovery evidence comes only from an **admitted producer input** that
 machine-readably declares complete whole-holder coverage, exact holder identity,
 language and version. When text is supplied, the input also carries that text's digest;

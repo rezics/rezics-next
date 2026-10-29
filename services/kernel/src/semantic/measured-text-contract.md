@@ -1,13 +1,16 @@
 # Measured text assertions
 
-This is a proposed Semantic owner decision and native specification acceptance, not
-an adopted release or a delivered measurement pipeline. The owning
-[Definitions README](../../../../packages/definitions/README.md) has not adopted
-this association grammar. Coordinate the choice below with Semantic before changing
-catalogue YAML, releases, shared schemas, converters or runtime. This document owns
-only the proposed association and its native cases; the
-[measurement research and complete matrix](../../../../docs/research/catalogue-filter-data-mappings.md)
-remain evidence, not a competing definition authority.
+The [Definitions owner](../../../../packages/definitions/README.md) adopts next-version
+multivalued word and distinct character measurements through the existing generic
+selected-candidate mechanism. Historical pinned releases retain their cardinality
+and bytes; old scalar facts remain valid. The current bundled wordCount remains
+singular until a real future versioned data producer lands. No latest/max/sum or
+cross-candidate qualifier donation follows. The same-holder simultaneously selected
+en/v1/1000000 and ja/v2/1000001 crossed-association proof remains required.
+
+This document owns the proposed association and native cases, not a release or a
+measurement pipeline. The [complete matrix](../../../../docs/research/catalogue-filter-data-mappings.md)
+is evidence. Exact native freeze and producer/query/consumer bindings remain open.
 
 ## Adopted whole-holder boundary and proposed native binding
 
@@ -60,6 +63,82 @@ Future released properties use that fixed value schema and `minimum: 0` (LinkML
 primitive remains decimal/unit-flexible; no serialized exact property flag exists.
 Input schema tests supplement, never replace native property validation.
 
+### Existing bounds and unresolved source-input boundary
+
+Before native writes, `packages/definitions/src/validate.ts`:
+`checkSubjectStructure` bounds one Statement to 16 qualifiers, 16 references and
+1–16 parts per reference; `valueLimits` bounds quantity amount/bounds strings to
+127 characters. This proposal mirrors those structural bounds (at most 273 snaks:
+main + 16 + 16×16). Bulk `BatchStatementSchema` alone does not bound qualifier or
+reference-part arrays; inheriting its shape alone was insufficient. Native property
+validation still checks each value against the pinned release. Generic string values
+and method definitions use the existing 1–1500-character `valueSchema` ceiling.
+Optional Source retains `packages/definitions/src/bulk.ts:SourceSchema` exactly:
+source key up to 32 characters, external ID 255, revision/converter revision 64,
+64 lowercase hex digest and the existing field-group enum. No private receipt exists.
+
+The native `schema:inLanguage` scalar is the fixed string schema from
+`packages/definitions/catalogue/core.yaml:inLanguage`, not the broader document or
+monolingual-text tag grammar. Its script and region casing are structural; `en-US`
+is admitted and `en-us` is rejected without normalization. The DTO uses that exact
+pattern with the generic string limits. `rezics:measuredAt` proposes millisecond UTC
+string shape only. Existing native `valueSchema('time')` in definitions/src/index.ts
+is a different precision/calendar carrier, not an instant parser; actual calendar
+validity remains an admitting-boundary obligation. A February 31 shape can pass this
+DTO Check and is never thereby an admitted measurement.
+
+There are three different byte domains: raw UTF-8 supplied text (its measured digest),
+`serializeDocument(fromPlainText(text))` UTF-8 bytes (Content snapshot digest), and
+complete serialized CountProducerInput bytes (including Statement, source, coverage
+and method). They are never interchangeable. `packages/definitions/src/bulk.ts`:
+`checkBatchWrite` enforces **32,768 canonical UTF-8 snapshot bytes** for a summary
+field; `packages/document/src/index.ts:serializeDocument` defines those bytes.
+`services/kernel/src/content/document.ts:validateContentDocument` and
+`content/authored-fields.ts:appendAuthoredField` allow 2 MiB for general authored
+Content, as does the single-statement authored validator. That broader Content cap
+must not be imported into the narrower portable summary-field path. These native
+cases deliberately preflight every authored source/method/manuscript snapshot against
+the narrower 32 KiB bound before writing, even though their ordinary authored route
+allows more. Raw text bytes must also fit; the snapshot envelope and JSON escaping
+consume additional bytes. No truncation, language normalization or partial-to-whole
+upgrade is permitted. The DTO's 32,768-code-point ceiling is only a necessary
+ceiling for that fixture path; multibyte text can pass it and exceed the byte budget.
+
+No existing path admits CountProducerInput itself. Neither the 32 KiB snapshot cap,
+Content's 2 MiB cap nor bulk's 100-command bound establishes a complete input transport
+or producer work budget. Remaining owner choice: select the actual admitted input
+path and its complete serialized UTF-8 byte budget, including coverage-list lengths
+and declaration/method/reference content, with pre-write enforcement and bounded
+parsing/counting. The old arbitrary 64-entry coverage caps supply no existing authority
+and are removed. The proposal cannot be frozen as an implementable input until this
+choice is made. For these fixed cases, declaration serialization and counting are
+linear in supplied bytes, records are preflighted at 32 KiB, and native Statement work
+is bounded above. This does not invent a producer runtime or exported validator.
+
+A future admitting boundary must establish actual holder/producer authority and exact
+Statement/reference equality; raw text/digest/value/count/unit, method Concept/version/
+definition and applicability, realization version, language, coverage and included/
+excluded parts must agree. It must check calendar validity, actual source revision,
+digest and absent/present date faithfully, and every current dependency before usable
+discovery publication. Schema Check performs structural checks only and is not a
+consistency check, caller certificate or trust grant.
+
+### Existing provenance admission
+
+`packages/definitions/src/validate.ts:checkStatementInput` independently adds
+`{ pointer: '/statement/references', code: 'required' }` when references are absent
+or empty and the property's disclosure is not `sourceOrConsent`.
+`services/kernel/src/semantic/candidates.ts:validatedStatement` calls it before
+ordinary proposal admission and throws SubjectInputError on violations, yielding
+400 `invalid_request`, `effect_status: not_applied`. Current bundled wordCount has
+omitted disclosure and therefore this default source-required rule. The next-version
+count direction preserves that default. The noSource case asserts this exact existing
+rule after valid count admission, not an inference from bulk minItems or a new global
+policy. Generic compact raw evidence and permitted sourceOrConsent paths retain their
+actual behavior. References and public citations alone do not establish trusted
+producer, whole-holder coverage or complete same-association binding. Retained raw
+incomplete/partial evidence never supplies usable whole-holder discovery.
+
 Proposed native storage keeps the existing Statement/Snak/Reference contracts:
 
 | Position                | Term                                                               | Meaning                                                                                       |
@@ -74,8 +153,12 @@ Proposed native storage keeps the existing Statement/Snak/Reference contracts:
 | Supplied-text qualifier | `rezics:measuredAt`                                                | Actual RFC 3339 millisecond UTC counting instant; native day-precision time cannot express it |
 | Reference parts         | `schema:url`, `schema:version`, `schema:dateModified` when present | Actual cited record and its own version/date, distinct from measured realization              |
 
-The citation records the complete machine declaration, included/excluded parts,
-holder, version, language, value and actual method/convention together. For supplied
+The citation records the source machine declaration, included/excluded parts,
+holder, version, language, value and actual method/convention together. Construct
+that declaration and its real authored citation first, without referring to the
+citation's future ID or digest. Then construct/check the complete CountProducerInput
+Statement with the final citation; that exact Statement is submitted natively.
+The source declaration is not a recursively serialized DTO. For supplied
 text it repeats the method definition, normalization, segmentation, word definition,
 locale/dictionary/Unicode version and tailoring as applicable. Content snapshot digest
 identifies serialized authored content, not raw manuscript bytes. Two incomplete
@@ -87,7 +170,8 @@ keep that missing prerequisite explicit rather than interpreting summary text.
 String equality must admit ANY declared string within existing limits, independently
 of patterns. It must not extend monolingual grammar, qualifier/leaves/depth budgets,
 or add another Boolean engine. The association may store more than four qualifiers;
-queries retain the current four-qualifier budget. Same-statement scope, language and
+queries retain the current four-qualifier budget. ALL stored measurement dependencies
+must be established and current even when a query asks only four of the six qualifiers. Same-statement scope, language and
 version plus method fit four; digest-specific probes are separate queries. Query
 conformance is NOT YET FROZEN pending inspection/review of actual Source/index code.
 The delivered exact-quantity primitive resolves the old bounds-schema blocker;
@@ -156,7 +240,8 @@ The shared fixture exposes actual native `grant` administration. Candidate hide/
 controls use `moderation:hide` and `moderation:takedown` on Global; source-fence
 producer dependencies remain closed. Omitted/unknown method and
 source-less input cases do not claim to cover actual source withdrawal. Native
-method-target hiding, cited-record withdrawal and foreign source fencing remain
+method-target hiding, cited-record withdrawal, source-fence changes, competing/deprecated
+candidates, original and terminal disclosure, and FOREIGN disclosure remain
 REQUIRED NOT YET FROZEN in the shared privacy producer; losing any indispensable dependency
 must make the entire measurement unknown before disclosure, including NOT,
 order, counts and membership. Do not add a fake permission or private proof.
