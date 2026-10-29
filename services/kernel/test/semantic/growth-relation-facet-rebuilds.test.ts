@@ -8,7 +8,16 @@ import type { Relay } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { assertGrowth, capture, costOf, medianCost, openGrowthDatabase, seed, type Cost } from '../support/growth.ts';
+import {
+  assertGrowth,
+  capture,
+  costOf,
+  medianCost,
+  openGrowthDatabase,
+  seed,
+  settle,
+  type Cost,
+} from '../support/growth.ts';
 import { writeSubject } from '../../src/semantic/subject.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createRealAccess } from './real-access.ts';
@@ -284,10 +293,11 @@ test('facet rebuild relay work per page is independent of tuple fanout and event
       { from: 0, to: scale },
     );
     await drain();
-    await db.admin.query('VACUUM (ANALYZE)');
+    await settle(db, { analyze: true });
     const costs = [];
     for (let sample = 0; sample < 4; sample++) {
       await prepare();
+      await settle(db, { analyze: true });
       const step = async () => {
         const result = await worker.run(home); // SINGLE continuation; source commands execute inside this call.
         expect(result.status).toBe('read');

@@ -4,7 +4,7 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { listSubjectLinks } from '../../src/semantic/links.ts';
 import { newId } from '../../src/route/route.ts';
-import { checkGrowth, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, measure, openGrowthDatabase, settle, type GrowthDatabase } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -189,8 +189,8 @@ test('links projection work grows with changed links and stays flat in in-degree
     if (growingLinks) {
       const costs = [];
       for (const scale of [10, 100, 500]) {
-        await db.admin.query('VACUUM (ANALYZE)');
         await check.operation(db, scale);
+        await settle(db, { analyze: true });
         costs.push({ scale, cost: (await measure(db, () => check.operation(db, scale))).cost });
       }
       for (const sample of costs.slice(1)) {

@@ -11,7 +11,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { expandSlot } from '../../src/semantic/slots.ts';
 import { createSubject, writeFacts } from '../../src/semantic/subject.ts';
 import type { CoverSummary, SubjectSummary } from '../../src/semantic/summaries.ts';
-import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, costOf, openGrowthDatabase, settle, type GrowthDatabase } from '../support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -354,8 +354,9 @@ test('bounded graph summary filling preserves the shared 256 ID limit', async ()
     { 'rezics:sameSetting': branches.map((id) => value('rezics:sameSetting', id)) },
   );
   await catchUp();
-  await db.admin.query('VACUUM (ANALYZE)');
+  await settle(db, { analyze: true });
   await get(graphPath(anchor));
+  await settle(db, { analyze: true });
   const measured = await capture(db, () => get(graphPath(anchor)));
   const graph = measured.value;
   expect(graph.nodes).toHaveLength(501);
