@@ -187,6 +187,8 @@ const cards = (html: string) =>
 const titleOf = (card: string) => text(/<a\b[^>]*>([\s\S]*?)<\/a>/.exec(card)?.[1] ?? '');
 const secondaryOf = (card: string) =>
   text(/<div\b[^>]*data-slot="cover-card-secondary"[^>]*>([\s\S]*?)<\/div>/.exec(card)?.[1] ?? '');
+const secondaryMarkupOf = (card: string) =>
+  /<div\b[^>]*data-slot="cover-card-secondary"[^>]*>([\s\S]*?)<\/div>/.exec(card)?.[1] ?? '';
 const hrefsOf = (html: string) => [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map((match) => match[1]!);
 
 const previewSlots = ['subject-list', 'relation-groups', 'appearances', 'credits'] as const;
@@ -209,6 +211,7 @@ test('subject previews render as cover cards: the cover first and edge to edge, 
   const relationGroups = section(html, 'relation-groups');
   const sequel = cards(layouts(relationGroups).grid).find((card) => titleOf(card) === 'Holder 6')!;
   expect(secondaryOf(sequel)).toBe('Sequel · 2012');
+  expect(secondaryMarkupOf(sequel)).toContain('<span> <span aria-hidden="true">·</span> 2012</span>');
   const editions = cards(layouts(section(html, 'subject-list')).grid);
   expect(editions).toHaveLength(3);
   expect(editions.filter((card) => card.includes('<img') && card.includes('src="/media/'))).toHaveLength(3);
@@ -349,6 +352,7 @@ test('the full relations view uses the responsive cover grid and keeps its conti
   for (const card of cards(html)) expect([...card.matchAll(/<a\b/g)]).toHaveLength(1);
   expect(titleOf(cards(html)[0]!)).toBe('Holder 1');
   expect(secondaryOf(cards(html)[0]!)).toBe('Sequel · 2015');
+  expect(secondaryMarkupOf(cards(html)[0]!)).toContain('<span> <span aria-hidden="true">·</span> 2015</span>');
   expect(html).toContain(`data-slot="next-page"`);
   expect(html).toContain(
     `href="/en/subjects/${subjectId}/${slug('The Little Prince')}/relations?cursor=opaque-cursor"`,

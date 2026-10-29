@@ -210,7 +210,7 @@ test('relations are grouped by relation group, each group with its count, cover,
   expect(text(order)).toContain('2 total');
   expect(text(order)).toContain('Second Voyage');
   expect(text(order)).toContain('Sequel');
-  expect(text(order)).toContain('Sequel · 2012');
+  expect(order).toContain('<span> <span aria-hidden="true">·</span> 2012</span>');
   expect(text(order)).toContain('2015');
   expect(order).toContain('/media/');
   expect(order.indexOf('Second Voyage')).toBeLessThan(order.indexOf('Third Voyage'));
