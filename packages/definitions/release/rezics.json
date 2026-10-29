@@ -1942,14 +1942,6 @@
             "type": "string",
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
-          "lowerBound": {
-            "type": "string",
-            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
-          },
-          "upperBound": {
-            "type": "string",
-            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
-          },
           "unit": {
             "enum": ["1"]
           }
