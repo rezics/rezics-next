@@ -21,9 +21,7 @@ test('the kernel README bounded job step limits equal the Library code constants
   expect(limit('Native command deadline')).toBe(
     `${SHELF_MAINTENANCE_LIMITS.commandDeadlineMs} ms; a shorter caller deadline wins`,
   );
-  expect(limit('Native command deadline')).toBe(
-    `${BULK_COMMAND_DEADLINE_MS} ms; a shorter caller deadline wins`,
-  );
+  expect(limit('Native command deadline')).toBe(`${BULK_COMMAND_DEADLINE_MS} ms; a shorter caller deadline wins`);
   expect(limit('Continuation (keyset cursor or frontier)')).toBe(
     `${SHELF_MAINTENANCE_LIMITS.cursorScalars} scalars and ${SHELF_MAINTENANCE_LIMITS.cursorBytes} UTF-8 JSON bytes, including full unique tie keys; never OFFSET`,
   );
