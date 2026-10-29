@@ -233,6 +233,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
     notes: parseNotes(local.notes),
+    flowThresholds,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
     silenceMs: positive(local.silenceMs ?? defaults.silenceMs, 'silenceMs'),
     codex: {
@@ -301,8 +302,7 @@ export type RuntimeOptions = {
 export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
-  const localSettings = existsSync(settings.localFile) ? object(JSON.parse(readFileSync(settings.localFile, 'utf8')), 'local settings') : {};
-  const flowThresholds = { ...DEFAULT_FLOW_THRESHOLDS, ...object(localSettings.flow ?? {}, 'flow') } as typeof DEFAULT_FLOW_THRESHOLDS;
+  const flowThresholds = settings.flowThresholds ?? DEFAULT_FLOW_THRESHOLDS;
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
   const startedCodeVersion = existsSync(join(settings.mainCheckout, 'tools/goal'))
     ? codeVersion(settings.mainCheckout, 'tools/goal')
