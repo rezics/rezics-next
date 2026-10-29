@@ -6,6 +6,23 @@ then reopens the production importer's SQLite journal and replays the actual bat
 It returns the native subject, selected candidate identities and original HTTP observations.
 The importer and its owned temporary files are removed before the call settles and on close.
 
+The integrating caller keeps this client alive for its remaining native requests:
+
+```ts
+const client = createDriverClient();
+try {
+  const driver = await client.init();
+  const book = await client.importReleasedBook({ version: 1 });
+  // book.subjectId and book.selected identify the actual imported, adopted Book.
+  const response = await driver.request('anonymous', 'POST', '/v1/subjects:search', {
+    text: 'Example Volume',
+  });
+  // Use the existing bounded worker-convergence wait before asserting visibility.
+} finally {
+  await client.close();
+}
+```
+
 Input: `specs/fixtures/imports/wikidata/entity.json`, SHA-256
 `6b1b348b9dbd5a4701495f00c041812742fbb8bf05eb0943218407b6a0674cbc`,
 converter `wikidata-3`. Q571/revision 24681012 are synthetic fixture identities, not observed live Wikidata.
