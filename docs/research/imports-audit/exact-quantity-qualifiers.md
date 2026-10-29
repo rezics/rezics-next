@@ -136,6 +136,15 @@ paths; it does not substitute for the unavailable native run. No pass or red ass
 is manufactured. The tests and product code are identical to the continuation base.
 No old suite, full kernel/web gate, timeout change or default converter repair ran.
 
+## Cached-runtime verification continuation
+
+Preflight at `4e009684d3` confirms the frozen test, actual bundled release and
+converter retain the SHA-256 values recorded above. The existing conversion
+README remains unchanged. This continuation runs only the focused native file
+through normal worker-check admission with `TMPDIR=/dev/shm`; local `/dev/shm`
+and `/tmp` are actual tmpfs mounts. The previously passing artifact acceptance
+and affected root typecheck are retained without rerunning unchanged suites.
+
 ## Limits and decisions
 
 The actual bundle is consumed unchanged. No product, helper, definition, release
