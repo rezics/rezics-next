@@ -1,8 +1,22 @@
 import type { Pool } from 'pg';
+import { defineQuery } from 'reylo';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
-import checkpoint from './erasure-page.sql';
+import checkpointStatement from './erasure-page.sql';
+
+// Migration compatibility is verified at deployment; discovery never probes catalogs.
+const checkpoint = defineQuery<
+  (typeof checkpointStatement)['~reylo']['input'],
+  (typeof checkpointStatement)['~reylo']['element'],
+  typeof checkpointStatement.cardinality,
+  'postgres'
+>({
+  dialect: checkpointStatement.dialect,
+  sql: checkpointStatement.raw,
+  params: checkpointStatement.params,
+  cardinality: checkpointStatement.cardinality,
+});
 
 type Routing = 'owner' | 'zero' | 'partitions';
 /** Scalar roles only. Typed JSON/delegation and HMAC associations have separate producer slices.
