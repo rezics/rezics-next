@@ -1,8 +1,10 @@
 # Own-reference refresh verification
 
-Implementation revision: `0b648d744bb80da17a70a3907233fab3168b9112`. Latest verification revision:
-`c79e538dfd`. The frozen native acceptance was not edited; its SHA-256 is
-`9c0ec65033be4f94562f13a986bbb5873b5ea3b14f50d105bfc3bd4736ea0e51`.
+Implementation revision: `0b648d744b3ed6f34bf435866606c102d1b0707d`. Current frozen installation:
+`7067483fa8371b76b6e1ec6c6cb4e9df72de2b05`. Its SHA-256 is
+`0df9043bf4316fe51014a836a680e902f0a84a7a9b6174622143d31479cc0077`, exactly matching the
+controller registry and the approved combined raw file. No worker formatting or amendment was applied.
+The controller committed the observation correction; this continuation preserves all frozen bytes.
 
 ## Delivered behavior
 
@@ -18,22 +20,38 @@ the new conversion and only replaces changed bodies. Thus an unchanged unknown-a
 second candidate while the work relation refreshes. Source revision, digest and converter revision remain unchanged.
 The stored dependency signature is importer coordination metadata; it does not add account, bearer or owner data.
 
-## Evidence
+## Current verification
 
-The latest frozen native command ran once on `c79e538dfd`:
+Focused native acceptance and the three-file recovery command are pending on this continuation.
+No runtime, storage API, shared type or local regression bytes have changed. Under the latest
+contract, reuse the previous local **2 pass, 16 assertions** and root typecheck **exit 0 across
+13 workspaces** (receipt `07-46-41.621Z-30884bbc`, check prefix `b1158554`) on product `c79e538dfd`.
+The prior adjacent submission `070d3370` ended in infrastructure before results, so it supplies no
+post-retention recovery proof and the three-file command must run here.
+
+The combined frozen correction distinguishes proposal and native read property shapes and allows
+`busy` to consume a relay call within the unchanged 16-call partition budget. Only `read` with zero
+envelopes establishes readiness; `stopped` remains fatal. These are authorized observation changes,
+not product behavior changes. Native `SnakSchema` and `StatementSchema` require `data_type` on reads;
+portable bulk proposals keep their id-only property shape. No other oracle change is assumed.
+
+## Earlier evidence
+
+The previous frozen native command ran once on `c79e538dfd` with old frozen hash
+`9c0ec65033be4f94562f13a986bbb5873b5ea3b14f50d105bfc3bd4736ea0e51`:
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
 ```
 
-It produced **1 pass and 1 failure**. The first native flow passed: it created and retained the real work claim;
+Receipt `07-39-54.387Z-a2c9e002` produced **1 pass and 1 failure**. The first native flow passed: it created and retained the real work claim;
 resolved the edition relation to that returned subject ID; preserved the unknown author as `somevalue` with its Open
 Library qualifier; retrieved and adopted the actual target-addressed candidate; verified stable replay; and confirmed
 grant-denied replay returned 403 without disclosing the ID.
 
 The late-learning flow failed while relaying the subject partition after its first adoption: the frozen helper
 received `delivered.status === "busy"` and asserted that the relay was not busy. That invocation therefore did not
-reach the later transition or assertions. An earlier completed run on this implementation reached the resolved
+reach the later transition or assertions. Receipt `05-09-02.014Z-e5812714`, an earlier completed run on this implementation, reached the resolved
 candidate transition, semantic key/body change with stable source metadata, old unresolved history, independent
 community adoption, and stable replay, then failed its final unknown-author response-shape assertion: the public
 candidate response contains qualifier property `{ id: "wdt:P648", data_type: "external-id" }`, while the frozen
@@ -53,9 +71,16 @@ verifies the resolved relation uses the actual returned work ID, and checks the 
 resolved replay remain stable. This is local recovery evidence, not a substitute for the native permission and
 adoption boundary.
 
-The root typecheck completed successfully with exit status 0 on the same product revision. The previously passed
-import-session and deferred-cover-recovery focused suites were not rerun because no product code changed after those
-results.
+The root typecheck completed successfully with exit status 0 on the same product revision. Earlier adjacent-suite
+passes predate candidate retention and do not establish current recovery behavior.
+
+## Decisions and bounds
+
+Preserve existing semantically unchanged candidates and every immutable journal/bootstrap byte. Reuse qualified
+local/typecheck evidence because their relevant product/test bytes are unchanged; rerun the named native and adjacent
+commands only. Do not rebase or merge this assigned branch. Existing Cost ceilings remain; candidate retention adds
+at most C × Q full-statement comparisons, C ≤ 300 current owned candidates and Q ≤ 100 actual Open Library proposals,
+with existing bounded statement bytes. This is local bounded work, with no new history scan or server query.
 
 ## Sources read
 

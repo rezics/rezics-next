@@ -107,30 +107,28 @@ retained, while changed relation bodies are proposed with new keys. This avoids 
 candidate effects for unrelated fields such as an unchanged unknown author.
 
 The frozen [native cases](../kernel/test/imports/known-reference-refresh.test.ts) cover the
-default handoff and unchanged dependency refresh. Implementation revision:
-`0b648d744bb80da17a70a3907233fab3168b9112`. The latest verification
-on `c79e538dfd` passed the first flow, including the actual work claim, target-addressed
-candidate, editor adoption, stable replay, and denied replay. The late-refresh flow stopped
-at the subject-partition relay because it returned `busy`. An earlier completed run reached
-resolved adoption and retained-history checks, then failed the unknown-author assertion:
-the public candidate response's qualifier property contains `data_type: "external-id"`,
-while the frozen helper requires a property object with only `id`. The local recovery
-regression passed earlier; its continuation rerun produced no result after a transfer EOF.
-The root typecheck passed. See the
-[verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
-for exact evidence and limits. The frozen native file hash is
-`9c0ec65033be4f94562f13a986bbb5873b5ea3b14f50d105bfc3bd4736ea0e51`.
+default handoff and unchanged dependency refresh. Original implementation locator:
+`0b648d744b3ed6f34bf435866606c102d1b0707d`. The installed combined observation correction
+preserves proposal property objects and requires the native read datatype only on native
+responses; a busy partition relay consumes one of the same 16 calls and is never readiness.
+Its unchanged SHA-256 is
+`0df9043bf4316fe51014a836a680e902f0a84a7a9b6174622143d31479cc0077`, matching the frozen registry.
+The current focused native and adjacent recovery checks are pending. The earlier local
+reopen regression passed (2 cases, 16 assertions); its exact runtime/test bytes are unchanged.
+The existing successful root typecheck covers the unchanged product and shared types.
+See the [verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
+for revisions, receipts, reached transitions and evidence limits.
 
 ### Own-reference refresh cost
 
 - Touches: read at most 64 author/work relation keys from the bounded Open Library projection, with one indexed `RecordBindings.claim` point read per supplied key; compare and persist one signature for the record. A changed signature runs ordinary bounded candidate reconciliation. Existing journals and receipts are read only by their exact owner/key.
-- Bound: O(M + F log B) per supplied record for M projection bytes, F ≤ 64 native relation keys and B stored binding rows, plus existing bounded planning and writes. Durable dependency metadata is O(1) per record; source record admission retains its existing byte and field caps. No claim/history enumeration or source-wide dependency sweep is used.
-- Growth check: `services/importer/tests/own-reference-refresh.test.ts` previously verified exact alias point reads and the default reopen/late-learning/stable-replay path; the continuation rerun was blocked by a check transfer failure. The frozen native case verifies target-addressed adoption and replay; the latest late-refresh run stopped at a busy relay, and an earlier run ended at the unknown-author response-shape mismatch. No native growth measurement is claimed.
+- Bound: O(M + F log B) per supplied record for M projection bytes, F ≤ 64 native relation keys and B stored binding rows, plus existing bounded planning and writes. Reconciliation additionally compares at most C × Q full statements, C ≤ 300 current owned candidates and Q ≤ 100 Open Library proposals, each under the existing bounded statement/envelope bytes. This adds local comparison work, not a history scan or server query. Durable dependency metadata is O(1) per record; source record admission retains its existing byte and field caps. No claim/history enumeration or source-wide dependency sweep is used.
+- Growth check: `services/importer/tests/own-reference-refresh.test.ts` previously passed exact-alias point reads and the default reopen/late-learning/stable-replay path (2 cases, 16 assertions). Native evidence and its limits are recorded in the verification report. No new native growth measurement or PostgreSQL count is claimed.
 
 The exact native command is:
 
 ```sh
-bun scripts/worker-check.ts -- env KERNEL_CHECK_SKIP_STALE_CLEANUP=1 bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
 ```
 
 ### Changed-dependency cost obligation
@@ -212,6 +210,10 @@ Refresh must respect server deletion, authorization and disclosure checks.
 Planning checks `(source, external_id, field_group)` takedown fences before even
 the unchanged-record shortcut, and dispatch checks them again. Never clear
 those fences or terminal source claims to recreate withheld material.
+
+The `run_reference_signatures` table holds only exact source/key dependency outcome signatures.
+It is coordination metadata for every role, has no role-specific product surface, and contains
+no account, bearer or owner data. It follows the same restart and retention restrictions below.
 
 Operational source/key/revision/digest/converter-revision rows, sanitized source
 projections, generation pages, returned IDs, exact prepared request bytes and
