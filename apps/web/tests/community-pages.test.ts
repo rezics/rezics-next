@@ -3,8 +3,8 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 
 mock.module('@tanstack/react-router', () => ({
-  Link: ({ children, to, params, className }: any) =>
-    createElement('a', { href: `${to.replace(/\$id/, params?.id ?? '')}`, className }, children),
+  Link: ({ children, to, params, className, ...props }: any) =>
+    createElement('a', { ...props, href: `${to.replace(/\$id/, params?.id ?? '')}`, className }, children),
   useLocation: () => ({ publicHref: 'https://site.example/en/spaces/atlas' }),
 }));
 mock.module('../src/community/realm-membership', () => ({
@@ -103,17 +103,23 @@ test('Space Realm list uses the same stretched ListRow pattern with no totals', 
 test('rendering the Space and carried Realm uses the existing five reads and adds no read', async () => {
   const calls: string[] = [];
   const client = {
-    spaceAddresses: () => ({ get: async () => (calls.push('address'), { data: { spaceId: 'space-42' } }) }),
+    spaceAddresses: () => ({
+      get: async () => (calls.push('address'), { status: 200, data: { spaceId: 'space-42' } }),
+    }),
     spaces: () => ({
       get: async () => (
         calls.push('space'),
-        { data: { space: { spaceId: 'space-42', realmId: 'realm-42', title: 'Atlas Readers', summary: 'Summary' } } }
+        {
+          status: 200,
+          data: { space: { spaceId: 'space-42', realmId: 'realm-42', title: 'Atlas Readers', summary: 'Summary' } },
+        }
       ),
     }),
     realms: () => ({
       get: async () => (
         calls.push('realm'),
         {
+          status: 200,
           data: {
             realm: {
               realmId: 'realm-42',
@@ -124,8 +130,8 @@ test('rendering the Space and carried Realm uses the existing five reads and add
           },
         }
       ),
-      boards: { get: async () => (calls.push('boards'), { data: { items: [], next: null } }) },
-      publications: { get: async () => (calls.push('publications'), { data: { items: [], next: null } }) },
+      boards: { get: async () => (calls.push('boards'), { status: 200, data: { items: [], next: null } }) },
+      publications: { get: async () => (calls.push('publications'), { status: 200, data: { items: [], next: null } }) },
     }),
   };
   const page = await loadSpacePage(
