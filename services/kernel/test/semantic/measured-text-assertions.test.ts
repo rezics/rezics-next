@@ -448,7 +448,7 @@ test('controlled threshold values remain independent from proof of owned measure
       },
       statement,
     };
-    const input: StatementInput = structuredClone(statement);
+    const input = structuredClone(statement) satisfies StatementInput;
     expect(producerInput.Check(declaration)).toBe(true);
     expect(declaration.statement).toEqual(input);
     expect('digest' in declaration).toBe(false);
