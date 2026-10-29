@@ -229,17 +229,18 @@ test('quota boundary serializes concurrent 33rd and 34th definitions, preserves 
       (await f.store.reserve(await native.actor(f.owner), f.collectionId, [definition(ordinal)])).episodes[0]!,
     );
   native.advance(1);
-  expect(await f.store.touch(f.actor, episodes[0]!.locator)).toBe(true);
+  expect(await f.store.touch(await native.actor(f.owner), episodes[0]!.locator)).toBe(true);
   const initial = await native.rows(f.owner);
   const oldest = initial
     .filter((row) => row.episode_id !== episodes[0]!.locator.episodeId)
     .sort((a, b) => String(a.episode_id).localeCompare(String(b.episode_id)))
     .slice(0, 2);
   const second = native.db.openPool({ max: 1 });
+  const firstActor = await native.actor(f.owner);
   const secondActor = await native.actor(f.owner, second);
   const result = await capture(native.db, () =>
     Promise.all([
-      f.store.reserve(f.actor, f.collectionId, [definition(32)]),
+      f.store.reserve(firstActor, f.collectionId, [definition(32)]),
       native.store(second).reserve(secondActor, f.collectionId, [definition(33)]),
     ]),
   );
@@ -254,7 +255,8 @@ test('quota boundary serializes concurrent 33rd and 34th definitions, preserves 
   expect(rows.find((row) => row.episode_id === episodes[0]!.locator.episodeId)?.state).toBe('live');
   expect(result.value.flatMap((value) => value.intent!.input.cleanup)).toHaveLength(2);
   expect(result.capture.statements.some((sql) => /DELETE FROM library\.|CASCADE/i.test(sql))).toBe(false);
-  const duplicate = await capture(native.db, () => f.store.reserve(f.actor, f.collectionId, [definition(33)]));
+  const duplicateActor = await native.actor(f.owner);
+  const duplicate = await capture(native.db, () => f.store.reserve(duplicateActor, f.collectionId, [definition(33)]));
   expect(duplicate.value.intent).toBeNull();
   expect(duplicate.capture.statements.filter((sql) => /FROM library.members_preparation\b/i.test(sql))).toHaveLength(1);
   expect(await native.rows(f.owner)).toEqual(rows);
@@ -265,8 +267,9 @@ test('one composed two-read admission has one batch intent, including quota reti
   const f = await native.fixture();
   for (let ordinal = 0; ordinal < 32; ordinal++)
     await f.store.reserve(await native.actor(f.owner), f.collectionId, [definition(ordinal)]);
+  const actor = await native.actor(f.owner);
   const result = await capture(native.db, () =>
-    f.store.reserve(f.actor, f.collectionId, [definition(32), definition(33), definition(32)]),
+    f.store.reserve(actor, f.collectionId, [definition(32), definition(33), definition(32)]),
   );
   expect(result.value.episodes).toHaveLength(2);
   expect(result.value.intent!.input.episodes).toHaveLength(2);
@@ -332,7 +335,10 @@ test('late work refuses retired and physically removed episodes and cannot mutat
   const f = await native.fixture();
   const old = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
   await native.db.admin.query(
-    "UPDATE library.members_preparation SET state='retired' WHERE route=$1 AND owner_account_id=$2 AND episode_id=$3",
+    `WITH retired AS (UPDATE library.members_preparation SET state='retired'
+      WHERE route=$1 AND owner_account_id=$2 AND episode_id=$3 AND state='live' RETURNING 1)
+      UPDATE library.members_preparation_owner SET live_count=live_count-(SELECT count(*) FROM retired)
+      WHERE route=$1 AND owner_account_id=$2`,
     [old.locator.route, f.owner.accountId, old.locator.episodeId],
   );
   const successor = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;

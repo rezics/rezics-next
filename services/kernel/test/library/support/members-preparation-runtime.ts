@@ -212,7 +212,7 @@ export function definition(ordinal = 0): PreparationDefinition {
   };
 }
 
-/** Observation barrier on real clients, before the indexed owner lock; it never supplies a query result. */
+/** Observation barrier before the first owner-control access, including concurrent first-row creation. */
 export function uniquenessRace(pools: readonly Pool[]) {
   const ready = Promise.withResolvers<void>();
   let arrivals = 0;
@@ -222,7 +222,7 @@ export function uniquenessRace(pools: readonly Pool[]) {
       client.query = (async (...args: unknown[]) => {
         if (
           typeof args[0] === 'string' &&
-          /FROM library\.members_preparation_owner[\s\S]*FOR UPDATE/i.test(args[0]) &&
+          /\b(?:FROM|INTO|UPDATE) library\.members_preparation_owner\b/i.test(args[0]) &&
           arrivals < 2
         ) {
           if (++arrivals === 2) ready.resolve();
