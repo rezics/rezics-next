@@ -58,7 +58,7 @@ test('the gate invokes the installed Bun explicitly instead of Bun.spawn selecti
   expect(resolveBunCommand(['other-tool', '--version'], root)).toEqual(['other-tool', '--version']);
 });
 
-test('worker checks select the pinned repository Bun and remote checks verify both Bun executables', async () => {
+test('worker and remote checks select and verify the pinned repository Bun', async () => {
   const manifest = await Bun.file(join(root, 'package.json')).json();
   const workerCommand = resolveRepositoryBun(['bun', '--eval', 'console.log(Bun.revision)'], root);
   const worker = run(workerCommand);
@@ -71,7 +71,7 @@ test('worker checks select the pinned repository Bun and remote checks verify bo
   expect(typecheckBun.output.trim()).toBe(Bun.revision);
 
   const remote = runScript('run-id', '/srv/rezics-check/runs/run-id', '.', ['bun', 'test'], 'host-a');
-  expect(remote).toContain(`expected_bun='${manifest.packageManager.slice(4)}'`);
+  expect(remote).toContain(`expected_bun=${manifest.packageManager.slice(4)}`);
   expect(remote).toContain('Bun.revision === process.argv[1]');
   expect(remote).toContain('https://registry.npmjs.org/@oven/bun-linux-${build}/-/bun-linux-${build}-${expected_bun}.tgz');
   expect(remote).toContain('"$PWD/.temp/pinned-bun/package/bin/bun"');
