@@ -281,15 +281,19 @@ function mountedAction(
   action: string,
   metadata: { anonymous: boolean; replay?: 'self-account-read'; 'x-resource-types'?: readonly string[] },
 ) {
-  return new Elysia().get('/internal', () => 'ok', {
-    detail: {
-      operationId: 'internal.read',
-      'x-action': action,
-      security: metadata.anonymous ? [{}] : [{ bearerAuth: [] }],
-      ...(metadata.replay ? { 'x-replay-authorization': metadata.replay } : {}),
-      ...(metadata['x-resource-types'] ? { 'x-resource-types': metadata['x-resource-types'] } : {}),
+  return new Elysia().get(
+    '/internal',
+    {
+      detail: {
+        operationId: 'internal.read',
+        'x-action': action,
+        security: metadata.anonymous ? [{}] : [{ bearerAuth: [] }],
+        ...(metadata.replay ? { 'x-replay-authorization': metadata.replay } : {}),
+        ...(metadata['x-resource-types'] ? { 'x-resource-types': metadata['x-resource-types'] } : {}),
+      },
     },
-  });
+    () => 'ok',
+  );
 }
 
 test('internal actions are additive, keep identical route metadata and reject conflicts at composition', () => {
