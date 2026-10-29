@@ -143,7 +143,7 @@ export function SpacePage({ page }: { page: SpacePageData }) {
     <article className="max-w-5xl space-y-10 text-foreground">
       <header
         className="relative isolate flex flex-wrap items-end justify-between gap-7 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
-        style={{ backgroundColor: banner ? undefined : colors.background, color: colors.foreground }}
+        style={{ backgroundColor: banner?.placeholder.color ?? colors.background, color: colors.foreground }}
       >
         {bannerSrc ? (
           <>
@@ -152,6 +152,9 @@ export function SpacePage({ page }: { page: SpacePageData }) {
               alt=""
               aria-hidden="true"
               className="absolute inset-0 -z-20 h-full w-full object-cover"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
             />
             <div
               aria-hidden="true"

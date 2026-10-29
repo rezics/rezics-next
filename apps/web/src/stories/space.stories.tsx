@@ -16,7 +16,9 @@ async function spaceReady(context: { canvasElement: HTMLElement }) {
   const board = realmBoardsRecording.items[0]?.title;
   if (!board) throw new Error('The recorded Realm has no board.');
   await view.findByRole('link', { name: new RegExp(board) });
-  await userEvent.hover((await view.findAllByRole('listitem'))[0]!);
+  const firstRow = (await view.findAllByRole('listitem'))[0]!;
+  await userEvent.hover(firstRow);
+  firstRow.setAttribute('data-overlay', 'visible');
 }
 
 export const SignedIn: Story = {

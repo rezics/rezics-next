@@ -19,7 +19,9 @@ async function listed(context: { canvasElement: HTMLElement }) {
   const view = await mainView(context);
   const name = myRealmsRecording.items[0]?.name;
   if (!name) throw new Error('The recorded Realms page has no Realm.');
-  await userEvent.hover(await view.findByRole('link', { name }));
+  const link = await view.findByRole('link', { name });
+  await userEvent.hover(link);
+  link.closest('[data-slot="list-row"]')?.setAttribute('data-overlay', 'visible');
 }
 
 /** A signed-out reader is offered sign-in instead. */
