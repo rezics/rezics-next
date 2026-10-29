@@ -99,7 +99,7 @@ test('a successful settle issues no relation-statistics diagnostics', async () =
   const original = db.admin.query.bind(db.admin);
   let diagnosticQueries = 0;
   db.admin.query = ((...args: Parameters<typeof db.admin.query>) => {
-    const query = args[0];
+    const query = args[0] as unknown as string | { text: string };
     const sql = typeof query === 'string' ? query : query.text;
     if (sql.includes('pg_stat_clear_snapshot') || sql.includes('pg_stat_user_tables')) diagnosticQueries++;
     return original(...args);
