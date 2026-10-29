@@ -85,7 +85,8 @@ export const HISTORY_ARTIFACTS = Object.freeze({
 export type HistoryArtifactType = keyof typeof HISTORY_ARTIFACTS;
 
 export function historyArtifact(type: string, minimizerVersion = 1) {
-  if (!Object.hasOwn(HISTORY_ARTIFACTS, type)) throw new TypeError('Unknown history artifact type');
+  if (typeof type !== 'string' || !Object.hasOwn(HISTORY_ARTIFACTS, type))
+    throw new TypeError('Unknown history artifact type');
   const entry = HISTORY_ARTIFACTS[type as HistoryArtifactType];
   if (minimizerVersion !== entry.minimizerVersion) throw new TypeError('Unknown history minimizer version');
   return entry;
@@ -94,7 +95,7 @@ export function historyArtifact(type: string, minimizerVersion = 1) {
 export type EventClassification =
   | Readonly<{ kind: 'account-bearing'; roles: readonly AccountRole[] }>
   | Readonly<{ kind: 'non-personal'; roles: readonly [] }>;
-const nonPersonal: EventClassification = Object.freeze({ kind: 'non-personal', roles: Object.freeze([]) });
+const nonPersonal: EventClassification = Object.freeze({ kind: 'non-personal', roles: Object.freeze([] as const) });
 function personal(...roles: AccountRole[]): EventClassification {
   return Object.freeze({ kind: 'account-bearing', roles: Object.freeze(roles) });
 }
@@ -118,7 +119,6 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.access.agent-verification.reversed.v1': personal('subject', 'reviewer'),
   'com.rezics.access.agent-verification.reversing.v1': personal('subject', 'reviewer'),
   'com.rezics.access.agent-verification.verified.v1': personal('subject'),
-  'com.rezics.access.agent-verification.withdrawn.v1': personal('subject'),
   'com.rezics.access.assignment.create.v1': personal('principal'),
   'com.rezics.access.assignment.revoke.v1': personal('principal'),
   'com.rezics.access.authentication-established.v1': personal('subject'),
