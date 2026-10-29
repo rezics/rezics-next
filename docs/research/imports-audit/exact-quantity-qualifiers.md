@@ -124,6 +124,11 @@ Retry/final log:
 `.temp/goal/checks/worker-check-2026-10-29T08-08-13.689Z-2431a90d.log`.
 No further native run or alternative runtime was started after that automatic retry.
 
+Affected root typecheck: **exit 0**, checking the kernel (one of thirteen
+workspaces), including construct, after the wrapper's single automatic retry.
+Log: `.temp/goal/checks/worker-check-2026-10-29T08-08-15.254Z-38c95dbf.log`.
+All three check IDs were awaited to a printed final exit status; none remains running.
+
 The command requested SQLite tmpfs via TMPDIR=/dev/shm. None of the three
 scenario outcomes, native candidate observations or receipt immutability assertions
 was reached or verified in this continuation. Source inspection identifies the unsafe
