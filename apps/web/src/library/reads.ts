@@ -138,7 +138,7 @@ export function subjectOf(subject: RawSubject | null | undefined): LibrarySubjec
     type: subject.type,
     types: subject.types?.length ? [...subject.types] : [subject.type],
     label: libraryLabel(subject.label, subject.id),
-    labelLanguage: typeof subject.label === 'object' && subject.label !== null ? subject.label.language : undefined,
+    ...(typeof subject.label === 'object' && subject.label !== null ? { labelLanguage: subject.label.language } : {}),
     cover: (subject.cover ?? null) as CoverSummary | null,
   };
 }
