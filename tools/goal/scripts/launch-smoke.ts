@@ -91,6 +91,9 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
   let checkId = '';
   const session = 'launch-smoke-fake-session';
   let resultPath = '';
+  let clone = '';
+  let devTree = '';
+  let devWorktreeAdded = false;
   const passed: string[] = [];
   const baseEnv = {
     ...process.env,
@@ -101,8 +104,33 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
   };
   try {
     try {
-      // Even the fake-agent protocol uses the real asynchronous check entry point and its durable result.
-      const started = checked(process.execPath, [join(root, 'scripts/worker-check.ts'), '--', '--local',
+      // Control-plane candidates do not carry the check runner. Exercise the version on dev, as the real smoke does.
+      const sourceRoot = mainCheckout(root);
+      const sourceSettings = loadSettings({ cwd: root });
+      clone = join(directory, 'repository');
+      const cloned = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 30_000,
+        maxBuffer: OUTPUT_LIMIT,
+      });
+      if (cloned.status !== 0)
+        throw new Error(cloned.stderr?.trim() || cloned.error?.message || `git clone exited ${cloned.status}`);
+      const devRef = `refs/heads/${sourceSettings.integrationBranch}`;
+      const remoteDev = `refs/remotes/origin/${sourceSettings.integrationBranch}`;
+      try {
+        git(clone, 'rev-parse', '--verify', `${remoteDev}^{commit}`);
+      } catch {
+        git(clone, 'fetch', '--quiet', sourceRoot, `${devRef}:${remoteDev}`);
+      }
+      devTree = join(directory, 'dev');
+      git(clone, 'worktree', 'add', '--detach', devTree, remoteDev);
+      devWorktreeAdded = true;
+      const workerCheckScript = join(devTree, 'scripts/worker-check.ts');
+      if (!existsSync(workerCheckScript)) throw new Error('dev worktree has no scripts/worker-check.ts');
+
+      // The fake agent protocol still receives a real worker-check UUID and result record.
+      const started = checked(process.execPath, [workerCheckScript, '--', '--local',
         process.execPath, '-e', 'process.exit(Number(process.env.REZICS_SMOKE_CHECK_EXIT ?? 0))'], directory, 30_000, { ...process.env, ...suppliedEnv, REZICS_STACK_LEASE: 'off' });
       checkId = /check: id ([0-9a-f-]{36})/.exec(started)?.[1] ?? '';
       if (!CHECK_ID.test(checkId)) throw new Error('worker-check did not return a real check id');
@@ -165,6 +193,13 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
     }
   } finally {
     if (resultPath) await waitForCheck(resultPath, Date.now() + 10_000).catch(() => {});
+    if (clone && devTree && devWorktreeAdded) {
+      try {
+        checked('git', ['worktree', 'remove', '--force', devTree], clone, 2000);
+      } catch {
+        /* The disposable clone is removed below. */
+      }
+    }
     rmSync(directory, { recursive: true, force: true });
   }
 }
