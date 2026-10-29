@@ -158,7 +158,8 @@ test(
     try {
       expect(await page.locator('main').getByRole('link', { name: 'Zebra story' }).count()).toBe(2);
       const deskArticle = article(page, 'Desk copy');
-      await deskArticle.getByRole('button', { name: 'Edit' }).click();
+      await deskArticle.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const dialog = page.getByRole('dialog');
       const form = dialog.getByRole('form', { name: 'Edit copy' });
       await form.getByRole('button', { name: 'More' }).click();
@@ -273,7 +274,8 @@ test(
     const { page, access } = await open('/en/library/copies');
     try {
       const card = article(page, 'Shelf note');
-      await card.getByRole('button', { name: 'Edit' }).click();
+      await card.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const conflictDialog = page.getByRole('dialog');
       const form = conflictDialog.getByRole('form', { name: 'Edit copy' });
       await form.getByRole('button', { name: 'More' }).click();

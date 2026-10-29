@@ -10,11 +10,20 @@ test(
     const { page } = await open('/en/library/copies', { width: 390, height: 844 });
     try {
       const row = article(page, 'First copy');
+      const rows = page.locator('main [data-slot="list-row"]');
+      expect(await rows.count()).toBe(2);
+      for (let index = 0; index < (await rows.count()); index += 1) {
+        const current = rows.nth(index);
+        expect(await current.locator('[data-slot="cover"]').count()).toBe(1);
+        expect(await current.locator('[data-slot="list-row-link"]').count()).toBe(1);
+        expect(await current.locator('[data-slot="list-row-control"] button').count()).toBe(1);
+      }
       expect(await row.count()).toBe(1);
       expect(await row.getAttribute('data-slot')).toBe('list-row');
       expect(await row.locator('[data-slot="cover"]').count()).toBe(1);
       expect(await row.locator('[data-slot="list-row-link"]').count()).toBe(1);
       expect(await row.locator('[data-slot="list-row-control"] button').count()).toBe(1);
+      expect(await row.innerText()).toContain('Physical');
       expect(await row.innerText()).toContain('Owned');
       expect(await row.innerText()).toContain('Book');
       expect(await row.innerText()).toContain('Jan 1, 2030');
@@ -24,8 +33,22 @@ test(
       const text = row.locator('.min-w-0.flex-1');
       const box = await text.boundingBox();
       const rowBox = await row.boundingBox();
-      expect(box && rowBox && box.width).toBeGreaterThan(rowBox!.width / 2);
+      const coverBox = await row.locator('[data-slot="cover"]').boundingBox();
+      const actionsBox = await row.locator('[data-slot="list-row-control"] button').boundingBox();
+      expect(box && rowBox && coverBox && actionsBox).not.toBeNull();
+      expect(box!.width).toBeGreaterThanOrEqual(rowBox!.width - coverBox!.width - actionsBox!.width - 64);
+      const details = await row.innerText();
+      expect(details.indexOf('Jan 1, 2030')).toBeLessThan(details.indexOf('Study'));
+      expect(details.indexOf('Study')).toBeLessThan(details.indexOf('Bookshop'));
+      expect(details.indexOf('Bookshop')).toBeLessThan(details.indexOf('First copy'));
       expect(await row.getByRole('button', { name: 'Edit copy' }).count()).toBe(0);
+      await row.getByRole('button', { name: 'More actions' }).click();
+      const menu = page.getByRole('dialog');
+      await menu.waitFor();
+      await menu.getByRole('button', { name: 'Edit copy' }).click();
+      const edit = page.getByRole('form', { name: 'Edit copy' });
+      await edit.waitFor();
+      await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
       expect(await lists()).toHaveLength(1);
     } finally {
       await page.context().close();

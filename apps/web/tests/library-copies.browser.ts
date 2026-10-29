@@ -61,6 +61,7 @@ type StoredCopy = {
   subjectId: string;
   subject: Subject;
   status: CopyStatus;
+  kind?: string;
   revision: number;
   location: string | null;
   source: string | null;
@@ -79,7 +80,7 @@ type Draft = {
   revision?: number;
 };
 
-export const zebra: Subject = { id: edition, label: 'Zebra story', type: 'book' };
+export const zebra: Subject = { id: edition, label: 'Zebra story', type: 'schema:Book' };
 export const copies: StoredCopy[] = [];
 let serial = 100;
 export function setSerial(value: number) {
@@ -167,7 +168,8 @@ export function reset() {
 }
 function wire(copy: StoredCopy, full: boolean) {
   const { accountId: _accountId, subject, ...rest } = copy;
-  return full ? { ...rest, subject } : rest;
+  const withKind = { ...rest, kind: copy.kind ?? 'physical' };
+  return full ? { ...withKind, subject } : withKind;
 }
 function applyDraft(copy: StoredCopy, draft: Draft) {
   if (draft.status) copy.status = draft.status;
@@ -337,6 +339,7 @@ const fake = Bun.serve({
         subjectId: draft.subjectId ?? '',
         subject: copies.find((copy) => copy.subjectId === draft.subjectId)?.subject ?? null,
         status: draft.status ?? 'owned',
+        kind: 'physical',
         location: draft.location ?? null,
         source: draft.source ?? null,
         acquiredOn: draft.acquiredOn ?? null,

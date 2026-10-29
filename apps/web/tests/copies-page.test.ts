@@ -57,7 +57,8 @@ test(
       await surface.getByRole('button', { name: 'Cancel' }).click();
 
       const row = article(page, 'First copy');
-      await row.getByRole('button', { name: 'Edit copy' }).click();
+      await row.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const edit = page.getByRole('dialog');
       await edit.waitFor();
       await edit.getByRole('button', { name: 'More' }).click();
@@ -111,7 +112,8 @@ test(
     const { page, access } = await open('/en/library/copies');
     try {
       const row = article(page, 'First copy');
-      await row.getByRole('button', { name: 'Edit copy' }).click();
+      await row.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const dialog = page.getByRole('dialog');
       await dialog.getByRole('button', { name: 'More' }).click();
       await dialog.getByLabel('Location').fill('Hall');
@@ -130,7 +132,8 @@ test(
 
       await add.getByRole('button', { name: 'Cancel' }).click();
       const current = article(page, 'First copy');
-      await current.getByRole('button', { name: 'Edit copy' }).click();
+      await current.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const edit = page.getByRole('dialog');
       await edit.getByRole('button', { name: 'More' }).click();
       const subjectCopy = copies.find((copy) => copy.note === 'First copy')!;
@@ -181,7 +184,8 @@ test(
       const rowBox = await row.boundingBox();
       const linkBox = await link.boundingBox();
       expect(rowBox && linkBox && linkBox.width).toBeGreaterThanOrEqual(rowBox!.width - 12);
-      await row.getByRole('button', { name: 'Edit copy' }).click();
+      await row.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       expect(page.url()).toStartWith(origin);
       await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
       await page.mouse.click(rowBox!.x + 40, rowBox!.y + Math.min(rowBox!.height / 2, 50));

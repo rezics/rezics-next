@@ -24,7 +24,11 @@ export const ManyCopies: Story = {
   render: () => <CopiesStory mode="many" />,
   async play(args) {
     await ready(args);
-    await userEvent.hover(within(args.canvasElement).getByText('The Little Prince'));
+    const canvas = within(args.canvasElement);
+    const kokoro = canvas.getByRole('listitem').filter({ hasText: 'Kokoro' });
+    await expect(kokoro).toContainText('Digital');
+    await expect(kokoro).not.toContainText('Physical');
+    await userEvent.hover(canvas.getByText('The Little Prince'));
   },
 };
 export const AddFormOpen: Story = {
@@ -40,7 +44,9 @@ export const EditFormOpen: Story = {
   render: () => <CopiesStory mode="one" />,
   async play(args) {
     await ready(args);
-    await userEvent.click(within(args.canvasElement).getByRole('button', { name: /Edit copy|Edit|编辑复本/ }));
+    const canvas = within(args.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: /More actions|更多操作/ }));
+    await userEvent.click(within(document.body).getByRole('menuitem', { name: /Edit copy|编辑复本/ }));
     await within(document.body).findByRole('dialog');
   },
 };

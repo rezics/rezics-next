@@ -18,6 +18,8 @@ import { csrfHeaders } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy, readCopySubject } from './copies-actions';
 import { type CopiesPageData, type CopyItem, type SavedCopy } from './copies-read';
 import { subjectHref } from '../subject/subject-href';
+import { Menu } from '@rezics/ui/menu';
+import { EllipsisIcon } from 'lucide-react';
 
 import type { CopyProfile } from './copies-profiles';
 import { CopiesFallback } from './copies-fallback';
@@ -467,7 +469,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
       ?.replace(/^./u, (letter) => letter.toLocaleUpperCase(locale())) ??
     '';
   return (
-    <ListRow className="flex items-center gap-4 py-4">
+    <ListRow className="flex items-center gap-3 py-4 sm:gap-4">
       <ListRowLink href={href?.href ?? '#'} className="z-[2]">
         {title}
       </ListRowLink>
@@ -499,12 +501,20 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
         ) : null}
         {copy.note ? <p className="line-clamp-2 text-sm text-muted-foreground">{copy.note}</p> : null}
       </div>
-      <ListRowControl>
-        <button type="button" className={quiet} onClick={onEdit}>
-          {copy.kind && copy.kind !== 'legacy-unspecified' && copy.profile?.kinds.some((kind) => kind.id === copy.kind)
-            ? m.library_copy_edit()
-            : m.library_copy_delete()}
-        </button>
+      <ListRowControl className="shrink-0">
+        <Menu
+          title={m.library_copy_more_actions()}
+          trigger={
+            <button
+              type="button"
+              className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted"
+              aria-label={m.library_copy_more_actions()}
+            >
+              <EllipsisIcon aria-hidden="true" className="size-5" />
+            </button>
+          }
+          entries={[{ type: 'item', label: m.library_copy_edit(), onSelect: onEdit }]}
+        />
       </ListRowControl>
     </ListRow>
   );

@@ -11,7 +11,7 @@ export function setCopiesStoryMode(next: CopiesStoryMode): void {
   mode = next;
 }
 
-const base = recording.copies.map((copy) => ({ ...copy, kind: 'physical' }));
+const base = recording.copies.map((copy, index) => ({ ...copy, kind: index === 1 ? 'digital' : 'physical' }));
 const many = [
   ...base,
   ...base.slice(0, 1).map((copy) => ({
