@@ -61,9 +61,10 @@ function retryAfterMs(value: unknown): number {
   const headers = [result.headers, response.headers, error.headers, errorResponse.headers];
   let raw: string | null = null;
   for (const candidate of headers) {
-    const get = record(candidate).get;
+    const headerBag = record(candidate);
+    const get = headerBag.get;
     if (typeof get === 'function') {
-      raw = (get as (name: string) => string | null)('retry-after');
+      raw = (get as (this: unknown, name: string) => string | null).call(candidate, 'retry-after');
       if (raw !== null) break;
     }
   }
