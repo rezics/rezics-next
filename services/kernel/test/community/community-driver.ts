@@ -196,7 +196,7 @@ async function buildShared(databaseUrl = process.env.DATABASE_URL): Promise<Shar
   // bounded at 100 tokens. Request this fixture's product scopes through Auth
   // rather than every unrelated action mounted on Kernel.
   const ordinaryScopes = [...productionActions().keys()].filter((action) =>
-    /^(account|access|space|realm|board|thread|post|subject|context|definitions|statement|document|copy|moderation|exposure|report|rating):/.test(
+    /^(account|access|space|realm|board|thread|post|subject|context|definitions|statement|document|copy|moderation|exposure|report|rating|follow|reaction|openapi):/.test(
       action,
     ),
   );
