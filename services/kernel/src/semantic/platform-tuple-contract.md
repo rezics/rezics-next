@@ -1,7 +1,7 @@
 # Release platform and language statement grain
 
-Status: owner proposal with frozen native API outcomes, before definitions/data implementation. This document
-specifies the missing association; it does not claim that the active release admits it or that Search executes it.
+Status: adopted release configuration with frozen native API outcomes. This document specifies the association
+admitted by the bundled definitions. It does not establish Search execution or Source completeness.
 [Native cases](../../test/semantic/platform-tuple-user-cases.test.ts) deliberately require successful writes and
 public evidence. A missing qualifier rejected by the API is red evidence, never completion.
 
@@ -9,15 +9,15 @@ public evidence. A missing qualifier rejected by the API is red evidence, never 
 
 Keep an existing `schema:gamePlatform` relation statement on an actual `wd:Q20631656` software release. Its value
 is the ID of an actually created and adopted `skos:Concept`. When a source or editor explicitly associates that
-platform with an asserted release language, attach `schema:inLanguage` as a native string qualifier to that same
-statement. Use `ja` and `en`, not invented language subjects or external/native identifiers. Keep references on
-the statement asserting the association, with native reference hashes, rank, acceptance/adoption heads and release
+platform with an asserted release language, that statement MAY carry `schema:inLanguage` as a native STRING
+qualifier on that SAME statement. Use `ja` and `en`, not invented language subjects or external/native identifiers.
+Keep references on the statement asserting the association, with native reference hashes, rank, acceptance/adoption heads and release
 pins. Compact creation and expanded proposal/acceptance/adoption must disclose equivalent selected evidence.
 
 A selected Switch/`ja` statement and a separate selected PC/`en` statement on a release establish those two pairs.
 They do not establish Switch/`en` or PC/`ja`. Statements on another release cannot supply the missing qualifier.
-An unselected competing Switch/`en` candidate cannot supply it either. Selection uses existing platform-target
-slots; language is not a new slot key. Multiple asserted languages on one platform statement mean explicit support
+An unselected competing Switch/`en` candidate cannot supply it either. Classification selection uses the existing descriptive property slot; one CAS selects the associated
+platform statements together. Language is not a new slot key. Multiple asserted languages on one platform statement mean explicit support
 for those languages, only when the source/editor asserts that association.
 
 A work's independent platform and language sets retain aggregate work meaning. They create neither release
@@ -32,25 +32,29 @@ language, citation and support together from anonymous evidence. Restoring it re
 An empty public response is not a complete-absence certificate. Native Search dependencies and current disclosure
 must determine `not_proven` rather than treating the pure matcher's false result as a negative proof.
 
-## Existing, proposed and missing surfaces
+## Released configuration and remaining dependencies
 
-| Surface                | Current source                                                                                               | Proposal or remaining dependency                                                                                                                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Platform value         | `game.yaml`: Concept-valued `schema:gamePlatform`, classification relation                                   | Preserve property, Concept targets, inverse and existing target-slot selection                                                                                                                      |
-| Language value         | `core.yaml`: patterned multivalued string `schema:inLanguage`                                                | Preserve datatype and language syntax; never convert it into an item                                                                                                                                |
-| Qualifier admission    | `gamePlatform` has no declared language qualifier                                                            | Definitions owner adds only native `inLanguage` admission to this property; this change does not edit YAML or released bytes                                                                        |
-| Statement validation   | `checkStatementInput` delegates to release checks; qualifier membership is checked before its datatype/value | Existing native validator can validate a string qualifier after release admission; no special platform validator is proposed                                                                        |
-| Filter syntax          | `statement.qualifiers: [{property, in}]` already groups qualifiers on one statement                          | Preserve same-statement syntax; no separate language leaf may substitute for association                                                                                                            |
-| Filter admission       | Shared admission explicitly restricts qualifiers to `wikibase-item` and validates UUID values                | Separate filter-owner adoption is required for patterned string qualifiers using the existing `schema:inLanguage` pattern; adding YAML alone cannot make the query executable                       |
-| Producer/read evidence | Native selected statements retain qualifiers, references, rank and pins                                      | Current indexed qualifier contract describes item targets only; verify actual public projection preserves string language and complete dependencies; do not substitute an in-memory tuple inventory |
-| Release date           | Release's existing `schema:datePublished`                                                                    | Keep at release grain; this proposal does not admit a new date qualifier or fabricate statement dates                                                                                               |
-| Profiles               | Existing released registry and accepting types                                                               | Preserve all eleven profiles and their pins; this proposal changes no profile or consumer wire                                                                                                      |
+| Surface                | Released configuration or remaining dependency                                                                                                                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Platform value         | `game.yaml` preserves Concept-valued `schema:gamePlatform`, mappings, targets, classification relation, inverse, order and descriptive property-slot selection.                                                               |
+| Language value         | `core.yaml` preserves multivalued STRING `schema:inLanguage` and its native language pattern.                                                                                                                                 |
+| Qualifier admission    | `gamePlatform` admits only the additional `inLanguage` qualifier; existing generic native validation checks its declared datatype and scalar constraints.                                                                     |
+| Filter syntax          | `statement.qualifiers: [{property, in}]` groups qualifiers on one statement; an independent language leaf cannot supply association.                                                                                          |
+| Filter admission       | The shared filter contract admits generic exact equality for ANY declared `datatype: string` qualifier under existing limits and actual scalar constraints. This primitive is implemented separately from this configuration. |
+| Producer/read evidence | Selected native statements preserve qualifiers, references, rank and pins. Complete source-to-index disclosure and current public execution remain separate obligations.                                                      |
+| Release date           | The release's existing `schema:datePublished` keeps release grain; no new date qualifier is admitted.                                                                                                                         |
+| Profiles               | All eleven attached profiles, their pins and consumer wire contracts remain unchanged.                                                                                                                                        |
 
-The item-only shared filter admission is a concrete current gap, not a reason to replace language strings with
-Concepts. The minimal owning choice proposed for manager adoption is the relation/string qualifier above plus
-property-declared, pattern-validated string qualifier admission in the shared filter owner. No unrelated string,
-credit, relation filter/slot-key or date field is widened here. This is a proposal, not adopted/executed grammar.
-It needs no new tuple entity, property, numeric budget or method metadata.
+String qualifier admission does not require a pattern. Values obey the existing nonempty, no-control, 256 UTF-8
+byte filter limit and native string `minLength`, `maxLength` and optional `pattern`. Exact equality adds no coercion,
+trimming, case folding, normalization, language guessing or label lookup. The native language pattern still applies
+to `schema:inLanguage`. See the [shared filter owner](../../../../packages/filter/README.md) for that generic
+primitive; this configuration neither implements nor proves Search execution or Source completeness.
+
+This change adds no language Concept, independent-property join, tuple entity, table, backend, route, profile,
+method metadata, provider/platform ID, source mapping, platform seed or per-release type switch. No broader
+credit, string or range grammar is implemented here. Controlled editorial Concepts in the native cases use real
+returned IDs, not provider bindings.
 
 ## Source evidence and limits
 
@@ -102,5 +106,6 @@ state, and native statement hide/restore. No rejected qualified write can satisf
 Actual Search query/no-Cartesian results and curated Collection, Everything, state Collection, mounted Zone and
 TypeList cells remain pending their owners' real bindings and producers. Existing Search cross-surface
 specifications own that execution. This suite creates no second cross-surface writer, accepts no mock success,
-and makes no current cost, index-readiness, NOT or consumer-completion claim. Once definitions admission lands,
-rerun these unchanged frozen cases and commission those owner dependencies separately.
+and makes no current cost, index-readiness, NOT or consumer-completion claim. The frozen cases verify the released
+admission; those owner dependencies remain separately required, including source-to-index/current matching, all
+six public query surfaces, privacy, runtime and main promotion.

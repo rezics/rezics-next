@@ -3,6 +3,7 @@ import { bundledRelease } from '../src/bundled.ts';
 import { validateRelease } from '../src/index.ts';
 
 const reviewedTypes = {
+  'rezics:AnimeRelease': 'https://schema.org/CreativeWork',
   'schema:Book': 'https://schema.org/Book',
   'bf:Instance': 'https://schema.org/Book',
   'schema:VideoGame': 'https://schema.org/VideoGame',
@@ -32,6 +33,7 @@ const reviewedTypes = {
 type NativeIdentity = readonly [iri: string, bases: readonly string[], mappings: readonly string[]];
 
 const nativeIdentities: Record<string, NativeIdentity> = {
+  'rezics:AnimeRelease': ['https://rezics.com/vocab/AnimeRelease', ['schema:CreativeWork', 'schema:Thing'], []],
   'schema:Episode': ['http://schema.org/Episode', ['schema:CreativeWork', 'schema:Thing'], ['wd:Q1983062']],
   'schema:Movie': ['http://schema.org/Movie', ['schema:CreativeWork', 'schema:Thing'], ['wd:Q11424']],
   'schema:TVSeason': ['http://schema.org/TVSeason', ['schema:CreativeWork', 'schema:Thing'], ['wd:Q3464665']],

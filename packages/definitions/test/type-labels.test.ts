@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '../src/bundled.ts';
 
 const labels = {
+  'rezics:AnimeRelease': ['动画发行版', '動畫發行版', 'アニメ刊行版'],
   'wd:Q2095': ['食物', '食物', '食品'],
   'wd:Q2620972': ['故事篇章', '故事篇章', 'ストーリー編'],
   'schema:Episode': ['集', '集', 'エピソード'],

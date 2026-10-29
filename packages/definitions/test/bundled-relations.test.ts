@@ -60,6 +60,7 @@ test('every bundled item property declares how it reads in both directions', () 
 test('bundled types declare the documented cover frame ratios', () => {
   const ratios: Record<string, string[]> = {
     '5:7': [
+      'rezics:AnimeRelease',
       'wd:Q2620972',
       'schema:Book',
       'bf:Instance',
@@ -105,7 +106,7 @@ test('a work names its representative edition for each language', () => {
     .filter(([, type]) => type.properties.includes('schema:exampleOfWork'))
     .map(([term]) => term)
     .sort();
-  expect(editions).toEqual(['bf:Instance', 'wd:Q20631656']);
+  expect(editions).toEqual(['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656']);
   expect(representative?.targets).toEqual(editions);
   expect(Object.keys(representative?.labels ?? {}).sort()).toEqual(locales);
   for (const term of [
@@ -123,17 +124,60 @@ test('a work names its representative edition for each language', () => {
 test('credit properties are admitted on episodes and releases', () => {
   const credits = Object.entries(properties).filter(([, property]) => property.relation?.group === 'credit');
   expect(credits.map(([term]) => term)).toEqual(expect.arrayContaining(['schema:director', 'wdt:P58', 'wdt:P725']));
-  const holders = [
-    'schema:Episode',
-    ...Object.keys(types).filter((term) => types[term]!.properties.includes('schema:exampleOfWork')),
+  const oldRoles = [
+    'schema:publisher',
+    'schema:translator',
+    'schema:author',
+    'schema:contributor',
+    'wdt:P178',
+    'schema:director',
+    'schema:illustrator',
+    'schema:musicBy',
+    'schema:producer',
+    'schema:productionCompany',
+    'wdt:P58',
+    'wdt:P725',
   ];
-  for (const holder of holders) {
-    for (const [term, property] of credits) {
-      expect(types[holder]?.properties).toContain(term);
-      expect(property.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
-      if (term === 'wdt:P725') expect(property.qualifiers).toContain('wdt:P453');
-    }
+  const releaseRoles = [
+    'marcrel:fds',
+    'schema:publisher',
+    'schema:translator',
+    'schema:author',
+    'schema:contributor',
+    'schema:director',
+    'schema:illustrator',
+    'schema:musicBy',
+    'schema:producer',
+    'schema:productionCompany',
+    'wdt:P58',
+    'wdt:P725',
+  ];
+  expect(credits.map(([term]) => term).sort()).toEqual([...oldRoles, 'marcrel:fds'].sort());
+  const applicability = {
+    'schema:Episode': oldRoles,
+    'bf:Instance': oldRoles,
+    'wd:Q20631656': oldRoles,
+    'rezics:AnimeRelease': releaseRoles,
+  };
+  for (const [holder, roles] of Object.entries(applicability)) {
+    expect(
+      credits
+        .filter(([term]) => types[holder]!.properties.includes(term))
+        .map(([term]) => term)
+        .sort(),
+    ).toEqual([...roles].sort());
+    for (const term of roles) expect(types[holder]?.properties).toContain(term);
   }
+  for (const [term, property] of credits) {
+    expect(property.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
+    expect(property.relation?.order).toBe('position');
+    expect(property.relation?.filter).toEqual(['wdt:P3831', 'wdt:P518']);
+    if (term === 'wdt:P725') expect(property.qualifiers).toContain('wdt:P453');
+  }
+  for (const [holder, type] of Object.entries(types)) {
+    if (holder !== 'rezics:AnimeRelease') expect(type.properties).not.toContain('marcrel:fds');
+  }
+  expect(types['rezics:AnimeRelease']?.properties).not.toContain('wdt:P178');
 });
 
 test('story arcs are creative-work subjects held as ordered part ranges', () => {

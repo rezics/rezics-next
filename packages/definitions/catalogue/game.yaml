@@ -224,6 +224,7 @@ slots:
       relation_group: classification
       inverse: rezics:gameOnPlatform
       relation_order: name
+      qualifiers: inLanguage
   gtin:
     slot_uri: schema:gtin
     description: Global Trade Item Number for the release.

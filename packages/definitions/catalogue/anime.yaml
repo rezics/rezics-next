@@ -315,10 +315,11 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:filmDistributionOf
       relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes
     description: The number of episodes or installments in the work or season.

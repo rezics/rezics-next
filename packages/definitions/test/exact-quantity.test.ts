@@ -339,6 +339,6 @@ test('invalid exact source flags and nonquantity annotations have explicit annot
 
 test('existing immutable bundled release still validates and retains its canonical digest', () => {
   expect(validateRelease(bundledRelease)).toEqual([]);
-  expect(releaseDigest(bundledRelease)).toBe('sha256:57f4211bebf2a5d697e624f0d87a351d11e5be2ffda1c5e3eec57f10b3000bd0');
+  expect(releaseDigest(bundledRelease)).toBe('sha256:943ceadcf70fe1bd71382c2f88ca782cbf946a2c1c1097d748d273482eb7b318');
   expect(bundledDigest).toBe(releaseDigest(bundledRelease));
 });
