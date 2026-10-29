@@ -15,8 +15,8 @@ import { createImportRunStoreDriver } from './run-store-driver.ts';
 import { RunStore } from '../src/run-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 
-const fixedCounts: CountedCheck<CountedValues> = {
-  read: (counts) => counts,
+const fixedCounts: CountedCheck = {
+  read: (counts) => counts as CountedValues,
   bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
   slack: {
     'sqlite returned rows': { absolute: 2, relative: 0.1 },

@@ -21,8 +21,8 @@ import {
   type Pending,
 } from './imports-run-store-driver.ts';
 
-const fixedCounts: CountedCheck<CountedValues> = {
-  read: (counts) => counts,
+const fixedCounts: CountedCheck = {
+  read: (counts) => counts as CountedValues,
   bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
   slack: {
     'sqlite returned rows': { absolute: 2, relative: 0.1 },
