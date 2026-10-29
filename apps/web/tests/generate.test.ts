@@ -6,7 +6,7 @@ import { join } from 'node:path';
 const app = join(import.meta.dir, '..');
 const generator = join(app, 'scripts/generate.ts');
 
-function runGeneration(failures: number, message: string, code?: string) {
+async function runGeneration(failures: number, message: string, code?: string) {
   const directory = mkdtempSync(join(tmpdir(), 'web-generate-'));
   const attempts = join(directory, 'attempts');
   const output = join(directory, 'output');
@@ -24,17 +24,17 @@ function runGeneration(failures: number, message: string, code?: string) {
       `import { readFileSync } from 'node:fs';\n`,
   );
 
-  const result = Bun.spawnSync(['bun', '--preload', preload, generator], {
+  const child = Bun.spawn(['bun', '--preload', preload, generator], {
     cwd: app,
-    timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const stdout = new TextDecoder().decode(result.stdout);
-  const stderr = new TextDecoder().decode(result.stderr);
+  const stdoutPromise = new Response(child.stdout).text();
+  const stderrPromise = new Response(child.stderr).text();
+  const [codeResult, stdout, stderr] = await Promise.all([child.exited, stdoutPromise, stderrPromise]);
   const attemptsMade = existsSync(attempts) ? readFileSync(attempts, 'utf8').trim().split('\n').length : 0;
   return {
-    code: result.exitCode,
+    code: codeResult,
     stdout,
     stderr,
     attemptsMade,
@@ -43,8 +43,8 @@ function runGeneration(failures: number, message: string, code?: string) {
   };
 }
 
-test('retries Lix timeouts in new processes and succeeds on a later compilation', () => {
-  const result = runGeneration(1, 'Lix open did not settle within 30000ms');
+test('retries Lix timeouts in new processes and succeeds on a later compilation', async () => {
+  const result = await runGeneration(1, 'Lix open did not settle within 30000ms');
   try {
     expect(result.code).toBe(0);
     expect(result.attemptsMade).toBe(2);
@@ -58,8 +58,8 @@ test('retries Lix timeouts in new processes and succeeds on a later compilation'
   }
 });
 
-test('retries Lix worker errors identified by code and reports the first error line', () => {
-  const result = runGeneration(
+test('retries Lix worker errors identified by code and reports the first error line', async () => {
+  const result = await runGeneration(
     1,
     'Lix worker did not acknowledge request receipt within 30000ms\nextra details',
     'LIX_WORKER_TIMEOUT',
@@ -76,8 +76,8 @@ test('retries Lix worker errors identified by code and reports the first error l
   }
 });
 
-test('retries twice and exits with the last Lix error after the third failure', () => {
-  const result = runGeneration(3, 'LixError: Lix worker is closed\nadditional context', 'LIX_WORKER_CLOSED');
+test('retries twice and exits with the last Lix error after the third failure', async () => {
+  const result = await runGeneration(3, 'LixError: Lix worker is closed\nadditional context', 'LIX_WORKER_CLOSED');
   try {
     expect(result.code).not.toBe(0);
     expect(result.attemptsMade).toBe(3);
@@ -90,8 +90,8 @@ test('retries twice and exits with the last Lix error after the third failure', 
   }
 });
 
-test('does not retry compilation errors outside the Lix failure signatures', () => {
-  const result = runGeneration(1, 'Invalid message syntax');
+test('does not retry compilation errors outside the Lix failure signatures', async () => {
+  const result = await runGeneration(1, 'Invalid message syntax');
   try {
     expect(result.code).not.toBe(0);
     expect(result.attemptsMade).toBe(1);
@@ -102,8 +102,8 @@ test('does not retry compilation errors outside the Lix failure signatures', () 
   }
 });
 
-test('a successful first compilation prints no retry message and writes generated output', () => {
-  const result = runGeneration(0, 'unused');
+test('a successful first compilation prints no retry message and writes generated output', async () => {
+  const result = await runGeneration(0, 'unused');
   try {
     expect(result.code).toBe(0);
     expect(result.attemptsMade).toBe(1);

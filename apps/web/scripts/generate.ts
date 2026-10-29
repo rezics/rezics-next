@@ -17,15 +17,15 @@ if (process.env[workerEnvironment] === '1') {
 } else {
   const maximumAttempts = 3;
   for (let attempt = 1; attempt <= maximumAttempts; attempt++) {
-    const result = Bun.spawnSync([process.execPath, import.meta.filename], {
+    const child = Bun.spawn([process.execPath, import.meta.filename], {
       cwd: process.cwd(),
       env: { ...process.env, [workerEnvironment]: '1' },
-      timeout: 120_000,
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    const stdout = new TextDecoder().decode(result.stdout);
-    const stderr = new TextDecoder().decode(result.stderr);
+    const stdoutPromise = new Response(child.stdout).text();
+    const stderrPromise = new Response(child.stderr).text();
+    const [exitCode, stdout, stderr] = await Promise.all([child.exited, stdoutPromise, stderrPromise]);
     const markerIndex = stderr.lastIndexOf(errorMarker);
     const workerError =
       markerIndex < 0
@@ -39,7 +39,7 @@ if (process.env[workerEnvironment] === '1') {
     if (!workerError) {
       process.stdout.write(stdout);
       process.stderr.write(stderr);
-      if (result.exitCode !== 0) process.exitCode = result.exitCode;
+      if (exitCode !== 0) process.exitCode = exitCode;
       break;
     }
 
@@ -55,7 +55,7 @@ if (process.env[workerEnvironment] === '1') {
     }
 
     process.stderr.write(`${workerError.stack ?? workerError.message}\n`);
-    process.exitCode = result.exitCode || 1;
+    process.exitCode = exitCode || 1;
     break;
   }
 }
