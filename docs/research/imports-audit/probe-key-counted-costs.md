@@ -80,9 +80,27 @@ Observed counts at every scale (each fixed-key operation is repeated separately 
 
 ## Validation and limits
 
-Validation results and the exact tested revision are recorded after the committed focused run and root typecheck.
-The acceptance command is `bun test services/importer/tests/sqlite-growth.test.ts
-services/importer/tests/run-store-native-keys-growth.test.ts`, through `bun scripts/worker-check.ts --`.
+On 29 October 2026, committed revision `491ea201698f5a05c8432645b21a43dd772ceb6f` passed both commands below
+on check host b with pinned Bun `1.4.4-canary.20261027.1`, engine revision `a0cc096ce`:
+
+```sh
+bun scripts/worker-check.ts -- bun test services/importer/tests/sqlite-growth.test.ts services/importer/tests/run-store-native-keys-growth.test.ts
+bun scripts/worker-check.ts -- bun run typecheck
+```
+
+The focused acceptance passed all 26 tests, with zero failures and 4693 assertions. The seed and operation counts
+above are the actual logged observations from that run. Root typecheck exited zero across all thirteen workspaces.
+Final logs are `.temp/goal/checks/worker-check-2026-10-29T10-14-34.489Z-f8eaed76.log` (acceptance) and
+`.temp/goal/checks/worker-check-2026-10-29T10-16-38.555Z-65e47883.log` (typecheck).
+
+The first focused run also passed. The initial root typecheck caught a readonly expected-array typing error in the
+new scale assertion; copying that tuple to a mutable expected array fixed it without changing the assertion's
+meaning. The focused command ran once after that final test edit. The first two root invocations also encountered
+`ENOSPC: no space left on device` during Paraglide's temporary-directory creation on host b. The second infrastructure
+retry completed successfully, without changing checks, environment, budgets or deadlines. Those earlier root logs
+are `.temp/goal/checks/worker-check-2026-10-29T10-10-54.521Z-5e7920a4.log` and
+`.temp/goal/checks/worker-check-2026-10-29T10-14-25.033Z-e60beb0c.log`. No started check remains running.
+No kernel gate, root gate or broad importer check ran. The subsequent documentation-only commit records these results.
 
 Remaining deprecated SQLite `.cost` consumers in this base are `bindings-growth.test.ts`, `record-store-growth.test.ts`,
 `run-store-growth.test.ts`, `run-store-empty-growth.test.ts`, `run-store-pages.test.ts`, `record-caps-growth.test.ts`
