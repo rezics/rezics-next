@@ -2,6 +2,13 @@
 
 The kernel workspace owns the database records and adapters used by the service.
 
+## Commands
+
+Run `bun run --cwd services/kernel typecheck` in any worker without starting a local database. With `DATABASE_URL`, it
+uses that migrated database here. Without it, the command places itself on a check host and runs TypeScript plus
+construct against one throwaway migrated database there; if no check host answers, it provisions the same database
+locally. TypeScript diagnostics and exit status are preserved.
+
 ## Development database
 
 Run `bun run db up` from `services/kernel` to create or start the local PostgreSQL database, apply migrations, and write

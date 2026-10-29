@@ -15,7 +15,7 @@
     "construct": "bun scripts/construct.ts",
     "analyse": "bun scripts/analyse.ts",
     "check": "bun scripts/check.ts",
-    "typecheck": "tsc --noEmit --runExternalCode -p tsconfig.json && bun run construct"
+    "typecheck": "bun scripts/typecheck.ts"
   },
   "dependencies": {
     "@dbos-inc/dbos-sdk": "5.4.6-preview",
