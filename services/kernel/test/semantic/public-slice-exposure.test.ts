@@ -274,7 +274,6 @@ test('native platform grants expose real development commands while preserving r
   );
   const contextResult = await call('editor', 'POST', '/v1/contexts', {
     labels: { en: 'Development extension' },
-    settings: 'lifecycle',
   });
   status(contextResult, 201);
   const context = contextResult.body.context.id as string;
