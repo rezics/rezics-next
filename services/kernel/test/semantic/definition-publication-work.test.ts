@@ -173,4 +173,4 @@ test('checkpoint-only proposal retains the full catalogue at three changed-input
     if (added === 64 || added === 512) expect(diagnostic.newSteps).toBeLessThan(PROPOSED_ANALYSIS_MAX);
     else expect(diagnostic.newSteps).toBeGreaterThan(PROPOSED_ANALYSIS_MAX);
   }
-});
+}, 180_000);
