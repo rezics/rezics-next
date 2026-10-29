@@ -16,6 +16,7 @@ function nodes(value: unknown): Record<string, unknown>[] {
 
 test('activity ascending growth retains logarithmic indexed work and declares its actual fixed index-level probes under calibrated whole-series validation', async () => {
   const db = await openGrowthDatabase();
+  const planDb = await openGrowthDatabase(db.url);
   try {
     for (const axis of ['matching', 'state', 'type', 'foreign'] as const) {
       const [owner, foreign, remote] = [newId(route), newId(route), newId(route + 0x1000)];
@@ -75,10 +76,12 @@ test('activity ascending growth retains logarithmic indexed work and declares it
         // First/deep-tie/tie-end each hydrate limit+1 keys; EOF hydrates none.
         // Thus one run makes exactly 4 * (7 + 3 * (limit+1)) descents: 52 or 616.
         // Fixed descents can gain an index level together; this is separate from state uncertainty.
-        const indexProbes = 4 * (1 + 2 + 2 + 2 + 3 * (limit + 1));
+        const rangeProbesPerFilter = 1 + 2 + 2 + 2;
+        const hydrationProbesPerFilter = 3 * (limit + 1);
+        const indexProbes = 4 * (rangeProbesPerFilter + hydrationProbesPerFilter);
         const populations = new Map<number, Record<string, number>>();
-        const operation = () =>
-          withConnection(db.pool, async (client) => {
+        const operation = (database = db) =>
+          withConnection(database.pool, async (client) => {
             await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
             try {
               for (const c of cases) {
@@ -151,7 +154,9 @@ test('activity ascending growth retains logarithmic indexed work and declares it
           },
           operation,
           warmup: async (_database, scale) => {
-            const measured = await capture(db, operation);
+            // checkGrowth captures its warm-up callback. Use an independently instrumented pool for
+            // the plan-detail capture so the actual branch and hydration probes remain inspectable.
+            const measured = await capture(planDb, () => operation(planDb));
             const kept = withoutCatalogStatements('activity ascending plans', measured.capture);
             const plans = kept.plans.filter((p) => nodes(p).some((n) => n['Relation Name'] === 'entry'));
             expect(plans).toHaveLength(cases.length);
@@ -258,6 +263,7 @@ test('activity ascending growth retains logarithmic indexed work and declares it
       }
     }
   } finally {
+    await planDb.close();
     await db.close();
   }
 }, 180_000);
