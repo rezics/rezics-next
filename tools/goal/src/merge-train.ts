@@ -442,9 +442,32 @@ function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean 
 }
 
 class WorkerConflictError extends Error {
-  constructor(readonly path: string) {
-    super(`Worker change conflicts with dev in ${path}`);
+  constructor(readonly path: string, detail = '') {
+    super(`Worker change conflicts with dev in ${path}${detail ? `: ${detail}` : ''}`);
   }
+}
+
+/** Lines removed by the task, excluding any line it also inserted elsewhere. */
+function taskDeletedLines(base: string, task: string): string[] {
+  const baseCounts = new Map<string, number>();
+  const taskCounts = new Map<string, number>();
+  for (const line of base.split(/\r?\n/)) baseCounts.set(line, (baseCounts.get(line) ?? 0) + 1);
+  for (const line of task.split(/\r?\n/)) taskCounts.set(line, (taskCounts.get(line) ?? 0) + 1);
+  return [...baseCounts].flatMap(([line, count]) => Array(Math.max(0, count - (taskCounts.get(line) ?? 0))).fill(line));
+}
+
+function assertTaskDeletionsAbsent(file: string, base: string, task: string, result: string): void {
+  const remaining = new Map<string, number>();
+  for (const line of result.split(/\r?\n/)) remaining.set(line, (remaining.get(line) ?? 0) + 1);
+  const conflicts: string[] = [];
+  for (const line of taskDeletedLines(base, task)) {
+    const count = remaining.get(line) ?? 0;
+    if (count) {
+      conflicts.push(line);
+      remaining.set(line, count - 1);
+    }
+  }
+  if (conflicts.length) throw new WorkerConflictError(file, `task-deleted lines remain: ${conflicts.map((line) => JSON.stringify(line)).join(', ')}`);
 }
 
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
@@ -525,6 +548,7 @@ export function resolveMechanicalConflicts(
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
         if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
           throw new WorkerConflictError(file);
+        if (markdown === 'union') assertTaskDeletionsAbsent(file, base!, ours!, text);
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -550,6 +574,13 @@ export function resolveMechanicalConflicts(
         comparableJson(theirs) !== comparableJson(base)
       )
         throw new WorkerConflictError(file);
+      const deletedOrReplaced = Object.keys(base ?? {}).filter(
+        (key) => Object.hasOwn(base!, key) && (!Object.hasOwn(ours!, key) || comparableJson(base![key]) !== comparableJson(ours![key])),
+      );
+      const stale = deletedOrReplaced.filter(
+        (key) => Object.hasOwn(merged.value, key) && comparableJson(merged.value[key]) === comparableJson(base![key]),
+      );
+      if (stale.length) throw new WorkerConflictError(file, `task-replaced message lines remain: ${stale.map((key) => `${JSON.stringify(key)}=${JSON.stringify(base![key])}`).join(', ')}`);
       text = `${JSON.stringify(merged.value, null, 2)}\n`;
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
