@@ -26,7 +26,7 @@ test('a passing worker branch integrates into dev without running the gate and m
   } finally { h.dispose(); }
 });
 
-test('integration into dev refuses a change in an undeclared risk area and reports a rebase conflict against dev', async () => {
+test('integration into dev refuses undeclared risk changes, unions Markdown and refuses other conflicts', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev(); const main = h.head('main');
@@ -40,9 +40,18 @@ test('integration into dev refuses a change in an undeclared risk area and repor
     const conflict = h.dispatch('README.md'); await h.start(conflict);
     const dev = h.advanceDev('README.md', 'Integration change\n');
     await h.train(undefined, false);
-    expect(h.outcomes[1]?.stage).toBe('rebase'); expect(h.outcomes[1]?.passed).toBe(false);
-    expect(h.outcomes[1]?.conflictedFiles).toContain('README.md');
-    expect(h.head()).toBe(dev); expect(h.head('main')).toBe(main);
+    expect(h.outcomes[1]?.passed).toBe(true);
+    expect(h.store.task(conflict.id).state).toBe('integrated');
+    const readme = git(h.root, 'show', 'dev:README.md');
+    expect(readme).toContain('Integration change'); expect(readme).toContain('README.md');
+    expect(readFileSync(h.outcomes[1]!.logPath, 'utf8')).toContain('Markdown union: README.md');
+    ancestor(h.root, dev, h.head()); expect(h.head('main')).toBe(main);
+    const other = h.dispatch('result.txt'); await h.start(other);
+    const conflictedDev = h.advanceDev('result.txt', 'Integration change\n');
+    await h.train(undefined, false);
+    expect(h.outcomes[2]?.stage).toBe('rebase'); expect(h.outcomes[2]?.passed).toBe(false);
+    expect(h.outcomes[2]?.conflictedFiles).toContain('result.txt');
+    expect(h.head()).toBe(conflictedDev); expect(h.head('main')).toBe(main);
   } finally { h.dispose(); }
 });
 

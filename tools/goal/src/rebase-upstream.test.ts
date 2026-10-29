@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git } from './merge.ts';
@@ -78,7 +78,7 @@ test('a rebase keeps both sections that the target and the worker inserted at on
   } finally { r.dispose(); }
 });
 
-test('a rebase conflict where both sides rewrote the same text still returns to the worker', () => {
+test('a rebase unions Markdown rewrites and names the file in its log', () => {
   const r = repository();
   try {
     const base = r.commit({ 'README.md': '# Module\n\nOld wording.\n' }, 'base');
@@ -87,6 +87,25 @@ test('a rebase conflict where both sides rewrote the same text still returns to 
     git(r.root, 'checkout', '-q', 'main');
     const target = r.commit({ 'README.md': '# Module\n\nTarget wording.\n' }, 'target');
     git(r.root, 'checkout', '-q', 'work');
+    const log = join(r.root, '.git', 'rebase.log');
+    rebaseOnto(r.root, target, base, log, []);
+    expect(readFileSync(join(r.root, 'README.md'), 'utf8')).toContain('Target wording.');
+    expect(readFileSync(join(r.root, 'README.md'), 'utf8')).toContain('Worker wording.');
+    expect(readFileSync(log, 'utf8')).toContain('Markdown union: README.md');
+    expect(git(r.root, 'merge-base', '--is-ancestor', target, 'HEAD')).toBe('');
+  } finally { r.dispose(); }
+});
+
+test('a rebase conflict where both sides rewrote non-Markdown text still returns to the worker', () => {
+  const r = repository();
+  try {
+    const base = r.commit({ 'result.txt': 'Old wording.\n' }, 'base');
+    git(r.root, 'checkout', '-qb', 'work');
+    r.commit({ 'result.txt': 'Worker wording.\n' }, 'work');
+    git(r.root, 'checkout', '-q', 'main');
+    const target = r.commit({ 'result.txt': 'Target wording.\n' }, 'target');
+    git(r.root, 'checkout', '-q', 'work');
     expect(() => rebaseOnto(r.root, target, base, join(r.root, '.git', 'rebase.log'), [])).toThrow();
+    expect(git(r.root, 'diff', '--name-only', '--diff-filter=U')).toBe('result.txt');
   } finally { r.dispose(); }
 });
