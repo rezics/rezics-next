@@ -105,10 +105,25 @@ no parent occupies effects capacity while awaiting its own effects child. No new
 catalogue mirror or global paid-order sweep is needed.
 
 Known-order resolution uses its routable ID and one native order key. Native Session lookup requires a route;
-there is no global Session-to-order index. Session-only events need an unexpanded provider Session locator,
-checking `client_reference_id`, metadata correlation and mode against the native recorded binding. PaymentIntent
-resolution also charges the existing filtered Session list. This narrow locator port is not implemented;
-a locator grants no buyer authority, and a pre-admission full read cannot become the later apply snapshot.
+there is no global Session-to-order index. The official [adapter](stripe.ts) now exports
+`createStripePort(config: StripePortConfig): StripePort & StripeCheckoutLocatorPort`; the separate additive
+`StripeCheckoutLocatorPort` exposes `readCheckoutLocator(sessionId: string): Promise<CheckoutLocator>`.
+Existing injected `StripePort` implementations and production callers remain unchanged.
+
+`CheckoutLocator` has exactly `sessionId: string`, `clientReferenceId: string | null`,
+`metadataOrderId: string | null`, `livemode: boolean`, `mode: 'payment' | 'setup' | 'subscription'` and
+`paymentIntentId: string | null`, normalized from the unexpanded
+[Session object](https://docs.stripe.com/api/checkout/sessions/object). Missing/foreign correlation is preserved.
+An unexpectedly expanded PaymentIntent fails with `StripeUnavailableError`; provider failures use the existing
+sanitized error mapping and never become a successful empty anchor. The DTO contains no payment truth, buyer
+`account_id` metadata, URL, amounts, refunds, disputes or `observedAt`. It is untrusted routing metadata, not an
+authorized anchor, native order, captured terms, snapshot, claim or receipt.
+
+The native resolver and production adoption remain pending. A future consumer must validate a routable order ID,
+matching `client_reference_id` and `metadata.order_id`, event/account mode and the actual recorded order/Session
+binding before admission. Missing correlation must not fall back to a sweep. PaymentIntent resolution also
+charges the existing filtered Session list. A locator grants no buyer authority, and a pre-admission full read
+cannot become the later apply snapshot.
 
 Use one combined registered physical attempt: resolve the anchor, fresh native admission, fresh full provider
 read, native apply. Neither an admission token nor provider truth is a separately memoized prefix step.
@@ -198,8 +213,8 @@ serialization retries, stale rollback, committed-effect-before-successor orderin
 They use the native profile fixture's provisioning, signed Access identities and ordinary grants/offer/order
 commands, plus the official Stripe adapter against the loopback fixture. This proves only the native slice.
 The existing [full SDK user cases](../../test/commerce/session-refresh-user-cases.test.ts) remain required.
-Locator/transport bounds, combined fresh Session-queue wiring, compatible persisted-history/executor cutover,
-paid-order/event repair, terminal benefits and composed/unrelated-data growth captures remain pending.
+Native locator binding and transport bounds, combined fresh Session-queue wiring, compatible persisted-history/
+executor cutover, paid-order/event repair, terminal benefits and composed/unrelated-data growth captures remain pending.
 
 ### SDK recovery, cutover and physical bounds
 
@@ -246,8 +261,8 @@ Session refreshes. [Settlement](settlement.ts) rejects an older `observedAt`, wh
 back without retaining that observation. A delayed old pending-full-refund response with no Balance Transaction can
 therefore revoke after a newer canceled-refund no-op. Equal clocks also supply no ordering proof. Receipt-aware
 admission and mandatory apply revision checks are now available through the additional native ports documented above.
-The live split-step path remains unfenced. Fresh combined retries, Session routing, provider locator/transport
-bounds and compatible cutover remain unimplemented; neither native prerequisite tests nor the
+The live split-step path remains unfenced. Fresh combined retries, Session routing, native locator binding,
+provider transport bounds and compatible cutover remain unimplemented; neither native prerequisite tests nor the
 [current](../../../../docs/research/commerce-session-refresh-recovery-current.md) and
 [deep reports](../../../../docs/research/commerce-session-refresh-recovery-deep.md) prove runtime acceptance.
 
@@ -449,6 +464,20 @@ Payout recording aggregates inserted lines rather than q sales, while entitlemen
 Settlement grants use the target subject captured on the order at creation and read no seller-partition offer.
 Every successful command serializes on its partition-wide `core.partition.position` counter (not a single all-partitions counter), and creator-period-currency payout upserts also contend on one statement row.
 Parent/root authorization and royalty source reads are separate anchored checkouts rather than cross-partition joins, but the shared pool and shared DBOS system database in the current composition do not prove independently routed multi-machine execution costs.
+
+### Unexpanded Session locator
+
+- Touches: one exact provider Session retrieval through the same official SDK client, six normalized correlation
+  fields and existing sanitized error mapping. No SQL or native connection is involved.
+- Bound: one logical GET with no `expand`, Session listing, history enumeration or financial child reads,
+  regardless of payment/refund/dispute or unrelated Session history. SDK network retries still count; response
+  bytes, sends and remaining deadlines are separately unproven and require transport enforcement.
+- Growth check: [adapter-boundary acceptance](../../test/commerce/stripe-locator.test.ts) inspects every actual
+  request and the closed DTO for open and paid provider fixture Sessions, growing refunds/disputes at 1/4/16.
+  It preserves foreign/missing correlation for later native validation and checks provider rejection. This proves
+  neither native authorization/binding nor forged webhook refusal, queue/CAS, transport bounds or runtime wiring.
+  Three-scale native resolver and combined transport capture remain release requirements alongside combined
+  refresh, compatible cutover and paid-order/event repair.
 
 ### Native refresh admission and application
 

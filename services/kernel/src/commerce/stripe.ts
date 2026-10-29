@@ -3,7 +3,9 @@ import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
 import {
   StripeRejectedError,
   StripeUnavailableError,
+  type CheckoutLocator,
   type CheckoutSnapshot,
+  type StripeCheckoutLocatorPort,
   type StripePort,
   type StripeTransaction,
   type TransactionKind,
@@ -76,7 +78,7 @@ async function boundedList<T extends { id: string }>(
   }
 }
 
-export function createStripePort(config: StripePortConfig): StripePort {
+export function createStripePort(config: StripePortConfig): StripePort & StripeCheckoutLocatorPort {
   // stripe-node 23.0.1 package.json's bun export uses WebPlatformFunctions (fetch and SubtleCrypto).
   const stripe = new Stripe(config.apiKey, {
     ...(config.host === undefined ? {} : { host: config.host }),
@@ -138,6 +140,24 @@ export function createStripePort(config: StripePortConfig): StripePort {
         const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
         if (!session.url) throw new StripeUnavailableError('Stripe returned no Checkout URL');
         return { id: session.id, url: session.url, expiresAt: new Date(session.expires_at * 1000).toISOString() };
+      });
+    },
+
+    readCheckoutLocator(sessionId): Promise<CheckoutLocator> {
+      return call(async () => {
+        // https://docs.stripe.com/api/checkout/sessions/retrieve: one logical GET, no expansions or child reads.
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        if (session.payment_intent !== null && typeof session.payment_intent !== 'string') {
+          throw new StripeUnavailableError('Stripe unexpectedly expanded the Checkout PaymentIntent');
+        }
+        return {
+          sessionId: session.id,
+          clientReferenceId: session.client_reference_id,
+          metadataOrderId: session.metadata?.order_id ?? null,
+          livemode: session.livemode,
+          mode: known(session.mode, ['payment', 'setup', 'subscription']),
+          paymentIntentId: session.payment_intent,
+        };
       });
     },
 
