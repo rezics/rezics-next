@@ -7,8 +7,8 @@ records actual implementation and remaining gaps. [Scope](scope.md) defers user-
 
 The shared owner contracts are [Dynamic Collections](dynamic-collections.md), [Collection source](collection-source.md),
 [filtered lists](filtered-lists.md), [independent labels](library-labels.md),
-[profile consumers](library-profile-consumers.md), and [deletion](deletion.md). Indexed evaluation and the shared
-identity epoch below supersede older per-page proof/replay, whole-slot observation and identity-basis protocols in
+[profile consumers](library-profile-consumers.md), and [deletion](deletion.md). Indexed evaluation and source-scoped
+concurrent identity currentness below supersede older per-page proof/replay, whole-slot observation and identity-basis protocols in
 those adoption surfaces and earlier research. Their ABI revisions belong to their owners; this adoption creates no
 alternate mode, budget, API or authority document. The [library abstraction research](research/library-abstraction.md)
 is background evidence, not implementation evidence.
@@ -133,7 +133,7 @@ including the OWNER candidate/support directory and concurrent first-apply rekey
 prior removal/addition/fence and exact native transactionId/component/job/epoch/version/scope, current terminal/
 account/source fences and stale destination rejection; follow-only completion is insufficient. No third participant
 or independent ACK shortcut. The [native owner plan](library-owner-queries.md#shared-operational-identity-and-disclosure-producers)
-owns the shared STORE/control cutover and still-required native proof.
+links the semantic scoped concurrent closure and still-required native proof.
 Epoch maintenance reads `owner_write_seq` and re-keys only derived data; it never allocates a state-write
 sequence or rewrites originals. The counter is private ordering data, never permission, an account lifecycle
 generation, a membership witness database or an aggregate count to disclose. Current authorization still covers

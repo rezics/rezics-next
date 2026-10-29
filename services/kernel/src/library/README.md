@@ -121,7 +121,7 @@ The SAME fixed `library-private-follow-counts` epoch participant covers EVERY Li
 OWNER candidate/support directory and concurrent first-apply rekey custody. Its ACK binds exact native
 transactionId AND component/job/epoch/version/scope and every prior removal/addition/fence, current terminal/
 account/source admission and stale destination rejection. Follow-only completion is insufficient; no third
-participant or independent ACK. Consume the shared STORE/control cutover ruling through the
+participant or independent ACK. Consume the semantic scoped concurrent closure through the
 [owner plan](../../../../docs/library-owner-queries.md#shared-operational-identity-and-disclosure-producers);
 actual native participant, whole-query Source2a and custody proofs remain required pending.
 
@@ -198,7 +198,7 @@ and NOT predicates. The native runtime and cross-surface evidence remain incompl
 Unresolved producer dependencies are specific:
 
 - **Semantic/Definitions:** immutable accepted pins and state-set meaning, current original/terminal disclosure,
-  canonical mapping and shared pending/published identity epoch, complete catalogue projections, and Zone composition
+  canonical mapping and source-scoped concurrent identity currentness, complete catalogue projections, and Zone composition
   through Collection source. The old digest/home-sweep ABI is superseded, not a prerequisite to reproduce.
 - **Search and performance:** shared admission/preparation/freshness, per-plan measured allowances and public-safe
   disclosure dependencies; Commerce supplies owner-local indexed plans. Catalogue owns harem/light-novel concepts,
