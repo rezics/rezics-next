@@ -23,6 +23,7 @@ import { nativeFixture, cookies, password } from '../access/native-account-bindi
 import { testKernel, registerTestClient } from '../support/test-kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const owner = newId(0x6c31);
 const other = newId(0x6c31);
@@ -547,7 +548,15 @@ test('add-member requests and member pages keep equal statements across three un
 });
 
 test('native Auth suspension rejects the old Collection bearer and sign-in without hiding anonymous known-ID public reads', async () => {
-  const native = await openGrowthDatabase();
+  // Existing HTTP fixtures already own platform governance in this file's database.
+  // Clone the runner's pristine migrated template for the actual Auth caller.
+  const database = `collection_auth_${randomUUID().replaceAll('-', '')}`;
+  const url = new URL(process.env.DATABASE_URL!);
+  url.pathname = '/postgres';
+  const admin = new pg.Pool({ connectionString: url.toString() });
+  await admin.query(`CREATE DATABASE "${database}" TEMPLATE rezics`);
+  url.pathname = `/${database}`;
+  const native = await openGrowthDatabase(url.toString());
   const auth = await nativeFixture(native.pool);
   try {
     const service = auth.host.service;
@@ -668,5 +677,7 @@ test('native Auth suspension rejects the old Collection bearer and sign-in witho
   } finally {
     await auth.close();
     await native.close();
+    await dropTestDatabase(admin, database);
+    await admin.end();
   }
 }, 180_000);

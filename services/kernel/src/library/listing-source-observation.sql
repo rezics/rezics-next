@@ -3,11 +3,12 @@ WITH input AS NOT MATERIALIZED (
 ), truth AS NOT MATERIALIZED (
   SELECT input.*,
          coalesce(collection.state = 'active' AND collection.visibility = 'public', false) AS currently_public,
-         coalesce(collection.listing_ever_public, false) OR coalesce(history.ever_public, false) AS ever_public
+         CASE WHEN collection.collection_id IS NOT NULL THEN collection.listing_ever_public
+           ELSE coalesce((SELECT history.ever_public FROM library.collection_listing_history AS history
+                          WHERE history.route = input.route AND history.collection_id = input.collection_id), false)
+         END AS ever_public
   FROM input
   LEFT JOIN library.collection ON collection.route = input.route AND collection.collection_id = input.collection_id
-  LEFT JOIN library.collection_listing_history AS history
-    ON history.route = input.route AND history.collection_id = input.collection_id
 )
 SELECT CASE WHEN currently_public THEN
          (SELECT count(*)::integer FROM library.collection_member AS member

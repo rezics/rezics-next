@@ -14,7 +14,7 @@ import { CREATE_SUBJECT } from '../../src/semantic/subject.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
-import { composeWork } from '../../src/work/registry.ts';
+import { composeWork, type WorkService } from '../../src/work/registry.ts';
 import { nativeFixture, cookies, password } from '../access/native-account-bindings-fixture.ts';
 import { testKernel, registerTestClient } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
@@ -30,6 +30,16 @@ let ownerId: string;
 const publicationPositions = new Map<string, SessionComponent>();
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let worker: Awaited<ReturnType<typeof composeWork>>;
+const backgroundServices: (WorkService & { pause?: () => Promise<void> })[] = [];
+
+async function pauseBackgroundRelays() {
+  // Keep the default workflow registrations and executor live. Quiesce only our
+  // unrelated periodic relays so their lag heartbeats cannot race harness VACUUM.
+  for (const service of backgroundServices) {
+    if (!service.pause) throw new Error('Background service does not expose its native pause lifecycle');
+    await service.pause();
+  }
+}
 
 async function call(method: string, path: string, body?: unknown, key = randomUUID()) {
   const response = await kernel.handle(
@@ -175,7 +185,22 @@ beforeAll(async () => {
   // Auth and Kernel each own the SDK in their process lifetime; registration has completed.
   await auth.stop();
   client = await createWorkClient(db.url);
-  worker = await composeWork(KERNEL_WORK_MODULES, {
+  const modules = KERNEL_WORK_MODULES.map((module) => ({
+    name: module.name,
+    register(context: Parameters<typeof module.register>[0]) {
+      return module.register({
+        ...context,
+        addService(start) {
+          context.addService(async () => {
+            const service = await start();
+            backgroundServices.push(service);
+            return service;
+          });
+        },
+      });
+    },
+  }));
+  worker = await composeWork(modules, {
     databaseUrl: db.url,
     pool: db.openPool({ max: 10 }),
     client,
@@ -292,6 +317,7 @@ test('a collapsed public-private-public cycle advances ordering without publishi
 
 for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] as const) {
   test(`native visibility publication rows, blocks and statements ignore unrelated ${axis}`, async () => {
+    await pauseBackgroundRelays();
     const unrelatedSubject = await subject();
     const fixedPartition = routeOf(unrelatedSubject)! >> 4;
     const populatedPartitions = new Set<number>();
@@ -370,6 +396,7 @@ for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] a
 }
 
 test('native visibility publication grows linearly only with the changed Collection subjects', async () => {
+  await pauseBackgroundRelays();
   let targets: { collection: CollectionView; subjects: string[] }[] = [];
   let index = 0;
   const report = await checkGrowth(db, {
