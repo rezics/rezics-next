@@ -284,6 +284,48 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         };
       },
     )
+    .patch(
+      '/v1/offers/:offerId',
+      {
+        params: t.Object({ offerId: id }),
+        headers,
+        body: t.Object({ unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }) }, object),
+        response: {
+          200: offerResponse,
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden', 'platform_closed'),
+          404: problemSchema('not_found'),
+          409: problemSchema('offer_unavailable'),
+          422: problemSchema('idempotency_conflict'),
+          503: unavailable,
+        },
+        detail: detail('offer.revise', 'offer:manage', 'gate:selling'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        if (!scoped(actor, 'offer:manage')) throw new ProblemError('forbidden');
+        if (routeOf(params.offerId) === null) throw new ProblemError('not_found');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(
+            () => createCommerceCommands({ pool, access: deps.access() }).reviseOffer(actor, params.offerId, body, key),
+            'not_found',
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return {
+          offer: offerView(
+            result.value,
+            (
+              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
+                result.value.targetSubjectId,
+              ])
+            ).get(result.value.targetSubjectId) ?? null,
+          ),
+        };
+      },
+    )
     .post(
       customMethod('/v1/offers/:offerId', 'delist'),
       {

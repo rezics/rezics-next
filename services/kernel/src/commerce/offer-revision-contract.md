@@ -2,7 +2,7 @@
 
 This contract owns the HTTP transport for the existing [`reviseOffer`](commands.ts) command and its
 [native HTTP acceptance](../../test/commerce/offer-revision-http.test.ts). It adopts the minimal seller price
-revision surface; it does not mount that surface. The [Commerce README](README.md) continues to own purchase,
+revision surface mounted by [`routes.ts`](routes.ts). The [Commerce README](README.md) continues to own purchase,
 settlement and entitlement behavior. Its historical target-digest defect description is superseded for this
 operation by the implemented command's `{ offerId, unitAmountMinor }` intent and the unchanged
 [native target-replay regression](../../test/commerce/revise-offer-target-replay.test.ts).
@@ -45,11 +45,12 @@ native authentication problem. An active caller missing the current `offer:manag
 A closed selling gate returns the existing `403 platform_closed`. A delisted target returns the existing
 `409 offer_unavailable` for a fresh authorized revision.
 
-If an otherwise valid suspended-bearer fixture becomes available, it must prove `403 account_suspended`.
-The current ordinary suspension command increments the authentication floor and sets `authn_fenced = true`;
-the authenticator rejects that fence before producing a suspended identity. Neither the old bearer nor a token
-signed at the new floor is such a valid suspended-bearer fixture. The acceptance therefore tests actual revoked
-bearer `401` separately and does not forge an unfenced suspended account or alter shared authentication policy.
+Native suspension increments the authentication floor and sets `authn_fenced = true`; the authenticator rejects
+the old token with HTTP `401`, JSON `invalid_credentials` and an `invalid_token` challenge before producing an
+identity. Gated Commerce routes retain their ordinary concealed `401 authentication_required` response for invalid
+bearers. Auth correct-password sign-in returns `403 ACCOUNT_SUSPENDED` without creating a session. The acceptance
+tests actual revoked bearer `401` separately and does not forge an unfenced suspended account or alter shared
+authentication policy.
 
 Receipts retain the native principal/partition/command/key identity. The digest binds the complete intent,
 including the path's `offerId` and body amount. With one seller owning two offers in the same partition, reusing
@@ -80,9 +81,10 @@ conflicts, Bob/unscoped/revoked denials, strict invalid input and closed selling
 inspects named offers/orders, the order-keyed entitlement, exact principal/key receipts, receipt-position events and
 native partition counters to prove effects or their absence. The existing helper-only target regression stays intact.
 
-The cases precede route implementation and must currently fail meaningfully at the absent PATCH's `404` versus
-successful `200`. Specification, implementation, exposure, passing acceptance and promotion remain separate states.
-Closed OpenAPI and client regeneration belong to the later runtime change.
+The route delegates to the existing native command under normal admission, records its session consistency component
+and resolves the summary for the current request, including replay. Closed OpenAPI and client declarations are
+derived from the mounted route. Specification, implementation, exposure, passing acceptance and promotion remain
+separate states; the named native cases provide acceptance evidence for this transport.
 
 ## Cost
 
