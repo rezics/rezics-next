@@ -223,19 +223,19 @@ async function libraryToken(account: string, scope = libraryScopes): Promise<str
 const librarySubjectSeeds = [
   {
     key: 'kokoro',
-    id: '01a17a3b-6b89-748f-a486-33c354ef3c9a',
+    id: '01a1773a-f6ff-7684-8e44-1a013af60d4b',
   },
   {
     key: 'norwegian-wood',
-    id: '01a17a3b-6bab-705b-935e-d6dc0cacd82d',
+    id: '01a1773a-f700-7078-8000-000000000003',
   },
   {
     key: 'genji',
-    id: '01a17a3b-6bc3-764f-8727-7872d197bd93',
+    id: '01a1773a-f700-7078-8000-000000000001',
   },
   {
     key: 'cat',
-    id: '01a17a3b-6bd9-706f-b395-987536454933',
+    id: '01a1773a-f700-7071-b5ef-2b02f7d0e8c6',
   },
   {
     key: 'snow-country',
