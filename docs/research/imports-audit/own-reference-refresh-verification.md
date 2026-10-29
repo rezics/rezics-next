@@ -29,10 +29,42 @@ changes no received value, expected object, matcher method or executable asserti
 proposal id-only properties, 16 relay calls, busy 5 ms sleep, fatal stopped status and read-zero readiness
 are unchanged. The installed file already has the exact approved bytes; no further frozen edit is needed.
 
-Run the root typecheck once first on a committed revision. Only a zero compiler exit permits the focused
-native acceptance once. Results are pending. Reuse the unchanged local bootstrap/reopen 2-case/16-assertion
-and post-retention adjacent 11-case/158-assertion evidence below; runtime, storage and local regression
-bytes remain identical to `c79e538dfd`. No rebase, merge, infrastructure or dependency change is needed.
+The root typecheck ran once, first, on committed revision
+`4c13e0fec1ab0a942f82eac938c2ac0803fb6602`:
+
+```sh
+bun scripts/worker-check.ts -- bun scripts/typecheck.ts
+```
+
+Check `9d85a761-1c9d-47aa-9745-90892a3d466c` reached terminal **exit 1**, after
+531.044 seconds queued and 68.244 seconds executing on a. Log:
+`.temp/goal/checks/worker-check-2026-10-29T14-01-15.170Z-8be87762.log`.
+All 12 other workspaces completed without errors; kernel reported only:
+
+```text
+test/imports/known-reference-refresh.test.ts(73,53): error TS2353: Object literal may only specify known properties, and 'data_type' does not exist in type '{ id: string; }'.
+```
+
+The approved erased generic changed the diagnostic from TS2769 to TS2353 but did not close the frozen
+helper compile error. The exact qualifier object still fails compilation. The current ruling requires
+stopping on a nonzero root compiler result, so **native acceptance was not started**. No native transition
+or assertion was reached in this continuation. The frozen preservation rule forbids a further helper
+amendment; changing the production read schema or proposal shape would contradict their existing contracts.
+This is a frozen acceptance/type conflict, not an infrastructure failure.
+
+The same check ID was resumed through terminal status; one wait returned 75 while the check remained
+running, then the next wait observed exit 1. No retry, infrastructure rerun or live check remains.
+The native file retains its exact approved/registry hash. Removing only the approved generic reproduces
+old SHA-256 `c2a3e80acba22a911bc2d118b07286ceb7494c6c528da7be4572c8fa76b65bf7`, verifying
+the complete one-hunk amendment contains no other byte changes.
+
+Reuse the unchanged local bootstrap/reopen **2 pass, 16 assertions** and post-retention adjacent
+**11 pass, 158 assertions** evidence below. Runtime, storage and local regression bytes remain identical
+to `c79e538dfd`; none was rerun. Only the owning README and this report were changed by the worker,
+within the declared paths. No rebase, merge, infrastructure, dependency or shared-type change was made.
+The final documentation commit records this result and does not change any tested bytes. The earlier
+native receipts below retain their reached transitions and honest failure limits; none proves this
+latest frozen installation passed.
 
 ## Previous three-type-edit verification
 
@@ -187,5 +219,5 @@ with existing bounded statement bytes. This is local bounded work, with no new h
 Read `docs/architecture.md`, `docs/scope.md`, the development workflow and Goal index, the imports capability contract,
 the importer README, the existing known-reference report, the frozen native acceptance, Open Library converter and
 context types, source registration and configured aliases, importer planning, run-store signatures, exact
-`RecordBindings.claim` and candidate APIs, and semantic relation-slot/candidate-listing contracts, the native read schemas and the controller's exact three-hunk type amendment. No reference
+`RecordBindings.claim` and candidate APIs, and semantic relation-slot/candidate-listing contracts, the native read schemas, the controller's earlier three-hunk type amendment and its latest exact erased matcher generic. No reference
 project or legacy source was consulted. No files outside the declared paths were changed.

@@ -114,11 +114,15 @@ responses; a busy partition relay consumes one of the same 16 calls and is never
 Its installed SHA-256 is
 `720b74e64eb29d8a1a10403f16c9e9a329d01aab93255fe5c69bc46f97d1db51`, matching the approved raw
 file and read-only frozen registry. The native `Statement` annotations and the latest erased matcher generic
-preserve every executable assertion. The previous three-type-edit installation failed TS2769 before native
-cases; the latest installation awaits root typecheck first, then focused native acceptance only if compilation
-passes. All three adjacent recovery files passed (11 cases, 158 assertions), with the extra recovery file run
-separately after a filename correction. The local reopen regression passed (2 cases, 16 assertions); runtime,
-storage and local regression bytes remain unchanged, so those qualified results are reused.
+preserve every executable assertion. The root typecheck ran once first on
+`4c13e0fec1ab0a942f82eac938c2ac0803fb6602` and exited 1: the frozen helper at
+`known-reference-refresh.test.ts(73,53)` now reports TS2353, rejecting the native-only `data_type`
+property. All other 12 workspaces completed without errors. The required stop-on-compiler-error rule
+prevented starting native acceptance, so this continuation establishes no native transition. The
+frozen bytes and production schemas remain unchanged. All three adjacent recovery files passed
+(11 cases, 158 assertions), with the extra recovery file run separately after a filename correction.
+The local reopen regression passed (2 cases, 16 assertions); runtime, storage and local regression
+bytes remain unchanged, so those qualified results are reused.
 See the [verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
 for revisions, receipts, reached transitions and evidence limits.
 
