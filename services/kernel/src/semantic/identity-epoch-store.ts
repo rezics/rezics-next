@@ -235,7 +235,7 @@ export const identityEpochStore: IdentityEpochStore = {
       if (
         !row.terminal ||
         !row.mapping_transaction ||
-        row.mapping_transaction !== row.source_transaction ||
+        (row.origin === 'creation' && row.mapping_transaction !== row.source_transaction) ||
         (row.origin !== 'creation' && row.dirty) ||
         row.member_dirty ||
         (row.terminal === original ? row.current_target !== null : row.current_target !== row.terminal)

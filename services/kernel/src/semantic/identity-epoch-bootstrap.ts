@@ -276,6 +276,33 @@ export async function stepIdentityEpochBootstrap(
     }
     const data = JSON.stringify(retained.rows);
     if (retained.phase === 'subjects' || retained.phase === 'dirty') {
+      // Install the mapping from the exact source-home export that is being taken into custody.
+      // The source command receipt supplies its owner epoch and transaction identity; a scan page
+      // without that receipt can update neither the mapping nor its local effect gate.
+      await query(
+        tx,
+        `INSERT INTO semantic.identity_epoch_mapping(route,original,terminal,epoch,origin,recorded_transaction_id)
+        SELECT r.route,r.original,r.terminal,$2,'published',$3
+        FROM jsonb_to_recordset($1::jsonb) AS r(route integer,original uuid,terminal uuid,source_revision bigint,present boolean)
+        WHERE r.present AND NOT EXISTS (
+          SELECT 1 FROM semantic.identity_epoch_home_gate g
+          WHERE (g.route,g.destination,g.original)=(r.route,r.original,r.original) AND g.pending_job IS NOT NULL
+        )
+        ON CONFLICT(route,original) DO UPDATE SET terminal=excluded.terminal,epoch=excluded.epoch,
+          origin=excluded.origin,recorded_transaction_id=excluded.recorded_transaction_id`,
+        [data, retained.native.epoch, retained.native.transactionId],
+      );
+      await query(
+        tx,
+        `INSERT INTO semantic.identity_epoch_home_gate(route,destination,original,terminal,epoch,recorded_transaction_id)
+        SELECT r.route,r.original,r.original,r.terminal,$2,$3
+        FROM jsonb_to_recordset($1::jsonb) AS r(route integer,original uuid,terminal uuid,source_revision bigint,present boolean)
+        WHERE r.present
+        ON CONFLICT(route,destination,original) DO UPDATE SET terminal=excluded.terminal,epoch=excluded.epoch,
+          recorded_transaction_id=excluded.recorded_transaction_id
+        WHERE semantic.identity_epoch_home_gate.pending_job IS NULL`,
+        [data, retained.native.epoch, retained.native.transactionId],
+      );
       await query(
         tx,
         `INSERT INTO semantic.identity_epoch_group(terminal,observed_count)
