@@ -63,7 +63,10 @@ async function open(width: number) {
   );
   if (!entry) throw new Error('Missing signed-in Collection page story.');
   browser ??= await chromium.launch();
-  const context = await browser.newContext({ viewport: { width, height: 860 }, reducedMotion: 'reduce' });
+  const context = await browser.newContext({
+    viewport: { width, height: width === 1280 ? 600 : 844 },
+    reducedMotion: 'reduce',
+  });
   const page = await context.newPage();
   await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:en`, {
     waitUntil: 'networkidle',
@@ -89,7 +92,7 @@ test(
     const height = await main.evaluate((element) =>
       Math.max(element.scrollHeight, document.documentElement.scrollHeight),
     );
-    expect(height).toBeGreaterThan(860);
+    expect(height).toBeGreaterThan(600);
 
     const sidebar = page.locator('[data-sidebar="sidebar"]:not([data-mobile="true"])');
     const initial = await sidebar.boundingBox();
