@@ -94,7 +94,23 @@ function successful(response: HttpResponse) {
 
 function expectedFacetValues(author: Subject, visible: boolean): Record<string, FacetValue[]> {
   return {
-    type: visible ? [{ value: 'schema:Book', labels: { en: 'Book' } }] : [],
+    type: visible
+      ? [
+          {
+            value: 'schema:Book',
+            labels: {
+              de: 'Buch',
+              en: 'book',
+              es: 'libro',
+              fr: 'livre',
+              ja: '書籍',
+              ko: '책',
+              'zh-Hans': '书籍',
+              'zh-Hant': '書籍',
+            },
+          },
+        ]
+      : [],
     'schema:inLanguage': visible ? [{ value: 'en', labels: {} }] : [],
     'schema:author': visible ? [{ value: author.id, labels: author.labels }] : [],
   };
