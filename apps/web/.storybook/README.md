@@ -42,3 +42,17 @@ bun run --cwd apps/web storybook:deploy --dry-run
 ```
 
 This runs Wrangler's local `deploy --dry-run` validation and prints that no version or domain changes will be made.
+
+## Publishing after dev advances
+
+The holder of the Cloudflare credentials publishes from a clean checkout of the current dev head. Check the review
+site against that checkout with:
+
+```sh
+bun run --cwd apps/web storybook:deploy --status
+```
+
+Exit 3 means the review site is stale; run `storybook:deploy` to publish. Exit 0 means it is current. Exit 2 means
+the live build could not be read; check the domain before deploying. Run this check after each dev advance that changes
+`apps/web` or `packages/ui`, and at least once a day while work lands. `--force` republishes the same commit, for
+example after a Wrangler config change.
