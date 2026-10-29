@@ -40,20 +40,23 @@ const started = new Promise<void>((resolve) => (blockedStarted = resolve));
 const starts: string[] = [];
 
 function registerFixtureEffects() {
-  return registerEffects([
-  { name: locator, types: [CONTEXT], async run() {} },
-  {
-    name: 'ordered',
-    types: [CREATED],
-    run: async (event) => {
-      starts.push(event.subject!);
-      if (event.subject === 'blocked') {
-        blockedStarted();
-        await within(blocked, 'blocked effect release');
-      }
-    },
-  },
-  ], locatorGrowth.pool);
+  return registerEffects(
+    [
+      { name: locator, types: [CONTEXT], async run() {} },
+      {
+        name: 'ordered',
+        types: [CREATED],
+        run: async (event) => {
+          starts.push(event.subject!);
+          if (event.subject === 'blocked') {
+            blockedStarted();
+            await within(blocked, 'blocked effect release');
+          }
+        },
+      },
+    ],
+    locatorGrowth.pool,
+  );
 }
 
 beforeAll(async () => {
