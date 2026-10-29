@@ -8,6 +8,7 @@ import {
   subjectGenerations,
   subjectIndexName,
   subjectAlias,
+  readSubjectSortFormat,
 } from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
@@ -48,8 +49,9 @@ export async function startSearchIndexing(options: {
       let state = await subjectGenerations(options.search, options.prefix);
       if (state.generations.length === 0) {
         await createSubjectIndex(options.search, options.prefix, 1);
+        const format = await readSubjectSortFormat(options.search, options.prefix, 1);
         await options.search.request('PUT', `/${subjectIndexName(options.prefix, 1)}/_mapping`, {
-          _meta: { activated_at: new Date().toISOString() },
+          _meta: { ...(format === null ? {} : { name_sort_format: format }), activated_at: new Date().toISOString() },
         });
         await options.search.request('POST', '/_aliases', {
           actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],

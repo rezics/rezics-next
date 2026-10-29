@@ -1,6 +1,13 @@
 import type { Pool } from 'pg';
 import { discardConnection } from '../database/pool.ts';
-import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
+import {
+  createSubjectIndex,
+  readSubjectSortFormat,
+  SUBJECT_SORT_FORMAT,
+  subjectAlias,
+  subjectGenerations,
+  subjectIndexName,
+} from './indices.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { readFreshness } from './freshness.ts';
@@ -133,10 +140,18 @@ export async function rebuildSubjects(options: {
     const state = await subjectGenerations(options.search, options.prefix);
     const previous = state.active;
     const highest = state.generations.at(-1) ?? 0;
-    const generation = highest > (previous ?? 0) ? highest : highest + 1;
+    // Advanced checkpoints on an old-format index cannot replay already consumed names.
+    // Only a generation created with the bounded writer format is safe to resume.
+    const resumable =
+      highest > (previous ?? 0) &&
+      (await readSubjectSortFormat(options.search, options.prefix, highest)) === SUBJECT_SORT_FORMAT;
+    const generation = resumable ? highest : highest + 1;
     if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
       throw new RebuildError('limit', generation);
     await createSubjectIndex(options.search, options.prefix, generation);
+    const format = await readSubjectSortFormat(options.search, options.prefix, generation);
+    if (format !== SUBJECT_SORT_FORMAT)
+      throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
     await options.runner.refresh();
 
     const consumer = subjectConsumer(options.prefix, generation);
@@ -211,7 +226,7 @@ export async function rebuildSubjects(options: {
     }
 
     await options.search.request('PUT', `/${index}/_mapping`, {
-      _meta: { activated_at: new Date().toISOString() },
+      _meta: { name_sort_format: format, activated_at: new Date().toISOString() },
     });
     const actions: unknown[] = [];
     if (previous !== null)

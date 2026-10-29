@@ -19,6 +19,7 @@ const fresh = () => `test-${crypto.randomUUID().slice(0, 8)}-`;
 const prefix = fresh();
 const large = fresh();
 const empty = fresh();
+const concrete = fresh();
 
 // Route 0x00a0 sits in partition 10.
 const id = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
@@ -60,6 +61,7 @@ async function seed(target: string, subjects: readonly IndexedSubject[]): Promis
 
 beforeAll(async () => {
   await seed(prefix, SUBJECTS);
+  await seed(concrete, SUBJECTS);
   await seed(
     large,
     Array.from({ length: TOTAL_LIMIT + 1 }, (_, index) => subject(index + 1, `Bulk ${index + 1}`)),
@@ -68,7 +70,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  for (const target of [prefix, large, empty]) {
+  for (const target of [prefix, large, empty, concrete]) {
     await search.request('DELETE', `/${subjectIndexName(target, 1)}`).catch(() => undefined);
     for (const name of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE]) {
       await search.request('DELETE', `/_scripts/${target}${name}`).catch(() => undefined);
@@ -162,4 +164,26 @@ test('a missing alias is an OpenSearch not-found error', async () => {
   const missing = await searchSubjects(search, empty, { sort: 'id', size: 1 }).catch((error: unknown) => error);
   expect(missing).toBeInstanceOf(OpenSearchError);
   expect(missing).toMatchObject({ status: 404, type: 'index_not_found_exception' });
+});
+
+test('a supplied physical generation works without an alias for every ordinary sort and zero hits', async () => {
+  await search.request('POST', '/_aliases', {
+    actions: [{ remove: { index: subjectIndexName(concrete, 1), alias: subjectAlias(concrete) } }],
+  });
+  for (const sort of ['name', 'id', 'collections', 'relevance'] as const) {
+    const plan = { query: kokoro, boost: 'kokoro', sort, size: 10 };
+    const ordinary = await searchSubjects(search, prefix, plan);
+    const pinned = await searchSubjects(search, concrete, { ...plan, generation: 1 });
+    expect(pinned.generation).toBe(1);
+    expect(pinned.hits).toEqual(ordinary.hits.map((hit) => ({ ...hit, index: subjectIndexName(concrete, 1) })));
+    expect(pinned.total).toEqual(ordinary.total);
+    const empty = await searchSubjects(search, concrete, {
+      ...plan,
+      generation: 1,
+      filter: { term: { type: 'schema:Recipe' } },
+    });
+    expect(empty).toEqual({ generation: 1, hits: [], total: { value: 0, relation: 'exact' } });
+  }
+  const omitted = await searchSubjects(search, concrete, { sort: 'id', size: 1 }).catch((error: unknown) => error);
+  expect(omitted).toMatchObject({ status: 404, type: 'index_not_found_exception' });
 });

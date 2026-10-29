@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
@@ -383,5 +383,93 @@ test('each request makes at most three index requests and reads only the partiti
     expect(searches).toBeLessThanOrEqual(3);
     expect(reads.length).toBeLessThanOrEqual(3 * 4);
     for (const read of reads) expect(read.length).toBeLessThanOrEqual(2 * pageSize + 1);
+  }
+});
+
+test('every listing sort restarts after an alias switch while keeping all queries pinned, including empty results and valid cursors', async () => {
+  for (const sort of ['name', 'collections', 'id', 'relevance'] as const) {
+    const books = [subject(1, 'Pinned Alpha'), subject(2, 'Pinned Zeta')];
+    let prefix: string;
+    let switched = false;
+    let resolutions = 0;
+    const mappings: string[] = [];
+    const targets: string[] = [];
+    const racing: OpenSearch = {
+      bulk: (...args) => client.bulk(...args),
+      async request<T>(...args: Parameters<OpenSearch['request']>) {
+        const response = await client.request<T>(...args);
+        if (args[1].startsWith('/_resolve/index/')) resolutions++;
+        if (args[1].endsWith('/_mapping')) mappings.push(args[1]);
+        if (args[1].endsWith('/_mapping') && !switched) {
+          switched = true;
+          await client.request('POST', '/_aliases', {
+            actions: [
+              { remove: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } },
+              { add: { index: subjectIndexName(prefix, 2), alias: subjectAlias(prefix) } },
+            ],
+          });
+        }
+        if (args[1].endsWith('/_search/template')) targets.push(args[1]);
+        return response;
+      },
+    };
+    const env = await deployment(books, { client: racing });
+    prefix = env.prefix;
+    await publish(prefix, env.fake, books, 2);
+    for (const scenario of [
+      { text: 'pinned', continuation: false },
+      { text: 'nohit', continuation: false },
+      { text: 'pinned', continuation: true },
+    ]) {
+      await client.request('POST', '/_aliases', {
+        actions: [
+          { remove: { index: subjectIndexName(prefix, 2), alias: subjectAlias(prefix) } },
+          { add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } },
+        ],
+      });
+      const request = { text: scenario.text, sort, limit: 1 };
+      // Obtain an authentic cursor while its original generation is still active.
+      switched = true;
+      const cursor = scenario.continuation ? (await env.service.search('anonymous', request)).next! : undefined;
+      if (scenario.continuation) expect(cursor).toBeString();
+      switched = false;
+      resolutions = 0;
+      mappings.length = 0;
+      targets.length = 0;
+      const error = await problem(
+        env.service.search('anonymous', { ...request, ...(cursor ? { cursor } : {}) }),
+        'search_restart_required',
+      );
+      expect(switched).toBe(true);
+      expect(resolutions).toBe(2);
+      expect(mappings).toEqual([`/${subjectIndexName(prefix, 1)}/_mapping`]);
+      expect(targets).toEqual([`/${subjectIndexName(prefix, 1)}/_search/template`]);
+      const response = problemResponse(error, { method: 'POST', id: 'alias-switch-test' });
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: 'search_restart_required' });
+      for (const key of ['subjects', 'next', 'total', 'as_of']) expect(body).not.toHaveProperty(key);
+    }
+  }
+});
+
+test('listing readiness requires the actual supported format for all sorts before any query', async () => {
+  const targets: string[] = [];
+  const observing: OpenSearch = {
+    bulk: (...args) => client.bulk(...args),
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      if (args[1].endsWith('/_search/template')) targets.push(args[1]);
+      return client.request<T>(...args);
+    },
+  };
+  const { prefix, service } = await deployment([kokoro], { client: observing });
+  expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
+  for (const meta of [{}, { name_sort_format: 0 }, { name_sort_format: 2 }]) {
+    await client.request('PUT', `/${subjectIndexName(prefix, 1)}/_mapping`, { _meta: meta });
+    targets.length = 0;
+    for (const sort of ['name', 'collections', 'id', 'relevance'] as const) {
+      await problem(service.search('anonymous', { text: 'nohit', sort }), 'index_not_ready');
+    }
+    expect(targets).toEqual([]);
   }
 });

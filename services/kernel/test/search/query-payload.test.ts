@@ -307,9 +307,18 @@ for (const operation of ['search', 'suggest', 'facet'] as const) {
     expect(reads).toBe(0);
     expect(observed.replies).toHaveLength(1);
     expect(observed.calls.filter(({ path }) => path.endsWith('/_search/template'))).toHaveLength(1);
+    const resolvePath = `/_resolve/index/${prefix}subjects*`;
+    const mappingPath = `/${index}/_mapping`;
+    for (const metadataPath of [resolvePath, mappingPath])
+      expect(
+        observed.calls.filter(({ method, path }) => method === 'GET' && path === metadataPath).length,
+      ).toBeLessThanOrEqual(1);
     expect(
       observed.calls.every(
-        ({ method, path }) => (method === 'PUT' && path.startsWith('/_scripts/')) || path.endsWith('/_search/template'),
+        ({ method, path }) =>
+          (method === 'PUT' && path.startsWith('/_scripts/')) ||
+          path.endsWith('/_search/template') ||
+          (method === 'GET' && (path === resolvePath || path === mappingPath)),
       ),
     ).toBe(true);
     const error = 'error' in outcome ? outcome.error : outcome;

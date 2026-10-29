@@ -195,18 +195,17 @@ export function createSearchService({
     }
   }
 
+  async function freshAliasGeneration(): Promise<number> {
+    const { active } = await subjectGenerations(client, prefix);
+    if (active === null) throw indexNotReady();
+    return active;
+  }
+
   function aliasGeneration(): Promise<number> {
     if (aliasRead) return aliasRead;
-    if (alias && Date.now() < alias.expiresAt) return Promise.resolve(alias.generation);
-    const read = subjectGenerations(client, prefix)
-      .then(({ active }) => {
-        if (active === null) throw indexNotReady();
-        alias = { generation: active, expiresAt: Date.now() + 1000 };
-        return active;
-      })
-      .finally(() => {
-        if (aliasRead === read) aliasRead = undefined;
-      });
+    const read = freshAliasGeneration().finally(() => {
+      if (aliasRead === read) aliasRead = undefined;
+    });
     aliasRead = read;
     return read;
   }
@@ -224,17 +223,6 @@ export function createSearchService({
       )
         throw indexNotReady();
       return { questionId: value.questionId, populationId: value.populationId, priorEpoch: value.priorEpoch };
-    } catch {
-      throw indexNotReady();
-    }
-  }
-
-  async function freshGeneration(): Promise<number> {
-    try {
-      const { active, generations } = await subjectGenerations(client, prefix);
-      if (active === null || !Number.isSafeInteger(active) || active < 1 || !generations.includes(active))
-        throw indexNotReady();
-      return active;
     } catch {
       throw indexNotReady();
     }
@@ -369,7 +357,6 @@ export function createSearchService({
       // Authenticate the original operation/request/viewer before reading dynamic rating metadata.
       const rating = sort === 'rating' ? await ratingEpoch() : undefined;
       let ratingPhase: RatingPhase | undefined;
-      let ratingGeneration: number | undefined;
       if (rating) {
         if (request.cursor !== undefined) {
           const decoded = await decodeRatingCursor(
@@ -387,13 +374,13 @@ export function createSearchService({
           cursor = decoded;
           ratingPhase = decoded.phase;
         }
-        ratingGeneration = await freshGeneration();
-        if (cursor?.ok && cursor.generation !== ratingGeneration) throw new ProblemError('search_restart_required');
-        if (
-          (await indexRequest(() => readSubjectSortFormat(client, prefix, ratingGeneration!))) !== SUBJECT_SORT_FORMAT
-        )
-          throw indexNotReady();
       }
+      // Pin the active generation before querying, including empty queries. Every
+      // refill targets that physical index even if the alias switches during validation.
+      const generation = await indexRequest(aliasGeneration);
+      if (cursor && cursor.generation !== generation) throw new ProblemError('search_restart_required');
+      const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+      if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
       const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f', relationOverflow: true }) : undefined;
@@ -417,7 +404,6 @@ export function createSearchService({
         sort,
       };
       let after = cursor?.after;
-      let generation = ratingGeneration ?? cursor?.generation;
       let overflow = false;
       let exhausted = false;
       const results: SearchHit[] = [];
@@ -450,18 +436,13 @@ export function createSearchService({
         const page = await indexRequest(() =>
           searchSubjects(client, prefix, {
             ...plan,
+            generation,
             size,
             ...(after === undefined ? {} : { after }),
-            ...(rating ? { rating, generation: ratingGeneration!, ...(ratingPhase ? { ratingPhase } : {}) } : {}),
+            ...(rating ? { rating, ...(ratingPhase ? { ratingPhase } : {}) } : {}),
           }),
         );
         overflow ||= page.overflow === true;
-        if (rating && (!Number.isSafeInteger(page.generation) || page.generation! < 1)) throw indexNotReady();
-        const currentGeneration = rating ? page.generation! : await generationOf(page.hits);
-        if (rating && page.hits.length && (await generationOf(page.hits)) !== currentGeneration) throw indexNotReady();
-        if (generation !== undefined && generation !== currentGeneration)
-          throw new ProblemError('search_restart_required');
-        generation = currentGeneration;
         sourcePositions.clear();
         const { passed, relationRejected } = await sourceRequest(() =>
           checkHits(
@@ -508,17 +489,15 @@ export function createSearchService({
       const as_of = await asOf(generation!);
       if (rating) {
         const currentRating = await ratingEpoch();
-        const currentGeneration = await freshGeneration();
         if (
           currentRating.questionId !== rating.questionId ||
           currentRating.populationId !== rating.populationId ||
-          currentRating.priorEpoch !== rating.priorEpoch ||
-          currentGeneration !== generation
+          currentRating.priorEpoch !== rating.priorEpoch
         )
           throw new ProblemError('search_restart_required');
       }
       const cursorBinding = overflow || inexact ? lowerBoundBinding : binding;
-      return {
+      const response = {
         subjects: results,
         next: exhausted
           ? null
@@ -533,6 +512,10 @@ export function createSearchService({
             : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
         as_of,
       };
+      // This operation's final observation must follow all query and source work;
+      // another request's in-flight alias read cannot bracket this response.
+      if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
+      return response;
     },
 
     async facets(

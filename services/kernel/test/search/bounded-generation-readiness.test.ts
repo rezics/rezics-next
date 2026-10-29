@@ -271,7 +271,7 @@ test('an old unbounded generation cannot produce cursors until a genuinely rebui
   for (const sort of ['name', 'collections'] as const) await readyFailure(app(env.prefix), { filter, sort, limit: 1 });
   // Additive mapping changes cannot remove the old 4500-unit term or certify its format.
   await engine.request('PUT', `/${env.index}/_mapping`, {
-    properties: { name_sort: { type: 'keyword', ignore_above: 512 } },
+    properties: { name_sort: { type: 'keyword', normalizer: 'name_key', ignore_above: 512 } },
     _meta: { activated_at: new Date().toISOString() },
   });
   expect(((await native(env.index)).find(({ _id }) => _id === subjects[3]!.id)!.sort[0] as string).length).toBe(4500);
