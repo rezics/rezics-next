@@ -1471,6 +1471,9 @@ async function takeSession(
     }
     if (signal.aborted) throw new Aborted();
     accepted = true;
+    // Keep the session's input pipe live while the remote script holds its marker and reads until EOF.
+    holder.stdin.write('\n');
+    await holder.stdin.flush();
     return lease;
   } catch (error) {
     if (!accepted) {
