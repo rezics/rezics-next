@@ -8,7 +8,12 @@ export type ConsumerLag = {
 
 export async function readConsumerLag(client: PoolClient, consumer: string): Promise<ConsumerLag | null> {
   const row = await readConsumerLagQuery.run(client, { consumer });
-  return row ? { oldestPendingAt: row.oldest_pending_at, observedAt: row.observed_at } : null;
+  return row
+    ? {
+        oldestPendingAt: row.oldest_pending_at === null ? null : new Date(row.oldest_pending_at),
+        observedAt: new Date(row.observed_at),
+      }
+    : null;
 }
 
 export function consumerReady(lag: ConsumerLag | null, options: { maxLagMs: number; now: Date }): boolean {
