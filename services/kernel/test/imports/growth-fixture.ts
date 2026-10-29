@@ -16,6 +16,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { createApiPopulation } from './api-population.ts';
 import { createGrowthSqliteCapture } from './growth-sqlite-capture.ts';
+import type { ImportPostgresCapture } from './api-capture.ts';
 import type {
   Counters,
   Fixture,
@@ -345,11 +346,13 @@ function emptyCapture(): Capture {
   return { statements: [], plans: [] };
 }
 
-function planQuery(document: unknown): string | undefined {
+function planQueries(document: unknown): string[] {
   const roots = Array.isArray(document) ? document : [document];
-  return roots.find(
-    (value) => value && typeof value === 'object' && !Array.isArray(value) && typeof value['Query Text'] === 'string',
-  )?.['Query Text'] as string | undefined;
+  return roots.flatMap((value) =>
+    value && typeof value === 'object' && !Array.isArray(value) && typeof value['Query Text'] === 'string'
+      ? [value['Query Text']]
+      : [],
+  );
 }
 
 function normalizedPlanSql(sql: string): string {
@@ -412,29 +415,45 @@ function partitions(capture: Capture): string[] {
   return [...result];
 }
 
-function postgresStatements(capture: Capture): PostgresStatement[] {
-  const plans = new Map<string, unknown[]>();
-  for (const [index, document] of capture.plans.entries()) {
-    const sql = planQuery(document);
-    if (sql === undefined) continue;
-    const backend = capture.planBackends?.[index];
-    const key = `${backend ?? '<unknown>'}\0${normalizedPlanSql(sql)}`;
-    const documents = plans.get(key) ?? [];
-    documents.push(document);
-    plans.set(key, documents);
+export function associatePostgresStatements(capture: ImportPostgresCapture): PostgresStatement[] {
+  const { statements: sqls, plans, statementErrors, statementBackends, planBackends, planStatements } = capture;
+  if (statementErrors === undefined || statementErrors.length !== sqls.length)
+    throw new Error(`Import capture statementErrors misaligned: ${statementErrors?.length ?? 0}/${sqls.length}`);
+  if (statementBackends === undefined || statementBackends.length !== sqls.length)
+    throw new Error(`Import capture statementBackends misaligned: ${statementBackends?.length ?? 0}/${sqls.length}`);
+  if (planBackends === undefined || planBackends.length !== plans.length)
+    throw new Error(`Import capture planBackends misaligned: ${planBackends?.length ?? 0}/${plans.length}`);
+  if (planStatements === undefined || planStatements.length !== plans.length)
+    throw new Error(`Import capture planStatements misaligned: ${planStatements?.length ?? 0}/${plans.length}`);
+  if (capture.importStatementOwners.length !== sqls.length || capture.importPlanOwners.length !== plans.length)
+    throw new Error('Import capture owner metadata misaligned with foreground entries');
+
+  const explains = new Array<unknown>(sqls.length);
+  const appended = new Array<number>(sqls.length).fill(0);
+  for (const [planIndex, document] of plans.entries()) {
+    const statementIndex = planStatements[planIndex];
+    // A plan without shared execution identity remains in the raw capture but cannot safely be projected.
+    if (statementIndex === undefined) continue;
+    if (!Number.isSafeInteger(statementIndex) || statementIndex < 0 || statementIndex >= sqls.length)
+      throw new Error(`Import capture planStatements out of range: ${statementIndex}`);
+    if (capture.importPlanOwners[planIndex] !== capture.importStatementOwners[statementIndex])
+      throw new Error(`Import capture plan owner differs from statement ${statementIndex}`);
+    const statementBackend = statementBackends[statementIndex];
+    const planBackend = planBackends[planIndex];
+    if (statementBackend === undefined || planBackend === undefined || statementBackend !== planBackend) continue;
+    if (statementErrors[statementIndex] !== null) continue;
+
+    // Every native plan attached to this client occurrence contributes its ModifyTable rows once, including
+    // nested statements. Only a matching Query Text can serve as this SQL occurrence's portable plan witness.
+    appended[statementIndex]! += rowsAppended(document);
+    if (planQueries(document).some((query) => normalizedPlanSql(query) === normalizedPlanSql(sqls[statementIndex]!)))
+      explains[statementIndex] ??= document;
   }
-  const offsets = new Map<string, number>();
-  const failed = (index: number) => (capture.statementErrors?.[index] ?? null) !== null;
-  const statements: PostgresStatement[] = capture.statements.map((sql, index): PostgresStatement => {
-    // A failed attempt has no raw plan. Do not borrow a later execution's plan or invent one.
-    if (failed(index)) return { engine: 'postgres', sql, explain: '', rowsAppended: 0 };
-    const backend = capture.statementBackends?.[index];
-    const key = `${backend ?? '<unknown>'}\0${normalizedPlanSql(sql)}`;
-    const documents = plans.get(key) ?? [];
-    const offset = offsets.get(key) ?? 0;
-    const explain = documents[offset];
-    offsets.set(key, offset + (explain === undefined ? 0 : 1));
-    if (explain === undefined && !isControlStatement(sql)) {
+
+  return sqls.map((sql, index): PostgresStatement => {
+    const failed = statementErrors[index] !== null;
+    const explain = failed ? undefined : explains[index];
+    if (explain === undefined && !failed && !isControlStatement(sql)) {
       const diagnostic = `unplanned SQL: ${sql}`;
       if (!reportedCaptureDiagnostics.has(diagnostic)) {
         reportedCaptureDiagnostics.add(diagnostic);
@@ -445,26 +464,9 @@ function postgresStatements(capture: Capture): PostgresStatement[] {
       engine: 'postgres',
       sql,
       explain: explain === undefined ? '' : JSON.stringify(explain),
-      rowsAppended: explain === undefined ? 0 : rowsAppended(explain),
+      rowsAppended: failed ? 0 : appended[index]!,
     };
   });
-  // Repeated SQL texts can also produce nested plans. Charge each such raw plan once,
-  // to the last successful execution of that same SQL, while keeping every plan in the raw capture.
-  for (const [key, documents] of plans) {
-    const indexes = capture.statements.flatMap((statement, index) => {
-      if (failed(index)) return [];
-      const backend = capture.statementBackends?.[index];
-      return `${backend ?? '<unknown>'}\0${normalizedPlanSql(statement)}` === key ? [index] : [];
-    });
-    const occurrences = indexes.length;
-    if (documents.length <= occurrences) continue;
-    const last = indexes.at(-1);
-    if (last === undefined) continue;
-    statements[last]!.rowsAppended += documents
-      .slice(occurrences)
-      .reduce<number>((total, document) => total + rowsAppended(document), 0);
-  }
-  return statements;
 }
 
 const statementBudgets: Readonly<Record<Seed['scenario'], readonly StatementBudgetTerm[]>> = Object.freeze(
@@ -790,7 +792,7 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
   async function nativeGrowthCapture(operation: () => Promise<unknown>) {
     const { phases, sqliteStatements, sqlite: sqliteMetadata } = await runtime.measureGrowth(operation);
     const postgres = phases.api.postgres;
-    const pgStatements = postgresStatements(postgres);
+    const pgStatements = associatePostgresStatements(postgres as ImportPostgresCapture);
     if (!state) throw new Error('Growth seed must precede every measurement');
     const raw = {
       ...postgres,

@@ -513,3 +513,42 @@ index d2ae4f625f..5d40b95b43 100644
    await reconcile('unchanged');
  });
 ```
+
+## Native plan coverage association repair
+
+Repair baseline: `4c61cd6000e7120f9e2cd45014fc998a5c7b68ca`. The portable Imports growth validator, its driver contract,
+the native fixture and wrapper, the Imports API capture merge, `api-runtime.ts` measurement composition, and shared
+`growth-capture.ts`, `growth-cost.ts` and `growth.ts` were read for this change. The Imports Goal and capabilities
+manifest, architecture and first-public-scope documents were also read. No reference clone was named or needed.
+
+The supplied prior native receipt had `growth-outcomes.test.ts` fail after 15 pass / 2 fail. Its first plan-coverage
+failure was the successful `SELECT operation FROM semantic.fact WHERE route = $1::integer AND subject_id = $2::uuid
+AND slot_id = $3::uuid ORDER BY log_seq DESC LIMIT 1` from `slots-read-operation.sql`: the derived statement had an
+empty `explain` and a null statement error, so the unchanged portable validator rejected it. The supplied isolated
+rerun also identified `read-item-types.sql` in the new-record scenario. The full prior receipt separately records
+the `api-outcomes.test.ts` seed-settle failure on `dbos.operation_outputs` (10 pages, 5 all-visible after three
+rounds); this is the already classified harness failure and was not changed here. No claim is made that those older
+counts establish a passing implementation.
+
+The shared capture already retains `planStatements` beside `plans`, plus statement and plan backend IDs and aligned
+SQLSTATEs. `withoutCatalogStatements` remaps occurrence IDs when it filters the bounded catalog probes. Imports'
+`createApiCapture.merge()` then concatenated foreground plans and statements but omitted those remapped occurrence
+IDs, and also omitted background plan occurrence IDs. The consumer consequently consumed plans by backend and
+normalized SQL order alone, which loses which retained plan belongs to a repeated execution and its composing owner.
+The defect is in the Imports projection; no shared capture or portable validator change is required.
+
+The repair keeps Imports owner labels on its projection, rebases foreground and background plan occurrence IDs as
+captures are composed, and preserves the raw plan/backend/error arrays. `associatePostgresStatements()` uses that
+shared execution identity together with owner, backend and normalized SQL. A failed execution receives no plan;
+plans lacking an identity or matching backend remain retained in the raw capture and are not borrowed. Every native
+plan attached to a successful execution contributes its ModifyTable rows once; only a plan whose Query Text matches
+the client SQL supplies that statement's `explain`. `costOf(PostgresCapture)`, raw Query Text, exact outcomes,
+appended-row totals, bounds, index proofs, seed/settle behavior and retry behavior remain under their existing owners.
+
+The new focused unit case covers the reported operation SQL with its source comment, repeated SQL across distinct
+backends, the same backend value under the other actual owner, reversed repeated-plan order, a failed attempt followed
+by success, full raw foreground/background array retention and canonical cost immutability. Those hand-built inputs
+prove projection association only. Native proof remains the unchanged portable suite under the existing
+`growth-outcomes.test.ts` wrapper. The implementation is limited to the four assigned paths; no acceptance or
+specification contradiction was found. The acceptance and typecheck receipts for the implementation commit are
+recorded below after the manager returns their results.

@@ -11,6 +11,16 @@ import {
   type Capture,
 } from '../support/growth.ts';
 
+export type ImportCaptureOwner = 'kernel' | 'auth';
+
+/** Import-only ownership tags keep merged captures attributable without changing the shared Capture contract. */
+export type ImportPostgresCapture = Capture & {
+  readonly importStatementOwners: readonly ImportCaptureOwner[];
+  readonly importPlanOwners: readonly ImportCaptureOwner[];
+  readonly importBackgroundStatementOwners: readonly ImportCaptureOwner[];
+  readonly importBackgroundPlanOwners: readonly ImportCaptureOwner[];
+};
+
 const empty = (): Counters => ({
   statements: 0,
   rowsReturned: 0,
@@ -23,6 +33,232 @@ const empty = (): Counters => ({
   maxPageRecords: 0,
   workUnits: 0,
 });
+
+function appendAligned<T>(
+  previous: readonly T[] | undefined,
+  next: readonly T[] | undefined,
+  previousCount: number,
+  nextCount: number,
+  label: string,
+  missing: () => T,
+): readonly T[] | undefined {
+  if (previous === undefined && next === undefined) return undefined;
+  const left = previous ?? Array.from({ length: previousCount }, missing);
+  const right = next ?? Array.from({ length: nextCount }, missing);
+  if (left.length !== previousCount || right.length !== nextCount)
+    throw new Error(
+      `Import capture ${label} misaligned: ${left.length}/${previousCount} and ${right.length}/${nextCount}`,
+    );
+  return [...left, ...right];
+}
+
+function appendRequired<T>(
+  previous: readonly T[] | undefined,
+  next: readonly T[] | undefined,
+  previousCount: number,
+  nextCount: number,
+  label: string,
+): readonly T[] | undefined {
+  if (previous === undefined && next === undefined) return undefined;
+  if ((previous === undefined && previousCount > 0) || (next === undefined && nextCount > 0))
+    throw new Error(`Import capture ${label} missing for retained entries`);
+  const left = previous ?? [];
+  const right = next ?? [];
+  if (left.length !== previousCount || right.length !== nextCount)
+    throw new Error(
+      `Import capture ${label} misaligned: ${left.length}/${previousCount} and ${right.length}/${nextCount}`,
+    );
+  return [...left, ...right];
+}
+
+function appendPlanStatements(
+  previous: readonly (number | undefined)[] | undefined,
+  next: readonly (number | undefined)[] | undefined,
+  previousPlanCount: number,
+  nextPlanCount: number,
+  nextStatementOffset: number,
+  label: string,
+): readonly (number | undefined)[] | undefined {
+  const aligned = appendAligned(previous, next, previousPlanCount, nextPlanCount, label, () => undefined);
+  if (aligned === undefined || nextPlanCount === 0) return aligned;
+  const prefixLength = previousPlanCount;
+  return [
+    ...aligned.slice(0, prefixLength),
+    ...aligned.slice(prefixLength).map((index) => (index === undefined ? undefined : index + nextStatementOffset)),
+  ];
+}
+
+function appendErrors(
+  previous: readonly (string | null)[] | undefined,
+  next: readonly (string | null)[] | undefined,
+  previousCount: number,
+  nextCount: number,
+  label: string,
+): readonly (string | null)[] | undefined {
+  return appendAligned(previous, next, previousCount, nextCount, label, () => null);
+}
+
+/** Merge one bounded capture and rebase shared plan occurrence IDs into the retained statement arrays. */
+export function appendImportPostgresCapture(
+  previous: Capture & Partial<ImportPostgresCapture>,
+  next: Capture,
+  owner: ImportCaptureOwner,
+): ImportPostgresCapture {
+  const previousBackgroundStatements = previous.backgroundStatements ?? [];
+  const nextBackgroundStatements = next.backgroundStatements ?? [];
+  const previousBackgroundPlans = previous.backgroundPlans ?? [];
+  const nextBackgroundPlans = next.backgroundPlans ?? [];
+  const previousStatementOwners = previous.importStatementOwners ?? [];
+  const previousPlanOwners = previous.importPlanOwners ?? [];
+  const previousBackgroundStatementOwners = previous.importBackgroundStatementOwners ?? [];
+  const previousBackgroundPlanOwners = previous.importBackgroundPlanOwners ?? [];
+  if (
+    previousStatementOwners.length !== previous.statements.length ||
+    previousPlanOwners.length !== previous.plans.length ||
+    previousBackgroundStatementOwners.length !== previousBackgroundStatements.length ||
+    previousBackgroundPlanOwners.length !== previousBackgroundPlans.length
+  )
+    throw new Error('Import capture owner metadata misaligned with retained entries');
+
+  const requestBytes = appendRequired(
+    previous.requestBytes,
+    next.requestBytes,
+    previous.statements.length,
+    next.statements.length,
+    'requestBytes',
+  );
+  const responseBytes = appendRequired(
+    previous.responseBytes,
+    next.responseBytes,
+    previous.statements.length,
+    next.statements.length,
+    'responseBytes',
+  );
+  const statementErrors = appendErrors(
+    previous.statementErrors,
+    next.statementErrors,
+    previous.statements.length,
+    next.statements.length,
+    'statementErrors',
+  );
+  const statementErrorMessages = appendAligned(
+    previous.statementErrorMessages,
+    next.statementErrorMessages,
+    previous.statements.length,
+    next.statements.length,
+    'statementErrorMessages',
+    () => null,
+  );
+  const statementBackends = appendAligned(
+    previous.statementBackends,
+    next.statementBackends,
+    previous.statements.length,
+    next.statements.length,
+    'statementBackends',
+    () => undefined,
+  );
+  const planBackends = appendAligned(
+    previous.planBackends,
+    next.planBackends,
+    previous.plans.length,
+    next.plans.length,
+    'planBackends',
+    () => undefined,
+  );
+  const planStatements = appendPlanStatements(
+    previous.planStatements,
+    next.planStatements,
+    previous.plans.length,
+    next.plans.length,
+    previous.statements.length,
+    'planStatements',
+  );
+  const backgroundRequestBytes = appendRequired(
+    previous.backgroundRequestBytes,
+    next.backgroundRequestBytes,
+    previousBackgroundStatements.length,
+    nextBackgroundStatements.length,
+    'backgroundRequestBytes',
+  );
+  const backgroundResponseBytes = appendRequired(
+    previous.backgroundResponseBytes,
+    next.backgroundResponseBytes,
+    previousBackgroundStatements.length,
+    nextBackgroundStatements.length,
+    'backgroundResponseBytes',
+  );
+  const backgroundStatementErrors = appendErrors(
+    previous.backgroundStatementErrors,
+    next.backgroundStatementErrors,
+    previousBackgroundStatements.length,
+    nextBackgroundStatements.length,
+    'backgroundStatementErrors',
+  );
+  const backgroundStatementErrorMessages = appendAligned(
+    previous.backgroundStatementErrorMessages,
+    next.backgroundStatementErrorMessages,
+    previousBackgroundStatements.length,
+    nextBackgroundStatements.length,
+    'backgroundStatementErrorMessages',
+    () => null,
+  );
+  const backgroundStatementBackends = appendAligned(
+    previous.backgroundStatementBackends,
+    next.backgroundStatementBackends,
+    previousBackgroundStatements.length,
+    nextBackgroundStatements.length,
+    'backgroundStatementBackends',
+    () => undefined,
+  );
+  const backgroundPlanBackends = appendAligned(
+    previous.backgroundPlanBackends,
+    next.backgroundPlanBackends,
+    previousBackgroundPlans.length,
+    nextBackgroundPlans.length,
+    'backgroundPlanBackends',
+    () => undefined,
+  );
+  const backgroundPlanStatements = appendPlanStatements(
+    previous.backgroundPlanStatements,
+    next.backgroundPlanStatements,
+    previousBackgroundPlans.length,
+    nextBackgroundPlans.length,
+    previousBackgroundStatements.length,
+    'backgroundPlanStatements',
+  );
+
+  return {
+    statements: [...previous.statements, ...next.statements],
+    plans: [...previous.plans, ...next.plans],
+    ...(requestBytes === undefined ? {} : { requestBytes }),
+    ...(responseBytes === undefined ? {} : { responseBytes }),
+    ...(planStatements === undefined ? {} : { planStatements }),
+    ...(statementErrors === undefined ? {} : { statementErrors }),
+    ...(statementErrorMessages === undefined ? {} : { statementErrorMessages }),
+    ...(statementBackends === undefined ? {} : { statementBackends }),
+    ...(planBackends === undefined ? {} : { planBackends }),
+    ...(previous.backgroundStatements === undefined && next.backgroundStatements === undefined
+      ? {}
+      : { backgroundStatements: [...previousBackgroundStatements, ...nextBackgroundStatements] }),
+    ...(backgroundRequestBytes === undefined ? {} : { backgroundRequestBytes }),
+    ...(backgroundResponseBytes === undefined ? {} : { backgroundResponseBytes }),
+    ...(previous.backgroundPlans === undefined && next.backgroundPlans === undefined
+      ? {}
+      : { backgroundPlans: [...previousBackgroundPlans, ...nextBackgroundPlans] }),
+    ...(backgroundPlanStatements === undefined ? {} : { backgroundPlanStatements }),
+    ...(backgroundStatementErrors === undefined ? {} : { backgroundStatementErrors }),
+    ...(backgroundStatementErrorMessages === undefined ? {} : { backgroundStatementErrorMessages }),
+    ...(backgroundStatementBackends === undefined ? {} : { backgroundStatementBackends }),
+    ...(backgroundPlanBackends === undefined ? {} : { backgroundPlanBackends }),
+    importStatementOwners: [...previousStatementOwners, ...next.statements.map(() => owner)],
+    importPlanOwners: [...previousPlanOwners, ...next.plans.map(() => owner)],
+    importBackgroundStatementOwners: [
+      ...previousBackgroundStatementOwners,
+      ...nextBackgroundStatements.map(() => owner),
+    ],
+    importBackgroundPlanOwners: [...previousBackgroundPlanOwners, ...nextBackgroundPlans.map(() => owner)],
+  };
+}
 
 /** Actual SQLite executions and shared PostgreSQL capture, owned by this composition. */
 export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase) {
@@ -86,23 +322,7 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
     };
   }
 
-  function alignedErrors(
-    previousErrors: readonly (string | null)[] | undefined,
-    previousCount: number,
-    nextErrors: readonly (string | null)[] | undefined,
-    nextCount: number,
-  ): readonly (string | null)[] | undefined {
-    if (previousErrors === undefined && nextErrors === undefined) return undefined;
-    const left = previousErrors ?? Array.from({ length: previousCount }, () => null);
-    const right = nextErrors ?? Array.from({ length: nextCount }, () => null);
-    if (left.length !== previousCount || right.length !== nextCount)
-      throw new Error(
-        `Import capture statementErrors misaligned: ${left.length}/${previousCount} and ${right.length}/${nextCount}`,
-      );
-    return [...left, ...right];
-  }
-
-  function merge(captured: Capture, owner: GrowthDatabase) {
+  function merge(captured: Capture, owner: GrowthDatabase, ownerKey: ImportCaptureOwner) {
     if (!active) return;
     // Shared plan-based accounting bounds catalog freshness probes separately from request work.
     const raw = withoutCatalogStatements('import API', captured);
@@ -140,50 +360,7 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
     }
     for (const plan of raw.plans) visit(plan);
     active.api.partitions = partitions.size;
-    const previous = active.api.postgres;
-    const statementErrors = alignedErrors(
-      previous.statementErrors,
-      previous.statements.length,
-      raw.statementErrors,
-      raw.statements.length,
-    );
-    const backgroundStatementErrors = alignedErrors(
-      previous.backgroundStatementErrors,
-      previous.backgroundStatements?.length ?? 0,
-      raw.backgroundStatementErrors,
-      raw.backgroundStatements?.length ?? 0,
-    );
-    active.api.postgres = {
-      statements: [...previous.statements, ...raw.statements],
-      plans: [...previous.plans, ...raw.plans],
-      ...(statementErrors === undefined ? {} : { statementErrors }),
-      ...(backgroundStatementErrors === undefined ? {} : { backgroundStatementErrors }),
-      ...(previous.backgroundStatements === undefined && raw.backgroundStatements === undefined
-        ? {}
-        : { backgroundStatements: [...(previous.backgroundStatements ?? []), ...(raw.backgroundStatements ?? [])] }),
-      ...(previous.backgroundPlans === undefined && raw.backgroundPlans === undefined
-        ? {}
-        : { backgroundPlans: [...(previous.backgroundPlans ?? []), ...(raw.backgroundPlans ?? [])] }),
-      ...(previous.statementBackends === undefined && raw.statementBackends === undefined
-        ? {}
-        : { statementBackends: [...(previous.statementBackends ?? []), ...(raw.statementBackends ?? [])] }),
-      ...(previous.planBackends === undefined && raw.planBackends === undefined
-        ? {}
-        : { planBackends: [...(previous.planBackends ?? []), ...(raw.planBackends ?? [])] }),
-      ...(previous.backgroundStatementBackends === undefined && raw.backgroundStatementBackends === undefined
-        ? {}
-        : {
-            backgroundStatementBackends: [
-              ...(previous.backgroundStatementBackends ?? []),
-              ...(raw.backgroundStatementBackends ?? []),
-            ],
-          }),
-      ...(previous.backgroundPlanBackends === undefined && raw.backgroundPlanBackends === undefined
-        ? {}
-        : {
-            backgroundPlanBackends: [...(previous.backgroundPlanBackends ?? []), ...(raw.backgroundPlanBackends ?? [])],
-          }),
-    };
+    active.api.postgres = appendImportPostgresCapture(active.api.postgres, raw, ownerKey);
   }
 
   return {
@@ -401,8 +578,8 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
         const result = await capture(database, () => capture(auth, action, { includeBackends: true }), {
           includeBackends: true,
         });
-        merge(result.capture, database);
-        merge(result.value.capture, auth);
+        merge(result.capture, database, 'kernel');
+        merge(result.value.capture, auth, 'auth');
         return counters;
       } finally {
         active = undefined;
