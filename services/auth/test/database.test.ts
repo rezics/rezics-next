@@ -2,7 +2,15 @@ import { expect, test } from 'bun:test';
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_RUN_TIMEOUT, assertDatabasePlacement, migrate, POSTGRES_IMAGE, run, schemaDump, ownDatabase } from '../scripts/database.ts';
+import {
+  DEFAULT_RUN_TIMEOUT,
+  assertDatabasePlacement,
+  migrate,
+  POSTGRES_IMAGE,
+  run,
+  schemaDump,
+  ownDatabase,
+} from '../scripts/database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const timeout = 60_000;
