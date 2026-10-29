@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, unlinkSync, watch, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { WorkerJob } from './job.ts';
@@ -52,6 +52,18 @@ async function until(condition: () => boolean): Promise<void> {
 }
 /** Run the manager's retry tool call, then start its persisted intent from the host recovery path. */
 async function launchThenKillLauncher(h: ReturnType<typeof harness>, taskId: string): Promise<Attempt> {
+  // `retry` records a retry, so first create and stop an attempt as a manager would.
+  const first = await h.tasks.retry(taskId);
+  const worktree = h.store.task(taskId).worktree;
+  await waitForFile(join(worktree, '.worker-started'));
+  writeFileSync(join(worktree, '.worker-release'), 'finish initial attempt');
+  await first.exited;
+  h.store.updateTask(first.attempt, (task) => {
+    task.state = 'stopped';
+  });
+  unlinkSync(join(worktree, '.worker-started'));
+  unlinkSync(join(worktree, '.worker-release'));
+  unlinkSync(join(worktree, 'result.txt'));
   const launcher = spawn(process.execPath, [join(import.meta.dir, 'cli.ts'), 'retry', taskId], {
     cwd: h.root,
     stdio: 'ignore',
