@@ -28,10 +28,6 @@ read, or `null` if no tick has recorded the consumer. `consumerReady(lag, { maxL
 row was observed within the maximum age and either no envelope is pending or its oldest pending time is within that
 age. A stopped relay therefore becomes not ready when its observation expires.
 
-A task that emits a new event type registers its schema in that same task.
-Test-only types are registered by the kernel test preload; production code never
-imports those fixtures.
-
 ## Shared-history erasure
 
 An outbox event locator identifies `(partition_no, position, event_seq)`. Its minimized storage form retains that
@@ -45,20 +41,10 @@ work rule. Minimization, reader support, consumer proof and source handoff remai
 
 ## Cost
 
-### Consumer lag record
-
-- Touches: one upsert per tick per consumer, using the minimum from the existing partition scan.
-- Bound: O(1) added work per tick; the existing scan over the fixed 4096-partition map is unchanged.
-- Growth check: not applicable; discovery is bounded by the fixed partition map rather than data growth.
-
-### Consumer lag read
-
-- Touches: one primary-key read by consumer.
-- Bound: O(1), returning at most one row from a table with one row per consumer.
-- Growth check: not applicable; the full primary key selects the row.
-
 Shared event costs for relay discovery, batch log reads, checkpoint operations, effect enqueue and effect persistence are documented in the [Kernel service Cost table](../../README.md#cost).
 
 | Operation                 | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Bound                                                                                                                                                                                                                        | Growth check                                                                                                                |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Consumer lag record | One upsert per tick per consumer, using the minimum from the existing partition scan. | Constant added work per tick; the existing scan over the fixed 4096-partition map is unchanged. | `test/events/growth-consumer-lag.test.ts`: “Consumer lag record stays within its bound as consumer rows grow” |
+| Consumer lag read | One primary-key read by consumer. | Constant work, returning at most one row from a table with one row per consumer. | `test/events/growth-consumer-lag.test.ts`: “Consumer lag read stays within its bound as consumer rows grow” |
 | Released projection batch | `projectBatch` reads a released snapshot through `readBatch`, applies at most the fixed batch size without holding a database connection, then compare-and-advances the consumer checkpoint by the snapshot epoch and position. Success persists the advance; empty input leaves the checkpoint unchanged; a locked checkpoint returns busy before apply, while a lost compare-and-set returns busy after apply without this call committing its advance. Grow checkpoint and outbox history while fixing the batch size and payloads. | Constant rows and statements for a fixed batch, logarithmic blocks in checkpoint and outbox history; successful, empty, busy and lost-CAS outcomes have fixed SQL work, with application callback work bounded by the batch. | `test/growth-projection.test.ts`: “Released projection batch stays within its bound as checkpoint and outbox history grows” |
