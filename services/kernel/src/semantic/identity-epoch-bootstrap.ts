@@ -36,6 +36,7 @@ import closureReceipt from './identity-epoch-bootstrap-closure-receipt.sql';
 import type { Pool } from 'pg';
 import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
+import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-epoch-store.ts';
@@ -72,7 +73,7 @@ export async function readIdentityEpochCutover(tx: CommandTransaction) {
 }
 
 async function readPage(pool: Pool, partition: number): Promise<Page | null> {
-  return withConnection(pool, async (tx) => {
+  return withReadTransaction(pool, async (tx) => {
     const owner = await readPartition(tx, partition);
     if (!owner || owner.writeState !== 'active') throw fail();
     const page = (await tx.query(bootstrapSelectBootstrapPage.sql, [partition])).rows[0];
@@ -224,6 +225,7 @@ export async function stepIdentityEpochBootstrap(
           ).rows[0];
           if (header.pending_job || header.owner_epoch !== owner.epoch) throw fail();
           const previous = (await query(tx, bootstrapSelectOriginal.sql, [destination, row.original])).rows[0];
+          if (previous?.pending_job) throw fail();
           if (previous && previous.terminal !== row.terminal) {
             await query(tx, bootstrapUpdateOriginal.sql, [previous.generation, row.original]);
             await query(tx, bootstrapUpdateGroup.sql, [previous.terminal]);

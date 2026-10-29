@@ -176,9 +176,9 @@ test('native identity store admits one capped durable job with no early publicat
   await expect(
     runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
-  const snapshot = await storeSnapshot([survivor, redirected]);
   await f.real.revoke(globalResource, 'editor', 'subject:merge');
   try {
+    const snapshot = await storeSnapshot([survivor, redirected]);
     await expect(execute()).rejects.toThrow('Denied subject:merge');
     expect(await storeSnapshot([survivor, redirected])).toEqual(snapshot);
   } finally {
@@ -250,7 +250,7 @@ test('same native creation transaction initializes exact self and rolls back wit
 test('stale home effect and fabricated step receipt cannot publish identity epoch', async () => {
   const original = (await f.create('Unhooked original', 0x6010)).subject.id;
   const destination = (await f.create('Wrong destination', 0x6020)).subject.id;
-  const job: IdentityJobRef = { jobId: randomUUID(), epoch: 1n };
+  const job: IdentityJobRef = { jobId: newId(routeOf(original)!), epoch: 1n };
   const before = await storeSnapshot([original, destination]);
   await expect(
     runCommand(f.pool, { partition: home(destination) }, async (tx) => {
