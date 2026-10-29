@@ -6,7 +6,7 @@ const headFailure = { passed: false, output: 'AssertionError: expected fixture t
 const probeFailure = { passed: false, output: 'Error: EADDRINUSE fixture port', timedOut: false };
 const success = { passed: true, output: '', timedOut: false };
 
-test('a prefix probe with a different failure is retried and the second result counts', async () => {
+test('a failing stabilize candidate does not run or retry a prefix probe', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('alpha');
@@ -24,13 +24,17 @@ test('a prefix probe with a different failure is retried and the second result c
       return success;
     });
 
-    expect(probeRuns).toBe(2);
-    expect(h.store.task(first.id).state).toBe('merged');
-    expect(h.store.task(culprit.id).currentAttempt).toBe(2);
+    expect(probeRuns).toBe(0);
+    expect(h.head()).toBe(dev);
+    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
+    for (const task of [first, culprit]) {
+      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(h.store.task(task.id).currentAttempt).toBe(1);
+    }
   } finally { h.dispose(); }
 });
 
-test('a prefix probe with the head failure is not retried as a transient failure', async () => {
+test('a failing stabilize candidate is recorded once without confirmation', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('alpha');
@@ -52,9 +56,13 @@ test('a prefix probe with the head failure is not retried as a transient failure
       return success;
     });
 
-    expect(probeRuns).toBe(1);
-    expect(confirmationRuns).toBe(1);
-    expect(h.store.task(first.id).currentAttempt).toBe(2);
-    expect(h.store.task(culprit.id).state).toBe('merged');
+    expect(probeRuns).toBe(0);
+    expect(confirmationRuns).toBe(0);
+    expect(h.head()).toBe(dev);
+    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
+    for (const task of [first, culprit]) {
+      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(h.store.task(task.id).currentAttempt).toBe(1);
+    }
   } finally { h.dispose(); }
 });

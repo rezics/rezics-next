@@ -4,14 +4,12 @@ import { join } from 'node:path';
 import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
-const narrowed = 'bun run --cwd services/x check';
-
-test('a root gate that names its failing workspace is bisected with that workspace check alone', async () => {
+test('a root gate failure blocks the stabilize candidate without narrowing or bisecting it', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('alpha');
     const culprit = await h.seed('bad');
-    const last = await h.seed('omega'); const dev = h.head();
+    const last = await h.seed('omega'); const dev = h.head(), main = h.head('main');
     h.settings.gate = ['root-gate']; h.settings.promotionParallelism = 2;
     const commands: string[] = [];
     await h.promote(async (command, cwd, log) => {
@@ -23,36 +21,37 @@ test('a root gate that names its failing workspace is bisected with that workspa
       appendFileSync(log, output);
       return { passed: !broken, output, timedOut: false };
     });
-    const probes = commands.filter(command => command === narrowed).length;
-    expect(probes).toBeGreaterThan(1);
-    expect(commands.filter(command => command === 'root-gate')).toHaveLength(2);
-    expect(git(h.root, 'diff', '--name-only', dev, 'dev')).toBe('bad');
-    expect(h.head('main')).toBe(h.head());
-    expect(h.store.task(first.id).state).toBe('merged'); expect(h.store.task(last.id).state).toBe('merged');
-    expect(h.store.task(culprit.id).currentAttempt).toBe(2);
+    expect(commands.filter(command => command === 'root-gate')).toHaveLength(1);
+    expect(commands).not.toContain('bun run --cwd services/x check');
+    expect(git(h.root, 'diff', '--name-only', dev, 'dev')).toBe('');
+    expect(h.head('main')).toBe(main);
+    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
+    for (const task of [first, culprit, last]) {
+      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(h.store.task(task.id).currentAttempt).toBe(1);
+    }
   } finally { h.dispose(); }
 });
 
-test('pausing stops a bisection between rounds and leaves main and dev where they are', async () => {
+test('pausing during a failing stabilize gate leaves main and dev where they are', async () => {
   const h = integrationHarness();
   try {
     for (const name of ['a', 'b', 'c', 'd', 'e', 'f']) await h.seed(name);
     await h.seed('bad'); const dev = h.head(), main = h.head('main');
     h.settings.gate = ['root-gate']; h.settings.promotionParallelism = 1;
-    // The first call gates the head and the second classifies main; the third is the first bisection probe.
     let calls = 0;
     await h.promote(async (_command, cwd) => {
       const broken = existsSync(join(cwd, 'bad'));
-      if (++calls === 3) writeFileSync(join(h.settings.stateDirectory, 'promotion.paused'), '');
+      if (++calls === 1) writeFileSync(join(h.settings.stateDirectory, 'promotion.paused'), '');
       return { passed: !broken, output: broken ? 'AssertionError: incompatible feature\n' : '', timedOut: false };
     });
     expect(h.head()).toBe(dev); expect(h.head('main')).toBe(main);
-    expect(calls).toBe(3);
-    expect(h.store.promotion()?.phase).toBe('classify-prefixes');
+    expect(calls).toBe(1);
+    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
   } finally { h.dispose(); }
 });
 
-test('a workspace check that lists its failing test files is bisected on those files', async () => {
+test('a workspace failure is left on the stabilize candidate for a fix', async () => {
   const h = integrationHarness();
   try {
     await h.seed('alpha'); const culprit = await h.seed('bad'); await h.seed('omega');
@@ -68,8 +67,8 @@ test('a workspace check that lists its failing test files is bisected on those f
       appendFileSync(log, output);
       return { passed: !broken, output, timedOut: false };
     });
-    expect(commands).toContain('bun run --cwd services/kernel check test/a.test.ts test/b.test.ts');
-    expect(commands).not.toContain('bun run --cwd services/kernel check');
-    expect(h.store.task(culprit.id).currentAttempt).toBe(2);
+    expect(commands).toEqual(['root-gate']);
+    expect(h.store.task(culprit.id).currentAttempt).toBe(1);
+    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
   } finally { h.dispose(); }
 });
