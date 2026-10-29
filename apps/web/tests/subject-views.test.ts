@@ -174,7 +174,8 @@ test("each subject view is its own server-rendered URL under the subject's addre
       renderJsonLd: false,
     } as never),
   );
-  expect(text(html)).toContain('number of pages');
+  // Field-label brief (8597b17dda): field names capitalize their first character in server-rendered text.
+  expect(text(html)).toContain('Number of pages');
 });
 
 const subjectBody = {
@@ -415,8 +416,8 @@ test('the platform overview follows the documented section order, ends with Sour
         } as never),
       ),
     );
-  expect(shown(overview, 'overview')).not.toContain('number of pages');
-  expect(shown(details, 'details')).toContain('number of pages');
+  expect(shown(overview, 'overview')).not.toContain('Number of pages');
+  expect(shown(details, 'details')).toContain('Number of pages');
 });
 
 test('a subject with only a title renders a complete page with the placeholder cover, an invitation to add facts and Discussion', async () => {
