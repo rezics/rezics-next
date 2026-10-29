@@ -1,3 +1,4 @@
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import { statementAudience } from './statement-disclosure.ts';
@@ -215,6 +216,27 @@ export async function slotView(
 ): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
   const view = await readSlotView(tx, subject, property, context, defaults, slot);
   return { ...view, facts: await omitHidden(tx, subject, view.facts) };
+}
+
+/** Current Global authority only: rejected display candidates never enter this view.
+ * Compact slots contain only their admitted creation facts; subsequent editorial
+ * writes expand the slot. Expanded selection is admitted at at most 32 entries.
+ */
+export async function effectiveGlobalSlotFacts(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+): Promise<{ facts: FactRow[]; basis: unknown }> {
+  const state = await resolveSlot(tx, subject, property);
+  const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
+  const facts = state.expanded
+    ? await selectionFacts(tx, subject, property, selection)
+    : state.compact.map((candidate) => candidateFact(property, candidate));
+  if (state.expanded && facts.length !== selection.length) throw new AccessUnavailableError('contention');
+  return {
+    facts: await omitHidden(tx, subject, facts),
+    basis: state.expanded ? state.adoption : state.compact,
+  };
 }
 
 /** Insert-CAS: collision with an already written head never overwrites history. */

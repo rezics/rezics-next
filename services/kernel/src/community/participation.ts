@@ -46,6 +46,24 @@ export async function prepareRealmParticipationResult(
   });
 }
 
+/** The native participation eligibility shared by checks and parent validation. */
+export function realmParticipationAnchor(resource: Resource) {
+  let visibility: 'public' | 'protected' | null = null;
+  const eligibility = createResourcePublicEligibility({
+    resource,
+    action: 'realm:participate',
+    async prepare() {
+      return { route: resource.route, id: resource.id };
+    },
+    async verify({ client, at }) {
+      const row = await read.run(client, { route: resource.route, id: resource.id, at });
+      visibility = row?.visibility === 'public' || row?.visibility === 'protected' ? row.visibility : null;
+      return visibility === 'public';
+    },
+  });
+  return { resource: { ...resource, eligibility }, visibility: () => visibility };
+}
+
 /** Checks participation and the independent Realm read anchor at one T.
  * The participation action uses its exact denial check. A protected Realm also
  * requires realm:read, while the single Realm head read supplies public eligibility.
@@ -61,28 +79,11 @@ export function createRealmParticipationCheck(input: {
     if (route === null) return false;
     const resource: Resource = { route, id: realmId };
     const context = { pool: input.pool, deadline: deadlineFor(1500) };
-    let visibility: 'public' | 'protected' | null = null;
-    const eligibility = createResourcePublicEligibility({
-      resource,
-      action: 'realm:participate',
-      async prepare() {
-        return { route, id: realmId };
-      },
-      async verify({ client: checked, at }) {
-        const row = await read.run(checked, { route, id: realmId, at });
-        visibility = row?.visibility === 'public' || row?.visibility === 'protected' ? row.visibility : null;
-        return visibility === 'public';
-      },
-    });
-    const participationCheck = await accessCheck(
-      input.access,
-      actor,
-      'realm:participate',
-      { ...resource, eligibility },
-      context,
-    );
+    const anchor = realmParticipationAnchor(resource);
+    const participationCheck = await accessCheck(input.access, actor, 'realm:participate', anchor.resource, context);
     const checkedTime = time ?? commandTime(client) ?? (await mintReadTime(client, input.clock));
     const participates = await participationCheck(client, checkedTime);
+    const visibility = anchor.visibility();
     if (visibility === 'public') {
       if (readDecision) readDecision.readable = true;
       return participates;

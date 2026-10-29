@@ -593,6 +593,33 @@ change.
 - Bound: Rows O(links moved from the node), independent of the survivor's in-degree; reversal processes the recorded links in pages and never scans the survivor's links.
 - Growth check: `test/semantic/agent-verification-reversal.test.ts`: `verification reversal growth stays flat across survivor in-degree` with scales `[64, 512, 4096]`.
 
+### Concept scheme reference
+
+`readConceptSchemeReference(pool, options)` proves the exact known Concept's current effective Global
+`skos:inScheme` membership, native type, readable identity and the foreign scheme's readable identity. It takes
+the unchanged live command `nativeT`, native actor/Access and both already prepared read evidences. Its fixed
+`deadline` must not exceed either evidence ceiling; Content also includes request, creation, participation and
+Realm-read ceilings. It returns an attempt-local boolean, throws `SubjectRedirectError` for a redirected identity,
+and refuses incomplete or changed observations with native unavailability. It never follows a survivor.
+
+- Touches: source subject/type/security and identity index points; the existing compact slot resolver or latest
+  Global adoption and exact selected candidate keys; selected revision provenance and retraction points; hidden
+  candidate/disclosure points; the target scheme's native Access/type/identity points; and exact imported facts
+  tuple fences using the server route key. Source, target and fence homes are released separately and their native
+  versions are read again before success. Rejected display samples, labels, related fields and link checkpoints
+  do not participate. An imported membership without the server key fails closed.
+- Bound: constant rows and statements for the admitted slot of at most 32 facts/selections; logarithmic index
+  blocks in catalogue, revision, adoption, candidate and tuple history, plus existing native Access bounds. The
+  compact fact key admits at most 32 facts before expansion, with no truncating query limit. `skos:inScheme`
+  uses its property slot, so complete absence needs no degree scan or new maintained index. Readability and
+  membership are observations for this command only and never grant board creation rights.
+- Growth check: `test/semantic/growth-concept-scheme-reference.test.ts`, real native Realm board caller captures
+  at `[64,512,4096]` for compact, expanded imported and complete mismatched membership. Independent axes grow
+  unrelated catalogue/provenance/fences and the known Concept's candidates/adoption history/irrelevant relations.
+  The shared harness counts native Access, source, target, identity, fences and Realm work, examined/removed rows,
+  blocks, statements, connections and bytes. Native refusal and projection-lag creation are covered by
+  `test/content/realm-board-create-native.test.ts`.
+
 ### Anchored subject read
 
 - Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown. The self summary and related summaries use the shared batched label statement, including the original-language slot, with the costs derived under Subject summaries.
