@@ -228,10 +228,16 @@ source field alone does not make that fact usable.
   and user posts are excluded. A light-novel form must likewise be explicitly
   supported by an adopted Concept, property and profile binding; a generic
   novel platform does not establish light-novel form.
-- A word-count producer must retain the counted text or text version, language,
-  source and measurement meaning. A provider's character count (`字数`) is not
-  a word count, must not be converted across translations, and must not be
-  summed across a series without an adopted semantic rule.
+- Word-count discovery requires admitted input declaring machine-readable
+  whole-holder coverage, exact holder identity, language and version. A text
+  digest is required only where text is supplied. A source's own declared total
+  word count for its whole work or serial, or a publisher's stated word length,
+  can be admitted without full-text ingestion. Partial, unknown or unsupported
+  multilingual coverage omits wordCount discovery evidence. A summary never
+  proves whole-holder coverage. Character counts are distinct; do not estimate
+  words from characters, pages or reading time, transfer counts across
+  translations, or sum a series without an adopted semantic rule. Semantic owns
+  the actual typed producer grammar; this rule invents no producer fields.
 - Semantic owns reviewed Concepts, property and profile bindings, and
   portable item and quantity shapes. Imports consumes those adopted
   definitions; it does not fabricate IDs or properties, or add a source.
@@ -244,8 +250,47 @@ keys that current contracts allow the converter to omit remain omittable.
 See the [Semantic contract](../../services/kernel/src/semantic/README.md),
 [definitions contract](../definitions/README.md), and
 [library profile consumers](../../docs/library-profile-consumers.md) for the
-owning interfaces; none currently supplies an adopted word-count meaning or a
-light-novel/harem binding for these importer mappings.
+owning interfaces. Adopted meanings and source correspondences do not themselves
+deliver admitted producer inputs, resolved native bindings or qualifying data.
+
+### Conservative exact-quantity source handoff
+
+For every exact-quantity source assertion, preserve **every actual source
+qualifier losslessly in the same native statement**, through reviewed mappings
+and the admitted property's schema. If any qualifier would be skipped,
+unsupported, unresolved or semantically narrowed, withhold the **entire
+measurement** and diagnose the loss. Never publish a less qualified amount.
+This includes loss during source projection, before emission can see a qualifier.
+Keep the original source input and its references intact; rejecting a proposal
+does not authorize rewriting source evidence or immutable earlier receipts.
+
+Exactness comes from the actual admitted closed fixed quantity value schema:
+required amount and unit, only those two properties, and neither lowerBound nor
+upperBound. The serialized property has no exact flag. Use the
+[Definitions owner API](../definitions/README.md#exact-quantities); this is generic
+exact-quantity validation, independent of property names or holder types.
+Ordinary quantity and default conversion semantics remain unchanged.
+
+The current bundle admits schema:wordCount with exact P6570 mapping, integer
+amount, unit 1, minimum 0 and qualifiers[]. Its mapping alone is unsafe provider
+support: Wikidata snaks() projects only mapped qualifier keys; emission diagnoses
+and skips property-unsupported and item qualifiers before pushing the amount.
+P1545 maps to the existing string position but is not admitted on wordCount.
+P459 method is unmapped; current P518 has no executable exact mapping and targets
+StoryArc only, so it cannot stand for an arbitrary counted text part. Do not narrow that scope, widen P518, invent
+method/part/digest properties or supply fabricated native identities.
+
+The [handoff evidence and frozen native scenarios](../../docs/research/imports-audit/exact-quantity-qualifiers.md)
+exercise rejection on the actual bundled runtime before default converter repair.
+The reviewed Q55867126 revision 1717031358 count (+1450/unit 1, P459 Q718390,
+P518 Q63246861, no statement references) belongs to a letter/text. Its explicit
+transplant into a controlled synthetic Book shell proves no observed Book count.
+With qualifiers[] no positive qualified provider case is promised. An unqualified
+source count likewise proves neither admitted whole-holder coverage nor a genuine
+measurement producer. Positive provider support and whole-scope discovery
+eligibility remain unresolved. The word-evidence boundary above is orthogonal to
+qualifier preservation; negative rejection proves no measurement/index coverage
+or double-index exactness. Converter repair is separate successor work.
 
 ## Covers, candidate identity, and trust boundaries
 
