@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { newId } from '../../src/route/route.ts';
-import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;
 const route = 0x6a30;
