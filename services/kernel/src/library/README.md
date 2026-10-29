@@ -1087,6 +1087,72 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus trusted-account authorization and the envelope. No subject, Collection or Space read inside this command.
 - Growth check: `test/library/growth-personal-writes.test.ts`: `Membership follow has constant rows and statements as follows grow` checks the whole command at scales 1, 4 and 16 while the owner's follows, other accounts' follows in the same and another partition, Access accounts, receipts, outbox events and write-basis rows grow by 500 × scale per relation. `test/library/follows.test.ts`: `statements per follow, membership step and page stay equal as unrelated follows grow` still checks membership statement counts at 1, 8 and 64.
 
+### Maintain source follow replacement metadata
+
+The forward `follow_count_source` migration installs `follow_count_source_change` on `library.follow` itself.
+Explicit follow/unfollow, entry-implied follow and the trusted membership owner command keep their existing
+SQL, DTOs, receipts and private `{targetId}` event. Previously prepared SQL also fires the storage hook. There is
+no Access trigger or write in an Access transaction. Ordinary writers retain their native `shareAccount` barrier;
+the hook reads only the keyed current `access.account` state/fence as eligibility data, never grant/role authority.
+
+`library.follow_count_source` has primary key `(route, account_id, target_type, target_id)`, positive native bigint
+`revision`, `source_following`, `desired_eligible` and nullable `pending_since`. This is one current replacement
+per original, including negatives after physical DELETE; raw `follow` remains truth. Original identity and owner
+route cannot be updated. Every actual changed row increments its revision, including reason-only changes; an
+identical row UPDATE, implied conflict, explicit no-op or receipt replay does not. Reinsert advances the retained
+revision. `desired_eligible` is raw following AND current account active AND not fenced; a missing account is
+ineligible. This saved value is never delivery authority. Every future delivery must reread native account/follow
+under the account barrier before applying, including a positive first application.
+
+`library.follow_count_owner`, keyed `(route, account_id)`, holds native bigint `observed_live_count` and explicit
+`bootstrap_complete=false`. Missing owner/pair metadata is unbuilt, never ready zero or revision zero. The count
+is the sum of raw following states **already represented** by source rows, independent of incoming eligibility.
+It becomes the outgoing live total only after a separate bounded bootstrap proves complete coverage. The hook
+never declares any owner complete, even one first seen after migration. It locks this owner point before reading
+the pair's previous `source_following`; its delta is current raw following minus previously represented following
+(absent means unrepresented, not absent raw truth). Thus first-touch legacy UPDATE incorporates current live state,
+first-touch legacy DELETE records a negative without subtracting unknown coverage, and concurrent first/last
+changes cannot lose or double-count a represented edge. Native bigint overflow aborts source, metadata, counter,
+receipt and outbox together; it never wraps or resets.
+
+Cutover is transactional DDL plus a `SHARE ROW EXCLUSIVE` lock on `follow`: pre-existing source mutations finish
+before installation, and later mutations, including old prepared statements, cannot bypass the hook. This proves
+all-writer coverage after cutover, not legacy population coverage. Existing follows are deliberately unseeded.
+A reader snapshot predating installation proves no baseline, and an absent head is not version zero. Future
+bootstrap must start in a fresh native transaction after observing installed coverage, take the same account
+writer barrier and owner counter lock, then page original follow keys, arbitrating each pair under its primary-key
+lock. Insert a missing pair at revision 1 from current native truth and add its raw live state exactly once;
+already represented pairs retain their revision unless current truth changes. Hooks behind the cursor represent
+their own changes. Only complete exhaustion under this arbitration may establish coverage. No chronology is
+inferred from `updated_at`, UUIDs or a global stamp; bootstrap and acknowledgement code are not delivered here.
+
+`pending_since` uses database statement time, retains the minimum uncompleted age across coalescing and starts
+again only after a future acknowledgement clears the current revision. The partial index
+`follow_count_source_pending(route, account_id, pending_since, target_type, target_id)` supports owner-local oldest
+work. Partition/global health reduction and discovery remain separate required producers; this owner-leading
+index alone is not a global health sampler. Retain negative rows/revisions while the account is active; no GC,
+TTL or revision reuse. Terminal erasure must fence writers and acknowledge target withdrawals before deleting
+source payload/head. This migration supplies no terminal withdrawal, cleanup completion or identity participant ACK.
+
+Source runtime reconciliation, bounded bootstrap, account maintenance/effect admission ports, current-source
+delivery, target replacement/support/total, canonical identity/rekey, terminal fences/erasure, maintenance readiness,
+count HTTP and the frozen full outcome driver remain unbuilt. Account effect work must preserve event time and
+unprocessed age through queued/pending/ERROR/lost work; readiness must include effects consumerReady and consumer
+lag, never heartbeat freshness. Suspension must change incoming eligibility through that later maintenance,
+not raw outgoing intent or this counter. No count becomes publicly exposed by this storage slice.
+
+- Touches: One original follow and fixed owner-local source/counter/index points in its same native transaction;
+  one keyed account data read. The hook executes five SQL statements on a live delta, four otherwise. The outer
+  statement and command envelope remain as above; nested trigger statements are additional work.
+- Bound: Constant changed rows/statements per edge and indexed depth `O(log N)`, with one-owner counter contention.
+  No follower/target/history scan, global clock ordering, fanout, full backfill or owner/global COUNT. Count reads,
+  maintained canonical support and full native API costs require their own evidence.
+- Growth check: `test/library/follow-count-source-storage.test.ts` captures actual native follow/unfollow with fixed
+  selected account/subject at scales 256, 1,024 and 4,096, growing unrelated source owners/targets and own negative
+  history. Whole captured rows/statements stay constant and blocks logarithmic, including nested storage work;
+  source/counter probes use indexes. Synthetic negative growth cardinality and isolated rollback/overflow/DDL
+  invariants are primitive-only, separate from native positive fixture/HTTP/owner-command evidence.
+
 ### Follow read
 
 - Touches: One `follow` primary key for the caller and the target. The read is a single autocommit statement. Another account receives no row. There is no public count.
