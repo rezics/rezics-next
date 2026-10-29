@@ -55,7 +55,10 @@ function frozenFileAtBase(worktree: string, base: string, path: string): Buffer 
     const detail = entry.stderr?.toString('utf8').trim() || entry.error?.message || `git exited ${entry.status}`;
     throw new Error(`git ls-tree: ${detail}`);
   }
-  const record = entry.stdout.toString('utf8').split('\0').find((candidate) => candidate.endsWith(`\t${path}`));
+  const record = entry.stdout
+    .toString('utf8')
+    .split('\0')
+    .find((candidate) => candidate.endsWith(`\t${path}`));
   if (!record) return undefined;
   const metadata = record.slice(0, record.indexOf('\t')).split(' ');
   const mode = metadata[0];
@@ -879,7 +882,13 @@ export class WorkerTasks {
         setupStep = 'committing frozen acceptance files';
         const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);
         const priorFiles = frozenFiles(task);
-        const frozen = commitFrozenFiles(task.worktree, frozenBlocks, this.settings.formatCommand, task.base, priorFiles);
+        const frozen = commitFrozenFiles(
+          task.worktree,
+          frozenBlocks,
+          this.settings.formatCommand,
+          task.base,
+          priorFiles,
+        );
         task = this.store.updateTask(next, (current) => {
           (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
         });
