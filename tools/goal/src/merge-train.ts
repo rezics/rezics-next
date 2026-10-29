@@ -36,7 +36,13 @@ import {
 import type { AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
 
-export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
+export type DerivedFile = {
+  path: string;
+  stage: 'integration' | 'promotion';
+  command: string[];
+  /** Source paths whose changes should refresh this output when a dev landing is assembled. */
+  inputs?: string[];
+};
 export type IntegrationCheck = { paths: string[]; command: string[] };
 import { resolveImportConflicts } from './import-conflicts.ts';
 import { resolveInsertedSections } from './section-conflicts.ts';
@@ -225,6 +231,43 @@ function changedWorkingFiles(cwd: string): string[] {
   const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd, encoding: 'utf8' });
   if (tracked.status !== 0 || untracked.status !== 0) throw new Error('Cannot read generated file changes');
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
+}
+
+/** Refresh promotion outputs on a dev landing when its source changes require them. */
+function regenerateLandingDerivedFiles(
+  cwd: string,
+  base: string,
+  files: readonly DerivedFile[],
+  logPath: string,
+): void {
+  const changedSources = changedPathsBetween(cwd, base, git(cwd, 'rev-parse', 'HEAD'));
+  const triggered = files.filter(
+    (file) =>
+      file.stage === 'promotion' &&
+      file.inputs?.length &&
+      changedSources.some((path) => matchesPath(path, file.inputs!)),
+  );
+  if (!triggered.length) return;
+
+  const commands = new Map<string, string[]>();
+  for (const file of triggered) commands.set(JSON.stringify(file.command), file.command);
+  for (const command of commands.values()) {
+    const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
+    const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n${output}`);
+    if (result.status !== 0)
+      throw new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`);
+  }
+
+  const changed = changedWorkingFiles(cwd);
+  const outside = changed.filter((path) => !files.some((file) => matchesPath(path, [file.path])));
+  if (outside.length) throw new Error(`Derived generator changed non-derived files: ${outside.join(', ')}`);
+  if (!changed.length) {
+    appendFileSync(logPath, 'Derived outputs already match the dev landing; no regeneration commit added\n');
+    return;
+  }
+  stagePaths(cwd, changed);
+  git(cwd, 'commit', '--amend', '--no-edit');
 }
 
 /** A path gone from both the index and the worktree is an already staged deletion, and naming it fails `git add`. */
@@ -1417,6 +1460,8 @@ export class MergeTrain {
           git(trainTree, 'reset', '--hard', base);
           git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
         } else rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
+        if (!stabilize && integratesIntoDev)
+          regenerateLandingDerivedFiles(trainTree, base, derivedFiles, logPath);
         const frozen = workspace
           ? sharedStore!
               .tasks()
