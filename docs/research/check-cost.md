@@ -61,10 +61,10 @@ The manifest SHA-256 is
 
 Two example source logs, identified independently of worker directory names:
 
-| Log basename | SHA-256 | Observation |
-| --- | --- | --- |
+| Log basename                                         | SHA-256                                                            | Observation                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
 | `worker-check-2026-10-28T20-49-39.152Z-cc460148.log` | `f24cf24ca21ca7cb648df3c2f5821f31696212d5c732f02239eefee805be146e` | Full web command 8,309.231 s; slice 8,311.626 s; peak 5.005 GiB |
-| `worker-check-2026-10-29T00-24-04.999Z-a64a6f7b.log` | `b291ff2d35b1e70d3a5ce1feffffd8d39ec09a22e2c235760c5c7a375b3e3610` | Two physical remote executions: 7,865.042 s and 769.956 s |
+| `worker-check-2026-10-29T00-24-04.999Z-a64a6f7b.log` | `b291ff2d35b1e70d3a5ce1feffffd8d39ec09a22e2c235760c5c7a375b3e3610` | Two physical remote executions: 7,865.042 s and 769.956 s       |
 
 One apparent resource observation was actually expected/received text from a
 remote-runner test failure: 0.5 CPU seconds, 4 seconds and 64 MiB. It and its fake
@@ -117,18 +117,18 @@ Hours below are sums of concurrently running work, not wall-clock coverage.
 The memory column is the peak-duration proxy defined above; actual GiB-hours are unknown
 for **every** class. Queue time is waiting, not execution savings.
 
-| Command class | Log artifacts | Timed scopes | Slice check-h | Peak-GiB-h | Rsync h | Provision h | Command h | Queue h |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Kernel check | 1,006 | 765 | 77.959 | 294.119 | 2.564 | 3.083 | 76.002 | 7.827 |
-| Root typecheck | 791 | 422 | 33.919 | 109.498 | 1.223 | 2.531 | 31.926 | 1.669 |
-| Web check/browser | 384 | 296 | 19.657 | 77.355 | 0.698 | 0.836 | 18.695 | 2.081 |
-| Docs/utility/unknown | 304 | 126 | 3.316 | 8.791 | 0.261 | 0.668 | 3.074 | 0.280 |
-| Control-plane/script tests | 640 | 79 | 3.192 | 1.419 | 0.190 | 0.518 | 2.718 | 2.778 |
-| Workspace typecheck | 94 | 39 | 1.540 | 3.837 | 0.097 | 0.050 | 1.488 | 0.189 |
-| Auth check | 39 | 31 | 1.317 | 1.213 | 0.083 | 0.156 | 1.157 | 0.141 |
-| Other tests | 43 | 22 | 0.077 | 0.025 | 0.042 | 0.024 | 0.051 | 0.064 |
-| Install | 43 | 8 | 0.025 | 0.005 | 0.020 | 0.008 | 0.015 | 0.034 |
-| **Total** | **3,344** | **1,788** | **141.002** | **496.263** | **5.178** | **7.873** | **135.126** | **15.064** |
+| Command class              | Log artifacts | Timed scopes | Slice check-h |  Peak-GiB-h |   Rsync h | Provision h |   Command h |    Queue h |
+| -------------------------- | ------------: | -----------: | ------------: | ----------: | --------: | ----------: | ----------: | ---------: |
+| Kernel check               |         1,006 |          765 |        77.959 |     294.119 |     2.564 |       3.083 |      76.002 |      7.827 |
+| Root typecheck             |           791 |          422 |        33.919 |     109.498 |     1.223 |       2.531 |      31.926 |      1.669 |
+| Web check/browser          |           384 |          296 |        19.657 |      77.355 |     0.698 |       0.836 |      18.695 |      2.081 |
+| Docs/utility/unknown       |           304 |          126 |         3.316 |       8.791 |     0.261 |       0.668 |       3.074 |      0.280 |
+| Control-plane/script tests |           640 |           79 |         3.192 |       1.419 |     0.190 |       0.518 |       2.718 |      2.778 |
+| Workspace typecheck        |            94 |           39 |         1.540 |       3.837 |     0.097 |       0.050 |       1.488 |      0.189 |
+| Auth check                 |            39 |           31 |         1.317 |       1.213 |     0.083 |       0.156 |       1.157 |      0.141 |
+| Other tests                |            43 |           22 |         0.077 |       0.025 |     0.042 |       0.024 |       0.051 |      0.064 |
+| Install                    |            43 |            8 |         0.025 |       0.005 |     0.020 |       0.008 |       0.015 |      0.034 |
+| **Total**                  |     **3,344** |    **1,788** |   **141.002** | **496.263** | **5.178** |   **7.873** | **135.126** | **15.064** |
 
 Kernel slices have median peak 3.811 GiB and maximum 5.993 GiB; root typechecks
 have median 3.456 GiB and maximum 4.631 GiB. A one-file kernel check still starts
@@ -139,17 +139,17 @@ size full gates, whose observed peaks exceed 5 GiB.
 
 ## Measured phases and missing attribution
 
-| Phase | Observations | Elapsed work h | Median s | Maximum s | Memory attribution |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Outbound rsync | 2,343 | 5.178 | 4.895 | 358.859 | Outside measured slice; unavailable |
-| Runtime provisioning and `bun install` | 2,061 | 7.873 | 2.801 | 914.932 | Paired subset: 11.798 peak-GiB-h proxy |
-| Container start and migrations | Not separated | Unknown | Unknown | Unknown | Inside command; unavailable |
-| Typecheck | Partial workspace timings | See below | Not comparable | Not comparable | Inside command; unavailable |
-| Tests | 12,505 process summaries | 159.536 process-h | Not comparable | Not comparable | Inside command; unavailable |
-| Whole command | 1,788 | 135.126 | 144.398 | 8,309.231 | Paired subset: 470.210 peak-GiB-h proxy |
-| Teardown | Not timed | Unknown | Unknown | Unknown | After accounting; unavailable |
-| Return rsync | 45 | 0.044 | 2.531 | 29.926 | Unavailable |
-| Slot wait | 2,343 | 15.064 | 3.648 | 2,719.999 | Not measured as run execution |
+| Phase                                  |              Observations |    Elapsed work h |       Median s |      Maximum s | Memory attribution                      |
+| -------------------------------------- | ------------------------: | ----------------: | -------------: | -------------: | --------------------------------------- |
+| Outbound rsync                         |                     2,343 |             5.178 |          4.895 |        358.859 | Outside measured slice; unavailable     |
+| Runtime provisioning and `bun install` |                     2,061 |             7.873 |          2.801 |        914.932 | Paired subset: 11.798 peak-GiB-h proxy  |
+| Container start and migrations         |             Not separated |           Unknown |        Unknown |        Unknown | Inside command; unavailable             |
+| Typecheck                              | Partial workspace timings |         See below | Not comparable | Not comparable | Inside command; unavailable             |
+| Tests                                  |  12,505 process summaries | 159.536 process-h | Not comparable | Not comparable | Inside command; unavailable             |
+| Whole command                          |                     1,788 |           135.126 |        144.398 |      8,309.231 | Paired subset: 470.210 peak-GiB-h proxy |
+| Teardown                               |                 Not timed |           Unknown |        Unknown |        Unknown | After accounting; unavailable           |
+| Return rsync                           |                        45 |             0.044 |          2.531 |         29.926 | Unavailable                             |
+| Slot wait                              |                     2,343 |            15.064 |          3.648 |      2,719.999 | Not measured as run execution           |
 
 The install proxy uses 1,758 logs with exactly one scope and one install phase,
 covering 5.168 hours. The command proxy uses 1,775 such pairs, covering 131.980
@@ -177,18 +177,18 @@ proxies; no class has an actual phase memory integral. Startup/migration, compil
 tests and teardown cannot be split by class from these records. Missing attribution
 is unknown rather than zero. The command columns contain those phases together.
 
-| Class | Provision h | Provision peak-GiB-h | Command h | Command peak-GiB-h |
-| --- | ---: | ---: | ---: | ---: |
-| Kernel check | 1.594 | 4.558 | 75.413 | 287.635 |
-| Root typecheck | 1.816 | 5.269 | 31.926 | 103.685 |
-| Web check/browser | 0.769 | 1.198 | 16.299 | 64.593 |
-| Docs/utility/unknown | 0.313 | 0.293 | 2.913 | 8.318 |
-| Control-plane/script tests | 0.452 | 0.278 | 2.718 | 1.129 |
-| Workspace typecheck | 0.042 | 0.079 | 1.488 | 3.738 |
-| Auth check | 0.149 | 0.116 | 1.157 | 1.090 |
-| Other tests | 0.024 | 0.006 | 0.051 | 0.018 |
-| Install | 0.008 | 0.002 | 0.015 | 0.003 |
-| **Total, before row rounding** | **5.168** | **11.798** | **131.980** | **470.210** |
+| Class                          | Provision h | Provision peak-GiB-h |   Command h | Command peak-GiB-h |
+| ------------------------------ | ----------: | -------------------: | ----------: | -----------------: |
+| Kernel check                   |       1.594 |                4.558 |      75.413 |            287.635 |
+| Root typecheck                 |       1.816 |                5.269 |      31.926 |            103.685 |
+| Web check/browser              |       0.769 |                1.198 |      16.299 |             64.593 |
+| Docs/utility/unknown           |       0.313 |                0.293 |       2.913 |              8.318 |
+| Control-plane/script tests     |       0.452 |                0.278 |       2.718 |              1.129 |
+| Workspace typecheck            |       0.042 |                0.079 |       1.488 |              3.738 |
+| Auth check                     |       0.149 |                0.116 |       1.157 |              1.090 |
+| Other tests                    |       0.024 |                0.006 |       0.051 |              0.018 |
+| Install                        |       0.008 |                0.002 |       0.015 |              0.003 |
+| **Total, before row rounding** |   **5.168** |           **11.798** | **131.980** |        **470.210** |
 
 These are subsets of the preceding tables, not additional costs. The retained
 `final-rows.json` has SHA-256
@@ -229,13 +229,13 @@ This ranking uses **measured addressable exposure**, not achieved savings.
 No proposed optimization has an A/B result here. Ceilings overlap; they must not
 be summed. Require an equal-result comparison before adopting a saving estimate.
 
-| Rank | Change | Measured exposure / saving ceiling in recovered cohort | Risk and proof required |
-| --- | --- | --- | --- |
-| 1 | Reuse compilation or typecheck once per landing dependency closure | Root typecheck: 33.919 slice-h, 109.498 peak-GiB-h; its command phase 31.926 h. Retained landing checks and cache misses reduce savings. Kernel compilation is additional but unmeasured. | High correctness risk: SQL content mapping and generated inputs. Compare cold/warm diagnostics and exit codes across schema, mapper, dependency and config changes; keep a full landing oracle. |
-| 2 | Publish an assembled dependency tree per host | Provision phase: 7.873 h, with 11.798 peak-GiB-h proxy in the smaller paired subset. Current cache already avoids many downloads; remaining savings need measurement. | Medium risk: stale hooks, patches, ABI or writable shared files. Compare cold/warm trees and checks; invalidate every relevant key and test concurrent readers plus interrupted publication. |
-| 3 | Reduce outbound workspace synchronization | 5.178 h of rsync exposure; no measured GiB-h saving. Existing delta transfer means this is an upper ceiling, not an expectation. | Medium risk: stale, deleted, executable or symlinked files. Verify remote tree equivalence after branch changes, deletion, renames and failed transfers; benchmark bytes and elapsed time. |
-| 4 | Plan documentation-only typechecks before placement | 18 timed scopes among 31 checks on tasks declaring only concrete Markdown paths: 1.795 slice-h and 5.568 peak-GiB-h. Actual diffs must confirm the inference. This is a subset of rank 1. | Low risk with an exact diff/dependency planner. Assert documentation selects no compiler database; SQL, generator and config changes still select all dependants. |
-| Unranked pending timings | One long-lived Postgres per host, with migrated template databases | Startup/migration saving is unknown. The 77.959 kernel slice-h and 294.119 peak-GiB-h include much more than Postgres; assigning them to this proposal would be false. | High shared-state risk. Prove parallel isolation, template invalidation, no active template connections, failed-run cleanup, role/config isolation and equivalent migrations/schema. OpenSearch remains separately provisioned. |
+| Rank                     | Change                                                             | Measured exposure / saving ceiling in recovered cohort                                                                                                                                    | Risk and proof required                                                                                                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1                        | Reuse compilation or typecheck once per landing dependency closure | Root typecheck: 33.919 slice-h, 109.498 peak-GiB-h; its command phase 31.926 h. Retained landing checks and cache misses reduce savings. Kernel compilation is additional but unmeasured. | High correctness risk: SQL content mapping and generated inputs. Compare cold/warm diagnostics and exit codes across schema, mapper, dependency and config changes; keep a full landing oracle.                                 |
+| 2                        | Publish an assembled dependency tree per host                      | Provision phase: 7.873 h, with 11.798 peak-GiB-h proxy in the smaller paired subset. Current cache already avoids many downloads; remaining savings need measurement.                     | Medium risk: stale hooks, patches, ABI or writable shared files. Compare cold/warm trees and checks; invalidate every relevant key and test concurrent readers plus interrupted publication.                                    |
+| 3                        | Reduce outbound workspace synchronization                          | 5.178 h of rsync exposure; no measured GiB-h saving. Existing delta transfer means this is an upper ceiling, not an expectation.                                                          | Medium risk: stale, deleted, executable or symlinked files. Verify remote tree equivalence after branch changes, deletion, renames and failed transfers; benchmark bytes and elapsed time.                                      |
+| 4                        | Plan documentation-only typechecks before placement                | 18 timed scopes among 31 checks on tasks declaring only concrete Markdown paths: 1.795 slice-h and 5.568 peak-GiB-h. Actual diffs must confirm the inference. This is a subset of rank 1. | Low risk with an exact diff/dependency planner. Assert documentation selects no compiler database; SQL, generator and config changes still select all dependants.                                                               |
+| Unranked pending timings | One long-lived Postgres per host, with migrated template databases | Startup/migration saving is unknown. The 77.959 kernel slice-h and 294.119 peak-GiB-h include much more than Postgres; assigning them to this proposal would be false.                    | High shared-state risk. Prove parallel isolation, template invalidation, no active template connections, failed-run cleanup, role/config isolation and equivalent migrations/schema. OpenSearch remains separately provisioned. |
 
 For rank 1, TypeScript documents [incremental builds](https://www.typescriptlang.org/tsconfig/incremental.html)
 and a disposable [build-info file](https://www.typescriptlang.org/tsconfig/tsBuildInfoFile.html).
@@ -365,10 +365,10 @@ it cannot prove those unavailable measurements.
 Existing clones were read without installing, building or executing their contents.
 The reference index was updated with the inspected revisions and licences.
 
-| Project | Reused local reference path under main checkout `.reference/` | Inspected revision and source | Licence |
-| --- | --- | --- | --- |
-| PostgreSQL | `library-shelf-maintenance/postgres` | [`0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`, `src/backend/commands/dbcommands.c`](https://github.com/postgres/postgres/blob/0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89/src/backend/commands/dbcommands.c), read with `git show` | PostgreSQL License, `COPYRIGHT` |
-| Bun | `search-worker-outcome-harness/bun` | [`c643ea8c2a9da88cae7e3508d2dd95c8f5857926`, `src/install/PackageInstall.rs`](https://github.com/oven-sh/bun/blob/c643ea8c2a9da88cae7e3508d2dd95c8f5857926/src/install/PackageInstall.rs) | MIT plus linked dependency licences, `LICENSE.md` |
+| Project    | Reused local reference path under main checkout `.reference/` | Inspected revision and source                                                                                                                                                                                                 | Licence                                           |
+| ---------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| PostgreSQL | `library-shelf-maintenance/postgres`                          | [`0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`, `src/backend/commands/dbcommands.c`](https://github.com/postgres/postgres/blob/0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89/src/backend/commands/dbcommands.c), read with `git show` | PostgreSQL License, `COPYRIGHT`                   |
+| Bun        | `search-worker-outcome-harness/bun`                           | [`c643ea8c2a9da88cae7e3508d2dd95c8f5857926`, `src/install/PackageInstall.rs`](https://github.com/oven-sh/bun/blob/c643ea8c2a9da88cae7e3508d2dd95c8f5857926/src/install/PackageInstall.rs)                                     | MIT plus linked dependency licences, `LICENSE.md` |
 
 Official documentation links above are primary explanatory sources accessed
 2026-10-29; measured REZICS costs come from the local logs, not those sources.
