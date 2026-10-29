@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import type { Release } from '@rezics/definitions';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { eraseAccountReactionsPage, type ReactionErasureCursor } from '../../src/content/account-erasure-reactions.ts';
@@ -73,7 +73,25 @@ beforeAll(async () => {
     }),
   });
   people = await createPersonas(kernel, { version: 1, pool: db.pool, auth });
-  await bootstrapRelease(db.pool, bundledRelease);
+  // This phase needs one subject type, independent of the full product catalogue.
+  const release: Release = {
+    format: 'https://rezics.com/definitions/release/1',
+    catalogue: { id: 'https://rezics.com/catalogue/erasure', version: '1.0.0' },
+    generator: { name: '@neverblink/linkml', version: '0.17.1' },
+    prefixes: { skos: 'http://www.w3.org/2004/02/skos/core#' },
+    types: {
+      'skos:Concept': {
+        iri: 'http://www.w3.org/2004/02/skos/core#Concept',
+        labels: { en: 'Concept' },
+        mappings: [],
+        bases: [],
+        properties: [],
+        facets: [],
+      },
+    },
+    properties: {},
+  };
+  await bootstrapRelease(db.pool, release);
   await setupContent(db.pool);
   await grant(people.staff, ['subject:create', 'board:create']);
   subjectId = (
