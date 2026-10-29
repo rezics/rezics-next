@@ -1,6 +1,6 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { anonymousReadMode } from '../kernel/credential';
+import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useMemo } from 'react';
 import '../../.storybook/route-root';
@@ -116,11 +116,13 @@ function localizedEntry(path: string): string {
 export function PageStory({
   visitor,
   path,
+  credentialMode = anonymousReadMode,
   ratings,
   ratingsFixture,
 }: {
   visitor: 'Signed In' | 'Signed Out';
   path: string;
+  credentialMode?: ReadCredentialMode;
   ratings?: Ratings;
   ratingsFixture?: RatingsFixtureName;
 }) {
@@ -131,7 +133,7 @@ export function PageStory({
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
     const router = createRouter({
       routeTree,
-      context: { queryClient, credentialMode: anonymousReadMode },
+      context: { queryClient, credentialMode },
       history: createMemoryHistory({ initialEntries: [entry] }),
       parseSearch,
       stringifySearch,

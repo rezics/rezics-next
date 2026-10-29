@@ -111,58 +111,64 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 ## apps/web/src/routes/collections/$id.tsx
 
-| Route                                   | State                   | Viewer                          | Desktop                                                       | Phone   |
-| --------------------------------------- | ----------------------- | ------------------------------- | ------------------------------------------------------------- | ------- |
-| apps/web/src/routes/collections/$id.tsx | populated               | anonymous                       | apps/web/src/stories/library-collection.stories.tsx#SignedOut | missing |
-| apps/web/src/routes/collections/$id.tsx | populated               | member                          | apps/web/src/stories/library-collection.stories.tsx#SignedIn  | missing |
-| apps/web/src/routes/collections/$id.tsx | populated               | suspended                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | empty                   | anonymous                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | empty                   | member                          | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | empty                   | suspended                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | long content            | anonymous                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | long content            | member                          | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | long content            | suspended                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | preparing / unavailable | anonymous                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | preparing / unavailable | member                          | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | preparing / unavailable | suspended                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | error                   | anonymous                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | error                   | member                          | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | error                   | suspended                       | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | curated                 | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | dynamic                 | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | private                 | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | unlisted                | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | public                  | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | curator                 | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | reader                  | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | empty                   | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | one page                | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | many pages              | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | notes                   | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | duplicate occurrences   | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | editing                 | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | reordering              | member or visitor as applicable | missing                                                       | missing |
-| apps/web/src/routes/collections/$id.tsx | following               | member or visitor as applicable | missing                                                       | missing |
+| Route                                   | State                   | Viewer                          | Desktop                                                             | Phone                                                               |
+| --------------------------------------- | ----------------------- | ------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| apps/web/src/routes/collections/$id.tsx | populated               | anonymous                       | apps/web/src/stories/collection.stories.tsx#PublicVisitor           | apps/web/src/stories/collection.stories.tsx#PublicVisitor           |
+| apps/web/src/routes/collections/$id.tsx | populated               | member                          | apps/web/src/stories/collection.stories.tsx#Curator                 | apps/web/src/stories/collection.stories.tsx#Curator                 |
+| apps/web/src/routes/collections/$id.tsx | populated               | suspended                       | planned: suspended-session fixture                                  | planned: suspended-session fixture                                  |
+| apps/web/src/routes/collections/$id.tsx | empty                   | anonymous                       | apps/web/src/stories/collection.stories.tsx#Empty                   | apps/web/src/stories/collection.stories.tsx#Empty                   |
+| apps/web/src/routes/collections/$id.tsx | empty                   | member                          | apps/web/src/stories/collection.stories.tsx#Empty                   | apps/web/src/stories/collection.stories.tsx#Empty                   |
+| apps/web/src/routes/collections/$id.tsx | empty                   | suspended                       | planned: suspended-session fixture                                  | planned: suspended-session fixture                                  |
+| apps/web/src/routes/collections/$id.tsx | long content            | anonymous                       | apps/web/src/stories/collection.stories.tsx#PublicVisitor           | apps/web/src/stories/collection.stories.tsx#PublicVisitor           |
+| apps/web/src/routes/collections/$id.tsx | long content            | member                          | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates      | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates      |
+| apps/web/src/routes/collections/$id.tsx | long content            | suspended                       | planned: suspended-session fixture                                  | planned: suspended-session fixture                                  |
+| apps/web/src/routes/collections/$id.tsx | preparing / unavailable | anonymous                       | apps/web/src/stories/collection.stories.tsx#Preparing               | apps/web/src/stories/collection.stories.tsx#Preparing               |
+| apps/web/src/routes/collections/$id.tsx | preparing / unavailable | member                          | apps/web/src/stories/collection.stories.tsx#Preparing               | apps/web/src/stories/collection.stories.tsx#Preparing               |
+| apps/web/src/routes/collections/$id.tsx | preparing / unavailable | suspended                       | planned: suspended-session fixture                                  | planned: suspended-session fixture                                  |
+| apps/web/src/routes/collections/$id.tsx | error                   | anonymous                       | apps/web/src/stories/collection.stories.tsx#PrivateNotFound         | apps/web/src/stories/collection.stories.tsx#PrivateNotFound         |
+| apps/web/src/routes/collections/$id.tsx | error                   | member                          | apps/web/src/stories/collection.stories.tsx#RestartAfterEpochChange | apps/web/src/stories/collection.stories.tsx#RestartAfterEpochChange |
+| apps/web/src/routes/collections/$id.tsx | error                   | suspended                       | planned: suspended-session fixture                                  | planned: suspended-session fixture                                  |
+| apps/web/src/routes/collections/$id.tsx | curated                 | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#PrivateCurator          | apps/web/src/stories/collection.stories.tsx#PrivateCurator          |
+| apps/web/src/routes/collections/$id.tsx | dynamic                 | member or visitor as applicable | planned: dynamic Collection runtime                                 | planned: dynamic Collection runtime                                 |
+| apps/web/src/routes/collections/$id.tsx | private                 | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#PrivateCurator          | apps/web/src/stories/collection.stories.tsx#PrivateCurator          |
+| apps/web/src/routes/collections/$id.tsx | unlisted                | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#UnlistedVisitor         | apps/web/src/stories/collection.stories.tsx#UnlistedVisitor         |
+| apps/web/src/routes/collections/$id.tsx | public                  | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#PublicVisitor           | apps/web/src/stories/collection.stories.tsx#PublicVisitor           |
+| apps/web/src/routes/collections/$id.tsx | curator                 | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Curator                 | apps/web/src/stories/collection.stories.tsx#Curator                 |
+| apps/web/src/routes/collections/$id.tsx | reader                  | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#PublicVisitor           | apps/web/src/stories/collection.stories.tsx#PublicVisitor           |
+| apps/web/src/routes/collections/$id.tsx | empty                   | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Empty                   | apps/web/src/stories/collection.stories.tsx#Empty                   |
+| apps/web/src/routes/collections/$id.tsx | one page                | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#OnePage                 | apps/web/src/stories/collection.stories.tsx#OnePage                 |
+| apps/web/src/routes/collections/$id.tsx | many pages              | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#ManyPages               | apps/web/src/stories/collection.stories.tsx#ManyPages               |
+| apps/web/src/routes/collections/$id.tsx | notes                   | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates      | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates      |
+| apps/web/src/routes/collections/$id.tsx | duplicate occurrences   | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates      | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates      |
+| apps/web/src/routes/collections/$id.tsx | editing                 | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Editing                 | apps/web/src/stories/collection.stories.tsx#Editing                 |
+| apps/web/src/routes/collections/$id.tsx | reordering              | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Reordering              | apps/web/src/stories/collection.stories.tsx#Reordering              |
+| apps/web/src/routes/collections/$id.tsx | following               | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Following               | apps/web/src/stories/collection.stories.tsx#Following               |
+| apps/web/src/routes/collections/$id.tsx | Everything              | member or visitor as applicable | planned: Everything query API                                       | planned: Everything query API                                       |
+| apps/web/src/routes/collections/$id.tsx | state                   | member or visitor as applicable | planned: Collection state query API                                 | planned: Collection state query API                                 |
+| apps/web/src/routes/collections/$id.tsx | Liked                   | member or visitor as applicable | planned: Liked source API                                           | planned: Liked source API                                           |
+| apps/web/src/routes/collections/$id.tsx | bulk                    | curator                         | planned: bulk Collection actions API                                | planned: bulk Collection actions API                                |
+| apps/web/src/routes/collections/$id.tsx | export                  | curator                         | planned: Collection export API                                      | planned: Collection export API                                      |
+| apps/web/src/routes/collections/$id.tsx | Zone mounts             | curator                         | planned: Zone mount API                                             | planned: Zone mount API                                             |
 
 ## apps/web/src/routes/collections/new.tsx
 
-| Route                                   | State                   | Viewer           | Desktop | Phone   |
-| --------------------------------------- | ----------------------- | ---------------- | ------- | ------- |
-| apps/web/src/routes/collections/new.tsx | populated               | member           | missing | missing |
-| apps/web/src/routes/collections/new.tsx | populated               | owner or curator | missing | missing |
-| apps/web/src/routes/collections/new.tsx | populated               | suspended        | missing | missing |
-| apps/web/src/routes/collections/new.tsx | empty                   | member           | missing | missing |
-| apps/web/src/routes/collections/new.tsx | empty                   | owner or curator | missing | missing |
-| apps/web/src/routes/collections/new.tsx | empty                   | suspended        | missing | missing |
-| apps/web/src/routes/collections/new.tsx | long content            | member           | missing | missing |
-| apps/web/src/routes/collections/new.tsx | long content            | owner or curator | missing | missing |
-| apps/web/src/routes/collections/new.tsx | long content            | suspended        | missing | missing |
-| apps/web/src/routes/collections/new.tsx | preparing / unavailable | member           | missing | missing |
-| apps/web/src/routes/collections/new.tsx | preparing / unavailable | owner or curator | missing | missing |
-| apps/web/src/routes/collections/new.tsx | preparing / unavailable | suspended        | missing | missing |
-| apps/web/src/routes/collections/new.tsx | error                   | member           | missing | missing |
-| apps/web/src/routes/collections/new.tsx | error                   | owner or curator | missing | missing |
-| apps/web/src/routes/collections/new.tsx | error                   | suspended        | missing | missing |
+| Route                                   | State                   | Viewer           | Desktop                                                            | Phone                                                              |
+| --------------------------------------- | ----------------------- | ---------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| apps/web/src/routes/collections/new.tsx | populated               | member           | apps/web/src/stories/library-collections.stories.tsx#CreateValid   | apps/web/src/stories/library-collections.stories.tsx#CreateValid   |
+| apps/web/src/routes/collections/new.tsx | populated               | owner or curator | apps/web/src/stories/library-collections.stories.tsx#CreateValid   | apps/web/src/stories/library-collections.stories.tsx#CreateValid   |
+| apps/web/src/routes/collections/new.tsx | populated               | suspended        | planned: suspended-session fixture                                 | planned: suspended-session fixture                                 |
+| apps/web/src/routes/collections/new.tsx | empty                   | member           | apps/web/src/stories/library-collections.stories.tsx#CreateInvalid | apps/web/src/stories/library-collections.stories.tsx#CreateInvalid |
+| apps/web/src/routes/collections/new.tsx | empty                   | owner or curator | apps/web/src/stories/library-collections.stories.tsx#CreateInvalid | apps/web/src/stories/library-collections.stories.tsx#CreateInvalid |
+| apps/web/src/routes/collections/new.tsx | empty                   | suspended        | planned: suspended-session fixture                                 | planned: suspended-session fixture                                 |
+| apps/web/src/routes/collections/new.tsx | long content            | member           | apps/web/src/stories/library-collections.stories.tsx#CreateValid   | apps/web/src/stories/library-collections.stories.tsx#CreateValid   |
+| apps/web/src/routes/collections/new.tsx | long content            | owner or curator | apps/web/src/stories/library-collections.stories.tsx#CreateValid   | apps/web/src/stories/library-collections.stories.tsx#CreateValid   |
+| apps/web/src/routes/collections/new.tsx | long content            | suspended        | planned: suspended-session fixture                                 | planned: suspended-session fixture                                 |
+| apps/web/src/routes/collections/new.tsx | preparing / unavailable | member           | apps/web/src/stories/library-collections.stories.tsx#CreatePending | apps/web/src/stories/library-collections.stories.tsx#CreatePending |
+| apps/web/src/routes/collections/new.tsx | preparing / unavailable | owner or curator | apps/web/src/stories/library-collections.stories.tsx#CreatePending | apps/web/src/stories/library-collections.stories.tsx#CreatePending |
+| apps/web/src/routes/collections/new.tsx | preparing / unavailable | suspended        | planned: suspended-session fixture                                 | planned: suspended-session fixture                                 |
+| apps/web/src/routes/collections/new.tsx | error                   | member           | apps/web/src/stories/library-collections.stories.tsx#CreateFailed  | apps/web/src/stories/library-collections.stories.tsx#CreateFailed  |
+| apps/web/src/routes/collections/new.tsx | error                   | owner or curator | apps/web/src/stories/library-collections.stories.tsx#CreateFailed  | apps/web/src/stories/library-collections.stories.tsx#CreateFailed  |
+| apps/web/src/routes/collections/new.tsx | error                   | suspended        | planned: suspended-session fixture                                 | planned: suspended-session fixture                                 |
 
 ## apps/web/src/routes/curate/presentation.tsx
 
@@ -206,23 +212,23 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 ## apps/web/src/routes/library/collections.tsx
 
-| Route                                       | State                   | Viewer           | Desktop | Phone   |
-| ------------------------------------------- | ----------------------- | ---------------- | ------- | ------- |
-| apps/web/src/routes/library/collections.tsx | populated               | member           | missing | missing |
-| apps/web/src/routes/library/collections.tsx | populated               | owner or curator | missing | missing |
-| apps/web/src/routes/library/collections.tsx | populated               | suspended        | missing | missing |
-| apps/web/src/routes/library/collections.tsx | empty                   | member           | missing | missing |
-| apps/web/src/routes/library/collections.tsx | empty                   | owner or curator | missing | missing |
-| apps/web/src/routes/library/collections.tsx | empty                   | suspended        | missing | missing |
-| apps/web/src/routes/library/collections.tsx | long content            | member           | missing | missing |
-| apps/web/src/routes/library/collections.tsx | long content            | owner or curator | missing | missing |
-| apps/web/src/routes/library/collections.tsx | long content            | suspended        | missing | missing |
-| apps/web/src/routes/library/collections.tsx | preparing / unavailable | member           | missing | missing |
-| apps/web/src/routes/library/collections.tsx | preparing / unavailable | owner or curator | missing | missing |
-| apps/web/src/routes/library/collections.tsx | preparing / unavailable | suspended        | missing | missing |
-| apps/web/src/routes/library/collections.tsx | error                   | member           | missing | missing |
-| apps/web/src/routes/library/collections.tsx | error                   | owner or curator | missing | missing |
-| apps/web/src/routes/library/collections.tsx | error                   | suspended        | missing | missing |
+| Route                                       | State                   | Viewer           | Desktop                                                              | Phone                                                                |
+| ------------------------------------------- | ----------------------- | ---------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| apps/web/src/routes/library/collections.tsx | populated               | member           | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | populated               | owner or curator | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | populated               | suspended        | planned: suspended-session fixture                                   | planned: suspended-session fixture                                   |
+| apps/web/src/routes/library/collections.tsx | empty                   | member           | apps/web/src/stories/library-collections.stories.tsx#NoCollections   | apps/web/src/stories/library-collections.stories.tsx#NoCollections   |
+| apps/web/src/routes/library/collections.tsx | empty                   | owner or curator | apps/web/src/stories/library-collections.stories.tsx#NoCollections   | apps/web/src/stories/library-collections.stories.tsx#NoCollections   |
+| apps/web/src/routes/library/collections.tsx | empty                   | suspended        | planned: suspended-session fixture                                   | planned: suspended-session fixture                                   |
+| apps/web/src/routes/library/collections.tsx | long content            | member           | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | long content            | owner or curator | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | long content            | suspended        | planned: suspended-session fixture                                   | planned: suspended-session fixture                                   |
+| apps/web/src/routes/library/collections.tsx | preparing / unavailable | member           | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | preparing / unavailable | owner or curator | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | preparing / unavailable | suspended        | planned: suspended-session fixture                                   | planned: suspended-session fixture                                   |
+| apps/web/src/routes/library/collections.tsx | error                   | member           | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | error                   | owner or curator | apps/web/src/stories/library-collections.stories.tsx#ManyCollections | apps/web/src/stories/library-collections.stories.tsx#ManyCollections |
+| apps/web/src/routes/library/collections.tsx | error                   | suspended        | planned: suspended-session fixture                                   | planned: suspended-session fixture                                   |
 
 ## apps/web/src/routes/library/copies.tsx
 
