@@ -411,58 +411,60 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
           {m.library_collection_members()}
         </h2>
         {members.length ? (
-          <CoverGrid ratio={ratio} density="large">
-            {members.map((member, index) => {
-              const subject = member.subject;
-              const locale = getLocale();
-              const title = subject
-                ? pageText({ [subject.labelLanguage ?? locale]: subject.label }, locale, subject.labelLanguage).text ||
-                  subject.label
-                : m.library_subject_unavailable();
-              const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
-              return (
-                <ListRow key={member.id} className="list-none space-y-3 rounded-xl p-2">
-                  <ListRowLink href={href ?? '#'}>{title}</ListRowLink>
-                  <CoverCard
-                    {...(href ? { href } : {})}
-                    title={title}
-                    cover={{
-                      subject: subject
-                        ? { id: subject.id, title, types: subject.types }
-                        : { id: 'unavailable', title, types: [] },
-                      cover: subject?.cover ?? null,
-                      src: coverSrc,
-                      labels: {
-                        withheld: m.thread_cover_withheld(),
-                        reveal: m.thread_cover_reveal(),
-                        credit: m.thread_cover_credit(),
-                        via: m.thread_cover_via(),
-                      },
-                    }}
-                    secondary={subject?.typeLabel}
-                    linkLabel={title}
-                  />
-                  {member.note ? (
-                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">{member.note}</p>
-                  ) : null}
-                  {owner ? (
-                    <ListRowControl className="space-y-2">
-                      <MemberRowControls
-                        member={member}
-                        index={index}
-                        members={members}
-                        firstPage={page.firstPage}
-                        busy={!hydrated || pending}
-                        moveMember={moveMember}
-                        saveNote={saveNote}
-                        removeMember={removeMember}
-                      />
-                    </ListRowControl>
-                  ) : null}
-                </ListRow>
-              );
-            })}
-          </CoverGrid>
+          <div className="[&_[data-slot=cover-grid]]:grid-cols-1 md:[&_[data-slot=cover-grid]]:grid-cols-2 xl:[&_[data-slot=cover-grid]]:grid-cols-3">
+            <CoverGrid ratio={ratio}>
+              {members.map((member, index) => {
+                const subject = member.subject;
+                const locale = getLocale();
+                const title = subject
+                  ? pageText({ [subject.labelLanguage ?? locale]: subject.label }, locale, subject.labelLanguage)
+                      .text || subject.label
+                  : m.library_subject_unavailable();
+                const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
+                return (
+                  <ListRow key={member.id} className="list-none space-y-3 rounded-xl p-2">
+                    <ListRowLink href={href ?? '#'}>{title}</ListRowLink>
+                    <CoverCard
+                      {...(href ? { href } : {})}
+                      title={title}
+                      cover={{
+                        subject: subject
+                          ? { id: subject.id, title, types: subject.types }
+                          : { id: 'unavailable', title, types: [] },
+                        cover: subject?.cover ?? null,
+                        src: coverSrc,
+                        labels: {
+                          withheld: m.thread_cover_withheld(),
+                          reveal: m.thread_cover_reveal(),
+                          credit: m.thread_cover_credit(),
+                          via: m.thread_cover_via(),
+                        },
+                      }}
+                      secondary={subject?.typeLabel}
+                      linkLabel={title}
+                    />
+                    {member.note ? (
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{member.note}</p>
+                    ) : null}
+                    {owner ? (
+                      <ListRowControl className="space-y-2">
+                        <MemberRowControls
+                          member={member}
+                          index={index}
+                          members={members}
+                          firstPage={page.firstPage}
+                          busy={!hydrated || pending}
+                          moveMember={moveMember}
+                          saveNote={saveNote}
+                          removeMember={removeMember}
+                        />
+                      </ListRowControl>
+                    ) : null}
+                  </ListRow>
+                );
+              })}
+            </CoverGrid>
+          </div>
         ) : (
           <p className="text-muted-foreground">{m.library_collection_empty()}</p>
         )}
