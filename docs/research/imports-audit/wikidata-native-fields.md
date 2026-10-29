@@ -79,7 +79,51 @@ such rather than rewritten into a product success claim.
 
 ## Verification
 
-Native execution and affected-scope typecheck are pending at the initial commit.
-The test file hash, tested revision, counts and first failure or real pass will be
-recorded after the prescribed single focused run. No full kernel, web or root gate
-is part of this specification delivery.
+The native command was:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/wikidata-native-fields.test.ts
+```
+
+It exited **1, infrastructure failure**, after the wrapper's one automatic rerun.
+Both attempts used the initial test revision
+`4084f500b630af44af3e9fda91f93fbc887b807b`, with test SHA-256
+`8f274a075a78b9a04830cebe581d410d8f24c8bfc22a4480cf9946a252f7187c`.
+Neither log reported a test title, pass/fail count, assertion count or native
+candidate/receipt result. There are **two defined cases**, with **execution counts
+unavailable**, not two established assertion failures. The first attempt on host b
+stopped growing after `stack-run: kernel check local, already on a check host`;
+the automatic rerun on c stopped at the same line. The terminal error was:
+
+```text
+worker-check: infrastructure failure (log did not grow for 10 minutes) on ah-ipv6; second runner failed; log .temp/goal/checks/worker-check-2026-10-29T11-41-01.963Z-8c6e2e9b.log
+```
+
+Initial log: `.temp/goal/checks/worker-check-2026-10-29T11-21-22.544Z-5da97d91.log`.
+The error is a tool blocker; there is no native pass or product failure claim.
+No third native attempt was started after the automatic retry was exhausted.
+
+Source inspection during the first checks identified the need to deliver actual
+semantic relay events before anonymous subject relation reads. The final test adds
+that existing production delivery and compares public values/ranks/qualifiers/references
+as well as IDs. Property-ID matchers allow the native schema's additional datatype
+annotation while retaining the exact expected ID and value. No timeout, configured
+limit or required assertion was relaxed. The final test revision is
+`63f110e6a637f7deb5533d8076860be23f4cf442`, with SHA-256
+`654536a4c123d563ff739ac63925e6b71fd638d738e161d429d1fbc6054fbd00`. Its native execution remains unverified because of the tool blocker.
+
+The root typecheck was restricted to the affected workspace:
+
+```sh
+bun scripts/worker-check.ts -- env TYPECHECK_CHANGED=services/kernel/test/imports/wikidata-native-fields.test.ts bun run typecheck
+```
+
+The initial version passed (exit 0, one of thirteen workspaces, kernel) after one
+automatic infrastructure rerun. Its successful log is
+`.temp/goal/checks/worker-check-2026-10-29T11-41-02.789Z-ea2bce06.log`.
+Final-revision affected-scope typecheck: pending shared slot.
+
+Only the two declared files changed; no outside-path files or existing/frozen tests
+were edited. No full kernel, web or root gate, extra test suite, live provider fetch,
+legacy port or growth check was run. The artifact's nonempty-file acceptance proves
+specification delivery only; it cannot substitute for missing native execution.
