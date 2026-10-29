@@ -575,7 +575,8 @@ CREATE TABLE semantic.identity_epoch_admission_plan (
     acquired_position bigint,
     closed_transaction_id uuid,
     closed_epoch integer,
-    closed_position bigint
+    closed_position bigint,
+    waiting boolean DEFAULT true NOT NULL
 );
 
 
@@ -1814,6 +1815,13 @@ CREATE INDEX fact_label ON semantic.fact USING btree (route, subject_id, languag
 --
 
 CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (kind <> 'statement'::text);
+
+
+--
+-- Name: identity_epoch_admission_waiters; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_admission_waiters ON semantic.identity_epoch_admission_plan USING btree (resource_home, job_id) WHERE waiting;
 
 
 --

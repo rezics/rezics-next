@@ -263,7 +263,7 @@ export async function stepIdentityEpochBootstrap(
   // Empty exports still require real receiving custody, never a count-only closure.
   if (!homes.size) homes.set(partition, []);
   for (const [destination, rows] of homes) {
-    await runCommand(pool, { partition: destination }, async (tx, { transactionId }) => {
+    await runCommand(pool, { partition: destination }, async (tx) => {
       const duplicate = (
         await query(tx, bootstrapSelectBootstrapCustody.sql, [
           destination,
@@ -283,9 +283,7 @@ export async function stepIdentityEpochBootstrap(
       if (retained.phase === 'subjects' || retained.phase === 'dirty') {
         for (const row of rows) {
           if (!row.present) continue;
-          const header = (
-            await query(tx, bootstrapInsertGroup.sql, [destination, row.terminal, transactionId, owner.epoch])
-          ).rows[0];
+          const header = (await query(tx, bootstrapInsertGroup.sql, [destination, row.terminal, owner.epoch])).rows[0];
           if (header.pending_job || header.owner_epoch !== owner.epoch) throw fail();
           const previous = (await query(tx, bootstrapSelectOriginal.sql, [destination, row.original])).rows[0];
           if (previous?.pending_job) throw fail();

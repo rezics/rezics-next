@@ -262,6 +262,8 @@ export const identityEpochStore: IdentityEpochStore = {
         ((await readIdentityEpochCutover(tx)).state !== 'ready' || !sourceClosure?.sealed_generation))
     )
       throw unavailable();
+    if (inputs.some((g) => g.pending_job))
+      throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
     const resulting =
       intent.kind === 'merge'
         ? inputs.reduce((n, g) => n + BigInt(g.observed_count), 0n)
@@ -364,8 +366,9 @@ export const identityEpochStore: IdentityEpochStore = {
       command.partition,
     ]);
     await tx.query(storeInsertHomeGate.sql, [originalRoute, original, owner.epoch, source.recorded_transaction_id]);
-    await tx.query(storeInsertGroup.sql, [command.partition, original, source.recorded_transaction_id, owner.epoch]);
-    await tx.query(storeInsertOriginal.sql, [command.partition, source.recorded_transaction_id, original]);
+    const header = (await tx.query(storeInsertGroup.sql, [command.partition, original, owner.epoch])).rows[0];
+    if (!header) throw unavailable();
+    await tx.query(storeInsertOriginal.sql, [command.partition, header.generation, original]);
     await tx.query(storeUpdateDirty.sql, [originalRoute, original]);
     registerCommandCallback(tx, async (transactionId) => {
       if (transactionId !== source.recorded_transaction_id)
@@ -382,7 +385,7 @@ export const identityEpochStore: IdentityEpochStore = {
     const pages: Array<{ original: string; terminal: string }[]> = [];
     const allowance = inputs.length === 1 ? 100 : 50;
     for (const input of inputs)
-      pages.push((await tx.query(storeSelectOriginal.sql, [input.generation, after, allowance])).rows);
+      pages.push((await tx.query(storeSelectOriginal.sql, [input.generation, after, allowance, input.terminal])).rows);
     const fences = pages
       .filter((p) => p.length === allowance)
       .map((p) => p.at(-1)!.original)

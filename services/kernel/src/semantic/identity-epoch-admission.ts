@@ -155,7 +155,7 @@ export async function prepareIdentityEpochAdmission(
   const first = await capture(pool, input);
   const second = await capture(pool, input);
   if (fingerprint(first) !== fingerprint(second)) throw unavailable();
-  const groups = [...new Map(second.map((r) => [r.generation, r])).values()];
+  const groups = [...new Map(second.map((r) => [r.terminal, r])).values()];
   const intent = input.intent;
   const resulting =
     intent.kind === 'merge'

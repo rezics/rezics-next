@@ -552,3 +552,43 @@ test('ordered PREPARING recovery and cancellation keep P=1 local, including unce
     runCommand(f.pool, { partition: home(low.job.jobId) }, (tx) => store.publish(tx, low.job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
 });
+
+test('same-transaction native births retain independent immutable group generations', async () => {
+  const originals = [newId(0x6360), newId(0x6360), newId(0x6360)];
+  const actor = await f.actor();
+  await runCommand(
+    f.pool,
+    {
+      partition: home(originals[0]!),
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      authorization: await f.authorization('subject:create'),
+    },
+    async (tx, { transactionId }) => {
+      const results = [];
+      for (const id of originals)
+        results.push(
+          await writeSubject(tx, transactionId, {
+            target: { route: routeOf(id)!, id },
+            item: { type: 'schema:Person', labels: { en: 'Native batch birth' } },
+            release,
+          }),
+        );
+      return { value: null, events: results.flatMap((result) => result.events) };
+    },
+  );
+  const headers = (
+    await f.admin.query('SELECT generation FROM semantic.identity_epoch_group WHERE terminal=ANY($1::uuid[])', [
+      originals,
+    ])
+  ).rows;
+  expect(new Set(headers.map((h) => h.generation)).size).toBe(3);
+  const job = (
+    await (
+      await admission({ kind: 'merge', survivor: originals[0]!, redirected: originals[1]!, release: release.digest })
+    ).execute()
+  ).value;
+  expect((await store.pageChanges(f.pool, job, null)).changes.map((c) => c.original).sort()).toEqual(
+    originals.slice(0, 2).sort(),
+  );
+  expect(await store.readMapping(f.pool, originals[2]!)).toMatchObject({ state: 'mapped', terminal: originals[2] });
+});
