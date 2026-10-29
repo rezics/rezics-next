@@ -5,8 +5,9 @@ The binding consumes the existing explicit `sourceStatistics: 'vndb'` runtime an
 store, ordinary Importer/transport and journal. The CLI case provisions an actual
 account key through stage/approve/apply, stores the private JWK with mode 0600 on
 tmpfs, and calls `runImportCli` with `--source vndb --dump -` and ordinary account,
-client, Auth, API and durable-state arguments. No shared helper or production code
-is changed.
+client, Auth, API and durable-state arguments. The shared native helpers remain
+unchanged. Production repairs are confined to the two reached coordinator/transport
+defects described below.
 
 The portable wrapper launches the unchanged suite on the current pinned Bun,
 inherits the native kernel environment/preloads, drains both output pipes and
@@ -55,8 +56,8 @@ resolution, empty native observations are empty, without invented effect proof.
 
 ## Verification state
 
-The tested implementation revision is `329400add0`. Both managed checks returned
-terminal results; no checks remain pending:
+The historical pre-repair tested implementation revision is `329400add0`. Both
+managed checks returned terminal results:
 
 - Native acceptance `4c8e4de6-b32d-48af-bd67-2361e322247f`: exit 1.
   Command: `bun run --cwd services/kernel check test/imports/vndb-statistics-outcomes.test.ts test/imports/vndb-cli-native.test.ts`.
@@ -70,7 +71,8 @@ The wrapper and its unchanged child both used Bun
 `67 expect() calls`, six tests, exit 1; no skip/todo is reported. The full six
 names above correspond to pass, fail, fail, pass, pass, pass respectively. The
 wrapper correctly fails its child-exit assertion (`Expected: 0`, `Received: 1`);
-it does not count these four passes as delivery. Both declared native files fail.
+it does not count these four passes as delivery. Both declared native files failed
+on that historical revision.
 Earlier compilation errors in source-literal typing, conversion type import and
 required archive progress callback were corrected before this tested revision.
 
@@ -120,10 +122,9 @@ captured one actual status-200 statistic response with mean 7.35 and marked
 ```
 
 No second PUT occurred; the run returned the same unresolved-work diagnostic.
-`services/importer/src/import-fetch.ts:45-47` admits GET/HEAD and keyed POST for
-retry and rejects PUT. This is incompatible with the frozen committed-response
-loss requirement, while this binding contract expressly forbids changing retry
-policy or correcting the production algorithm. No manual retry, fabricated
+At that revision, `services/importer/src/import-fetch.ts:45-47` admitted GET/HEAD
+and keyed POST for retry and rejected PUT. This reached conflict justified the
+subsequent narrowly authorized production repair. No manual retry, fabricated
 success, fixture/assertion change or policy relaxation was used.
 
 The four passing frozen cases establish initial native statistic publication,
@@ -132,18 +133,74 @@ denial, and acquisition/mass-loss baseline protection within their exact frozen
 assertions. The initial case checks real storage, current transaction, one
 historical event/receipt and zero native votes. Exact transaction/event IDs are
 not printed on its passing path, so this report does not invent them. The changed
-and uncertain-ACK requirements remain red. Their production behavior predates
+and uncertain-ACK requirements were red at that revision. Their production behavior predates
 the binding; the missing tests cannot run on a base without this new driver, so
 no base-pass or base-fail result is claimed.
 
 An independent authorization/disclosure/rights review found no blocking defect in
 the binding. It identified the PUT retry-policy mismatch and clarified that the
 baseline port aliases a maintained generation pointer, not a content hash.
-The two frozen hashes above were verified unchanged after execution. This final
-report records reached native product conflicts, replacing the earlier missing
-terminal handoff and compile-only evidence; it does not request another check.
+The two frozen hashes above were verified unchanged after that execution.
+
+## Scoped repair and local proof
+
+The coordinator now records successful completion of the actual awaited statistic
+write before permitting the statistic-only disposition. It still performs the
+bounded current-candidate/proposal comparisons, requires every candidate and
+proposal to be retained, and excludes fenced, skipped-cover and deferred-cover
+paths from this disposition. No existing semantic candidate, bootstrap journal,
+proposal body or server receipt is replaced. The trusted RunStore method requires
+a current ready lease, a classified immutable empty plan, a present VNDB source
+projection, an existing acknowledgement and no pending keys/deferred cover. It
+resolves the actual staged projection through the ordinary acknowledgement and
+finalization logic. Existing no-effect reasons retain their previous guards.
+
+Normal bounded HTTP retries now also admit only the exact UUID-subject VNDB
+statistic PUT path with the existing validated quoted structured-field key. No
+unrelated PUT, missing/malformed key, server policy, retry/deadline/body limit or
+coordinator logical-write ceiling changed. The transport retains the exact original
+bytes/headers/bearer, subject to its pre-existing explicit 401 renewal rule.
+Failure diagnostics summarize method/path/status/loss/receipt and omit raw bearer
+tokens; in-memory exact requests remain available to the frozen replay assertions.
+
+Local regressions were committed and run before repair: 7 passed and 4 failed,
+reproducing uncommitted same-revision refresh, failed resume and one-send lost ACK.
+After repair, the six focused new cases across the existing source-statistics,
+import-fetch and import-fetch-growth files passed with 95 assertions on pinned Bun
+`v1.4.4-canary.1 (a0cc096ce)`. These cases use actual local Importer/RunStore and
+ordinary transport with explicit local HTTP protocol doubles; they claim no native
+Auth, server receipt or event proof. They verify committed projection changes,
+unchanged semantic journals, reopened no-op, unchanged baseline on denial or
+exhausted acknowledgement loss, original-key recovery, stale/terminal completion
+rejection, exact retry bytes/headers, invalid route/key refusal and the existing
+three-attempt/two-wait physical default. Counted supplied bytes remain a byte unit.
+
+Edited-file formatting passed. The direct pinned importer compiler passed all 136
+files. A broader local two-file run also exposed an existing Retry-After exact-wall-
+clock assertion receiving 1999 instead of 2000; it was left unchanged. The final
+focused run selected the six new regressions rather than changing that assertion.
+The system Bun initially resolved a compiler command to the root gate; that own
+invocation was interrupted while queued, before a slot was admitted. The pinned
+compiler was then invoked directly. No broad gate result is claimed, and the
+historical all-13-workspace typecheck is not evidence for this repair.
+
+The final native acceptance will execute only the two declared files after this
+local preflight. Its terminal result and actual bundle/receipt/journal evidence
+will be recorded below; local success is not native delivery.
 
 ## Cost and limits
+
+### Statistic-only completion and retry
+
+- Touches: existing bounded current-candidate comparisons for one source record,
+  exact run/generation/acknowledgement keys and bounded physical sends of the same
+  authorized statistic request.
+- Bound: existing 300-candidate cap, fixed indexed RunStore point reads/writes and
+  O((1+q) log R) work at existing q caps. Retry admission uses bounded URL/key bytes;
+  physical attempts, waits, deadlines and eight logical-write ceilings are unchanged.
+- Growth check: exact existing bounds and raw plan proofs are retained. Focused
+  local outcomes and native acceptance do not establish a new statistic-bearing
+  native growth series.
 
 ### Native observation
 
