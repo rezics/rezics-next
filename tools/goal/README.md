@@ -473,6 +473,10 @@ evidence; changes outside the task's declared paths still count as scope growth.
 outside `tools/goal/` are not routed to `main`; historical tasks that declared such paths continue to use their recorded
 target. Tasks from other Goals continue to integrate into the integration branch as before.
 
+Changes to the worker launch path also run `scripts/launch-smoke.ts` on the candidate after the control-plane checks.
+The smoke exercises the waiting and wake sequence with a disposable candidate worktree and checks each step's result.
+It catches launch and resume failures that isolated tests with a fake worker cannot expose.
+
 New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
 landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork
 from `main`. If the integration branch does not exist, the controller creates it from `main`.
