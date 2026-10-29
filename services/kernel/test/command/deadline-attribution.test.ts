@@ -229,6 +229,29 @@ test('production bundled publish phase distributions with the fixture worker qui
   // Fixture cloning needs the migrated source database to have no live clients.
   await pool.end();
   poolClosed = true;
+  // Measure synchronous work before fixture setup, so even a setup deadline retains its CPU evidence.
+  for (let index = 0; index < 20; index++) {
+    const started = performance.now();
+    const cpu = process.cpuUsage();
+    const violations = validateRelease(bundledRelease);
+    const validated = performance.now();
+    const digest = releaseDigest(bundledRelease);
+    const ended = performance.now();
+    const used = process.cpuUsage(cpu);
+    console.log(
+      JSON.stringify({
+        event: 'release_own_work',
+        index,
+        validation_ms: validated - started,
+        digest_ms: ended - validated,
+        elapsed_ms: ended - started,
+        cpu_ms: (used.user + used.system) / 1000,
+        violation_count: violations.length,
+      }),
+    );
+    expect(violations).toEqual([]);
+    expect(digest).toMatch(/^sha256:/);
+  }
   const driver = await createCommunityDriver();
   const fixture = await driver.provision();
   await driver.settle();
@@ -264,28 +287,6 @@ test('production bundled publish phase distributions with the fixture worker qui
         });
       }
       expect(samples.length).toBeGreaterThan(0);
-      if (load === 'quiet') {
-        // Separate this request's synchronous definitions work from scheduler and database waits.
-        for (let index = 0; index < 20; index++) {
-          const started = performance.now();
-          const cpu = process.cpuUsage();
-          expect(validateRelease(bundledRelease)).toEqual([]);
-          const validated = performance.now();
-          expect(releaseDigest(bundledRelease)).toMatch(/^sha256:/);
-          const ended = performance.now();
-          const used = process.cpuUsage(cpu);
-          console.log(
-            JSON.stringify({
-              event: 'release_own_work',
-              index,
-              validation_ms: validated - started,
-              digest_ms: ended - validated,
-              elapsed_ms: ended - started,
-              cpu_ms: (used.user + used.system) / 1000,
-            }),
-          );
-        }
-      }
       const percentile = (values: number[], p: number) =>
         values.toSorted((a, b) => a - b)[Math.ceil(values.length * p) - 1];
       const distribution = Object.fromEntries(
