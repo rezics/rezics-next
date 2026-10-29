@@ -1,5 +1,5 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths, agentPathView, agentViewAvailable } from '../features/pages/agent-page';
@@ -42,11 +42,22 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   // readAgentPage(...) is called by the public view query factory; this loader only seeds its query cache.
-  loader: async ({ params, deps, context }) => {
+  loader: async ({ params, deps, location, context }) => {
     const view = agentPathView(params.view);
     if (!view) throw notFound();
     const locale = getLocale();
-    const page = await context.queryClient.ensureQueryData(agentViewQuery(params.handle, locale, view, deps.cursor));
+    const query = agentViewQuery(params.handle, locale, view, deps.cursor, location.searchStr);
+    const page = await context.queryClient.ensureQueryData(query).catch((error: unknown) => {
+      context.queryClient.removeQueries({ queryKey: query.queryKey });
+      throw error;
+    });
+    if (page.kind === 'redirect') {
+      throw redirect({
+        href: page.redirectTo,
+        statusCode: 302,
+        headers: { 'Cache-Control': 'public, max-age=300' },
+      });
+    }
     if (!agentViewAvailable(page.tabs, view)) throw notFound();
     return { ...page, paths: agentPagePaths(params.handle, view) };
   },
@@ -74,8 +85,11 @@ function AgentViewRoute() {
   const { state: session } = useSession();
   const { data: reader } = useQuery({
     ...agentReaderQuery(handle, locale),
-    enabled: personalRead.enabled && session === 'signed-in',
+    enabled: data.kind === 'page' && personalRead.enabled && session === 'signed-in',
   });
+  if (data.kind === 'redirect') {
+    throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'public, max-age=300' } });
+  }
   return (
     <SubjectPage
       page={data.page}

@@ -1,5 +1,5 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths } from '../features/pages/agent-page';
@@ -22,9 +22,20 @@ const publicOrigin = createIsomorphicFn()
 // An agent's page is its own address: never inside a Realm or a Zone, whatever venue the agent speaks in.
 // readAgentPage(...) is called by the shared public query factory so SSR and hydration use the same cache entry.
 export const Route = createFileRoute('/@{$handle}')({
-  loader: async ({ params, context }) => {
+  loader: async ({ params, location, context }) => {
     const locale = getLocale();
-    const page = await context.queryClient.ensureQueryData(agentPageQuery(params.handle, locale));
+    const query = agentPageQuery(params.handle, locale, location.searchStr);
+    const page = await context.queryClient.ensureQueryData(query).catch((error: unknown) => {
+      context.queryClient.removeQueries({ queryKey: query.queryKey });
+      throw error;
+    });
+    if (page.kind === 'redirect') {
+      throw redirect({
+        href: page.redirectTo,
+        statusCode: 302,
+        headers: { 'Cache-Control': 'public, max-age=300' },
+      });
+    }
     return { ...page, paths: agentPagePaths(params.handle) };
   },
   head: ({ loaderData }) =>
@@ -41,8 +52,11 @@ function AgentRoute() {
   const { state: session } = useSession();
   const { data: reader } = useQuery({
     ...agentReaderQuery(handle, locale),
-    enabled: personalRead.enabled && session === 'signed-in',
+    enabled: data.kind === 'page' && personalRead.enabled && session === 'signed-in',
   });
+  if (data.kind === 'redirect') {
+    throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'public, max-age=300' } });
+  }
   return (
     <SubjectPage
       page={data.page}

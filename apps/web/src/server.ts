@@ -421,7 +421,10 @@ async function siteRequest(request: Request): Promise<Response> {
     ? await fetchHandler(request)
     : await paraglideMiddleware(request, () => fetchHandler(request));
   const headers = new Headers(response.headers);
-  headers.set('Cache-Control', 'private, no-store');
+  const location = headers.get('Location');
+  const destination = location ? new URL(location, request.url).pathname : '';
+  const publicAgentMove = response.status === 302 && /^\/[^/]+\/@[^/]+(?:\/[^/]+)?$/.test(destination);
+  headers.set('Cache-Control', publicAgentMove ? 'public, max-age=300' : 'private, no-store');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 

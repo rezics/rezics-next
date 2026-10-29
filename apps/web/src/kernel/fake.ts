@@ -930,6 +930,7 @@ function accountProfile(fixtures: Fixtures, account: FixtureAccount) {
     handle: account.handle,
     displayName: account.displayName,
     state: account.state,
+    ...('movedTo' in account && typeof account.movedTo === 'string' ? { movedTo: account.movedTo } : {}),
     automated: false,
     operatorId: null,
     bio: account.bio,
@@ -993,7 +994,7 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
   const account =
     handle === undefined
       ? undefined
-      : fixtures.accounts?.find((item) => item.handle === handle && item.state === 'active');
+      : fixtures.accounts?.find((item) => item.handle === handle && item.state === 'active' && !('movedTo' in item));
   if (handle !== undefined && !account) return notFound();
   if (!requested && requestedRoute === undefined && !account) return notFound();
   const payload = account
@@ -1090,6 +1091,11 @@ export function createFakeKernelFetch(given: Fixtures, observe?: (call: FakeKern
       authorization: request.headers.get('authorization'),
       cookie: request.headers.get('cookie'),
     });
+    if (request.method === 'GET' && url.pathname === '/v1/accounts' && url.searchParams.has('handle')) {
+      const handle = url.searchParams.get('handle');
+      const account = fixtures.accounts?.find((item) => item.handle === handle && item.state === 'active');
+      return Response.json({ accounts: account ? [accountProfile(fixtures, account)] : [], next: null });
+    }
     const moduleRecording = await answerFakeRoute('fixture', request, undefined, fixtures);
     if (moduleRecording) return recordedResponse(moduleRecording);
     if (request.method === 'GET') {

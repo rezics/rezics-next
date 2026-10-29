@@ -47,7 +47,6 @@ export const Route = createRootRouteWithContext<{
     const data = last?.loaderData as { paths?: PagePaths } | undefined;
     const path = last?.pathname ?? '/';
     const origin = publicOrigin();
-    const context = { origin, locale, path, ...(data?.paths ? { paths: data.paths } : {}) };
     const closed = matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error));
     const missing =
       matches.length === 1 ||
@@ -57,12 +56,20 @@ export const Route = createRootRouteWithContext<{
           match.status === 'notFound' ||
           (match.status === 'error' && isNotFound(match.error)),
       );
+    const hiddenAgentHandle = missing && /^\/(?:[^/]+\/)?@[^/]+(?:\/[^/]+)?$/.test(path);
+    const safePath = hiddenAgentHandle ? `/${locale}` : path;
+    const context = {
+      origin,
+      locale,
+      path: safePath,
+      ...(data?.paths && !hiddenAgentHandle ? { paths: data.paths } : {}),
+    };
     const head = closed ? closedPageHead(context) : pageHead(missing ? { robots: 'noindex' } : {}, context);
     return {
       meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, ...head.meta],
       links: [
         { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-        ...pageLinks(origin, locale, path, data?.paths),
+        ...pageLinks(origin, locale, safePath, hiddenAgentHandle ? undefined : data?.paths),
       ],
     };
   },

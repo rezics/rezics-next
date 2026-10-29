@@ -153,3 +153,9 @@ export const demoAgentAccounts: FixtureAccount[] = [
   ),
   agentAccount({ id: uuid(0xf001, 4), handle: 'ghost', state: 'deleted', displayName: 'Ghost' }, { posts: 1 }),
 ];
+
+/** A reserved former handle that the public account lookup forwards to its current claim. */
+export const renamedAgentAccount: FixtureAccount & { movedTo: string } = {
+  ...agentAccount({ id: uuid(0xf001, 5), handle: 'former', displayName: 'Mira Okabe' }),
+  movedTo: 'mira',
+};
