@@ -115,6 +115,72 @@ function admitted(source: string): boolean {
   }
 }
 
+/**
+ * Prove the grammar (?:^F S* : T* $)(?![\s\S]), optionally inside ^(?:1|...)$.
+ * F is an ASCII letter class, S an ASCII scheme class (no colon), and T one
+ * native Unicode character class. All punctuation/assertions must be consumed.
+ *
+ * With only the u flag, ^ fixes one start. F consumes one code point; S cannot
+ * cross the colon, so there is at most one entry into T. Each of S* and T* can
+ * scan/backtrack at most the input length, and every suffix assertion is O(1).
+ * The optional literal branch starts with 1, disjoint from F. Thus matching is
+ * O(n), including rejection, without automaton construction or execution here.
+ *
+ * The recognizer scans at most the already-admitted 256 source characters.
+ * Range checks use fixed ASCII intervals, never expansion or input matching.
+ */
+function iriCompositionProof(source: string): boolean {
+  let position = 0;
+  const take = (token: string) => {
+    if (!source.startsWith(token, position)) return false;
+    position += token.length;
+    return true;
+  };
+  const asciiClass = (scheme: boolean) => {
+    if (!take('[')) return false;
+    const start = position;
+    while (position < source.length && source[position] !== ']') {
+      const low = source.charCodeAt(position++);
+      let high = low;
+      if (source[position] === '-' && source[position + 1] !== ']') {
+        position++;
+        high = source.charCodeAt(position++);
+      }
+      // Only literal ASCII intervals; no escapes, negation or class extensions.
+      if (
+        low > high ||
+        !(
+          (low >= 65 && high <= 90) ||
+          (low >= 97 && high <= 122) ||
+          (scheme && ((low >= 48 && high <= 57) || (low === high && [43, 45, 46].includes(low))))
+        )
+      )
+        return false;
+    }
+    return position > start && take(']');
+  };
+  const tailClass = () => {
+    if (!take('[')) return false;
+    while (position < source.length) {
+      const char = source[position++];
+      if (char === '\\') position++;
+      else if (char === ']') return true;
+    }
+    return false;
+  };
+  const wildcard = take('^(?:1|');
+  return (
+    take('(?:^') &&
+    asciiClass(false) &&
+    asciiClass(true) &&
+    take('*:') &&
+    tailClass() &&
+    take('*$)(?![\\s\\S])') &&
+    (!wildcard || take(')$')) &&
+    position === source.length
+  );
+}
+
 const checkerPath = import.meta.resolve('recheck/lib/browser.js');
 // The pinned browser checker implements Scala.js nanoTime with performance.now.
 // Keep the counter and all checkpoint callbacks in the checker's own realm:
@@ -159,11 +225,14 @@ const checkPattern = new Script(`(pattern) => {
 }`).runInContext(context) as (pattern: string) => { safe: boolean; steps: number };
 
 /** The compiler and release validator's sole pattern safety authority. No proof cache. */
-export function analyzePattern(pattern: unknown): { safe: boolean; steps: number } {
+export function analyzePattern(pattern: unknown): { safe: boolean; steps: number; proof?: 'iri-composition' } {
   if (typeof pattern !== 'string' || pattern.length > 256) return { safe: false, steps: 0 };
   try {
     new RegExp(pattern, 'u');
     if (!admitted(pattern)) return { safe: false, steps: 0 };
+    // Independent structural proof, before (and never inferred from) a native
+    // unknown/over-budget verdict. Zero steps means no native checkpoints ran.
+    if (iriCompositionProof(pattern)) return { safe: true, steps: 0, proof: 'iri-composition' };
     return checkPattern(pattern);
   } catch {
     return { safe: false, steps: 0 };
