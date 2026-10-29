@@ -200,7 +200,9 @@ async function journey(feed: Feed) {
     expect(replay.status).toBe(bootstrapExchange.status);
     expect(await replay.text()).toBe(bootstrapExchange.responseBytes);
     expect(await cli.effects()).toEqual(after);
-    committed(await cli.invoke(feed.refreshed), unchanged);
+    const unchangedRefresh = await cli.invoke(feed.refreshed);
+    committed(unchangedRefresh, unchanged);
+    expect(unchangedRefresh.writes).toEqual([]);
     expect(await cli.effects()).toEqual(after);
     expect(await cli.candidates(id, feed.property)).toEqual(freshRows);
 
@@ -284,6 +286,8 @@ test('Bangumi account-key CLI imports refreshes reopens and safely stops the nat
   const records = [subject, book, game, { id: 3, type: 3 }, { id: 6, type: 6 }];
   const changed = structuredClone(records);
   changed[0]!.name = 'The Clockwork Observatory revised';
+  const unsealed = structuredClone(changed);
+  unsealed[0]!.name = 'Unsealed Observatory title';
   const bytes = lines(records),
     refresh = lines(changed);
   const feed: Feed = {
@@ -291,9 +295,9 @@ test('Bangumi account-key CLI imports refreshes reopens and safely stops the nat
     converter: 'bangumi@3',
     first: bytes,
     refreshed: refresh,
-    malformed: lines([changed[0]]) + '{"id":',
-    truncated: refresh.slice(0, -3),
-    diminished: lines([changed[0]]),
+    malformed: lines([unsealed[0]]) + '{"id":',
+    truncated: lines(unsealed).slice(0, -3),
+    diminished: lines([unsealed[0]]),
     target: '424242',
     property: 'schema:name',
     oldValue: { language: 'und', text: bangumi.name },
@@ -372,6 +376,9 @@ test('Open Library account-key CLI imports refreshes reopens and safely stops th
   const changed = structuredClone(records);
   changed[1]!.title = 'The Glass Atlas: Revised Pocket Edition';
   changed[1]!.revision = 12;
+  const unsealed = structuredClone(changed);
+  unsealed[1]!.title = 'Unsealed Pocket Edition';
+  unsealed[1]!.revision = 13;
   const bytes = tsv(records),
     refresh = tsv(changed);
   const feed: Feed = {
@@ -379,9 +386,9 @@ test('Open Library account-key CLI imports refreshes reopens and safely stops th
     converter: 'open-library@3',
     first: bytes,
     refreshed: refresh,
-    malformed: tsv([changed[1]]) + '/type/edition\tbroken\n',
-    truncated: refresh.slice(0, -3),
-    diminished: tsv([changed[1]]),
+    malformed: tsv([unsealed[1]]) + '/type/edition\tbroken\n',
+    truncated: tsv(unsealed).slice(0, -3),
+    diminished: tsv([unsealed[1]]),
     target: edition.key,
     property: 'schema:name',
     oldValue: { language: 'und', text: edition.title },
@@ -443,6 +450,9 @@ test('Wikidata account-key CLI imports refreshes reopens and safely stops the sy
   const revised = structuredClone(entity);
   revised.lastrevid = 24681013;
   revised.claims.P856[0]!.mainsnak.datavalue.value = 'https://books.example.org/revised';
+  const unsealed = structuredClone(revised);
+  unsealed.lastrevid = 24681014;
+  unsealed.claims.P856[0]!.mainsnak.datavalue.value = 'https://books.example.org/unsealed';
   const bytes = lines([record, second]),
     refresh = lines([revised, second]);
   const feed: Feed = {
@@ -450,9 +460,9 @@ test('Wikidata account-key CLI imports refreshes reopens and safely stops the sy
     converter: 'wikidata-3',
     first: bytes,
     refreshed: refresh,
-    malformed: lines([revised]) + '{"type":"item",',
-    truncated: refresh.slice(0, -3),
-    diminished: lines([revised]),
+    malformed: lines([unsealed]) + '{"type":"item",',
+    truncated: lines([unsealed, second]).slice(0, -3),
+    diminished: lines([unsealed]),
     target: 'Q571',
     property: 'schema:url',
     oldValue: 'https://books.example.org/example',
