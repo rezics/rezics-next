@@ -4,6 +4,8 @@ import { converter_revision } from '../../../../packages/conversion/src/open-lib
 import type { Dump, Run } from '../../../../specs/imports-api-driver.ts';
 import { openApiRuntime, type ApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 const work = {
   type: { key: '/type/work' },
@@ -76,19 +78,57 @@ async function open() {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   try {
     const editor = await openApiObserver(runtime);
-    async function candidates(id: string, property: string, context?: string) {
+    async function candidates(id: string, property: string, context?: string, target?: string) {
       const response = await editor.http(
         `/v1/subjects/${id}/candidates?${new URLSearchParams({
           property,
           limit: '100',
           ...(context ? { context } : {}),
+          ...(target ? { target } : {}),
         })}`,
       );
       expect(response.status).toBe(200);
       expect(response.body.next).toBeNull();
       return response.body.candidates as Candidate[];
     }
-    return { runtime, editor, candidates };
+    async function adopt(id: string, property: string, candidate: string, context: string, target?: string) {
+      const listing = await editor.http(
+        `/v1/subjects/${id}/candidates?${new URLSearchParams({ property, context, limit: '100', ...(target ? { target } : {}) })}`,
+      );
+      expect(listing.status).toBe(200);
+      expect(listing.body.next).toBeNull();
+      expect((listing.body.candidates as Candidate[]).some((row) => row.id === candidate)).toBe(true);
+      expect(
+        (await editor.http(`/v1/subjects/${id}/candidates/${candidate}:accept`, { context, expected_head: null }))
+          .status,
+      ).toBe(200);
+      expect(
+        (
+          await editor.http(`/v1/subjects/${id}:adopt`, {
+            context,
+            property,
+            ...(target ? { target } : {}),
+            mode: 'replace',
+            selection: [{ candidate, rank: 'normal' }],
+            expected_head: (listing.body.adoption as { head: number } | null)?.head ?? null,
+          })
+        ).status,
+      ).toBe(200);
+      // Deliver the real bounded subject-partition relay before testing relation disclosure.
+      const links = linkProjection(runtime.database.pool);
+      let caughtUp = false;
+      for (let batch = 0; batch < 16; batch++) {
+        const delivered = await links.run(partitionOf(routeOf(id)!));
+        expect(delivered.status).not.toBe('stopped');
+        expect(delivered.status).not.toBe('busy');
+        if (delivered.status === 'read' && delivered.envelopes === 0) {
+          caughtUp = true;
+          break;
+        }
+      }
+      expect(caughtUp).toBe(true);
+    }
+    return { runtime, editor, candidates, adopt };
   } catch (error) {
     await runtime.close();
     throw error;
@@ -96,7 +136,7 @@ async function open() {
 }
 
 test('an importer reference resolves only through actual known native claims without invented identity or revision', async () => {
-  const { runtime, editor, candidates } = await open();
+  const { runtime, editor, candidates, adopt } = await open();
   try {
     const first = await runtime.run(dump([work]));
     completed(first);
@@ -109,7 +149,7 @@ test('an importer reference resolves only through actual known native claims wit
     expect(author).toBeDefined();
     unresolved(author!.statement, '/authors/OL1A');
     expect(runtime.importer.session.bindings.claim(owner('/authors/OL1A'))).toBeNull();
-    const rows = await candidates(book.id, relation);
+    const rows = await candidates(book.id, relation, undefined, known.id);
     expect(rows).toHaveLength(1);
     const resolved = proposal(second, relation);
     expect(resolved).toBeDefined();
@@ -119,9 +159,12 @@ test('an importer reference resolves only through actual known native claims wit
     expect(resolved!.statement.value).toEqual({ type: 'value', content: known.id });
     expect(rows[0]!.statement.value).toEqual({ type: 'value', content: known.id });
     // Use only the retrieved candidate; never synthesize a manual replacement to make adoption pass.
-    await editor.adopt('openlibrary', edition.key, relation, known.id);
+    const contextResponse = await editor.http('/v1/contexts', { labels: { en: 'Native resolved reference review' } });
+    expect(contextResponse.status).toBe(201);
+    const context = (contextResponse.body.context as { id: string }).id;
+    await adopt(book.id, relation, rows[0]!.id, context, known.id);
     completed(await runtime.run(dump([work, edition])));
-    expect(await candidates(book.id, relation)).toEqual(rows);
+    expect(await candidates(book.id, relation, undefined, known.id)).toEqual(rows);
     await runtime.identity.setBulkPermission(false);
     const exchange = second.exchanges.find((e) => e.request.keys.includes(resolved!.key))!;
     const denied = await runtime.replay(
@@ -134,14 +177,14 @@ test('an importer reference resolves only through actual known native claims wit
     expect(denied.status).toBe(403);
     expect(await denied.text()).not.toContain(known.id);
     expect(runtime.importer.session.bindings.claim(owner(work.key))).toEqual(known.binding);
-    expect(await candidates(book.id, relation)).toEqual(rows);
+    expect(await candidates(book.id, relation, undefined, known.id)).toEqual(rows);
   } finally {
     await runtime.close();
   }
 }, 600_000);
 
 test('the same session refreshes an unchanged native edition after learning its real work claim', async () => {
-  const { runtime, editor, candidates } = await open();
+  const { runtime, editor, candidates, adopt } = await open();
   try {
     const first = await runtime.run(dump([edition]));
     completed(first);
@@ -154,43 +197,15 @@ test('the same session refreshes an unchanged native edition after learning its 
     const contextResponse = await editor.http('/v1/contexts', { labels: { en: 'Native reference review' } });
     expect(contextResponse.status).toBe(201);
     const context = (contextResponse.body.context as { id: string }).id;
-    async function adopt(candidate: string) {
-      const listing = await editor.http(
-        `/v1/subjects/${book.id}/candidates?${new URLSearchParams({
-          property: relation,
-          context,
-          limit: '100',
-        })}`,
-      );
-      expect(listing.status).toBe(200);
-      expect(
-        (
-          await editor.http(`/v1/subjects/${book.id}/candidates/${candidate}:accept`, {
-            context,
-            expected_head: null,
-          })
-        ).status,
-      ).toBe(200);
-      expect(
-        (
-          await editor.http(`/v1/subjects/${book.id}:adopt`, {
-            context,
-            property: relation,
-            mode: 'replace',
-            selection: [{ candidate, rank: 'normal' }],
-            expected_head: (listing.body.adoption as { head: number } | null)?.head ?? null,
-          })
-        ).status,
-      ).toBe(200);
-    }
-    await adopt(oldCandidate.id);
+    await adopt(book.id, relation, oldCandidate.id, context);
     const learned = await runtime.run(dump([edition, work]));
     completed(learned);
     const known = claim(runtime, learned, work.key);
     expect(runtime.importer.session.bindings.claim(owner(work.key))).toEqual(known.binding);
     const refreshed = await runtime.run(dump([edition, work]));
     completed(refreshed);
-    const after = await candidates(book.id, relation, context);
+    const after = await candidates(book.id, relation, context, known.id);
+    const unresolvedAfter = await candidates(book.id, relation, context);
     const resolved = after.find((c) => c.statement.value.type === 'value' && c.statement.value.content === known.id);
     // Learning may refresh in that complete dump or in the subsequent unchanged import.
     expect(resolved).toBeDefined();
@@ -200,7 +215,7 @@ test('the same session refreshes an unchanged native edition after learning its 
     expect(fresh!.statement).not.toEqual(old.statement);
     expect(fresh!.source).toEqual(old.source); // data-only digest and both real revisions stay stable
     expect(resolved!.id).not.toBe(oldCandidate.id);
-    const retained = after.find((c) => c.id === oldCandidate.id);
+    const retained = unresolvedAfter.find((c) => c.id === oldCandidate.id);
     expect(retained?.statement).toEqual(oldCandidate.statement);
     expect(retained?.revision).toBe(oldCandidate.revision);
     // Source retraction does not silently undo the community's earlier adoption.
@@ -208,7 +223,7 @@ test('the same session refreshes an unchanged native edition after learning its 
     expect(adopted.status).toBe(200);
     const subject = adopted.body.subject as { statements: Record<string, BatchStatement[]> };
     expect(subject.statements[relation]?.some((s) => s.value.type === 'somevalue')).toBe(true);
-    await adopt(resolved!.id);
+    await adopt(book.id, relation, resolved!.id, context, known.id);
     const selected = await editor.http(`/v1/subjects/${book.id}?context=${context}`);
     expect(selected.status).toBe(200);
     expect(
@@ -216,10 +231,12 @@ test('the same session refreshes an unchanged native edition after learning its 
         (s) => s.value.type === 'value' && s.value.content === known.id,
       ),
     ).toBe(true);
-    const history = await candidates(book.id, relation, context);
-    expect(history.some((c) => c.id === oldCandidate.id)).toBe(true);
+    const history = await candidates(book.id, relation, context, known.id);
+    const unresolvedHistory = await candidates(book.id, relation, context);
+    expect(unresolvedHistory.some((c) => c.id === oldCandidate.id)).toBe(true);
     completed(await runtime.run(dump([edition, work])));
-    expect(await candidates(book.id, relation, context)).toEqual(history);
+    expect(await candidates(book.id, relation, context, known.id)).toEqual(history);
+    expect(await candidates(book.id, relation, context)).toEqual(unresolvedHistory);
     const author = await candidates(book.id, 'schema:author');
     expect(author).toHaveLength(1);
     unresolved(author[0]!.statement, '/authors/OL1A');
