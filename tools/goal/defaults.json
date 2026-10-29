@@ -89,6 +89,7 @@
   "jsonMessageConflicts": ["apps/web/messages/*.json"],
   "integration": {
     "batchSize": 4,
+    "devLandingChecks": true,
     "batchAcceptanceConcurrency": 8,
     "gateConcurrency": 1,
     "gateTimeoutMs": 1800000,
