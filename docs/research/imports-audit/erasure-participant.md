@@ -168,5 +168,11 @@ RunStore additionally persists source/record-keyed reference signatures; these c
 not an account ownership relation or new account-owned payload. The `none` rationale remains applicable.
 The existing README measurement adoption, source policies and numerical bounds are preserved. No external
 reference source or outside-path edit is needed. The affected typecheck already passed; unchanged proof
-code requires no repeated typecheck. The focused native acceptance is resubmitted for the reconciled base,
-with its terminal outcome recorded separately below when available.
+code requires no repeated typecheck. The focused native acceptance passed on the reconciled base at `d30ef603ef`:
+`bun run --cwd services/kernel check test/imports/erasure-participant.test.ts` exited zero with 1 pass,
+0 fail and 47 assertions, without a load rerun. Evidence:
+`.temp/goal/checks/worker-check-2026-10-29T20-47-39.982Z-09fa8edb.log`.
+Both native owner observations again showed imports `none`, all ten other participants pending and
+completedAt null. The unchanged acceptance proved actual registered redelivery, identical terminal DBOS
+identity/steps and the unchanged full ACK/xmin. No check remains live. This resolves the scoped landing
+reconciliation and native acceptance; integration and promotion remain separate.
