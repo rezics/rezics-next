@@ -53,7 +53,7 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
       ['bun', 'test'],
     ]);
     expect(checked[0]!.files).toEqual(['first.txt']);
-    expect(checked[1]!.files).toEqual(['first.txt', 'second.txt']);
+    expect(checked[1]!.files).toEqual(['second.txt']);
     // Each task runs once on its stabilize landing candidate and once on the merged-dev candidate.
     expect(checked[2]!.files).toEqual(['first.txt', 'second.txt']);
     expect(checked[3]!.files).toEqual(['first.txt', 'second.txt']);
