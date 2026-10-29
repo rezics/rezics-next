@@ -6,7 +6,7 @@ import { ProblemError } from '../../src/http/problem.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-command.ts';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { capture, checkGrowth } from '../support/growth.ts';
+import { capture, checkGrowth, statementOccurrences } from '../support/growth.ts';
 import {
   definition,
   membersPreparationRuntime,
@@ -25,8 +25,11 @@ const prefix = 'library:members-preparation:';
 function attemptBudgets(captured: Capture) {
   // Include Core's time transaction, external Access preparation and all rollback/control SQL.
   const byBackend = new Map<number | undefined, string[]>();
+  const occurrences = statementOccurrences(captured).statements;
+  expect(occurrences).toHaveLength(captured.statements.length);
   for (const [index, sql] of captured.statements.entries()) {
     const backend = captured.statementBackends![index];
+    expect(occurrences[index]!.backend).toBe(backend);
     const statements = byBackend.get(backend) ?? [];
     statements.push(sql);
     byBackend.set(backend, statements);
@@ -132,6 +135,14 @@ test('concurrent identical first requests force native contention retry and shar
     2,
   );
   expect(raced.capture.statements).toContain('ROLLBACK');
+  expect(raced.capture.statementErrors?.some((error) => error === '40001')).toBe(true);
+  const attemptsByBackend = new Map<number | undefined, number>();
+  for (const [index, statement] of raced.capture.statements.entries()) {
+    if (statement !== 'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY') continue;
+    const backend = raced.capture.statementBackends![index];
+    attemptsByBackend.set(backend, (attemptsByBackend.get(backend) ?? 0) + 1);
+  }
+  expect([...attemptsByBackend.values()].some((count) => count > 1)).toBe(true);
   expect(await native.rows(f.owner)).toHaveLength(1);
   const other = await native.fixture();
   const separate = await other.store.reserve(other.actor, other.collectionId, [definition()]);

@@ -177,17 +177,19 @@ own drained inventory/ACK is not whole-role NoData, overall erasure completion o
   exceeds the ceiling requires actual capture review before freeze. Grow retired history without increasing live
   quota; do not relocate the hot owner. Read and intent captures remain separate.
 
-The forced-contention series currently retains only aggregate growth evidence and cannot certify that retry proof.
-The required shared capture prerequisite is an exported statement-occurrence-to-plan association (including backend,
-error and absent-plan status) and measured-repetition raw capture access. Actual
-[`Capture`](../../test/support/growth-cost.ts) has parallel statement/error/backend arrays and separate plan/backend
-arrays, but no occurrence association. The capture implementation's internal `planCount` is not exported.
-[`statementAttributions`](../../test/support/growth-report.ts) groups normalized SQL across backends and attempts;
-[`checkGrowth`](../../test/support/growth.ts) exposes those grouped `statementRepetitions`, not the raw captures.
-Repeated SQL in a successful retry and an aborted prefix therefore cannot be safely assigned per-attempt plan costs
-through an existing shared port. Keep first202, duplicate, quota-full, forced contention and stale-history axes;
-fixed-prefix and real-COMMIT schedules with the comparisons above remain required before freeze. Do not guess
-capture fields, add local attribution/classification, alter the harness or count aggregate evidence as a pass.
+The shared growth port now exports `statementOccurrences(Capture)`, which associates each captured statement
+occurrence with its backend, error, plan indices and measured rows/blocks, and `checkGrowth` retains raw
+`occurrenceRepetitions` for every measured run. Bind future forced-contention evidence to those actual exports;
+`statementAttributions` remains aggregate-only and cannot stand in for per-attempt proof. The current occurrence
+records do not carry an explicit Core logical-attempt/phase marker, and `occurrenceRepetitions` exposes normalized
+statement text rather than the original SQL capture. That leaves no safe existing signal to distinguish the
+read-only time transaction, intervening Access preparation, SERIALIZABLE body and rollback/commit for each logical
+attempt, or to assert exact SQL text at a planless failed occurrence. Do not infer grouping from normalized SQL,
+invent a local marker or alter the shared harness in this specification. Keep all named growth cases and the
+fixed-statement/real-COMMIT schedules required above; their per-attempt proof remains an explicit shared-capture
+prerequisite, not a numeric pass. If later shared capture exports explicit Core phase/attempt boundaries and the
+original SQL text alongside occurrence-to-plan evidence, compare successful retries against same-scale first
+admission and charge each failed prefix plus rollback independently.
 
 ### Retired header and late work
 
