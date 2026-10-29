@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeDocument, serializeDocument } from '@rezics/document';
 import { createMentionNoticeEffect } from '../../src/content/mention-notices.ts';
+import { createContentWorkAccess } from '../../src/content/register.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -44,7 +45,42 @@ function event(
   } as CloudEvent;
 }
 
-async function postWithMentions(ids: string[], options: { replyRecipient?: string; boardVisibility?: string } = {}) {
+async function publicRealm() {
+  const route = 0x1234;
+  const space = newId(route),
+    realm = newId(route),
+    spaceRevision = newId(route),
+    realmRevision = newId(route);
+  await fixture.reader.query('BEGIN');
+  await fixture.reader.query(
+    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+     VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
+    [route, space, spaceRevision, fixture.recipient],
+  );
+  await fixture.reader.query(
+    `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
+     VALUES($1,$2,$3,'Mention space','',clock_timestamp(),$4)`,
+    [route, space, spaceRevision, fixture.recipient],
+  );
+  await fixture.reader.query(
+    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+     VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
+    [route, realm, space, newId(route), realmRevision, fixture.recipient],
+  );
+  await fixture.reader.query(
+    `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
+     SELECT route,realm_id,head_revision_id,'Mention Realm','','public',context_id,clock_timestamp(),creator
+     FROM community.realm WHERE route=$1 AND realm_id=$2`,
+    [route, realm],
+  );
+  await fixture.reader.query('COMMIT');
+  return realm;
+}
+
+async function postWithMentions(
+  ids: string[],
+  options: { replyRecipient?: string; boardVisibility?: string; realmId?: string } = {},
+) {
   const route = 0x1234;
   const actor = fixture.actor;
   const board = newId(route),
@@ -71,9 +107,9 @@ async function postWithMentions(ids: string[], options: { replyRecipient?: strin
   const digest = createHash('sha256').update(body).digest();
   await fixture.reader.query('BEGIN');
   await fixture.reader.query(
-    `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-    VALUES ($1,$2,$3,'Mentions',$4,1,$2)`,
-    [route, board, subject, options.boardVisibility ?? 'published'],
+    `INSERT INTO content.board(route,board_id,subject_id,title,realm_id,visibility,security_revision,recorded_transaction_id)
+    VALUES ($1,$2,$3,'Mentions',$4,$5,1,$2)`,
+    [route, board, subject, options.realmId ?? null, options.boardVisibility ?? 'published'],
   );
   await fixture.reader.query(
     `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id)
@@ -134,19 +170,9 @@ test("a mention in a post's first published revision notifies each mentioned acc
       `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES($1,$2,'actor','active',$2)`,
       [routeOf(accountId), accountId],
     );
-  const { thread, post, revision, board } = await postWithMentions([
-    recipient,
-    ...more,
-    recipient,
-    actor,
-    fixture.principal,
-  ]);
-  for (const accountId of [recipient, ...more.slice(0, 9)]) {
-    await fixture.grant(accountId, 'thread:read', { route: 0x1234, id: thread });
-    await fixture.grant(accountId, 'post:read', { route: 0x1234, id: post });
-    await fixture.grant(accountId, 'board:read', { route: 0x1234, id: board });
-  }
-  const effect = createMentionNoticeEffect(fixture.pool, fixture.access);
+  const { thread, post, revision } = await postWithMentions([recipient, ...more, recipient, actor, fixture.principal]);
+  const access = createContentWorkAccess(() => new Date(), fixture.pool);
+  const effect = createMentionNoticeEffect(fixture.pool, access);
   const created = event(thread, post, revision, actor);
   await effect.run(created);
   await effect.run({ ...created, id: randomUUID() });
@@ -185,7 +211,8 @@ test("a mentioned account who cannot read the post, turned mentions off, is dele
     routeOf(fixture.principal),
     fixture.principal,
   ]);
-  const effect = createMentionNoticeEffect(fixture.pool, fixture.access);
+  const access = createContentWorkAccess(() => new Date(), fixture.pool);
+  const effect = createMentionNoticeEffect(fixture.pool, access);
   await effect.run(event(thread, post, revision, actor));
   expect(await notices()).toEqual([]);
 });
@@ -194,9 +221,30 @@ test('replayed post events add no second notice', async () => {
   await fixture.reader.query('TRUNCATE content.notice');
   const { thread, post, revision, actor } = await postWithMentions([fixture.recipient]);
   const source = event(thread, post, revision, actor);
-  const effect = createMentionNoticeEffect(fixture.pool, fixture.access);
+  const access = createContentWorkAccess(() => new Date(), fixture.pool);
+  const effect = createMentionNoticeEffect(fixture.pool, access);
   await effect.run(source);
   const first = await notices();
   await effect.run(source);
   expect(await notices()).toEqual(first);
+});
+
+test('mention notices use public Realm eligibility and withhold sends after Realm read authority is denied', async () => {
+  await fixture.reader.query('TRUNCATE content.notice');
+  const realmId = await publicRealm();
+  const access = createContentWorkAccess(() => new Date(), fixture.pool);
+  const effect = createMentionNoticeEffect(fixture.pool, access);
+
+  const readable = await postWithMentions([fixture.recipient], { realmId });
+  await effect.run(event(readable.thread, readable.post, readable.revision, readable.actor));
+  expect((await notices()).map((row) => row.post_id)).toEqual([readable.post]);
+
+  const denied = await postWithMentions([fixture.recipient], { realmId });
+  await fixture.reader.query(
+    `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+     VALUES($1,$2,$3,'realm:read','resource','(,)',$3)`,
+    [0x1234, realmId, fixture.recipient],
+  );
+  await effect.run(event(denied.thread, denied.post, denied.revision, denied.actor));
+  expect((await notices()).map((row) => row.post_id)).toEqual([readable.post]);
 });
