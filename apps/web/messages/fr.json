@@ -613,7 +613,7 @@
   "decision_appeal_expired": "Le délai de contestation est dépassé.",
   "decision_appeal_too_long": "Utilisez au maximum 2 000 caractères.",
   "decision_appeal_unavailable": "Impossible d’envoyer votre contestation. Réessayez.",
-  "decision_target_fallback": "{kind} concerné par cette décision"
+  "decision_target_fallback": "{kind} concerné par cette décision",
   "thread_media_unavailable": "Une image de ce brouillon ne peut pas encore être utilisée.",
   "thread_media_status": "État de l’image",
   "thread_media_processing": "Cette image est encore en cours de traitement.",

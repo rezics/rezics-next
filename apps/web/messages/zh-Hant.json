@@ -613,7 +613,7 @@
   "decision_appeal_expired": "申訴期限已過。",
   "decision_appeal_too_long": "請將內容控制在 2,000 個字元以內。",
   "decision_appeal_unavailable": "無法提交申訴，請重試。",
-  "decision_target_fallback": "受此決定影響的{kind}"
+  "decision_target_fallback": "受此決定影響的{kind}",
   "thread_media_unavailable": "草稿中的一張圖片目前無法使用。",
   "thread_media_status": "圖片狀態",
   "thread_media_processing": "這張圖片仍在處理中。",
