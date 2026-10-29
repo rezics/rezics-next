@@ -40,10 +40,11 @@ const timing = (wall: number): FileTiming => ({ wall, create: 0, drop: 0, outsid
 test('test commands emit dots and file bounds follow recorded test, hook and wall times', () => {
   expect(captureDefaults).toEqual({ killGraceMs: 10_000, progressInterval: 60 });
   expect(testCommand('test/a.test.ts', 'a.xml')).toContain('--dots');
-  expect(testCommand('test/a.test.ts', 'a.xml', '.temp/module-import-timing.ts').slice(0, 3)).toEqual([
+  expect(testCommand('test/a.test.ts', 'a.xml', '.temp/module-import-timing.ts').slice(0, 4)).toEqual([
+    'test',
     '--preload',
     '.temp/module-import-timing.ts',
-    'test',
+    '--timeout',
   ]);
   expect(fileBounds()).toEqual({ silence: 1800, wall: 7200 });
   expect(fileBounds({ ...timing(100), outsideTests: 250, tests: [{ name: 'slow', time: 400 }] })).toEqual({

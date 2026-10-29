@@ -448,11 +448,17 @@ export function createRecorder() {
           const start = performance.now();
           try {
             const output = await runner.run(file, database);
-            if (typeof output === 'string') timing.moduleLoad = readModuleLoad(output);
+            if (typeof output === 'string') {
+              const moduleLoad = readModuleLoad(output);
+              if (moduleLoad !== undefined) timing.moduleLoad = moduleLoad;
+            }
             timing.result = 'pass';
             return output;
           } catch (cause) {
-            if (cause instanceof Error) timing.moduleLoad = readModuleLoad(cause.message);
+            if (cause instanceof Error) {
+              const moduleLoad = readModuleLoad(cause.message);
+              if (moduleLoad !== undefined) timing.moduleLoad = moduleLoad;
+            }
             throw cause;
           } finally {
             timing.wall = round((performance.now() - start) / 1000);
@@ -828,8 +834,8 @@ export async function capture(
 /** Tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
 export function testCommand(file: string, junitFile: string, preload?: string): string[] {
   return [
-    ...(preload ? ['--preload', preload] : []),
     'test',
+    ...(preload ? ['--preload', preload] : []),
     '--timeout',
     '60000',
     '--reporter=junit',
