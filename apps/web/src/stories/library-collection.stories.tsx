@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { within } from 'storybook/test';
+import { userEvent, within } from 'storybook/test';
 import { PageStory, libraryCollectionReady, pagePaths, pageReady } from './page';
 import { collectionStoryPaths } from '../kernel/fake/collection-stories';
 
@@ -40,6 +40,12 @@ async function variantReady(context: { canvasElement: HTMLElement }, title: stri
   if (title) await within(context.canvasElement).findByRole('heading', { level: 1, name: title });
 }
 
+async function collectionReadyWithHover(context: { canvasElement: HTMLElement }) {
+  await libraryCollectionReady(context);
+  const row = (await within(context.canvasElement).findAllByRole('listitem'))[0];
+  if (row) await userEvent.hover(row);
+}
+
 function variantStory(variant: (typeof variants)[keyof typeof variants]): Story {
   return {
     play: (context) => variantReady(context, variant.title),
@@ -49,7 +55,7 @@ function variantStory(variant: (typeof variants)[keyof typeof variants]): Story 
 
 export const SignedIn: Story = {
   name: 'Signed In',
-  play: libraryCollectionReady,
+  play: collectionReadyWithHover,
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-collection']} />,
 };
 export const SignedOut: Story = {

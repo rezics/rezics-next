@@ -24,7 +24,7 @@ export function rowRatio(subjects: readonly (LibrarySubject | null)[]): CoverRat
 export function SubjectCover({
   subject,
   ratio,
-  size = 'xs',
+  size = 'sm',
   className = '',
   priority = false,
 }: {
@@ -61,7 +61,7 @@ export function SubjectCover({
 export function SubjectIdentity({
   subject,
   ratio,
-  size = 'xs',
+  size = 'sm',
   children,
 }: {
   subject: LibrarySubject | null;
