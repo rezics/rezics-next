@@ -75,6 +75,7 @@ test('copy fact storage keeps declared kind status and private pins without expo
       { transactionId: id(82), time: later },
       { pin: nextPin, kind: 'digital-license' },
     );
+    if (updated === null) throw new Error('Expected the matching copy CAS to succeed');
     expect(updated?.revision).toBe(2);
     expect(updated?.createdAt).toBe(at);
     privateFree(updated);
