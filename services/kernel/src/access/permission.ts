@@ -327,7 +327,7 @@ export function createAccess(config: PermissionConfig): Access {
       if (!recorded?.databaseAt) return evidence;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
-      const attempt = isSession(actor) ? accessCommandAttempt(context) : undefined;
+      const attempt = accessCommandAttempt(context);
       const at = attempt ? authoritativeTimeValue(attempt.time) : recorded.at;
       let principalId: string | null = null;
       let assignmentRoute: number | null = null;
