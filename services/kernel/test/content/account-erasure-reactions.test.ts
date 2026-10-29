@@ -5,11 +5,12 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { eraseAccountReactionsPage, type ReactionErasureCursor } from '../../src/content/account-erasure-reactions.ts';
 import { createReactionCountEffect } from '../../src/content/reaction-projection.ts';
+import { createReportLocatorEffect } from '../../src/content/report-locator.ts';
 import { createReportEffect } from '../../src/content/report-effect.ts';
 import { createReportOutcomeEffect } from '../../src/content/report-outcomes.ts';
 import { createModerationDecisionEffect } from '../../src/content/moderation-decisions.ts';
 import { setupContent } from '../../src/content/setup.ts';
-import { readBatch } from '../../src/events/log.ts';
+import { projectBatch } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
@@ -75,9 +76,17 @@ beforeAll(async () => {
   await setupContent(db.pool);
   await grant(people.staff, ['subject:create', 'board:create']);
   subjectId = (
-    await call('POST', '/v1/subjects', people.staff, { type: 'schema:Book', labels: { en: 'Erasure subject' } }, 201)
+    await call('POST', '/v1/subjects', people.staff, { type: 'skos:Concept', labels: { en: 'Erasure subject' } }, 201)
   ).subject.id;
-  boardId = (await call('POST', '/v1/boards', people.staff, { subjectId, title: 'Erasure board' }, 201)).board.id;
+  boardId = (
+    await call(
+      'POST',
+      '/v1/boards',
+      people.staff,
+      { conceptId: subjectId, title: 'Erasure board', visibility: 'published', purpose: 'discussion' },
+      201,
+    )
+  ).board.id;
   for (const person of [people.alice, people.bob, people.orgOwner, people.operator]) {
     await grant(person, ['thread:create', 'reaction:set', 'report:create', 'board:read', 'thread:read', 'post:read'], {
       route: routeOf(boardId)!,
@@ -104,6 +113,7 @@ async function thread() {
       {
         boardId,
         title: 'Retained target',
+        visibility: 'published',
         body: fromPlainText('Retained contribution'),
         licence: 'MIT',
         subjectIds: [],
@@ -116,7 +126,6 @@ async function thread() {
 // Use the native log consumer and real effects, then the shared deletion drain.
 // A locator is explicitly delivered before the phase, as required by its committed-locator boundary.
 async function settle() {
-  const { createReportLocatorEffect } = await import('../../src/content/' + 'report-locator.ts');
   const effects = [
     createReactionCountEffect(db.pool),
     createReportEffect(db.pool),
@@ -130,7 +139,7 @@ async function settle() {
       'SELECT partition_no FROM core.partition WHERE position>0',
     );
     for (const row of rows) {
-      const batch = await readBatch(db.pool, {
+      const batch = await projectBatch(db.pool, {
         consumer: 'effects',
         partition: row.partition_no,
         async apply(envelopes) {
@@ -199,7 +208,9 @@ test("account erasure clears the account's reactions with their counts and proje
   ).toHaveLength(0);
   for (const target of targets) {
     const id = target.split('/')[1]!;
-    expect((await call('GET', `/v1/${target}/reaction`, people.bob)).reaction.kind).toBe('like');
+    if (target.startsWith('subjects/'))
+      expect((await call('GET', `/v1/${target}/reaction`, people.bob)).kind).toBe('like');
+    else expect((await call('GET', `/v1/${target}`, people.bob)).post.viewerReaction).toBe('like');
     expect(
       (
         await db.admin.query('SELECT count FROM content.reaction_total WHERE route=$1 AND target_id=$2 AND kind=$3', [
@@ -229,7 +240,7 @@ test("account erasure clears the account's reactions with their counts and proje
   const post = await call('GET', `/v1/posts/${first.firstPost.id}`, people.bob);
   expect(post.post.reactions.like).toBe(1);
   const subject = await call('GET', `/v1/subjects/${subjectId}/reactions`, people.bob);
-  expect(subject.reactions.like).toBe(1);
+  expect(subject.counts).toEqual([{ kind: 'like', count: 1 }]);
   expect(await eraseAccountReactionsPage(db, people.alice.accountId, null)).toEqual({
     next: { phase: 'reports', after: null },
     found: 0,
@@ -280,7 +291,6 @@ test("account erasure removes the account's report evidence text and reporter id
     ).rows,
   ).toHaveLength(0);
   // A replay consults the minimized source and cannot recreate the reporter locator.
-  const { createReportLocatorEffect } = await import('../../src/content/' + 'report-locator.ts');
   const { rows: events } = await db.admin.query('SELECT * FROM core.outbox WHERE type=$1 AND subject=$2', [
     'com.rezics.content.report.created.v1',
     reports[0],
@@ -323,7 +333,7 @@ test("an account reaction and report erasure page stays within its bound as othe
   // Fixed-size consumable pages for warmups and repetitions; distractors grow in the same routes.
   // Raw writes here are cost fixtures, after native creation and terminal account deletion above.
   const home = routeOf(person.accountId)!;
-  const reportRoute = routeOf(target.id)!;
+  const reportRoute = home ^ 0x1000;
   const ownTargets = Array.from({ length: 1000 }, () => newId(reportRoute));
   const ownReports = Array.from({ length: 1000 }, () => newId(reportRoute));
   await db.admin.query(
