@@ -146,15 +146,20 @@ test('erasing a post erases only the media that post claimed', async () => {
   const before = await row(secondImage);
   expect((await send('DELETE', `/v1/posts/${first.id}`)).status).toBe(204);
   // Drain the same native cleanup and storage capability called by the post-erased worker.
-  await clearErasedPostRevisions(
-    system.database.pool,
-    { postId: first.id },
-    Date.now() + 10_000,
-    currentMediaScenario().erasureJob,
-  );
+  const drain = () =>
+    clearErasedPostRevisions(
+      system.database.pool,
+      { postId: first.id },
+      Date.now() + 10_000,
+      currentMediaScenario().erasureJob,
+    );
+  const derivative = (await driver.derivatives(firstImage))[0]!;
+  await driver.failNextStorageDelete(derivative.key);
+  await expect(drain()).rejects.toThrow('Storage deletion failed');
   expect((await row(firstImage)).erased).toBe(true);
+  await drain();
   expect(await driver.download('author', firstImage, 'derivative')).toEqual({ outcome: 'denied' });
-  expect(await driver.derivatives(firstImage)).toEqual([]);
+  expect((await driver.inspect()).storage.filter(({ key }) => key.startsWith(`m/${firstImage}/`))).toEqual([]);
   expect(await row(secondImage)).toEqual(before);
   expect((await driver.download('author', secondImage, 'derivative')).outcome).toBe('permitted');
   expect(before.claimed_item_id).toBe(second.id);
