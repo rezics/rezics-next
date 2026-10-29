@@ -2,7 +2,13 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { withConnection } from '../../src/database/pool.ts';
-import { checkGrowth, GrowthEvidenceError, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from './growth.ts';
+import {
+  checkGrowth,
+  GrowthEvidenceError,
+  openGrowthDatabase,
+  type GrowthDatabase,
+  type GrowthReport,
+} from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -26,21 +32,21 @@ test('a newly used pool connection is discarded once and accepted repetitions re
   let report: GrowthReport;
   try {
     report = await checkGrowth(database, {
-    name: 'cold pooled backend',
-    bounds,
-    repetitions: 2,
-    warmup: (growthDb) => withConnection(growthDb.pool, (client) => client.query('SELECT 1 AS warm')),
-    grow: async () => {},
-    operation: async (growthDb) => {
-      const first = await growthDb.pool.connect();
-      const second = await growthDb.pool.connect();
-      try {
-        await Promise.all([first.query('SELECT 2 AS first'), second.query('SELECT 3 AS second')]);
-      } finally {
-        first.release();
-        second.release();
-      }
-    },
+      name: 'cold pooled backend',
+      bounds,
+      repetitions: 2,
+      warmup: (growthDb) => withConnection(growthDb.pool, (client) => client.query('SELECT 1 AS warm')),
+      grow: async () => {},
+      operation: async (growthDb) => {
+        const first = await growthDb.pool.connect();
+        const second = await growthDb.pool.connect();
+        try {
+          await Promise.all([first.query('SELECT 2 AS first'), second.query('SELECT 3 AS second')]);
+        } finally {
+          first.release();
+          second.release();
+        }
+      },
     });
   } finally {
     if (previousProfile === undefined) delete process.env.GROWTH_PROFILE;

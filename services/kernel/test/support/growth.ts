@@ -374,10 +374,14 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     for (let warmup = 0; warmup < warmups; warmup++) {
       let warmupCapture: Awaited<ReturnType<typeof capture>> | undefined;
       const warmed = await captureMeasuredRun(async () => {
-        warmupCapture = await capture(db, async () => {
-          if (check.warmup) await check.warmup(db, scale, repetition);
-          else await check.operation(db, scale, repetition);
-        }, { includeBackends: true });
+        warmupCapture = await capture(
+          db,
+          async () => {
+            if (check.warmup) await check.warmup(db, scale, repetition);
+            else await check.operation(db, scale, repetition);
+          },
+          { includeBackends: true },
+        );
       });
       for (const backend of warmupCapture!.capture.statementBackends ?? [])
         if (backend !== undefined) seenBackends.add(backend);
@@ -398,71 +402,73 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     for (let run = 0; run < repetitions; run++) {
       let accepted = false;
       while (!accepted) {
-      for (const target of pendingWrites.keys()) {
-        const workflowStatus = await target.admin.query<{ exists: boolean }>(
-          `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
-        );
-        if (workflowStatus.rows[0]!.exists) {
-          const relations = pendingWrites.get(target)!;
-          relations.add('dbos.workflow_status');
-        }
-      }
-      for (const [target, relations] of pendingWrites) {
-        if (relations.size > 0) settleMs += await settle(target, { relations: [...relations] });
-      }
-      (seeding as { settleMs: number }).settleMs = settleMs;
-      if (check.prepare) await check.prepare(db, scale, repetition);
-      const captured = await captureMeasuredRun(() =>
-        capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
-      );
-      const writes = captured.writes;
-      const measured = captured.value;
-      const runBackends = [...new Set((measured.capture.statementBackends ?? []).filter(
-        (backend): backend is number => backend !== undefined,
-      ))];
-      const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
-      if (coldBackends.length > 0) {
-        coldBackendDiscards++;
-        if (coldBackendDiscards > 4)
-          throw new GrowthEvidenceError(
-            `${check.name}: operation keeps using cold backends at scale ${scale} (${coldBackends.join(', ')}); discarded more than 4 cold backend repetitions`,
+        for (const target of pendingWrites.keys()) {
+          const workflowStatus = await target.admin.query<{ exists: boolean }>(
+            `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
           );
-        for (const backend of runBackends) seenBackends.add(backend);
-        for (const [target, relations] of writes) {
-          const accumulated = pendingWrites.get(target) ?? new Set<string>();
-          for (const relation of relations) accumulated.add(relation);
-          pendingWrites.set(target, accumulated);
+          if (workflowStatus.rows[0]!.exists) {
+            const relations = pendingWrites.get(target)!;
+            relations.add('dbos.workflow_status');
+          }
         }
-        repetition++;
-        continue;
-      }
-      pendingWrites = writes;
-      for (const backend of runBackends) seenBackends.add(backend);
-      backendRepetitions.push(runBackends);
-      const cost = costOf(measured.capture);
-      if (check.counted) {
-        const values = check.counted.read(measured.value, scale);
-        const merged = { ...values };
-        const configuredNames = [
-          ...Object.keys(check.counted.limits ?? {}),
-          ...Object.keys(check.counted.bounds ?? {}),
+        for (const [target, relations] of pendingWrites) {
+          if (relations.size > 0) settleMs += await settle(target, { relations: [...relations] });
+        }
+        (seeding as { settleMs: number }).settleMs = settleMs;
+        if (check.prepare) await check.prepare(db, scale, repetition);
+        const captured = await captureMeasuredRun(() =>
+          capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
+        );
+        const writes = captured.writes;
+        const measured = captured.value;
+        const runBackends = [
+          ...new Set(
+            (measured.capture.statementBackends ?? []).filter((backend): backend is number => backend !== undefined),
+          ),
         ];
-        if (configuredNames.includes('connections')) {
-          const backends = measured.capture.statementBackends;
-          if (backends === undefined)
-            throw new Error(
-              `Counted unit connections is unavailable at scale ${scale}: capture did not include backends`,
+        const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
+        if (coldBackends.length > 0) {
+          coldBackendDiscards++;
+          if (coldBackendDiscards > 4)
+            throw new GrowthEvidenceError(
+              `${check.name}: operation keeps using cold backends at scale ${scale} (${coldBackends.join(', ')}); discarded more than 4 cold backend repetitions`,
             );
-          merged.connections = new Set(backends.filter((backend): backend is number => backend !== undefined)).size;
+          for (const backend of runBackends) seenBackends.add(backend);
+          for (const [target, relations] of writes) {
+            const accumulated = pendingWrites.get(target) ?? new Set<string>();
+            for (const relation of relations) accumulated.add(relation);
+            pendingWrites.set(target, accumulated);
+          }
+          repetition++;
+          continue;
         }
-        countedRuns.push({ ...validateCountedRun(check.counted, merged, scale) });
-      }
-      assertCatalogBound(check.name, scale, measured.capture, samples);
-      costs.push(cost);
-      statementRepetitions.push(statementAttributions(measured.capture));
-      occurrenceRepetitions.push(statementOccurrences(measured.capture));
-      repetition++;
-      accepted = true;
+        pendingWrites = writes;
+        for (const backend of runBackends) seenBackends.add(backend);
+        backendRepetitions.push(runBackends);
+        const cost = costOf(measured.capture);
+        if (check.counted) {
+          const values = check.counted.read(measured.value, scale);
+          const merged = { ...values };
+          const configuredNames = [
+            ...Object.keys(check.counted.limits ?? {}),
+            ...Object.keys(check.counted.bounds ?? {}),
+          ];
+          if (configuredNames.includes('connections')) {
+            const backends = measured.capture.statementBackends;
+            if (backends === undefined)
+              throw new Error(
+                `Counted unit connections is unavailable at scale ${scale}: capture did not include backends`,
+              );
+            merged.connections = new Set(backends.filter((backend): backend is number => backend !== undefined)).size;
+          }
+          countedRuns.push({ ...validateCountedRun(check.counted, merged, scale) });
+        }
+        assertCatalogBound(check.name, scale, measured.capture, samples);
+        costs.push(cost);
+        statementRepetitions.push(statementAttributions(measured.capture));
+        occurrenceRepetitions.push(statementOccurrences(measured.capture));
+        repetition++;
+        accepted = true;
       }
     }
     samples.push({
