@@ -6,7 +6,7 @@ paths: [tools/goal/reports/**]
 riskAreas: []
 acceptance:
   command: [bun, tools/goal/src/cli.ts, report, --flow, --json]
-  tests: ["tools/goal/src/flow.test.ts"]
+  tests: ['tools/goal/src/flow.test.ts']
   failing: false
 estimate: { lines: 100, files: 1 }
 criticalPath: false

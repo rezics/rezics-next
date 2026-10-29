@@ -325,8 +325,20 @@ export class WorkerStore implements AttemptFence {
         task.integratedCommits = plan.commits;
       }
       this.saveTask(task);
-      recordFlow(this.db, {taskId:ref.taskId,attempt:ref.attempt,stage:'integration',action:'integrated',at:new Date().toISOString()});
-      recordFlow(this.db, {taskId:ref.taskId,attempt:ref.attempt,stage:'dev-update',action:'updated',at:new Date().toISOString()});
+      recordFlow(this.db, {
+        taskId: ref.taskId,
+        attempt: ref.attempt,
+        stage: 'integration',
+        action: 'integrated',
+        at: new Date().toISOString(),
+      });
+      recordFlow(this.db, {
+        taskId: ref.taskId,
+        attempt: ref.attempt,
+        stage: 'dev-update',
+        action: 'updated',
+        at: new Date().toISOString(),
+      });
       if (plan) this.clearIntegrationPlan(ref);
       return commit;
     });
@@ -384,8 +396,20 @@ export class WorkerStore implements AttemptFence {
             task.integratedCommits = plan.commits;
           }
           this.saveTask(task);
-          recordFlow(this.db, {taskId:member.taskId,attempt:member.attempt,stage:'integration',action:'integrated',at:new Date().toISOString()});
-          recordFlow(this.db, {taskId:member.taskId,attempt:member.attempt,stage:'dev-update',action:'updated',at:new Date().toISOString()});
+          recordFlow(this.db, {
+            taskId: member.taskId,
+            attempt: member.attempt,
+            stage: 'integration',
+            action: 'integrated',
+            at: new Date().toISOString(),
+          });
+          recordFlow(this.db, {
+            taskId: member.taskId,
+            attempt: member.attempt,
+            stage: 'dev-update',
+            action: 'updated',
+            at: new Date().toISOString(),
+          });
           if (plan) this.clearIntegrationPlan(member);
         }
         return head;
@@ -575,8 +599,22 @@ export class WorkerStore implements AttemptFence {
       if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt)
         throw new Error('task identity cannot be updated');
       this.saveTask(task);
-      if (previousState !== task.state && task.state === 'running') recordFlow(this.db, { taskId: ref.taskId, attempt: ref.attempt, stage: 'start', action: 'started', at: new Date().toISOString() });
-      if (previousState !== task.state && ['integrated','merged'].includes(task.state)) recordFlow(this.db, { taskId: ref.taskId, attempt: ref.attempt, stage: 'integration', action: 'integrated', at: new Date().toISOString() });
+      if (previousState !== task.state && task.state === 'running')
+        recordFlow(this.db, {
+          taskId: ref.taskId,
+          attempt: ref.attempt,
+          stage: 'start',
+          action: 'started',
+          at: new Date().toISOString(),
+        });
+      if (previousState !== task.state && ['integrated', 'merged'].includes(task.state))
+        recordFlow(this.db, {
+          taskId: ref.taskId,
+          attempt: ref.attempt,
+          stage: 'integration',
+          action: 'integrated',
+          at: new Date().toISOString(),
+        });
       return task;
     });
   }
@@ -616,8 +654,22 @@ export class WorkerStore implements AttemptFence {
       if (attempt.taskId !== ref.taskId || attempt.attempt !== ref.attempt)
         throw new Error('attempt identity cannot be updated');
       this.saveAttempt(attempt);
-      if (previousState !== attempt.state && attempt.state === 'running') recordFlow(this.db, { taskId: ref.taskId, attempt: ref.attempt, stage: 'worker', action: 'started', at: new Date().toISOString() });
-      if (previousState === 'running' && attempt.state !== 'running') recordFlow(this.db, { taskId: ref.taskId, attempt: ref.attempt, stage: 'worker', action: 'finished', at: attempt.endedAt ?? new Date().toISOString() });
+      if (previousState !== attempt.state && attempt.state === 'running')
+        recordFlow(this.db, {
+          taskId: ref.taskId,
+          attempt: ref.attempt,
+          stage: 'worker',
+          action: 'started',
+          at: new Date().toISOString(),
+        });
+      if (previousState === 'running' && attempt.state !== 'running')
+        recordFlow(this.db, {
+          taskId: ref.taskId,
+          attempt: ref.attempt,
+          stage: 'worker',
+          action: 'finished',
+          at: attempt.endedAt ?? new Date().toISOString(),
+        });
       return attempt;
     });
   }
@@ -695,8 +747,21 @@ export class WorkerStore implements AttemptFence {
         .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
         .run(ref.taskId, ref.attempt, kind, new Date().toISOString(), JSON.stringify(body));
       if (kind === 'check-slot-requested' || kind === 'check-slot-acquired' || kind === 'check-slot-released')
-        recordFlow(this.db, {taskId:ref.taskId,attempt:ref.attempt,stage:'check',action:kind.replace('check-slot-',''),at:new Date().toISOString()});
-      if (kind === 'start-requested') recordFlow(this.db, {taskId:ref.taskId,attempt:ref.attempt,stage:'start',action:'requested',at:new Date().toISOString()});
+        recordFlow(this.db, {
+          taskId: ref.taskId,
+          attempt: ref.attempt,
+          stage: 'check',
+          action: kind.replace('check-slot-', ''),
+          at: new Date().toISOString(),
+        });
+      if (kind === 'start-requested')
+        recordFlow(this.db, {
+          taskId: ref.taskId,
+          attempt: ref.attempt,
+          stage: 'start',
+          action: 'requested',
+          at: new Date().toISOString(),
+        });
     });
   }
   events(
@@ -720,7 +785,13 @@ export class WorkerStore implements AttemptFence {
         .get(request.taskId, request.attempt);
       if (sent) return;
       this.event(request, 'landing-requested', request);
-      recordFlow(this.db, {taskId:request.taskId,attempt:request.attempt,stage:'landing',action:'enqueued',at:new Date().toISOString()});
+      recordFlow(this.db, {
+        taskId: request.taskId,
+        attempt: request.attempt,
+        stage: 'landing',
+        action: 'enqueued',
+        at: new Date().toISOString(),
+      });
       enqueue(request);
     });
   }

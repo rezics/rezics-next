@@ -423,7 +423,13 @@ export async function launch(
   codex?: Settings['codex'],
 ): Promise<RunningWorker> {
   store.assertCurrent(attempt);
-  recordFlow(store.db, {taskId:attempt.taskId,attempt:attempt.attempt,stage:'start',action:'requested',at:new Date().toISOString()});
+  recordFlow(store.db, {
+    taskId: attempt.taskId,
+    attempt: attempt.attempt,
+    stage: 'start',
+    action: 'requested',
+    at: new Date().toISOString(),
+  });
   mkdirSync(dirname(attempt.logPath), { recursive: true });
   const exitPath = workerExitPath(attempt.logPath),
     pidPath = `${attempt.logPath}.pid`;

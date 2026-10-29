@@ -94,15 +94,29 @@ export async function runWorkerCommand(
     } else if (command === 'report') {
       const flow = argv.includes('--flow');
       let since: string | undefined;
-      const accepted = new Set(['--json','--flow','--since']);
-      for (let i=0;i<argv.length;i++) {
+      const accepted = new Set(['--json', '--flow', '--since']);
+      for (let i = 0; i < argv.length; i++) {
         if (!accepted.has(argv[i]!)) throw new Error('usage: report [--flow] [--since <time>] [--json]');
-        if (argv[i] === '--since') { since = argv[++i]; if (!since || !Number.isFinite(Date.parse(since))) throw new Error('--since requires a valid time'); }
+        if (argv[i] === '--since') {
+          since = argv[++i];
+          if (!since || !Number.isFinite(Date.parse(since))) throw new Error('--since requires a valid time');
+        }
       }
       if (flow) {
         const result = flowReport(readFlow(store.db, since), store.tasks());
         if (argv.includes('--json')) print(JSON.stringify(result, null, 2));
-        else print([`Flow efficiency: ${result.flowEfficiency === null ? 'unknown' : `${(result.flowEfficiency*100).toFixed(1)}%`}`, `Bottleneck: ${result.bottleneck ?? 'unknown'}`, `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`, ...result.stages.map(s=>`${s.stage}: total ${s.totalMs}ms, p50 ${s.p50Ms}ms, p90 ${s.p90Ms}ms`), ...result.queues.map(q=>`Queue ${q.stage}: ${q.length}, oldest ${Math.round(q.oldestAgeMs/60000)}m`)].join('\n'));
+        else
+          print(
+            [
+              `Flow efficiency: ${result.flowEfficiency === null ? 'unknown' : `${(result.flowEfficiency * 100).toFixed(1)}%`}`,
+              `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
+              `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
+              ...result.stages.map((s) => `${s.stage}: total ${s.totalMs}ms, p50 ${s.p50Ms}ms, p90 ${s.p90Ms}ms`),
+              ...result.queues.map(
+                (q) => `Queue ${q.stage}: ${q.length}, oldest ${Math.round(q.oldestAgeMs / 60000)}m`,
+              ),
+            ].join('\n'),
+          );
         return 0;
       }
       const result = report(store.records());

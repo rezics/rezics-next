@@ -47,7 +47,13 @@ export class SqliteLandingQueue implements LandingQueue {
             'INSERT INTO landing_queue(task, attempt, request) VALUES (?, ?, ?) ON CONFLICT(task, attempt) DO NOTHING',
           )
           .run(request.taskId, request.attempt, JSON.stringify(request));
-      recordFlow(this.db, {taskId:request.taskId,attempt:request.attempt,stage:'landing',action:'enqueued',at:new Date().toISOString()});
+        recordFlow(this.db, {
+          taskId: request.taskId,
+          attempt: request.attempt,
+          stage: 'landing',
+          action: 'enqueued',
+          at: new Date().toISOString(),
+        });
       })
       .immediate();
   }
@@ -115,20 +121,37 @@ export class SqliteLandingQueue implements LandingQueue {
     }[];
     return rows.map((row) => {
       const request = JSON.parse(row.request) as LandingRequest;
-      recordFlow(this.db, {taskId:request.taskId,attempt:request.attempt,stage:'landing',action:'started',at:new Date().toISOString()});
-      return ({
-      ...row,
-      request,
-      outcome: row.outcome ? JSON.parse(row.outcome) : null,
-    }); });
+      recordFlow(this.db, {
+        taskId: request.taskId,
+        attempt: request.attempt,
+        stage: 'landing',
+        action: 'started',
+        at: new Date().toISOString(),
+      });
+      return {
+        ...row,
+        request,
+        outcome: row.outcome ? JSON.parse(row.outcome) : null,
+      };
+    });
   }
   candidate(id: number, commit: string): void {
     this.db.query('UPDATE landing_queue SET candidate = ? WHERE id = ?').run(commit, id);
   }
   finish(id: number, outcome: GateOutcome): void {
     this.db.query('UPDATE landing_queue SET outcome = ? WHERE id = ?').run(JSON.stringify(outcome), id);
-    const row=this.db.query('SELECT task,attempt FROM landing_queue WHERE id=?').get(id) as {task:string;attempt:number}|null;
-    if(row) recordFlow(this.db,{taskId:row.task,attempt:row.attempt,stage:'landing',action:'finished',at:new Date().toISOString()});
+    const row = this.db.query('SELECT task,attempt FROM landing_queue WHERE id=?').get(id) as {
+      task: string;
+      attempt: number;
+    } | null;
+    if (row)
+      recordFlow(this.db, {
+        taskId: row.task,
+        attempt: row.attempt,
+        stage: 'landing',
+        action: 'finished',
+        at: new Date().toISOString(),
+      });
   }
   acknowledge(id: number): void {
     this.db.query('UPDATE landing_queue SET delivered = 1 WHERE id = ?').run(id);

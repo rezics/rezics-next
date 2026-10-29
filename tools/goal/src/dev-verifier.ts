@@ -60,11 +60,22 @@ function taskLandings(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
         !skippedKinds.has(task.brief.kind),
     );
 }
-function recordVerified(settings: Settings, store: Pick<WorkerStore, 'tasks'> & { db?: Database }, base: string, target: string): void {
+function recordVerified(
+  settings: Settings,
+  store: Pick<WorkerStore, 'tasks'> & { db?: Database },
+  base: string,
+  target: string,
+): void {
   if (!store.db) return;
   const at = new Date().toISOString();
   for (const task of taskLandings(settings, store, base, target))
-    recordFlow(store.db, {taskId:task.id,attempt:task.currentAttempt,stage:'verification',action:'verified',at});
+    recordFlow(store.db, {
+      taskId: task.id,
+      attempt: task.currentAttempt,
+      stage: 'verification',
+      action: 'verified',
+      at,
+    });
 }
 function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Check[] {
   const checkout = settings.mainCheckout;

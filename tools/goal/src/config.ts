@@ -202,12 +202,19 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   keys(compact, ['sol', 'luna'], 'compactTokens');
   const pools: Pool[] = readPoolPolicies(local.pools ?? [], localFile);
   const flowOverrides = object(local.flow ?? {}, 'flow');
-  keys(flowOverrides, ['efficiencyBelow','oldestQueueMs','landingP90Ms','attemptsPerIntegrated'], 'flow');
+  keys(flowOverrides, ['efficiencyBelow', 'oldestQueueMs', 'landingP90Ms', 'attemptsPerIntegrated'], 'flow');
   const flowThresholds = { ...DEFAULT_FLOW_THRESHOLDS, ...flowOverrides } as typeof DEFAULT_FLOW_THRESHOLDS;
-  if (!Number.isFinite(flowThresholds.efficiencyBelow) || flowThresholds.efficiencyBelow < 0 || flowThresholds.efficiencyBelow > 1 ||
-      !Number.isFinite(flowThresholds.oldestQueueMs) || flowThresholds.oldestQueueMs <= 0 ||
-      !Number.isFinite(flowThresholds.landingP90Ms) || flowThresholds.landingP90Ms <= 0 ||
-      !Number.isFinite(flowThresholds.attemptsPerIntegrated) || flowThresholds.attemptsPerIntegrated <= 0)
+  if (
+    !Number.isFinite(flowThresholds.efficiencyBelow) ||
+    flowThresholds.efficiencyBelow < 0 ||
+    flowThresholds.efficiencyBelow > 1 ||
+    !Number.isFinite(flowThresholds.oldestQueueMs) ||
+    flowThresholds.oldestQueueMs <= 0 ||
+    !Number.isFinite(flowThresholds.landingP90Ms) ||
+    flowThresholds.landingP90Ms <= 0 ||
+    !Number.isFinite(flowThresholds.attemptsPerIntegrated) ||
+    flowThresholds.attemptsPerIntegrated <= 0
+  )
     throw new Error('invalid flow alarm thresholds');
   return {
     version: 1,
@@ -509,7 +516,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     evaluateFlow() {
       const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
       const flow = flowReport(readFlow(db, new Date(Date.now() - 30 * 86400_000).toISOString()), store.tasks());
-      checkFlowAlarms(db, flow, summary => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }), new Date(), flowThresholds);
+      checkFlowAlarms(
+        db,
+        flow,
+        (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+        new Date(),
+        flowThresholds,
+      );
     },
     dispatchDailyStepAudit() {
       const template = join(import.meta.dir, '../templates/daily-step-audit.md');
