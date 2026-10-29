@@ -365,7 +365,7 @@ describe('control-plane launch smoke gate', () => {
       expect(s.outcomes[0]?.passed).toBe(false);
       expect(s.outcomes[0]?.stage).toBe('gate');
       expect(s.outcomes[0]?.firstFailure?.assertion).toContain('wake: failed: resume session mismatch');
-      expect(existsSync(join(s.main, 'tools/goal/src/job.ts'))).toBe(false);
+      expect(readFileSync(join(s.main, 'tools/goal/src/job.ts'), 'utf8')).toBe('base\n');
     } finally {
       s.goalDb.close();
       s.close();

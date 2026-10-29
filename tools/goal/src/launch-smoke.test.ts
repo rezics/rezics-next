@@ -120,3 +120,99 @@ test('launch smoke path list covers the launch path, schema, agents, and prompt 
   expect(launchPaths.every((path) => launchSmokeRequired([path]))).toBe(true);
   expect(launchSmokeRequired(['tools/goal/src/landing.ts'])).toBe(false);
 });
+
+import { existsSync, readFileSync } from 'node:fs';
+import { openDb } from './db.ts';
+import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { SqliteLandingQueue } from './land.ts';
+import { MergeTrain } from './merge-train.ts';
+import { git } from './merge.ts';
+import { WorkerStore } from './store.ts';
+import { repository } from './test-support.ts';
+import type { AttemptFence, GateOutcome } from './contracts.ts';
+
+function landingFixture(path: string) {
+  const repo = repository();
+  mkdirSync(join(repo.main, path, '..'), { recursive: true });
+  writeFileSync(join(repo.main, path), 'base\n');
+  git(repo.main, 'add', '--', path);
+  git(repo.main, 'commit', '-m', 'Smoke fixture base');
+  git(repo.main, 'branch', 'dev', 'main');
+  const request = repo.branch('smoke-candidate', path, 'candidate\n');
+  const stateDirectory = join(repo.path, 'state');
+  mkdirSync(stateDirectory, { recursive: true });
+  const db = openDb(join(stateDirectory, 'goal.sqlite'));
+  const store = new WorkerStore(db);
+  const brief = parseBrief(`---
+goal: control-plane
+kind: implementation
+paths: [${path}]
+riskAreas: []
+acceptance:
+  command: ["true"]
+  tests: [smoke]
+  failing: true
+estimate:
+  lines: 1
+  files: 1
+criticalPath: false
+waiting: []
+---
+Exercise candidate gating.
+`, readRiskOwnership(join(import.meta.dir, '../risk-areas.json')));
+  store.createTask(brief, {
+    briefPath: join(stateDirectory, 'brief.md'), worktree: request.worktree, branch: request.branch,
+    base: git(repo.main, 'rev-parse', 'main'),
+  }, 'implementation', request.taskId);
+  const fence: AttemptFence = { assertCurrent() {}, commitMerge(_, merge) { return merge(); } };
+  const queue = new SqliteLandingQueue(db, fence);
+  queue.enqueue(request);
+  const outcomes: GateOutcome[] = [];
+  return {
+    ...repo, outcomes,
+    options: {
+      mainCheckout: repo.main, stateDirectory, worktreeRoot: join(repo.path, 'trees'), integrationBranch: 'dev',
+      queue, fence, sink: { onGateOutcome(outcome: GateOutcome) { outcomes.push(outcome); } },
+    },
+    close() { db.close(); repo.close(); },
+  };
+}
+
+test('a control-plane launch-path landing runs the smoke on the checked candidate and lands only if it passes', async () => {
+  for (const passed of [true, false]) {
+    const s = landingFixture('tools/goal/src/launch.ts');
+    const order: string[] = [];
+    try {
+      await new MergeTrain({
+        ...s.options,
+        runGate: async () => { order.push('check'); return { passed: true, output: '', timedOut: false }; },
+        runLaunchSmoke: async (command, cwd) => {
+          order.push('smoke');
+          expect(command).toEqual(['bun', 'tools/goal/scripts/launch-smoke.ts']);
+          expect(readFileSync(join(cwd, 'tools/goal/src/launch.ts'), 'utf8')).toBe('candidate\n');
+          return { passed, output: passed ? 'success: passed' : 'wake: failed: injected resume failure', timedOut: false };
+        },
+      }).run();
+      expect(order.at(-1)).toBe('smoke');
+      expect(order.filter((step) => step === 'check').length).toBeGreaterThan(1);
+      expect(s.outcomes[0]?.passed).toBe(passed);
+      expect(readFileSync(join(s.main, 'tools/goal/src/launch.ts'), 'utf8')).toBe(passed ? 'candidate\n' : 'base\n');
+      if (!passed) expect(s.outcomes[0]?.firstFailure?.assertion).toContain('wake: failed: injected resume failure');
+    } finally { s.close(); }
+  }
+});
+
+test('a control-plane landing outside the worker launch path does not run the smoke', async () => {
+  const s = landingFixture('tools/goal/src/unrelated.ts');
+  let smokeRuns = 0;
+  try {
+    await new MergeTrain({
+      ...s.options,
+      runGate: async () => ({ passed: true, output: '', timedOut: false }),
+      runLaunchSmoke: async () => { smokeRuns++; return { passed: true, output: '', timedOut: false }; },
+    }).run();
+    expect(smokeRuns).toBe(0);
+    expect(s.outcomes[0]?.passed).toBe(true);
+    expect(existsSync(join(s.main, 'tools/goal/src/unrelated.ts'))).toBe(true);
+  } finally { s.close(); }
+});

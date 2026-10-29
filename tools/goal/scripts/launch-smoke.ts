@@ -164,6 +164,7 @@ async function runFakeSmoke(agent: string, root: string, report: Reporter, suppl
       throw stepFailure('success', error, report);
     }
   } finally {
+    if (resultPath) await waitForCheck(resultPath, Date.now() + 10_000).catch(() => {});
     rmSync(directory, { recursive: true, force: true });
   }
 }
@@ -285,21 +286,21 @@ async function runRealSmoke(root: string, report: Reporter): Promise<void> {
   } finally {
     if (clone && tree && worktreeAdded) {
       try {
-        git(clone, 'worktree', 'remove', '--force', tree);
+        checked('git', ['worktree', 'remove', '--force', tree], clone, 2000);
       } catch {
         /* The disposable repository is removed below. */
       }
     }
     if (clone && branch) {
       try {
-        git(clone, 'branch', '-D', branch);
+        checked('git', ['branch', '-D', branch], clone, 2000);
       } catch {
         /* The disposable repository is removed below. */
       }
     }
     if (clone && devTree && devWorktreeAdded) {
       try {
-        git(clone, 'worktree', 'remove', '--force', devTree);
+        checked('git', ['worktree', 'remove', '--force', devTree], clone, 2000);
       } catch {
         /* The disposable repository is removed below. */
       }

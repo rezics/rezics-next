@@ -473,12 +473,14 @@ evidence; changes outside the task's declared paths still count as scope growth.
 outside `tools/goal/` are not routed to `main`; historical tasks that declared such paths continue to use their recorded
 target. Tasks from other Goals continue to integrate into the integration branch as before.
 
-Changes to the worker launch path also run `scripts/launch-smoke.ts` on the candidate after the control-plane checks.
+Changes to the worker launch path also run `tools/goal/scripts/launch-smoke.ts` on the candidate after the control-plane checks.
 The smoke builds a disposable worktree with the candidate merged on top of current `dev`, dispatches one tiny task through
 the real worker launch and settle path, starts a real `scripts/worker-check.ts` command, and waits for its result before
 recovering the same attempt. It verifies the worker result schema, saved check id, resumed session, successful exit, and
 both systemd-scoped launches. This catches provider schema refusals, start-form mismatches, and resume defects that
-fake-agent tests cannot expose. A failed step is returned to the task with its step output.
+fake-agent tests cannot expose. It uses the cheapest configured Codex model at low effort, with the configured service
+tier (Fast is refused), a five-minute deadline, and a prompt budget of 2000 generated tokens. Fake-agent protocol tests
+use actual detached checks without provider calls. A failed step is returned to the task with its step output.
 
 New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
 landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork

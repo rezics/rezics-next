@@ -96,7 +96,7 @@ export async function runRecordedCheck(id: string, cwd = process.cwd()): Promise
     let infrastructure: string | undefined;
     try {
       code = await execute(command, record.cwd, remote);
-      if (code !== 0 && remote) {
+      if (code !== 0 && (remote || command.some((arg) => arg.endsWith('scripts/remote-check.ts')))) {
         infrastructure = readFileSync(join(record.cwd, record.log), 'utf8').split('\n').find((line) =>
           /Permission denied|Connection refused|Connection timed out|No route to host|Could not resolve hostname|rsync.*failed|ssh.*failed|No space left on device|out of memory/i.test(line),
         );
