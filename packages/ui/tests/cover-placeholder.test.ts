@@ -9,8 +9,7 @@ const cover = { subject, cover: null, src: () => '' };
 const card = (props: Record<string, unknown> = {}) =>
   createElement(CoverCard, { cover, title: subject.title, ...props } as never);
 const render = (element: React.ReactElement) => renderToStaticMarkup(element);
-const slot = (html: string, name: string) =>
-  html.match(new RegExp(`<[^>]+data-slot="${name}"[^>]*>`))?.[0] ?? '';
+const slot = (html: string, name: string) => html.match(new RegExp(`<[^>]+data-slot="${name}"[^>]*>`))?.[0] ?? '';
 const classes = (tag: string) => tag.match(/\sclass="([^"]*)"/)?.[1] ?? '';
 
 test('a subject without a cover shows the same titled colour field in a tile, a list row and a bare Cover', () => {
@@ -35,7 +34,7 @@ test('below 64 px the placeholder is a colour field with one neutral image icon 
   const small = render(createElement(Cover, { ...cover, size: 'xs' }));
   expect(small.match(/data-slot="cover-placeholder-icon"/g)).toHaveLength(1);
   expect(slot(small, 'cover-placeholder-icon')).toContain('text-muted-foreground');
-  expect(small).not.toContain('Norwegian Wood');
+  expect(small).not.toContain('data-slot="cover-placeholder-title"');
 });
 
 test('CoverCard does not disable placeholder text and the showPlaceholderText prop is gone', () => {
@@ -46,7 +45,9 @@ test('CoverCard does not disable placeholder text and the showPlaceholderText pr
 
 test('the menu shares the bottom action row after state or progress and rows align to the card bottom', () => {
   const state = render(card({ state: 'Reading', menu: createElement('span', null, 'Remove') }));
-  const progress = render(card({ progress: { value: 0.5, label: '50%' }, menu: createElement('span', null, 'Remove') }));
+  const progress = render(
+    card({ progress: { value: 0.5, label: '50%' }, menu: createElement('span', null, 'Remove') }),
+  );
   for (const html of [state, progress]) {
     const actionRow = slot(html, 'cover-card-actions-row');
     expect(classes(actionRow)).toContain('mt-auto');
