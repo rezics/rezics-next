@@ -149,7 +149,7 @@ test("account erasure keeps each Realm's and Space's current revision with its a
     ).rows;
     expect(locatorBefore).toHaveLength(7);
     const deletion = accountDeletionRuntime(system);
-    await deletePersona({ pool, auth: deletion.auth }, { accountId: fixture.owner.id, bearer: fixture.owner.bearer });
+    await deletePersona({ pool: system.database.pool, auth: deletion.auth }, { accountId: fixture.owner.id, bearer: fixture.owner.bearer });
     await drainEffects(pool, partitionOf(routeOf(fixture.owner.id)!));
     expect(await eraseAll(pool, fixture.owner.id)).toBe(7);
     const archivedAfter = (
@@ -224,7 +224,10 @@ test("an account revision erasure page stays within its bound as other editors' 
       [routeOf(fixture.owner.id), fixture.owner.id, route, realm.realmId, revisions],
     );
     const deletion = accountDeletionRuntime(system);
-    await deletePersona({ pool, auth: deletion.auth }, { accountId: fixture.owner.id, bearer: fixture.owner.bearer });
+    await deletePersona(
+      { pool: system.database.pool, auth: deletion.auth },
+      { accountId: fixture.owner.id, bearer: fixture.owner.bearer },
+    );
     await drainEffects(system.database.pool, partitionOf(routeOf(fixture.owner.id)!));
     await driver.settle();
     await worker.stop();
