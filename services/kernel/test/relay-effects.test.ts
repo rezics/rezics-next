@@ -148,6 +148,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
     );
     await checkGrowth(growth, {
       name: 'effects relay discovery',
+      rule: 'series',
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (db, scale, previous) => {
         for (let offset = previous; offset < scale; offset++) {

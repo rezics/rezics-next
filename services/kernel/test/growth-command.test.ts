@@ -131,6 +131,7 @@ function check(name: string, operation: Parameters<typeof checkGrowth>[1]['opera
   return checkGrowth(db, {
     name,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    ...(name === 'New command' ? { rule: 'series' as const } : {}),
     grow,
     operation,
   });

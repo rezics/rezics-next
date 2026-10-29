@@ -87,6 +87,7 @@ async function warmRetentionBatch(growth: GrowthDatabase, expected: number): Pro
 test('a short retention batch stays bounded as retained workflow history grows', async () => {
   const report = await checkGrowth(db, {
     name: 'short workflow retention batch',
+    rule: 'series',
     scales: [64, 512, 4096],
     repetitions: 1,
     warmup: (growth) => warmRetentionBatch(growth, 10),
@@ -130,6 +131,7 @@ test('one retention batch stays bounded as retained and recent workflow history 
 
   const report = await checkGrowth(db, {
     name: 'workflow retention batch',
+    rule: 'series',
     scales: [64, 512, 4096],
     repetitions: 1,
     warmup: (growth) => warmRetentionBatch(growth, 1000),
