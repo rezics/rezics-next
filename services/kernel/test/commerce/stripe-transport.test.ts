@@ -116,7 +116,7 @@ test('public deadline and cancellation retain all eight slots through real SDK r
       expect(outcomes.every((outcome) => outcome instanceof StripeUnavailableError)).toBe(true);
       expect(outcomes.every((outcome) => !String(outcome).includes('sk_test_private_transport'))).toBe(true);
       expect(performance.now() - firstResponseAt).toBeLessThan(500);
-      const laterConfig = { ...f.config, signal: undefined };
+      const laterConfig = { ...f.config, signal: new AbortController().signal };
       // The response streams have ended, but all eight underlying SDK promises are still asleep.
       // A fresh factory/signal must not reuse their slots or send a ninth physical request.
       await unavailable(createStripePort(laterConfig).readCheckoutLocator('cs_transport'));
