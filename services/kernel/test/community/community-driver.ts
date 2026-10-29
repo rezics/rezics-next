@@ -30,6 +30,7 @@ import {
 import { observeSql, type SqlExecution, type SqlObserver } from '../content/support/sql-observer.ts';
 import { assertSetupResponse } from '../content/support/setup-response.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { startConsentServer } from './membership-fixture.ts';
@@ -209,6 +210,7 @@ async function buildShared(databaseUrl = process.env.DATABASE_URL): Promise<Shar
     if (!isolatedUrl) throw new Error('Content fixture database URL is missing');
     work = await createWorkClient(isolatedUrl);
     const kernel = createKernel({
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       pool: system.database.pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,

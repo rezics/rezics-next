@@ -22,6 +22,8 @@ const TEST_KEY = 0x6b;
 const testIssuer = 'https://test-auth.example.test';
 const testAudience = 'https://test-api.example.test';
 
+export const TEST_REQUEST_DEADLINE_MS = 30_000;
+
 export const testAuth: AuthenticationConfig = {
   issuer: testIssuer,
   audience: testAudience,
@@ -110,7 +112,7 @@ export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
   return createApp({
-    requestDeadlineMs: 30_000,
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
     tokens: defaults.tokens,
     writeRate: defaults.writeRate,
@@ -156,7 +158,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
   const kernel = createKernel({
-    requestDeadlineMs: 30_000,
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
     routeKey: testRouteKey(),
     tokens: defaults.tokens,
