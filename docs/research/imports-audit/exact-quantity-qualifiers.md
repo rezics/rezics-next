@@ -190,6 +190,43 @@ this declared report path changed. No outside-path file changed. No started
 check remains running. Native verification is blocked on the schema-dump tool
 failure; converter repair and positive whole-holder evidence remain separate.
 
+## Converter repair verification
+
+The converter repair is committed as revision `wikidata-4`; its current source
+hash is recorded above. The focused controls cover unqualified admitted exact
+input, mapped but unadmitted qualifiers, unmapped and unresolved item
+qualifiers, unknown qualifier bodies that must not be read, and established
+nonmeasurement statement output. The frozen native file remains byte-for-byte
+unchanged at SHA-256
+`55e7cdfdd0c160b5064e94809aeb998406d367977f57c35987c1a5b035e5ad3c`.
+
+The latest focused native acceptance invocation was check
+`1ece269b-28c1-45e0-9ac0-4bf73a810793`, exit **1**, log
+`.temp/goal/checks/worker-check-2026-10-29T18-36-44.302Z-10f2aff4.log`.
+All three frozen test bodies ran:
+
+1. `exact P6570 with mapped but unadmitted P1545 withholds the entire native measurement`
+2. `reviewed letter P6570 transplanted into a controlled Book cannot lose P459 method or narrow P518 text scope`
+3. `native Book refresh rejects unsupported qualified exact count while preserving bootstrap receipt and changed established facts`
+
+Each passed the run completion checks and observed a `schema:Book` subject,
+then failed in `established()` because at least one expected ordinary
+`schema:name`, `schema:datePublished`, `schema:url` or `schema:author` proposal
+was absent. The helper does not include the property id in its assertion
+message. None reached its measurement-withholding assertions. The third case
+failed before capturing the bootstrap command key, returned ACK or complete
+native receipt row, so this attempt has **no returned receipt evidence** and
+does not establish receipt immutability. No frozen assertion was changed and no
+native pass is claimed.
+
+The focused converter check initially exposed two test-only defects: its
+nonmeasurement comparison included digest-derived command keys, which correctly
+change when the accepted source projection changes, and its JSON fixture type
+did not admit the controlled `P6570` field. Both are corrected. The conversion
+and root typecheck reruns after correction are recorded by their returned check
+results; no native rerun was made because the single required frozen acceptance
+invocation had completed.
+
 ## Limits and decisions
 
 The actual bundle is consumed unchanged; no source/native revision, runtime
