@@ -489,8 +489,7 @@ CREATE TABLE library.copy (
     CONSTRAINT copy_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
     CONSTRAINT copy_revision_check CHECK ((revision >= 1)),
     CONSTRAINT copy_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT copy_source_check CHECK (((source IS NULL) OR (char_length(source) <= 200))),
-    CONSTRAINT copy_status_check CHECK ((status = ANY (ARRAY['ordered'::text, 'owned'::text, 'lent'::text, 'disposed'::text])))
+    CONSTRAINT copy_source_check CHECK (((source IS NULL) OR (char_length(source) <= 200)))
 );
 
 
@@ -523,7 +522,6 @@ CREATE TABLE library.entry (
     CONSTRAINT entry_owner_write_seq_check CHECK ((owner_write_seq > 0)),
     CONSTRAINT entry_revision_check CHECK ((revision >= 1)),
     CONSTRAINT entry_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT entry_state_check CHECK ((state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text]))),
     CONSTRAINT entry_type_observation_check CHECK ((((type_id IS NULL) AND (type_source_id IS NULL) AND (type_source_partition IS NULL) AND (type_source_epoch IS NULL) AND (type_source_position IS NULL)) OR ((type_id IS NOT NULL) AND (type_source_id IS NOT NULL) AND (type_source_partition IS NOT NULL) AND (type_source_epoch IS NOT NULL) AND (type_source_position IS NOT NULL) AND ((type_source_partition >= 0) AND (type_source_partition <= 4095)) AND (type_source_epoch >= 1) AND (type_source_position >= 0) AND (type_source_partition = (((get_byte(uuid_send(type_source_id), 10) * 256) + get_byte(uuid_send(type_source_id), 11)) >> 4)))))
 );
 
@@ -731,7 +729,6 @@ CREATE TABLE library.progress_session (
     CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
     CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT progress_session_check2 CHECK (((unit <> 'percent'::text) OR (((amount IS NULL) OR (amount <= (100)::numeric)) AND ((total IS NULL) OR (total <= (100)::numeric))))),
     CONSTRAINT progress_session_check3 CHECK (((state = 'completed'::text) = (completed_at IS NOT NULL))),
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
@@ -742,8 +739,7 @@ CREATE TABLE library.progress_session (
     CONSTRAINT progress_session_revision_check CHECK ((revision >= 1)),
     CONSTRAINT progress_session_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text]))),
-    CONSTRAINT progress_session_total_check CHECK (((total IS NULL) OR (total >= (0)::numeric))),
-    CONSTRAINT progress_session_unit_check CHECK ((unit = ANY (ARRAY['page'::text, 'chapter'::text, 'episode'::text, 'volume'::text, 'minute'::text, 'percent'::text])))
+    CONSTRAINT progress_session_total_check CHECK (((total IS NULL) OR (total >= (0)::numeric)))
 );
 
 
@@ -1274,6 +1270,14 @@ ALTER TABLE ONLY library.copy
 
 
 --
+-- Name: copy copy_status_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.copy
+    ADD CONSTRAINT copy_status_check CHECK ((((library_profile_pin IS NULL) AND (status = ANY (ARRAY['ordered'::text, 'owned'::text, 'lent'::text, 'disposed'::text]))) OR ((library_profile_pin IS NOT NULL) AND (char_length(status) > 0)))) NOT VALID;
+
+
+--
 -- Name: entry_deleted entry_deleted_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -1287,6 +1291,14 @@ ALTER TABLE ONLY library.entry_deleted
 
 ALTER TABLE ONLY library.entry
     ADD CONSTRAINT entry_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
+-- Name: entry entry_state_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.entry
+    ADD CONSTRAINT entry_state_check CHECK ((((library_profile_pin IS NULL) AND (state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text]))) OR ((library_profile_pin IS NOT NULL) AND (char_length(state) > 0)))) NOT VALID;
 
 
 --
@@ -1354,11 +1366,27 @@ ALTER TABLE ONLY library.progress_head
 
 
 --
+-- Name: progress_session progress_session_check2; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.progress_session
+    ADD CONSTRAINT progress_session_check2 CHECK (((library_profile_pin IS NOT NULL) OR (unit <> 'percent'::text) OR (((amount IS NULL) OR (amount <= (100)::numeric)) AND ((total IS NULL) OR (total <= (100)::numeric))))) NOT VALID;
+
+
+--
 -- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.progress_session
     ADD CONSTRAINT progress_session_pkey PRIMARY KEY (route, session_id);
+
+
+--
+-- Name: progress_session progress_session_unit_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.progress_session
+    ADD CONSTRAINT progress_session_unit_check CHECK ((((library_profile_pin IS NULL) AND (unit = ANY (ARRAY['page'::text, 'chapter'::text, 'episode'::text, 'volume'::text, 'minute'::text, 'percent'::text]))) OR ((library_profile_pin IS NOT NULL) AND (char_length(unit) > 0)))) NOT VALID;
 
 
 --

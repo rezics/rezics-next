@@ -10,6 +10,7 @@
     "./hooks/use-highlighted-code": "./src/hooks/use-highlighted-code.ts",
     "./hooks/*": "./src/hooks/*.tsx",
     "./lib/*": "./src/lib/*.tsx",
+    "./list-row": "./src/components/list-row.tsx",
     "./*": "./src/components/*.tsx",
     ".": "./src/index.ts"
   },

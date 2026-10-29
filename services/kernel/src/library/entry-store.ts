@@ -10,6 +10,8 @@ import entryInsert from './entry-store-entry-insert.sql';
 import entryPage from './entry-store-entry-page.sql';
 import entryRead from './entry-store-entry-read.sql';
 import entryUpdate from './entry-store-entry-update.sql';
+import { decodeLibraryProfilePin } from './profile-pin.ts';
+import type { LibraryProfilePin } from './profile.ts';
 import {
   MAX_LIBRARY_PAGE_SIZE,
   type Copy,
@@ -25,7 +27,10 @@ import {
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };
-type EntryResult = Omit<NonNullable<Awaited<ReturnType<typeof entryRead.run>>>, 'state'> & { state: string };
+type EntryResult = Omit<NonNullable<Awaited<ReturnType<typeof entryRead.run>>>, 'state' | 'libraryProfilePin'> & {
+  state: string;
+  libraryProfilePin?: unknown;
+};
 type CopyResult = Omit<NonNullable<Awaited<ReturnType<typeof copyRead.run>>>, 'status'> & { status: string };
 
 const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
@@ -39,21 +44,20 @@ function iso(value: string): string {
   return new Date(value).toISOString();
 }
 
-function asState(value: string): EntryState {
-  return value;
-}
-
 function asStatus(value: string): CopyStatus {
   return value;
 }
 
 function asEntry(row: EntryResult): Entry {
-  const { route: _route, ...entry } = row;
   return {
-    ...entry,
-    state: asState(entry.state),
-    createdAt: iso(entry.createdAt),
-    updatedAt: iso(entry.updatedAt),
+    accountId: row.accountId,
+    subjectId: row.subjectId,
+    requestedSubjectId: row.requestedSubjectId,
+    state: row.state,
+    revision: row.revision,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    transactionId: row.transactionId,
   };
 }
 
@@ -88,14 +92,17 @@ export async function insertEntry(
   route: number,
   entry: EntryDraft,
   context: WriteContext,
+  pin?: LibraryProfilePin,
 ): Promise<Entry> {
-  assertState(entry.state);
+  const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
+  if (acceptedPin === null) assertState(entry.state);
   const rows = await entryInsert.run(queryClient(client), {
     route,
     account_id: entry.accountId,
     subject_id: entry.subjectId,
     requested_subject_id: entry.requestedSubjectId,
     state: entry.state,
+    library_profile_pin: acceptedPin,
     ...write(context),
   });
   const row = rows[0];
@@ -113,6 +120,16 @@ export async function readEntry(
   return row ? asEntry(row) : null;
 }
 
+export async function readEntryFact(
+  client: Client,
+  route: number,
+  accountId: string,
+  subjectId: string,
+): Promise<{ entry: Entry; pin: LibraryProfilePin | null } | null> {
+  const row = await entryRead.run(queryClient(client), { route, account_id: accountId, subject_id: subjectId });
+  return row ? { entry: asEntry(row), pin: decodeLibraryProfilePin(row.libraryProfilePin) } : null;
+}
+
 export async function updateEntryState(
   client: Client,
   route: number,
@@ -121,14 +138,17 @@ export async function updateEntryState(
   revision: number,
   state: EntryState,
   context: WriteContext,
+  pin?: LibraryProfilePin,
 ): Promise<Entry | null> {
-  assertState(state);
+  const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
+  if (acceptedPin === null) assertState(state);
   const row = await entryUpdate.run(queryClient(client), {
     route,
     account_id: accountId,
     subject_id: subjectId,
     revision,
     state,
+    library_profile_pin: acceptedPin,
     ...write(context),
   });
   return row ? asEntry(row) : null;
@@ -152,7 +172,6 @@ export async function deleteEntry(
 
 export async function pageEntries(client: Client, route: number, accountId: string, page: EntryPage): Promise<Entry[]> {
   assertLimit(page.limit);
-  if (page.state !== null) assertState(page.state);
   const rows = await entryPage.run(queryClient(client), {
     route,
     account_id: accountId,

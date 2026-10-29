@@ -3,6 +3,8 @@ export {
   ERASURE_PARTICIPANT_VERSION,
   acknowledgeErasure,
   readErasureStatus,
+  resolveRetention,
+  type RetentionException,
   type ErasureOutcome,
   type ErasureStatus,
 } from './erasure.ts';

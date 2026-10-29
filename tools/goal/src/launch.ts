@@ -198,6 +198,9 @@ export function workerPrompt(
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit your changes on this branch before you start a check and again after each fix: a commit does not claim that checks pass, and an attempt that ends without a commit counts as stalled.',
     'Do not rebase or merge. Write every acceptance test the contract names that does not exist yet; never weaken or edit an existing acceptance test or a frozen file. A check that waits for a test slot is queued, not stuck: let it run.',
+    task.workspace
+      ? `Peers edit this tree at the same time. There are no path reservations or holds. Commit your own work often with git add <your paths> (never -A or .). Use path-limited commits (git commit --only -- <your paths>) so a peer's staged files stay theirs. Every commit must have the subject '${task.workspace.taskName}: <message>' and a 'Goal-Task: ${task.id}' trailer. Task name is the brief's file name without .md: ${task.workspace.taskName}. Never reset, checkout, stash, clean or rebase. A failure in files you did not touch is a peer's work in progress: rerun later or check only your own tests.`
+      : '',
     // A stabilize base can predate the check wrapper (dev tooling reaches stabilize at a cut); without it every check
     // failed with 'Module not found' before acceptance (2026-10-28).
     existsSync(join(task.worktree, 'scripts/worker-check.ts'))

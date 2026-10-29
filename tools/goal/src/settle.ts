@@ -7,6 +7,7 @@ import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
 import { attemptEnvironment, workerEnvironment, type RunningWorker } from './launch.ts';
 import { matchesPath } from './briefs.ts';
 import { changedFiles } from './merge.ts';
+import { taskChangedPaths } from './workspace.ts';
 import { runAffectedTest } from './merge-train.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
@@ -41,7 +42,8 @@ export async function settle(
     // Stopped or superseded attempts still need Docker cleanup even though they no longer settle records.
     store.assertCurrent(ref);
     await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
-    await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
+    if (!store.task(ref.taskId).workspace)
+      await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
     let queued = false;
     let finished = false;
     store.write(ref, () => {
@@ -109,8 +111,8 @@ export async function settle(
     if (finished) {
       const task = store.task(ref.taskId);
       const pool = tasks.settings.pools.find((p) => p.name === ref.pool)!;
-      const files = changedFiles(task.worktree, task.base);
-      const checks = (tasks.settings.affectedTests ?? []).filter((check) =>
+      const files = task.workspace ? taskChangedPaths(task) : changedFiles(task.worktree, task.base);
+      const checks = (task.workspace ? [] : (tasks.settings.affectedTests ?? [])).filter((check) =>
         files.some((file) => matchesPath(file, check.paths)),
       );
       // The checks wait outside SQLite's write transaction, so other attempts can finish at the same time.

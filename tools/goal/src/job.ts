@@ -1,3 +1,4 @@
+import { taskCommits } from './workspace.ts';
 import { statSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
@@ -228,6 +229,7 @@ export class WorkerJob implements GateOutcomeSink {
   }
   private hasCommit(ref: AttemptRef): boolean {
     const task = this.tasks.store.task(ref.taskId);
+    if (task.workspace) return taskCommits(task).length > 0;
     return Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])) > 0;
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
@@ -412,7 +414,7 @@ export class WorkerJob implements GateOutcomeSink {
         await terminateProcessGroup(current.process, this.tasks.settings.terminationGraceMs);
         for (const process of current.auxiliaryProcesses)
           await terminateProcessGroup(process, this.tasks.settings.terminationGraceMs);
-        await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
+        if (!task.workspace) await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
       }

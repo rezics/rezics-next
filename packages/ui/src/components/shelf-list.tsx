@@ -3,6 +3,7 @@ import { EllipsisIcon } from 'lucide-react';
 import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRatio, type CoverProps } from './cover.tsx';
+import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
 export interface ShelfSelectionProps {
@@ -12,6 +13,7 @@ export interface ShelfSelectionProps {
   onSelect?: (event: MouseEvent) => void;
 }
 export interface ShelfListRowProps extends ShelfSelectionProps {
+  forceOverlay?: boolean;
   href: string;
   cover: Omit<CoverProps, 'size'>;
   title: string;
@@ -27,12 +29,13 @@ export interface ShelfListRowProps extends ShelfSelectionProps {
   menuEntries?: MenuEntry[];
   labels: { select: string; menu: string };
 }
-/** A shelf list landmark; shadcn has no shelf list layout. */
+/** A shelf list landmark without separators between items. */
 export function ShelfList({ children }: { children: ReactNode }) {
-  return <ul className="divide-y">{children}</ul>;
+  return <ul>{children}</ul>;
 }
-/** A compact shelf entry; shadcn has no subject list row. */
+/** A shelf entry whose cover determines its height; shadcn has no subject list row. */
 export function ShelfListRow({
+  forceOverlay = false,
   href,
   cover,
   title,
@@ -52,7 +55,7 @@ export function ShelfListRow({
   onSelectedChange,
   onSelect,
 }: ShelfListRowProps) {
-  const ratio = coverRatio(cover.subject.types);
+  const ratio = cover.ratio ?? coverRatio(cover.subject.types);
   const select = (event: MouseEvent) => {
     onSelectedChange?.(!selected);
     onSelect?.(event);
@@ -74,31 +77,42 @@ export function ShelfListRow({
       status
     ));
   return (
-    <li
-      className="flex h-32 items-center gap-3 py-3 sm:h-24"
+    <ListRow
+      forceOverlay={forceOverlay}
+      className="flex items-center gap-3 py-3"
       onClick={
         selectable
           ? (event) => {
-              if (!(event.target as Element).closest('a, button, input, [role="menuitem"]')) select(event);
+              if (
+                !(event.target as Element).closest(
+                  '[data-slot="list-row-control"], a, button, input, [role="menuitem"]',
+                )
+              )
+                select(event);
             }
           : undefined
       }
     >
       {selectable && (
-        <input
-          type="checkbox"
-          aria-label={labels.select}
-          aria-checked={selected}
-          checked={selected}
-          onChange={() => onSelectedChange?.(!selected)}
-          onClick={(event) => onSelect?.(event)}
-        />
+        <ListRowControl>
+          <input
+            type="checkbox"
+            aria-label={labels.select}
+            aria-checked={selected}
+            checked={selected}
+            onChange={() => onSelectedChange?.(!selected)}
+            onClick={(event) => onSelect?.(event)}
+          />
+        </ListRowControl>
       )}
-      <div className="w-12 shrink-0 overflow-hidden rounded" style={{ aspectRatio: ratio.replace(':', ' / ') }}>
+      <div
+        className="pointer-events-none w-[72px] shrink-0 overflow-hidden rounded sm:w-24"
+        style={{ aspectRatio: ratio.replace(':', ' / ') }}
+      >
         <Cover {...cover} size="fill" ratio={ratio} decorative caption={false} />
       </div>
       <div className="min-w-0 flex-1">
-        <a
+        <ListRowLink
           href={href}
           lang={titleLang}
           onClick={
@@ -109,13 +123,15 @@ export function ShelfListRow({
                 }
               : undefined
           }
-          className="line-clamp-2 text-sm font-semibold sm:line-clamp-1"
         >
           {title}
-        </a>
+        </ListRowLink>
+        <span aria-hidden="true" lang={titleLang} className="line-clamp-2 text-sm font-semibold sm:line-clamp-1">
+          {title}
+        </span>
         {meta != null && <div className="hidden truncate text-xs text-muted-foreground sm:block">{meta}</div>}
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:hidden">
-          {chip}
+          {chip != null && <ListRowControl>{chip}</ListRowControl>}
           <span className="whitespace-nowrap">{progress?.label}</span>
           <span>{date}</span>
         </div>
@@ -129,7 +145,7 @@ export function ShelfListRow({
         )}
         <div className="flex justify-end sm:hidden">
           {stepper && (
-            <div className="flex">
+            <ListRowControl className="flex">
               <Button
                 variant="ghost"
                 size="icon-xs"
@@ -146,18 +162,17 @@ export function ShelfListRow({
               >
                 +
               </Button>
-            </div>
+            </ListRowControl>
           )}
         </div>
       </div>
-      <div className="hidden items-center gap-3 sm:flex">
+      <ListRowControl className="hidden items-center gap-3 sm:flex">
         {chip}
         {progress && (
           <div className="w-24 text-xs">
             <ProgressRow {...progress} />
           </div>
         )}
-
         {stepper && (
           <div className="flex">
             <Button
@@ -174,19 +189,21 @@ export function ShelfListRow({
           </div>
         )}
         <span className="text-xs text-muted-foreground">{date}</span>
-      </div>
+      </ListRowControl>
       {(menu != null || menuEntries != null) && (
-        <Menu
-          title={labels.menu}
-          trigger={
-            <Button variant="ghost" size="icon-sm" aria-label={labels.menu}>
-              <EllipsisIcon aria-hidden />
-            </Button>
-          }
-          content={menu}
-          entries={menuEntries}
-        />
+        <ListRowControl>
+          <Menu
+            title={labels.menu}
+            trigger={
+              <Button variant="ghost" size="icon-sm" aria-label={labels.menu}>
+                <EllipsisIcon aria-hidden />
+              </Button>
+            }
+            content={menu}
+            entries={menuEntries}
+          />
+        </ListRowControl>
       )}
-    </li>
+    </ListRow>
   );
 }

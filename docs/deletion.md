@@ -53,7 +53,10 @@ promises still hold.
    dynamic Collection keeps its last completely published generation, never a pending one or a fresh evaluation.
    Published reading logs are erased. Financial records keep only the legally required subset, restricted and with
    an expiry. That subset is defined by the payment and tax retention schedule: jurisdiction, record categories,
-   fields, purpose and expiry. The schedule remains an open external condition.
+   fields, purpose and expiry. The schedule remains an open external condition. Anything an owner keeps beyond these categories, including
+   moderation evidence (reports, decisions, bans), is a retention exception under item 7: the store, fields, purpose
+   and expiry must be stated in that owner's retention inventory and purged at expiry; without one it is erased,
+   including the reporter of a report, which is private material.
 6. **Bounded steps.** Every phase pages with keyset seeks over a small fixed number of raw keys and explicit byte
    limits, children before parents, releasing the connection before entering another partition. Total work grows
    with the account's own records; no step grows with unrelated data. Cleanup runs under narrow platform authority
