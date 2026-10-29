@@ -300,29 +300,34 @@ export class WorkerStore implements AttemptFence {
       .immediate();
   }
   recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
-    this.db.transaction(() => {
-      const task = this.task(ref.taskId);
-      if (
-        task.currentAttempt !== ref.attempt ||
-        (ref.attempt > 0 && ['superseded', 'cancelled'].includes(this.attempt(ref).state))
-      )
-        throw new StaleAttemptError(ref, task.currentAttempt);
-      update(task);
-      this.saveTask(task);
-      const existing = this.retryIntent(ref);
-      if (existing?.status === 'pending') throw new Error('a retry is already pending');
-      const intent: RetryIntent = { ...ref, options, status: 'pending' };
-      this.db.query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
-        .run(ref.taskId, ref.attempt, JSON.stringify(intent));
-    }).immediate();
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (
+          task.currentAttempt !== ref.attempt ||
+          (ref.attempt > 0 && ['superseded', 'cancelled'].includes(this.attempt(ref).state))
+        )
+          throw new StaleAttemptError(ref, task.currentAttempt);
+        update(task);
+        this.saveTask(task);
+        const existing = this.retryIntent(ref);
+        if (existing?.status === 'pending') throw new Error('a retry is already pending');
+        const intent: RetryIntent = { ...ref, options, status: 'pending' };
+        this.db
+          .query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
+          .run(ref.taskId, ref.attempt, JSON.stringify(intent));
+      })
+      .immediate();
   }
   retryIntents(): RetryIntent[] {
-    return this.db
-      // SQLite's rowid is the durable insertion order for intents. A replacement
-      // intent receives a new rowid, so recovery follows the order managers queued them.
-      .query('SELECT body FROM worker_retry_intents ORDER BY rowid')
-      .all()
-      .map((row) => decode<RetryIntent>(row)!);
+    return (
+      this.db
+        // SQLite's rowid is the durable insertion order for intents. A replacement
+        // intent receives a new rowid, so recovery follows the order managers queued them.
+        .query('SELECT body FROM worker_retry_intents ORDER BY rowid')
+        .all()
+        .map((row) => decode<RetryIntent>(row)!)
+    );
   }
   retryIntent(ref: AttemptRef): RetryIntent | undefined {
     return decode<RetryIntent>(
