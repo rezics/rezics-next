@@ -49,13 +49,14 @@ export function processGroupRunner(
   timeoutMs?: number,
   stateDirectory?: string,
   parent: NodeJS.ProcessEnv = process.env,
+  sanitizeEnvironment = true,
 ): GateRunner {
   return async (argv, cwd, logPath) => {
     if (!argv.length) throw new Error('A gate command is required');
     return await new Promise<GateResult>((resolve, reject) => {
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
-        env: gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent)),
+        env: sanitizeEnvironment ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent)) : parent,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });

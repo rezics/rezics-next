@@ -118,7 +118,7 @@ export async function runAffectedTest(
   let environmentUnverified = false;
   for (let retry = 0; retry < 2; retry++) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const result = await processGroupRunner(undefined, undefined, env)(command, cwd, logPath);
+    const result = await processGroupRunner(undefined, undefined, env, false)(command, cwd, logPath);
     output = result.output;
     passed = result.passed;
     environmentUnverified = checkEnvironmentFailed(output);
