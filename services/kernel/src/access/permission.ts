@@ -2,7 +2,7 @@ import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { readAccount, type Account } from './account-data.ts';
-import { installAccountStandingCheck, type StandingPrincipal } from './account-standing.ts';
+import { installAccountStandingCheck } from './account-standing.ts';
 import { accessCommandAttempt } from './command-admission.ts';
 import { authoritativeTimeValue, hasLiveCommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import {
@@ -56,6 +56,8 @@ export type PermissionConfig = {
   /** Retrieve the already-read account from the request; do not query again here. */
   accountEvidence: (actor: AccountActor, context: PermissionContext) => Account | null | undefined;
   authenticate?: Access['authenticate'];
+  /** Private, per-factory standing evidence shared with the main Access adapter. */
+  standingAccounts?: WeakMap<AccountActor, Account>;
   /** Server-owned Realm integration. Read only this Realm/member anchor on the
    * supplied released connection. Return positive and negative proofs for the existing ACL subject roles
    * using native current/next temporal seeks, never an interval-history scan.
@@ -103,6 +105,8 @@ const prepared = new WeakMap<object, Prepared>();
 export function permissionEvidenceDeadline(evidence: unknown): number | undefined {
   return typeof evidence === 'object' && evidence !== null ? prepared.get(evidence)?.deadline : undefined;
 }
+// NUL is outside OAuth VSCHAR and cannot be persisted in PostgreSQL text.
+const STANDING_CLIENT_ID = '\u0000account-standing';
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const uuidPattern = new RegExp(`^${uuid}$`);
 const requestedByPattern = new RegExp(`^urn:rezics:request:(${uuid}):(${uuid})$`);
@@ -122,16 +126,11 @@ async function readPermissionTime(
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt, observedAt };
 }
-type PermissionActor = Actor | StandingPrincipal;
-const isSession = (actor: PermissionActor): actor is AccountActor =>
-  actor.kind === 'account' && actor.clientId !== undefined;
-const bind = (actor: PermissionActor, action: string, resource: Resource, page?: ResourcePage): string =>
+const bind = (actor: Actor, action: string, resource: Resource, page?: ResourcePage): string =>
   JSON.stringify([
     actor.kind,
     actor.kind === 'account'
-      ? isSession(actor)
-        ? [actor.accountId, actor.clientId, actor.scopes, actor.requestedBy, actor.authnEpoch]
-        : [actor.accountId]
+      ? [actor.accountId, actor.clientId, actor.scopes, actor.requestedBy, actor.authnEpoch]
       : null,
     action,
     resource.route,
@@ -168,7 +167,7 @@ export async function checkPermission(
 
 async function checkPreparedPermission(
   client: AccessClient,
-  actor: PermissionActor,
+  actor: Actor,
   action: string,
   resource: Resource,
   evidence?: unknown,
@@ -271,13 +270,15 @@ export function createAccess(config: PermissionConfig): Access {
   // Copy metadata so later mutation of the caller's map cannot expand a mounted catalogue.
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
   const catalogue = resolveResourceRoles(actions, config.resourceRoles);
+  const standingAccounts = config.standingAccounts ?? new WeakMap<AccountActor, Account>();
+  const standingScopes = Object.freeze([...actions.keys()]);
   async function preparePermission(
-    actor: PermissionActor,
+    actor: Actor,
     action: string,
     resource: Resource,
     context: AccessContext,
     page?: ResourcePage,
-    standingAccount?: Account,
+    perId = false,
   ) {
     const evidence = Object.freeze({});
     const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
@@ -301,21 +302,12 @@ export function createAccess(config: PermissionConfig): Access {
       } else {
         if (
           !uuidPattern.test(actor.accountId) ||
-          (isSession(actor) &&
-            (!actor.clientId || actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))))
+          !actor.clientId ||
+          actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))
         )
           return evidence;
-        account = isSession(actor) ? config.accountEvidence(actor, context) : standingAccount;
-        if (
-          !account ||
-          account.accountId !== actor.accountId ||
-          account.route !== routeOf(actor.accountId) ||
-          account.kind !== 'actor' ||
-          account.state !== 'active' ||
-          account.fenced !== false ||
-          (isSession(actor) && !eligible(account, actor))
-        )
-          return evidence;
+        account = standingAccounts.get(actor) ?? config.accountEvidence(actor, context);
+        if (!account || !eligible(account, actor)) return evidence;
       }
       const verifyFloor = await prepareAnonymousEligibility(
         { actor, action, resource: Object.freeze({ ...resource }), deadline },
@@ -335,7 +327,7 @@ export function createAccess(config: PermissionConfig): Access {
       const members: { accountId: string; automated: boolean }[] = [];
       if (actor.kind === 'account' && account) {
         members.push({ accountId: actor.accountId, automated: account.operatorAccountId !== null });
-        if (isSession(actor) && actor.requestedBy !== null) {
+        if (actor.requestedBy !== null) {
           const request = requestedByPattern.exec(actor.requestedBy);
           if (!request) return evidence;
           const principal = request[1]!;
@@ -483,11 +475,9 @@ export function createAccess(config: PermissionConfig): Access {
               throwAccessUnavailable(result.reason, deadline);
               throwEvidenceFailure(result.reason);
             }
-          // A session page requires every proof. Standing returns decisions per
-          // id: unresolved roles keep their empty validity range, so the same
-          // SQL denies only targets that actually hit that role.
-          if (isSession(actor) && results.some((result) => result.status === 'rejected' || !result.value))
-            return evidence;
+          // Per-id pages retain empty proof ranges so SQL denies only ids
+          // that need an unresolved role. Ordinary page admission stays fail-closed.
+          if (!perId && results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
         }
       }
       // Short-lived account/assignment/membership observations never survive the
@@ -510,7 +500,7 @@ export function createAccess(config: PermissionConfig): Access {
         roles,
         anonymous: actor.kind === 'anonymous',
         grantRoles,
-        scope: actor.kind === 'account' && (!isSession(actor) || actor.scopes.includes(action)),
+        scope: actor.kind === 'account' && actor.scopes.includes(action),
         admitsAnonymous: metadata.anonymous,
         capability: resource.eligibility ?? resource.anonymousEligibility,
         verifyFloor,
@@ -810,21 +800,35 @@ export function createAccess(config: PermissionConfig): Access {
       return await within(deadline, async () => {
         const account = await readAccount(currentContext.pool, routeOf(accountId), accountId);
         if (!account || account.kind !== 'actor' || account.state !== 'active' || account.fenced) return denied();
-        const principal: StandingPrincipal = Object.freeze({ kind: 'account', accountId });
-        const evidence = await preparePermission(principal, action, resource, currentContext, page, account);
-        return withConnection(currentContext.pool, async (client) => {
-          const decision = await checkPreparedPermission(
-            deadlineClient(client, deadline),
-            principal,
-            action,
-            resource,
-            evidence,
-            undefined,
-            config.clock,
-            page,
-          );
-          return decision.decisions ?? denied();
+        const authnEpoch = Number(account.minimumAuthnEpoch > 1n ? account.minimumAuthnEpoch : 1n);
+        if (!Number.isSafeInteger(authnEpoch)) return denied();
+        const actor: AccountActor = Object.freeze({
+          kind: 'account',
+          accountId,
+          clientId: STANDING_CLIENT_ID,
+          scopes: standingScopes,
+          requestedBy: null,
+          authnEpoch,
         });
+        standingAccounts.set(actor, account);
+        try {
+          const evidence = await preparePermission(actor, action, resource, currentContext, page, true);
+          return await withConnection(currentContext.pool, async (client) => {
+            const decision = await checkPreparedPermission(
+              deadlineClient(client, deadline),
+              actor,
+              action,
+              resource,
+              evidence,
+              undefined,
+              config.clock,
+              page,
+            );
+            return decision.decisions ?? denied();
+          });
+        } finally {
+          standingAccounts.delete(actor);
+        }
       });
     } catch (error) {
       throwAccessUnavailable(error, deadline);

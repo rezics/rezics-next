@@ -44,6 +44,7 @@ import type {
   ActionCatalogue,
 } from '../request/access.ts';
 import { accessRoot } from './derived-access.ts';
+import type { Account } from './account-data.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import timeRead from './permission-time.sql';
@@ -158,10 +159,12 @@ export function createAccess(config: AccessConfig): Access {
   const authentication = createAuthenticator(config.auth, clock);
   const admission = createCommandAdmission(authentication.identity, clock);
   const prepared = new WeakMap<object, Prepared>();
+  const standingAccounts = new WeakMap<AccountActor, Account>();
   const permissions = permissionAccess({
     actions,
     resourceRoles: config.resourceRoles,
-    accountEvidence: (actor) => authentication.identity(actor)?.account,
+    standingAccounts,
+    accountEvidence: (actor) => standingAccounts.get(actor) ?? authentication.identity(actor)?.account,
     ...(config.realmRoleReader ? { realmRoleReader: config.realmRoleReader } : {}),
     ...(config.clock ? { clock: config.clock } : {}),
   });
@@ -179,7 +182,8 @@ export function createAccess(config: AccessConfig): Access {
     try {
       requireAccessDeadline(context.deadline);
       const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
-      if (actor.kind === 'account' && (!identity || identity.pool !== context.pool)) return null;
+      const standing = actor.kind === 'account' && standingAccounts.has(actor);
+      if (actor.kind === 'account' && !standing && (!identity || identity.pool !== context.pool)) return null;
       const requestDeadline = Math.min(context.deadline, identity?.deadline ?? Infinity);
       requireAccessDeadline(requestDeadline);
       const expires = identity?.expires ?? Infinity;
@@ -283,6 +287,7 @@ export function createAccess(config: AccessConfig): Access {
       const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
       if (
         actor.kind === 'account' &&
+        !standingAccounts.has(actor) &&
         (!identity || identity.pool !== context.pool || identity.durableTime || identityExpired(identity, clock))
       )
         throw new AccessUnavailableError('overloaded');

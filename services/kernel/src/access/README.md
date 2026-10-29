@@ -540,13 +540,21 @@ modules sending notices after a write. It returns a frozen map of resource id to
 decision. The target is a resource or the same single-route page accepted by `preparePage` (1–100 ids).
 Derived Access adapters resolve the installed root port.
 
-The recipient is its own durable account principal. There is no session, client id, client-scope operand or
-delegation; an account cannot acquire an organization's identity authority through this port. Identity,
-organization and Realm roles, active-account grants, resource roles, domain eligibility, bans and denials use
-`permission.ts` and `permission-check.sql`, with the same installed Realm role reader as session checks.
-Only the session scope and delegation steps are omitted; no placeholder client or parallel formula is used.
+The recipient is its own durable account principal, with no caller-selected client, scopes or delegation.
+Access represents it internally as one frozen `AccountActor`: its account id, a module-constant client id
+beginning with U+0000 (outside OAuth's VSCHAR client-id character set and rejected by PostgreSQL text),
+frozen scopes containing every catalogue action, `requestedBy: null`, and the current `minimumAuthnEpoch`
+(at least 1 and a safe integer). These neutral values make its decision equal to a first-party session
+holding every scope. An account cannot acquire an organization's identity authority through this port.
+Identity, organization and Realm roles, active-account grants, resource roles, domain eligibility, bans
+and denials use `permission.ts` and `permission-check.sql`, with the same installed Realm role reader as
+session checks. There is no parallel formula or additional evaluator principal type.
+
 The port point-reads the account itself and denies suspended, fenced, pending, missing and tombstoned accounts,
-as well as organization identities. It does not apply a credential authentication floor.
+as well as organization identities. It does not apply a credential authentication floor. A private WeakMap
+binds that account evidence to the exact actor while the check runs, including nested checks through the main
+Access from eligibility callbacks. Copies cannot borrow evidence; it is removed when the call finishes.
+The actor is never returned or exported, and its impossible client id matches no command attempt basis.
 
 Each call evaluates at its own current send time, never the post's or effect's earlier T. A grant revoked
 before the call stops delivery. The effect's DBOS step records that outcome, so retry after success does not

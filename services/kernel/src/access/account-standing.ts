@@ -1,15 +1,6 @@
 import type { Access, AccessContext, Resource, ResourcePage } from '../request/access.ts';
 import { accessRoot } from './derived-access.ts';
 
-/** An account's own principal, without any session or delegation authority. */
-export type StandingPrincipal = Readonly<{
-  kind: 'account';
-  accountId: string;
-  clientId?: never;
-  scopes?: never;
-  requestedBy?: never;
-  authnEpoch?: never;
-}>;
 export type AccountStandingInput = Readonly<{
   accountId: string;
   action: string;

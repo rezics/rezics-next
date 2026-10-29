@@ -4,7 +4,13 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createRealmMembership } from '../../src/community/membership.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { accessCheck, type Resource, type ResourcePage } from '../../src/request/access.ts';
+import {
+  accessCheck,
+  type AccountActor,
+  type Actor,
+  type Resource,
+  type ResourcePage,
+} from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { actorFixture, type ActorFixture } from './actor-side-fixture.ts';
@@ -358,7 +364,7 @@ function publicResource(resource: Resource) {
   };
 }
 
-test('public domain eligibility and its denial use the shared evaluator without session fields', async () => {
+test('public domain eligibility and its denial use the neutral standing actor', async () => {
   const f = await fixture();
   let seen = false;
   const target = {
@@ -367,8 +373,12 @@ test('public domain eligibility and its denial use the shared evaluator without 
       resource: f.f.resource,
       action,
       async prepare({ actor }) {
-        if (actor.kind === 'account' && !actor.clientId) {
-          expect(Object.keys(actor).sort()).toEqual(['accountId', 'kind']);
+        if (actor.kind === 'account' && actor.clientId.startsWith('\u0000')) {
+          expect(Object.isFrozen(actor)).toBe(true);
+          expect(Object.isFrozen(actor.scopes)).toBe(true);
+          expect(actor.scopes).toEqual(expect.arrayContaining([...actions.keys()]));
+          expect(actor.requestedBy).toBeNull();
+          expect(actor.authnEpoch).toBe(1);
           expect(actor.accountId).toBe(f.f.actorId);
           seen = true;
         }
@@ -477,4 +487,101 @@ test('the session preparation port cannot accept a caller-supplied standing acco
   expect(
     await Reflect.apply(sessionOnly.authorize, sessionOnly, [pool, principal, action, f.f.resource, evidence]),
   ).toBe(false);
+});
+
+test('eligibility verification reads an Actor and runs a nested check through the main Access', async () => {
+  const f = await fixture();
+  const nestedTarget = { route: f.page.route, id: f.ids[1]! };
+  await f.grant();
+  let captured: AccountActor | undefined;
+  let visits = 0;
+  const target = {
+    ...f.f.resource,
+    eligibility: createResourcePublicEligibility({
+      resource: f.f.resource,
+      action,
+      async prepare({ actor }) {
+        const typed: Actor = actor;
+        return {
+          actor: typed,
+          nested: await accessCheck(f.access, actor, action, nestedTarget, context()),
+          copied: await accessCheck(f.access, { ...actor }, action, nestedTarget, context()),
+        };
+      },
+      async verify({ actor, client, evidence }) {
+        expect(actor).toBe(evidence.actor);
+        if (actor.kind !== 'account') return false;
+        expect(actor.accountId).toBe(f.f.actorId);
+        expect(actor.requestedBy).toBeNull();
+        expect(actor.scopes.includes(action)).toBe(true);
+        if (actor.clientId.startsWith('\u0000')) captured = actor;
+        visits++;
+        // Preparation consults released anchors; the supplied client runs the
+        // nested formula without acquiring another client from the size-one pool.
+        const result = await evidence.nested(client);
+        // A spread copy cannot borrow the exact actor's account evidence.
+        expect(await evidence.copied(client)).toBe(false);
+        return result;
+      },
+    }),
+  };
+  const actor = await authenticateAccount(f.access, context(), {
+    accountId: f.f.actorId,
+    clientId: 'first-party',
+    scopes: [...actions.keys()],
+  });
+  // Remove the outer grant, so only successful domain verification can allow it.
+  await pool.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [target.route, target.id]);
+  const session = await (await accessCheck(f.access, actor, action, target, context()))(pool);
+  expect(session).toBe(true);
+  expect(
+    await accountStandingCheck(f.access, {
+      accountId: actor.accountId,
+      action,
+      target,
+      context: context(),
+    }),
+  ).toEqual({ [target.id]: session });
+  expect(visits).toBe(2);
+  expect(captured).toBeDefined();
+  // Capturing a callback actor cannot retain authority after the port returns.
+  expect(await (await accessCheck(f.access, captured!, action, nestedTarget, context()))(pool)).toBe(false);
+  await pool.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+    nestedTarget.route,
+    nestedTarget.id,
+  ]);
+  expect(await (await accessCheck(f.access, actor, action, target, context()))(pool)).toBe(false);
+  expect(
+    await accountStandingCheck(f.access, {
+      accountId: actor.accountId,
+      action,
+      target,
+      context: context(),
+    }),
+  ).toEqual({ [target.id]: false });
+});
+
+test('the neutral epoch follows the current account floor without requiring a credential', async () => {
+  const f = await fixture();
+  await f.grant();
+  await pool.query('UPDATE access.account SET minimum_authn_epoch=7 WHERE route=$1 AND account_id=$2', [
+    routeOf(f.f.actorId),
+    f.f.actorId,
+  ]);
+  const actor = await authenticateAccount(f.access, context(), {
+    accountId: f.f.actorId,
+    clientId: 'first-party',
+    scopes: [...actions.keys()],
+    authnEpoch: 7,
+  });
+  const check = await accessCheck(f.access, actor, action, f.f.resource, context());
+  expect(await check(pool)).toBe(true);
+  expect(
+    await accountStandingCheck(f.access, {
+      accountId: actor.accountId,
+      action,
+      target: f.f.resource,
+      context: context(),
+    }),
+  ).toEqual({ [f.f.resource.id]: true });
 });
