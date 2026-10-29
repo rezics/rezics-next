@@ -13,6 +13,10 @@ once at registration; the writer, log reader and effects share the same lookup.
 Validation takes O(total event data bytes) CPU for at most `MAX_COMMAND_EVENTS`,
 with no SQL or additional partition lock time.
 
+A task that emits a new event type registers its schema in that same task.
+Test-only types are registered by the kernel test preload; production code never
+imports those fixtures.
+
 ## Consumer lag
 
 `core.consumer_lag` stores one row per consumer with the oldest pending envelope time and the time the relay observed
@@ -40,6 +44,18 @@ the source handoff. Durable effect locator completion evidence is required by th
 work rule. Minimization, reader support, consumer proof and source handoff remain open gaps.
 
 ## Cost
+
+### Consumer lag record
+
+- Touches: one upsert per tick per consumer, using the minimum from the existing partition scan.
+- Bound: O(1) added work per tick; the existing scan over the fixed 4096-partition map is unchanged.
+- Growth check: not applicable; discovery is bounded by the fixed partition map rather than data growth.
+
+### Consumer lag read
+
+- Touches: one primary-key read by consumer.
+- Bound: O(1), returning at most one row from a table with one row per consumer.
+- Growth check: not applicable; the full primary key selects the row.
 
 Shared event costs for relay discovery, batch log reads, checkpoint operations, effect enqueue and effect persistence are documented in the [Kernel service Cost table](../../README.md#cost).
 
