@@ -628,12 +628,23 @@ export function runScript(id: string, directory: string, cwd: string, command: s
       aarch64) build=aarch64 ;;
       *) echo "remote-check: unsupported check-host architecture $(uname -m)" >&2; exit 1 ;;
     esac
+    # The verified pinned Bun is cached per host and version: downloading it on every run failed whole bursts of
+    # checks on TLS resets from the registry (curl 56, 10-29). A run downloads only on a cache miss, with retries.
+    pinned_cache=${ROOT}/pinned-bun/$expected_bun-$build
     if [ -n "\${REMOTE_CHECK_PINNED_BUN_PATH:-}" ]; then
       bun="$REMOTE_CHECK_PINNED_BUN_PATH"
+    elif [ -x "$pinned_cache/package/bin/bun" ]; then
+      bun="$pinned_cache/package/bin/bun"
     else
-      mkdir -p .temp/pinned-bun
-      curl -fsSL "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C .temp/pinned-bun
-      bun="$PWD/.temp/pinned-bun/package/bin/bun"
+      mkdir -p ${ROOT}/pinned-bun
+      pinned_download=$(mktemp -d ${ROOT}/pinned-bun/.download.XXXXXX)
+      curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C "$pinned_download"
+      if "$pinned_download/package/bin/bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
+        mv -T "$pinned_download" "$pinned_cache" 2>/dev/null || rm -rf "$pinned_download"
+        bun="$pinned_cache/package/bin/bun"
+      else
+        bun="$pinned_download/package/bin/bun"
+      fi
     fi
     if ! "$bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
       echo "remote-check: downloaded Bun does not match packageManager $expected_bun" >&2
