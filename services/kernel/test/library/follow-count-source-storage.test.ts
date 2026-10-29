@@ -286,10 +286,10 @@ test('native source hook rows and statements stay constant with logarithmic bloc
   let activeRun: (typeof runs)[number] | undefined;
   // Retain the actual nested auto_explain documents alongside the shared harness's
   // per-occurrence accounting; this listener neither changes nor filters its costs.
-  const listeners = new Map<PoolClient, (notice: { message?: string }) => void>();
+  const listeners = new Map<PoolClient, (notice: { message?: string | undefined }) => void>();
   const listen = (client: PoolClient) => {
     if (listeners.has(client)) return;
-    const listener = (notice: { message?: string }) => {
+    const listener = (notice: { message?: string | undefined }) => {
       const message = notice.message;
       if (activeRun && message?.startsWith('duration:') && message.includes('plan:\n'))
         activeRun.plans.push(JSON.parse(message.slice(message.indexOf('plan:\n') + 6)));
