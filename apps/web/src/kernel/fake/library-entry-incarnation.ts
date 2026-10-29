@@ -23,19 +23,24 @@ export const routes: FakeRoute[] = [
   {
     method: 'GET',
     path: '/v1/libraryEntries',
-    story: ({ request }) => {
+    story: ({ request, recordings }) => {
       const url = new URL(request.url);
-      const rows = url.searchParams.get('state') && url.searchParams.get('state') !== entry.state ? [] : [entry];
-      return { status: 200, libraryEntries: rows, next: null };
+      const recorded = recordings['library-entries'];
+      if (!recorded || !Array.isArray(recorded.libraryEntries)) return undefined;
+      // Keep the existing stories' subjects and states while exercising the new read field.
+      const rows = recorded.libraryEntries.filter(
+        (row) => !url.searchParams.get('state') || row.state === url.searchParams.get('state'),
+      );
+      return { ...recorded, libraryEntries: rows.map((row) => ({ ...row, incarnationId })) };
     },
   },
   {
     method: 'PUT',
     path: `/v1/libraryEntries/${entryId}`,
     story: async ({ request }) => {
-      const body = (await request.json().catch(() => ({}))) as { incarnationId?: unknown };
-      if (body.incarnationId !== incarnationId) return conflict;
-      return { status: 200, libraryEntry: { ...entry, revision: 2, state: 'paused' } };
+      const body = (await request.json().catch(() => ({}))) as { incarnationId?: unknown; state?: string };
+      if (body.incarnationId !== undefined && body.incarnationId !== incarnationId) return conflict;
+      return { status: 200, libraryEntry: { ...entry, revision: 2, state: body.state ?? entry.state } };
     },
   },
   {
@@ -43,7 +48,8 @@ export const routes: FakeRoute[] = [
     path: `/v1/libraryEntries/${entryId}`,
     story: ({ request }) => {
       const url = new URL(request.url);
-      return url.searchParams.get('incarnationId') === incarnationId ? { status: 204 } : conflict;
+      const guard = url.searchParams.get('incarnationId');
+      return guard === null || guard === incarnationId ? { status: 204 } : conflict;
     },
   },
 ];

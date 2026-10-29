@@ -1,4 +1,3 @@
-import type { KernelClient } from '@rezics/client';
 import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
