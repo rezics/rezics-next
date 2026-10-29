@@ -148,3 +148,8 @@ focused acceptance submission was attempted twice and the typecheck submission o
 existing UUID. The final typecheck retry also exited 1 with the same exact error before allocating a check ID. No native assertion, SDK workflow
 or typecheck was reached, and no check is live. The acceptance, fixture child and preserved files were not
 changed in this admission. The submission interface remains the concrete blocker.
+
+The current retry uses the now-prescribed public submission form,
+`bun scripts/worker-check.ts -- <command...>`, rather than the earlier internal `--run` form.
+All sixteen recorded final hashes were confirmed again before submission. The existing acceptance and child
+are reused unchanged; native replay and typecheck results remain unproven until these submissions terminate.
