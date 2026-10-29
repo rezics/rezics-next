@@ -671,18 +671,33 @@ test('a genuinely waiting link freshness probe has constant work per poll across
     },
   });
 
-  const perPollStatements: number[] = [];
+  mkdirSync(evidenceDirectory, { recursive: true });
+  const evidence = report.samples.map((sample) => ({
+    scale: sample.scale,
+    repetitions: sample.repetitions.map((cost, index) => ({
+      cost,
+      occurrences: sample.occurrenceRepetitions[index],
+    })),
+  }));
+  writeFileSync(`${evidenceDirectory}/freshness-report.json`, JSON.stringify(evidence));
+  console.info('Freshness occurrence and aligned Cost evidence', JSON.stringify(evidence));
+
+  const statementsPerPoll: number[] = [];
   for (const sample of report.samples) {
-    for (const run of sample.occurrenceRepetitions) {
+    expect(sample.repetitions).toHaveLength(sample.occurrenceRepetitions.length);
+    for (const [index, cost] of sample.repetitions.entries()) {
+      const run = sample.occurrenceRepetitions[index]!;
       const polls = run.statements.filter(({ statement }) =>
         statement.includes('FROM core.consumer_checkpoint'),
       ).length;
-      const statements = run.statements.length;
       expect(polls).toBeGreaterThan(0);
       expect(polls).toBeLessThanOrEqual(Math.ceil(waitBudget / FRESHNESS_POLL_MS) + 1);
-      expect(statements % polls).toBe(0);
-      perPollStatements.push(statements / polls);
+      expect(cost.statements).toBe(polls);
+      expect(cost.controlStatements).toBe(3 * polls);
+      const countedWork = cost.statements + cost.controlStatements;
+      expect(countedWork % polls).toBe(0);
+      statementsPerPoll.push(countedWork / polls);
     }
   }
-  expect(new Set(perPollStatements).size).toBe(1);
+  expect(new Set(statementsPerPoll)).toEqual(new Set([4]));
 });
