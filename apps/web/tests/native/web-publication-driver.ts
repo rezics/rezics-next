@@ -20,6 +20,16 @@ const titleOf = (value: unknown): string => {
 };
 const subjectPath = (id: string, label: string, locale = 'en') =>
   `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug(label)}`;
+const globalContext = '00000000-0000-8000-8000-000000000000';
+
+function accountIdFromAuthorization(authorization: string): string {
+  const token = authorization.match(/^Bearer ([^.]+)\.([^.]+)\./)?.[2];
+  if (!token) throw new Error('Native fixture account did not receive a bearer token');
+  const claims = JSON.parse(Buffer.from(token, 'base64url').toString('utf8')) as { sub?: unknown };
+  if (typeof claims.sub !== 'string' || !/^[0-9a-f-]{36}$/.test(claims.sub))
+    throw new Error('Native fixture bearer did not identify its account');
+  return claims.sub;
+}
 
 function assertReleasedDefinitions(): void {
   const types = bundledRelease.types as Record<string, unknown>;
@@ -52,7 +62,9 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     if (!active.ok) throw new Error(`Could not read released definition: ${active.status} ${await active.text()}`);
     const activeBody = (await active.json()) as { digest: string };
     if (activeBody.digest !== bundledDigest)
-      throw new Error(`Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`);
+      throw new Error(
+        `Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`,
+      );
 
     const created = new Map<string, { id: string; label: string; type: string }>();
     const entries = Object.entries(data.subjects).map(([key, value]) => ({
@@ -61,59 +73,117 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       label: titleOf(value),
       descriptions: 'description' in value ? { en: String(value.description) } : undefined,
     }));
-    for (const [view, count] of Object.entries({ editions: 105, contents: 105, cast: 105, crew: 105, inverse: 105, relations: 105 })) {
+    for (const [view, count] of Object.entries({
+      editions: 105,
+      contents: 105,
+      cast: 105,
+      crew: 105,
+      inverse: 105,
+      relations: 105,
+    })) {
       for (let index = 1; index <= count; index++) {
         const key = `${view}-${String(index).padStart(3, '0')}`;
         entries.push({ key, type: 'schema:Book', label: `${view} ${index}`, descriptions: undefined });
       }
-      entries.push({ key: `${view}-withheld`, type: 'schema:Book', label: `${view} withheld`, descriptions: undefined });
+      entries.push({
+        key: `${view}-withheld`,
+        type: 'schema:Book',
+        label: `${view} withheld`,
+        descriptions: undefined,
+      });
     }
-    const batches = Array.from({ length: Math.ceil(entries.length / 100) }, (_, index) => entries.slice(index * 100, index * 100 + 100));
-    await Promise.all(batches.map(async (batch) => {
-      const commands = batch.map(({ key, type, label, descriptions }) => ({
-        op: 'create',
-        key,
-        source: {
-          source: 'web-publication-fixture',
-          external_id: key,
-          record_revision: '1',
-          digest: '0'.repeat(64),
-          converter_revision: 'web-publication-fixture@1',
-          field_group: 'facts',
-        },
-        subject: { type, labels: { en: label }, ...(descriptions ? { descriptions } : {}) },
-      }));
-      let response: Response;
-      while (true) {
-        response = await stack.kernel(
-          '/v1/subjects:batchWrite',
-          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commands }) },
-          'editor',
+    const writerCount = Math.ceil(entries.length / 220);
+    const writers = await Promise.all(
+      Array.from({ length: writerCount }, async (_, index) => {
+        const persona = `web-fixture-writer-${index + 1}`;
+        const credentials = await stack.credentials(persona);
+        const accountId = accountIdFromAuthorization(credentials.authorization);
+        const grantKey = crypto.randomUUID();
+        const grant = await stack.kernel(
+          '/v1/grants',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(grantKey) },
+            body: JSON.stringify({
+              resource: { route: 0, id: globalContext },
+              subject: { kind: 'account', id: accountId },
+              actions: ['subject:create'],
+              valid: '(,)',
+            }),
+          },
+          'governor',
         );
-        if (response.status !== 429) break;
-        const retryAfter = Number(response.headers.get('retry-after'));
-        const problem = (await response.json()) as { code?: string; effect_status?: string };
-        if (problem.code !== 'rate_limited' || problem.effect_status !== 'not_applied' || !Number.isFinite(retryAfter) || retryAfter < 1)
-          throw new Error(`Could not batch-create fixture subjects through kernel API: 429 ${JSON.stringify(problem)}`);
-        await Bun.sleep(retryAfter * 1000);
-      }
-      if (!response.ok)
-        throw new Error(`Could not batch-create fixture subjects through kernel API: ${response.status} ${await response.text()}`);
-      const result = (await response.json()) as { results: { key: string; status: number; value?: { id: string } }[] };
-      for (const item of result.results) {
-        const entry = batch.find(({ key }) => key === item.key)!;
-        if (item.status !== 201 || !item.value?.id)
-          throw new Error(`Could not create fixture subject ${item.key}: API status ${item.status}`);
-        created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
-      }
-    }));
+        if (!grant.ok)
+          throw new Error(`Could not grant native fixture writer ${persona}: ${grant.status} ${await grant.text()}`);
+        const rateTierKey = crypto.randomUUID();
+        const rateTier = await stack.kernel(
+          `/v1/accounts/${encodeURIComponent(accountId)}:setRateTier`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(rateTierKey) },
+            body: JSON.stringify({ key: rateTierKey, tier: 'trusted' }),
+          },
+          'governor',
+        );
+        if (!rateTier.ok)
+          throw new Error(
+            `Could not set native fixture writer rate tier ${persona}: ${rateTier.status} ${await rateTier.text()}`,
+          );
+        return persona;
+      }),
+    );
+    const batches = Array.from({ length: writerCount }, (_, index) => {
+      const writerEntries = entries.slice(index * 220, index * 220 + 220);
+      return { persona: writers[index]!, entries: writerEntries };
+    });
+    await Promise.all(
+      batches.map(async ({ persona, entries: writerEntries }) => {
+        for (let start = 0; start < writerEntries.length; start += 100) {
+          const batch = writerEntries.slice(start, start + 100);
+          const commands = batch.map(({ key, type, label, descriptions }) => ({
+            op: 'create',
+            key,
+            source: {
+              source: 'web-publication-fixture',
+              external_id: key,
+              record_revision: '1',
+              digest: '0'.repeat(64),
+              converter_revision: 'web-publication-fixture@1',
+              field_group: 'facts',
+            },
+            subject: { type, labels: { en: label }, ...(descriptions ? { descriptions } : {}) },
+          }));
+          let response: Response;
+          response = await stack.kernel(
+            '/v1/subjects:batchWrite',
+            { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commands }) },
+            persona,
+          );
+          if (!response.ok)
+            throw new Error(
+              `Could not batch-create fixture subjects through kernel API: ${response.status} ${await response.text()}`,
+            );
+          const result = (await response.json()) as {
+            results: { key: string; status: number; value?: { id: string } }[];
+          };
+          for (const item of result.results) {
+            const entry = batch.find(({ key }) => key === item.key)!;
+            if (item.status !== 201 || !item.value?.id)
+              throw new Error(`Could not create fixture subject ${item.key}: API status ${item.status}`);
+            created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
+          }
+        }
+      }),
+    );
 
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
       if (!subject) throw new Error(`Fixture subject ${key} was not created`);
       return new URL(subjectPath(subject.id, subject.label, locale), publicOrigin).href;
     };
-    const subjects = Object.fromEntries([...created.keys()].map((key) => [key, urlFor(key)])) as PublicationFixture['subjects'];
+    const subjects = Object.fromEntries(
+      [...created.keys()].map((key) => [key, urlFor(key)]),
+    ) as PublicationFixture['subjects'];
     const views = Object.fromEntries(
       (['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const).map((name) => [
         name,
@@ -121,7 +191,10 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       ]),
     ) as PublicationFixture['views'];
     const sitemap = Object.fromEntries(
-      (['subject', 'collection', 'realm', 'space', 'board', 'thread'] as const).map((kind) => [kind, { eligible: [], excluded: [] }]),
+      (['subject', 'collection', 'realm', 'space', 'board', 'thread'] as const).map((kind) => [
+        kind,
+        { eligible: [], excluded: [] },
+      ]),
     ) as PublicationFixture['sitemap'];
     const fixture: PublicationFixture = {
       releaseDigest: activeBody.digest,
@@ -169,7 +242,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         const query = new URLSearchParams({ limit: '2' });
         if (cursor) query.set('cursor', cursor);
         const response = await stack.kernel(`/v1/sitemap/${routes[feed]}?${query}`);
-        if (!response.ok) throw new Error(`Native sitemap feed ${feed} returned ${response.status}: ${await response.text()}`);
+        if (!response.ok)
+          throw new Error(`Native sitemap feed ${feed} returned ${response.status}: ${await response.text()}`);
         const page = (await response.json()) as { next: string | null };
         cursor = page.next;
         if (++pages > 10_000) throw new Error(`Native sitemap feed ${feed} did not terminate`);
@@ -182,14 +256,22 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     provision,
     request,
     settle,
-    async proposeCompetingDate() { throw new Error('proposeCompetingDate is delivered by a later task'); },
-    async revokeAlice() { throw new Error('revokeAlice is delivered by a later task'); },
+    async proposeCompetingDate() {
+      throw new Error('proposeCompetingDate is delivered by a later task');
+    },
+    async revokeAlice() {
+      throw new Error('revokeAlice is delivered by a later task');
+    },
     async configurePublicOrigin(origin) {
       await stack.restartWeb({ publicOrigin: origin });
       publicOrigin = origin;
     },
-    async interrupt(kind) { throw new Error(`interrupt is delivered by a later task: ${kind}`); },
-    async nativeSearch() { throw new Error('nativeSearch is delivered by a later task'); },
+    async interrupt(kind) {
+      throw new Error(`interrupt is delivered by a later task: ${kind}`);
+    },
+    async nativeSearch() {
+      throw new Error('nativeSearch is delivered by a later task');
+    },
     close() {
       return (closed ??= stack.stop());
     },
