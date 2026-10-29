@@ -530,11 +530,9 @@ async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise
   people = Array.from({ length: 4_096 }, () => newId(anchorRoute));
   peopleLabels = people.map((id, index) => rowsFor(id, { labels: { en: `Author ${String(index).padStart(4, '0')}` } }));
   relationFacts = people.map((id) =>
-    rowsFor(
-      anchor,
-      { labels: { en: label }, statements: { 'schema:author': [statement(id)] } },
-      bundledRelease,
-    ).find((fact) => fact.kind === 'statement')!,
+    rowsFor(anchor, { labels: { en: label }, statements: { 'schema:author': [statement(id)] } }, bundledRelease).find(
+      (fact) => fact.kind === 'statement',
+    )!,
   );
   population = createPopulation();
 }
