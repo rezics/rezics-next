@@ -92,9 +92,12 @@ hashes above remain unchanged. Preserve those acceptance assertions unchanged;
 retry native verification against this actual base rather than manufacturing a
 new fixture or treating the previous infrastructure failure as a scenario result.
 
-Frozen test revision: `edc7800dde`. The artifact acceptance is
-`test -s docs/research/imports-audit/exact-quantity-qualifiers.md`; its execution
-result accompanies the final handoff and proves specification delivery only.
+Frozen tests were delivered in `17465ded7d`; continuation verification used
+`15d78fd61d`. The test SHA-256 above is unchanged. Artifact acceptance
+`test -s docs/research/imports-audit/exact-quantity-qualifiers.md` passed with
+**exit 0**, after the wrapper's single automatic retry. It proves specification
+delivery only. Log:
+`.temp/goal/checks/worker-check-2026-10-29T08-08-25.808Z-80cf79bf.log`.
 
 Commands from the worktree root:
 
@@ -103,29 +106,29 @@ bun scripts/worker-check.ts -- env TMPDIR=/dev/shm KERNEL_CHECK_SKIP_STALE_CLEAN
 bun scripts/worker-check.ts -- env TYPECHECK_CHANGED=services/kernel/test/imports/exact-quantity-qualifiers.test.ts KERNEL_CHECK_SKIP_STALE_CLEANUP=1 bun scripts/typecheck.ts
 ```
 
-Affected root typecheck: **exit 0**, checking the kernel (one of thirteen
-workspaces), including construct. Log:
-`.temp/goal/checks/worker-check-2026-10-29T05-08-37.306Z-f0e5acad.log`.
-
-Focused native check: **infrastructure exit 1**, after the wrapper automatically
-retried once under the same check ID. Both runs completed dependency installation
-and reached `stack-run: kernel check local, already on a check host`, then produced
-no further output. First run log:
-`.temp/goal/checks/worker-check-2026-10-29T05-07-55.981Z-ebb29a59.log`.
-Retry log:
-`.temp/goal/checks/worker-check-2026-10-29T05-21-09.872Z-9a67a07c.log`.
-The first reached failure was the wrapper's log-growth infrastructure monitor,
-not a native scenario assertion. Its final exact error line was:
+Focused native check: **exit 1 before test execution**. The first runner stopped
+producing output after `remote-check: running on c`. The wrapper detected ten
+minutes without log growth and automatically retried once under the same check ID,
+`5688cee2-c7b0-42ff-a21d-66ea3a526381`. The retry failed while downloading the
+repository-pinned Bun executable, with this exact first error line:
 
 ```text
-worker-check: infrastructure failure (log did not grow for 10 minutes) on ah-ipv6; second runner failed; log .temp/goal/checks/worker-check-2026-10-29T05-21-09.872Z-9a67a07c.log
+curl: (56) OpenSSL SSL_read: OpenSSL/3.5.9: error:0A000126:SSL routines::unexpected eof while reading, errno 0
 ```
+
+The following `gzip: stdin: unexpected end of file`, `tar: Unexpected EOF in archive`
+and `remote-check: downloaded Bun does not match packageManager 1.4.4-canary.20261027.1`
+confirm an incomplete tool download, not a scenario assertion. Initial log:
+`.temp/goal/checks/worker-check-2026-10-29T07-58-09.419Z-a1d6044e.log`.
+Retry/final log:
+`.temp/goal/checks/worker-check-2026-10-29T08-08-13.689Z-2431a90d.log`.
+No further native run or alternative runtime was started after that automatic retry.
 
 The command requested SQLite tmpfs via TMPDIR=/dev/shm. None of the three
 scenario outcomes, native candidate observations or receipt immutability assertions
-was reached or verified in this attempt. Source inspection identifies the unsafe
-paths; it is not a substitute for the unavailable native run. No pass or red
-assertion is manufactured. All started checks were awaited to an exit status.
+was reached or verified in this continuation. Source inspection identifies the unsafe
+paths; it does not substitute for the unavailable native run. No pass or red assertion
+is manufactured. The tests and product code are identical to the continuation base.
 No old suite, full kernel/web gate, timeout change or default converter repair ran.
 
 ## Limits and decisions
