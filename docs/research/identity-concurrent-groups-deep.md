@@ -43,17 +43,17 @@ source command, without another checkout/Search. Bind `writeSubject` (including 
 Convert `mergeSubjectsInCommand`, move registration/repoint/member/link phases, verify/unverify/backlinks and `links.ts` relay retries. Final
 handoff needs the deferred same-TX guard AND native barrier over all old writers/queued work; a type flag or capture alone proves neither.
 
-| Native owner | Minimal retained data and indexed access |
-| --- | --- |
-| Original/source home | Exact self/current basis `(route,original) -> (control_home,group_incarnation,generation,basis_version)` in the existing native subject row, not a second membership table; creation gate, source head/export/frontier and exact native custody locators. Read it with the existing native source point. |
-| Current group control home | `group_header(home,incarnation)` PK: sealed generation, exact count, CAS version, published basis version, ownership epoch, readiness/claim; immutable membership PK `(home,generation,original)`. Inverse access is an index, not another membership copy. |
-| Receipt's stable job home | Unique native receipt binding, immutable operation/attempt/input references, state, planned homes, capacity/claim receipts, wakeup, progress and fixed completion custody. Index resumable state/key and receipt key, never scan historical JSON. |
-| Each participating control home | At most P occupied work slots, including preparing/cancelling/reclaim-blocked occupants; unique live claim `(home,group_incarnation)`, and attempt state keyed `(home,job,attempt)`. Reserve output/copy space here before admission. |
-| Actual effect/payload home | Native gate, expected prior/next effect scope, frontiers, transaction/component receipt and producer/consumer custody/minimization locators. Library payload remains Library-owned. |
+| Native owner                    | Minimal retained data and indexed access                                                                                                                                                                                                                                                                 |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original/source home            | Exact self/current basis `(route,original) -> (control_home,group_incarnation,generation,basis_version)` in the existing native subject row, not a second membership table; creation gate, source head/export/frontier and exact native custody locators. Read it with the existing native source point. |
+| Current group control home      | `group_header(home,incarnation)` PK: sealed generation, exact count, CAS version, published basis version, ownership epoch, readiness/claim; immutable membership PK `(home,generation,original)`. Inverse access is an index, not another membership copy.                                              |
+| Receipt's stable job home       | Unique native receipt binding, immutable operation/attempt/input references, state, planned homes, capacity/claim receipts, wakeup, progress and fixed completion custody. Index resumable state/key and receipt key, never scan historical JSON.                                                        |
+| Each participating control home | At most P occupied work slots, including preparing/cancelling/reclaim-blocked occupants; unique live claim `(home,group_incarnation)`, and attempt state keyed `(home,job,attempt)`. Reserve output/copy space here before admission.                                                                    |
+| Actual effect/payload home      | Native gate, expected prior/next effect scope, frontiers, transaction/component receipt and producer/consumer custody/minimization locators. Library payload remains Library-owned.                                                                                                                      |
 
 Route ordinary jobs by the existing redirected original's command partition; account-agent jobs by the derived node's command partition, as
 [current callers][agents] do. Accounts source intent remains account-home-routed. Claims follow current groups, not the receipt anchor. Choosing
-the smallest *current* terminal would misroute receipt replay after a split. An opaque operation locator retains the stable route; native
+the smallest _current_ terminal would misroute receipt replay after a split. An opaque operation locator retains the stable route; native
 ownership resolution can change the backend, not the key. This anchor owns recovery, not group-read authority; allocate a slot once per
 `(home,job)`, reused by its second group.
 
@@ -69,8 +69,13 @@ Required internal boundary clarification, with public DTOs unchanged:
 ```ts
 // Illustrative replacement shapes, not a new public wire protocol.
 type RoutedJob = { controlPartition: number; jobId: string; epoch: bigint };
-type GroupBasis = { controlPartition: number; incarnation: string;
-  generation: string; basisVersion: bigint; ownerEpoch: number };
+type GroupBasis = {
+  controlPartition: number;
+  incarnation: string;
+  generation: string;
+  basisVersion: bigint;
+  ownerEpoch: number;
+};
 type ReaderObservation = { revision: bigint; pendingCount: bigint; ready: boolean };
 // Extend native job states with PREPARING/CANCELLING; retryable reasons include preparing/drift/capacity.
 // Released preparation uses native locators; batched observation uses page clients. Durable bigint JSON is decimal strings.
@@ -92,7 +97,7 @@ checkpoints cannot become identity completion.
 
 ## Exact cap before effects, including cross-home races
 
-After authorization, resolve same-receipt replay read-only before fresh cap validation. Collect the at most two *current* changed groups' sealed
+After authorization, resolve same-receipt replay read-only before fresh cap validation. Collect the at most two _current_ changed groups' sealed
 counts, incarnations, generations, versions and native owner epochs. Finish all captures, then validate all with released indexed reads. All matches
 imply a common cut between the last capture and first validation: each unchanged interval covers that cut. Nonreuse/version monotonicity
 excludes ABA; missing/moved/unsealed/drifting evidence returns retryable unavailable, never overflow. Validate readiness too: an intermediate
@@ -166,7 +171,7 @@ overlap is capacity refusal. Keep the same intent/receipt/priority across retrie
 capacity before effects, never halfway through execution.
 
 Before the first remote claim, the job home owns the entire planned-home set and recovery obligation. Cancellation writes an attempt tombstone
-at *every* planned home, even one with no visible claim yet; it serializes with claim creation there. A delayed old acquire sees CANCELLED and
+at _every_ planned home, even one with no visible claim yet; it serializes with claim creation there. A delayed old acquire sees CANCELLED and
 cannot recreate a claim after cleanup. Retain this minimal fence until all registered deliveries/retries are in native custody; elapsed lease
 time or a failed workflow is insufficient. Minimize to a per-home/job rejected-attempt watermark; absence cannot authorize old delayed work.
 Job-home CAS chooses ADMITTED versus CANCELLING once. Final admission consumes exact claim/slot
@@ -213,11 +218,11 @@ basis/owner. A retired control route returns unavailable; do not chase forwardin
 source basis. Native owner move failure likewise returns unavailable; old captures cannot authorize the new owner. Concrete ownership-transfer
 and final writer-barrier producers remain missing delivery obligations, not assumed ports.
 
-| Mapping observation layout | Charged native SQL envelope, excluding no work by renaming it |
-| --- | --- |
-| Same backend | ONE RR snapshot: BEGIN, SET timeout, source-owner point, source-basis point, control-owner point, TWO control probes, COMMIT = 8. The common snapshot needs no second source visit. Missing fields must be joined into these indexed points. |
-| Different backends | Initial source RR: 3 setup/close + owner + basis = 5; released control RR: 3 + owner + 2 probes = 6; final source RR: 5. Source <=10, control <=6, total <=16; pending returns after 11. |
-| Filtered page | Reuse its existing batched owner/epoch observation and source candidate/basis points; add no snapshot, client or control statement. Route bases into backend batches and execute the SAME two probes, not per-ID loops. Preserve <=12/backend direct or 8+4R composed. |
+| Mapping observation layout | Charged native SQL envelope, excluding no work by renaming it                                                                                                                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same backend               | ONE RR snapshot: BEGIN, SET timeout, source-owner point, source-basis point, control-owner point, TWO control probes, COMMIT = 8. The common snapshot needs no second source visit. Missing fields must be joined into these indexed points.                           |
+| Different backends         | Initial source RR: 3 setup/close + owner + basis = 5; released control RR: 3 + owner + 2 probes = 6; final source RR: 5. Source <=10, control <=6, total <=16; pending returns after 11.                                                                               |
+| Filtered page              | Reuse its existing batched owner/epoch observation and source candidate/basis points; add no snapshot, client or control statement. Route bases into backend batches and execute the SAME two probes, not per-ID loops. Preserve <=12/backend direct or 8+4R composed. |
 
 The [native RR helper][read] really costs BEGIN/SET/COMMIT; do not retain the old three-snapshot layout on one backend. Batch multiple partition
 keys inside the same backend statement, validating every native owner. A page can span several control homes: ONE means one per original, not
@@ -336,17 +341,17 @@ retention of terminal DBOS workflows is not proof of all-role erasure. No namesp
 
 ## Required schedules and recommendation
 
-| Schedule | Native outcome/proof obligation |
-| --- | --- |
-| A+B versus B+C | J claims A; K claims B. If K ranks first, J cancels all planned homes and retries after K; otherwise J waits while K claims C and finishes. An admitted overlap is busy, never denied review or partial publication. |
-| P=1, opposite receipt homes | J/K each reserve one home and need the other. The higher-ranked requester cancels; its tombstones release capacity and the lower-ranked waiter proceeds. Symmetric cancel/retry without priority proves no finite progress. |
-| A+B versus C+D | J claims A/B; K claims C/D; both OPEN/admit/map/run participants concurrently. K may CLOSE while J is still mapping; neither waits for the other's whole workflow. Short metadata updates may queue. |
-| Crash after first claim / delayed acquire | Job already owns cleanup; cancellation tombstones all planned homes. Delayed claim loses locked attempt check; no orphan or lease expiry. |
-| Crash at admission response / DBOS journal | Native receipt resolves PREPARING, admitted or published exactly; lost response cannot create a second job or false `not_applied`. |
-| Crash at OPEN/CLOSE / home publication | Idempotent marker receipt, native count and exact job state reconcile; incomplete local handoff remains pending. No premature clean epoch. |
-| Group or partition ownership changes | Capture h/v; move fences h and changes owner/version; old claim/effect CAS fails. Old source route remains pending/unavailable until retained responsibility transfers and new basis is ready; old captures grant nothing. |
-| Lower job epoch commits later | J gets job epoch 10, K gets 11; K CLOSE commits revision r+1 first; J CLOSE later commits r+2. Max allocated job epoch stays 11 and misses J; native committed marker ordering does not. |
-| Crash during reclaim/export/ACK | Saved native frontier/receipt resumes; partial payload still charged, h+1 not lost, no slot freed before receiving custody. |
+| Schedule                                      | Native outcome/proof obligation                                                                                                                                                                                                                                |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A+B versus B+C                                | J claims A; K claims B. If K ranks first, J cancels all planned homes and retries after K; otherwise J waits while K claims C and finishes. An admitted overlap is busy, never denied review or partial publication.                                           |
+| P=1, opposite receipt homes                   | J/K each reserve one home and need the other. The higher-ranked requester cancels; its tombstones release capacity and the lower-ranked waiter proceeds. Symmetric cancel/retry without priority proves no finite progress.                                    |
+| A+B versus C+D                                | J claims A/B; K claims C/D; both OPEN/admit/map/run participants concurrently. K may CLOSE while J is still mapping; neither waits for the other's whole workflow. Short metadata updates may queue.                                                           |
+| Crash after first claim / delayed acquire     | Job already owns cleanup; cancellation tombstones all planned homes. Delayed claim loses locked attempt check; no orphan or lease expiry.                                                                                                                      |
+| Crash at admission response / DBOS journal    | Native receipt resolves PREPARING, admitted or published exactly; lost response cannot create a second job or false `not_applied`.                                                                                                                             |
+| Crash at OPEN/CLOSE / home publication        | Idempotent marker receipt, native count and exact job state reconcile; incomplete local handoff remains pending. No premature clean epoch.                                                                                                                     |
+| Group or partition ownership changes          | Capture h/v; move fences h and changes owner/version; old claim/effect CAS fails. Old source route remains pending/unavailable until retained responsibility transfers and new basis is ready; old captures grant nothing.                                     |
+| Lower job epoch commits later                 | J gets job epoch 10, K gets 11; K CLOSE commits revision r+1 first; J CLOSE later commits r+2. Max allocated job epoch stays 11 and misses J; native committed marker ordering does not.                                                                       |
+| Crash during reclaim/export/ACK               | Saved native frontier/receipt resumes; partial payload still charged, h+1 not lost, no slot freed before receiving custody.                                                                                                                                    |
 | Account terminal during verification/reversal | Verification publishes; reversal commits its own intent/pending receipt; account terminal fence wins before a later effect. Mechanical cleanup resumes that reversal, stale verification cannot clear it, and shared/Library minimizer custody precedes clear. |
 
 Recommend the routed multi-home preparation protocol, local P slots and immutable group bases, with the short ordered reader marker if retaining
