@@ -29,6 +29,7 @@ test('each recorded JSON response type-checks against the kernel client', async 
   const module = join(temporary, 'recordings.ts');
   const source = [
     "import type { Kernel, KernelClient } from '@rezics/client';",
+    `import type { ZonePageResponse } from ${JSON.stringify(join(root, 'services/kernel/src/zones/contract.ts'))};`,
     'type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };',
     "type Read = Awaited<ReturnType<ReturnType<KernelClient['subjects']>['get']>>;",
     "type SubjectResponse = NonNullable<Read['data']>;",
@@ -109,6 +110,11 @@ test('each recorded JSON response type-checks against the kernel client', async 
     'subject-ratings.json': 'SubjectRatingsResponse',
     'subject-source-statistics.json': 'SubjectSourceStatisticsResponse',
     'zone-subject-page.json': 'PageResponse',
+    'zone-static-home.json': 'ZonePageResponse',
+    'zone-static-guide.json': 'ZonePageResponse',
+    'zone-static-owner-home.json': 'ZonePageResponse',
+    'zone-static-subject.json': 'SubjectResponse',
+    'zone-static-subject-page.json': 'PageResponse',
     'subject-reactions.json': 'SubjectReactionsResponse',
     'subject-reaction.json': 'SubjectOwnReactionResponse',
     'subject-review-threads.json': 'SubjectThreadsResponse',
@@ -206,6 +212,11 @@ test('each recorded JSON response type-checks against the kernel client', async 
       'offer.json',
       'order-paid.json',
       'thread-owned.json',
+      'zone-static-home.json',
+      'zone-static-guide.json',
+      'zone-static-owner-home.json',
+      'zone-static-subject.json',
+      'zone-static-subject-page.json',
     ]),
   );
 }, 120_000);

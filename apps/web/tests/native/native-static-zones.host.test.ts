@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { BrowserContext, Page } from 'playwright';
 import { UI_LOCALES } from '@rezics/composition';
+import { slug } from '@rezics/definitions/slug';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import {
   createNativeStaticZoneGrowthResources,
@@ -130,16 +131,21 @@ test('anonymous readers use native static Zone pages, actual subject links, and 
   await phone.keyboard.press('Enter');
   await phone.waitForURL((url) => url.pathname.startsWith(`/zh-Hans/subjects/${fixture.subjectId}/`));
   expect(await phone.getByRole('heading', { name: subjectLabels['zh-Hans'] }).count()).toBeGreaterThan(0);
-  expect(await canonicalPath(phone)).toBe(new URL(`${stack.web}/zh-Hans/subjects/${fixture.subjectId}`).pathname);
+  expect(await canonicalPath(phone)).toBe(`/zh-Hans/subjects/${fixture.subjectId}/${slug(subjectLabels['zh-Hans'])}`);
   await phone.goBack();
   await phone.waitForURL(new URL(`${stack.web}/zh-Hans/zones/${fixture.publicZoneId}`).href);
   expect(await canonicalPath(phone)).toBe(`/zh-Hans/zones/${fixture.publicZoneId}`);
 
-  const desktop = await browserPage(anonymous, `/en/zones/${fixture.publicZoneId}/guide`, {
+  const desktop = await browserPage(anonymous, `/en/zones/${fixture.publicZoneId}`, {
     width: 1280,
     height: 860,
   });
   await desktop.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  const guideLink = desktop.getByRole('link', { name: 'Guide', exact: true });
+  await guideLink.focus();
+  expect(await guideLink.evaluate((node) => node === document.activeElement)).toBe(true);
+  await desktop.keyboard.press('Enter');
+  await desktop.waitForURL(new URL(`${stack.web}/en/zones/${fixture.publicZoneId}/guide`).href);
   await desktop.getByRole('heading', { level: 1, name: 'Guide' }).waitFor();
   await desktop.getByText('A second declared static page.').waitFor();
   expect(await canonicalPath(desktop)).toBe(`/en/zones/${fixture.publicZoneId}/guide`);
@@ -292,21 +298,34 @@ test('current Zone takedown removes protected copy from page and metadata for th
   expect(originalPage.status).toBe(200);
   expect(JSON.stringify(await originalPage.json())).toContain(fixture.protectedSentinel);
 
+  const takedownBody = {
+    notice: { complaint: zoneDisclosureComplaint, received_at: new Date().toISOString() },
+    fields: zoneDisclosureFieldPaths,
+  };
+  const takedownPath = `/v1/zones/${fixture.publicZoneId}:takedown`;
   const takedown = await stack.kernel(
-    `/v1/zones/${fixture.publicZoneId}:takedown`,
+    takedownPath,
     {
       method: 'POST',
-      headers: commandHeaders(),
-      body: JSON.stringify({
-        notice: { complaint: zoneDisclosureComplaint, received_at: new Date().toISOString() },
-        fields: zoneDisclosureFieldPaths,
-      }),
+      headers: { ...commandHeaders(), 'if-match': `"${fixture.publicRevision}"` },
+      body: JSON.stringify(takedownBody),
     },
     'governor',
   );
-  expect(takedown.status, `POST /v1/zones/${fixture.publicZoneId}:takedown: ${await takedown.clone().text()}`).toBe(
-    200,
+  const takedownResponseBody = await takedown.clone().text();
+  console.info(
+    `Native Zone takedown request/response: ${JSON.stringify({
+      method: 'POST',
+      path: takedownPath,
+      body: takedownBody,
+      status: takedown.status,
+      responseBody: takedownResponseBody,
+    })}`,
   );
+  expect(
+    takedown.status,
+    `POST ${takedownPath} ${JSON.stringify(takedownBody)} returned ${takedown.status}: ${takedownResponseBody}`,
+  ).toBe(200);
 
   const nextPage = await stack.kernel(`/v1/zones/${fixture.publicZoneId}:readPage`, {
     method: 'POST',

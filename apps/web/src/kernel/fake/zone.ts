@@ -1,5 +1,10 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
+import staticGuide from '../recorded/zone-static-guide.json';
+import staticHome from '../recorded/zone-static-home.json';
+import staticOwnerHome from '../recorded/zone-static-owner-home.json';
+import staticSubject from '../recorded/zone-static-subject.json';
+import staticSubjectPage from '../recorded/zone-static-subject-page.json';
 import subjectPage from '../recorded/zone-subject-page.json';
 import subjectReactions from '../recorded/subject-reactions.json';
 
@@ -12,6 +17,9 @@ const alternateZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';
 const recoveringZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e07';
 const revokedZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
+const recordedZoneId = staticHome.zone.id;
+const recordedOwnerZoneId = staticOwnerHome.zone.id;
+const recordedSubjectId = staticSubject.subject.id;
 const recoveringReads = new Map<string, number>();
 
 type ZoneTarget = { route: string };
@@ -119,6 +127,12 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   const target = isRecord(body) ? body.target : undefined;
   if (!isRecord(target)) return { status: 400, code: 'invalid_request' };
   if (typeof target.route !== 'string') return problem(404, { 'cache-control': 'no-store' });
+  if (id === recordedOwnerZoneId)
+    return target.route === '' ? { status: 200, ...staticOwnerHome } : problem(404, { 'cache-control': 'no-store' });
+  if (id === recordedZoneId) {
+    const recording = target.route === '' ? staticHome : target.route === 'guide' ? staticGuide : undefined;
+    return recording ? { status: 200, ...recording } : problem(404, { 'cache-control': 'no-store' });
+  }
   const cursor = url.searchParams.get('cursor');
   if (id === recoveringZoneId) {
     const count = recoveringReads.get(id) ?? 0;
@@ -159,7 +173,9 @@ async function subjectPageResponse(request: Request): Promise<KernelRecording | 
   } catch {
     return undefined;
   }
-  if (!isRecord(target) || target.subject !== subjectId) return undefined;
+  if (!isRecord(target)) return undefined;
+  if (target.subject === recordedSubjectId) return { status: 200, ...staticSubjectPage };
+  if (target.subject !== subjectId) return undefined;
   if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details') return undefined;
   return {
     ...subjectPage,
@@ -168,6 +184,13 @@ async function subjectPageResponse(request: Request): Promise<KernelRecording | 
     views: ['overview', 'details'],
   };
 }
+
+const nativeSubjectRoute: FakeRoute = {
+  method: 'GET',
+  path: /^\/v1\/subjects\/([^/]+)$/,
+  story: ({ match }) =>
+    match?.[1] && decodeURIComponent(match[1]) === recordedSubjectId ? { status: 200, ...staticSubject } : undefined,
+};
 
 const route: FakeRoute = {
   method: 'POST',
@@ -188,4 +211,4 @@ const subjectReactionsRoute: FakeRoute = {
   story: ({ match }) => (match?.[1] === subjectId ? subjectReactions : undefined),
 };
 
-export const routes = [route, subjectPageRoute, subjectReactionsRoute];
+export const routes = [route, nativeSubjectRoute, subjectPageRoute, subjectReactionsRoute];

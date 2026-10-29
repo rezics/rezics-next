@@ -4,7 +4,9 @@ import { slug } from '@rezics/definitions/slug';
 import { UI_LOCALES, type CompositionDocument, type ZoneStarter } from '@rezics/composition';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import bookStarter from '../../../../packages/definitions/presentation/book/zone.json';
+import { routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
+import type { ZonePageResponse } from '../../../../services/kernel/src/zones/contract.ts';
 import type { NativeWebStack } from './stack.ts';
 
 const nativeRead = 'A public page from the native Zone configuration.';
@@ -31,7 +33,9 @@ function commandHeaders(): HeadersInit {
   return { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) };
 }
 
-async function grant(stack: NativeWebStack, accountId: string, actions: string[]) {
+async function grant(stack: NativeWebStack, accountId: string, actions: string[], resourceId = GLOBAL_CONTEXT) {
+  const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
+  if (route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
   await json(
     await stack.kernel(
       '/v1/grants',
@@ -39,7 +43,7 @@ async function grant(stack: NativeWebStack, accountId: string, actions: string[]
         method: 'POST',
         headers: commandHeaders(),
         body: JSON.stringify({
-          resource: { route: 0, id: GLOBAL_CONTEXT },
+          resource: { route, id: resourceId },
           subject: { kind: 'account', id: accountId },
           actions,
           valid: '(,)',
@@ -83,7 +87,9 @@ async function configureZone(stack: NativeWebStack, id: string, revision: string
 
 export type NativeStaticZonesFixture = {
   publicZoneId: string;
+  publicRevision: string;
   privateZoneId: string;
+  privateHome: ZonePageResponse;
   subjectId: string;
   publicLabel: string;
   publicHref: string;
@@ -228,7 +234,7 @@ export async function createNativeStaticZonesFixture(stack: NativeWebStack): Pro
     createdPublic.zone.revision,
     publicConfiguration,
   );
-  const publishedPublic = await json<{ zone: { id: string } }>(
+  const publishedPublic = await json<{ zone: { id: string; revision: string } }>(
     await stack.kernel(
       `/v1/zones/${createdPublic.zone.id}:publish`,
       {
@@ -277,18 +283,26 @@ export async function createNativeStaticZonesFixture(stack: NativeWebStack): Pro
     privateConfiguration,
   );
 
-  const recordPage = async (id: string, route: string) =>
-    json(
-      await stack.kernel(`/v1/zones/${id}:readPage`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: { route }, languages: ['en'] }),
-      }),
+  const governor = await stack.authPersona('governor');
+  await grant(stack, governor.accountId, ['moderation:takedown'], publishedPublic.zone.id);
+
+  const recordPage = async (id: string, route: string, persona?: 'alice') =>
+    json<ZonePageResponse>(
+      await stack.kernel(
+        `/v1/zones/${id}:readPage`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ target: { route }, languages: ['en'] }),
+        },
+        persona,
+      ),
       `record native ${route || 'home'} page`,
     );
-  const [home, guide, metadata, subjectMetadata, subjectPage] = await Promise.all([
+  const [home, guide, privateHome, metadata, subjectMetadata, subjectPage] = await Promise.all([
     recordPage(publishedPublic.zone.id, ''),
     recordPage(publishedPublic.zone.id, 'guide'),
+    recordPage(createdPrivate.zone.id, '', 'alice'),
     json(await stack.kernel(`/v1/zones/${publishedPublic.zone.id}`), 'record native Zone metadata'),
     json(await stack.kernel(`/v1/subjects/${subjectId}`), 'record native global subject'),
     json(
@@ -304,12 +318,17 @@ export async function createNativeStaticZonesFixture(stack: NativeWebStack): Pro
   await mkdir(recordingDirectory, { recursive: true });
   await Bun.write(
     join(recordingDirectory, 'native-static-zones-recording.json'),
-    `${JSON.stringify({ home, guide, metadata, subjectMetadata, subjectPage }, null, 2)}\n`,
+    `${JSON.stringify({ home, guide, privateHome, metadata, subjectMetadata, subjectPage }, null, 2)}\n`,
+  );
+  console.info(
+    `Native static Zone story recordings: ${JSON.stringify({ home, guide, privateHome, metadata, subjectMetadata, subjectPage })}`,
   );
 
   return {
     publicZoneId: publishedPublic.zone.id,
+    publicRevision: publishedPublic.zone.revision,
     privateZoneId: createdPrivate.zone.id,
+    privateHome,
     subjectId,
     publicLabel,
     publicHref,

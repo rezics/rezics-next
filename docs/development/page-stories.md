@@ -563,6 +563,54 @@ snapshots therefore use the Space stories below.
 | apps/web/src/routes/spaces/$address.tsx | unavailable (503)                            | member or visitor as applicable | missing                                                  | missing                                                  |
 | apps/web/src/routes/spaces/$address.tsx | member                                       | member or visitor as applicable | missing                                                  | missing                                                  |
 | apps/web/src/routes/spaces/$address.tsx | visitor                                      | member or visitor as applicable | missing                                                  | missing                                                  |
+| Route                                   | State                                        | Viewer                          | Desktop                                                  | Phone                                                    |
+| --------------------------------------- | -----------------------                      | ------------------------------- | ------------------------------------------------         | -------                                                  |
+| apps/web/src/routes/spaces/$address.tsx | populated                                    | anonymous                       | apps/web/src/stories/space.stories.tsx#SignedOut         | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | populated                                    | member                          | apps/web/src/stories/space.stories.tsx#SignedIn          | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | populated                                    | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | empty                                        | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | empty                                        | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | empty                                        | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | long content                                 | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | long content                                 | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | long content                                 | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable                      | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable                      | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable                      | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | error                                        | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | error                                        | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | error                                        | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | member                                       | member or visitor as applicable | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | visitor                                      | member or visitor as applicable | missing                                                  | missing                                                  |
+
+## apps/web/src/routes/zones/$id.tsx
+
+| Route                             | State                   | Viewer | Desktop                                            | Phone                                              |
+| --------------------------------- | ----------------------- | ------ | -------------------------------------------------- | -------------------------------------------------- |
+| apps/web/src/routes/zones/$id.tsx | Zone home               | reader | apps/web/src/stories/zone.stories.tsx#Home         | apps/web/src/stories/zone.stories.tsx#Home         |
+| apps/web/src/routes/zones/$id.tsx | private or missing Zone | reader | apps/web/src/stories/zone.stories.tsx#UnknownZone  | apps/web/src/stories/zone.stories.tsx#UnknownZone  |
+| apps/web/src/routes/zones/$id.tsx | private owner page      | owner  | apps/web/src/stories/zone.stories.tsx#PrivateOwner | apps/web/src/stories/zone.stories.tsx#PrivateOwner |
+| apps/web/src/routes/zones/$id.tsx | read unavailable (503)  | reader | apps/web/src/stories/zone.stories.tsx#Unavailable  | apps/web/src/stories/zone.stories.tsx#Unavailable  |
+
+## apps/web/src/routes/zones/$id_.$.tsx
+
+| Route                                | State                   | Viewer | Desktop                                           | Phone                                             |
+| ------------------------------------ | ----------------------- | ------ | ------------------------------------------------- | ------------------------------------------------- |
+| apps/web/src/routes/zones/$id_.$.tsx | configured static page  | reader | apps/web/src/stories/zone.stories.tsx#Subject     | apps/web/src/stories/zone.stories.tsx#Subject     |
+| apps/web/src/routes/zones/$id_.$.tsx | unknown configured page | reader | apps/web/src/stories/zone.stories.tsx#Preparing   | apps/web/src/stories/zone.stories.tsx#Preparing   |
+| apps/web/src/routes/zones/$id_.$.tsx | read unavailable (503)  | reader | apps/web/src/stories/zone.stories.tsx#Unavailable | apps/web/src/stories/zone.stories.tsx#Unavailable |
+
+## apps/web/src/routes/zones/$id_.subjects.$subjectId.tsx
+
+| Route                                                  | State                      | Viewer | Desktop                                                   | Phone                                                     |
+| ------------------------------------------------------ | -------------------------- | ------ | --------------------------------------------------------- | --------------------------------------------------------- |
+| apps/web/src/routes/zones/$id_.subjects.$subjectId.tsx | direct source route closed | reader | apps/web/src/stories/zone.stories.tsx#DirectTargetsClosed | apps/web/src/stories/zone.stories.tsx#DirectTargetsClosed |
+
+## apps/web/src/routes/zones/$id_.subjects.$subjectId_.$view.tsx
+
+| Route                                                         | State                      | Viewer | Desktop                                                   | Phone                                                     |
+| ------------------------------------------------------------- | -------------------------- | ------ | --------------------------------------------------------- | --------------------------------------------------------- |
+| apps/web/src/routes/zones/$id_.subjects.$subjectId_.$view.tsx | direct source route closed | reader | apps/web/src/stories/zone.stories.tsx#DirectTargetsClosed | apps/web/src/stories/zone.stories.tsx#DirectTargetsClosed |
 
 ## apps/web/src/routes/subjects/$id.tsx
 
@@ -1180,14 +1228,6 @@ snapshots therefore use the Space stories below.
 - apps/web/src/routes/spaces/$address.tsx — error — member — phone
 - apps/web/src/routes/spaces/$address.tsx — error — suspended — desktop
 - apps/web/src/routes/spaces/$address.tsx — error — suspended — phone
-- apps/web/src/routes/spaces/$address.tsx — Zone home — member or visitor as applicable — desktop
-- apps/web/src/routes/spaces/$address.tsx — Zone home — member or visitor as applicable — phone
-- apps/web/src/routes/spaces/$address.tsx — subject inside a Zone — member or visitor as applicable — desktop
-- apps/web/src/routes/spaces/$address.tsx — subject inside a Zone — member or visitor as applicable — phone
-- apps/web/src/routes/spaces/$address.tsx — preparing (202 continuation) — member or visitor as applicable — desktop
-- apps/web/src/routes/spaces/$address.tsx — preparing (202 continuation) — member or visitor as applicable — phone
-- apps/web/src/routes/spaces/$address.tsx — unavailable (503) — member or visitor as applicable — desktop
-- apps/web/src/routes/spaces/$address.tsx — unavailable (503) — member or visitor as applicable — phone
 - apps/web/src/routes/spaces/$address.tsx — member — member or visitor as applicable — desktop
 - apps/web/src/routes/spaces/$address.tsx — member — member or visitor as applicable — phone
 - apps/web/src/routes/spaces/$address.tsx — visitor — member or visitor as applicable — desktop
