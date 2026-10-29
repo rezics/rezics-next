@@ -43,14 +43,16 @@ export async function deletePersona(
        AND 'account:delete'=ANY(c.scopes) ORDER BY c.client_id LIMIT 1`,
     [actingHuman.accountId],
   );
-  const clientId = client.rows[0]?.client_id;
+  const authorizedClient = client.rows[0];
+  if (!authorizedClient) throw new Error(`No Auth client consent exists for acting human ${actingHuman.accountId}`);
+  const clientId = authorizedClient.client_id;
   if (!clientId) throw new Error(`No Auth client consent exists for acting human ${actingHuman.accountId}`);
 
   const signedIn = await options.auth.request('/signin', {
     account_id: actingHuman.accountId,
     password: 'ordinary native registration password',
     client_id: clientId,
-    scope: client.rows[0].scopes,
+    scope: authorizedClient.scopes,
   });
   if (signedIn.status !== 200) {
     const body = (await signedIn.json().catch(() => ({}))) as AccountDeletionErrorBody;

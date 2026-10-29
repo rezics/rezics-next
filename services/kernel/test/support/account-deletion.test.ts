@@ -39,6 +39,7 @@ test('a human deletion uses Auth approval and execution, records version 1 and r
   expect(status).toEqual({
     version: 1,
     at: deleted.at,
+    state: 'pending',
     participants: {
       access: 'pending',
       auth: 'pending',
