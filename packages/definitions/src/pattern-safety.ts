@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createContext, Script } from 'node:vm';
 
-export const MAX_ANALYSIS_STEPS = 100_000;
+export const MAX_ANALYSIS_STEPS = 8192;
 // Admission bounds the *expanded* expression before recheck allocates its NFA.
 // Counts include nested multiplication, not just the spelling of {n}. Saturate
 // by refusing immediately, before any expansion or integer overflow is possible.

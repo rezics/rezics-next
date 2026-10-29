@@ -13,7 +13,7 @@ filters, and regular-expression safety. A facet is an item, a time, a quantity, 
 a code: a `string` whose release definition has a `pattern`. Pattern checks use
 one shared structural admission policy and recheck 4.5.0's in-process synchronous
 entry point in an isolated VM context. The pinned browser checker's `performance.now`
-is a private counter, with a budget of 100,000 native cancellation checkpoints
+is a private counter, with a budget of 8,192 native cancellation checkpoints
 per expression; it never reads or patches the host clock. This also bounds DFA
 construction, which has no native size cap. Safety verdicts have no wall-clock deadline. Admission permits at most
 256 source characters, 16 nested groups, repetition endpoints of 64, a sum of 128
