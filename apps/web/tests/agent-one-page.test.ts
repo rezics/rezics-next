@@ -10,6 +10,7 @@ import { loadSubjectPage } from '../src/features/pages/subject';
 import { accountOf } from '../src/features/pages/account-read';
 import { accountSchemaType } from '../src/features/pages/account';
 import { subjectAccountRedirect } from '../src/features/pages/subject';
+import { routes as agentRoutes } from '../src/kernel/fake/agent-one-page';
 
 const redirectedClient = (data: unknown) =>
   ({
@@ -189,4 +190,17 @@ test('a followed handle page takes precedence over a merged subject survivor wit
     target: 'account',
   });
   expect(reads).toBe(1);
+});
+
+test('the operator fake answers its own identity without replacing unrelated public identities', async () => {
+  const route = agentRoutes.find((route) => route.path === '/v1/accounts')!;
+  for (const answer of [route.story!, route.fixture!]) {
+    const context = (ids: string) =>
+      ({ request: new Request(`https://kernel.test/v1/accounts?ids=${ids}`), recordings: {}, match: null }) as never;
+    expect(await answer(context('unrelated-account'))).toBeUndefined();
+    expect(await answer(context('0192f3a0-6c1e-7b2a-f001-000000000009'))).toMatchObject({
+      status: 200,
+      accounts: [{ handle: 'operator', displayName: 'Operator Name' }],
+    });
+  }
 });
