@@ -118,7 +118,7 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     expect(logs[3]).not.toContain('Batch integration check on');
     for (const entry of [controlPlane, stabilize]) {
       const log = readFileSync(h.outcomes.find(({ taskId }) => taskId === entry.id)!.logPath, 'utf8');
-      expect(log).toContain('Control-plane checks on');
+      expect(log).toContain(entry.id === controlPlane.id ? 'Control-plane checks on' : 'Integration check on');
       expect(log).not.toContain('Batch integration check on');
     }
   } finally {
