@@ -13,6 +13,8 @@ import { subjectAccountRedirect } from '../src/features/pages/subject';
 import { routes as agentRoutes } from '../src/kernel/fake/agent-one-page';
 import { loadViewPages } from '../src/features/pages/subject-frame';
 import { readRelationsPage } from '../src/features/pages/relations-view';
+import { createKernelClient } from '@rezics/client';
+import { createRecordedKernelFetch } from '../src/kernel/fake';
 
 const redirectedClient = (data: unknown) =>
   ({
@@ -246,4 +248,27 @@ test('a redirected relations view never reads inverse links', async () => {
     links: null,
   });
   expect(requests).toEqual([{ target: { subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80' }, languages: ['en'] }]);
+});
+
+test('the fake handle redirect follows in one hop with the original POST body and generated client', async () => {
+  const fake = createRecordedKernelFetch({ 'agent-page': agentRecording });
+  const requests: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      requests.push(request.url);
+      const response = await fake(request.clone());
+      if (response.status !== 308) return response;
+      const location = new URL(response.headers.get('location')!, request.url);
+      requests.push(location.href);
+      return fake(new Request(location, request));
+    }) as typeof fetch,
+  });
+  expect(await loadSubjectPage(client, '0192f3a0-6c1e-7b2a-e001-000000000001', 'details', 'en')).toEqual({
+    kind: 'redirect',
+    id: 'helper',
+    target: 'account',
+  });
+  expect(requests).toHaveLength(2);
+  expect(JSON.parse(new URL(requests[1]!).searchParams.get('target')!)).toEqual({ account: 'helper', view: 'details' });
 });
