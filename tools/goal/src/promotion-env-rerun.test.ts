@@ -40,25 +40,25 @@ test('an infrastructure-only stabilize gate failure reruns the same candidate an
   }
 });
 
-test.each([
-  'docker run failed with exit code 1',
-  'rsync error: unexplained error (code 255)',
-])('a stabilize gate retries infrastructure failure: %s', async (failure) => {
-  const h = integrationHarness();
-  try {
-    await h.seed('candidate');
-    git(h.root, 'branch', 'stabilize', h.head());
-    let calls = 0;
-    await h.promote(async () => {
-      calls++;
-      return calls === 1 ? { passed: false, output: failure, timedOut: false } : success;
-    });
-    expect(calls).toBe(2);
-    expect(h.head('main')).toBe(h.head('stabilize'));
-  } finally {
-    h.dispose();
-  }
-});
+test.each(['docker run failed with exit code 1', 'rsync error: unexplained error (code 255)'])(
+  'a stabilize gate retries infrastructure failure: %s',
+  async (failure) => {
+    const h = integrationHarness();
+    try {
+      await h.seed('candidate');
+      git(h.root, 'branch', 'stabilize', h.head());
+      let calls = 0;
+      await h.promote(async () => {
+        calls++;
+        return calls === 1 ? { passed: false, output: failure, timedOut: false } : success;
+      });
+      expect(calls).toBe(2);
+      expect(h.head('main')).toBe(h.head('stabilize'));
+    } finally {
+      h.dispose();
+    }
+  },
+);
 
 test('each infrastructure retry is named in the blocked promotion event', async () => {
   const h = integrationHarness();

@@ -449,7 +449,9 @@ function blockStabilize(
 }
 
 function infrastructureText(text: string): boolean {
-  return /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|docker\s+(?:run\b|:).*?(?:failed|failure|error|exit(?:ed)?(?: with code)? [1-9])|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(text);
+  return /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|docker\s+(?:run\b|:).*?(?:failed|failure|error|exit(?:ed)?(?: with code)? [1-9])|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(
+    text,
+  );
 }
 
 function infrastructureFailure(
@@ -494,11 +496,18 @@ async function rerunStabilizeInfrastructure(
     const label = `head-infrastructure-rerun-${attempt}`;
     const [rerun] = await gateAt(options, run, run.devHead, commands, label, 'headResults', true);
     if (!rerun) break;
-    run.infrastructureReruns = [...(run.infrastructureReruns ?? []), {
-      kind: 'promotion-infrastructure-rerun', commit: run.devHead, command: [...rerun.command], attempt,
-      initial: current, result: rerun,
-      log: join(options.settings.stateDirectory, `promotion-${run.id}-${label}-0.log`),
-    }];
+    run.infrastructureReruns = [
+      ...(run.infrastructureReruns ?? []),
+      {
+        kind: 'promotion-infrastructure-rerun',
+        commit: run.devHead,
+        command: [...rerun.command],
+        attempt,
+        initial: current,
+        result: rerun,
+        log: join(options.settings.stateDirectory, `promotion-${run.id}-${label}-0.log`),
+      },
+    ];
     options.job.tasks.store.savePromotion(run);
     current = rerun;
     if (rerun.passed) return [rerun];
@@ -997,14 +1006,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
           }
         }
         const tasks = run.taskIds.map((id) => store.task(id));
-        let checked = await gateAt(
-          options,
-          run,
-          run.devHead,
-          commandsFor(run.rootGate, tasks),
-          'head',
-          'headResults',
-        );
+        let checked = await gateAt(options, run, run.devHead, commandsFor(run.rootGate, tasks), 'head', 'headResults');
         if (stabilization) checked = await rerunStabilizeInfrastructure(options, run, checked);
         const failed = checked.find((item) => !item.passed);
         if (stabilization && failed) {
