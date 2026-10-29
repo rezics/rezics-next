@@ -1,5 +1,7 @@
+import { within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PageStory, libraryProgressReady, libraryProgressUnitMenuOpen, pagePaths } from './page';
+import { PageStory, libraryProgressReady, pagePaths } from './page';
 
 const viewports = {
   phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
@@ -26,7 +28,10 @@ export const Desktop: Story = {
 };
 
 export const SelectorSheetOpen: Story = {
-  name: 'Selector sheet open at 390',
-  play: libraryProgressUnitMenuOpen,
+  name: 'Profile unit selector at 390',
+  play: async (context) => {
+    await libraryProgressReady(context);
+    (await within(context.canvasElement).findByRole('combobox', { name: m.library_progress_unit() })).focus();
+  },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-progress']} />,
 };

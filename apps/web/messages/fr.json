@@ -266,12 +266,6 @@
   "library_progress_subject": "Œuvre",
   "library_progress_total": "Total",
   "library_progress_unit": "Unité",
-  "library_progress_unit_chapter": "Chapitre",
-  "library_progress_unit_episode": "Épisode",
-  "library_progress_unit_minute": "Minute",
-  "library_progress_unit_page": "Page",
-  "library_progress_unit_percent": "Pourcentage",
-  "library_progress_unit_volume": "Volume",
   "library_progress_units": "Unités terminées",
   "library_progress_units_empty": "Aucune unité n’a encore été terminée.",
   "library_remove": "Retirer",
@@ -658,5 +652,7 @@
   "search_stale_cursor_restarted": "Les résultats ont changé. La première page est affichée.",
   "library_copy_kind": "Type",
   "library_copy_unsupported": "Le profil de bibliothèque de cet élément ne prend pas en charge ce type d’exemplaire et cet état.",
-  "library_copy_no_longer_offered": "Ce type d’exemplaire n’est plus proposé pour cet élément."
+  "library_copy_no_longer_offered": "Ce type d’exemplaire n’est plus proposé pour cet élément.",
+  "library_progress_no_longer_offered": "Ce type de progression n’est plus proposé pour cet élément.",
+  "library_progress_unsupported": "Ce type de progression n’est pas disponible pour cet élément."
 }

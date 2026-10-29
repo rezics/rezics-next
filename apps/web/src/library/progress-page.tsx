@@ -1,7 +1,8 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { Label } from '@rezics/ui/shadcn/label';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { EllipsisIcon } from 'lucide-react';
@@ -11,16 +12,16 @@ import { ProgressRow } from '@rezics/ui/progress-row';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import type { ProgressIndex, ProgressMode, ProgressUnitWrite } from './progress-reads';
+import type { ProgressIndex, ProgressMode } from './progress-reads';
 import { progressView } from './progress-label';
-import { progressDefaultUnit } from './progress-default-unit';
-import { finishProgressSession, startProgressSession } from './progress-server';
+import type { ProgressChoices } from './progress-profile';
+import { finishProgressSession, startProgressSession, readProgressChoices } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
 
 const modeChoices: { value: ProgressMode; label: () => string }[] = [
@@ -29,26 +30,12 @@ const modeChoices: { value: ProgressMode; label: () => string }[] = [
   { value: 'completed_units', label: () => m.library_progress_mode_units() },
 ];
 
-const unitChoices: { value: ProgressUnitWrite; label: () => string }[] = [
-  { value: 'page', label: () => m.library_progress_unit_page() },
-  { value: 'chapter', label: () => m.library_progress_unit_chapter() },
-  { value: 'episode', label: () => m.library_progress_unit_episode() },
-  { value: 'volume', label: () => m.library_progress_unit_volume() },
-  { value: 'minute', label: () => m.library_progress_unit_minute() },
-  { value: 'percent', label: () => m.library_progress_unit_percent() },
-];
-
-function unitLabel(unit: ProgressUnitWrite): string {
-  return unitChoices.find((choice) => choice.value === unit)?.label() ?? m.library_progress_unit_page();
-}
-
 function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
   if (state === 'completed') return m.library_progress_state_completed();
   if (state === 'abandoned') return m.library_progress_state_abandoned();
   return m.library_progress_state_active();
 }
 
-const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2';
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
 
@@ -67,27 +54,35 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
     return subject ? [pickerSubject(subject)] : [];
   });
   const [seenSubject, setSeenSubject] = useState(page.subjectId);
-  if (seenSubject !== page.subjectId) {
-    setSeenSubject(page.subjectId);
-    const next = sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
-    setChosen(next ? [pickerSubject(next)] : []);
-  }
   const subject = chosen[0]?.id ?? '';
-  const [mode, setMode] = useState<ProgressMode>('scalar_amount');
-  const [unit, setUnit] = useState<ProgressUnitWrite>(() =>
-    progressDefaultUnit(sessions.find((session) => session.subject?.id === page.subjectId)?.subject?.types),
-  );
+  const [choices, setChoices] = useState<ProgressChoices>(page.progressChoices);
+  const [selectedMode, setMode] = useState<ProgressMode | undefined>(page.progressChoices?.[0]?.mode);
+  const [selectedUnit, setUnit] = useState('');
+  const mode = choices?.find((choice) => choice.mode === selectedMode)?.mode ?? choices?.[0]?.mode;
+  const units = choices?.find((choice) => choice.mode === mode)?.units ?? [];
+  const pair = units.find((unit) => unit.id === selectedUnit) ?? units[0];
+  const progressDefaultUnit = units[0]?.id ?? '';
+  const unit = pair?.id ?? progressDefaultUnit;
+  const choiceRequest = useRef(0);
+  const [choosing, setChoosing] = useState(false);
   const [total, setTotal] = useState('');
   const [key, setKey] = useState(page.idempotencyKey);
   const [alert, setAlert] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  if (seenSubject !== page.subjectId) {
+    setSeenSubject(page.subjectId);
+    setChoices(page.progressChoices);
+    const next = sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
+    setChosen(next ? [pickerSubject(next)] : []);
+  }
+
   async function onStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || !mode || !pair) return;
     setAlert(null);
     setPending(true);
-    const totalValue = mode === 'scalar_amount' ? total.trim() : '';
+    const totalValue = pair.total !== 'forbidden' ? total.trim() : '';
     try {
       const result = await startProgressSession({
         data: {
@@ -100,7 +95,13 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
         headers: csrfHeaders(),
       });
       if (!result.ok) {
-        setAlert(result.reason === 'conflict' ? m.library_progress_conflict() : m.library_progress_invalid());
+        setAlert(
+          result.reason === 'unsupported_library_profile'
+            ? m.library_progress_unsupported()
+            : result.reason === 'conflict'
+              ? m.library_progress_conflict()
+              : m.library_progress_invalid(),
+        );
         return;
       }
       setKey(crypto.randomUUID());
@@ -145,101 +146,96 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
             <h2 id="start-progress-heading" className="text-xl font-semibold">
               {m.library_progress_start_heading()}
             </h2>
-            <form className="max-w-xl space-y-5" onSubmit={onStart}>
-              <input type="hidden" name="idempotencyKey" value={key} />
-              {hydrated ? (
-                <>
-                  <input type="hidden" name="subjectId" value={subject} />
-                  <div className="space-y-2">
-                    <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                    <ProgressPicker
-                      value={chosen}
-                      onValueChange={(value) => {
-                        setChosen(value);
-                        if (value[0]) setUnit(progressDefaultUnit(value[0].types));
-                      }}
-                    />
-                  </div>
-                </>
-              ) : (
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                  <Input name="subjectId" defaultValue={page.subjectId} />
-                </label>
-              )}
-              <fieldset className="space-y-3">
-                <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
-                <RadioGroup
-                  name="progress-mode"
-                  value={mode}
-                  onValueChange={(value) => setMode(value as ProgressMode)}
-                  className="flex flex-wrap gap-x-6 gap-y-3"
-                >
-                  {modeChoices.map((choice) => (
-                    <label key={choice.value} className="flex items-center gap-2 text-sm">
-                      <RadioGroupItem value={choice.value} />
-                      {choice.label()}
-                    </label>
-                  ))}
-                </RadioGroup>
-              </fieldset>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
-                  {hydrated ? (
-                    <Menu
-                      title={m.library_progress_unit()}
-                      trigger={
-                        <Button
-                          variant="outline"
-                          className="w-full justify-between"
-                          aria-label={m.library_progress_unit()}
-                        >
-                          {unitLabel(unit)}
-                        </Button>
-                      }
-                      entries={[
-                        {
-                          type: 'radio',
-                          label: m.library_progress_unit(),
-                          value: unit,
-                          options: unitChoices.map((choice) => ({ value: choice.value, label: choice.label() })),
-                          onValueChange: (value) => setUnit(value as ProgressUnitWrite),
-                        },
-                      ]}
-                    />
-                  ) : (
-                    <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
-                      {unitChoices.map((choice) => (
-                        <option key={choice.value} value={choice.value}>
+            {hydrated ? (
+              <ProgressPicker
+                value={chosen}
+                onValueChange={async (value) => {
+                  const request = ++choiceRequest.current;
+                  setChosen(value);
+                  setChoices(undefined);
+                  setChoosing(true);
+                  setAlert(null);
+                  try {
+                    const next = value[0]
+                      ? await readProgressChoices({ data: value[0].type ?? value[0].types[0] ?? '' })
+                      : undefined;
+                    if (request !== choiceRequest.current) return;
+                    setChoices(next);
+                    setMode(next?.[0]?.mode);
+                    setUnit('');
+                    setTotal('');
+                  } catch {
+                    if (request === choiceRequest.current) setAlert(m.library_progress_invalid());
+                  } finally {
+                    if (request === choiceRequest.current) setChoosing(false);
+                  }
+                }}
+              />
+            ) : null}
+            {choices?.length && !choosing ? (
+              <form className="max-w-xl space-y-5" onSubmit={onStart}>
+                <input type="hidden" name="idempotencyKey" value={key} />
+                <input type="hidden" name="subjectId" value={subject} />
+                <fieldset className="space-y-3">
+                  <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
+                  <RadioGroup
+                    name="progress-mode"
+                    value={mode}
+                    onValueChange={(value) => setMode(value as ProgressMode)}
+                    className="flex flex-wrap gap-x-6 gap-y-3"
+                  >
+                    {choices
+                      ?.map((allowed) => modeChoices.find((choice) => choice.value === allowed.mode)!)
+                      .map((choice) => (
+                        <label key={choice.value} className="flex items-center gap-2 text-sm">
+                          <RadioGroupItem value={choice.value} />
                           {choice.label()}
-                        </option>
+                        </label>
                       ))}
-                    </select>
-                  )}
+                  </RadioGroup>
+                </fieldset>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field>
+                    <FieldLabel htmlFor="progress-unit">{m.library_progress_unit()}</FieldLabel>
+                    <NativeSelect
+                      id="progress-unit"
+                      name="unit"
+                      value={unit}
+                      onChange={(event) => setUnit(event.target.value)}
+                    >
+                      {units.map((choice) => (
+                        <NativeSelectOption key={choice.id} value={choice.id}>
+                          {choice.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                  {pair?.total !== 'forbidden' ? (
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">{m.library_progress_total()}</span>
+                      <Input
+                        name="total"
+                        type="number"
+                        min={pair?.min}
+                        max={pair?.max}
+                        step={pair?.step}
+                        required={pair?.total === 'required'}
+                        value={total}
+                        onChange={(event) => setTotal(event.target.value)}
+                      />
+                    </label>
+                  ) : null}
                 </div>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">{m.library_progress_total()}</span>
-                  <Input
-                    name="total"
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={total}
-                    disabled={mode !== 'scalar_amount'}
-                    onChange={(event) => setTotal(event.target.value)}
-                  />
-                </label>
-              </div>
-              {alert ? (
-                <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                  {alert}
-                </p>
-              ) : null}
-              <Button type="submit" disabled={pending}>
-                {m.library_progress_start()}
-              </Button>
-            </form>
+                {alert ? (
+                  <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                    {alert}
+                  </p>
+                ) : null}
+                <Button type="submit" disabled={pending}>
+                  {m.library_progress_start()}
+                </Button>
+              </form>
+            ) : null}
           </section>
         </Exposure>
       </>
@@ -347,6 +343,9 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
             </Exposure>
           }
         />
+        {!session.inputRules ? (
+          <p className="text-sm text-muted-foreground">{m.library_progress_no_longer_offered()}</p>
+        ) : null}
         {confirming ? (
           <Exposure operation="progress_session.complete">
             <div className="relative z-10 flex flex-wrap gap-2">

@@ -266,12 +266,6 @@
   "library_progress_subject": "Werk",
   "library_progress_total": "Gesamt",
   "library_progress_unit": "Einheit",
-  "library_progress_unit_chapter": "Kapitel",
-  "library_progress_unit_episode": "Episode",
-  "library_progress_unit_minute": "Minute",
-  "library_progress_unit_page": "Seite",
-  "library_progress_unit_percent": "Prozent",
-  "library_progress_unit_volume": "Band",
   "library_progress_units": "Abgeschlossene Einheiten",
   "library_progress_units_empty": "Bisher wurde noch keine Einheit abgeschlossen.",
   "library_remove": "Entfernen",
@@ -658,5 +652,7 @@
   "search_stale_cursor_restarted": "Die Ergebnisse wurden aktualisiert. Die erste Seite wird angezeigt.",
   "library_copy_kind": "Art",
   "library_copy_unsupported": "Das Bibliotheksprofil dieses Eintrags unterstützt diese Art und diesen Status nicht.",
-  "library_copy_no_longer_offered": "Diese Art von Exemplar wird für diesen Eintrag nicht mehr angeboten."
+  "library_copy_no_longer_offered": "Diese Art von Exemplar wird für diesen Eintrag nicht mehr angeboten.",
+  "library_progress_no_longer_offered": "Diese Art von Fortschritt wird für diesen Eintrag nicht mehr angeboten.",
+  "library_progress_unsupported": "Diese Art von Fortschritt wird für diesen Eintrag nicht unterstützt."
 }

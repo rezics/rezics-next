@@ -1,9 +1,11 @@
-import type { ProgressUnitWrite } from './progress-reads';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { libraryChoices } from './profiles';
 
-/** Choose a useful starting unit from the subject's semantic types while keeping the existing unit choices. */
-export function progressDefaultUnit(types: readonly string[] | undefined): ProgressUnitWrite {
-  const values = (types ?? []).map((type) => type.toLowerCase());
-  if (values.some((type) => /videogame|game/.test(type))) return 'percent';
-  if (values.some((type) => /video|movie|tvseries|tvseason|tv.*episode/.test(type))) return 'episode';
-  return 'page';
+/** Compatibility for callers with a bundled accepting type; pages use their server-resolved choices. */
+export function progressDefaultUnit(types: readonly string[] | undefined): string {
+  for (const type of types ?? []) {
+    const unit = libraryChoices(bundledRelease, type)?.progress[0]?.units[0]?.id;
+    if (unit) return unit;
+  }
+  return '';
 }

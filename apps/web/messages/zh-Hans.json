@@ -266,12 +266,6 @@
   "library_progress_subject": "作品",
   "library_progress_total": "总量",
   "library_progress_unit": "单位",
-  "library_progress_unit_chapter": "章",
-  "library_progress_unit_episode": "集",
-  "library_progress_unit_minute": "分钟",
-  "library_progress_unit_page": "页",
-  "library_progress_unit_percent": "百分比",
-  "library_progress_unit_volume": "卷",
   "library_progress_units": "已完成单位",
   "library_progress_units_empty": "尚未完成任何单元。",
   "library_remove": "移除",
@@ -658,5 +652,7 @@
   "search_stale_cursor_restarted": "结果已更新，现显示第一页。",
   "library_copy_kind": "类型",
   "library_copy_unsupported": "此条目的藏书配置不支持该副本类型和状态。",
-  "library_copy_no_longer_offered": "此条目已不再提供这种副本类型。"
+  "library_copy_no_longer_offered": "此条目已不再提供这种副本类型。",
+  "library_progress_no_longer_offered": "这个条目已不再提供这种进度记录方式。",
+  "library_progress_unsupported": "这个条目不支持这种进度记录方式。"
 }

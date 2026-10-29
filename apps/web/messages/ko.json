@@ -266,12 +266,6 @@
   "library_progress_subject": "작품",
   "library_progress_total": "합계",
   "library_progress_unit": "단위",
-  "library_progress_unit_chapter": "장",
-  "library_progress_unit_episode": "화",
-  "library_progress_unit_minute": "분",
-  "library_progress_unit_page": "페이지",
-  "library_progress_unit_percent": "퍼센트",
-  "library_progress_unit_volume": "권",
   "library_progress_units": "완료한 단위",
   "library_progress_units_empty": "아직 완료한 단위가 없습니다.",
   "library_remove": "삭제",
@@ -658,5 +652,7 @@
   "search_stale_cursor_restarted": "결과가 업데이트되어 첫 페이지를 표시합니다.",
   "library_copy_kind": "종류",
   "library_copy_unsupported": "이 항목의 라이브러리 프로필은 해당 복본 종류와 상태를 지원하지 않습니다.",
-  "library_copy_no_longer_offered": "이 항목에서는 이 종류의 복본을 더 이상 제공하지 않습니다."
+  "library_copy_no_longer_offered": "이 항목에서는 이 종류의 복본을 더 이상 제공하지 않습니다.",
+  "library_progress_no_longer_offered": "이 항목에서는 이 방식으로 진행 상황을 더 이상 기록할 수 없습니다.",
+  "library_progress_unsupported": "이 항목에서는 이 방식으로 진행 상황을 기록할 수 없습니다."
 }

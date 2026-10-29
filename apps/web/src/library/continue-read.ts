@@ -121,6 +121,7 @@ export async function readProgress(
       total: session.total,
       completedUnitCount: session.completedUnitCount,
       locator: session.locator,
+      position: session.position,
     };
   } catch {
     return null;
@@ -149,6 +150,7 @@ export async function loadContinue(
     );
     const page = await reader.pages.$read.post({ reads, headers: { authorization } });
     const results = page.data?.reads ?? {};
+    const { release, locale, progressSessionProfile } = await progressProfiles(request);
     return subjects.flatMap((item) => {
       const header = results[`subject:${item.subjectId}`];
       const subject = header?.status === 200 ? header.body?.subject : undefined;
@@ -162,7 +164,9 @@ export async function loadContinue(
           label: libraryLabel(subject.label, item.subjectId),
           ...(language ? { language } : {}),
           summary: summaryOf(subject),
-          progress,
+          progress: progress && release
+            ? { ...progress, ...progressSessionProfile(release, subject.type, progress.mode, progress.unit, locale) }
+            : progress,
           ...(label ? { stateLabel: label } : {}),
         },
       ];
@@ -183,6 +187,7 @@ export async function loadLegacyContinue(
     const authorization = viewerCredential(request);
     if (!authorization) return [];
     const page = await readEntryPage(client, authorization, undefined, 'in_progress', CONTINUE_LIMIT);
+    const { release, locale, progressSessionProfile } = await progressProfiles(request);
     return await Promise.all(
       page.libraryEntries.flatMap((entry) => {
         const subject = entry.subject as RawSubject | null | undefined;
@@ -195,7 +200,9 @@ export async function loadLegacyContinue(
             label: libraryLabel(subject.label, entry.subjectId),
             ...(language ? { language } : {}),
             summary: summaryOf(subject),
-            progress,
+            progress: progress && release
+              ? { ...progress, ...progressSessionProfile(release, subject.type, progress.mode, progress.unit, locale) }
+              : progress,
             ...(stateLabel ? { stateLabel } : {}),
           })),
         ];
@@ -204,4 +211,11 @@ export async function loadLegacyContinue(
   } catch {
     return [];
   }
+}
+
+async function progressProfiles(request: Request) {
+  const release = await import('../subject/definitions').then(({ readRelease }) => readRelease()).catch(() => undefined);
+  const locale = (await import('../kernel/client')).requestLocale(request) ?? 'en';
+  const { progressSessionProfile } = await import('./progress-profile');
+  return { release, locale, progressSessionProfile };
 }

@@ -266,12 +266,6 @@
   "library_progress_subject": "作品",
   "library_progress_total": "合計",
   "library_progress_unit": "単位",
-  "library_progress_unit_chapter": "章",
-  "library_progress_unit_episode": "話",
-  "library_progress_unit_minute": "分",
-  "library_progress_unit_page": "ページ",
-  "library_progress_unit_percent": "パーセント",
-  "library_progress_unit_volume": "巻",
   "library_progress_units": "完了した単位",
   "library_progress_units_empty": "完了した単位はまだありません。",
   "library_remove": "削除",
@@ -658,5 +652,7 @@
   "search_stale_cursor_restarted": "検索結果が更新されました。1ページ目を表示しています。",
   "library_copy_kind": "種類",
   "library_copy_unsupported": "この項目のライブラリプロフィールでは、この種類と状態の組み合わせは使えません。",
-  "library_copy_no_longer_offered": "この項目では、この種類のコピーは現在利用できません。"
+  "library_copy_no_longer_offered": "この項目では、この種類のコピーは現在利用できません。",
+  "library_progress_no_longer_offered": "このアイテムでは、この方法で進捗を記録できなくなりました。",
+  "library_progress_unsupported": "このアイテムでは、この方法で進捗を記録できません。"
 }

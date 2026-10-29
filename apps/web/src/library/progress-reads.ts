@@ -1,3 +1,4 @@
+import type { ProgressChoices, ProgressInputRules } from './progress-profile';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
@@ -19,11 +20,8 @@ const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][
 const decimal = /^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$/;
 const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
 const modes = new Set(['scalar_amount', 'cursor_position', 'completed_units']);
-const writableProgressUnits = new Set(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
 
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
-export type ProgressUnitWrite = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
-export type ProgressUnitRead = string;
 export type ProgressState = 'active' | 'completed' | 'abandoned';
 
 export type ProgressChange = {
@@ -43,7 +41,10 @@ export type ProgressSessionCore = {
   subjectId: string;
   versionSubjectId: string | null;
   mode: ProgressMode;
-  unit: ProgressUnitRead;
+  unit: string;
+  unitLabel?: string;
+  dimension?: string;
+  inputRules?: ProgressInputRules;
   total: string | null;
   amount: string | null;
   locator: string | null;
@@ -60,6 +61,7 @@ export type ProgressSessionCore = {
 export type ProgressIndex = {
   signedIn: boolean;
   subjectId: string;
+  progressChoices?: ProgressChoices;
   sessions: ProgressSessionCore[];
   next: string | null;
   idempotencyKey: string;
@@ -84,7 +86,7 @@ export type ProgressSessionPage =
 
 export type ProgressFailure = {
   ok: false;
-  reason: 'conflict' | 'invalid' | 'closed' | 'forbidden' | 'unavailable';
+  reason: 'conflict' | 'invalid' | 'unsupported_library_profile' | 'closed' | 'forbidden' | 'unavailable';
 };
 
 export type ProgressSnapshot = {
@@ -126,8 +128,8 @@ function isMode(value: string): value is ProgressMode {
   return modes.has(value);
 }
 
-function isWritableUnit(value: string): value is ProgressUnitWrite {
-  return writableProgressUnits.has(value);
+function isWritableUnit(value: string): boolean {
+  return unitIdPattern.test(value);
 }
 
 function subjectOf(subject: RawSubject | undefined): LibrarySubject | null {
@@ -200,8 +202,16 @@ function callBody(error: unknown): unknown {
 
 function failure(status: number, body: unknown): ProgressFailure {
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
+  if (
+    status === 422 &&
+    typeof body === 'object' &&
+    body !== null &&
+    'code' in body &&
+    body.code === 'unsupported_library_profile'
+  )
+    return { ok: false, reason: 'unsupported_library_profile' };
   if (status === 409) return { ok: false, reason: 'conflict' };
-  if (status === 400 || status === 422) return { ok: false, reason: 'invalid' };
+  if (status === 400 || status === 422) return { ok: false, reason: 'unsupported_library_profile' };
   if (status === 401 || status === 403 || status === 404) return { ok: false, reason: 'forbidden' };
   return { ok: false, reason: 'unavailable' };
 }
@@ -348,7 +358,7 @@ export type ProgressStartInput = {
   idempotencyKey: string;
 };
 
-/** Starts one session. Total belongs only to an amount, and only when the person gave one. */
+/** Starts one session; the kernel validates the pair and its total policy against the current profile. */
 export async function startProgress(
   client: KernelClient,
   request: Request,
@@ -363,7 +373,7 @@ export async function startProgress(
     !isMode(input.mode) ||
     !isWritableUnit(input.unit) ||
     !idempotencyKeyPattern.test(input.idempotencyKey) ||
-    (total !== '' && (input.mode !== 'scalar_amount' || !decimal.test(total)))
+    (total !== '' && !decimal.test(total))
   )
     return { ok: false, reason: 'invalid' };
   try {

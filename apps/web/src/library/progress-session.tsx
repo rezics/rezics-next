@@ -52,6 +52,8 @@ function SessionEditor({
   const [alert, setAlert] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
   const [editing, setEditing] = useState(false);
+  const [unsupported, setUnsupported] = useState(false);
+  const offered = Boolean(session.inputRules) && !unsupported;
   const [phone, setPhone] = useState(false);
   const pending = useRef(false);
   const addId = useId();
@@ -78,6 +80,7 @@ function SessionEditor({
 
   if (page.session.id !== seenId) {
     setSeenId(page.session.id);
+    setUnsupported(false);
     setSession(page.session);
     setKey(page.idempotencyKey);
     setAmount('');
@@ -90,11 +93,18 @@ function SessionEditor({
   }
 
   function explain(reason: string) {
-    setAlert(reason === 'conflict' ? m.library_progress_conflict() : m.library_progress_invalid());
+    setAlert(
+      reason === 'unsupported_library_profile'
+        ? m.library_progress_unsupported()
+        : reason === 'conflict'
+          ? m.library_progress_conflict()
+          : m.library_progress_invalid(),
+    );
+    if (reason === 'unsupported_library_profile') setUnsupported(true);
   }
 
   async function onRecord() {
-    if (pending.current || session.state !== 'active') return;
+    if (pending.current || session.state !== 'active' || !offered) return;
     setAlert(null);
     const intent =
       session.mode === 'cursor_position'
@@ -146,7 +156,7 @@ function SessionEditor({
   }
 
   async function onUnits(kind: 'add' | 'remove') {
-    if (pending.current || session.state !== 'active') return;
+    if (pending.current || session.state !== 'active' || !offered) return;
     const parsed = parseUnitBatch(kind === 'add' ? addText : removeText);
     if (!parsed.ok) {
       setAlert(parsed.reason === 'limit' ? m.library_progress_batch_limit() : m.library_progress_invalid());
@@ -245,6 +255,8 @@ function SessionEditor({
     }
   }
 
+  const { min, max, step } = session.inputRules ?? {};
+  const inputBounds = { min, max, step };
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
   const progress = progressView(session, getLocale());
   const recordForm = (
@@ -254,7 +266,7 @@ function SessionEditor({
           {m.library_progress_record_heading()}
         </h2>
         {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
-        {session.state === 'active' && session.mode !== 'completed_units' ? (
+        {offered && session.state === 'active' && session.mode !== 'completed_units' ? (
           <form
             className="max-w-xl space-y-4"
             onSubmit={(event) => {
@@ -265,7 +277,12 @@ function SessionEditor({
             {session.mode === 'scalar_amount' ? (
               <label className="block space-y-1">
                 <span className="text-sm font-medium">{m.library_progress_amount()}</span>
-                <Input value={amount} onChange={(event) => setAmount(event.target.value)} />
+                <Input
+                  type="number"
+                  {...inputBounds}
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
               </label>
             ) : (
               <>
@@ -275,14 +292,19 @@ function SessionEditor({
                 </label>
                 <label className="block space-y-1">
                   <span className="text-sm font-medium">{m.library_progress_position()}</span>
-                  <Input value={position} onChange={(event) => setPosition(event.target.value)} />
+                  <Input
+                    type="number"
+                    {...inputBounds}
+                    value={position}
+                    onChange={(event) => setPosition(event.target.value)}
+                  />
                 </label>
               </>
             )}
             <Button type="submit">{m.library_progress_record()}</Button>
           </form>
         ) : null}
-        {session.state === 'active' && session.mode === 'completed_units' ? (
+        {offered && session.state === 'active' && session.mode === 'completed_units' ? (
           <div className="space-y-4">
             <div className="space-y-2">
               <label htmlFor={addId} className="text-sm font-medium">
@@ -393,9 +415,12 @@ function SessionEditor({
         </div>
         {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
+      {!session.inputRules ? (
+        <p className="text-sm text-muted-foreground">{m.library_progress_no_longer_offered()}</p>
+      ) : null}
       {session.state === 'active' ? (
         <div className="flex items-center gap-2">
-          <Button onClick={openUpdate}>{m.library_progress_update()}</Button>
+          {offered ? <Button onClick={openUpdate}>{m.library_progress_update()}</Button> : null}
           <Exposure operation="progress_session.complete">
             <Menu
               title={m.library_collection_actions()}
@@ -434,7 +459,7 @@ function SessionEditor({
                     {alert}
                   </p>
                 ) : null}
-                {recordForm}
+                {offered ? recordForm : null}
               </div>
             </DrawerContent>
           </Drawer>
@@ -448,7 +473,7 @@ function SessionEditor({
                   {alert}
                 </p>
               ) : null}
-              {recordForm}
+              {offered ? recordForm : null}
             </DialogContent>
           </Dialog>
         )

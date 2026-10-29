@@ -3,6 +3,9 @@ import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
+import { progressFormChoices, progressSessionProfile, type ProgressChoices } from './progress-profile';
+import { readRelease } from '../subject/definitions';
+import { requestLocale } from '../kernel/client';
 import { kernelClient } from '../kernel/client';
 import { nameSubjectTypes } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
@@ -60,7 +63,7 @@ function validateStart(input: unknown): ProgressStartInput {
   return {
     subjectId: requiredString(value.subjectId, 128),
     mode: requiredString(value.mode, 32),
-    unit: requiredString(value.unit, 32),
+    unit: requiredString(value.unit, 128),
     idempotencyKey: requiredString(value.idempotencyKey, 64),
     ...(total === undefined ? {} : { total }),
   };
@@ -154,6 +157,16 @@ export const readProgressIndex = createServerFn({ method: 'GET' })
       loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data),
     );
     await nameSubjectTypes(page.sessions.map((session) => session.subject));
+    if (page.signedIn) {
+      const release = await readRelease();
+      const locale = requestLocale(request) ?? 'en';
+      const subject = page.sessions.find((session) => session.subjectId === page.subjectId)?.subject;
+      page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
+      page.sessions = page.sessions.map((session) => ({
+        ...session,
+        ...progressSessionProfile(release, session.subject?.type ?? '', session.mode, session.unit, locale),
+      }));
+    }
     return withFreshKey(page);
   });
 
@@ -166,6 +179,19 @@ export const readProgressSession = createServerFn({ method: 'GET' })
       loadProgressSession(kernelClient(), request, env as Partial<SessionEnv>, data),
     );
     if (page.signedIn) await nameSubjectTypes([page.session.subject, page.session.versionSubject]);
+    if (page.signedIn) {
+      const release = await readRelease();
+      page.session = {
+        ...page.session,
+        ...progressSessionProfile(
+          release,
+          page.session.subject?.type ?? '',
+          page.session.mode,
+          page.session.unit,
+          requestLocale(request) ?? 'en',
+        ),
+      };
+    }
     return withFreshKey(page);
   });
 
@@ -189,3 +215,10 @@ export const finishProgressSession = createServerFn({ method: 'POST' })
     setResponseHeader('cache-control', 'private, no-store');
     return finishProgress(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
+
+/** Picker results already identify the accepting type; resolving its choices needs no subject request. */
+export const readProgressChoices = createServerFn({ method: 'GET' })
+  .validator((type: string) => requiredString(type, 256))
+  .handler(async ({ data }): Promise<ProgressChoices> =>
+    progressFormChoices(await readRelease(), data, requestLocale() ?? 'en'),
+  );
