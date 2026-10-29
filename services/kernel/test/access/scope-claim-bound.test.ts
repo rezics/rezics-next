@@ -22,7 +22,7 @@ const auth: AuthenticationConfig = {
   fetch: async () => Response.json({ keys: [jwk] }),
 };
 const app = createApp({ pool, access: (config) => createAccess({ ...config, auth }) });
-for (let index = 0; index < 101; index++) {
+for (let index = 0; index < MAX_CONSENTED_SCOPES - 3; index++) {
   const suffix = String.fromCharCode(97 + Math.floor(index / 26), 97 + (index % 26));
   const action = `scope:${'a'.repeat(120)}${suffix}`;
   const detail = {
@@ -76,7 +76,7 @@ async function refused(scope: string) {
 }
 
 test('the kernel admits every known scope with more than 100 maximum-length mounted actions', async () => {
-  expect(catalogue.size).toBe(101);
+  expect(catalogue.size).toBe(MAX_CONSENTED_SCOPES - 3);
   expect([...catalogue.keys()].every((action) => action.length === 128)).toBe(true);
   expect(scopes.join(' ').length).toBeGreaterThan(12_900);
   const response = await request(scopes.join(' '));

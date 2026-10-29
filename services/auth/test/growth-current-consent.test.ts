@@ -384,7 +384,7 @@ test('durable consent point reader honors native pending reduction ceiling befor
   }
 }, 120000);
 
-test('current consent keeps one point statement and fixed rows at 16, 103 and 512 scopes', async () => {
+test('current consent keeps one point statement and fixed rows at 8, 64 and 512 scopes', async () => {
   const fixture = testDatabase();
   const db = await openGrowthDatabase(fixture.url);
   try {
@@ -393,7 +393,7 @@ test('current consent keeps one point statement and fixed rows at 16, 103 and 51
       INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ('person','scope-bound',ARRAY['read'])`);
     const read = createCurrentConsentReader({ database: db.pool }).readCurrentConsent;
     const costs: [number, number][] = [];
-    for (const count of [16, 103, MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPES + 1]) {
+    for (const count of [8, 64, MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPES + 1]) {
       const scopes = Array.from({ length: count }, (_, i) => `scope:${i}:`.padEnd(128, 'a'));
       await db.admin.query("UPDATE auth_client SET scopes=$1 WHERE client_id='scope-bound'", [scopes]);
       await db.admin.query("UPDATE auth_consent SET scopes=$1 WHERE client_id='scope-bound'", [scopes]);

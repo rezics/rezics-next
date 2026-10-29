@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { DBOS, Error as DBOSErrors } from '@dbos-inc/dbos-sdk';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { Pool, type PoolClient } from 'pg';
 import { createContentOperationClient, createContentWork } from '../../src/content/work.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -2634,7 +2635,7 @@ export async function runWorker() {
         operation.sourceId = 'x'.repeat(256);
         break;
       case 'oversized-tuple':
-        operation.actor = { ...substitutedActor, scopes: Array.from({ length: 101 }, () => 'account:read') };
+        operation.actor = { ...substitutedActor, scopes: Array.from({ length: MAX_CONSENTED_SCOPES + 1 }, () => 'account:read') };
         break;
       case 'oversized-key':
         operation.idempotencyKey = 'x'.repeat(256);

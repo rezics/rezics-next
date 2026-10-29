@@ -2,7 +2,7 @@ import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { captureDurableInitiator } from '../../src/access/index.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { measure, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { captureAttempt, captureFixture } from './durable-initiator-capture.test.ts';
 
 let db: GrowthDatabase;
@@ -59,19 +59,26 @@ for (const delegated of [false, true]) {
   }, 120_000);
 }
 
-test('capture keeps constant statements and rows at 16, 103 and 512 consented scopes', async () => {
-  const costs: [number, number][] = [];
+test('capture keeps constant statements and rows at 8, 64 and 512 consented scopes', async () => {
+  const fixtures = new Map<number, Awaited<ReturnType<typeof captureFixture>>>();
   const complete = new Error('Measured before writes');
-  for (const count of [16, 103, MAX_CONSENTED_SCOPES]) {
-    const scopes = ['subject:write', ...Array.from({ length: count - 1 }, (_, i) => `scope:${i}`)];
-    const f = await captureFixture(db, false, scopes);
-    await expect(
-      captureAttempt(f, async (context) => {
-        const sample = await measure(db, () => captureDurableInitiator(context, f.actor));
-        costs.push([sample.cost.statements, sample.cost.rows]);
-        throw complete;
-      }),
-    ).rejects.toBe(complete);
-  }
-  expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!]);
+  const report = await checkGrowth(db, {
+    name: 'durable initiator capture by consented scope count',
+    scales: [8, 64, MAX_CONSENTED_SCOPES],
+    bounds: { statements: 'constant', rows: 'constant', blocks: 'linear' },
+    async grow(_database, scale) {
+      const scopes = ['subject:write', ...Array.from({ length: scale - 1 }, (_, i) => `scope:${i}`)];
+      fixtures.set(scale, await captureFixture(db, false, scopes));
+    },
+    async operation(_database, scale) {
+      const f = fixtures.get(scale)!;
+      await expect(
+        captureAttempt(f, async (context) => {
+          await captureDurableInitiator(context, f.actor);
+          throw complete;
+        }),
+      ).rejects.toBe(complete);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([8, 64, MAX_CONSENTED_SCOPES]);
 });

@@ -165,28 +165,28 @@ for (const person of ['other people', 'same person history'] as const) {
   }
 }
 
-test('restoration keeps constant statements and rows at 16, 103 and 512 consented scopes', async () => {
-  const fixtures = [];
-  for (const count of [16, 103, MAX_CONSENTED_SCOPES]) {
-    const scopes = ['subject:write', 'account:delegate', ...Array.from({ length: count - 2 }, (_, i) => `scope:${i}`)];
-    fixtures.push({ count, fixture: await h.fixture(false, scopes) });
-  }
-  // Hold the stored neighbourhood fixed while only the selected scope count changes.
-  await h.db.admin.query('VACUUM (ANALYZE)');
-  const costs: [number, number][] = [];
+test('restoration keeps constant statements and rows at 8, 64 and 512 consented scopes', async () => {
+  const fixtures = new Map<number, Awaited<ReturnType<typeof h.fixture>>>();
   const complete = new Error('Restoration measured before target writes');
-  for (const { count, fixture } of fixtures) {
-    const sample = await measure(h.db, async () => {
+  const report = await checkGrowth(h.db, {
+    name: 'durable initiator restoration by consented scope count',
+    scales: [8, 64, MAX_CONSENTED_SCOPES],
+    bounds: { statements: 'constant', rows: 'constant', blocks: 'linear' },
+    async grow(_db, scale) {
+      const scopes = ['subject:write', 'account:delegate', ...Array.from({ length: scale - 2 }, (_, i) => `scope:${i}`)];
+      fixtures.set(scale, await h.fixture(false, scopes));
+    },
+    async operation(_db, scale) {
+      const fixture = fixtures.get(scale)!;
       await expect(
         h.step(fixture, {
           onActor: async (actor) => {
-            expect(actor.scopes).toHaveLength(count);
+            expect(actor.scopes).toHaveLength(scale);
             throw complete;
           },
         }),
       ).rejects.toBe(complete);
-    });
-    costs.push([sample.cost.statements, sample.cost.rows]);
-  }
-  expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!]);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([8, 64, MAX_CONSENTED_SCOPES]);
 });
