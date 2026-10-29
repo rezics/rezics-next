@@ -11,6 +11,7 @@ import { createRegistrationProofBindings } from '../../src/access/registration-p
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { readRealm } from '../../src/community/realm.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import type { Access } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -544,7 +545,7 @@ test.serial(
             { deadline: Date.now() + 90_000, idempotencyKey: crypto.randomUUID() },
           );
           head = changed.value.revisionId;
-          const read = await board.readRealm({ pool, access }, actor, probe.realmId, { deadline: Date.now() + 90_000 });
+          const read = await readRealm({ pool, access }, actor, probe.realmId, { deadline: Date.now() + 90_000 });
           expect(read?.boardSchemeId).toBe(schemeId);
           expect(read?.headRevisionId).toBe(head);
           return changed;

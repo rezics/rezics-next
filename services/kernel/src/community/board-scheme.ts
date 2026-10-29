@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { createResourcePublicEligibility, resourceAuthorization } from '../access/index.ts';
+import { resourceAuthorization } from '../access/index.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deriveAccess } from '../access/derived-access.ts';
@@ -12,16 +12,15 @@ import {
   runCommand,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readSubject } from '../semantic/subject.ts';
 import {
   RealmConflictError,
   RealmInputError,
-  type Realm as Metadata,
+  type Realm,
   type RealmDependencies,
   type RealmContext,
 } from './realm.ts';
@@ -29,7 +28,6 @@ import read from './board-scheme-read.sql';
 import append from './board-scheme-revision.sql';
 import moveHead from './board-scheme-head.sql';
 
-export type Realm = Metadata & Readonly<{ boardSchemeId: string | null }>;
 type RealmRow = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 function record(row: RealmRow): Realm {
   return {
@@ -38,7 +36,6 @@ function record(row: RealmRow): Realm {
     state: row.state,
     visibility: row.visibility,
     contextId: row.context_id,
-    boardSchemeId: row.board_scheme_id,
     headRevisionId: row.head_revision_id,
     createdAt: new Date(row.created_at).toISOString(),
     creator: row.creator,
@@ -48,44 +45,6 @@ function record(row: RealmRow): Realm {
     revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
     author: row.author,
   };
-}
-
-/** The scheme travels with the same single head read used by public eligibility. */
-export async function readRealm(
-  deps: Pick<RealmDependencies, 'pool' | 'access'>,
-  actor: Actor,
-  realmId: string,
-  context: { deadline: number },
-): Promise<Realm | null> {
-  const route = routeOf(realmId);
-  if (route === null || !Number.isFinite(context.deadline) || Date.now() >= context.deadline) return null;
-  const resource = { route, id: realmId };
-  let current: RealmRow | null = null;
-  const eligibility = createResourcePublicEligibility({
-    resource,
-    action: 'realm:read',
-    async prepare() {
-      return resource;
-    },
-    async verify({ client, at }) {
-      current = await read.run(client, { route, id: realmId, at });
-      return current?.visibility === 'public';
-    },
-  });
-  const check = await accessCheck(
-    deps.access,
-    actor,
-    'realm:read',
-    { ...resource, eligibility },
-    {
-      pool: deps.pool,
-      deadline: context.deadline,
-    },
-  );
-  return withConnection(deps.pool, async (client) => {
-    if (!(await check(deadlineClient(client, context.deadline)))) return null;
-    return current ? record(current) : null;
-  });
 }
 
 export async function setBoardScheme(
