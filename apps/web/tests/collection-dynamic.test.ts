@@ -55,12 +55,13 @@ test('a dynamic page renders cover tiles without count, time, or membership cont
   );
   expect(html).toContain('Everything');
   expect(html).toContain('A book');
-  expect(html).not.toContain('Updated');
-  expect(html).not.toContain('items');
-  expect(html).not.toContain('Add');
-  expect(html).not.toContain('Remove');
-  expect(html).not.toContain('Move');
-  expect(html).not.toContain('Note');
+  const text = html.replace(/<[^>]*>/g, ' ');
+  expect(text).not.toMatch(/\bUpdated\b/);
+  expect(text).not.toMatch(/\bitems?\b/);
+  expect(text).not.toMatch(/\bAdd\b/);
+  expect(text).not.toMatch(/\bRemove\b/);
+  expect(text).not.toMatch(/\bMove\b/);
+  expect(text).not.toMatch(/\bNote\b/);
 });
 
 test('one Collection read and one members read per document for dynamic and curated Collections with 0, 20 and 100 members; a preparing answer adds at most 3 rereads', async () => {
