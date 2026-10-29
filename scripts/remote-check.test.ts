@@ -438,7 +438,7 @@ if (script.includes('/proc/loadavg')) {
     .filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index))
     .reduce((sum, index) => sum + Number(readFileSync(dir + '/' + hostKey + '.slot.' + index + '.memory', 'utf8') || 0), 0)
     + (existsSync(dir + '/' + hostKey + '.slot.express') ? Number(readFileSync(dir + '/' + hostKey + '.slot.express.memory', 'utf8') || 0) : 0);
-  if (reserved + reservationBytes > (config.memoryMax ?? (16 * 2 ** 30))) {
+  if (reserved + requested * reservationBytes > (config.memoryMax ?? (16 * 2 ** 30))) {
     log({ kind: 'slot', granted: false, reason: 'memory', reserved, requestedBytes: reservationBytes, script });
     process.exit(75);
   }
@@ -1147,7 +1147,7 @@ test('among hosts that pass load and available-memory admission, free slots and 
       processors: 16,
       load: 8 - CHECK_SLOT_PROCESSORS + 0.01,
       slots: 4,
-      ordinaryBusy: 1,
+      ordinaryBusy: 3,
     },
     ready: {
       available: 4 * 2 ** 30,
@@ -1268,6 +1268,8 @@ test('releasing a slot frees its memory reservation for a queued run', async () 
   expect(waiting.child.exitCode).toBeNull();
   writeFileSync(join(env.FAKE_DIR!, 'clock'), '100');
   expect(await holder.child.exited).toBe(0);
+  await waitFor(() => events().filter((event) => event.kind === 'run').length === 2);
+  writeFileSync(join(env.FAKE_DIR!, 'clock'), '200');
   expect(await waiting.child.exited).toBe(0);
   expect(events().filter((event) => event.kind === 'run')).toHaveLength(2);
 });

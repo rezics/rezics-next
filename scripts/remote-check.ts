@@ -333,7 +333,8 @@ while [ "$i" -lt ${Math.max(0, host.slots - 1)} ]; do
   i=$((i + 1))
 done
 express_slot_used=0
-express_lock=${ROOT}/slots/express.lock
+express_name=express
+express_lock=${ROOT}/slots/$express_name.lock
 if [ -e "$express_lock" ]; then
   exec 9<"$express_lock"
   if flock -n 9; then flock -u 9; else
@@ -598,7 +599,8 @@ while [ "$slot" -lt ${Math.max(0, host.slots - 1)} ]; do
   exec 9<&-
   slot=$((slot + 1))
 done
-express_lock=${ROOT}/slots/express.lock
+express_name=express
+express_lock=${ROOT}/slots/$express_name.lock
 if [ -e "$express_lock" ]; then
   exec 9<"$express_lock"
   if flock -n 9; then flock -u 9; else
