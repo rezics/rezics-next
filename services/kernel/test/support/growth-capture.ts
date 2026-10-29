@@ -906,6 +906,81 @@ async function visibilityDetails(database: GrowthDatabase, relations: readonly s
   return details;
 }
 
+type RelationCounters = { relation: string; n_tup_ins: string; n_tup_upd: string; n_tup_del: string; n_dead_tup: string };
+
+async function settleCounters(database: GrowthDatabase, relations: readonly string[]): Promise<RelationCounters[]> {
+  // PostgreSQL backends publish cumulative statistics asynchronously. Give them a flush window before reading.
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await database.admin.query('SELECT pg_stat_clear_snapshot()');
+  const result = await database.admin.query<RelationCounters>(
+    `SELECT s.schemaname || '.' || s.relname AS relation,s.n_tup_ins::text,s.n_tup_upd::text,
+            s.n_tup_del::text,s.n_dead_tup::text
+       FROM pg_stat_user_tables s WHERE s.schemaname || '.' || s.relname=ANY($1::text[]) ORDER BY relation`,
+    [relations],
+  );
+  return result.rows;
+}
+
+function countersChanged(before: RelationCounters[], after: RelationCounters[]): boolean {
+  const previous = new Map(before.map((row) => [row.relation, row]));
+  return after.some((row) => {
+    const old = previous.get(row.relation);
+    return old !== undefined &&
+      (old.n_tup_ins !== row.n_tup_ins || old.n_tup_upd !== row.n_tup_upd || old.n_tup_del !== row.n_tup_del);
+  });
+}
+
+async function tupleDetails(database: GrowthDatabase, relation: string, blocks: readonly { blkno: number | string }[], horizon: string) {
+  const columns = await database.admin.query<{
+    name: string;
+    is_primary: boolean;
+    is_text: boolean;
+    has_workflow_uuid: boolean;
+  }>(
+    `SELECT a.attname AS name,
+            EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid=c.oid AND i.indisprimary AND a.attnum=ANY(i.indkey)) AS is_primary,
+            a.atttypid='text'::regtype AS is_text,
+            EXISTS (SELECT 1 FROM pg_attribute x WHERE x.attrelid=c.oid AND x.attname='workflow_uuid' AND NOT x.attisdropped) AS has_workflow_uuid
+       FROM pg_class c JOIN pg_attribute a ON a.attrelid=c.oid
+      WHERE c.oid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum`,
+    [relation],
+  );
+  const primary = columns.rows.filter((column) => column.is_primary).map(({ name }) => name);
+  const text = columns.rows.filter((column) => column.is_text).map(({ name }) => name);
+  const hasWorkflow = columns.rows[0]?.has_workflow_uuid ?? false;
+  const [schema] = relation.split('.', 2);
+  const qualified = qualifiedIdentifier(relation);
+  const workflowTable = qualifiedIdentifier(`${schema}.workflow_status`);
+  const workflowExists = hasWorkflow && (await database.admin.query<{ exists: boolean }>(
+    `SELECT to_regclass($1) IS NOT NULL AS exists`, [`${schema}.workflow_status`],
+  )).rows[0]?.exists;
+  const found: Record<string, unknown>[] = [];
+  for (const { blkno } of blocks) {
+    const result = await database.admin.query<{
+      ctid: string;
+      xmin: string;
+      xmax: string;
+      at_or_after_horizon: boolean;
+      primary_key: Record<string, unknown>;
+      text_columns: Record<string, unknown>;
+      workflow: Record<string, unknown> | null;
+    }>(
+      `SELECT t.ctid::text,t.xmin::text,t.xmax::text,(t.xmin::text::bigint >= $2::bigint) AS at_or_after_horizon,
+              (SELECT jsonb_object_agg(k,v) FROM (SELECT key AS k,value AS v FROM jsonb_each(to_jsonb(t)) WHERE key=ANY($3::text[])) p) AS primary_key,
+              (SELECT jsonb_object_agg(k,left(v,120)) FROM (SELECT key AS k,value AS v FROM jsonb_each_text(to_jsonb(t)) WHERE key=ANY($4::text[])) p) AS text_columns,
+              ${workflowExists ? `(SELECT jsonb_build_object('name',ws.name,'status',ws.status,'queue_name',ws.queue_name,'created_at',ws.created_at)
+                  FROM ${workflowTable} ws WHERE to_jsonb(ws)->>'workflow_uuid'=to_jsonb(t)->>'workflow_uuid' LIMIT 1)` : 'NULL::jsonb'} AS workflow
+         FROM ${qualified} t
+        WHERE t.ctid >= format('(%s,1)',$1)::tid AND t.ctid < format('(%s,1)',$1::integer+1)::tid
+        ORDER BY t.xmin::text::bigint DESC,t.ctid LIMIT 16`,
+      [Number(blkno), horizon, primary, text],
+    );
+    found.push(...result.rows);
+  }
+  found.sort((left, right) => Number(right.xmin) - Number(left.xmin));
+  return found.slice(0, 16);
+}
+
 export async function settle(
   database: GrowthDatabase,
   options: {
@@ -976,6 +1051,7 @@ export async function settle(
   };
   let dirty: Awaited<ReturnType<typeof verify>> = [];
   let lastNotices: string[] = [];
+  const counterSamples: RelationCounters[][] = [];
   for (let round = 0; round < 3; round++) {
     await waitForHorizon(database, horizon, deadline, pollMs, options.operationBackends);
     const targets = round === 0 ? names : dirty.length > 0 ? dirty.map(({ relation }) => relation) : names;
@@ -986,19 +1062,29 @@ export async function settle(
     });
     dirty = await verify();
     if (dirty.length === 0) break;
+    if (round < 2) counterSamples.push(await settleCounters(database, dirty.map(({ relation }) => relation)));
     if (round < 2) await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   if (dirty.length > 0) {
     const waiting = await database.admin.query(
-      `SELECT pid,backend_type,application_name,state,xact_start,backend_xid::text,backend_xmin::text,split_part(query,E'\\n',1) AS query
+      `SELECT pid,backend_type,application_name,state,xact_start,backend_xmin::text,backend_xid::text
          FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() ORDER BY pid`,
     );
-    const details = await visibilityDetails(
-      database,
-      dirty.map(({ relation }) => relation),
+    const moving = counterSamples.some((sample, index) => index > 0 && countersChanged(counterSamples[index - 1]!, sample));
+    const staticCounters = counterSamples.length > 0 && !moving;
+    const heldSnapshot = staticCounters && waiting.rows.some((backend) =>
+      typeof backend.backend_xmin === 'string' && Number(backend.backend_xmin) >= Number(horizon),
     );
+    const cause = moving ? 'concurrent writer' : heldSnapshot ? 'snapshot held during VACUUM' : 'unclassified';
+    const blocks = await visibilityDetails(database, dirty.map(({ relation }) => relation));
+    const tupleRows: Record<string, unknown> = {};
+    for (const { relation } of dirty) {
+      const detail = blocks[relation] as { notAllVisibleBlocks?: { blkno: number }[] } | undefined;
+      if (detail?.notAllVisibleBlocks) tupleRows[relation] = await tupleDetails(database, relation, detail.notAllVisibleBlocks, horizon);
+    }
+    const attribution = { ...blocks, tuples: tupleRows };
     throw new GrowthSettleInfrastructureError(
-      `VACUUM did not make every page all-visible after three rounds; relations: ${JSON.stringify(dirty)}; backends: ${JSON.stringify(waiting.rows)}; vacuum notices: ${JSON.stringify(lastNotices)}; attribution: ${JSON.stringify(details)}`,
+      `VACUUM did not make every page all-visible after three rounds; settle cause: ${cause}; starting horizon: ${horizon}; relation statistics by round: ${JSON.stringify(counterSamples)}; relations: ${JSON.stringify(dirty)}; backends: ${JSON.stringify(waiting.rows)}; vacuum notices: ${JSON.stringify(lastNotices)}; attribution: ${JSON.stringify(attribution)}`,
     );
   }
   return performance.now() - started;

@@ -468,6 +468,10 @@ capture. Work captured inside `grow` is never settled. A fixture that measures o
 `settle` API instead of issuing a bare VACUUM: bare VACUUM neither waits for older snapshots nor verifies visibility
 ([growth bare VACUUM sites](../docs/research/growth-bare-vacuum-sites.md)).
 
+When a settle fails, moving table counters classify a concurrent writer, which the check must stop outside the
+operation under the background-statements decision; static counters with a newer `backend_xmin` classify a snapshot
+held during VACUUM, which the harness must release.
+
 When a bound fails, `GrowthBoundError` keeps its scale and relation summary and adds the statements with the largest
 first-to-last-scale growth for each failing metric. Each statement line shows its normalized first line, its value at
 every scale, and the plan node that used the most buffers (including its relation or index when present). Statements
