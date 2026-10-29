@@ -57,7 +57,11 @@ test('a human deletion uses Auth approval and execution, records version 1 and r
   const response = await kernel.handle(
     new Request(`http://kernel.test/v1/accounts/${personas.alice.accountId}:suspend`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${personas.alice.bearer}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${personas.alice.bearer}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      },
       body: JSON.stringify({ reason: 'deleted account bearer check' }),
     }),
   );
@@ -65,8 +69,20 @@ test('a human deletion uses Auth approval and execution, records version 1 and r
 });
 
 test('effects drain waits for the account partition head and reports its deadline by name', async () => {
-  const account = await deletePersona({ version: 1, pool, auth }, personas.bob);
-  await drainEffects(pool, partitionOf(routeOf(account.accountId)!));
+  await deletePersona({ version: 1, pool, auth }, personas.bob);
+  const positions = [
+    { position: '4', checkpoint: '3' },
+    { position: '4', checkpoint: '4' },
+  ];
+  let reads = 0;
+  const advancingPool = {
+    query: async () => {
+      reads += 1;
+      return { rows: [positions.shift()!] };
+    },
+  } as unknown as typeof pool;
+  await drainEffects(advancingPool, partitionOf(routeOf(personas.bob.accountId)!));
+  expect(reads).toBe(2);
   const stalledPool = {
     query: async () => ({ rows: [{ position: '1', checkpoint: '0' }] }),
   } as unknown as typeof pool;
@@ -79,7 +95,7 @@ test('effects drain waits for the account partition head and reports its deadlin
 });
 
 test('repeating deletion is refused and does not add another erasure row', async () => {
-  const subject = personas.orgOwner;
+  const subject = personas.delegated as Persona;
   await deletePersona({ version: 1, pool, auth }, subject);
   const before = await pool.query('SELECT count(*)::integer AS count FROM access.erasure WHERE account_id=$1', [
     subject.accountId,
