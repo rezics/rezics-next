@@ -17,10 +17,6 @@ const engine = {
     },
   },
 };
-const checkerPath = import.meta.resolve('recheck/lib/browser.js');
-new Script(readFileSync(new URL(checkerPath), 'utf8'), { filename: checkerPath }).runInContext(createContext(engine));
-const { checkSync } = engine.module.exports;
-
 // Admission bounds the *expanded* expression before recheck allocates its NFA.
 // Counts include nested multiplication, not just the spelling of {n}. Saturate
 // by refusing immediately, before any expansion or integer overflow is possible.
@@ -32,13 +28,17 @@ const MAX_TRANSITIONS = 1024;
 function admitted(source: string): boolean {
   let position = 0;
   let repeats = 0;
-  const refuse = (): never => { throw new Error('Pattern structure exceeds the analysis profile'); };
+  const refuse = (): never => {
+    throw new Error('Pattern structure exceeds the analysis profile');
+  };
   const escape = () => {
     const char = source[position++];
     // Backreferences and Unicode properties are outside this structural profile.
     if (char === undefined || /[1-9kpP]/u.test(char)) refuse();
     if ((char === 'u' || char === 'x') && source[position] === '{') {
-      while (position < source.length && source[position++] !== '}') { /* One code point. */ }
+      while (position < source.length && source[position++] !== '}') {
+        /* One code point. */
+      }
     } else if (char === 'u') position += 4;
     else if (char === 'x') position += 2;
     else if (char === 'c') position++;
@@ -81,7 +81,11 @@ function admitted(source: string): boolean {
   const expression = (depth: number): number => {
     let size = 0;
     while (position < source.length && source[position] !== ')') {
-      if (source[position] === '|') { position++; size++; continue; }
+      if (source[position] === '|') {
+        position++;
+        size++;
+        continue;
+      }
       let cost = atom(depth);
       const quantifier = source[position];
       if (quantifier !== undefined && '*+?{'.includes(quantifier)) {
@@ -125,6 +129,32 @@ function admitted(source: string): boolean {
   }
 }
 
+const checkerPath = import.meta.resolve('recheck/lib/browser.js');
+const context = createContext({
+  ...engine,
+  report(message: string) {
+    // In recheck 4.5.0, structural cap failures log before the auto/fuzz
+    // fallback. Refuse them, and all fuzz diagnostics, before seeding/matching.
+    if (!['parse:', 'automaton:', 'recall:'].some((stage) => message.startsWith(stage))) {
+      throw new Error('Pattern requires analysis outside the structural budget');
+    }
+  },
+});
+new Script(readFileSync(new URL(checkerPath), 'utf8'), { filename: checkerPath }).runInContext(context);
+// The Scala.js parameter decoder requires objects/functions from its own realm.
+// Compile a fixed wrapper; the untrusted pattern is passed only as a string argument.
+const checkPattern = new Script(`(pattern) => module.exports.checkSync(pattern, 'u', {
+  // Explicit automaton mode bypasses these limits in the pinned checker.
+  checker: 'auto',
+  maxPatternSize: 257,
+  maxRepeatCount: ${MAX_EXPANSION + 1},
+  maxNFASize: ${MAX_TRANSITIONS},
+  timeout: 3000,
+  maxRecallStringSize: 1024,
+  recallTimeout: -1,
+  logger: message => report(message)
+})`).runInContext(context) as (pattern: string) => ReturnType<(typeof import('recheck'))['checkSync']>;
+
 /** The compiler and release validator's sole pattern safety authority. No proof cache. */
 export function analyzePattern(pattern: unknown): { safe: boolean; steps: number } {
   steps = 0;
@@ -132,27 +162,7 @@ export function analyzePattern(pattern: unknown): { safe: boolean; steps: number
   try {
     new RegExp(pattern, 'u');
     if (!admitted(pattern)) return { safe: false, steps };
-    const result = checkSync(pattern, 'u', {
-      // In pinned recheck 4.5.0, explicit `automaton` bypasses these three
-      // structural limits. `auto` enforces them during graph construction.
-      checker: 'auto',
-      maxPatternSize: 257,
-      maxRepeatCount: MAX_EXPANSION + 1,
-      maxNFASize: MAX_TRANSITIONS,
-      timeout: 3000, // Synthetic counter units, never elapsed host time.
-      maxRecallStringSize: 1024,
-      recallTimeout: -1, // Structural verdict only; never execute an attack string.
-      logger(message) {
-        // In the pinned browser checker, exceeding a graph/repetition limit logs
-        // `auto:` *before* throwing Unsupported and entering its fuzz fallback.
-        // Throw a JS error here instead: it cannot trigger that fallback. Other
-        // unsupported syntax can reach FuzzProgram compilation, bounded by the
-        // same admission limits; refuse its first log, before seeding/execution.
-        if (!['parse:', 'automaton:', 'recall:'].some((stage) => message.startsWith(stage))) {
-          throw new Error('Pattern requires analysis outside the structural budget');
-        }
-      },
-    });
+    const result = checkPattern(pattern);
     return { safe: result.status === 'safe' && result.checker === 'automaton', steps };
   } catch {
     return { safe: false, steps };
@@ -162,4 +172,3 @@ export function analyzePattern(pattern: unknown): { safe: boolean; steps: number
 export function safePattern(pattern: unknown): boolean {
   return analyzePattern(pattern).safe;
 }
-

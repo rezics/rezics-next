@@ -1,11 +1,29 @@
 import { expect, test } from 'bun:test';
 
-const safe = ['^[A-Z][a-z]+$', '^\\S', '^(?:[0-9]{8}|[0-9]{12,14})$', '^(?![0-9])[a-z]+$', '^97[89]-?(?:[0-9]-?){9}[0-9]$'];
+const safe = [
+  '^[A-Z][a-z]+$',
+  '^\\S',
+  '^(?:[0-9]{8}|[0-9]{12,14})$',
+  '^(?![0-9])[a-z]+$',
+  '^97[89]-?(?:[0-9]-?){9}[0-9]$',
+];
 const hostile = [
-  '^(a+)+$', '^(a|aa)+$', '^(a*)*$', '[', '\\u{110000}', 'x'.repeat(257),
-  '^a{999999999999999999999999999999}$', '^a{2147483647,}$', '^a{65}$',
-  '^(?:a{8}){8}$', '^(?:a{64}){64}$', '^(?=a+)a+$', '^(?<=a)b$', '^(a)\\1$',
-  '^\\p{Letter}+$', '('.repeat(17) + 'a' + ')'.repeat(17),
+  '^(a+)+$',
+  '^(a|aa)+$',
+  '^(a*)*$',
+  '[',
+  '\\u{110000}',
+  'x'.repeat(257),
+  '^a{999999999999999999999999999999}$',
+  '^a{2147483647,}$',
+  '^a{65}$',
+  '^(?:a{8}){8}$',
+  '^(?:a{64}){64}$',
+  '^(?=a+)a+$',
+  '^(?<=a)b$',
+  '^(a)\\1$',
+  '^\\p{Letter}+$',
+  '('.repeat(17) + 'a' + ')'.repeat(17),
 ];
 
 // Each subprocess starts with cold module state. recheck's Scala.js nanoTime reads
@@ -58,10 +76,13 @@ async function evaluate(step: number, reverse: boolean, inputs: string[], fixedS
   `;
   const child = Bun.spawn([process.execPath, '--eval', script], {
     cwd: new URL('../../../', import.meta.url).pathname,
-    stdout: 'pipe', stderr: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
   const [code, stdout, stderr] = await Promise.all([
-    child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
   ]);
   expect({ code, stderr }).toEqual({ code: 0, stderr: '' });
   return JSON.parse(stdout) as [string, string, unknown[], unknown[]?][];
@@ -82,14 +103,21 @@ async function assertVerdicts(step: number, reverse: boolean, patterns: string[]
       expect(issues).toEqual([]);
       expect(compiler).toEqual([]);
     } else {
-      expect(issues).toEqual([{
-        pointer: datatype === 'string' ? '/properties/ex:p/value/pattern' : '/properties/ex:p/value/properties/text/pattern',
-        code: 'unsafe_pattern',
-      }]);
-      expect(compiler).toEqual([{
-        file: 'main.yaml', pointer: '/slots/p/pattern', code: 'unsafe_pattern',
-        message: 'Pattern must be safe Unicode syntax of at most 256 characters',
-      }]);
+      expect(issues).toEqual([
+        {
+          pointer:
+            datatype === 'string' ? '/properties/ex:p/value/pattern' : '/properties/ex:p/value/properties/text/pattern',
+          code: 'unsafe_pattern',
+        },
+      ]);
+      expect(compiler).toEqual([
+        {
+          file: 'main.yaml',
+          pointer: '/slots/p/pattern',
+          code: 'unsafe_pattern',
+          message: 'Pattern must be safe Unicode syntax of at most 256 characters',
+        },
+      ]);
     }
   }
   return results;
