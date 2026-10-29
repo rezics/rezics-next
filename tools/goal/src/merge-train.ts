@@ -1433,7 +1433,7 @@ export class MergeTrain {
         integratesIntoDev = false;
       }
       // Recover an advance that committed before its outcome was saved.
-      if (recoverAlreadyIntegrated()) return finish();
+      if (await recoverAlreadyIntegrated()) return finish();
       const originalBase = controlPlaneFork ?? git(o.mainCheckout, 'merge-base', tip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);

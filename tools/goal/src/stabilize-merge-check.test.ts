@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SqliteManagerInbox } from './inbox.ts';
 import { git } from './merge.ts';
@@ -43,10 +43,6 @@ test('stabilize-to-dev runs every newly integrated stabilize task acceptance aga
     };
     await h.train(runner);
 
-    for (const outcome of h.outcomes) {
-      if (!outcome.passed)
-        throw new Error(`${JSON.stringify(outcome)}\n${readFileSync(outcome.logPath, 'utf8')}`);
-    }
     expect(h.outcomes.map(({ passed, stage }) => ({ passed, stage }))).toEqual([
       { passed: true, stage: 'merge' },
       { passed: true, stage: 'merge' },
