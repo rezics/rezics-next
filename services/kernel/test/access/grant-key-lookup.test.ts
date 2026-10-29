@@ -42,6 +42,24 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
       );
     }
   }
+  async function assertProbe(database: typeof db, scale: number) {
+    const observed = await capture(database, () => probe('2030-01-01T12:00:00Z', true));
+    const scans = nodes(observed.capture.plans).filter(
+      (node) => node['Relation Name'] === 'resource_grant' && Number(node['Actual Loops']) > 0,
+    );
+    expect(scans.length).toBeGreaterThan(0);
+    for (const node of scans) {
+      expect(node['Node Type'], JSON.stringify({ scale, scans })).toBe('Index Only Scan');
+      expect(node['Index Name']).toBe('resource_grant_pkey_lookup');
+      const condition = String(node['Index Cond']);
+      // The partial index fixes route/resource; the remaining key is parameterized.
+      for (const key of ['subject_kind', 'subject_id', 'subject_role', 'action'])
+        expect(condition, JSON.stringify({ scale, scans })).toContain(`${key} =`);
+      expect(condition, JSON.stringify({ scale, scans })).toContain('valid <=');
+      expect(node['Actual Rows'], JSON.stringify({ scale, scans })).toBeLessThanOrEqual(1);
+      expect(node['Rows Removed by Filter'] ?? 0, JSON.stringify({ scale, scans })).toBe(0);
+    }
+  }
   try {
     const indexes = await db.admin.query<{ indexdef: string }>(
       "SELECT indexdef FROM pg_indexes WHERE schemaname = 'access' AND indexname = 'resource_grant_pkey_lookup'",
@@ -81,23 +99,9 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
           [resource, actor, transaction, previous * 256, scale * 256, newId(0)],
         );
         await database.admin.query('VACUUM ANALYZE access.resource_grant');
-        const observed = await capture(database, () => probe('2030-01-01T12:00:00Z', true));
-        const scans = nodes(observed.capture.plans).filter(
-          (node) => node['Relation Name'] === 'resource_grant' && Number(node['Actual Loops']) > 0,
-        );
-        expect(scans.length).toBeGreaterThan(0);
-        for (const node of scans) {
-          expect(node['Node Type'], JSON.stringify({ scale, scans })).toBe('Index Only Scan');
-          expect(node['Index Name']).toBe('resource_grant_pkey_lookup');
-          const condition = String(node['Index Cond']);
-          // The partial index fixes route/resource; the remaining key is parameterized.
-          for (const key of ['subject_kind', 'subject_id', 'subject_role', 'action'])
-            expect(condition).toContain(`${key} =`);
-          expect(condition).toContain('valid <=');
-          expect(node['Actual Rows']).toBeLessThanOrEqual(1);
-          expect(node['Rows Removed by Filter'] ?? 0).toBe(0);
-        }
+        await assertProbe(database, scale);
       },
+      prepare: assertProbe,
       operation: () => probe('2030-01-01T12:00:00Z', true),
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
