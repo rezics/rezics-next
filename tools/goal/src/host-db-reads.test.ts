@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 
@@ -16,7 +17,7 @@ afterEach(() => {
 function fixture(): { db: Database; store: WorkerStore; path: string } {
   mkdirSync(root, { recursive: true });
   const path = join(root, 'goal.sqlite');
-  const db = new Database(path, { create: true });
+  const db = openDb(path);
   databases.push(db);
   const store = new WorkerStore(db);
   const insertTask = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
