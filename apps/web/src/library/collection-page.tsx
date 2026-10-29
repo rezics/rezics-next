@@ -1,6 +1,10 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { ContentActions } from '@rezics/ui/content-actions';
+import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { sharedRatio } from '@rezics/ui/cover';
+import { RelativeTime } from '@rezics/ui/relative-time';
 import { Link, useRouter } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react';
@@ -9,6 +13,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { AccountRef } from './account-ref';
+import { coverSrc } from '../media/cover-src';
+import { subjectHref } from '../subject/subject-href';
 import {
   deleteCollection,
   moveCollectionMember,
@@ -317,13 +323,28 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
           ) : null}
         </div>
         {page.description !== null ? <p className="whitespace-pre-wrap">{page.description}</p> : null}
-        <p>
-          {m.library_curator()} <AccountRef account={page.curator} />
+        <p className="flex flex-wrap items-baseline gap-x-1">
+          <span>{m.library_curator()}</span>{' '}
+          {page.curator ? (
+            <>
+              <a
+                href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle ?? '')}`}
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                {page.curator.displayName ?? page.curator.handle}
+              </a>
+              {page.curator.handle ? (
+                <span className="text-sm text-muted-foreground">@{page.curator.handle}</span>
+              ) : null}
+            </>
+          ) : (
+            <AccountRef account={null} />
+          )}
         </p>
         <p>{m.library_member_count({ count: page.memberCount })}</p>
         {atLimit ? <p>{m.library_collection_full()}</p> : null}
         <p>
-          {m.library_collection_updated()} <time {...{ datetime: page.updatedAt }}>{page.updatedAt}</time>
+          {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
         </p>
         {page.visibility ? <p data-visibility={page.visibility}>{visibilityLabel(page.visibility)}</p> : null}
         {following !== null ? (
@@ -389,24 +410,54 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
           {m.library_collection_members()}
         </h2>
         {members.length ? (
-          <ol className="divide-y divide-border/60 border-y border-border/60">
-            {members.map((member, index) => (
-              <MemberRow
-                busy={!hydrated || pending}
-                dropMember={dropMember}
-                firstPage={page.firstPage}
-                index={index}
-                key={member.id}
-                member={member}
-                members={members}
-                moveMember={moveMember}
-                owner={owner}
-                ratio={ratio}
-                removeMember={removeMember}
-                saveNote={saveNote}
-              />
-            ))}
-          </ol>
+          <CoverGrid ratio={ratio}>
+            {members.map((member, index) => {
+              const subject = member.subject;
+              const title = subject?.label ?? m.library_subject_unavailable();
+              const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
+              return (
+                <ListRow key={member.id} className="space-y-3 rounded-xl p-2">
+                  <ListRowLink href={href ?? '#'}>{title}</ListRowLink>
+                  <CoverCard
+                    {...(href ? { href } : {})}
+                    title={title}
+                    cover={{
+                      subject: subject
+                        ? { id: subject.id, title, types: subject.types }
+                        : { id: 'unavailable', title, types: [] },
+                      cover: subject?.cover ?? null,
+                      src: coverSrc,
+                      labels: {
+                        withheld: m.thread_cover_withheld(),
+                        reveal: m.thread_cover_reveal(),
+                        credit: m.thread_cover_credit(),
+                        via: m.thread_cover_via(),
+                      },
+                    }}
+                    secondary={subject?.typeLabel}
+                    linkLabel={title}
+                  />
+                  {member.note ? (
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">{member.note}</p>
+                  ) : null}
+                  {owner ? (
+                    <ListRowControl className="space-y-2">
+                      <MemberRowControls
+                        member={member}
+                        index={index}
+                        members={members}
+                        firstPage={page.firstPage}
+                        busy={!hydrated || pending}
+                        moveMember={moveMember}
+                        saveNote={saveNote}
+                        removeMember={removeMember}
+                      />
+                    </ListRowControl>
+                  ) : null}
+                </ListRow>
+              );
+            })}
+          </CoverGrid>
         ) : (
           <p className="text-muted-foreground">{m.library_collection_empty()}</p>
         )}
@@ -426,6 +477,90 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
         ) : null}
       </section>
     </article>
+  );
+}
+
+function MemberRowControls({
+  member,
+  index,
+  members,
+  firstPage,
+  busy,
+  moveMember,
+  saveNote,
+  removeMember,
+}: {
+  member: CollectionMember;
+  index: number;
+  members: CollectionMember[];
+  firstPage: boolean;
+  busy: boolean;
+  moveMember: (memberId: string, after: string | null) => Promise<void>;
+  saveNote: (memberId: string, note: string) => Promise<void>;
+  removeMember: (memberId: string) => Promise<void>;
+}) {
+  const [note, setNote] = useState(member.note ?? '');
+  const [confirmed, setConfirmed] = useState(false);
+  const up = placementAfter('up', index, members, firstPage);
+  const down = placementAfter('down', index, members, firstPage);
+  const top = placementAfter('top', index, members, firstPage);
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {up !== undefined ? (
+          <button className={buttonClass} disabled={busy} onClick={() => void moveMember(member.id, up)} type="button">
+            {m.library_member_move_up()}
+          </button>
+        ) : null}
+        {down !== undefined ? (
+          <button
+            className={buttonClass}
+            disabled={busy}
+            onClick={() => void moveMember(member.id, down)}
+            type="button"
+          >
+            {m.library_member_move_down()}
+          </button>
+        ) : null}
+        {top !== undefined ? (
+          <button className={buttonClass} disabled={busy} onClick={() => void moveMember(member.id, top)} type="button">
+            {m.library_member_move_to_top()}
+          </button>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="block min-w-48 flex-1">
+          {m.library_member_note()}
+          <textarea
+            className={fieldClass}
+            disabled={busy}
+            onChange={(event) => setNote(event.target.value)}
+            rows={2}
+            value={note}
+          />
+        </label>
+        <button className={buttonClass} disabled={busy} onClick={() => void saveNote(member.id, note)} type="button">
+          {m.library_member_note_save()}
+        </button>
+      </div>
+      <label className="flex items-center gap-2">
+        <input
+          checked={confirmed}
+          disabled={busy}
+          onChange={(event) => setConfirmed(event.target.checked)}
+          type="checkbox"
+        />
+        {m.library_member_remove_confirm()}
+      </label>
+      <button
+        className={buttonClass}
+        disabled={busy || !confirmed}
+        onClick={() => void removeMember(member.id)}
+        type="button"
+      >
+        {m.library_member_remove()}
+      </button>
+    </>
   );
 }
 
