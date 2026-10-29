@@ -9,6 +9,9 @@ additional DBOS launch, release-format reduction or permanent own-work retry loo
 The [Semantic README](README.md#definition-publish) owns existing storage cost; the
 [Definitions README](../../../../packages/definitions/README.md) owns release validity and pattern policy.
 This document adds proposed work admission and its native schedules, not another schema/safety authority.
+The current paired adoption and Performance's candidate review supersede the earlier weighted-meter proposal:
+the proposed runtime meter is pattern checkpoints only; other work needs construction bounds. The HTTP
+precedence amendment, ingress integration and execution proofs below remain required before freeze.
 The two complete research reports, their paired adoption, Performance decision 30 and final wildcard union
 review were read. Their old P1114-refused bundle runs are not successful current-publication evidence.
 The historical twenty isolated samples and twelve HTTP failures used the old inline checker, not these counters.
@@ -36,17 +39,19 @@ This specification does not add that code to the production Problem catalogue.
 Collection-limit errors precede size, canonical-JSON rejection precedes schema, and existing pointer escaping,
 first-code deduplication, lexical ordering and 64-error cap remain. No arbitrary input-depth cap is added.
 Pattern unknown/refusal/exhaustion never becomes safe. New work admission must not silently change these errors.
-The unresolved precedence case below must be settled before freezing the aggregate producer.
+The proposed deterministic precedence amendment below needs explicit Root/Definitions adoption before runtime.
 
 ## Owned input, two digests, fresh command
 
-The owned parsed-JSON snapshot must be established before any mutable-body await and before BOTH digest domains.
+Owned serialized input must be established before any mutable-body await and before BOTH digest domains.
 Release identity remains SHA-256 of JCS(release). Receipt identity remains
 `requestDigest('definitions.publish', actor, {params: {}, body: {release}})`; its outer canonical envelope includes
-operation, client_id and requested_by. They cannot be substituted for each other. Native JSON rejects non-finite
-numbers and malformed Unicode; the direct-call boundary additionally needs explicit sparse-array, cycle,
-prototype/accessor/toJSON, alias and partial-freeze decisions without executing caller code. JCS is not that guard.
-Do not claim arbitrary Proxy inspection is inert. No caller reference becomes retained authority.
+operation, client_id and requested_by. They cannot be substituted for each other or replaced by a wire hash.
+Whitespace and equivalent JSON escapes must replay as the same value within the wire limit. Native JCS rejects
+non-finite numbers and malformed Unicode. Direct internal callers must cross the same owned serialization
+boundary; getters, cycles, holes, toJSON and partially frozen caller graphs cannot become authority through an
+object-identity cache. No arbitrary Proxy inspection is claimed inert. JCS is not an ownership guard.
+No caller reference becomes retained authority.
 
 Finish all expensive guard, proof, schema, graph, canonicalization and hashing work before `runCommand`.
 Hold no Global/Source gate, command transaction or checked-out command connection during it. The job receives no
@@ -55,59 +60,76 @@ Actor, Access, authoritative T, SQL client or permission result. Prepared data c
 authorizes at T and only then reads the receipt. Each contention retry refreshes T and Access under the SAME
 original deadline. Preparation held longer than the 1,000 ms evidence TTL must finish before this fresh sequence.
 
-Reuse requires an actual immutable validated body in this database/pool, verified through
-`readRelease(pool,digest,{composed:false})` and the published-row existence check. A composed body, other-pool
-cache entry or equal digest string alone is insufficient. Cold stored bodies still undergo bounded validation
-and digest verification before runtime use. Eviction/restart must not reintroduce synchronous unbounded work.
-The current process-wide `Map` has no entry/byte bound and is not the proposed cache.
+Publication requires no body cache. Each request parses its own owned bytes once and computes both canonical
+digest domains. An indexed published-digest existence probe in this actual database/pool can establish current
+published authority. A composed body, other-pool entry or caller-supplied digest cannot. The present
+`readRelease(pool,digest,{composed:false})` is the available runtime-read boundary: it verifies DB existence
+even on a cache hit, validates/digest-checks a cold body and freezes it. It is not a new publication API.
+Cold stored bodies must still undergo bounded verification before runtime use. Restart/eviction must not
+reintroduce unbounded synchronous work. Runtime-read cache residency is separate from publication admission.
 
-## Work units and diagnostic boundary
+## Checkpoint admission and construction bounds
 
-Proposed units are deterministic work units, never milliseconds. Let:
+The sole proposed runtime meter is A, the SUM of actual `analyzePattern(...).steps` for distinct exact
+source/`u`/checker/policy identities outside the successfully initialized finite module-owned fixed table.
+Proposed `A_max = 16,384` checkpoints per request. A checkpoint is not a millisecond. Preserve the existing
+8,192-checkpoint per-expression policy, source/depth/expansion/graph limits and unknown/fuzz refusals.
+Fixed initialization costs its actual proof work at readiness, once per process; if done lazily it still
+consumes that request's original deadline. Failed initialization supplies no reusable authority.
 
-- A be the SUM of actual `analyzePattern(...).steps` for distinct exact source/`u`/checker/policy identities not
-  covered by the successfully initialized finite fixed table in this module. Repeated submitted patterns still
-  incur their walk/lookup bytes and nodes. A structural IRI proof has zero recheck checkpoints, not zero work.
-- T be the sum of bytes actually examined/emitted/copied/hashed in each phase, including repeats. Each decode,
-  parse, size/ownership walk, Unicode/escape scan, canonicalization, key comparison, schema string/regex check,
-  schema comparison, semantic CURIE/list/string comparison, pattern source/recognizer scan, SHA-256 input,
-  freeze/serialization and parent/worker transfer contributes separately. UTF-8 bytes apply to serialized buffers;
-  an examined UTF-16 code unit costs two bytes. Read AND emitted buffers are separately charged when both occur.
-- G be actual primitive semantic/structural work: node/edge/member visits, reference/map probes, list comparisons,
-  construction and error insertion/sorting comparisons. Repeated `includes` scans count EACH examined element,
-  not one call. Canonical key-sort comparisons charge G and their actually examined key units in T.
+Fixed membership is the exact sources generated by wikibase-item/media/url/document/monolingual/time schemas
+and ordinary/exact integer/decimal wildcard quantities. The diagnostic actually proves all eight sources
+through today's unchanged checker. Identity includes exact source bytes, flags, checker artifact and policy.
+Module/policy replacement discards the table. Structural IRI proof has zero native checkpoints but still
+bounded source-recognition work. Keep unconditional schema pattern walks and call-local distinct-source
+lookup; neither a canonical template nor a datatype tag grants an exemption. No arbitrary untrusted
+cross-request proof LRU is selected.
 
-The candidate meter is `W = 1024*A + T + 32*G`. Reserve/check before each bounded operation, and debit within
-checkpoint/source/string/graph loops; use saturating checked arithmetic. Do not compute a complete expensive W
-and then decide to refuse. An indivisible primitive needs an established reservation bound before entering it;
-its release of unused reservation cannot authorize a previous overrun. Per-expression 8,192 checkpoints remain.
-Initialization on readiness charges the same A/T/G to readiness; lazy initialization inside a request charges
-that request. Reuse is not free initialization. No new callable API or guessed worker message DTO is specified.
+Enforcement must stop at the first reservation that would exceed A_max, before effects. It must limit the
+current pattern as well as the sum of finished patterns: completing an analysis then checking its count
+is insufficient. The existing `analyzePattern` only returns steps after analysis; it exposes no remaining-
+aggregate-budget argument or intermediate cancellation hook. REQUIRED Definitions/Semantic internal native
+proof of aggregate enforcement under the unchanged per-pattern policy; this document exports no such API.
+Conservatively reserving 8,192 for every pattern would reject the useful ordinary fixture and is not adopted.
 
-The test helper calls the UNCHANGED real `analyzePattern` for every distinct submitted source and separately
-for each finite generated fixed source; it never injects a work verdict into HTTP. The proposed fixed membership
-comes from wikibase-item/media/url/document/monolingual/time schemas plus ordinary/exact integer/decimal wildcard
-quantity schemas. All entries must actually pass; key exact bytes, `u`, checker artifact hash and policy source
-identity. Deployment/policy change discards the table. Keep unconditional schema walks; no datatype/template
-exemption and no arbitrary untrusted cross-request LRU. Failed initialization prevents reusable authority.
+Other work is bounded by capped wire/canonical bytes and explicit construction. The earlier candidate
+`W = 1024*A + T + 32*G`, its weights and weighted admission fractions are rejected by Performance. No T/G
+runtime debits inside TypeBox, JCS, SHA or recheck are adopted. Exact byte measurements remain cost evidence:
+B = canonical release bytes; E_r = canonical receipt-envelope bytes; V = sum of canonical property-value schemas.
+The current successful-path byte floor is `4B + 2E_r + 2V`: size walk B, validation JCS B, release JCS B/hash B,
+envelope JCS E_r/hash E_r and actual/expected value JCS V each. It omits parse, source scans, key comparisons,
+compiled-schema internals and graph traversal; it is neither a full byte count nor an admission certificate.
+Repeated traversals must remain visible in phase evidence, even though bytes do not enter the runtime meter.
 
-The delivered diagnostic is deliberately a LOWER BOUND, not the missing aggregate meter. For valid releases let
-B = canonical release bytes, E_r = canonical receipt-envelope bytes, V = sum of canonical property-value schemas.
-The current known byte floor is `4B + 2E_r + 2V`: size walk B, validation JCS B, release JCS B and hash B,
-envelope JCS E_r and hash E_r, actual/expected value JCS V each (equal for valid schemas). Parse, ownership,
-compiled-schema internals, sort comparisons, semantic graph operations and allocations are omitted from this
-floor, not asserted to be zero. Optimized reuse may eliminate specific passes only with actual phase evidence.
-The excess fixture additionally exceeds the candidate budget through A alone, independent of that byte floor.
+The unchanged test/helper retain their historical weighted diagnostic fields to preserve frozen acceptance.
+Their excess assertion also proves `A_new > 16,384` independently of bytes/weights. A low weighted floor does
+not certify admission, and the historical exports do not set product constants or supply HTTP verdicts.
 
-Candidate `W_max = 16,777,216` work units and checkpoint weight 1,024 are REVIEW PROPOSALS. The weight makes
-16,384 analysis checkpoints alone exhaust the candidate; it distinguishes the ordinary fixtures from thousands
-of distinct literals even after fixed-pattern reuse. Node weight 32 is also provisional. No observed ms/checkpoint
-conversion proves these weights. The evidence below cannot yet certify a full W or a safe W_max with native margin;
-a floor below the budget never certifies admission. Performance must approve full counter/allocation evidence
-before these become production constants. In particular, do not describe the candidate as an already derived
-upper bound or promise maximum-size publication success.
+### Own input loops and required construction
 
-## Current native counter observations
+Here n counts owned input nodes/edges/members and L their string units; n is bounded by input bytes, not history.
+Key-sort comparisons cost O(n log n) comparisons plus compared string units; do not label that O(n).
+These are source derivations, not measured graph counters or claims that opaque library internals are metered.
+
+| Existing phase / producer            | Input touches and construction obligation                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts` collection limits         | Enumerate type/property/context/filter keys; per-type properties/facets length checks; context defaults keys; filter group Map counts. O(n+L), no nested global scan.                                                                                                                                                                                                                                                                     |
+| `exceedsSize`                        | Iterative node stack; enumerate each member, stringify each key/primitive, count actual emitted UTF-8 bytes, stop at cap. O(n+L); current arbitrary JS boundary is not owned JSON proof.                                                                                                                                                                                                                                                  |
+| `validateRelease`                    | One whole-release JCS pass; Library progress checks; compiled shape Check and, only if invalid, Errors. Error Map keeps first code/pointer, final lexical sort and 64 cap. Fixed passes with key sorts; no per-property Compile.                                                                                                                                                                                                          |
+| Semantic mappings/lists/CURIEs       | Enumerate definitions, adjacent sorted-list comparisons, own-key reference checks and CURIE scans. O(n+L). Property-IRI and target-name Sets built once, then point probes.                                                                                                                                                                                                                                                               |
+| Type bases/properties/facets         | Visit all bases/properties/facets. Current facets call `type.properties.includes`; replace repeated membership with a Set per type. Existing 64/16 caps bound it today; do not carry nested scans into the new construction.                                                                                                                                                                                                              |
+| Relations/qualifiers/units           | Walk qualifiers, targets, unit lists and relation filters. Current relation filter/slot/order checks use qualifier `includes`; prebuild a qualifier Set per property. Unit `includes('*')` in `buildValueSchema` is one linear scan, not one scan per unit. Fixed datatype/option arrays are constant.                                                                                                                                    |
+| Fixed schema and patterns            | Reconstruct expected schema once/property; canonicalize actual and expected; unconditional iterative member walk; deduplicate sources locally; sort distinct sources before analysis. Fixed passes plus key/source sorts; proof checkpoints separately bounded by A_max.                                                                                                                                                                  |
+| Library profiles                     | `libraryProgressSemantics` visits allowed modes/units; `libraryProfileSemantics` uses Sets for duplicate ids and traverses kinds/statuses/import sources. Count each child visit; no publication-history scan.                                                                                                                                                                                                                            |
+| Contexts and saved filters           | Defaults point-check property keys. Visit every filter node and embedded subject-id string. `validateFilter`/`admitFilter` parse and visit bounded filter trees; `typeFacets` scans each selected type's bases/facets, `allReleaseFacets` caches their union per release, and qualifier membership scans lists. Repeated selected-type expansion across filters needs reuse by construction; a filter call is not one constant operation. |
+| Serialization/hashes/command binding | Parse once in the job; canonical key sorts; two distinct hash domains; owned transfer and bounded result; JSONB parameter serialization/freeze if retained. Attribute every additional pass to parent/job. The current pg binding of a graph is not proof of no parent per-node traversal.                                                                                                                                                |
+
+REQUIRED Definitions/Filter deterministic operation counters for these own loops at 64/512/3,993 changed
+properties, including list membership and saved-filter/Library shapes. Neither helper `valueNodes` nor
+returned SQL rows is this counter. New runtime must replace repeated growing membership scans with Set/Map;
+this specification changes none of those product loops.
+
+## Successful current-policy counter observations
 
 A single managed disposable phase probe ran the actual unchanged pure validator, then the separate checker
 and exact-byte diagnostic, in one pinned process. All five releases returned `[]`, all submitted and eight
@@ -135,12 +157,19 @@ RSS after those validations is 164,241,408 / 197,287,936 / 244,936,704 / 249,573
 These sequential process readings and the runner's 445 MiB peak include diagnostics/runtime/install and cannot
 derive worker baseline H0, c or peak heap. No physical allocation bound is claimed.
 
-The candidate budget separates 512 ordinary changed literals from the existing collection boundary and admits
-the _measured floors_ of both required ordinary bodies. The cold bundle's observed remaining 645.06 ms and
-ordinary body's 1,384.64 ms against 2,000 ms exclude native overhead and are margin observations only. They do
-not prove full aggregate admission or native success. Reuse-floor fractions are prospective arithmetic from
-actual successful exact proofs, not timings of an implemented fixed table. This is why approval still needs
-the full meter, native cost/history rows and memory proof; the numbers are not an authorization to build the pool.
+Under checkpoint-only admission the bundle is `967 / 16,384 = 0.05902` of A_max and the ordinary
+three-type/twelve-property fixture is `1,135 / 16,384 = 0.06927`. The changed-input series is
+`1,863 / 16,384 = 0.11371`, `8,135 / 16,384 = 0.49652`, and `56,869 / 16,384 = 3.47101`.
+These are actual checkpoint counts with prospective fixed-table reuse, not implemented runtime admission.
+The table's weighted floors are historical arithmetic only. All eight fixed proofs succeeded; initialization
+is 13,344 checkpoints. New literal sources each cost 14 checkpoints on the unchanged current checker.
+
+The cold bundle's observed 645.06 ms and ordinary body's 1,384.64 ms remaining against 2,000 ms exclude
+native overhead. They are loaded-host margin observations, not a safe A_max or native completion proof.
+Before A_max/K freeze, REQUIRED Performance/Semantic one native observation with A exactly A_max and a
+maximum-canonical-size body on an idle check host, recording host/runtime/load and all native overhead.
+The existing helper/fixture series does not produce that exact-boundary workload or an idle-host observation.
+Do not repeat the historical eighty-publication incident suite or infer maximum-size publication success.
 
 ## Resource ownership and decision 30
 
@@ -158,20 +187,41 @@ only for the slot's still-live job identity. Shutdown stops intake, terminates/a
 jobs/threads/retained input reservations, and only then closes the pool. A close event, Promise.race, unref or
 late-result check alone is not physical thread/heap reclamation evidence.
 
-Bun ignores Worker resourceLimits; no runtime heap cap is claimed. Required transport is one transferred owned
-input buffer of at most existing 4 MiB, never structured cloning the parsed object graph. Result is verdict,
-digests and at most 64 errors. Parent O(B) copying/encoding and all result bytes are counted. Parent per-node JS
-traversal belongs in the CPU job, including reconstruction needed by the existing JSONB write binding.
-For worker baseline H0 and measured/derived amplification c, worker bytes are at most `H0 + c*B_max`; process
-reservation is `K*(H0+c*B_max) + parent bytes + cache bytes + bounded result bytes`. Active AND retired allocations
-remain charged. RSS deltas/process high-water observations do not prove this bound or c.
+Bun ignores Worker resourceLimits; no runtime heap cap is claimed. Proposed transport is one transferred
+owned wire buffer, never a structured clone of a parsed graph. Result is verdict, digests and at most 64 errors.
+Parent O(wire bytes) copying is charged; per-node JS parsing/traversal belongs in the job. Parse once.
 
-A cache proposal is at most eight entries AND 8 MiB of canonical retained bytes, evict oldest insertion first
-until both bounds hold; a single oversize entry is not retained. Eight entries hold the independent eight-body
-history scale; 8 MiB holds two maximum canonical bodies. These are candidate ACCOUNTED buffer capacities, not
-proof that retained parsed-JS heaps occupy 8 MiB. Minimize retention to authoritative published data, no pending
-promises or arbitrary pattern proofs. Performance must select E/actual resident-byte accounting and c; no literal
-E/c/cleanup duration is shipped. The current helper does not build this cache or a CPU pool.
+The current adopted ingress declaration is `RELEASE_LIMITS.bytes + 65,536 = 4,259,840` wire bytes, independently
+of the unchanged 4,194,304 canonical-release-byte cap. Send compact JSON: key ordering does not affect compact
+length; the `{release: ...}` envelope adds 12 bytes. Whitespace/escape-inflated spellings count against wire
+bytes. Content-Length over cap refuses before reading; streaming excess cancels and returns 413
+`content_too_large`, with no receipt/key/effect or extra Access/receipt/rate-limiter call. Diagnostics disclose
+sizes/codes, not body text or account ids. This is the adopted shared ingress proposal, not an existing
+Semantic parser or permission capability.
+
+Root assigned ingress to Performance: `http/body.ts`, `app.ts`, `server.ts`, the Definitions route declaration,
+owned-byte/wire-count accessors, process byte reservations and native ingress acceptance. The producer is
+registered but not delivered; no accessor signature or raw mode is inferred. Its parse-once-before-admission
+brief and Performance's no-parent-parse recommendation remain an explicit integration question. Do not detach
+a buffer still owned by ingress or claim the framework parent parse has disappeared. Pre-admission bodies
+consume ingress reservations independently of original request permits.
+
+For idle job baseline H0 bytes, amplification c bytes/byte, wire maximum B_wire_max and actual ingress budget I,
+process accounted bytes are `K*(H0+c*B_wire_max) + I + bounded result bytes`, plus separately bounded runtime-read
+cache storage. Avoid double-counting transferred buffers; trace actual ownership/reservation transitions.
+Active AND retired allocations stay charged. Measure the job's heap after forced GC following parse/validation
+at all three changed-input sizes; record H0 once per pinned runtime and fit/qualify c. Whole-process RSS deltas,
+retained-heap samples or a fitted slope alone are not a peak-heap guarantee. Account transient parse/checker/JIT
+allocations and physical reclamation separately. Performance sets the process memory budget and selects K from
+permits, processors and measurements; no literal K/c/cleanup duration is shipped. No pool construction before
+this memory evidence and the A_max/native-margin observation.
+
+The existing runtime-read cache is independently unbounded. Performance accepts a proposal to retain canonical
+bytes keyed by digest AND pool, at most eight entries AND 8 MiB, evicting oldest insertion until both limits hold;
+no pending promises, composed entries or arbitrary pattern proofs. Actual parsed graphs, if retained, require
+c-times-byte accounting. Cold misses still need current-policy/digest verification. Publication retains no body
+cache. REQUIRED Semantic runtime-read residency/eviction evidence at 1E/8E/64E and Performance allocation review;
+no native cache producer or production literal is delivered by this document.
 
 ## Native schedule matrix and REQUIRED boundaries
 
@@ -181,88 +231,86 @@ CPU waiters, live/idle/retired threads, outstanding jobs, owned/transferred/pare
 connections/gates and effects after EVERY listed step, not merely at the end. Existing fixture pool/Auth ownership
 must remain; do not swap another pool into its kernel to make measurement convenient.
 
-| Schedule                        | Causal steps and required assertions                                                                                                                                                                                                                                                                                            | Available producer / precise missing owner boundary                                                                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| First publication and replay    | Validate current bundle and new three-type/twelve-property fixture independently; cold POST 201, native GET/body/digest, same-key 201/no effects, new-key 200/current command effects, changed-key-body 422, malformed 400; remove real grant, replay 403/no receipt disclosure; valid over-work POST 422/all effects unchanged | Delivered named HTTP test uses unmodified `createSemanticDriver`, its real shared Auth and fixture pool; direct fixture grant deletion follows real-access.ts, not a custom permission checker      |
-| CPU progress                    | Enter actual checker phase, hold its internal phase barrier outside command; complete unrelated ordinary GET and reserved Auth request before release; resume same actual proof; observe real active CPU separately from a parked barrier                                                                                       | REQUIRED Core/Definitions internal actual-job phase barrier and checker entry/exit producer; shared Semantic/Auth request producer already exists                                                   |
-| Ownership and digest binding    | Hold after snapshot/before proof; mutate original nested body (including partially frozen ancestor); release and require original digest/body/receipt, changed input conflicts; repeat Unicode, -0, aliases, cycles, holes, getters/toJSON and byte/collection/cap boundaries                                                   | REQUIRED Semantic HTTP/direct-call ownership observation before BOTH hashes; HTTP driver serializes input immediately and cannot alone exercise mutable native objects                              |
-| Publication authority           | Seed identical body in DB A; request in DB B must miss despite process cache; use different pool identities, composed-only body, restart and eviction; corrupt cold stored body must fail actual proof/digest before runtime                                                                                                    | Existing `readRelease(...,{composed:false})` and fixture pool; REQUIRED Semantic bounded-cache residency/eviction producer, independently owned two-driver schedule without retargeting shared Auth |
-| Capacity                        | Fill K jobs under original permits; fill at most permits-K CPU waiters; next admitted-capacity overflow uses existing overload; release one job, resume oldest admitted waiter without new permit/deadline                                                                                                                      | REQUIRED Core internal sub-lane accounting bound to actual Admission, not new public API or helper queue                                                                                            |
-| Deadline and cancellation       | Enter actual proof, expire original 2,000 ms deadline or abort; return typed refusal/no effects; observe retired slot; inject late result, observe discard; only actual exit permits replacement                                                                                                                                | REQUIRED Core actual running-thread cancel/exit and original-deadline notification producer; default deadline and JobContext already exist                                                          |
-| Error/startup/exit not observed | Fail startup, worker error and repeated deadlines; hold exit acknowledgement beyond approved cleanup bound; assert active+retired<=K at each transition, NOTREADY, no replacement, no unbounded bytes                                                                                                                           | REQUIRED Core/Work runtime physical exit/reclamation evidence and readiness observation; timer/close notifications cannot supply it                                                                 |
-| Shutdown                        | With live, idle and retired slots and a waiter, initiate normal shutdown; cancel/drain, await physical exit of every thread, counts/bytes zero BEFORE pool end                                                                                                                                                                  | REQUIRED Work/Core shutdown ordering and physical thread/heap evidence; existing service relay stop does not prove CPU disposal                                                                     |
-| Fresh Access and retry          | Hold actual preparation beyond evidence TTL; revoke/suspend during hold; release; record mint T then prepare Access then authorize before receipt, denied replay returns no stored result; force native contention retry and observe fresh T/evidence without repeating immutable proof                                         | Existing `runCommand`/real Auth/Access producers; REQUIRED Core CPU barrier plus Accounts internal per-attempt trace and native contention schedule; never transport T/Access into job              |
+| Schedule                        | Causal steps and required assertions                                                                                                                                                                                                                                                                                            | Available producer / precise missing owner boundary                                                                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First publication and replay    | Validate current bundle and new three-type/twelve-property fixture independently; cold POST 201, native GET/body/digest, same-key 201/no effects, new-key 200/current command effects, changed-key-body 422, malformed 400; remove real grant, replay 403/no receipt disclosure; valid over-work POST 422/all effects unchanged | Delivered named HTTP test uses unmodified `createSemanticDriver`, its real shared Auth and fixture pool; direct fixture grant deletion follows real-access.ts, not a custom permission checker                            |
+| CPU progress                    | Enter actual checker phase, hold its internal phase barrier outside command; complete unrelated ordinary GET and reserved Auth request before release; resume same actual proof; observe real active CPU separately from a parked barrier                                                                                       | REQUIRED Core/Definitions internal actual-job phase barrier and checker entry/exit producer; shared Semantic/Auth request producer already exists                                                                         |
+| Ownership and digest binding    | Hold after snapshot/before proof; mutate original nested body (including partially frozen ancestor); release and require original digest/body/receipt, changed input conflicts; repeat Unicode, -0, aliases, cycles, holes, getters/toJSON and wire/canonical-byte/collection/cap boundaries                                    | REQUIRED Performance owned-wire producer and Semantic binding before BOTH hashes; HTTP driver serializes immediately and cannot prove internal ownership                                                                  |
+| Publication authority           | Seed identical body in DB A; request in DB B must miss despite process cache; use different pool identities, composed-only body, restart and eviction; corrupt cold stored body must fail actual proof/digest before runtime                                                                                                    | Existing `readRelease(...,{composed:false})` and fixture pool; REQUIRED Semantic same-pool published-existence binding and separate runtime-read cache producer; independent two-driver schedule without retargeting Auth |
+| Capacity                        | Fill K jobs under original permits; fill at most permits-K CPU waiters; next admitted-capacity overflow uses existing overload; release one job, resume oldest admitted waiter without new permit/deadline                                                                                                                      | REQUIRED Core internal sub-lane accounting bound to actual Admission, not new public API or helper queue                                                                                                                  |
+| Deadline and cancellation       | Enter actual proof, expire original 2,000 ms deadline or abort; return typed refusal/no effects; observe retired slot; inject late result, observe discard; only actual exit permits replacement                                                                                                                                | REQUIRED Core actual running-thread cancel/exit and original-deadline notification producer; default deadline and JobContext already exist                                                                                |
+| Error/startup/exit not observed | Fail startup, worker error and repeated deadlines; hold exit acknowledgement beyond approved cleanup bound; assert active+retired<=K at each transition, NOTREADY, no replacement, no unbounded bytes                                                                                                                           | REQUIRED Core/Work runtime physical exit/reclamation evidence and readiness observation; timer/close notifications cannot supply it                                                                                       |
+| Shutdown                        | With live, idle and retired slots and a waiter, initiate normal shutdown; cancel/drain, await physical exit of every thread, counts/bytes zero BEFORE pool end                                                                                                                                                                  | REQUIRED Work/Core shutdown ordering and physical thread/heap evidence; existing service relay stop does not prove CPU disposal                                                                                           |
+| Fresh Access and retry          | Hold actual preparation beyond evidence TTL; revoke/suspend during hold; release; record mint T then prepare Access then authorize before receipt, denied replay returns no stored result; force native contention retry and observe fresh T/evidence without repeating immutable proof                                         | Existing `runCommand`/real Auth/Access producers; REQUIRED Core CPU barrier plus Accounts internal per-attempt trace and native contention schedule; never transport T/Access into job                                    |
 
 ## Cost rows
 
-### Cold publication — Touches / Bound / Growth check
+### Cold publication
 
-Touches: distinct P_new current proofs and all actual phase bytes/nodes/edges above; one published-row insert
-attempt plus native Auth/Access/command statements. Bound: linear in changed input plus explicitly metered key
-sorts/list scans, W at most approved W_max, constant statements with independent publication history.
-Growth check: pure diagnostics at 64/512/3,993 added properties (4,096 total is the existing collection boundary)
-retain the FULL current bundle, not a tiny alternate catalogue. Independently vary actual prior publications
-1/8/64 while holding changed input fixed. Do not substitute returned rows or time for examined work.
-REQUIRED Semantic fixture capture attachment to the original kernel pool AND shared Auth/all library pools,
-using `growth-capture.ts` and `withoutCatalogStatements`/the shared catalog classifier. Existing growth tests
-at 1/4/16 with permissive Access are storage evidence, not this real-Auth counter/history acceptance.
+- Touches: one owned wire buffer and parse; current distinct P_new proofs with actual A; all repeated byte passes
+  and own input loops listed above; native current Auth/Access, published-row insert attempt and command effects.
+- Bound: A <= proposed 16,384; wire <=4,259,840 and canonical release <=4,194,304 bytes; linear own loops and
+  explicit key/source sorting, fixed passes and no repeated growing membership scans. Statements constant in
+  unrelated history. These construction obligations are not a delivered full operation counter.
+- Growth check: full current bundle plus 64/512/3,993 changed properties (4,096 total at the boundary), retaining
+  actual safe proofs/byte measurements. Independently seed prior publications 1/8/64 with changed input fixed.
+  REQUIRED own-loop counters and native SQL capture on original Kernel, shared Auth and all library pools.
 
-### Warm same body — Touches / Bound / Growth check
+### Warm same body
 
-Touches: bounded owned input and both domain hashes, finite fixed proof hits, actual published existence/body
-read points. Bound: zero fresh proof checkpoints on proven fixed hits; byte work still follows this request's B;
-constant statements/history, not constant in input bytes. Growth check: native body hit at history 1/8/64 with
-actual existence/read statements and step counters, including cold stored-body miss after eviction. REQUIRED
-bounded published-cache producer plus same all-pools capture boundary; current native GET is covered functionally.
+- Touches: this request's own parse, both canonical hashes and indexed same-DB/pool published-digest existence
+  probe; finite initialized fixed proofs supply zero new checkpoints on exact hits. Publication needs no body cache.
+- Bound: O(owned bytes plus key sorting), constant native statements/history; byte work is not zero. Current
+  existence and validation-policy authority remain necessary even if a digest was seen in another pool.
+- Growth check: warm same-body native publication at independent history 1/8/64, actual existence statement and
+  proof counters. Cross-pool, composed-only and cold stored-body schedules use real authority boundaries. REQUIRED
+  Semantic publication binding and all-pools capture; existing GET only covers functional runtime reads.
 
-### Exact replay / new key — Touches / Bound / Growth check
+### Exact replay and new key
 
-Touches: fresh native authentication, T, Access preparation/authorization and receipt lookup; new key also uses
-ordinary existing-digest command path. Bound: constant statements/history; same-key adds no effect, new key adds
-current one receipt/event/write basis. Growth check: repeat at prior history 1/8/64 with the shared classifier,
-no pre-authorized receipt lookup and no unobserved Auth pool. Functional first case is executable today;
-REQUIRED all-pools capture and current-attempt trace for full cost proof.
+- Touches: current native authentication, fresh T, Access preparation/authorization and receipt lookup; new key
+  additionally uses the existing-digest command/event path. Both canonical digest domains still bind owned input.
+- Bound: constant native statements/history; same key adds zero effect; new key adds one receipt/event/write basis
+  and no duplicate release. No prepared data bypasses current Access or reads a receipt early.
+- Growth check: native current-Auth schedules at independent history 1/8/64, exact 201 replay and new-key 200,
+  conflict 422 and revoked 403. First named test is executable; REQUIRED all-pools capture and per-attempt trace.
 
-### Cache — Touches / Bound / Growth check
+### Resource schedules
 
-Touches: same-pool published bodies and finite module-owned proofs only. Bound: approved E and actual resident
-bytes, eviction on both entry and byte pressure, readiness policy identity; no retained untrusted-pattern LRU.
-Growth check: publish 1E/8E/64E distinct bodies, including maximum-size and small bodies, inspect occupancy after
-every insertion/replacement/eviction and verify miss authority. REQUIRED Semantic residency producer and
-Performance actual allocation accounting; canonical byte sum alone is insufficient resident-memory evidence.
+- Touches: original permits/CPU waiters, K fixed threads, retirement, transferred input, ingress pre-admission
+  reservations, parent/result allocations and physical shutdown. Runtime-read cache has its separate bound above.
+- Bound: active+retired<=K after EVERY transition, CPU waiters<=permits-K, original deadline; no replacement before
+  observed physical exit, shutdown zero before pool closes. Process bytes follow the formula above, not a Bun heap cap.
+- Growth check: matrix schedules, repeated deadline/abort/error/late-exit cycles, H0/c job-heap observations at the
+  three changed-input scales, actual ingress reservations and physical cleanup. REQUIRED Core/Work instrumentation
+  and Performance memory/cleanup approval. HTTP success or shape counters do not prove cleanup/concurrency.
 
-### Resource schedules — Touches / Bound / Growth check
+Native SQL must use `growth-capture.ts` and `catalogStatementBound`/`withoutCatalogTexts` from `growth-cost.ts`,
+including nested captures for separate databases and all pools. `openGrowthDatabase` currently constructs its
+own instrumented pool and owns the state required by `capture`; it cannot be retrofitted by assigning a different
+pool to `driver.fixtures.pool`. REQUIRED Performance/shared-fixture capture attachment to the existing Kernel
+and shared Auth/DBOS library pools, preserving ownership. Catalogue statements use the shared classifier and
+background statements remain outside request cost. Old permissive-Access growth tests at 1/4/16 are storage
+evidence only; no native 1/8/64 real-Auth statement counts are claimed here.
 
-Touches: original permits/waiters, K fixed threads, retirement, one transferred owned input, parent/result/cache
-allocations and shutdown. Bound: active+retired<=K at EVERY transition, waiters<=permits-K, original deadline,
-physical reclamation before replacement and shutdown zero before pool closes. Growth check: matrix resource
-schedules above, repeating deadline/abort/error/late-exit cycles and measuring H0/c against all three changed
-input sizes. REQUIRED Core/Work physical evidence and Performance c/cleanup approval. Native shape/counter
-measurements and a successful HTTP response do not prove concurrency or cleanup.
+## Deterministic precedence proposal and remaining owner boundaries
 
-## Remaining freeze decisions
+Cheap bounded checks retain existing 400 precedence: collection limits, canonical size/JSON and schema shape.
+Then analyze distinct sources in sorted order. A defect reached before budget exhaustion retains its existing
+diagnostic; the first reservation exceeding A_max returns 422 `definition_work_exceeded`. Preserve first code per
+pointer, lexical error order and 64 cap for defects actually reached. Unsafe/unknown never becomes safe.
+This changes the mixed malformed/over-work case from running every proof to a deterministic bounded prefix;
+Performance supports it, but Root/Definitions must explicitly amend HTTP precedence before runtime or freeze.
+Do not silently reinterpret a late unsafe pattern as safe or claim all old malformed outcomes survive unchanged.
 
-The required 4 MiB transferred-input condition is not yet reconciled with the existing 4 MiB CANONICAL release
-cap. `{release: ...}` adds 12 bytes even without envelope metadata, whitespace can increase wire bytes without
-changing release validity, and JSON escape spellings can expand them further. Elysia currently parses on the
-parent before this route. Producing a canonical <=4 MiB release buffer there requires the per-node parent walk
-that decision 30 moves into the job. Sending the unbounded wire body violates the transport condition; rejecting
-it at 4 MiB silently reduces the admitted format. Core/Performance/Semantic must choose a bounded ingress/
-streaming ownership primitive or explicitly reconcile this unit mismatch. This document does not invent one.
+The earlier aggregate weighted-work assignment requires byte/node debits and unchanged complete error precedence;
+the mandatory updated owner adoption rejects those weights/debits and proposes this checkpoint-only construction
+and precedence amendment. The earlier assignment's <=4 MiB transfer condition also differs from the newly adopted wire declaration.
+Those are explicit specification alignment boundaries, not permission to implement a different HTTP contract.
 
-Likewise the present pure validator has no aggregate T/G debit boundary, and TypeBox/JCS/checker allocation
-internals do not expose a full release meter or native heap upper bound. `analyzePattern.steps` supplies real A,
-not allocation work between checkpoints. The lower-bound diagnostic can establish deterministic excess but
-cannot close full W, c or native margin. Performance must approve the metering/reservation strategy and memory
-proof before an execution producer is dispatched. No guessed c/heap claim is justified by the old measurements.
-
-Finally, if a late semantic/unsafe-pattern defect exists only after work would exhaust W_max, preserving the
-old complete malformed 400 diagnostic while stopping before excess work requires an owner-defined ordering or
-bounded reservation proof. Running the whole validator then refusing violates early refusal; returning early
-422 for every such malformed input changes existing precedence. Semantic/Definitions must settle this exact
-mixed invalid/over-work case, without weakening any old per-pattern controls. Ordinary malformed 400, collection/
-size precedence and the valid excess fixture are already specified separately.
-
-These are precise proof/owner boundaries, not a request for another external research pair or a runtime API.
-Until resolved, candidate numeric values are not freeze-ready and this SPEC does not claim native runtime,
-physical reclamation, main/root gate or Goal completion.
+Still REQUIRED before execution: actual bounded ingress producer and raw/parse-once binding; aggregate in-analysis
+checkpoint enforcement; deterministic own-loop counter evidence; real all-pools history capture; idle-host native
+A=A_max/max-body margin; H0/c/transient allocation evidence; CPU barrier, cancellation, physical exit, readiness and
+shutdown observations. No missing port is replaced by a success-shaped helper, guessed resource DTO or authority
+receipt. This SPEC and its red HTTP acceptance do not claim physical reclamation, runtime readiness, main/root
+gate or Goal completion. No new external research pair is requested.
