@@ -4,7 +4,7 @@ import { groupMembers } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
 import { StaleAttemptError } from './contracts.ts';
-import type { AttemptFence, AttemptRef, LandingRequest } from './contracts.ts';
+import type { AttemptFence, AttemptRef, LandingRequest, ManagerEvent } from './contracts.ts';
 import type {
   Attempt,
   AttemptRecord,
@@ -382,17 +382,19 @@ export class WorkerStore implements AttemptFence {
         const tasks = members.map((member) => {
           this.assertCurrent(member);
           const task = this.task(member.taskId);
-          if (task.state === 'integrated' || task.state === 'merged') throw new Error('attempt already integrated');
+          if (task.state === 'integrated' || task.state === 'merged') return { member, task, plan: undefined };
           const plan = this.integrationPlan(member);
           if (plan && plan.commit !== member.commit)
             throw new Error('batch member does not match its integration plan');
           return { member, task, plan };
         });
+        const pending = tasks.filter(({ task }) => task.state !== 'integrated' && task.state !== 'merged');
+        if (!pending.length) return members[members.length - 1]!.commit;
         const head = merge();
         if (!head) return '';
         if (head !== members[members.length - 1]!.commit)
           throw new Error('batch head does not match its final member commit');
-        for (const { member, task, plan } of tasks) {
+        for (const { member, task, plan } of pending) {
           task.state = 'integrated';
           task.integratedCommit = member.commit;
           if (plan) {
@@ -419,6 +421,70 @@ export class WorkerStore implements AttemptFence {
         return head;
       })
       .immediate();
+  }
+  /** Recover a current landing attempt only when its durable queue entry has disappeared. */
+  recoverOrphanedLanding(
+    ref: AttemptRef,
+    failure: NonNullable<Attempt['failure']>,
+    options: RetryIntent['options'],
+    event: ManagerEvent,
+  ): boolean {
+    const recovered = this.db
+      .transaction(() => {
+        this.assertCurrent(ref);
+        const task = this.task(ref.taskId);
+        if (task.state !== 'landing' || this.retryIntent(ref)?.status === 'pending') return false;
+        const queueExists = this.db
+          .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='landing_queue'")
+          .get();
+        if (!queueExists) return false;
+        if (
+          this.db
+            .query('SELECT 1 FROM landing_queue WHERE task=? AND attempt=? AND delivered=0 LIMIT 1')
+            .get(ref.taskId, ref.attempt)
+        )
+          return false;
+        if (
+          this.db
+            .query("SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='orphaned-landing-recovered' LIMIT 1")
+            .get(ref.taskId, ref.attempt)
+        )
+          return false;
+
+        const attempt = this.attempt(ref);
+        attempt.failure = failure;
+        attempt.failureLogPath = attempt.logPath;
+        attempt.escalation = 'environment';
+        attempt.approaches.push({
+          approach: `Attempt ${attempt.attempt}: recover orphaned landing`,
+          result: failure.assertion,
+        });
+        this.saveAttempt(attempt);
+        const record = this.record(ref);
+        if (record) {
+          record.escalation = 'environment';
+          record.firstFailure = failure.fingerprint;
+          record.outcome = 'gate-failed';
+          this.saveRecord(record);
+        }
+        task.state = 'ready';
+        this.saveTask(task);
+        const intent: RetryIntent = { ...ref, options, status: 'pending' };
+        this.db
+          .query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
+          .run(ref.taskId, ref.attempt, JSON.stringify(intent));
+        const at = new Date().toISOString();
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'orphaned-landing-recovered', at, JSON.stringify({ failure, options }));
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'manager-event', at, JSON.stringify(event));
+        return true;
+      })
+      .immediate();
+    this.invalidateSnapshot();
+    return recovered;
   }
   clearPromotion(): void {
     this.db.query('DELETE FROM worker_promotions WHERE id=1').run();

@@ -111,6 +111,11 @@ changes belong to it and whether all its commits are on dev; those tasks become 
 commits cannot finish by claiming a peer's work. A failing landing returns to the tasks identified by the failing
 acceptance or changed files. Main promotion retains its existing workflow.
 
+A dev rebase conflict enters the existing rebase-conflict retry path with its conflict files and evidence. A batch
+drops members already integrated before advancing dev, so one completed member cannot refuse the others. The
+manager-host sweep also repairs a current `landing` task that has no pending queue entry after both train lanes are
+idle: it records a durable retry and sends one environment notice to the supermanager.
+
 The controller merges dev into the workspace only while no worker runs there, under the same short lease used for
 launch. Pending launches also block that merge. Dirty work is preserved and defers the merge until a later idle
 opportunity; no checkpoint, stash, reset or snapshot machinery is used. Landing can proceed while peers keep editing.
@@ -271,6 +276,8 @@ Host recovery, dependency release, cancellation reporting and watchdog sweeps us
 Settled dependency checks read state and commit/target scalars by task id; dispatch validation reads task ids only.
 `WorkerStore` caches decoded task and attempt bodies for the current SQLite `data_version`, and its own task/attempt
 writes invalidate that snapshot. Repeated store reads in a sweep or request reuse decoded rows.
+Orphaned landings are repaired under the task lease only when no current pending queue entry or train-lane lease exists;
+the retry intent and one-time supermanager report are written atomically.
 
 The `host-db-reads.test.ts` live-sized fixture has 3,000 settled task bodies averaging 7.5 KB and 5,000 settled
 attempt bodies averaging 8 KB, about 62.5 MB of settled JSON. Before active-row reads, a full sweep decoded all of

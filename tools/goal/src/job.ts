@@ -31,6 +31,7 @@ import {
 } from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
+import { firstFailure } from './merge.ts';
 import {
   git,
   HeldTaskConflictError,
@@ -149,6 +150,20 @@ export const START_GRACE_MS = 10 * 60_000;
 export const SILENCE_WINDOW_MS = 40 * 60_000;
 /** Run-log activity is checked at most once a minute when the filesystem watcher is unavailable. */
 const SILENCE_CHECK_MS = 60_000;
+
+/** Hold both train lanes while checking and repairing a landing with no queued request. */
+function acquireIdleTrainLeases(stateDirectory: string): DirectoryLease[] | undefined {
+  const leases: DirectoryLease[] = [];
+  try {
+    for (const name of ['train-main.lease', 'train.lease'])
+      leases.push(acquireDirectoryLease(join(stateDirectory, name)));
+    return leases;
+  } catch (error) {
+    for (const lease of leases) lease.release();
+    if (error instanceof LeaseHeldError) return undefined;
+    throw error;
+  }
+}
 
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
@@ -740,6 +755,53 @@ export class WorkerJob implements GateOutcomeSink {
     const yieldSweep = async () => {
       if (++sweepItems % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     };
+    if (adoptRunning) {
+      for (const candidate of tasks.filter((task) => task.state === 'landing' && task.currentAttempt > 0)) {
+        await yieldSweep();
+        const ref = { taskId: candidate.id, attempt: candidate.currentAttempt };
+        let taskLease: DirectoryLease;
+        try {
+          taskLease = this.acquireOrphanLease(join(this.tasks.settings.stateDirectory, 'leases', candidate.id));
+        } catch (error) {
+          if (error instanceof LeaseHeldError) continue;
+          throw error;
+        }
+        try {
+          const task = store.task(candidate.id);
+          if (task.currentAttempt !== ref.attempt || task.state !== 'landing') continue;
+          if (store.retryIntent(ref)?.status === 'pending') continue;
+          const trainLeases = acquireIdleTrainLeases(this.tasks.settings.stateDirectory);
+          if (!trainLeases) continue;
+          try {
+            const attempt = store.attempt(ref);
+            const failure =
+              attempt.failure ??
+              firstFailure(
+                `Landing for task ${task.id} attempt ${ref.attempt} was lost: no pending landing entry or live train owner remains.`,
+              );
+            const evidence = evidenceBundle(task, attempt, failure);
+            const event = {
+              managerId: this.tasks.settings.integration.supermanager,
+              taskId: task.id,
+              kind: 'environment' as const,
+              summary: `environment: recovered landing for task ${task.id} attempt ${ref.attempt}; queued a retry. See ${evidence}`,
+              evidencePath: evidence,
+            };
+            const recovered = store.recoverOrphanedLanding(
+              ref,
+              failure,
+              { evidence, escalation: 'environment', fixRound: attempt.fixRound },
+              event,
+            );
+            if (recovered) this.inbox.deliver(event);
+          } finally {
+            for (const lease of trainLeases) lease.release();
+          }
+        } finally {
+          taskLease.release();
+        }
+      }
+    }
     for (const task of !adoptRunning
       ? []
       : tasks.filter(

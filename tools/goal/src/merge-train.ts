@@ -996,10 +996,6 @@ export class MergeTrain {
                 }
               }
 
-              if (retryDeferred.has(entry.id) && outcome.stage === 'rebase' && outcome.conflictedFiles?.length) {
-                deferred.add(entry.id);
-                continue;
-              }
               o.queue.finish(entry.id, outcome);
               // Sink delivery is at least once; obsolete entries must never block the current attempt.
               o.sink.onGateOutcome(outcome);
@@ -1096,8 +1092,22 @@ export class MergeTrain {
         return outcome ? [{ entry, outcome }] : [];
       });
     const passedAcceptance = new Map<string, { output: string; command: readonly string[] }>();
+    const discardIntegratedMembers = (): boolean => {
+      if (!(o.fence instanceof WorkerStore)) return false;
+      const integrated = new Set(
+        pending
+          .filter((entry) => ['integrated', 'merged'].includes(o.fence.task(entry.request.taskId).state))
+          .map((entry) => entry.id),
+      );
+      if (!integrated.size) return false;
+      for (const id of integrated) skipped.add(id);
+      pending = pending.filter((entry) => !integrated.has(entry.id));
+      return true;
+    };
 
     while (pending.length) {
+      discardIntegratedMembers();
+      if (!pending.length) break;
       const trainTree = resolve(o.worktreeRoot, `train-batch-${randomUUID()}`);
       const logPaths = new Map<number, string>();
       const memberStarted = new Map<number, number>();
@@ -1523,8 +1533,7 @@ export class MergeTrain {
                 `${note}${!savedBaseline && batchBaselineOutput ? `Batch baseline on dev ${base}:\n${batchBaselineOutput}\n` : ''}`,
               );
               savedBaseline ||= Boolean(batchBaselineOutput);
-              if (outcome.stage === 'rebase' && outcome.conflictedFiles?.length) deferred.add(entry.id);
-              else outcomes.set(entry.id, outcome);
+              outcomes.set(entry.id, outcome);
             } catch (error) {
               if (!(error instanceof StaleAttemptError)) throw error;
               skipped.add(entry.id);
@@ -1610,6 +1619,8 @@ export class MergeTrain {
           if (!staleEntry) throw error;
           skipped.add(staleEntry.id);
           pending = pending.filter((entry) => entry.id !== staleEntry.id);
+          retry = true;
+        } else if (String(error).includes('attempt already integrated') && discardIntegratedMembers()) {
           retry = true;
         } else {
           const message = String(error);
