@@ -146,3 +146,18 @@ syntax cannot submit a check on this base. No checks were queued, no tests were 
 command/result/receipt or assertion count was produced. The frozen test hash remains unchanged. Changing the
 runner or silently substituting another launch protocol is outside this witness-only contract. The tool failure
 blocks current revalidation; the historical passing combined witness remains preserved.
+
+### Latest retry preflight
+
+Starting revision `97a6db186d002b0bbbae168149c8d01a1f6f58cb` is clean on the assigned worker branch.
+The composed test and recovery factory were read again; the frozen test SHA-256 above is unchanged.
+The required delivery launch was retried before treating the manifest's failure as current:
+
+```sh
+bun scripts/worker-check.ts --run -- test -s docs/research/imports-audit/cover-recovery-pixels.md
+```
+
+It again exited 1 with `Invalid check id: --` and created no check ID. The checked-in runner still routes
+`--run` to an existing record, rather than command submission. Two further prescribed launches will verify
+the focused native test and affected kernel typecheck submission before concluding this retry. No frozen
+assertion, helper, product or runner change is made.
