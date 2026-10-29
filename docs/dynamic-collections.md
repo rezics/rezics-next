@@ -5,7 +5,10 @@ The first implementation scope is built-in dynamic Collections and the shared Co
 
 [Filtered lists](filtered-lists.md) owns the shared complete indexed observation, current disclosure, direct/prepared
 admission, useful pages, freshness, canonical-list identity and cost contract. Required behavior below is distinct
-from the current incomplete dynamic runtime, source factories and publication integration.
+from the current incomplete dynamic runtime, source factories and publication integration. The
+[native owner plan](library-owner-queries.md#native-candidate-support-and-complete-observations) alone owns the
+shared OWNER candidate/support directory, native predicate access and complete selective observations/repair;
+this document consumes it without another architecture or numeric authority.
 
 ## Model and identity
 
@@ -21,15 +24,26 @@ The first-scope built-ins are:
 
 1. Everything, one stable Collection identity for every account, including an empty account.
 2. **One state Collection per state identity** for every library profile whose state set is in use by that account.
+3. Liked, one stable private logical identity for every account, including genuine empty 200, backed by Content's
+   current SUBJECT like/love source. Reactions alone add neither Everything presence nor state support.
 
 Built-ins are logical on reads and private by default; account setup creates no state-view fanout. Collection resource,
 list, detail, and logical built-in discovery reads are pure: they create no Collection header, grant, receipt, domain
-event, or other user-visible resource state. The common members GET is the sole read exception: it may start bounded,
-retained derived preparation as an idempotent cache fill under the existing quotas and budgets. Its key includes the
+event, or other user-visible resource state. Liked follows the same logical/read-only contract; its identity and
+Content raw/version integration remain implementation requirements; its shared DTO/discovery binding must preserve
+this scope without treating the existing Everything/state helper as Liked delivery. The common members GET is the
+sole read exception: it may start bounded, retained derived preparation as an idempotent cache fill under the
+existing quotas and budgets. Its key includes the
 actual viewer, Collection, validated filter and sort, and accepted release/meaning. Only the derived preparation
 record and its work intent may be written. This cannot materialize a Collection, grant access, or perform a receipt,
 domain event, rename, follow, or other resource mutation. Authorization, current source eligibility, and privacy are
 checked before disclosure and revalidated by the owning admitted plan; preparation is never cached authority.
+Accounts owns the additive fenced event-free operational transaction plus atomic durable intent/native SPEC.
+Use only its actual [Core contract/export](../services/kernel/src/command/README.md#operational-transactions):
+the adopted mechanism uses same-client DBOS `enqueueInTransaction`, native Access/current-T finalization and
+partition/account fences with existing DBOS recovery, not a separate intent table or relay. Executor source and
+its frozen contract are now present; Library cache-fill consumption and full native custody proof remain pending.
+`runCommand`/`noEffect`, fabricated transactions or post-commit WorkClient enqueue do not implement this exception.
 
 When a members GET has retained preparation genuinely underway, it returns HTTP 202 with `Retry-After` and the exact
 closed `application/json` body `{preparing:true}`. The client retries the same validated URL and cursor; a later GET
@@ -171,6 +185,11 @@ private predicates and facts are not public output. Pending or unpublished gener
 Never evaluate a fresh query at `T` over undisclosed private facts; if no generation completed, no subject set is
 manufactured. Private, UNLISTED and already-deleted Collections, including formerly-public ones, are erased by bounded work.
 
+Every new directory/support/change/registration/frontier/prepared/intent store, identity effect and first-apply
+custody joins the exact Library [A5 inventory](../services/kernel/src/library/README.md#retention-inventory), bound
+to native transactionId/component/job and terminal T. Shared history/work artifacts join their actual owner custody;
+missing whole-role proof stays pending. Heads/counters are removed last after fact hooks cannot recreate them.
+
 The durable terminal handoff records freeze/revoke and bounded purge work, then returns without waiting for projection consumers; the
 delete response may precede purge completion. Delayed delivery cannot adopt B or resurrect erased facts. [Deletion](deletion.md)
 governs individual-record tombstones and 30-day undo: restore rechecks `deleted_at`/`purge_after`/CAS and restores the same historic
@@ -203,6 +222,12 @@ Canonical browsing uses maintained canonical-ID indexes and unique prepared resu
 identity epoch remains pending throughout serialized durable merge/unmerge/repoint maintenance; lists prepare
 while pending and cursors restart after changes. At most 4,096 originals per group are admitted before effects;
 published redirects are direct to active terminals. No request-time exhaustive alias walking or all-home sweeps.
+The SAME `library-private-follow-counts` participant covers EVERY Library canonical record, including OWNER
+candidate/support directories and concurrent first-apply rekey custody. No third participant/independent ACK;
+follow-only completion is insufficient. Exact native transactionId/component/job/epoch/version/scope and every
+prior removal/addition/fence use the shared native receipt contract, with terminal/account/source fences and stale
+destination rejection. The [owner plan](library-owner-queries.md#shared-operational-identity-and-disclosure-producers)
+links the fixed STORE/control cutover ruling and separate still-required Source2a observation producer.
 Stored originals and occurrence notes/multiplicity remain; editing preserves occurrences. Canonical owner views
 select latest state with conflict visible, union labels, keep copies/sessions separate and address new writes to
 current terminals. Current original and terminal disclosure remains required.

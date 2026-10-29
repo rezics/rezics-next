@@ -28,22 +28,36 @@ Current implementation evidence is narrower than the capability:
   entry witnesses; it does not prove copy/session-only whole-state-set support, all siblings or writer coverage.
   These helpers implement neither Liked identity nor its Content reaction integration.
 - Pin/kind columns, retained-entry/due storage, labels/reservations, source-head hooks and canonical tables exist.
-  Entry/copy/session row adapters still use the fixed pre-profile values and omit accepted pins. Label DAOs provide
+  `entry-store.ts` accepts private pins for entry insert/update and pin/kind for copy insert/update, with
+  `readEntryFact`/`readCopyFact` native readers. `progress-store.ts` accepts session pins and exposes `readSessionFact`.
+  Unpinned compatibility paths still constrain fixed values; DAO delivery is not complete production profile acceptance.
+  Label DAOs provide
   metadata lifecycle and reservation admission, not HTTP commands, complete assignment undo/pages or automatic purge.
 - The native [owner sequence allocator/schema](owner-write-sequence.md) and
   [owner fact invalidation ABI](owner-fact-version.md), including full changed-row UPDATE coverage, are integrated.
   `entries.ts` and production entry/clear/Undo writers still do not allocate or persist state-write sequences.
   These primitives establish neither complete owner-query coverage nor dynamic/canonical runtime readiness.
+- Shared `FilterDocument`/`OwnerLeaf` and `parseFilter`/`admitFilter`/`walkFilter` deliver structural owner grammar,
+  including saved expansion. `owner: true` is not authorization or a native owner plan.
+- `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
+  the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
+  consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
 - Every method of `createCollectionSource` and the canonical-source-store factories throws `dependency_unavailable`.
   Integrated tables, typed ports, outcome interfaces and missing-driver verifiers are not runtime completion.
-- `work-module.ts` registers `work.ts` Collection listing effects only. No integrated `purgeAccountFactsPage` export
-  or terminal Library graph worker exists. An entry/copy/follow-only purge would still omit most of that graph.
+- `work-module.ts` registers `work.ts` Collection listing effects only. `account-fact-purge.ts` exports
+  `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
+- Semantic identity STORE/mapping/participants/coordinator and whole-query Source2a remain contracts without
+  runtime producers. Existing point Access/disclosure, `subjectSource` and projection checkpoints do not close them.
+  Content reaction commands exist, but inspected worktree/dev has no `readLiked`/`readLikedVersion` implementation;
+  obtain actual raw/version and DDL receipts rather than inferring delivery from an earlier receipt description.
 
 ### Required built-ins and personal space
 
 Use one Collection members service/surface for curated, Everything, state and Liked. Native personal facts remain
-truth. One derived owner-level subject candidate index may serve built-ins; no per-built-in membership cache or
-copied exact-fact-witness store. Every qualifying producer must insert discovery coverage atomically or establish
+truth. The [native owner plan](../../../../docs/library-owner-queries.md#native-candidate-support-and-complete-observations)
+owns the ONE private OWNER candidate/support directory, native indexed truth and complete selective dependency/
+repair design, shared by Everything/state/Continue/Liked and admitted owner queries. No per-built-in membership
+cache or copied exact-fact-witness store. Every qualifying producer must insert discovery coverage atomically or establish
 readiness through bounded durable preparation. Missing coverage returns preparing, never false empty. Stale positive
 candidates lose membership/disclosure immediately under current native checks. Logical Library/Collection list and
 detail reads are pure: no repair, header/grant creation, receipt or domain event. Only the common members GET may
@@ -54,6 +68,13 @@ exactly `{preparing:true}`, `Retry-After` and owner-private `no-store`; retry th
 No members, next, operation ID or partial data accompanies `202`. Genuine exhaustion stays
 `200 {members:[],next:null}`; unavailable runtime/work stays `503`. Zone POST remains unchanged.
 [Continue GET](../../../../docs/library-continue.md#http-contract) starts no work; the members exception does not apply.
+The Accounts operational producer uses SERIALIZABLE/current deadline/contention retry, existing command gate,
+request-mode actual Access/current-T finalization and actor-free work-step partition/up-to-two active/unfenced
+account FOR SHARE fences. Atomic intent uses pinned DBOS `enqueueInTransaction` on the SAME pg client as derived
+rows, no separate intent table/relay/new queue/second connection. Consumer uniqueness enqueues only newly created
+preparation with deterministic workflowID, no deduplicationID, locators-only inputs and shared-history custody.
+No receipt/event/write basis/position advance; existing DBOS recovers it and expires only terminal workflows.
+Consume the actual Core API; ordinary `runCommand`/`noEffect` or enqueue after commit is not this transaction.
 
 Everything is the unique subjects with live explicit state, effective live label assignment, retained session/history
 or retained holding. Empty entry shells, trash, follows, curated occurrences, ratings and published-log snapshots
@@ -94,6 +115,13 @@ one canonical card; the editor retains every occurrence/note/order. Canonical-ID
 pending/published identity epochs establish browsing order and uniqueness. Pending returns preparing; cursors restart
 on epoch change. No per-page identity-home sweep or identity-basis protocol. Original withheld support never becomes
 public through terminal visibility; current original/terminal authorization remains required.
+The SAME fixed `library-private-follow-counts` epoch participant covers EVERY Library canonical record, including
+OWNER candidate/support directory and concurrent first-apply rekey custody. Its ACK binds exact native
+transactionId AND component/job/epoch/version/scope and every prior removal/addition/fence, current terminal/
+account/source admission and stale destination rejection. Follow-only completion is insufficient; no third
+participant or independent ACK. Consume the shared STORE/control cutover ruling through the
+[owner plan](../../../../docs/library-owner-queries.md#shared-operational-identity-and-disclosure-producers);
+actual native participant, whole-query Source2a and custody proofs remain required pending.
 
 ### Native owner state-write sequencing (required; runtime incomplete)
 
@@ -117,9 +145,12 @@ The delivered [`allocateOwnerWriteSeq` ABI and schema](owner-write-sequence.md) 
 same-owner attribution and matching partition. Private `owner_write_counter` storage and nullable positive bigint
 `entry.owner_write_seq` / `entry_deleted.owner_write_seq` exist; null is legacy/unsequenced, with no default/backfill.
 Production row adapters and set/clear/Undo binding, bounded migration/cutover/readiness, epoch consumer and complete
-terminal cleanup remain missing producers. Existing unsequenced values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero. Explicit bounded
-migration/cutover must establish authoritative ordering before those values participate in ready canonical reads;
-fresh supported writers must set real sequences before advertising canonical readiness.
+terminal cleanup remain missing producers. Existing unsequenced values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero.
+The [native cutover plan](../../../../docs/library-owner-queries.md#sequencing-cutover-bounded-cuts-and-native-proof)
+requires complete authoritative native state-write evidence, exact verified locators and bounded live-write cutover,
+or explicit real owner reassertion. Affected winner/NOT-state/Continue state stays unready; independent complete
+original/presence/label/session/holding paths need not all wait. Fresh supported writers must set real sequences
+before canonical readiness. Unknown chronology is a required producer gap, not a permanent launch exception.
 
 The distinct delivered [`readOwnerFactVersion` ABI](owner-fact-version.md) reads one exact owner head in the caller's
 native snapshot. Its bigint result is private invalidation metadata; `null` means unbuilt, never zero or ready absence.
@@ -467,6 +498,19 @@ The applied private `owner_write_counter` (`seq`) and live/archive `owner_write_
 inventory; their complete participant cleanup remains unimplemented. T fences their state writers immediately.
 Bounded Library participant cleanup erases ordering metadata after dependent private facts; fenced late repair must not recreate it. This counter is neither an account
 lifecycle generation nor a public activity total. Existing `fact_source_head` removal remains last after delete hooks.
+
+This A5 inventory also includes every planned OWNER candidate/support directory and inverse, pin-set/sibling
+support, private change positions and retained old/new/parent-range repairs, dependency registrations, bootstrap
+frontiers/CAS controls, ordered prepared results, operational derived records/intents and identity first-apply/
+OLD-removal/NEW-addition/fence/ACK custody. Native specifications must name each actual table/key and exact native
+transactionId+component/job/epoch/version/scope and workflow/input/output locators, including all prior pages and
+concurrent registrations. No invented table name or follow-only completion counts as whole-role coverage.
+Fence every producer/apply at T; erase child work before parents and heads/counters after hooks cannot recreate them.
+Core/DBOS intent artifacts belong to actual shared-history custody, not a Library JSON scan or extra intent store.
+Missing native producer, redrive, reclamation or store-owner ACK proof stays pending; empty Library rows do not
+establish shared payload erasure. Public complete A retains fixed membership/current disclosure; pending B cannot
+complete from private facts. The [owner plan](../../../../docs/library-owner-queries.md#shared-operational-identity-and-disclosure-producers)
+owns the design, while this inventory must gain exact native locators with each implementation cut.
 
 | Native data                                                                                                                                                                        | Required cleanup and current gap                                                                                                                                                                                                                                                                                                                   |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
