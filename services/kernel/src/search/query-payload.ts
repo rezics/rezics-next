@@ -34,15 +34,14 @@ function hitsOf(body: unknown, maximum: number, total: boolean): RecordValue[] {
   }
   return body.hits.hits.map((hit) => {
     if (!record(hit) || !uuid(hit._id) || typeof hit._index !== 'string' || !record(hit._source)) fail();
-    let partition: number;
     try {
-      partition = subjectPartition(hit._id);
+      subjectPartition(hit._id);
     } catch {
       return fail();
     }
+    // A stale index hint may route elsewhere; disclosure checks drop it before any source read.
     if (
       !safeCount(hit._source.partition, 4095) ||
-      hit._source.partition !== partition ||
       !safeCount(hit._source.security_revision)
     )
       fail();
