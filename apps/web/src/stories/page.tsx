@@ -374,7 +374,7 @@ function libraryReady(heading: () => string, item: () => string | undefined) {
 
 export const libraryEntriesReady = libraryReady(
   () => m.library_heading(),
-  () => libraryEntriesRecording.libraryEntries[0]?.subject.label,
+  () => libraryEntriesRecording.libraryEntries[0]?.subject.label.value,
 );
 export const libraryCollectionsReady = libraryReady(
   () => m.library_collections_heading(),
@@ -422,7 +422,7 @@ export async function libraryProgressUnitMenuOpen(context: { canvasElement: HTML
 }
 export const libraryCollectionReady = libraryReady(
   () => libraryCollectionRecording.collection.title,
-  () => libraryCollectionMembersRecording.members[0]?.subject.label,
+  () => libraryCollectionMembersRecording.members[0]?.subject.label.value,
 );
 export const libraryLogReady = libraryReady(
   () => m.library_logs_page_heading(),

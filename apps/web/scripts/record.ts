@@ -842,7 +842,7 @@ function applyStorySubjects(value: unknown, locale: string, name: string): unkno
   ].filter((label): label is string => typeof label === 'string');
   const isPersonalStory = name.startsWith('library-') || name.startsWith('subject-page');
   const candidates = storySubjects.filter((entry) =>
-    labelValues.some((label) => Object.values(entry.labels).includes(label)),
+    labelValues.some((label) => Object.values(entry.labels as Record<string, string>).includes(label)),
   );
   const subject =
     storySubjects.find((entry) => entry.id === result.id) ??
@@ -850,7 +850,8 @@ function applyStorySubjects(value: unknown, locale: string, name: string): unkno
     candidates[0];
   if (subject) {
     result.id = subject.id;
-    const localizedLabel = subject.labels[locale] ?? subject.labels.en ?? Object.values(subject.labels)[0]!;
+    const labels = subject.labels as Record<string, string>;
+    const localizedLabel = labels[locale] ?? labels.en ?? Object.values(labels)[0]!;
     result.type = subject.type;
     if (result.labels && typeof result.labels === 'object' && !Array.isArray(result.labels))
       result.labels = { ...subject.labels };
