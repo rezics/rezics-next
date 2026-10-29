@@ -34,6 +34,7 @@ let options: PersonasOptions;
 let first: Awaited<ReturnType<typeof createPersonas>>;
 let second: typeof first;
 let additional: typeof first;
+let deletionBuyers: typeof first;
 let commands: ReturnType<typeof createCommerceCommands>;
 let scheduled: typeof commands;
 let fake: ReturnType<typeof startFakeStripe>;
@@ -137,6 +138,7 @@ beforeAll(async () => {
   first = await createPersonas(kernel, options);
   second = await createPersonas(kernel, { ...options, governance: first.staff });
   additional = await createPersonas(kernel, { ...options, governance: first.staff });
+  deletionBuyers = await createPersonas(kernel, { ...options, governance: first.staff });
   for (const group of ['purchases', 'selling']) await post(first.staff, `/v1/platform/exposure/${group}:open`, {});
   for (const [resource, actions] of [
     [PLATFORM_RESOURCE, ['offer:create']],
@@ -457,7 +459,7 @@ describe('fresh Auth account deletion fences native late paid and refund-reversa
 
   for (const mode of ['claimed', 'legacy'] as const) {
     test(`fresh Auth T before late first paid ${mode} apply: financial truth commits without an entitlement or private benefit`, async () => {
-      const buyer = mode === 'claimed' ? first.bob : additional.alice;
+      const buyer = mode === 'claimed' ? first.bob : deletionBuyers.alice;
       const order = await checkout(buyer);
       fake.pay(order.checkoutSessionId!);
       const attempt = await prepare(order, mode, scheduled);
@@ -519,7 +521,7 @@ describe('fresh Auth account deletion fences native late paid and refund-reversa
   }
 
   test('real deletion race: account share acquired first commits the grant before T, and Auth deletion waits for that transaction', async () => {
-    const buyer = additional.bob;
+    const buyer = deletionBuyers.bob;
     const order = await checkout(buyer);
     fake.pay(order.checkoutSessionId!);
     const attempt = await prepare(order, 'claimed', scheduled);
@@ -654,7 +656,7 @@ describe('fresh Auth account deletion fences native late paid and refund-reversa
 
 // Additional physical schedules use the same owned Auth/kernel world and leave the existing cases unchanged.
 test('fresh Auth T before legacy service admission still permits late paid accounting without recreating entitlement role grants', async () => {
-  const buyer = first.orgOwner;
+  const buyer = additional.bob;
   const order = await checkout(buyer);
   await terminal(buyer);
   fake.pay(order.checkoutSessionId!);
@@ -686,7 +688,7 @@ test('fresh Auth T before legacy service admission still permits late paid accou
 });
 
 test('real deletion race reversed for restoration: refund-failure bytes and claim precede Auth T, account barrier follows T and only money reconciles', async () => {
-  const buyer = second.orgOwner;
+  const buyer = additional.alice;
   const order = await paid(buyer);
   const refund = fake.refund(order.checkoutSessionId!, { amount: 1200 });
   expect((await (await prepare(order, 'claimed')).apply()).changed).toBe(true);
