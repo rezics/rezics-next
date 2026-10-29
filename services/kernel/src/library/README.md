@@ -1173,6 +1173,9 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   the current shared API. Shared occurrence reporting for those invocations is a prerequisite; raw plan counts
   must not stand in for executions. The authored steady-plan assertions and storage/correctness cases remain
   unchanged, and no new calibrated pass is claimed.
+  The focused acceptance run stopped before native test execution with TypeScript `TS2339` on the raw client's
+  `processID` property. The probe now uses the same checked native-property narrowing as the shared harness.
+  That fix has no new native receipt; the missing warm-up occurrence binding above remains required.
 
 ### Follow read
 

@@ -334,10 +334,13 @@ test('native source hook rows and statements stay constant with logarithmic bloc
   const listeners = new Map<PoolClient, (notice: { message?: string | undefined }) => void>();
   const listen = (client: PoolClient) => {
     if (listeners.has(client)) return;
+    const backend = (client as PoolClient & { readonly processID?: unknown }).processID;
+    if (typeof backend !== 'number' || !Number.isSafeInteger(backend))
+      throw new Error('Native PostgreSQL backend PID is unavailable');
     const listener = (notice: { message?: string | undefined }) => {
       const message = notice.message;
       if (activeRun && message?.startsWith('duration:') && message.includes('plan:\n')) {
-        activeRun.backendPids.push(client.processID);
+        activeRun.backendPids.push(backend);
         activeRun.plans.push(JSON.parse(message.slice(message.indexOf('plan:\n') + 6)));
       }
     };
