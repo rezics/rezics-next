@@ -24,7 +24,11 @@ import { identitySupport } from './identity-fixture.ts';
 
 export type Candidate = {
   id: string;
-  statement: BatchStatement;
+  statement: Omit<BatchStatement, 'value'> & {
+    value:
+      | Extract<BatchStatement['value'], { type: 'value' }>
+      | (Exclude<BatchStatement['value'], { type: 'value' }> & { content?: never });
+  };
   source: Source;
   revision: number;
   retracted: number | null;
@@ -34,7 +38,7 @@ type Exchange = {
   url: string;
   method: string;
   headers: Headers;
-  bytes: string | undefined;
+  bytes: string;
   status: number;
   responseHeaders: Headers;
   responseBytes: string;
@@ -188,7 +192,7 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
           expect(claims.sub).toBe(runtime.identity.bulk.accountId);
           expect(claims.client_id).toBe(runtime.identity.client.clientId);
           expect(String(claims.scope).split(' ').sort()).toEqual([...IMPORTER_SCOPES].sort());
-          const bytes = request.method === 'GET' ? undefined : await request.clone().text();
+          const bytes = request.method === 'GET' ? '' : await request.clone().text();
           if (url.pathname === '/v1/subjects:batchWrite') {
             expect(Buffer.byteLength(bytes!)).toBeLessThanOrEqual(65536);
             const body = JSON.parse(bytes!) as BatchWriteRequest;
