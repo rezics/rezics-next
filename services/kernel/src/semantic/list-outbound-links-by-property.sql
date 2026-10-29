@@ -1,7 +1,7 @@
 -- Merge the ordered layers, prefer Context at an equal key, then skip suppressions.
 -- Page index keys before fetching payloads, so both ordered ranges can use index-only scans.
 WITH input AS NOT MATERIALIZED (
-  SELECT :route::integer AS r_route, :subject_id::uuid AS r_subject_id, :context_id::uuid AS r_context_id, :property::text AS r_property, :filter_value::uuid AS r_filter_value, :after_order::text AS r_after_order, :after_target::uuid AS r_after_target, :after_statement::uuid AS r_after_statement
+  SELECT :route::integer AS r_route, :subject_id::uuid AS r_subject_id, :context_id::uuid AS r_context_id, :property::text AS r_property, :filter_value::uuid AS r_filter_value, :after_order::text AS r_after_order, :after_target::uuid AS r_after_target, :after_statement::uuid AS r_after_statement, :page_limit::integer AS r_page_limit
 ), page AS MATERIALIZED (
 SELECT property, sort_subject, sort_statement, context_id, order_key FROM (
   -- Global has one unsuppressed ordered layer. Seek and limit it directly so page work is independent of degree.
@@ -15,7 +15,7 @@ SELECT property, sort_subject, sort_statement, context_id, order_key FROM (
      AND (link.order_key, link.target_subject_id, link.statement_id) >
          (input.r_after_order COLLATE "C", input.r_after_target, input.r_after_statement)
    ORDER BY link.order_key, link.target_subject_id, link.statement_id
-   LIMIT :page_limit::integer)
+   LIMIT (SELECT r_page_limit FROM input))
   UNION ALL
   (
 SELECT property, sort_subject, sort_statement, context_id, order_key FROM (
@@ -43,7 +43,7 @@ UNION ALL
 WHERE NOT suppressed
   AND (SELECT r_context_id FROM input) <> '00000000-0000-8000-8000-000000000000'::uuid
 ORDER BY order_key, sort_subject, sort_statement
-LIMIT :page_limit::integer
+LIMIT (SELECT r_page_limit FROM input)
   )
 )
 SELECT link.property, link.statement_id::text AS statement, link.slot_id::text AS slot,
