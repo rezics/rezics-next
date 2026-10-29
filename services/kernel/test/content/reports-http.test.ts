@@ -546,7 +546,6 @@ describe('real migrated report HTTP and shared admission', () => {
       scales: [32, 256, 2048],
       rule: 'series',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      warmups: 5,
       async grow(database, scale, previous) {
         // At 64 rows per scale unit, board/report/command indexes start with 2,048 rows.
         // Setup is unmeasured. Half the targets share the real target's route.
