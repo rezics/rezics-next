@@ -78,7 +78,8 @@ binding as well as both reconciled portable files.
 
 ### `specs/imports-cli-driver.ts`
 
-Before SHA-256: `da37aa815d5a83f4f77fd1036ba83e4c561ff7375fc780c50f9d3c7354c169f2`  
+Before SHA-256: `da37aa815d5a83f4f77fd1036ba83e4c561ff7375fc780c50f9d3c7354c169f2`
+
 After SHA-256: `66eb7c1a0f2464ec7e7aa12efdf5b7ac4fd4dc1a8cb2fdc85c4c18fc020a831a`
 
 ```diff
@@ -130,7 +131,8 @@ index dc2fa338ff..d63ad2e5c5 100644
 
 ### `specs/imports-cli.test.ts`
 
-Before SHA-256: `2fbd6ba7979255d96a61037e06121803f2b85bb04b31677f3e9066c9f95a6dee`  
+Before SHA-256: `2fbd6ba7979255d96a61037e06121803f2b85bb04b31677f3e9066c9f95a6dee`
+
 After SHA-256: `c23ce72f4c0f2286ea413130ff855303e8e0673a7ead227ff889c174d37bca3e`
 
 ```diff
@@ -219,7 +221,8 @@ index c5f593e379..af241f910d 100644
 
 ### `services/importer/tests/cli-driver.ts`
 
-Before SHA-256: `65deb2ae77dbf677fdce913358412c2adfb609d0889f4126fb17b44deef103be`  
+Before SHA-256: `65deb2ae77dbf677fdce913358412c2adfb609d0889f4126fb17b44deef103be`
+
 After SHA-256: `f34e2be95c4df8c378599c53b4a1608587f09e696b47d36b6ec49bdca6a71a7f`
 
 ```diff
