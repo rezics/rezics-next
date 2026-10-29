@@ -76,10 +76,13 @@ export async function compileEntryRelease(version: 'original' | 'replacement'): 
 export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryFixture>>;
 
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
-export async function createProfileEntryFixture(options: { clock?: KernelClock; pool?: Pool } = {}) {
+export async function createProfileEntryFixture(
+  options: { clock?: KernelClock; pool?: Pool; singleConnection?: boolean } = {},
+) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = options.pool ?? createPool(url);
+  if (options.singleConnection) pool.options.max = 1;
   // Assertions cannot observe an uncommitted writer connection or mutate the fixture.
   const reader = new pg.Pool({ connectionString: url, max: 1, options: '-c default_transaction_read_only=on' });
   try {

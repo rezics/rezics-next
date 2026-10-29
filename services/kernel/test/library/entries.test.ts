@@ -293,7 +293,8 @@ test('an account keeps one library entry per readable subject whose state change
     [owner.accountId],
   );
   const removed = await commands.deleteEntry(owner, subjectId, 3, key());
-  expect(removed.value).toMatchObject({ subjectId, state: 'completed', revision: 3 });
+  expect(removed.value).toEqual({ deletionId: removed.transactionId, revision: 4 });
+  expect(removed.value).not.toHaveProperty('state');
   expect(await commands.readEntry(owner, subjectId).catch((error) => error)).toBeInstanceOf(LibraryNotFoundError);
   expect(await followCommands.readFollow(owner, subjectId)).toMatchObject({ state: 'following', reason: 'library' });
   const copiesAfterDelete = await database.admin.query(
@@ -301,9 +302,7 @@ test('an account keeps one library entry per readable subject whose state change
     [owner.accountId],
   );
   expect(copiesAfterDelete.rows[0].n).toBe(copiesBeforeDelete.rows[0].n);
-  await expect(commands.deleteEntry(owner, subjectId, 3, key())).rejects.toMatchObject({
-    name: 'LibraryConflictError',
-  });
+  await expect(commands.deleteEntry(owner, subjectId, 3, key())).rejects.toBeInstanceOf(LibraryNotFoundError);
 
   expect(await eventRows(subjectId)).toEqual([
     { partition_no: partitionOf(route), type: updatedEvent, subject: owner.accountId, data: { subjectId } },
@@ -441,9 +440,7 @@ test('unknown, unreadable, malformed, foreign, anonymous and suspended requests 
     GrantDeniedError,
   );
   await expect(commands.deleteEntry(noScope, subjectId, 1, key())).rejects.toBeInstanceOf(GrantDeniedError);
-  await expect(commands.deleteEntry(other, subjectId, 1, key())).rejects.toMatchObject({
-    name: 'LibraryConflictError',
-  });
+  await expect(commands.deleteEntry(other, subjectId, 1, key())).rejects.toBeInstanceOf(LibraryNotFoundError);
   expect(await snapshot()).toEqual(before);
 });
 

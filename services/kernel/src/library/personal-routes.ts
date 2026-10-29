@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { customMethod } from '../http/custom-method.ts';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -14,7 +15,12 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
-import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
+import {
+  createEntryCommands,
+  LibraryConflictError,
+  LibraryEntryInvalidError,
+  LibraryEntryLifecycleConflictError,
+} from './entries.ts';
 import type { Copy, Entry } from './entry-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
@@ -348,21 +354,75 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         headers,
         query: t.Object({ revision: t.Optional(revision), incarnationId: t.Optional(incarnationId) }, closed),
         response: { 204: t.Void(), ...failures },
-        detail: detail('library_entry.delete', 'library_entry:delete', true),
+        detail: {
+          ...detail('library_entry.delete', 'library_entry:delete', true),
+          responses: {
+            204: {
+              description: 'Entry cleared',
+              headers: {
+                'Library-Entry-Deletion-Id': { schema: { type: 'string', format: 'uuid' } },
+                'Library-Entry-Deletion-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+              },
+            },
+          },
+        },
       },
       async ({ actor, params, query, headers, admission, job, session, set }) => {
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(async () => {
-            // Conceal absent rows before reporting a revision conflict.
-            await entries().readEntry(actor, params.subjectId);
             if (query.revision === undefined) throw new ProblemError('conflict');
             return entries().deleteEntry(actor, params.subjectId, query.revision, key, query.incarnationId);
           }),
         );
         session.record(result);
+        if ('deletionId' in result.value) {
+          set.headers['Library-Entry-Deletion-Id'] = result.value.deletionId;
+          set.headers['Library-Entry-Deletion-Revision'] = String(result.value.revision);
+        }
         set.status = 204;
+      },
+    )
+    .post(
+      customMethod('/v1/libraryEntries/:subjectId', 'restore'),
+      {
+        params: t.Object({ subjectId: id }),
+        headers,
+        body: t.Object({ deletionId: t.String({ format: 'uuid' }), revision }, closed),
+        response: {
+          200: entryResponse,
+          ...failures,
+          409: problemSchema(
+            'library_entry_restore_occupied',
+            'library_entry_restore_stale',
+            'library_entry_restore_expired',
+          ),
+        },
+        detail: detail('library_entry.restore', 'library_entry:update', true),
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(async () => {
+            try {
+              return await entries().restoreEntry(actor, params.subjectId, body, key);
+            } catch (error) {
+              if (error instanceof LibraryEntryLifecycleConflictError) {
+                const codes = {
+                  occupied: 'library_entry_restore_occupied',
+                  stale: 'library_entry_restore_stale',
+                  expired: 'library_entry_restore_expired',
+                } as const;
+                throw new ProblemError(codes[error.reason]);
+              }
+              throw error;
+            }
+          }),
+        );
+        session.record(result);
+        return { libraryEntry: entryView(result.value.entry) };
       },
     )
     .post(

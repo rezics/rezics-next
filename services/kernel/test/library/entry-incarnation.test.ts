@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { IdempotencyConflictError } from '../../src/command/command.ts';
+import { LibraryConflictError } from '../../src/library/entries.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
@@ -65,3 +67,44 @@ test('entry incarnation phase one exposes actual identity accepts optional guard
   const oldClient = await f.send('owner', 'PUT', path, { state: 'playing', revision: current.libraryEntry.revision });
   expect(oldClient.status).toBe(200);
 }, 120000);
+
+test('optional entry incarnation binds guarded writers and receipts across real clear and refill', async () => {
+  const subject = await f.createSubject('record');
+  const first = await f.commands.putEntry(f.owner.actor, subject, { state: 'listening' }, entryKey());
+  const original = first.value.entry;
+  const key = entryKey();
+  const removed = await f.commands.deleteEntry(f.owner.actor, subject, original.revision, key, original.incarnationId!);
+  const next = await f.commands.putEntry(f.owner.actor, subject, { state: 'planned' }, entryKey());
+  expect(next.value.entry.revision).toBe(original.revision);
+  expect(next.value.entry.incarnationId).not.toBe(original.incarnationId);
+  const before = await f.inspect();
+  await expect(
+    f.commands.deleteEntry(f.owner.actor, subject, original.revision, entryKey(), original.incarnationId!),
+  ).rejects.toMatchObject({ name: 'LibraryConflictError', reason: 'stale' });
+  await expect(
+    f.commands.putEntry(
+      f.owner.actor,
+      subject,
+      {
+        state: 'listening',
+        revision: original.revision,
+        incarnationId: original.incarnationId!,
+      },
+      entryKey(),
+    ),
+  ).rejects.toBeInstanceOf(LibraryConflictError);
+  expect(await f.commands.deleteEntry(f.owner.actor, subject, original.revision, key, original.incarnationId!)).toEqual(
+    { ...removed, replayed: true },
+  );
+  await expect(
+    f.commands.deleteEntry(f.owner.actor, subject, original.revision, key, next.value.entry.incarnationId!),
+  ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  expect(await f.inspect()).toEqual(before);
+  // Phase one still accepts the real omitted-guard producer and its original digest shape.
+  const unguardedKey = entryKey();
+  const unguarded = await f.commands.deleteEntry(f.owner.actor, subject, next.value.entry.revision, unguardedKey);
+  expect(await f.commands.deleteEntry(f.owner.actor, subject, next.value.entry.revision, unguardedKey)).toEqual({
+    ...unguarded,
+    replayed: true,
+  });
+});

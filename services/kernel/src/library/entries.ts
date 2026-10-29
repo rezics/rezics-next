@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { authoritativeTimeValue, type CommandEvent } from '../command/command.ts';
@@ -8,7 +9,7 @@ import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
@@ -26,6 +27,12 @@ import { readLibraryProfileSource } from './profile-source.ts';
 import { hasEntryState } from './profile.ts';
 import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
 import stampOwnerSequence from './entry-owner-write-sequence.sql';
+import { admitEntryAttempt } from './entry-lifecycle.ts';
+import { prepareEntryRestoration } from './entry-restore-preparation.ts';
+import { retainEntryDeletion, restoreRetainedEntryDeletion } from './entry-retention-store.ts';
+import stampLegacyIncarnation from './entry-legacy-incarnation-stamp.sql';
+import restoreState from './entry-restore-state.sql';
+import { decodeLibraryProfilePin } from './profile-pin.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type PutEntryInput = { state: EntryState; revision?: number; incarnationId?: string };
@@ -50,6 +57,12 @@ export class LibraryConflictError extends Error {
   constructor() {
     super('Library entry revision conflicts');
     this.name = 'LibraryConflictError';
+  }
+}
+
+export class LibraryEntryLifecycleConflictError extends LibraryConflictError {
+  constructor(readonly reason: 'stale' | 'occupied' | 'expired') {
+    super();
   }
 }
 
@@ -319,25 +332,119 @@ export function createEntryCommands(config: Dependencies) {
     const guard = expectedIncarnationId === undefined ? undefined : incarnationId(expectedIncarnationId);
     requireRoute(owner.accountId);
     requireRoute(subjectId);
-    const existing = await snapshot(actor, 'library_entry:delete', (client, accountOwner, route) =>
-      store.readEntry(client, route, accountOwner.accountId, subjectId),
-    );
-    const resolved = existing ? { subjectId } : await resolveSubject({ pool, access }, owner, subjectId);
-    if (!resolved) throw new LibraryNotFoundError();
-    return runner.ownAccount(
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return runner.ownAccountPrepared<void, Entry | { deletionId: string; revision: number }>(
       actor,
       {
         action: 'library_entry:delete',
         kind: 'library.entry.delete',
         requestKey,
         input: { subjectId, revision: expected, ...(guard === undefined ? {} : { incarnationId: guard }) },
+        prepare: (attempt) => admitEntryAttempt(config, actor, 'library_entry:delete', attempt, deadline),
       },
       async (tx, command) => {
         const route = requireRoute(owner.accountId);
+        const current = await store.readEntry(tx, route, owner.accountId, subjectId);
+        if (!current) throw new LibraryNotFoundError();
+        if (
+          current.revision !== expected ||
+          expected > 2_147_483_644 ||
+          (guard !== undefined && current.incarnationId !== guard)
+        )
+          throw new LibraryEntryLifecycleConflictError('stale');
+        let incarnation = current.incarnationId;
+        if (incarnation == null) {
+          incarnation = newId(route);
+          const stamped = await stampLegacyIncarnation.run(tx, {
+            route,
+            account_id: owner.accountId,
+            subject_id: subjectId,
+            revision: expected,
+            transaction_id: current.transactionId,
+            incarnation_id: incarnation,
+          });
+          if (stamped.length !== 1) throw new LibraryEntryLifecycleConflictError('stale');
+        }
         await allocateOwnerWriteSeq(tx, owner.accountId);
-        const removed = await store.deleteEntry(tx, route, owner.accountId, resolved.subjectId, expected, guard);
-        if (!removed) throw new LibraryConflictError();
-        return { value: removed, events: [entryEvent(DELETED_EVENT, owner.accountId, removed.subjectId)] };
+        const removed = await retainEntryDeletion(
+          tx,
+          { route, accountId: owner.accountId, subjectId, revision: expected, incarnationId: incarnation },
+          { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+        );
+        if (!removed) throw new LibraryEntryLifecycleConflictError('stale');
+        return {
+          value: { deletionId: removed.deletionId, revision: removed.deletedRevision },
+          events: [entryEvent(DELETED_EVENT, owner.accountId, subjectId)],
+        };
+      },
+    );
+  }
+
+  async function restoreEntry(actor: Actor, subjectId: string, input: unknown, requestKey: string) {
+    const owner = account(actor, 'library_entry:update');
+    requireRoute(subjectId);
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      Array.isArray(input) ||
+      Object.keys(input).some((key) => key !== 'deletionId' && key !== 'revision')
+    )
+      throw new TypeError('Entry restore input must contain only deletionId and revision');
+    const value = input as Record<string, unknown>;
+    const selected = { subjectId, deletionId: incarnationId(value.deletionId), revision: revision(value.revision) };
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return runner.ownAccountPrepared(
+      actor,
+      {
+        action: 'library_entry:update',
+        kind: 'library.entry.restore',
+        requestKey,
+        input: selected,
+        prepare: (attempt) => prepareEntryRestoration(config, actor, selected, attempt, deadline),
+      },
+      async (tx, command, prepared) => {
+        if (prepared.kind === 'deferred') throw prepared.error;
+        const route = requireRoute(owner.accountId);
+        const locator = { route, accountId: owner.accountId, subjectId, deletionId: selected.deletionId };
+        const locked = await restoreState.run(tx, {
+          route,
+          account_id: owner.accountId,
+          subject_id: subjectId,
+          deletion_id: selected.deletionId,
+          time: authoritativeTimeValue(command.time),
+        });
+        if (!locked) throw new LibraryNotFoundError();
+        const { expired, ...snapshot } = locked;
+        if (
+          locked.deletedRevision !== selected.revision ||
+          canonicalize({ ...snapshot, libraryProfilePin: decodeLibraryProfilePin(snapshot.libraryProfilePin) }) !==
+            canonicalize(prepared.deletion)
+        )
+          throw new LibraryEntryLifecycleConflictError('stale');
+        if (expired) throw new LibraryEntryLifecycleConflictError('expired');
+        const restored = await restoreRetainedEntryDeletion(
+          tx,
+          { ...locator, deletedRevision: selected.revision },
+          { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+        );
+        if (!restored) {
+          if (await store.readEntry(tx, route, owner.accountId, subjectId))
+            throw new LibraryEntryLifecycleConflictError('occupied');
+          throw new Error('Locked retained entry could not be restored');
+        }
+        const seq = await allocateOwnerWriteSeq(tx, owner.accountId);
+        const stamped = await stampOwnerSequence.run(tx, {
+          route,
+          account_id: owner.accountId,
+          subject_id: subjectId,
+          revision: restored.revision,
+          transaction_id: command.transactionId,
+          seq,
+        });
+        if (stamped.length !== 1) throw new Error('Restored entry owner sequence stamp failed');
+        const entry = await store.readEntry(tx, route, owner.accountId, subjectId);
+        if (!entry) throw new Error('Restored entry is missing');
+        return { value: { entry }, events: [entryEvent(UPDATED_EVENT, owner.accountId, subjectId)] };
       },
     );
   }
@@ -410,5 +517,5 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
-  return { putEntry, deleteEntry, readEntry, listEntries };
+  return { putEntry, deleteEntry, restoreEntry, readEntry, listEntries };
 }
