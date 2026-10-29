@@ -3,6 +3,7 @@ import { existsSync, watch, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { WorkerJob } from './job.ts';
 import type { ProcessIdentity } from './process.ts';
+import { startOrphanRecoveryTimer } from './integration-cli.ts';
 import { harness } from './test-support.ts';
 
 const deadDriver: ProcessIdentity = { pid: 2_147_483_647, start: 'dead', boot: 'dead', group: 2_147_483_647 };
@@ -39,6 +40,13 @@ test('a ready task orphaned after a recovery sweep started is adopted by the nex
   h.settings.startGraceMs = 1;
   let release = '';
   let worker: Awaited<ReturnType<typeof h.tasks.retry>> | undefined;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let firstSweep: Promise<void> | undefined;
+  let firstStartedResolve!: () => void;
+  const firstStarted = new Promise<void>(resolve => { firstStartedResolve = resolve; });
+  let secondStartedResolve!: () => void;
+  const secondStarted = new Promise<void>(resolve => { secondStartedResolve = resolve; });
+  let sweeps = 0;
   try {
     const adopted = h.tasks.dispatch(h.briefFile);
     worker = await h.tasks.retry(adopted.id);
@@ -47,21 +55,36 @@ test('a ready task orphaned after a recovery sweep started is adopted by the nex
     h.store.updateAttempt(worker.attempt, attempt => { (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadDriver; });
 
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    const firstSweep = job.recoverOrphans();
+    timer = startOrphanRecoveryTimer(() => {
+      sweeps++;
+      if (sweeps === 1) {
+        firstSweep = job.recoverOrphans();
+        firstStartedResolve();
+        return firstSweep;
+      }
+      const sweep = job.recoverOrphans();
+      secondStartedResolve();
+      return sweep;
+    }, 20);
+    await firstStarted;
     const newlyOrphaned = h.tasks.dispatch(h.briefFile);
     h.store.updateTask({ taskId: newlyOrphaned.id, attempt: 0 }, task => {
       task.createdAt = new Date(Date.now() - 10_000).toISOString();
     });
 
-    await job.recoverOrphans();
+    await secondStarted;
+    await waitForFile(join(newlyOrphaned.worktree, '.worker-started'));
     expect(h.store.task(newlyOrphaned.id).currentAttempt).toBe(1);
     await job.recoverOrphans();
     expect(h.store.task(newlyOrphaned.id).currentAttempt).toBe(1);
     expect(h.store.attempts(newlyOrphaned.id).map(attempt => attempt.attempt)).toEqual([1]);
+    clearInterval(timer);
+    timer = undefined;
 
     writeFileSync(release, 'release');
     await firstSweep;
   } finally {
+    if (timer) clearInterval(timer);
     if (release) writeFileSync(release, 'release');
     if (worker) await worker.exited;
     h.dispose();

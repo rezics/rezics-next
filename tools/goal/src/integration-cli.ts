@@ -59,6 +59,19 @@ export type HostRequest = {
   summary?: string;
 };
 
+export function startOrphanRecoveryTimer(
+  recoverOrphans: () => Promise<void>,
+  intervalMs = 60_000,
+  onTick: () => void = () => {},
+): ReturnType<typeof setInterval> {
+  const timer = setInterval(() => {
+    void recoverOrphans().catch(() => {});
+    onTick();
+  }, intervalMs);
+  timer.unref();
+  return timer;
+}
+
 const appServerRegistryName = 'manager-app-servers.json';
 
 function isProcessIdentity(value: unknown): value is ProcessIdentity {
@@ -352,13 +365,11 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         console.error(error);
       }
     };
-    recoveryTimer = setInterval(() => {
-      void recoverOrphans().catch(() => {});
+    recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, 60_000, () => {
       remind();
       promote();
       reap();
-    }, 60_000);
-    recoveryTimer.unref();
+    });
     await new Promise<void>((resolve) => {
       stopServer = resolve;
       if (stopRequested) stopWhenIdle();
