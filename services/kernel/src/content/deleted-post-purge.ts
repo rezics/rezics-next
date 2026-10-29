@@ -21,6 +21,7 @@ export async function purgeDeletedPostPage(
       withConnection(pool, (connection) => page.run(deadlineClient(connection, end), { route, at: at.toISOString() })),
     );
   });
-  for (const row of rows) await clearErasedPostRevisions(pool, { postId: row.post_id }, deadline, () => at, step, erasureJob);
+  for (const row of rows)
+    await clearErasedPostRevisions(pool, { postId: row.post_id }, deadline, () => at, step, erasureJob);
   return { postIds: rows.map((row) => row.post_id) };
 }
