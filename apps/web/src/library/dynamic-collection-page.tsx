@@ -6,11 +6,17 @@ import { getLocale } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
-import { readDynamicCollectionMembers } from './collection';
 import { rowRatio } from './subject-row';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
+import type { DynamicMembersResult } from './collection-load';
 
-export function DynamicCollectionPage({ page }: { page: DynamicCollectionPageData }) {
+export function DynamicCollectionPage({
+  page,
+  readMembers,
+}: {
+  page: DynamicCollectionPageData;
+  readMembers?: (id: string, cursor?: string) => Promise<DynamicMembersResult>;
+}) {
   const [current, setCurrent] = useState(page);
   const [retries, setRetries] = useState(0);
   const [retrying, setRetrying] = useState(false);
@@ -20,13 +26,11 @@ export function DynamicCollectionPage({ page }: { page: DynamicCollectionPageDat
     setRetrying(false);
   }, [page]);
   useEffect(() => {
-    if (!current.preparing || retries >= 3 || retrying) return;
+    if (!current.preparing || retries >= 3 || retrying || !readMembers) return;
     const timer = setTimeout(
       () => {
         setRetrying(true);
-        void readDynamicCollectionMembers({
-          data: { id: current.id, ...(current.cursor ? { cursor: current.cursor } : {}) },
-        })
+        void readMembers(current.id, current.cursor)
           .then(
             (result) => {
               setCurrent((value) => ({ ...value, ...result }));
@@ -43,7 +47,7 @@ export function DynamicCollectionPage({ page }: { page: DynamicCollectionPageDat
       Math.max(1000, Math.min(30_000, current.retryAfterMs)),
     );
     return () => clearTimeout(timer);
-  }, [current, retries, retrying]);
+  }, [current, readMembers, retries, retrying]);
   const ratio = rowRatio(current.members.map((member) => member.subject));
   const empty =
     current.builtinKind === 'everything'

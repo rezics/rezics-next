@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { CollectionPage } from '../../library/collection-page';
 import { DynamicCollectionPage } from '../../library/dynamic-collection-page';
 import type { CollectionPageResult } from '../../library/collection-load';
-import { collectionPageQuery } from '../../library/collection';
+import { collectionPageQuery, readDynamicCollectionMembers } from '../../library/collection';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/collections/$id')({
@@ -18,5 +18,12 @@ export const Route = createFileRoute('/collections/$id')({
 
 function CollectionRoute() {
   const page = Route.useLoaderData() as CollectionPageResult;
-  return 'preparing' in page ? <DynamicCollectionPage page={page} /> : <CollectionPage page={page} />;
+  return 'preparing' in page ? (
+    <DynamicCollectionPage
+      page={page}
+      readMembers={(id, cursor) => readDynamicCollectionMembers({ data: { id, ...(cursor ? { cursor } : {}) } })}
+    />
+  ) : (
+    <CollectionPage page={page} />
+  );
 }
