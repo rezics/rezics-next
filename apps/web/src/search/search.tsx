@@ -391,7 +391,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
               <Separator />
               <ul className="space-y-2">
                 {Object.entries(selectedFacets).map(([property, values]) => {
-                  const label = localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale);
+                  const label = fieldLabel(localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale), locale);
                   return (
                     <li key={property} className="flex items-baseline justify-between gap-2 text-sm">
                       <span lang={label.lang}>{label.text || property}</span>

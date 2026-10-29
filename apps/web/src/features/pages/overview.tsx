@@ -17,6 +17,7 @@ import { listView } from './views';
 import {
   bestRank,
   ExternalValue,
+  fieldLabel,
   isRecord,
   linkClass,
   linkColor,
@@ -825,7 +826,7 @@ export function SourcesSection({
         {sources.identifiers.map(({ label, value: identifier }, index) => (
           <li key={index}>
             <span lang={label.lang} className="me-2 font-medium text-muted-foreground">
-              {label.text || value.unlabelled}
+              {fieldLabel(label, value.locale).text || value.unlabelled}
             </span>
             {identifier}
           </li>
