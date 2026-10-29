@@ -5,11 +5,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { MediaImportAccepted, MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { countedSample, countedViolations, type CountedCheck } from '../../kernel/test/support/growth-counters.ts';
+
 import { RecordBindings, type Owner } from '../src/record-bindings.ts';
 import { createSqliteProbe, type SqliteEvidence } from './support/sqlite-growth.ts';
 
-const SCALES = [1, 8, 64] as const;
+type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
+
+const constant: CountedCheck = {
+  read: (value) => value as Record<string, number>,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+};
+
+const SCALES = [64, 512, 4096] as const;
 const SOURCE = 'growth';
 const SUBJECT = uuid(1);
 const TABLES = ['binding_records', 'binding_groups', 'binding_journal', 'binding_candidates', 'binding_media'];
@@ -112,7 +120,7 @@ function mediaStatus(request: MediaImportRequest, id: string, containerId = SUBJ
 }
 
 function population(count: number, scale: number, label: string): Owner[] {
-  return Array.from({ length: count }, (_, index) =>
+  return Array.from({ length: count + 1 }, (_, index) =>
     owner(index === 0 ? `${label}-${scale}` : `${label}-${scale}-${String(index).padStart(6, '0')}`),
   );
 }
@@ -192,7 +200,7 @@ function seedCandidates(database: Database, owners: Owner[], target: Owner, targ
     'INSERT INTO binding_candidates (source, external_id, field_group, candidate, subject, key, bytes, signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const transaction = database.transaction(() => {
-    for (let index = 0; index < owners.length; index++) {
+    for (let index = 0; index < owners.length - 1 + Math.max(targetCount, 1); index++) {
       const record = index < targetCount ? target : owners[1 + ((index - targetCount) % (owners.length - 1))]!;
       const candidate = uuid(1000 + index);
       const requestKey = key(record, `candidate-${index}`);
@@ -255,25 +263,40 @@ async function measuredAtScale<T>(
   label: string,
   seed: (database: Database, count: number, target: Owner) => void,
   operation: (bindings: RecordBindings, target: Owner) => T,
-): Promise<{ value: T; cost: { rows: number; blocks: 0; statements: number }; statements: SqliteEvidence[] }> {
+): Promise<{
+  value: T;
+  counts: { 'sqlite returned rows': number; 'sqlite statements': number };
+  statements: SqliteEvidence[];
+}> {
   const directory = await mkdtemp(join(tmpdir(), 'bindings-growth-'));
   const native = new Database(join(directory, 'bindings.sqlite'), { create: true, strict: true });
   const probe = createSqliteProbe(native, { growingTables: TABLES });
   const bindings = new RecordBindings(probe.database);
   const target = owner(`${label}-${scale}`);
   try {
-    const count = 500 * scale;
+    const count = scale;
     seed(probe.database, count, target);
+    const expected: Record<string, number[]> = {
+      lookup: [scale + 1, 0, scale + 1, 0, 0],
+      'candidate-page': [0, 0, 0, scale + 8, 0],
+      'media-projection': [scale + 1, 0, 0, 0, scale + 1],
+      'binding-write': [scale + 1, scale + 1, scale + 1, scale + 1, 0],
+      'media-write': [scale + 1, 0, 0, 0, scale + 1],
+    };
+    expect(
+      TABLES.map((table) => (native.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n),
+    ).toEqual(expected[label]!);
     probe.database.exec('ANALYZE');
     const measured = probe.measure(() => operation(bindings, target));
     try {
-      probe.verifyPlans();
+      const plans = probe.verifyPlans();
+      expect(plans.some((event) => event.plan.some((plan) => /^SEARCH\b/.test(plan.detail)))).toBe(true);
     } catch (error) {
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}\n${describeEvidence(measured.statements)}`,
       );
     }
-    return { value: measured.value, cost: measured.cost, statements: measured.statements };
+    return { value: measured.value, counts: measured.counts, statements: measured.statements };
   } finally {
     bindings.close();
     probe.restore();
@@ -282,9 +305,9 @@ async function measuredAtScale<T>(
   }
 }
 
-function assertConstant(samples: GrowthSample[], evidence: SqliteEvidence[][]): void {
+function assertConstant(samples: Sample[], evidence: SqliteEvidence[][]): void {
   try {
-    assertGrowth(samples, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+    expect(countedViolations(constant, samples)).toEqual([]);
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\n${evidence.map(describeEvidence).join('\n')}`,
@@ -293,14 +316,17 @@ function assertConstant(samples: GrowthSample[], evidence: SqliteEvidence[][]): 
 }
 
 function assertMaximum(
-  samples: GrowthSample[],
+  samples: Sample[],
   evidence: SqliteEvidence[][],
   maximum: { rows: number; statements: number },
 ): void {
-  samples.forEach(({ cost }, index) => {
-    if (cost.rows > maximum.rows || cost.statements > maximum.statements) {
+  samples.forEach(({ counted }, index) => {
+    if (
+      counted['sqlite returned rows']!.value > maximum.rows ||
+      counted['sqlite statements']!.value > maximum.statements
+    ) {
       throw new Error(
-        `Measured SQLite cost exceeds its bound: ${cost.rows} rows, ${cost.statements} statements\n${describeEvidence(evidence[index]!)}`,
+        `Measured SQLite cost exceeds its bound: ${counted['sqlite returned rows']!.value} sqlite returned rows, ${counted['sqlite statements']!.value} sqlite statements\n${describeEvidence(evidence[index]!)}`,
       );
     }
   });
@@ -310,13 +336,12 @@ async function check(
   label: string,
   seed: (database: Database, count: number, target: Owner) => void,
   operation: (bindings: RecordBindings, target: Owner) => unknown,
-): Promise<{ samples: GrowthSample[]; evidence: SqliteEvidence[][] }> {
-  const samples: GrowthSample[] = [];
+): Promise<{ samples: Sample[]; evidence: SqliteEvidence[][] }> {
+  const samples: Sample[] = [];
   const evidence: SqliteEvidence[][] = [];
   for (const scale of SCALES) {
     const result = await measuredAtScale(scale, label, seed, operation);
-    expect(result.cost.blocks).toBe(0);
-    samples.push({ scale, cost: result.cost });
+    samples.push({ scale, counted: countedSample([result.counts]) });
     evidence.push(result.statements);
   }
   assertConstant(samples, evidence);
@@ -324,7 +349,7 @@ async function check(
 }
 
 test('Binding lookup stays within its bound as B grows', async () => {
-  await check(
+  const { samples, evidence } = await check(
     'lookup',
     (database, count, target) => {
       const owners = population(count, Number(target.external_id.split('-').at(-1)), 'lookup');
@@ -336,10 +361,11 @@ test('Binding lookup stays within its bound as B grows', async () => {
       expect(bindings.journal(target, key(target, 'journal'))?.key).toBe(key(target, 'journal'));
     },
   );
+  assertMaximum(samples, evidence, { rows: 2, statements: 2 });
 });
 
 test('Binding candidate page stays within its bound as B grows', async () => {
-  await check(
+  const { samples, evidence } = await check(
     'candidate-page',
     (database, count, target) => {
       const scale = Number(target.external_id.split('-').at(-1));
@@ -352,10 +378,11 @@ test('Binding candidate page stays within its bound as B grows', async () => {
       return page;
     },
   );
+  assertMaximum(samples, evidence, { rows: 8, statements: 1 });
 });
 
 test('Media projection stays within its bound as B grows', async () => {
-  await check(
+  const { samples, evidence } = await check(
     'media-projection',
     (database, count, target) => {
       const scale = Number(target.external_id.split('-').at(-1));
@@ -368,6 +395,7 @@ test('Media projection stays within its bound as B grows', async () => {
       expect(bindings.mediaIds(target)).toEqual({ cover: uuid(500_000) });
     },
   );
+  assertMaximum(samples, evidence, { rows: 2, statements: 2 });
 });
 
 test('Binding write stays within its bound as B grows', async () => {

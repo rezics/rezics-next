@@ -1,10 +1,18 @@
 import { expect, test } from 'bun:test';
 import type { Database, SQLQueryBindings } from 'bun:sqlite';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { countedSample, countedViolations, type CountedCheck } from '../../kernel/test/support/growth-counters.ts';
+
 import { createDumpCounters, MAX_DUMP_RECORD_BYTES } from '../src/dumps-bytes.ts';
 import { readDump } from '../src/dumps.ts';
 import { RUN_TABLES, RunStore, type Run, type SourceProjection } from '../src/run-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
+
+type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
+
+const constant: CountedCheck = {
+  read: (value) => value as Record<string, number>,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+};
 
 const source = 'open-library';
 const sizes = [72 * 1024, 144 * 1024, 288 * 1024];
@@ -31,7 +39,7 @@ function begin(store: RunStore<SourceProjection>): Run {
 // One growing seed: current members/acknowledgements, failed history/activity,
 // and unrelated entries in the active staging run all grow with scale.
 function seed(store: RunStore<SourceProjection>, scale: number, previous: number): Run {
-  const count = 8 * scale;
+  const count = scale;
   for (let i = previous; i < count; i++) {
     const history = begin(store);
     store.stage(history, record(`History${i}`));
@@ -101,12 +109,21 @@ function deferredProbe(database: Database) {
 
 test('larger sanitized record stage and exact key/page reads stay indexed as unrelated state grows', () => {
   const store = new RunStore<SourceProjection>(':memory:', { projectionMode: 'source-record' });
-  const samples = new Map<string, GrowthSample[]>();
+  const samples = new Map<string, Sample[]>();
   let previous = 0;
+  let step = 0;
+  let cumulative = 0;
   try {
-    for (const scale of [1, 8, 64]) {
+    for (const scale of [64, 512, 4096]) {
       const run = seed(store, scale, previous);
-      previous = 8 * scale;
+      previous = scale;
+      step++;
+      cumulative += scale;
+      expect(
+        RUN_TABLES.map(
+          (table) => (store.database.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+        ),
+      ).toEqual([1, scale + 2 * step, scale + 2 * cumulative + 3 * (step - 1), scale, scale, 0, 0, 0]);
       store.database.exec('ANALYZE');
       const evidence = deferredProbe(store.database);
       const inputBytes: number[] = [];
@@ -114,15 +131,14 @@ test('larger sanitized record stage and exact key/page reads stay indexed as unr
       const measure = <T>(name: string, operation: () => T) => {
         const sample = evidence.probe.measure(operation);
         evidence.verify();
-        expect(sample.cost.blocks).toBe(0); // SQLite buffer counters are unavailable, not zero IO.
-        expect(sample.cost.rows).toBeLessThanOrEqual(5);
-        expect(sample.cost.statements).toBeGreaterThan(0);
-        expect(sample.cost.statements).toBeLessThanOrEqual(9);
+        expect(sample.counts['sqlite returned rows']).toBeLessThanOrEqual(5);
+        expect(sample.counts['sqlite statements']).toBeGreaterThan(0);
+        expect(sample.counts['sqlite statements']).toBeLessThanOrEqual(9);
         const searches = sample.statements.flatMap((s) => s.plan).filter((p) => /^SEARCH\b/.test(p.detail));
         expect(searches.length).toBeGreaterThan(0);
         for (const search of searches) expect(search.detail).toMatch(/\(source=\?/);
         const group = samples.get(name) ?? [];
-        group.push({ scale, cost: sample.cost });
+        group.push({ scale, counted: countedSample([sample.counts]) });
         samples.set(name, group);
         return sample;
       };
@@ -131,7 +147,7 @@ test('larger sanitized record stage and exact key/page reads stay indexed as unr
           const target = record(keys[i]!, 'é'.repeat(size / 2));
           inputBytes.push(Buffer.byteLength(JSON.stringify(target.projection.normalizedRecord)));
           const stage = measure(`stage-${size}`, () => store.stage(run, target));
-          expect(stage.cost).toEqual({ rows: 1, blocks: 0, statements: 6 });
+          expect(stage.counts).toEqual({ 'sqlite returned rows': 1, 'sqlite statements': 6 });
           expect(stage.statements.filter((s) => s.kind === 'control').map((s) => s.sql)).toEqual([
             'BEGIN IMMEDIATE',
             'COMMIT',
@@ -144,7 +160,7 @@ test('larger sanitized record stage and exact key/page reads stay indexed as unr
           outputBytes.push(Buffer.byteLength(serialized));
           const read = measure(`key-${size}`, () => store.key(source, target.row.recordKey, run));
           expect(read.value.staged).toEqual(target);
-          expect(read.cost).toEqual({ rows: 3, blocks: 0, statements: 5 });
+          expect(read.counts).toEqual({ 'sqlite returned rows': 3, 'sqlite statements': 5 });
         }
         expect(store.seal(run, { complete: true }).status).toBe('ready');
         for (const [i, size] of sizes.entries()) {
@@ -154,7 +170,7 @@ test('larger sanitized record stage and exact key/page reads stay indexed as unr
               limit: 1,
             }),
           );
-          expect(page.cost).toEqual({ rows: 2, blocks: 0, statements: 2 });
+          expect(page.counts).toEqual({ 'sqlite returned rows': 2, 'sqlite statements': 2 });
           expect(page.value).toEqual([record(keys[i]!, 'é'.repeat(size / 2))]);
           expect(Buffer.byteLength(JSON.stringify(page.value[0]!.projection))).toBe(outputBytes[i]!);
           const details = page.statements
@@ -175,12 +191,7 @@ test('larger sanitized record stage and exact key/page reads stay indexed as unr
       }
       expect(store.abandon(run)).toBe('abandoned');
     }
-    for (const group of samples.values())
-      assertGrowth(
-        group,
-        { rows: 'constant', blocks: 'constant', statements: 'constant' },
-        { rows: { absolute: 0, relative: 0 }, blocks: { absolute: 0, relative: 0 } },
-      );
+    for (const group of samples.values()) expect(countedViolations(constant, group)).toEqual([]);
   } finally {
     store.close();
   }

@@ -3,9 +3,17 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { countedSample, countedViolations, type CountedCheck } from '../../kernel/test/support/growth-counters.ts';
+
 import { RUN_TABLES, RunStore, type Run, type SourceProjection } from '../src/run-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
+
+type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
+
+const constant: CountedCheck = {
+  read: (value) => value as Record<string, number>,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+};
 
 const source = 'wikidata';
 const disposition = { reason: 'converter-ignored' } as const;
@@ -270,10 +278,13 @@ test('no-effect resolution stays indexed with unrelated same-source history and 
       return probe.database;
     },
   });
-  const samples = new Map<string, GrowthSample[]>();
+  const samples = new Map<string, Sample[]>();
   let previous = 0;
+  let step = 0;
+  let cumulative = 0;
+  let previousMembers = 0;
   try {
-    for (const scale of [32, 128, 512]) {
+    for (const scale of [64, 512, 4096]) {
       // One deterministic seed grows historical generations/entries and live keys in the same source.
       for (; previous < scale; previous++) {
         const history = begin(store);
@@ -291,20 +302,27 @@ test('no-effect resolution stays indexed with unrelated same-source history and 
         store.acknowledgeNoEffects(run, `Current${i}`, disposition);
       }
       store.classify(run, 'Target', { commands: [] });
+      step++;
+      cumulative += scale;
+      expect(
+        RUN_TABLES.map(
+          (table) => (store.database.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+        ),
+      ).toEqual([1, scale + step, scale + cumulative + step, previousMembers, scale + (step > 1 ? 1 : 0), 0, 0, 0]);
       store.database.exec('ANALYZE');
       const measure = <T>(name: string, operation: () => T) => {
         const sample = probe.measure(operation);
-        expect(sample.cost.blocks).toBe(0); // SQLite buffer counters are unavailable.
-        expect(sample.cost.rows).toBeLessThanOrEqual(2);
-        expect(sample.cost.statements).toBeLessThanOrEqual(7);
-        probe.verifyPlans(); // EXPLAIN QUERY PLAN covers every executed statement, including UPSERT/control.
+        expect(sample.counts['sqlite returned rows']).toBeLessThanOrEqual(2);
+        expect(sample.counts['sqlite statements']).toBeLessThanOrEqual(7);
+        const plans = probe.verifyPlans(); // Every execution, including UPSERT/control.
+        expect(plans.some((event) => event.plan.some((plan) => /^SEARCH\b/.test(plan.detail)))).toBe(true);
         const group = samples.get(name) ?? [];
-        group.push({ scale, cost: sample.cost });
+        group.push({ scale, counted: countedSample([sample.counts]) });
         samples.set(name, group);
         return sample;
       };
       const resolved = measure('resolve', () => store.acknowledgeNoEffects(run, 'Target', disposition));
-      expect(resolved.cost).toEqual({ rows: 2, blocks: 0, statements: 7 });
+      expect(resolved.counts).toEqual({ 'sqlite returned rows': 2, 'sqlite statements': 7 });
       expect(resolved.statements.filter((s) => s.kind === 'control').map((s) => s.sql)).toEqual([
         'BEGIN IMMEDIATE',
         'COMMIT',
@@ -320,13 +338,13 @@ test('no-effect resolution stays indexed with unrelated same-source history and 
       const outer = store.database.transaction(() => inner());
       const nested = measure('nested-controls', () => outer.immediate());
       expect(nested.value).toEqual({ row_json: JSON.stringify(target.row) });
-      expect(nested.cost).toEqual({ rows: 1, blocks: 0, statements: 5 });
+      expect(nested.counts).toEqual({ 'sqlite returned rows': 1, 'sqlite statements': 5 });
       expect(nested.statements.filter((s) => s.kind === 'control')).toHaveLength(4);
       expect(finish(store, run)).toBe('complete');
       expect(store.source(source)).toEqual({ generation: run.id, count: scale + 1 });
+      previousMembers = scale + 1;
     }
-    for (const group of samples.values())
-      assertGrowth(group, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+    for (const group of samples.values()) expect(countedViolations(constant, group)).toEqual([]);
   } finally {
     probe.restore();
     store.close();

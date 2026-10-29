@@ -2,11 +2,19 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { countedSample, countedViolations, type CountedCheck } from '../../kernel/test/support/growth-counters.ts';
+
 import { RecordStore, type RecordRow } from '../src/record-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 
-const SCALES = [1, 8, 64] as const;
+type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
+
+const constant: CountedCheck = {
+  read: (value) => value as Record<string, number>,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+};
+
+const SCALES = [64, 512, 4096] as const;
 const DIGEST = 'a'.repeat(64);
 const seedSequence = `WITH RECURSIVE seq(n) AS (
   SELECT ?
@@ -20,20 +28,13 @@ function seedHistory(database: RecordStore['database'], from: number, through: n
     .query(
       `${seedSequence}INSERT INTO acknowledged_records
       (source,record_key,record_revision,digest,converter_revision,state)
-    SELECT 'history' || n, 'Q' || printf('%05d', n), 'unversioned', ?, 'fixture@1', 'present' FROM seq`,
+    SELECT 'growth', 'Q' || printf('%05d', n), 'unversioned', ?, 'fixture@1', 'present' FROM seq`,
     )
     .run(from, through, DIGEST);
   database
-    .query(
-      `${seedSequence}INSERT INTO record_source_counts (source,present_count)
-    SELECT 'history' || n, 1 FROM seq`,
-    )
-    .run(from, through);
-}
-
-function seedMeasurementRows(database: RecordStore['database']) {
-  for (const scale of SCALES)
-    database.query(`INSERT INTO record_source_counts (source,present_count) VALUES (?,0)`).run(`growth${scale}`);
+    .query(`INSERT INTO record_source_counts (source,present_count) VALUES ('growth',?)
+    ON CONFLICT(source) DO UPDATE SET present_count=present_count+excluded.present_count`)
+    .run(through - from + 1);
 }
 
 function presentRecord(source: string, recordKey: string): RecordRow {
@@ -58,27 +59,39 @@ test('Record upsert stays within its bound as R grows', () => {
       return database;
     },
   });
-  const samples: GrowthSample[] = [];
+  const samples: Sample[] = [];
 
   try {
-    seedMeasurementRows(store.database);
     let seeded = 0;
 
     for (const scale of SCALES) {
-      const target = 500 * scale;
+      const target = scale;
       seedHistory(store.database, seeded + 1, target);
       seeded = target;
+      expect(
+        store.database
+          .query("SELECT count(*) AS n FROM acknowledged_records WHERE source='growth' AND record_key LIKE 'Q0%'")
+          .get(),
+      ).toEqual({ n: scale });
+      expect(store.database.query('SELECT count(*) AS n FROM record_source_counts').get()).toEqual({ n: 1 });
+      expect(store.database.query('SELECT count(*) AS n FROM acknowledged_records').get()).toEqual({
+        n: scale + samples.length,
+      });
       store.database.exec('ANALYZE');
 
-      const source = `growth${scale}`;
+      const source = 'growth';
       const key = `QMEASURE${scale}`;
       const measured = probe.measure(() => store.put(presentRecord(source, key)));
       probe.verifyPlans();
-      expect(store.count(source)).toBe(1);
-      samples.push({ scale, cost: measured.cost });
+      expect(store.count(source)).toBe(scale + samples.length + 1);
+      // The Cost row permits three point statements plus BEGIN/COMMIT.
+      expect(measured.counts['sqlite returned rows']).toBeLessThanOrEqual(1);
+      expect(measured.counts['sqlite statements']).toBe(5);
+      expect(measured.statements.some((event) => event.plan.some((plan) => /^SEARCH\b/.test(plan.detail)))).toBe(true);
+      samples.push({ scale, counted: countedSample([measured.counts]) });
     }
 
-    assertGrowth(samples, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+    expect(countedViolations(constant, samples)).toEqual([]);
   } finally {
     store.close();
     probe.restore();
