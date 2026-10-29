@@ -66,13 +66,14 @@ async function controlPlaneOutcome(
     const commands: { command: string[]; cwd: string }[] = [];
     await h.train(async (command, cwd) => {
       commands.push({ command: [...command], cwd });
-      if (JSON.stringify(command) === JSON.stringify(['bun', 'test', 'tools/goal/src']))
+      if (JSON.stringify(command) === JSON.stringify(['bun', 'test', '--timeout', '30000', 'tools/goal/src']))
         return { passed: false, output, timedOut: false };
-      if (command[0] === 'bun' && command[1] === 'test' && files.includes(command[2]!)) {
+      const file = command.at(-1)!;
+      if (command[0] === 'bun' && command[1] === 'test' && files.includes(file)) {
         const onBase = cwd.includes('control-plane-base-');
-        const baseFileFails = Array.isArray(baseFails) ? baseFails.includes(command[2]!) : baseFails;
+        const baseFileFails = Array.isArray(baseFails) ? baseFails.includes(file) : baseFails;
         const fails = onBase ? baseFileFails : true;
-        return { passed: !fails, output: fails ? `FAIL ${command[2]}\n` : '', timedOut: false };
+        return { passed: !fails, output: fails ? `FAIL ${file}\n` : '', timedOut: false };
       }
       return { passed: true, output: '', timedOut: false };
     });
@@ -130,8 +131,8 @@ test.serial(
       ({ command, cwd }) => command[1] === 'test' && cwd.includes('control-plane-base-'),
     );
     expect(baseRuns.map(({ command }) => command)).toEqual([
-      ['bun', 'test', regression],
-      ['bun', 'test', shared],
+      ['bun', 'test', '--timeout', '30000', regression],
+      ['bun', 'test', '--timeout', '30000', shared],
     ]);
     expect(outcome?.passed).toBe(false);
     expect(outcome?.firstFailure?.excerpt).toContain(regression);
@@ -157,14 +158,14 @@ test.serial(
     const files = ['tools/goal/src/fixtures/one.test.ts', 'tools/goal/src/fixtures/two.test.ts'];
     const { outcome, commands } = await controlPlaneOutcome([files[0]!], files);
     const isolatedRuns = commands.filter(
-      ({ command }) => command[0] === 'bun' && command[1] === 'test' && files.includes(command[2]!),
+      ({ command }) => command[0] === 'bun' && command[1] === 'test' && files.includes(command.at(-1)!),
     );
 
     expect(isolatedRuns.map(({ command }) => command)).toEqual([
-      ['bun', 'test', files[0]!],
-      ['bun', 'test', files[1]!],
-      ['bun', 'test', files[0]!],
-      ['bun', 'test', files[1]!],
+      ['bun', 'test', '--timeout', '30000', files[0]!],
+      ['bun', 'test', '--timeout', '30000', files[1]!],
+      ['bun', 'test', '--timeout', '30000', files[0]!],
+      ['bun', 'test', '--timeout', '30000', files[1]!],
     ]);
     expect(isolatedRuns[0]?.cwd).not.toContain('control-plane-base-');
     expect(isolatedRuns[1]?.cwd).not.toContain('control-plane-base-');
@@ -183,10 +184,10 @@ test.serial(
     const file = 'tools/goal/src/fixtures/branch-only.test.ts';
     const { outcome, commands } = await controlPlaneOutcome([], [file], []);
     const isolatedRuns = commands.filter(
-      ({ command }) => JSON.stringify(command) === JSON.stringify(['bun', 'test', file]),
+      ({ command }) => JSON.stringify(command) === JSON.stringify(['bun', 'test', '--timeout', '30000', file]),
     );
 
-    expect(isolatedRuns.map(({ command }) => command)).toEqual([['bun', 'test', file]]);
+    expect(isolatedRuns.map(({ command }) => command)).toEqual([['bun', 'test', '--timeout', '30000', file]]);
     expect(isolatedRuns[0]?.cwd).not.toContain('control-plane-base-');
     expect(outcome?.passed).toBe(false);
     expect(outcome?.firstFailure?.assertion).toContain('Failures introduced on this branch');
