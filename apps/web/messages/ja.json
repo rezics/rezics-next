@@ -388,6 +388,7 @@
   "realm_state_pending_note": "リクエストを処理しています。しばらくしてから再読み込みすると結果を確認できます。",
   "realms_empty": "まだ参加しているコミュニティはありません。",
   "realms_heading": "参加中のコミュニティ",
+  "space_realm_heading": "コミュニティ",
   "realms_more": "さらにコミュニティを表示",
   "realms_sign_in": "参加中のコミュニティを見るにはサインインしてください。",
   "report_action": "報告",

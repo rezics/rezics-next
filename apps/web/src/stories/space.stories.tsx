@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { within } from 'storybook/test';
+import { userEvent, within } from 'storybook/test';
 import realmBoardsRecording from '../kernel/recorded/realm-boards.json';
 import spaceRecording from '../kernel/recorded/space.json';
 import { PageStory, pageReady } from './page';
@@ -7,8 +7,6 @@ import { PageStory, pageReady } from './page';
 const meta = { title: 'Pages/Space', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
-const path = `/spaces/${spaceRecording.space.address}`;
 
 /** The Space's title, the Realm's boards and a published subject are on the page. */
 async function spaceReady(context: { canvasElement: HTMLElement }) {
@@ -18,15 +16,26 @@ async function spaceReady(context: { canvasElement: HTMLElement }) {
   const board = realmBoardsRecording.items[0]?.title;
   if (!board) throw new Error('The recorded Realm has no board.');
   await view.findByRole('link', { name: new RegExp(board) });
+  await userEvent.hover((await view.findAllByRole('listitem'))[0]!);
 }
 
 export const SignedIn: Story = {
-  name: 'Signed In',
+  name: 'Banner, Non-member',
   play: spaceReady,
-  render: () => <PageStory visitor="Signed In" path={path} />,
+  render: () => <PageStory visitor="Signed In" path="/spaces/atlas-non-member" />,
 };
 export const SignedOut: Story = {
-  name: 'Signed Out',
+  name: 'Banner, Signed Out',
   play: spaceReady,
-  render: () => <PageStory visitor="Signed Out" path={path} />,
+  render: () => <PageStory visitor="Signed Out" path="/spaces/atlas-banner" />,
+};
+export const NoBanner: Story = {
+  name: 'No Banner',
+  play: spaceReady,
+  render: () => <PageStory visitor="Signed Out" path="/spaces/atlas-plain" />,
+};
+export const Member: Story = {
+  name: 'Banner, Member',
+  play: spaceReady,
+  render: () => <PageStory visitor="Signed In" path="/spaces/atlas-member" />,
 };

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { within } from 'storybook/test';
+import { userEvent, within } from 'storybook/test';
 import myRealmsRecording from '../kernel/recorded/my-realms.json';
 import { PageStory, pageReady } from './page';
 
@@ -19,7 +19,7 @@ async function listed(context: { canvasElement: HTMLElement }) {
   const view = await mainView(context);
   const name = myRealmsRecording.items[0]?.name;
   if (!name) throw new Error('The recorded Realms page has no Realm.');
-  await view.findByRole('link', { name });
+  await userEvent.hover(await view.findByRole('link', { name }));
 }
 
 /** A signed-out reader is offered sign-in instead. */

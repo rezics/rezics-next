@@ -16,17 +16,23 @@ export function RealmMembership({ realm, returnTo }: { realm: RealmHome; returnT
   const { state: session, csrfToken } = useSession();
   if (session !== 'signed-in' && realm.viewer?.state === 'none')
     return (
-      <section aria-label={m.realm_membership_label()} data-member-state="none" className="min-h-16 space-y-3">
+      <section aria-label={m.realm_membership_label()} data-member-state="none">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button">{m.realm_join()}</Button>
+          <Button type="button" size="lg" className="h-11 px-6 text-base">
+            {m.realm_join()}
+          </Button>
         </div>
       </section>
     );
   if (session !== 'signed-in')
     return (
-      <section aria-label={m.realm_membership_label()} className="min-h-16 space-y-3">
+      <section aria-label={m.realm_membership_label()}>
         <div className="flex flex-wrap items-center gap-3">
-          <Button render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}>
+          <Button
+            size="lg"
+            className="h-11 px-6 text-base"
+            render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
+          >
             {m.realm_join()}
           </Button>
         </div>
@@ -78,13 +84,17 @@ function PersonalMembership({
       </p>
     ) : null;
 
-  if (isPending) return <section aria-label={m.realm_membership_label()} className="min-h-16" aria-busy="true" />;
+  if (isPending) return <section aria-label={m.realm_membership_label()} aria-busy="true" />;
 
   if (!viewer)
     return (
-      <section aria-label={m.realm_membership_label()} className="min-h-16 space-y-3">
+      <section aria-label={m.realm_membership_label()}>
         <div className="flex flex-wrap items-center gap-3">
-          <Button render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}>
+          <Button
+            size="lg"
+            className="h-11 px-6 text-base"
+            render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
+          >
             {m.realm_join()}
           </Button>
         </div>
@@ -92,18 +102,31 @@ function PersonalMembership({
     );
 
   return (
-    <section aria-label={m.realm_membership_label()} data-member-state={state} className="min-h-16 space-y-3">
+    <section aria-label={m.realm_membership_label()} data-member-state={state}>
       <div className="flex flex-wrap items-center gap-3">
         {state === 'member' ? (
           <>
             <Badge>{m.realm_state_member()}</Badge>
-            <Button type="button" variant="outline" disabled={!csrfToken || busy} onClick={() => void change('leave')}>
+            <Button
+              size="lg"
+              type="button"
+              variant="outline"
+              className="h-11 px-6 text-base"
+              disabled={!csrfToken || busy}
+              onClick={() => void change('leave')}
+            >
               {m.realm_leave()}
             </Button>
           </>
         ) : null}
         {state === 'none' ? (
-          <Button type="button" disabled={!csrfToken || busy} onClick={() => void change('join')}>
+          <Button
+            size="lg"
+            type="button"
+            className="h-11 px-6 text-base"
+            disabled={!csrfToken || busy}
+            onClick={() => void change('join')}
+          >
             {m.realm_join()}
           </Button>
         ) : null}

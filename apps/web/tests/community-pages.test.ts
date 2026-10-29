@@ -13,12 +13,21 @@ mock.module('../src/community/realm-membership', () => ({
 
 const { SpacePage } = await import('../src/community/space-page');
 const { MyRealmsPageView } = await import('../src/community/my-realms-page');
+const { loadSpacePage } = await import('../src/community/space');
 
 const space = {
   id: 'space-42',
   title: 'Atlas Readers',
   summary: 'Read slowly, together.',
-  banner: { mediaId: 'banner-42' },
+  banner: {
+    media: 'banner-42',
+    width: 1200,
+    height: 500,
+    placeholder: { thumbhash: '', color: '#252a31' },
+    variants: [{ format: 'webp', width: 320 }],
+    focalPoint: null,
+    credit: null,
+  },
 };
 
 const spacePage = {
@@ -89,4 +98,43 @@ test('Space Realm list uses the same stretched ListRow pattern with no totals', 
   expect(html).toContain('data-slot="list-row-link"');
   expect(html).not.toMatch(/\b(?:\d+ members|\d+ followers)\b/i);
   expect(html).not.toMatch(/divide-y|rounded-2xl border|bg-card/);
+});
+
+test('rendering the Space and carried Realm uses the existing five reads and adds no read', async () => {
+  const calls: string[] = [];
+  const client = {
+    spaceAddresses: () => ({ get: async () => (calls.push('address'), { data: { spaceId: 'space-42' } }) }),
+    spaces: () => ({
+      get: async () => (
+        calls.push('space'),
+        { data: { space: { spaceId: 'space-42', realmId: 'realm-42', title: 'Atlas Readers', summary: 'Summary' } } }
+      ),
+    }),
+    realms: () => ({
+      get: async () => (
+        calls.push('realm'),
+        {
+          data: {
+            realm: {
+              realmId: 'realm-42',
+              title: 'Atlas Readers',
+              summary: 'A public reading room.',
+              visibility: 'public',
+            },
+          },
+        }
+      ),
+      boards: { get: async () => (calls.push('boards'), { data: { items: [], next: null } }) },
+      publications: { get: async () => (calls.push('publications'), { data: { items: [], next: null } }) },
+    }),
+  };
+  const page = await loadSpacePage(
+    client as any,
+    new Request('https://site.example/en/spaces/atlas'),
+    {},
+    { address: 'atlas' },
+    'anonymous',
+  );
+  expect(page.realm?.title).toBe('Atlas Readers');
+  expect(calls.toSorted()).toEqual(['address', 'boards', 'publications', 'realm', 'space']);
 });

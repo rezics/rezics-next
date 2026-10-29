@@ -16,6 +16,7 @@ export type MemberState = 'none' | 'pending' | 'member' | 'banned';
 export type RealmBoard = {
   id: string;
   title: string | null;
+  description?: string | null;
   purpose: 'discussion' | 'reviews';
   visibility: 'published' | 'draft' | 'protected' | 'taken_down';
 };
@@ -42,7 +43,7 @@ export type RealmHome = {
 };
 
 export type SpacePageData = {
-  space: { id: string; title: string; summary: string };
+  space: { id: string; title: string; summary: string; banner?: CoverSummary | null };
   /** Null when the Space carries no Realm, or the viewer may not read the one it carries. */
   realm: RealmHome | null;
 };
@@ -67,7 +68,7 @@ export async function namePublishedTypes(page: SpacePageData, locale: string): P
   };
 }
 
-export type RealmLink = { realmId: string; name: string };
+export type RealmLink = { realmId: string; name: string; description?: string | null };
 export type MyRealmsPage = { signedIn: boolean; realms: RealmLink[]; next: string | null };
 
 export type Located = { kind: 'page'; page: SpacePageData } | { kind: 'redirect'; address: string };
@@ -173,7 +174,13 @@ async function readHome(
     visibility: realm.visibility,
     boards: (boards?.items ?? [])
       .filter((board) => board.availability === 'available' && board.visibility !== 'taken_down')
-      .map((board) => ({ id: board.id, title: board.title, purpose: board.purpose, visibility: board.visibility })),
+      .map((board) => ({
+        id: board.id,
+        title: board.title,
+        description: (board as typeof board & { description?: string | null }).description,
+        purpose: board.purpose,
+        visibility: board.visibility,
+      })),
     published,
     viewer: null,
   };
@@ -198,7 +205,13 @@ export async function loadSpacePage(
   const { auth } = await session(request, sessionEnv, credentialMode);
   const { spaceId } = readCommunity(await client.spaceAddresses({ address: input.address }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId }).get(auth));
-  const base = { id: space.spaceId, title: space.title, summary: space.summary };
+  const extendedSpace = space as typeof space & { banner?: CoverSummary | null };
+  const base = {
+    id: space.spaceId,
+    title: space.title,
+    summary: space.summary,
+    ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}),
+  };
   if (!space.realmId) return { space: base, realm: null };
   const realmId = space.realmId;
   const [realm, home] = await Promise.all([
@@ -230,7 +243,17 @@ export async function locateRealm(
   const home = await readHome(client, realm, auth);
   return {
     kind: 'page',
-    page: { space: { id: space.spaceId, title: space.title, summary: space.summary }, realm: home },
+    page: {
+      space: {
+        id: space.spaceId,
+        title: space.title,
+        summary: space.summary,
+        ...((space as typeof space & { banner?: CoverSummary | null }).banner
+          ? { banner: (space as typeof space & { banner?: CoverSummary | null }).banner }
+          : {}),
+      },
+      realm: home,
+    },
   };
 }
 
@@ -249,7 +272,11 @@ export async function loadMyRealms(
   const page = readCommunity(result);
   return {
     signedIn: true,
-    realms: page.items.map((item) => ({ realmId: item.realmId, name: item.name })),
+    realms: page.items.map((item) => ({
+      realmId: item.realmId,
+      name: item.name,
+      description: (item as typeof item & { description?: string | null }).description,
+    })),
     next: page.next,
   };
 }

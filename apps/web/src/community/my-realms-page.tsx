@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { placeholderColors } from '@rezics/ui/cover';
+import { ListRow } from '@rezics/ui/list-row';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { MyRealmsPage } from './space';
@@ -12,22 +12,26 @@ export function MyRealmsPageView({ page }: { page: MyRealmsPage }) {
         <PageHeading>{m.realms_heading()}</PageHeading>
       </header>
       {page.realms.length ? (
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/70 bg-card">
+        <ul className="space-y-1">
           {page.realms.map((realm) => (
-            <li key={realm.realmId}>
+            <ListRow key={realm.realmId} className="flex items-start gap-4 rounded-xl px-4 py-3">
               <Link
                 to="/realms/$id"
                 params={{ id: realm.realmId }}
-                className="flex min-h-14 items-center gap-4 px-4 py-3 font-medium text-primary underline-offset-4 hover:bg-muted/60 hover:underline"
+                data-slot="list-row-link"
+                className="absolute inset-1 z-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                <span
-                  aria-hidden
-                  className="h-8 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: placeholderColors({ id: realm.realmId, types: [] }).background }}
-                />
-                {realm.name}
+                <span className="sr-only">{realm.name}</span>
               </Link>
-            </li>
+              <div className="min-w-0 flex-1 space-y-1">
+                <h2 aria-hidden="true" className="font-semibold">
+                  {realm.name}
+                </h2>
+                {realm.description ? (
+                  <p className="text-sm leading-relaxed text-muted-foreground">{realm.description}</p>
+                ) : null}
+              </div>
+            </ListRow>
           ))}
         </ul>
       ) : (

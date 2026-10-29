@@ -388,6 +388,7 @@
   "realm_state_pending_note": "Your request is being processed. Reload in a moment to see the result.",
   "realms_empty": "You have not joined any Realms yet.",
   "realms_heading": "Your Realms",
+  "space_realm_heading": "Realm",
   "realms_more": "More Realms",
   "realms_sign_in": "Sign in to see your Realms.",
   "report_action": "Report",
