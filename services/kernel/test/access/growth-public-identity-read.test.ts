@@ -28,6 +28,8 @@ test('a fixed 100-account public identity batch stays bounded as unrelated accou
     name: 'public identity read',
     scales: [1, 8, 64],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    rule: 'series',
+    indexProbes: 100,
     repetitions: 1,
     async grow(database, scale, previous) {
       const count = (scale - previous) * 2000;

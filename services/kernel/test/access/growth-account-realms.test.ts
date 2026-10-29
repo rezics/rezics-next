@@ -121,6 +121,8 @@ test("account Realm pages stay bounded as this and other accounts' memberships g
     name: 'account Realm page',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    rule: 'series',
+    indexProbes: 81,
     warmups: 1,
     async grow(database, scale, previous) {
       if (previous === 0) {

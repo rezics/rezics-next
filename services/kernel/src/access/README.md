@@ -1237,7 +1237,8 @@ refill after skips, so it may return fewer than `limit` items.
 - Touches: one account primary-key probe for the opt-in and inverse-completeness gate; one `membership_inverse_pkey`
   range of at most `limit + 1` Realm rows in the account's partition; then, for each scanned candidate, one registered
   Realm role read and one `realm:read` authorization, each anchored in that Realm's partition. Checks run in sequence.
-- Bound: rows and statements O(limit); blocks O(limit × log R), independent of other accounts' memberships and of
+- Bound: rows and statements O(limit); blocks O(limit × log R), the sum of the inverse range seek and each
+  candidate's indexed role and authorization reads. This remains independent of other accounts' memberships and of
   this account's Realms beyond the page.
 - Growth check: `test/access/growth-account-realms.test.ts`,
   `account Realm pages stay bounded as this and other accounts' memberships grow at a fixed limit`, seeded in `grow`
