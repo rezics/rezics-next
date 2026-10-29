@@ -49,6 +49,7 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
 async function startWorker(system: ContentSystem): Promise<{
   child: Bun.Subprocess;
   failure(): string | undefined;
+  output(): string;
   stop(): Promise<void>;
 }> {
   const databaseUrl = system.database.pool.options.connectionString;
@@ -122,6 +123,7 @@ async function startWorker(system: ContentSystem): Promise<{
   return {
     child,
     failure: () => workerFailure,
+    output: () => output,
     stop: () =>
       (stopping ??= (async () => {
         if (child.exitCode === null) child.kill();
@@ -285,6 +287,11 @@ export async function closeCommunityDrivers(): Promise<void> {
 export function communityFixtureRuntime(): Pick<SharedCommunity, 'system' | 'kernel'> {
   if (!shared) throw new Error('Community driver is not open');
   return { system: shared.system, kernel: shared.kernel };
+}
+
+/** Native worker diagnostics for a companion fixture's failed durable operation. */
+export function communityWorkerOutput(): string {
+  return shared?.worker.output() ?? '';
 }
 
 /** Read the isolated fixture database from a companion integration test. */

@@ -8,6 +8,7 @@ import { subjectTarget } from '../../../src/semantic/subject.ts';
 import {
   closeCommunityDrivers,
   communityFixtureRuntime,
+  communityWorkerOutput,
   createCommunityDriver,
 } from '../../community/community-driver.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
@@ -37,6 +38,15 @@ export async function createFigureFixture(
   try {
     const setup = await driver.provision();
     const { system, kernel } = communityFixtureRuntime();
+    const settle = async () => {
+      try {
+        await driver.settle();
+      } catch (error) {
+        throw new Error(`Native figure fixture did not settle:\n${communityWorkerOutput().slice(-12_000)}`, {
+          cause: error,
+        });
+      }
+    };
     const database = (cleanupDatabase = await openGrowthDatabase(system.database.pool.options.connectionString));
     let closed = false;
     const checked = async (command: Command) => {
@@ -106,15 +116,15 @@ export async function createFigureFixture(
     let membersJoined = false;
     const joinMembers = async () => {
       if (membersJoined) return;
-      for (const member of realmMembers)
+      // Finish each durable membership before admitting the next operation on the same Realm.
+      for (const member of realmMembers) {
         await checked({
           actor: setup.owner,
           method: 'POST',
           path: `/v1/realms/${realmId}/members`,
           body: { accountId: member.id },
         });
-      await driver.settle();
-      for (const member of realmMembers) {
+        await settle();
         const response = await checked({ actor: member, method: 'GET', path: `/v1/realms/${realmId}/members/me` });
         if ((await response.json()).state !== 'member') throw new Error('Native Realm membership did not publish');
       }
@@ -156,7 +166,7 @@ export async function createFigureFixture(
       });
     };
     const drain = async () => {
-      await driver.settle();
+      await settle();
     };
     const figure = async (subjectId: string) => {
       const response = await checked({ actor: null, method: 'GET', path: `/v1/subjects/${subjectId}/figure` });
