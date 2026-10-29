@@ -185,8 +185,7 @@ for (const person of ['other people', 'same person history'] as const) {
             ])
               await db.admin.query(`VACUUM (ANALYZE) ${table}`);
           },
-          operation: async (_db, _scale, repetition) =>
-            operation(exerciseFixture(exerciseTargets[repetition]!)),
+          operation: async (_db, _scale, repetition) => operation(exerciseFixture(exerciseTargets[repetition]!)),
         });
         expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
         const observed = await capture(h.db, () => operation(exerciseFixture(exerciseTargets[12]!)));
