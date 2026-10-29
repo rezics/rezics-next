@@ -184,9 +184,16 @@ invocation was interrupted while queued, before a slot was admitted. The pinned
 compiler was then invoked directly. No broad gate result is claimed, and the
 historical all-13-workspace typecheck is not evidence for this repair.
 
-The final native acceptance will execute only the two declared files after this
-local preflight. Its terminal result and actual bundle/receipt/journal evidence
-will be recorded below; local success is not native delivery.
+An independent read-only authorization/disclosure/rights review of
+`d3f3667db7..f23f236dd7` found no blocking findings. It checked the confirmed-write
+and exhaustive-retention gates, current lease and immutable/pending/deferred guards,
+exact route/key admission under unchanged budgets, and redacted failure diagnostics.
+The reviewer ran no tests; native behavior remained a verification limit.
+
+Native acceptance `3641609f-917a-40df-b98e-c5f3603a4311` was submitted once at
+`b231910991`, after this local preflight, for only the two declared files. Its
+terminal result and actual bundle/receipt/journal evidence will be recorded below;
+local success is not native delivery.
 
 ## Cost and limits
 
