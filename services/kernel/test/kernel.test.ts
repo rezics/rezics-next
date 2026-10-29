@@ -209,6 +209,7 @@ const typed = [
   'GET /v1/libraryShelfTypes',
   'GET /v1/libraryEntries/:subjectId',
   'PUT /v1/libraryEntries/:subjectId',
+  'POST /v1/libraryEntries/:subjectId/$restore',
   'DELETE /v1/libraryEntries/:subjectId',
   'POST /v1/copies',
   'GET /v1/copies',

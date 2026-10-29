@@ -77,7 +77,7 @@ export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryF
 
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
 export async function createProfileEntryFixture(
-  options: { clock?: KernelClock; pool?: Pool; singleConnection?: boolean } = {},
+  options: { clock?: KernelClock; pool?: Pool; singleConnection?: boolean; projectLinks?: boolean } = {},
 ) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -110,9 +110,10 @@ export async function createProfileEntryFixture(
     expect(access).toBeDefined();
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
-    // The current resolver waits for this native consumer even on unrelated entry events.
-    // Run the real relay, as the deployed worker would, rather than forging checkpoints.
+    // Run the real relay for scenarios that consume Semantic link projections.
+    // Direct source-reference scenarios can leave this unrelated worker asynchronous.
     async function drainSubjectLinks() {
+      if (options.projectLinks === false) return;
       for (let step = 0; step < 20; step++) {
         let pending = false;
         for (const partition of partitions) {

@@ -39,27 +39,32 @@ async function reject(
 }
 
 /** One real fixture/command path for the three independently checked growth surfaces. */
-export async function runEntryUndoGrowth(slice: Slice) {
+export async function runEntryUndoGrowth(
+  slice: Slice,
+  beforeGrowth?: (db: GrowthDatabase, fixture: NativeProfileFixture, setTime: (time?: number) => void) => Promise<void>,
+) {
   const db = await openGrowthDatabase();
   let f: NativeProfileFixture | undefined;
   let time: number | undefined;
   const clock = () => new Date(time ?? Date.now());
   try {
-    f = await createProfileEntryFixture({ pool: db.pool, clock, singleConnection: true });
+    f = await createProfileEntryFixture({ pool: db.pool, clock, singleConnection: true, projectLinks: false });
     const native = f;
     const owner = () => native.owner.actor;
     const renew = async () => {
-      for (const identity of [native.owner, native.other, native.steward])
+      for (const identity of [native.owner, native.other, native.steward]) {
         identity.bearer = await accountToken(identity.actor);
-      native.owner.actor = await native.access.authenticate(native.owner.bearer, {
-        pool: db.pool,
-        deadline: deadlineFor(30000),
-      });
-      native.other.actor = await native.access.authenticate(native.other.bearer, {
-        pool: db.pool,
-        deadline: deadlineFor(30000),
-      });
+        identity.actor = await native.access.authenticate(identity.bearer, {
+          pool: db.pool,
+          deadline: deadlineFor(30000),
+        });
+      }
     };
+    // A database has one governance bootstrap: related native scenarios share its real identities.
+    await beforeGrowth?.(db, native, (value) => {
+      time = value;
+    });
+    await renew();
     const put = async (subjectId: string, actor = owner()) =>
       (await native.commands.putEntry(actor, subjectId, { state: 'planned' }, entryKey())).value.entry;
     const clear = async (entry: Entry, actor = owner()) => {

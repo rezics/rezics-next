@@ -1,18 +1,10 @@
 import { expect, test } from 'bun:test';
 import { runEntryUndoGrowth, ownerSequence } from './support/entry-undo-growth.ts';
-import { createProfileEntryFixture, entryKey } from './support/profile-entry-fixture.ts';
-import { openGrowthDatabase } from '../support/growth.ts';
+import { entryKey } from './support/profile-entry-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
 
-test('exact restore and all rejected/replayed native envelopes have bounded whole-command work at three unrelated population scales', async () => {
-  await runEntryUndoGrowth('restore');
-}, 3600000);
-
-test('native concurrent Undo and live-slot arbitration allocate one fresh sequence and preserve independent archives and conflicts', async () => {
-  const db = await openGrowthDatabase();
-  let time: number | undefined;
-  const f = await createProfileEntryFixture({ pool: db.pool, clock: () => new Date(time ?? Date.now()) });
-  try {
+test('exact restore, concurrent slot arbitration and all rejected/replayed native envelopes have bounded whole-command work at three unrelated population scales', async () => {
+  await runEntryUndoGrowth('restore', async (db, f, setTime) => {
     const subject = await f.createSubject('record');
     const first = (await f.commands.putEntry(f.owner.actor, subject, { state: 'listening' }, entryKey())).value.entry;
     const clear = () =>
@@ -56,13 +48,13 @@ test('native concurrent Undo and live-slot arbitration allocate one fresh sequen
     await expect(f.commands.restoreEntry({ ...f.owner.actor }, subject, d2, entryKey())).rejects.toMatchObject({
       name: 'GrantDeniedError',
     });
-    time = Date.now() + 720 * 60 * 60 * 1000 + 60000;
+    setTime(Date.now() + 720 * 60 * 60 * 1000 + 60000);
     try {
       await expect(f.commands.restoreEntry(f.owner.actor, subject, d2, entryKey())).rejects.toMatchObject({
         reason: 'expired',
       });
     } finally {
-      time = undefined;
+      setTime();
     }
     await expect(f.commands.restoreEntry(f.owner.actor, subject, d2, entryKey())).rejects.toMatchObject({
       reason: 'occupied',
@@ -84,8 +76,5 @@ test('native concurrent Undo and live-slot arbitration allocate one fresh sequen
     expect(BigInt(await ownerSequence(db, f))).toBe(emptyCounter + 1n);
     const final = await f.commands.readEntry(f.owner.actor, subject);
     expect(final.incarnationId).toEqual(expect.any(String));
-  } finally {
-    await f.close();
-    await db.close();
-  }
-}, 120000);
+  });
+}, 3600000);

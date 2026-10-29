@@ -185,6 +185,7 @@ beforeAll(async () => {
   accounts.set(noScope.accountId, await installAccount(noScope.accountId, 'active'));
   kernel = createKernel({
     pool: database.pool,
+    clock,
     tokens,
     routeKey: new Uint8Array(32).fill(73),
     writeRate: createWriteRateLimiter({ secret: 'native-library-entry-baseline-rate-secret' }),
