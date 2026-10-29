@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:0bd5f18476a913d662af6eb0305a877020322e061d255f34e988e857c5cc7028",
+  "digest": "sha256:943ceadcf70fe1bd71382c2f88ca782cbf946a2c1c1097d748d273482eb7b318",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -335,7 +335,9 @@
           "wdt:P179",
           "schema:datePublished",
           "schema:contributor",
-          "schema:inLanguage"
+          "schema:inLanguage",
+          "schema:wordCount",
+          "wdt:P7937"
         ],
         "labels": {
           "de": "Buch",
@@ -378,11 +380,13 @@
           "schema:name",
           "schema:sameAs",
           "schema:url",
+          "schema:wordCount",
           "wdt:P155",
           "wdt:P179",
           "wdt:P361",
           "wdt:P5732",
-          "wdt:P648"
+          "wdt:P648",
+          "wdt:P7937"
         ],
         "descriptions": {
           "de": "Schrifttum",
@@ -710,7 +714,14 @@
       "schema:Recipe": {
         "iri": "http://schema.org/Recipe",
         "bases": ["schema:Thing"],
-        "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"],
+        "facets": [
+          "schema:author",
+          "schema:keywords",
+          "schema:datePublished",
+          "schema:cookTime",
+          "schema:recipeYield",
+          "schema:suitableForDiet"
+        ],
         "labels": {
           "de": "Kochrezept",
           "en": "recipe",
@@ -736,6 +747,7 @@
           "schema:recipeInstructions",
           "schema:recipeYield",
           "schema:sameAs",
+          "schema:suitableForDiet",
           "schema:url",
           "wdt:P186"
         ],
@@ -2975,6 +2987,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:filmDistributionOf",
           "inverseLabels": {
             "de": "Filmveröffentlichungen",
@@ -2987,7 +3000,7 @@
             "zh-Hant": "發行的影片版本"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "rezics:note": {
@@ -4048,6 +4061,34 @@
         "qualifiers": [],
         "multivalued": false
       },
+      "schema:wordCount": {
+        "iri": "http://schema.org/wordCount",
+        "units": ["1"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["1"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Wortanzahl",
+          "en": "word count",
+          "es": "número de palabras",
+          "fr": "nombre de mots",
+          "ja": "単語数",
+          "ko": "단어 수",
+          "zh-Hans": "词数",
+          "zh-Hant": "詞數"
+        },
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": ["wd:P6570"],
+        "qualifiers": [],
+        "multivalued": false
+      },
       "schema:inLanguage": {
         "iri": "http://schema.org/inLanguage",
         "value": {
@@ -4376,7 +4417,7 @@
             "zh-Hant": "此平台的遊戲"
           }
         },
-        "qualifiers": [],
+        "qualifiers": ["schema:inLanguage"],
         "multivalued": true
       },
       "schema:alternateName": {
@@ -4582,6 +4623,40 @@
         "mappings": ["wd:P1873"],
         "qualifiers": ["schema:minValue"],
         "multivalued": false
+      },
+      "schema:suitableForDiet": {
+        "iri": "http://schema.org/suitableForDiet",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "geeignet für Ernährungsform",
+          "en": "suitable for diet",
+          "es": "apto para la dieta",
+          "fr": "convient au régime alimentaire",
+          "ja": "対応する食事法",
+          "ko": "적합한 식단",
+          "zh-Hans": "适用饮食",
+          "zh-Hant": "適用飲食"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "relation": {
+          "group": "classification",
+          "order": "name",
+          "inverse": "rezics:recipeForDiet",
+          "inverseLabels": {
+            "de": "Rezepte für diese Ernährungsform",
+            "en": "Recipes for this diet",
+            "es": "Recetas para esta dieta",
+            "fr": "Recettes pour ce régime alimentaire",
+            "ja": "この食事法に対応するレシピ",
+            "ko": "이 식단에 적합한 레시피",
+            "zh-Hans": "适用此饮食的食谱",
+            "zh-Hant": "適用此飲食的食譜"
+          }
+        },
+        "qualifiers": [],
+        "multivalued": true
       },
       "rezics:bangumiRelatedTo": {
         "iri": "https://rezics.com/vocab/bangumiRelatedTo",
@@ -4907,7 +4982,7 @@
           "zh-Hans": "代表版本",
           "zh-Hant": "代表版本"
         },
-        "targets": ["bf:Instance", "wd:Q20631656"],
+        "targets": ["bf:Instance", "rezics:AnimeRelease", "wd:Q20631656"],
         "datatype": "wikibase-item",
         "mappings": [],
         "relation": { "group": "derivation", "order": "name", "inverse": "none" },
