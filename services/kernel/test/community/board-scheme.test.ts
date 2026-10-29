@@ -425,7 +425,8 @@ test.serial(
         const space = newId(route),
           realm = newId(route),
           revision = newId(route),
-          subject = newId(route);
+          subject = newId(route),
+          bannedAccount = newId(route);
         const at = '2026-10-25T00:00:00.000Z',
           transaction = crypto.randomUUID(),
           position = base + ordinal * 100 + 1;
@@ -480,6 +481,16 @@ test.serial(
               author: owner.accountId,
             },
           ],
+          // Grow current ban keys and ended history away from the owner's probe.
+          'community.realm_ban': ['[2020-01-01,2026-10-25)', '[2026-10-25,)'].map((valid) => ({
+            route,
+            realm_id: realm,
+            account_id: bannedAccount,
+            valid,
+            reason: 'Neighbour',
+            actor: owner.accountId,
+            transaction_id: transaction,
+          })),
           'semantic.subject': [
             { route, subject_id: subject, type: 'skos:ConceptScheme', recorded_transaction_id: transaction },
           ],
