@@ -8,7 +8,7 @@ const typeByKey: Record<string, string> = {
   book: 'schema:Book',
   recipe: 'schema:Recipe',
   game: 'schema:VideoGame',
-  release: 'schema:VideoGame',
+  release: 'wd:Q20631656',
   person: 'schema:Person',
   organization: 'schema:Organization',
   automated: 'schema:SoftwareApplication',
@@ -107,7 +107,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
             body: JSON.stringify({
               resource: { route: 0, id: globalContext },
               subject: { kind: 'account', id: accountId },
-              actions: ['subject:create'],
+              actions: ['subject:batch_write', 'subject:create'],
               valid: '(,)',
             }),
           },
