@@ -608,7 +608,11 @@ export class WorkerTasks {
       if (task.currentAttempt > 0 && reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
         return { hold: true, first: startsFirst(task) };
       const next = { ...task, brief: reshaped?.brief ?? task.brief, taskClass: reshaped?.taskClass ?? task.taskClass };
-      const hold = (reshaped !== undefined || task.state === 'held') && !this.dependenciesMet({ brief: next.brief });
+      // Any retry waits for unmet dependencies: a stopped or ready task retried while its dependency was still landing
+      // started against code it needs (commerce a65, 2026-10-29). A running attempt is replaced, not held.
+      const running =
+        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
+      const hold = !running && !this.dependenciesMet({ brief: next.brief });
       // Replacing a running worker adds none, so it never waits behind the worker it replaces.
       const replaces =
         task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
@@ -669,7 +673,9 @@ export class WorkerTasks {
         );
       }
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
-      if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief })) {
+      const currentRunning =
+        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
+      if ((reshaped || task.state === 'held' || !currentRunning) && !this.dependenciesMet({ brief: nextBrief })) {
         if (!heldAmendment) {
           const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
           mkdirSync(dirname(briefPath), { recursive: true });

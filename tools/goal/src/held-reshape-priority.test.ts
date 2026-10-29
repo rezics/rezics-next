@@ -103,6 +103,31 @@ test('retry --brief amends a held task whose attempt waits for checks', async ()
   }
 });
 
+test('a stopped task retried while a dependency is unmet is held instead of started', async () => {
+  const h = harness();
+  try {
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = await h.tasks.retry(task.id);
+    await worker.exited;
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
+      attempt.state = 'exited';
+    });
+    h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
+      current.state = 'stopped';
+      current.brief.after = [dependency.id];
+    });
+
+    await expect(h.tasks.retry(task.id)).rejects.toThrow();
+
+    const held = h.store.task(task.id);
+    expect(held.state).toBe('held');
+    expect(held.currentAttempt).toBe(1);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('a refused retry writes no brief file', async () => {
   const h = harness();
   try {
