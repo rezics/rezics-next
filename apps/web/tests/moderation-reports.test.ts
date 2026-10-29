@@ -1,6 +1,9 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
 import { readModerationReports, resolveReportTargets } from '../src/moderation/reports-read';
 import { dismissReport, takeDownReport } from '../src/moderation/actions';
 import { ModerationReportsView } from '../src/moderation/reports-page';
