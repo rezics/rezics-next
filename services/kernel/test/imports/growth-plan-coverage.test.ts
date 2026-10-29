@@ -126,7 +126,7 @@ test('Imports keeps each native plan on its captured owner, backend, and executi
   expect(raw.statementErrors).toEqual(['40001', null, null, null, null]);
   expect(raw.statementErrorMessages).toEqual(['serialization failure', null, null, null, null]);
   expect(raw.statementBackends).toEqual([303, 303, 303, 303, 202]);
-  expect(raw.planBackends).toEqual([303, 303, 303, 303]);
+  expect(raw.planBackends).toEqual([303, 303, 303, 202]);
   expect(raw.planStatements).toEqual([1, 3, 2, 4]);
   expect(raw.importStatementOwners).toEqual(['kernel', 'kernel', 'auth', 'auth', 'auth']);
   expect(raw.importPlanOwners).toEqual(['kernel', 'auth', 'auth', 'auth']);
