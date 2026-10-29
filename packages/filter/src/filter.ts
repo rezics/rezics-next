@@ -438,70 +438,117 @@ function hasOwnMapKey(map: unknown, key: string): boolean {
   return field.found && isRecord(field.value);
 }
 
-function includesOwnString(list: unknown, expected: string): boolean {
-  if (!Array.isArray(list)) return false;
-  for (let index = 0; index < list.length; index++) {
-    const field = ownData(list, index);
-    if (field.found && field.value === expected) return true;
-  }
-  return false;
+/** An explicit construction lifetime. The caller owns a snapshot; raw entry points create a fresh one. */
+export function createFilterConstruction(release: FilterRelease) {
+  // Own all descriptor-backed data before retaining indexes across admissions.
+  const snapshot = snapshotData(release) as FilterRelease;
+  const construction = buildConstruction(snapshot);
+  return {
+    admitFilter: (filter: FilterDocument, options?: FilterAdmissionOptions) =>
+      admitConstructed(filter, snapshot, options, construction),
+    validateFilter: (input: unknown, options?: FilterAdmissionOptions) =>
+      validateConstructed(input, snapshot, options, construction),
+    facetProperties: (types: readonly string[]) => displayFacets(construction, types),
+    qualifiers: (property: string): ReadonlySet<string> => construction.qualifiers.get(property) ?? emptyFacets,
+  };
 }
 
-function typeFacets(types: unknown, type: string): Set<string> {
-  const result = new Set<string>();
-  const definition = ownRecordValue(types, type);
-  if (!isRecord(definition)) return result;
-  for (const facet of ownStringList(definition, 'facets')) result.add(facet);
-  for (const base of ownStringList(definition, 'bases')) {
-    const baseDefinition = ownRecordValue(types, base);
-    if (!isRecord(baseDefinition)) continue;
-    for (const facet of ownStringList(baseDefinition, 'facets')) result.add(facet);
+// Copy own data only. Accessors, inherited fields and holes remain absent, never evaluated.
+function snapshotData(value: unknown, ancestors = new Set<object>()): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (ancestors.has(value)) return undefined;
+  ancestors.add(value);
+  const copy: Record<string, unknown> | unknown[] = Array.isArray(value) ? new Array(value.length) : Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (Array.isArray(value) && key === 'length') continue;
+    const field = ownData(value, key);
+    if (field.found) Object.defineProperty(copy, key, {
+      value: snapshotData(field.value, ancestors), enumerable: true, configurable: true, writable: true,
+    });
   }
-  return result;
+  ancestors.delete(value);
+  return copy;
 }
 
-export function facetProperties(release: FilterRelease, types: readonly string[]): string[] {
-  const definitions = dataField(release, 'types');
-  const result = new Set<string>();
-  for (const type of types) {
-    for (const property of typeFacets(definitions, type)) result.add(property);
+const emptyFacets: ReadonlySet<string> = new Set();
+type Construction = {
+  facets: Map<string, ReadonlySet<string>>;
+  all: ReadonlySet<string>;
+  qualifiers: Map<string, ReadonlySet<string>>;
+  units: Map<string, ReadonlySet<string>>;
+  patterns: Map<object, RegExp | null>;
+};
+
+function buildConstruction(release: FilterRelease): Construction {
+  const types = dataField(release, 'types');
+  const direct = new Map<string, readonly string[]>();
+  const facets = new Map<string, ReadonlySet<string>>();
+  const all = new Set<string>();
+  if (isRecord(types)) {
+    for (const type of Object.getOwnPropertyNames(types)) {
+      direct.set(type, ownStringList(ownRecordValue(types, type), 'facets'));
+    }
+    for (const type of Object.getOwnPropertyNames(types)) {
+      const definition = ownRecordValue(types, type);
+      const selected = new Set<string>();
+      for (const facet of direct.get(type) ?? []) selected.add(facet);
+      for (const base of ownStringList(definition, 'bases')) {
+        for (const facet of direct.get(base) ?? []) selected.add(facet);
+      }
+      facets.set(type, selected);
+      for (const facet of selected) all.add(facet);
+    }
   }
+  const qualifiers = new Map<string, ReadonlySet<string>>();
+  const units = new Map<string, ReadonlySet<string>>();
+  const properties = dataField(release, 'properties');
+  if (isRecord(properties)) for (const property of Object.getOwnPropertyNames(properties)) {
+    const definition = ownRecordValue(properties, property);
+    qualifiers.set(property, new Set(ownStringList(definition, 'qualifiers')));
+    units.set(property, new Set(ownStringList(definition, 'units')));
+  }
+  return { facets, all, qualifiers, units, patterns: new Map() };
+}
+
+const immutableConstructions = new WeakMap<object, Construction>();
+function constructionFor(release: FilterRelease): Construction {
+  const known = immutableConstructions.get(release);
+  if (known) return known;
+  const construction = buildConstruction(release);
+  const seen = new Set<object>();
+  function immutable(value: unknown): boolean {
+    if (value === null || typeof value !== 'object' || seen.has(value)) return true;
+    if (!Object.isFrozen(value)) return false;
+    seen.add(value);
+    return Reflect.ownKeys(value).every((key) => {
+      const field = Object.getOwnPropertyDescriptor(value, key)!;
+      return Object.hasOwn(field, 'value') && immutable(field.value);
+    });
+  }
+  if (immutable(release)) immutableConstructions.set(release, construction);
+  return construction;
+}
+
+function displayFacets(construction: Construction, types: readonly string[]): string[] {
+  const result = new Set<string>();
+  for (const type of types) for (const facet of construction.facets.get(type) ?? emptyFacets) result.add(facet);
   return [...result];
 }
 
-const allFacetsByRelease = new WeakMap<object, ReadonlySet<string>>();
+export function facetProperties(release: FilterRelease, types: readonly string[]): string[] {
+  return displayFacets(constructionFor(release), types);
+}
 
-// One compiled pattern per property definition. A missing or unusable pattern is cached as null.
-const codePatterns = new WeakMap<object, RegExp | null>();
-
-function codePattern(definition: object): RegExp | null {
-  if (codePatterns.has(definition)) return codePatterns.get(definition) ?? null;
+function codePattern(definition: object, construction: Construction): RegExp | null {
+  if (construction.patterns.has(definition)) return construction.patterns.get(definition) ?? null;
   const value = dataField(definition, 'value');
   const source = isRecord(value) ? dataField(value, 'pattern') : undefined;
   let compiled: RegExp | null = null;
   if (typeof source === 'string' && source.length > 0) {
-    try {
-      compiled = new RegExp(source, 'u');
-    } catch {
-      compiled = null;
-    }
+    try { compiled = new RegExp(source, 'u'); } catch { compiled = null; }
   }
-  codePatterns.set(definition, compiled);
+  construction.patterns.set(definition, compiled);
   return compiled;
-}
-
-function allReleaseFacets(release: FilterRelease): ReadonlySet<string> {
-  const known = allFacetsByRelease.get(release);
-  if (known) return known;
-  const facets = new Set<string>();
-  const types = dataField(release, 'types');
-  if (isRecord(types)) {
-    for (const type of Object.getOwnPropertyNames(types)) {
-      for (const facet of typeFacets(types, type)) facets.add(facet);
-    }
-  }
-  allFacetsByRelease.set(release, facets);
-  return facets;
 }
 
 function containsSaved(filter: FilterDocument): boolean {
@@ -516,10 +563,11 @@ function mappedPointer(actual: string, source: string | undefined): string {
   return source ?? actual;
 }
 
-export function admitFilter(
+function admitConstructed(
   filter: FilterDocument,
   release: FilterRelease,
   options: FilterAdmissionOptions = {},
+  construction: Construction,
 ): FilterDocument {
   const expansions = new Map<string, FilterDocument | null>();
   const allowSaved = options.saved !== false;
@@ -580,15 +628,10 @@ export function admitFilter(
     }
   }
 
-  const allowedFacets = new Set<string>();
-  if (returnable === undefined) {
-    for (const facet of allReleaseFacets(release)) allowedFacets.add(facet);
-  } else {
-    for (const type of returnable) {
-      if (!hasOwnMapKey(types, type)) continue;
-      for (const facet of typeFacets(types, type)) allowedFacets.add(facet);
-    }
-  }
+  const selectedFacets = returnable === undefined
+    ? [construction.all]
+    : returnable.filter((type) => hasOwnMapKey(types, type)).map((type) => construction.facets.get(type) ?? emptyFacets);
+  const allowedFacet = (property: string) => selectedFacets.some((facets) => facets.has(property));
 
   let expandedLeaves = 0;
 
@@ -629,7 +672,7 @@ export function admitFilter(
   ): void {
     const statement = node.statement;
     const propertyPointer = appendPointer(appendPointer(pointer, 'statement'), 'property');
-    if (!allowedFacets.has(statement.property)) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
+    if (!allowedFacet(statement.property)) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
 
     const properties = dataField(release, 'properties');
     const definition = propertyDefinition(properties, statement.property);
@@ -647,7 +690,7 @@ export function admitFilter(
       const inPointer = appendPointer(appendPointer(pointer, 'statement'), 'in');
       if (datatype === 'wikibase-item') validateUuidValues(statement.in, inPointer, source);
       else if (datatype === 'string') {
-        const pattern = codePattern(definition);
+        const pattern = codePattern(definition, construction);
         if (!pattern) reject(inPointer, source, 'unsupported', 'unsupported_query');
         for (let index = 0; index < statement.in.length; index++) {
           const value = statement.in[index]!;
@@ -672,21 +715,20 @@ export function admitFilter(
       } else {
         if (range.unit === undefined)
           reject(appendPointer(rangePointer, 'unit'), source, 'required', 'invalid_request');
-        const units = dataField(definition, 'units');
-        if (!includesOwnString(units, range.unit))
+        if (!construction.units.get(statement.property)?.has(range.unit))
           reject(appendPointer(rangePointer, 'unit'), source, 'unsupported', 'unsupported_query');
       }
     }
 
     const qualifiers = statement.qualifiers;
     if (qualifiers) {
-      const declaredQualifiers = dataField(definition, 'qualifiers');
+      const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;
       for (let index = 0; index < qualifiers.length; index++) {
         const qualifier = qualifiers[index]!;
         const qualifierPointer = appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index);
         const qualifierPropertyPointer = appendPointer(qualifierPointer, 'property');
         const qualifierDefinition = propertyDefinition(properties, qualifier.property);
-        if (!includesOwnString(declaredQualifiers, qualifier.property) || !qualifierDefinition)
+        if (!declaredQualifiers.has(qualifier.property) || !qualifierDefinition)
           reject(qualifierPropertyPointer, source, 'unsupported', 'unsupported_query');
         const inPointer = appendPointer(qualifierPointer, 'in');
         const datatype = dataField(qualifierDefinition, 'datatype');
@@ -694,7 +736,7 @@ export function admitFilter(
         else if (datatype === 'string') {
           const schema = dataField(qualifierDefinition, 'value');
           const declaredPattern = dataField(schema, 'pattern');
-          const pattern = codePattern(qualifierDefinition);
+          const pattern = codePattern(qualifierDefinition, construction);
           if (declaredPattern !== undefined && declaredPattern !== '' && !pattern)
             reject(inPointer, source, 'unsupported', 'unsupported_query');
           const minimum = dataField(schema, 'minLength');
@@ -848,14 +890,15 @@ export function admitFilter(
   return visit(filter, '', 0, false, undefined);
 }
 
-export function validateFilter(
+function validateConstructed(
   input: unknown,
   release: FilterRelease,
-  options?: FilterAdmissionOptions,
+  options: FilterAdmissionOptions | undefined,
+  construction: Construction,
 ): FilterValidationError[] {
   try {
     const parsed = parseFilter(input);
-    admitFilter(parsed, release, options);
+    admitConstructed(parsed, release, options, construction);
     return [];
   } catch (error) {
     if (error instanceof FilterError) {
@@ -864,4 +907,13 @@ export function validateFilter(
     }
     return [{ problem: 'invalid_request', pointer: '', code: 'invalid_type' }];
   }
+}
+
+/** Raw mutable releases are indexed anew for every public call. */
+export function admitFilter(filter: FilterDocument, release: FilterRelease, options?: FilterAdmissionOptions): FilterDocument {
+  return admitConstructed(filter, release, options, constructionFor(release));
+}
+
+export function validateFilter(input: unknown, release: FilterRelease, options?: FilterAdmissionOptions): FilterValidationError[] {
+  return validateConstructed(input, release, options, constructionFor(release));
 }

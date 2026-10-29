@@ -1,9 +1,10 @@
 /// <reference path="./recheck.d.ts" />
-import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
+import { createFilterConstruction, type FilterDocument, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { safePattern } from './pattern-safety.ts';
-import { Compile } from 'typebox/schema';
+import { constructionValidator, constructionUniqueness } from './publication-construction.ts';
+export { publicationLimits, PUBLICATION_LIMITS } from './publication-construction.ts';
 import schema from '../schema/release.json';
 import {
   libraryProfileSemantics,
@@ -209,7 +210,7 @@ export function releaseDigest(release: Release): string {
   return `sha256:${createHash('sha256').update(canonicalize(release)!, 'utf8').digest('hex')}`;
 }
 
-const validator = Compile(schema);
+const validator = constructionValidator;
 const own = (value: object, key: string) => Object.hasOwn(value, key);
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -276,16 +277,33 @@ function collectionLimits(value: unknown, add: (pointer: string, code: ReleaseVi
 // Canonical ordering does not change byte length. Count JSON bytes before sorting
 // keys or compiling schema errors, and stop as soon as the size bound is crossed.
 function exceedsSize(value: unknown): boolean {
-  const pending = [value];
+  const pending: { value: unknown; exit?: boolean }[] = [{ value }];
+  const ancestors = new Set<object>();
   let bytes = 0;
   while (pending.length) {
-    const item = pending.pop();
+    const entry = pending.pop()!;
+    const item = entry.value;
     if (item !== null && typeof item === 'object') {
-      const entries = Object.entries(item);
-      bytes += 2 + Math.max(0, entries.length - 1);
-      for (const [key, child] of entries) {
-        if (!Array.isArray(item)) bytes += Buffer.byteLength(JSON.stringify(key)) + 1;
-        pending.push(child);
+      if (entry.exit) { ancestors.delete(item); continue; }
+      if (ancestors.has(item)) throw new TypeError('Expected acyclic JSON');
+      ancestors.add(item);
+      pending.push({ value: item, exit: true });
+      const array = Array.isArray(item);
+      const prototype = Object.getPrototypeOf(item);
+      if (prototype !== (array ? Array.prototype : Object.prototype) && prototype !== null)
+        throw new TypeError('Expected own JSON data');
+      const keys = Reflect.ownKeys(item);
+      if (array && keys.length !== item.length + 1) throw new TypeError('Expected dense JSON array');
+      bytes += 2 + Math.max(0, keys.length - (array ? 2 : 1));
+      for (const key of keys) {
+        if (array && key === 'length') continue;
+        if (typeof key !== 'string') throw new TypeError('Expected JSON key');
+        const field = Object.getOwnPropertyDescriptor(item, key)!;
+        if (!Object.hasOwn(field, 'value') || !field.enumerable) throw new TypeError('Expected own JSON data');
+        if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= item.length))
+          throw new TypeError('Expected JSON array index');
+        if (!array) bytes += Buffer.byteLength(JSON.stringify(key)) + 1;
+        pending.push({ value: field.value });
       }
     } else {
       const json = JSON.stringify(item);
@@ -363,19 +381,22 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
     type.bases.forEach((base, index) => {
       if (expand(base) === undefined) add(at(at(pointer, 'bases'), index));
     });
+    const typeProperties = new Set(type.properties);
     type.facets.forEach((facet, index) => {
       const facetPointer = at(at(pointer, 'facets'), index);
       const property = release.properties[facet];
-      if (expand(facet) === undefined || !type.properties.includes(facet) || !property || !facetable(property))
+      if (expand(facet) === undefined || !typeProperties.has(facet) || !property || !facetable(property))
         add(facetPointer);
     });
   }
   const targetNames = new Set(Object.keys(release.types));
   for (const type of Object.values(release.types)) for (const base of type.bases) targetNames.add(base);
+  const filters = createFilterConstruction(release);
   const propertyIris = new Set(Object.values(release.properties).map((property) => property.iri));
   for (const [key, property] of Object.entries(release.properties)) {
     const pointer = at('/properties', key);
     list(property.qualifiers, at(pointer, 'qualifiers'), release.properties);
+    const qualifierMembership = filters.qualifiers(key);
     const relation = property.relation;
     if (relation) {
       const relationPointer = at(pointer, 'relation');
@@ -391,19 +412,19 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
         if (!own(relation, 'inverseLabels')) add(at(relationPointer, 'inverseLabels'));
       } else if (own(relation, 'inverseLabels')) add(at(relationPointer, 'inverseLabels'));
       if (hasSymmetric && own(relation, 'acyclic')) add(at(relationPointer, 'acyclic'));
-      if (relation.order === 'position' && !property.qualifiers.includes('schema:position'))
+      if (relation.order === 'position' && !qualifierMembership.has('schema:position'))
         add(at(relationPointer, 'order'));
       if (relation.filter !== undefined) {
         const filters = Array.isArray(relation.filter) ? relation.filter : [relation.filter];
         for (const filter of filters) {
           const qualifier = release.properties[filter];
-          if (!property.qualifiers.includes(filter) || qualifier?.datatype !== 'wikibase-item')
+          if (!qualifierMembership.has(filter) || qualifier?.datatype !== 'wikibase-item')
             add(at(relationPointer, 'filter'));
         }
       }
       if (relation.slotKey !== undefined) {
         const qualifier = release.properties[relation.slotKey];
-        if (!property.qualifiers.includes(relation.slotKey) || qualifier?.datatype !== 'wikibase-item')
+        if (!qualifierMembership.has(relation.slotKey) || qualifier?.datatype !== 'wikibase-item')
           add(at(relationPointer, 'slotKey'));
       }
     }
@@ -451,7 +472,7 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
   // A shipped filter names types, facets, years and amounts. Subject ids differ per deployment.
   for (const [key, saved] of Object.entries(release.filters ?? {})) {
     const filterPointer = at(at('/filters', key), 'filter');
-    for (const error of validateFilter(saved.filter, release, { saved: false }))
+    for (const error of filters.validateFilter(saved.filter, { saved: false }))
       add(`${filterPointer}${error.pointer}`, savedFilterCode(error));
     visitSubjectIds(saved.filter, filterPointer, (pointer) => add(pointer));
   }
@@ -474,6 +495,17 @@ function visitSubjectIds(value: unknown, pointer: string, add: (pointer: string)
   for (const key of Object.keys(value)) visitSubjectIds(value[key], at(pointer, key), add);
 }
 
+/** Cheap JSON/collection admission shared by publication's digest-existence probe and validation. */
+export function releaseAdmission(value: unknown): ReleaseViolation[] {
+  const violations: ReleaseViolation[] = [];
+  try {
+    const oversized = exceedsSize(value);
+    collectionLimits(value, (pointer, code) => violations.push({ pointer, code }));
+    if (!violations.length && oversized) violations.push({ pointer: '', code: 'limit' });
+  } catch { violations.push({ pointer: '', code: 'invalid' }); }
+  return violations.sort((a,b) => a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0).slice(0,64);
+}
+
 export function validateRelease(value: unknown): ReleaseViolation[] {
   const violations = new Map<string, ReleaseViolation['code']>();
   const add = (pointer: string, code: ReleaseViolation['code'] = 'invalid') => {
@@ -485,15 +517,15 @@ export function validateRelease(value: unknown): ReleaseViolation[] {
       .slice(0, 64)
       .map(([pointer, code]) => ({ pointer, code }));
   try {
-    collectionLimits(value, add);
+    for (const violation of releaseAdmission(value)) add(violation.pointer, violation.code);
     if (violations.size) return result();
-    if (exceedsSize(value)) return [{ pointer: '', code: 'limit' }];
     // JCS rejects malformed Unicode as well as non-finite JSON numbers.
     canonicalize(value);
     if (record(value) && record(value.libraryProfiles))
       for (const [id, profile] of Object.entries(value.libraryProfiles))
         libraryProgressSemantics(profile, (pointer) => add(at('/libraryProfiles', id) + pointer));
-    if (!validator.Check(value)) {
+    constructionUniqueness(value, '', add);
+    if (violations.size || !validator.Check(value)) {
       const [, errors] = validator.Errors(value);
       for (const error of errors) {
         if (error.keyword === 'required') {

@@ -1,4 +1,4 @@
-import { releaseDigest, validateRelease, type Release, type ReleaseViolation } from '@rezics/definitions';
+import { publicationLimits, releaseAdmission, releaseDigest, validateRelease, type Release, type ReleaseViolation } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { systemClock } from '../clock.ts';
@@ -113,9 +113,20 @@ export function commandOptions(
 }
 
 export async function publishRelease(pool: Pool, options: WriteOptions & { release: unknown }) {
-  // Validate before runCommand can check out a connection, including for a replay.
+  // A historical exemption is established by one indexed point on this same
+  // pool, never a caller flag. JSON admission precedes digest work. Authorization
+  // and receipt/key conflict ordering remain inside runCommand at fresh T.
+  const caps = publicationLimits(options.release);
+  let publishedDigest: string | undefined;
+  if (caps.length) {
+    const admission = releaseAdmission(options.release);
+    if (admission.length) throw new DefinitionInputError(admission);
+    publishedDigest = releaseDigest(options.release as Release);
+    if (!(await exists.run(pool, { route: resource.route, digest: publishedDigest })))
+      throw new DefinitionInputError(caps);
+  }
   const release = validated(options.release);
-  const digest = releaseDigest(release);
+  const digest = publishedDigest ?? releaseDigest(release);
   const command = await runCommand(
     pool,
     commandOptions(options, 'definitions.publish', 'definitions:publish'),
@@ -182,6 +193,8 @@ class AlreadyActive extends Error {
 export async function bootstrapRelease(pool: Pool, release: Release, clock: () => Date = systemClock): Promise<string> {
   const existing = await pointer.run(pool, { route: resource.route });
   if (existing) return existing.digest;
+  const caps = publicationLimits(release);
+  if (caps.length) throw new DefinitionInputError(caps);
   const body = validated(release);
   const digest = releaseDigest(body);
   try {

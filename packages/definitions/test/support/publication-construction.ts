@@ -94,6 +94,11 @@ type Counts = {
   baseReads: number;
   baseVisits: number;
   qualifierVisits: number;
+  snapshotVisits: number;
+  hashNodes: number;
+  hashBytes: number;
+  hashSortComparisons: number;
+  facetProbes: number;
 };
 type ProbeState = Counts & { bases: WeakSet<object>; types: WeakSet<object>; qualifiers: WeakSet<object> };
 type Row = {
@@ -200,22 +205,41 @@ async function probe(): Promise<Evidence> {
     unique = replaceOnce(unique, 'return [...result, index];', `return [...publicationSpread(result), index];`);
     unique += `\nfunction* publicationSpread(result) {\n  ${counter}.duplicateAppends++;\n  for (const item of result) { ${counter}.duplicateCopies++; yield item; }\n}\n`;
     copy('typebox-uniqueItems', uniquePath, unique, join(directory, 'typebox/build/schema/engine/uniqueItems.mjs'));
+    const baseRevision = '2c86ce30ef';
+    const originalSource = (path: string) => {
+      const result = Bun.spawnSync(['git', 'show', `${baseRevision}:${path}`], { cwd: root });
+      if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+      return result.stdout.toString();
+    };
+    const originalFilterPath = join(directory, 'original-filter.ts');
+    writeFileSync(originalFilterPath, imports(originalSource('packages/filter/src/filter.ts'), dirname(filterPath)));
+    const originalDefinitionsPath = join(directory, 'original-definitions.ts');
+    writeFileSync(originalDefinitionsPath, imports(originalSource('packages/definitions/src/index.ts'), dirname(definitionsPath))
+      .replace(Bun.resolveSync('@rezics/filter', dirname(definitionsPath)), originalFilterPath));
+    const originalDefinitions = await import(originalDefinitionsPath) as typeof import('../../src/index.ts');
+    const originalFilter = await import(originalFilterPath) as typeof import('../../../filter/src/filter.ts');
     let filter = imports(read(filterPath), dirname(filterPath));
-    filter = replaceOnce(
-      filter,
-      'const item = ownData(value, index);',
-      `if (${counter}.bases.has(value)) ${counter}.baseReads++;\n    const item = ownData(value, index);`,
-    );
-    filter = replaceOnce(
-      filter,
-      'const field = ownData(list, index);',
-      `if (${counter}.qualifiers.has(list)) ${counter}.qualifierVisits++;\n    const field = ownData(list, index);`,
-    );
-    filter = replaceOnce(
-      filter,
-      "for (const base of ownStringList(definition, 'bases')) {",
-      `for (const base of ownStringList(definition, 'bases')) {\n    if (${counter}.types.has(definition)) ${counter}.baseVisits++;`,
-    );
+    filter = replaceOnce(filter, 'const item = ownData(value, index);',
+      `if (${counter}.bases.has(value)) ${counter}.baseReads++;
+       if (${counter}.qualifiers.has(value)) ${counter}.qualifierVisits++;
+       const item = ownData(value, index);`);
+    filter = replaceOnce(filter, "for (const base of ownStringList(definition, 'bases')) {",
+      `for (const base of ownStringList(definition, 'bases')) {
+        if (${counter}.types.has(definition)) ${counter}.baseVisits++;`);
+    filter = replaceOnce(filter, 'ancestors.delete(value);', `
+      if (${counter}.bases.has(value)) ${counter}.bases.add(copy);
+      if (${counter}.types.has(value)) ${counter}.types.add(copy);
+      if (${counter}.qualifiers.has(value)) ${counter}.qualifiers.add(copy);
+      ancestors.delete(value);`);
+    filter = replaceOnce(filter, 'const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;',
+      'const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;');
+    filter = replaceOnce(filter, 'if (!declaredQualifiers.has(qualifier.property) || !qualifierDefinition)',
+      `if ((${counter}.qualifierVisits++, !declaredQualifiers.has(qualifier.property)) || !qualifierDefinition)`);
+    filter = replaceOnce(filter, 'if (value === null || typeof value !== 'object') return value;',
+      `${counter}.snapshotVisits++;
+  if (value === null || typeof value !== 'object') return value;`);
+    filter = replaceOnce(filter, 'const allowedFacet = (property: string) => selectedFacets.some((facets) => facets.has(property));',
+      `const allowedFacet = (property: string) => selectedFacets.some((facets) => { ${counter}.facetProbes++; return facets.has(property); });`);
     copy('filter', filterPath, filter, join(directory, 'filter.ts'));
     let definitions = imports(read(definitionsPath), dirname(definitionsPath));
     definitions = definitions.replace(
@@ -226,6 +250,22 @@ async function probe(): Promise<Evidence> {
       Bun.resolveSync('typebox/schema', dirname(definitionsPath)),
       join(directory, 'typebox/build/schema/index.mjs'),
     );
+    const constructionPath = join(root, 'packages/definitions/src/publication-construction.ts');
+    let construction = imports(read(constructionPath), dirname(constructionPath));
+    construction = construction.replace(Bun.resolveSync('typebox/value', dirname(constructionPath)), join(directory, 'typebox/build/value/index.mjs'));
+    construction = replaceOnce(construction, 'const hash = Hash(member);', `${counter}.duplicateVisits++;
+          const hash = Hash(member);`);
+    construction = replaceOnce(construction, 'seen.add(hash);', `${counter}.duplicateAppends++;
+          seen.add(hash);`);
+    copy('construction', constructionPath, construction, join(directory, 'construction.ts'));
+    definitions = definitions.replace(constructionPath, join(directory, 'construction.ts'));
+    const hashingPath = join(typeboxPath, 'build/system/hashing/hash.mjs');
+    let hashing = read(hashingPath);
+    hashing = replaceOnce(hashing, 'function FromValue(value) {', `function FromValue(value) { ${counter}.hashNodes++;`);
+    hashing = replaceOnce(hashing, 'function FNV1A64_OP(byte) {', `function FNV1A64_OP(byte) { ${counter}.hashBytes++;`);
+    hashing = replaceOnce(hashing, 'InstanceKeys(value).sort()', `InstanceKeys(value).sort((a,b) => { ${counter}.hashSortComparisons++; return a < b ? -1 : a > b ? 1 : 0; })`);
+    chmodSync(join(directory, 'typebox/build/system/hashing/hash.mjs'), 0o600);
+    copy('hashing', hashingPath, hashing, join(directory, 'typebox/build/system/hashing/hash.mjs'));
     copy('definitions', definitionsPath, definitions, join(directory, 'definitions.ts'));
     const measured = (await import(join(directory, 'definitions.ts'))) as typeof import('../../src/index.ts');
     const measuredFilter = (await import(
@@ -244,6 +284,7 @@ async function probe(): Promise<Evidence> {
         baseReads: 0,
         baseVisits: 0,
         qualifierVisits: 0,
+        snapshotVisits: 0, hashNodes: 0, hashBytes: 0, hashSortComparisons: 0, facetProbes: 0,
         bases: new WeakSet(),
         types: new WeakSet(),
         qualifiers: new WeakSet(),
@@ -257,17 +298,18 @@ async function probe(): Promise<Evidence> {
       global.__publicationConstruction = state;
       const selected = Object.entries(release.filters ?? {}).filter(([key]) => key.startsWith('construction'));
       function admissions(api: typeof measuredFilter) {
+        const owned = api.createFilterConstruction?.(release);
         return selected.map(([key, saved]) => {
           // Observe actual normalized admitted output as well as the complete typed refusal.
-          const errors = api.validateFilter(saved.filter, release, { saved: false });
+          const errors = owned ? owned.validateFilter(saved.filter, { saved: false }) : api.validateFilter(saved.filter, release, { saved: false });
           if (errors.length) return { key, errors };
-          return { key, errors, admitted: api.admitFilter(api.parseFilter(saved.filter), release, { saved: false }) };
+          return { key, errors, admitted: owned ? owned.admitFilter(api.parseFilter(saved.filter), { saved: false }) : api.admitFilter(api.parseFilter(saved.filter), release, { saved: false }) };
         });
       }
       const original =
         mode === 'release'
-          ? validateRelease(release)
-          : admissions({ admitFilter, parseFilter, validateFilter } as typeof measuredFilter);
+          ? originalDefinitions.validateRelease(release)
+          : admissions(originalFilter);
       const instrumented = mode === 'release' ? measured.validateRelease(release) : admissions(measuredFilter);
       const { bases: _bases, types: _types, qualifiers: _qualifiers, ...counts } = state;
       rows.push({
