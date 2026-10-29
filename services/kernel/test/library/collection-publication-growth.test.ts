@@ -9,7 +9,8 @@ import type { CollectionView } from '../../src/library/collection-reads.ts';
 import { applySubjectListing, syncSubjectListing } from '../../src/library/listing.ts';
 import { observeListingSource } from '../../src/library/listing-source-observer.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { anchorRoute, routeOf } from '../../src/route/route.ts';
+import { CREATE_SUBJECT } from '../../src/semantic/subject.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
@@ -19,7 +20,7 @@ import { testKernel, registerTestClient } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { capture, checkGrowth, costOf, openGrowthDatabase } from '../support/growth.ts';
 import { decodeSession, type SessionComponent } from '../../src/tokens/session.ts';
-import { testTokens } from '../support/test-kernel.ts';
+import { testTokens, testRouteKey } from '../support/test-kernel.ts';
 
 const db = await openGrowthDatabase();
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
@@ -30,14 +31,14 @@ const publicationPositions = new Map<string, SessionComponent>();
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let worker: Awaited<ReturnType<typeof composeWork>>;
 
-async function call(method: string, path: string, body?: unknown) {
+async function call(method: string, path: string, body?: unknown, key = randomUUID()) {
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
         authorization: `Bearer ${bearer}`,
         'content-type': 'application/json',
-        'idempotency-key': JSON.stringify(randomUUID()),
+        'idempotency-key': JSON.stringify(key),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
@@ -59,9 +60,17 @@ async function call(method: string, path: string, body?: unknown) {
   }
   return value;
 }
-async function subject() {
-  return (await call('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Native publication subject' } }))
-    .subject.id as string;
+async function subject(partition?: number) {
+  let key = randomUUID();
+  // Select native request routing, never insert or relocate a domain fact in a fixture.
+  while (
+    partition !== undefined &&
+    anchorRoute(testRouteKey(), `${ownerId}\n${CREATE_SUBJECT}\n${key}`) >>> 4 !== partition
+  )
+    key = randomUUID();
+  return (
+    await call('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Native publication subject' } }, key)
+  ).subject.id as string;
 }
 async function collection(visibility = 'public') {
   return (await call('POST', '/v1/collections', { title: 'Native publication Collection', visibility }))
@@ -284,6 +293,8 @@ test('a collapsed public-private-public cycle advances ordering without publishi
 for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] as const) {
   test(`native visibility publication rows, blocks and statements ignore unrelated ${axis}`, async () => {
     const unrelatedSubject = await subject();
+    const fixedPartition = routeOf(unrelatedSubject)! >> 4;
+    const populatedPartitions = new Set<number>();
     const history = await collection('private');
     const targets: { collection: CollectionView; subjects: string[] }[] = [];
     // Every measured write/effect uses fresh real source truth, with a fixed four-subject page.
@@ -316,13 +327,18 @@ for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] a
             const m = await add(history.id, unrelatedSubject);
             await call('DELETE', `/v1/collections/${history.id}/members/${m}`);
           } else {
-            const s = await subject();
+            const partition = axis === 'partitions' ? (fixedPartition + i + 1) % 4096 : fixedPartition;
+            const s = await subject(partition);
+            expect(routeOf(s)! >> 4).toBe(partition);
+            populatedPartitions.add(partition);
             if (axis === 'partitions') {
               const c = await collection('private');
               await add(c.id, s);
             }
           }
         }
+        if (axis === 'subjects') expect(populatedPartitions.size).toBe(1);
+        if (axis === 'partitions') expect(populatedPartitions.size).toBe(scale * 8);
       },
       operation: execute,
       warmup: execute,
