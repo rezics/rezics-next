@@ -130,6 +130,11 @@ const cases: [string, boolean, (fixture: Fixture) => Promise<void>][] = [
     async ({ grant }) => grant('00000000-0000-0000-0000-000000000000', '', 'active_accounts'),
   ],
   ['identity resource role', true, async ({ grant, f }) => grant(f.actorId, '', 'identity', true)],
+  [
+    'active accounts resource role',
+    true,
+    async ({ grant }) => grant('00000000-0000-0000-0000-000000000000', '', 'active_accounts', true),
+  ],
   ['organization owner role', true, async ({ grant, f }) => grant(f.organizationId, 'owner')],
   ['organization member role', false, async ({ grant, f }) => grant(f.organizationId, 'member')],
   [
@@ -217,6 +222,18 @@ const cases: [string, boolean, (fixture: Fixture) => Promise<void>][] = [
         [routeOf(id), id, f.actorId, newId(routeOf(id)!), f.transactionId],
       );
       await grant(id, 'member');
+    },
+  ],
+  [
+    'Realm owner role',
+    true,
+    async ({ f, grant }) => {
+      const id = await realm(f);
+      await pool.query(
+        "INSERT INTO community.realm_member(route,realm_id,account_id,role,valid,reservation_id,transaction_id) VALUES($1,$2,$3,'owner','(,)',$4,$5)",
+        [routeOf(id), id, f.actorId, newId(routeOf(id)!), f.transactionId],
+      );
+      await grant(id, 'owner');
     },
   ],
   ['Realm owner is not membership', false, async ({ f, grant }) => grant(await realm(f), 'owner')],
