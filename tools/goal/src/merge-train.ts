@@ -2714,7 +2714,7 @@ export class MergeTrain {
       resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'),
       ...FORMAT_FLAGS,
     ];
-    if (!resolveMechanicalConflicts(tree, files, formatCommand)) return false;
+    if (!resolveMechanicalConflicts(tree, files, formatCommand, 'insertions', 3)) return false;
     git(tree, 'add', '--', ...files);
     git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;
