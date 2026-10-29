@@ -446,9 +446,7 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     const catalogue = catalogStatementBound(result.capture);
     expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
     const plans = result.capture.plans.flatMap((plan) => nodes(plan));
-    const labelNodes = plans.filter(
-      (node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label',
-    );
+    const labelNodes = plans.filter((node) => node.Schema === 'library' && node['Relation Name'] === 'personal_label');
     expect(labelNodes.length).toBeGreaterThan(0);
     for (const node of labelNodes) {
       expect(node['Node Type']).not.toBe('Seq Scan');
@@ -517,7 +515,10 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     const relation = sample.cost.relations['library.personal_label'];
     expect(relation).toBeDefined();
     expect(relation!.sequentialScans).toBe(0);
-    const boundedRows = operations.reduce((total, operation) => total + (operation.name.startsWith('list') ? 16 : 2), 0);
+    const boundedRows = operations.reduce(
+      (total, operation) => total + (operation.name.startsWith('list') ? 16 : 2),
+      0,
+    );
     expect(relation!.rows).toBeLessThanOrEqual(boundedRows);
     expect(sample.cost.backgroundStatements ?? 0).toBe(0);
   }
