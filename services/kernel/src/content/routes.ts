@@ -25,6 +25,7 @@ import { readPartition } from '../partition/partition.ts';
 import readSubjectVisibility from '../semantic/read-visibility.sql';
 import readSubjectRedirect from '../semantic/read-redirect.sql';
 import readContainingThread from './read-containing-post-thread.sql';
+import readLiveReview from './live-review-read.sql';
 import { createBoard, BoardCreationConflictError, BoardCreationInputError } from './board-create.ts';
 import { applyBoardCandidate } from './board-projection.ts';
 import { documentRoutes } from './document-routes.ts';
@@ -487,7 +488,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: {
           201: withHeaders(threadResponse, { ...sessionHeader, location: t.String() }),
           ...writeFailures,
-          409: problemSchema('conflict', 'media_unavailable'),
+          409: problemSchema('conflict', 'media_unavailable', {
+            existingThreadId: t.Optional(t.String({ format: 'uuid' })),
+          }),
         },
         detail: {
           operationId: 'thread.create',
@@ -503,7 +506,23 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         const context = requestContext(request, job.deadline);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
-            const result = await createThread(dependencies, actor, body, context);
+            let result: Awaited<ReturnType<typeof createThread>>;
+            try {
+              result = await createThread(dependencies, actor, body, context);
+            } catch (error) {
+              if (!(error instanceof ReviewConflictError)) throw error;
+              const row = await withConnection(dependencies.pool, (client) =>
+                readLiveReview.run(client, {
+                  route: routeOf(actor.accountId)!,
+                  board_id: body.boardId,
+                  author_id: actor.accountId,
+                  subject_id: body.subjectIds[0]!,
+                }),
+              );
+              throw new ProblemError('conflict', {
+                ...(row ? { extensions: { existingThreadId: row.thread_id } } : {}),
+              });
+            }
             const readContext = { actor, deadline: job.deadline };
             const thread = await readThread(dependencies, result.value.threadId, readContext);
             if (!thread.value) throw new ProblemError('not_found');
