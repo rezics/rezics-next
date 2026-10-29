@@ -9,7 +9,7 @@ const failsWith = (file: string) => ['bun', '-e', `if (require('fs').existsSync(
 const requires = (file: string) => ['bun', '-e', `if (!require('fs').existsSync(${JSON.stringify(file)})) { console.error('AssertionError: missing feature'); process.exit(1); }`];
 const ancestor = (cwd: string, older: string, newer: string) => expect(git(cwd, 'merge-base', older, newer)).toBe(older);
 
-test('a passing worker branch integrates into dev without running the gate and main does not move', async () => {
+test("a passing worker branch runs its acceptance before integrating into dev and main does not move", async () => {
   const h = integrationHarness();
   try {
     h.ensureDev(); const main = h.head('main');
@@ -17,7 +17,7 @@ test('a passing worker branch integrates into dev without running the gate and m
     await h.start(task); const worker = h.head(task.branch);
     let gates = 0;
     await h.train(async () => { gates++; return { passed: true, output: '', timedOut: false }; });
-    expect(gates).toBe(0);
+    expect(gates).toBe(1);
     expect(h.head('main')).toBe(main); expect(h.head()).toBe(worker);
     expect(h.store.task(task.id).state).toBe('integrated');
     expect(h.head(task.branch)).toBe(worker);

@@ -332,9 +332,14 @@ watchdog does not probe when no hosts file is present and does not include the c
 ## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
-`bun run check` from an isolated checkout. Task acceptance commands are saved with the task for promotion. Integration
-rebases onto the integration branch, checks declared paths, formats changes and fast-forwards that branch; it does not
-run task acceptance gates or move `main`. The `integrationChecks` setting lists `{ paths, command }` checks. After
+`bun run check` from an isolated checkout. Task acceptance commands are saved with the task and run on the merged
+candidate before either dev integration or promotion to `main`, using configured remote check hosts like other train
+checks. A failed dev acceptance refuses that landing and records the command and first failure. The train runs the same
+command on the dev base and marks an identical fingerprint as pre-existing. Batched landings run each entry's
+acceptance against its cumulative candidate; a failed batch acceptance falls back to single landings so the failing
+task is identified and other entries can proceed. Integration rebases onto
+the integration branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+The `integrationChecks` setting lists `{ paths, command }` checks. After
 formatting and scope validation, each check runs in order only when a changed file matches its paths. By default,
 changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` install dependencies and construct the
 kernel. Set it to `[]` to disable the check. Other repositories can override the local `gate` command. Gates and

@@ -1071,8 +1071,39 @@ export class MergeTrain {
         const integrationChecks = configuredChecks.filter((check) =>
           changed.some((path) => matchesPath(path, check.paths)),
         );
-        let failedBatch: { output: string; timedOut: boolean; failedCommand?: readonly string[] } | undefined;
+        let failedBatch:
+          | { kind: 'acceptance' | 'integration'; output: string; timedOut: boolean; failedCommand?: readonly string[] }
+          | undefined;
         let batchBaselineOutput = '';
+        // A batch is a sequence of cumulative candidates. Run each member's own acceptance command against the
+        // candidate at the point where that member would land; if one fails, single-land the batch so the failure is
+        // attributed to that task and the remaining members can still proceed.
+        for (const member of prepared) {
+          const command = member.entry.request.gate;
+          git(trainTree, 'reset', '--hard', member.candidate);
+          appendFileSync(
+            member.result.logPath,
+            `\nAcceptance on ${member.candidate}, dev ${base}: ${command.join(' ')}\n`,
+          );
+          const accepted = await (o.runGate ?? gateRunner())(command, trainTree, member.result.logPath);
+          for (const entry of pending) o.fence.assertCurrent(entry.request);
+          if (target() !== base) {
+            retry = true;
+            break;
+          }
+          if (!accepted.passed || git(trainTree, 'rev-parse', 'HEAD') !== member.candidate ||
+              spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0) {
+            failedBatch = {
+              kind: 'acceptance',
+              output: accepted.output || 'Acceptance command changed the candidate commit',
+              timedOut: accepted.timedOut,
+              failedCommand: command,
+            };
+            break;
+          }
+        }
+        if (retry) continue;
+        git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
         if (integrationChecks.length) {
           const commands = integrationChecks.map((check) =>
             check.command.join(' ').includes('scripts/typecheck.ts')
@@ -1144,7 +1175,7 @@ export class MergeTrain {
             const addedErrors = baseline.passed
               ? ['candidate failed while dev passed']
               : newErrorLines(checked.output, baseline.output);
-            if (addedErrors.length) failedBatch = checked;
+            if (addedErrors.length) failedBatch ??= { ...checked, kind: 'integration' };
             else
               for (const member of prepared)
                 appendFileSync(
@@ -1155,7 +1186,9 @@ export class MergeTrain {
         }
 
         if (failedBatch) {
-          const note = `Batch integration check failed; falling back to single landings.\n${failedBatch.output}\n`;
+          const note =
+            `Batch ${failedBatch.kind} failed${failedBatch.failedCommand ? ` (${failedBatch.failedCommand.join(' ')})` : ''}; ` +
+            `falling back to single landings.\n${failedBatch.output}\n`;
           let savedBaseline = false;
           for (const entry of pending) {
             if (deferred.has(entry.id)) continue;
@@ -1845,18 +1878,21 @@ export class MergeTrain {
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
             throw new Error('Acceptance changed the candidate commit');
         }
-        if (!integratesIntoDev && !controlPlane) {
+        if (!controlPlane) {
           stage = 'gate';
-          appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
+          appendFileSync(
+            logPath,
+            `\nAcceptance on ${candidate}, ${integratesIntoDev ? 'dev' : 'main'} ${base}: ${request.gate.join(' ')}\n`,
+          );
           const gated = await runGate(request.gate, trainTree, logPath);
-          // A gate on an old main is never authoritative, including a red gate.
+          // A gate on an old target is never authoritative, including a red gate.
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
           if (!gated.passed) {
             result.timedOut = gated.timedOut;
             result.firstFailure = firstFailure(gated.output);
             result.failedCommand = [...request.gate];
-            const key = JSON.stringify([o.gateIdentity ?? '', request.gate]);
+            const key = `acceptance:${JSON.stringify([o.gateIdentity ?? '', request.gate])}`;
             let baseline = o.queue.baseline(base, key);
             if (!baseline) {
               git(trainTree, 'reset', '--hard', base);
@@ -1868,11 +1904,13 @@ export class MergeTrain {
             if (target() !== base) continue;
             result.failsOnMain =
               !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
+            if (result.failsOnMain)
+              appendFileSync(logPath, `${integratesIntoDev ? 'Acceptance failure is pre-existing on dev' : 'Acceptance failure is pre-existing on main'}\n`);
             result.stage = stage;
             return finish();
           }
-          // Gates may write files but may not replace the commit that was validated.
-          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Gate changed the candidate commit');
+          // Acceptance commands may inspect but not replace or modify the candidate that was validated.
+          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Acceptance command changed the candidate commit');
           git(trainTree, 'diff', '--quiet', 'HEAD', '--');
         }
         stage = 'merge';
