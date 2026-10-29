@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
-import type { KernelClient } from '@rezics/client';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import { createKernelClient, type KernelClient } from '@rezics/client';
+import { createFakeKernelFetch, createRecordedKernelFetch } from '../src/kernel/fake.ts';
+import reviewThreads from '../src/kernel/recorded/subject-review-threads.json';
 import fixtures from '../src/kernel/fixtures.json';
 import { startThreadRequest } from '../src/threads/post-writes';
 
@@ -96,4 +97,74 @@ test('the fake review create returns a conflict with an optional existingThreadI
   expect(present).toMatchObject({ code: 'review_exists', existingThreadId: id(9) });
   expect(absent).toMatchObject({ code: 'review_exists' });
   expect(absent).not.toHaveProperty('existingThreadId');
+});
+
+// Exercise the generated client and the fake route, rather than returning an Eden-shaped stub.
+function observedClient(fake: typeof fetch, omitExistingThreadId = false) {
+  const calls: string[] = [];
+  const responses: Response[] = [];
+  const kernel = createKernelClient('https://kernel.test', {
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const call = new Request(input, init);
+      if (omitExistingThreadId) call.headers.set('x-fake-omit-existing-thread-id', 'true');
+      calls.push(`${call.method} ${new URL(call.url).pathname}`);
+      const response = await fake(call);
+      responses.push(response.clone());
+      return response;
+    }) as typeof fetch,
+  });
+  return { kernel, calls, responses };
+}
+
+async function expectKernelConflict(response: Response | undefined, existingThreadId?: string) {
+  expect(response?.status).toBe(409);
+  expect(response?.headers.get('content-type')).toBe('application/problem+json');
+  expect(await response!.json()).toEqual({
+    type: 'https://rezics.com/problems/conflict',
+    title: 'Conflict',
+    status: 409,
+    code: 'conflict',
+    retryable: false,
+    effect_status: 'not_applied',
+    request_id: 'fake-review-conflict',
+    ...(existingThreadId ? { existingThreadId } : {}),
+  });
+}
+
+test('a review-create 409 carrying existingThreadId offers the author that review with no further kernel request', async () => {
+  const { kernel, calls, responses } = observedClient(createFakeKernelFetch(fixtures as never));
+  const result = await startThreadRequest(input, request, {}, kernel, refusal);
+  expect(result).toEqual({ ok: false, reason: 'conflict', existingReviewId: id(9) });
+  expect(calls).toEqual(['POST /v1/threads']);
+  await expectKernelConflict(responses[0], id(9));
+});
+
+test('a review-create 409 without existingThreadId returns the conflict failure with no subject threads read', async () => {
+  const { kernel, calls, responses } = observedClient(createFakeKernelFetch(fixtures as never), true);
+  const result = await startThreadRequest(input, request, {}, kernel, refusal);
+  expect(result).toEqual({ ok: false, reason: 'conflict' });
+  expect(calls).toEqual(['POST /v1/threads']);
+  await expectKernelConflict(responses[0]);
+});
+
+test('submitting a review makes no GET /v1/subjects/:id/threads request with 1, 30 or 300 reviews on the subject', async () => {
+  for (const reviewCount of [1, 30, 300]) {
+    const threads = Array.from({ length: reviewCount }, (_, index) => ({
+      ...reviewThreads.threads[0]!,
+      id: index === reviewCount - 1 ? id(9) : id(100 + index),
+      authorId: index === reviewCount - 1 ? 'reader' : `other-reader-${index}`,
+      boardId: input.boardId,
+      subjectIds: [input.subjectId],
+    }));
+    const { kernel, calls } = observedClient(
+      createRecordedKernelFetch({ 'subject-review-threads': { ...reviewThreads, threads } }),
+    );
+    const result = await startThreadRequest(input, request, {}, kernel, refusal);
+    expect(result, `subject with ${reviewCount} reviews`).toEqual({
+      ok: false,
+      reason: 'conflict',
+      existingReviewId: id(9),
+    });
+    expect(calls, `subject with ${reviewCount} reviews`).toEqual(['POST /v1/threads']);
+  }
 });
