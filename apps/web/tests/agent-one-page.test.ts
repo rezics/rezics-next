@@ -261,7 +261,9 @@ test('the fake handle redirect follows in one hop with the original POST body an
       if (response.status !== 308) return response;
       const location = new URL(response.headers.get('location')!, request.url);
       requests.push(location.href);
-      return fake(new Request(location, request));
+      const followed = await fake(new Request(location, request));
+      expect(followed.status).toBe(200);
+      return followed;
     }) as typeof fetch,
   });
   expect(await loadSubjectPage(client, '0192f3a0-6c1e-7b2a-e001-000000000001', 'details', 'en')).toEqual({
