@@ -99,9 +99,17 @@ bullets and the eleven-participant point-ACK bound with its existing named nativ
 
 ## Verification and preserved bytes
 
-The acceptance and child amendments are committed before starting the focused existing native file and affected
-kernel typecheck. Their results are pending at this edit; no passing native replay, cleanup, integration or
-promotion is claimed. Only the four declared files change. No outside-path edits or external reference project
+The acceptance and child amendments were committed as `97f4ef88ee` before both prescribed check submissions:
+
+- `bun scripts/worker-check.ts --run -- bun run --cwd services/kernel check test/imports/erasure-participant.test.ts`
+- `bun scripts/worker-check.ts --run -- bun run --cwd services/kernel typecheck`
+
+Both submissions exited 1 immediately with the exact line `Invalid check id: --`. No check ID was allocated,
+no slot was queued, and neither native acceptance nor typecheck reached execution. Current worker-check parses
+`--run` as an internal runner requiring an existing UUID; its public command submission syntax is different
+(`scripts/worker-check.ts:180,774,783`). Changing the prescribed invocation or shared runner is outside this
+attempt's verification authorization. This is a tool-interface blocker, not an observed native product failure.
+There is no live check to poll or wait for. No passing native replay, cleanup, integration or promotion is claimed. Only the four declared files change. No outside-path edits or external reference project
 were needed. The complete patch is the committed diff; no live predecessor process is controlled by this attempt.
 
 The following admission and final SHA-256 values identify the actual files. All runtime/default-registration,
