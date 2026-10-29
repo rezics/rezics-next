@@ -107,12 +107,41 @@ function diagnosed(run: Run) {
 async function established(editor: Awaited<ReturnType<typeof openApiObserver>>, entity: Entity) {
   const view = await editor.read('wikidata', entity.id);
   expect(view.subject?.type).toBe('schema:Book');
-  for (const id of ['schema:name', 'schema:datePublished', 'schema:url', 'schema:author']) {
+  for (const id of ['schema:name', 'schema:datePublished', 'schema:url']) {
     const rows = view.proposals.filter((candidate) => candidate.statement?.property.id === id);
-    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length, id).toBeGreaterThan(0);
     expect(rows.every((candidate) => candidate.references.length > 0)).toBe(true);
   }
-  expect(JSON.stringify(view.proposals)).toContain('https://catalogue.example.org/books/example');
+  const authors: { statement: BatchStatement }[] = [];
+  for (const claim of entity.claims.P50!) {
+    const target = (claim.mainsnak.datavalue!.value as { id: string }).id;
+    const sameAs = `http://www.wikidata.org/entity/${target}`;
+    const response = await editor.http(
+      `/v1/subjects/${view.subject!.id}/candidates?${new URLSearchParams({
+        property: 'schema:author',
+        sameAs,
+        limit: '100',
+      })}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.body.next).toBeNull();
+    const rows = response.body.candidates as { statement: BatchStatement }[];
+    expect(rows.length, sameAs).toBeGreaterThan(0);
+    for (const candidate of rows) {
+      expect(candidate.statement.property.id).toBe('schema:author');
+      expect(candidate.statement.value).toEqual({ type: 'somevalue' });
+      expect(
+        candidate.statement.qualifiers?.some(
+          (part) =>
+            part.property.id === 'schema:sameAs' && part.value.type === 'value' && part.value.content === sameAs,
+        ),
+      ).toBe(true);
+      expect((candidate.statement.references?.length ?? 0) > 0).toBe(true);
+    }
+    authors.push(...rows);
+  }
+  expect(authors.length).toBeGreaterThan(0);
+  expect(JSON.stringify([...view.proposals, ...authors])).toContain('https://catalogue.example.org/books/example');
   return view;
 }
 
