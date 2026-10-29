@@ -118,8 +118,18 @@ test('a configured limit reports a younger attempt without subtracting check wai
     );
     const delivered: string[] = [];
     expect(runWatch(store, state, delivered)).toBe(0);
-    expect(watch(store, state, { stabilize: 'missing', integration: 'missing' }, state,
-      (summary) => delivered.push(summary), now, () => {}, () => 20 * 60_000)).toBe(1);
+    expect(
+      watch(
+        store,
+        state,
+        { stabilize: 'missing', integration: 'missing' },
+        state,
+        (summary) => delivered.push(summary),
+        now,
+        () => {},
+        () => 20 * 60_000,
+      ),
+    ).toBe(1);
     expect(delivered[0]).toContain('30m');
     expect(delivered[0]).toContain('20m spent waiting for check slots');
   } finally {
@@ -165,19 +175,39 @@ test('rollout and Claude commands expose shell commands and worker-check waits s
     const state = join(repo.path, 'state');
     mkdirSync(state);
     const logPath = join(worker.worktree, 'run.jsonl');
-    const store = runningStore(
-      { worktree: worker.worktree, base: git(repo.main, ['rev-parse', 'main']) },
-      { logPath },
-    );
+    const store = runningStore({ worktree: worker.worktree, base: git(repo.main, ['rev-parse', 'main']) }, { logPath });
     const commands = ['ps -ef', 'pgrep -af worker', 'bun scripts/worker-check.ts --wait check-id'];
-    writeFileSync(logPath, [
-      { type: 'response_item', payload: { type: 'function_call', call_id: 'ps', arguments: JSON.stringify({ cmd: commands[0] }) } },
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'pgrep', input: { command: commands[1] } }] } },
-      { type: 'response_item', payload: { type: 'function_call', call_id: 'wait', arguments: JSON.stringify({ cmd: commands[2] }) } },
-    ].map((event) => JSON.stringify(event)).join('\n'));
+    writeFileSync(
+      logPath,
+      [
+        {
+          type: 'response_item',
+          payload: { type: 'function_call', call_id: 'ps', arguments: JSON.stringify({ cmd: commands[0] }) },
+        },
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', id: 'pgrep', input: { command: commands[1] } }] },
+        },
+        {
+          type: 'response_item',
+          payload: { type: 'function_call', call_id: 'wait', arguments: JSON.stringify({ cmd: commands[2] }) },
+        },
+      ]
+        .map((event) => JSON.stringify(event))
+        .join('\n'),
+    );
     const delivered: string[] = [];
-    expect(watch(store, state, { stabilize: 'missing', integration: 'missing' }, state,
-      (summary) => delivered.push(summary), now, () => {})).toBe(1);
+    expect(
+      watch(
+        store,
+        state,
+        { stabilize: 'missing', integration: 'missing' },
+        state,
+        (summary) => delivered.push(summary),
+        now,
+        () => {},
+      ),
+    ).toBe(1);
     expect(delivered[0]).toContain(commands.join(' | '));
     expect(delivered[0]).not.toContain('"cmd"');
   } finally {
@@ -198,7 +228,10 @@ test('native Codex shell launchers report repeated process inspection without tr
     );
     const delivered: { summary: string; managerId?: string; kind?: string }[] = [];
     const record = (id: string, command: string) =>
-      appendFileSync(logPath, JSON.stringify({ type: 'item.completed', item: { id, type: 'command_execution', command } }) + '\n');
+      appendFileSync(
+        logPath,
+        JSON.stringify({ type: 'item.completed', item: { id, type: 'command_execution', command } }) + '\n',
+      );
     record('echo', `/usr/bin/zsh -lc 'echo "ps -ef"'`);
     record('printf', `/bin/bash -c "echo 'pgrep -af worker'"`);
     expect(runWatch(store, state, delivered)).toBe(0);
