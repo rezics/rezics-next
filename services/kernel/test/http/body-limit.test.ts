@@ -115,9 +115,7 @@ test('a raw route delivers a non-JSON body as bytes without request-path JSON va
       detail: {
         operationId: 'probe.raw_body',
         hide: true,
-        'x-action': 'probe:write',
         'x-body-mode': 'raw',
-        'x-exposure': 'public',
         security: [{ bearerAuth: [] }, {}],
       } as never,
     },
