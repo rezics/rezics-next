@@ -138,13 +138,14 @@ describe('worker systemd slice', () => {
     const result = worker.launch('task:one', 3, 'python3', ['-c', 'pass'], { env: fake.env }, () => false);
 
     expect(result.status).toBe(0);
-    expect(fake.read(fake.systemdRunCalls)).toEqual([
+    const calls = fake.read(fake.systemdRunCalls);
+    expect(calls).toEqual([
       '--user',
       '--scope',
       '--collect',
       '--quiet',
       `--slice=${WORKER_SLICE}`,
-      '--unit=rezics-worker-task:one-3.scope',
+      expect.stringMatching(/^--unit=rezics-worker-task:one-3-[a-z0-9]+\.scope$/),
       'python3',
       '-c',
       'pass',
@@ -284,8 +285,37 @@ describe('worker systemd slice', () => {
     );
 
     expect(result.status).toBe(0);
-    expect(fake.read(fake.systemdRunCalls)).toContain('--unit=rezics-worker-task-2.scope');
+    expect(fake.read(fake.systemdRunCalls).some((line) => /^--unit=rezics-worker-task-2-[a-z0-9]+\.scope$/.test(line))).toBe(true);
     expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('systemd-run exited with status 1');
+  });
+
+  test('a relaunch of the same attempt gets a new unit name, since systemd refuses one still loaded', () => {
+    const fake = fakeSystemd();
+    const worker = new WorkerSlice();
+    worker.launch('task', 4, 'true', [], { env: fake.env }, () => false);
+    worker.launch('task', 4, 'true', [], { env: fake.env }, () => false);
+
+    const units = fake.read(fake.systemdRunCalls).filter((line) => line.startsWith('--unit='));
+    expect(units).toHaveLength(2);
+    expect(units[0]).not.toBe(units[1]);
+  });
+
+  test('a failed scope with inherited stdio falls back instead of throwing', () => {
+    const fake = fakeSystemd({ systemdRun: 'exit 1' });
+    const worker = new WorkerSlice();
+    const reports: string[] = [];
+    const result = worker.launch(
+      'task',
+      5,
+      'true',
+      [],
+      { env: fake.env, stdio: 'inherit' },
+      () => false,
+      (line) => reports.push(line),
+    );
+
+    expect(result.status).toBe(0);
     expect(reports[0]).toContain('systemd-run exited with status 1');
   });
 });

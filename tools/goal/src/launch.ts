@@ -1,9 +1,20 @@
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
+import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { processIdentity, sameProcess, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
@@ -205,7 +216,9 @@ export function workerPrompt(
     task.workspace
       ? `Peers edit this tree at the same time. There are no path reservations or holds. Commit your own work often with git add <your paths> (never -A or .). Use path-limited commits (git commit --only -- <your paths>) so a peer's staged files stay theirs. Every commit must have the subject '${task.workspace.taskName}: <message>' and a 'Goal-Task: ${task.id}' trailer. Task name is the brief's file name without .md: ${task.workspace.taskName}. Never reset, checkout, stash, clean or rebase. A failure in files you did not touch is a peer's work in progress: rerun later or check only your own tests.`
       : '',
-    'Check slots are the scarce shared resource: start each check with `bun scripts/worker-check.ts --run -- <command...>` from the worktree root. It returns a check id immediately; keep working while checks run. When only waiting remains, finish this turn with `{"status":"waiting","checks":["<id>",...]}`. Never poll, use `--wait`, or return waiting a second time. The manager host will resume this same session with each check result, including exit status, failure summary and log path. An infrastructure line after the one automatic rerun is a `tool` blocker. Run a whole-workspace check (a workspace check with no files named, or a full web check) only when the contract names one; an extra check you choose names at most 12 test files, those closest to your change.',
+    existsSync(join(task.worktree, 'scripts/worker-check.ts'))
+      ? 'Check slots are the scarce shared resource: start each check with `bun scripts/worker-check.ts -- <command...>` from the worktree root. It returns a check id immediately; keep working while checks run. When only waiting remains, finish this turn with `{"status":"waiting","checks":["<id>",...]}`. Never poll, use `--wait`, or return waiting a second time. The manager host will resume this same session with each check result, including exit status, failure summary and log path. An infrastructure line after the one automatic rerun is a `tool` blocker. Run a whole-workspace check (a workspace check with no files named, or a full web check) only when the contract names one; an extra check you choose names at most 12 test files, those closest to your change.'
+      : 'Check slots are the scarce shared resource, but this base has no check runner (scripts/worker-check.ts): run each check directly from the worktree root and wait for it; never finish with status waiting.',
     'You have the authority to finish. Your declared paths are where the work is expected, not a fence: change any other file the acceptance or a defect blocking it needs, including a defect another Goal left in your base, keep such changes minimal, and list each file outside your paths with its reason in your summary. Your landing runs only your own acceptance, so run the tests that cover every file you change outside your paths before you finish (in services/kernel, `bun run --cwd services/kernel check` without file arguments runs the tests your changes affect); the Goal that owns such a file is told of your change. Files in a risk area your contract does not declare stay closed.',
     'Decide ambiguities yourself from the contract, the specs, the code and the tests, and record each decision in your summary. Report a blocker only when the acceptance tests contradict each other or the specs, when the work needs a product decision the contract does not make, or when a tool or access you need fails.',
     'When a tool or infrastructure failure blocks the work (SSH or rsync to a check host, network, out of disk or memory, file watchers, a service that will not start), retry it at most twice, then finish with a `tool` blocker whose detail starts with the exact error line; do not work around it by weakening the check.',
@@ -301,6 +314,7 @@ open(exit_path+'.tmp','w').write(json.dumps({'code':code,'signal':sig}))
 os.rename(exit_path+'.tmp',exit_path)
 `;
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number };
+export type CapacityRelease = () => void;
 const DEFAULT_CAPACITY: HostCapacity = { maxWorkers: 32, minAvailableMiB: 6144 };
 /** Whether one more worker may start: below the worker cap and above the memory floor. */
 export function hasCapacity(running: number, availableMiB: number, capacity: HostCapacity): boolean {
@@ -320,7 +334,7 @@ export function capacityAvailable(store: WorkerStore, stateDirectory: string): b
   } catch {
     /* Defaults. */
   }
-  const running = store.runningAttemptsCount();
+  const running = store.runningAttemptsCount() + admittedStarts(stateDirectory);
   return hasCapacity(running, availableMiB(), capacity);
 }
 /** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
@@ -338,10 +352,11 @@ export async function awaitHostCapacity(
   stateDirectory: string,
   first = false,
   taskId?: string,
-): Promise<void> {
+  targetAttempt?: number,
+): Promise<CapacityRelease> {
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
-  if (!existsSync(file)) return;
+  if (!existsSync(file)) return () => {};
   // Waiters hold tickets so the oldest starts first: polling alone let a start wait over an hour behind newer ones.
   const queue = join(stateDirectory, 'capacity-queue');
   // The ticket names its task, so the host can tell a waiting start from a lost one. Critical-path starts used to skip
@@ -350,30 +365,130 @@ export async function awaitHostCapacity(
   // its ticket half an hour earlier, so it goes ahead of recent waiters without starving older ones.
   const ticket = `${String(Date.now() - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
   mkdirSync(queue, { recursive: true });
-  writeFileSync(join(queue, ticket), '');
+  const owner = processIdentity();
+  if (!owner) throw new Error('Cannot identify capacity ticket owner');
+  writeFileSync(join(queue, ticket), JSON.stringify(owner));
   let reported = false;
   try {
     for (;;) {
-      if (!existsSync(file)) return;
-      let capacity = DEFAULT_CAPACITY;
+      let admissionLease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
-      } catch {
-        /* Defaults. */
+        admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'));
+      } catch (error) {
+        if (!(error instanceof LeaseHeldError)) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        continue;
       }
-      const running = store.runningAttemptsCount();
-      const ahead = waitersAhead(queue, ticket);
-      if (hasCapacity(running + ahead, availableMiB(), capacity)) return;
-      if (!reported)
-        console.error(
-          `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
-        );
-      reported = true;
+      try {
+        if (!existsSync(file)) return () => {};
+        let capacity = DEFAULT_CAPACITY;
+        try {
+          capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
+        } catch {
+          /* Defaults. */
+        }
+        const admitted = admittedStarts(stateDirectory);
+        const running = store.runningAttemptsCount();
+        const ahead = waitersAhead(queue, ticket);
+        if (hasCapacity(running + admitted + ahead, availableMiB(), capacity)) {
+          const reservation = join(queue, `${ticket}.admitted`);
+          renameSync(join(queue, ticket), reservation);
+          return releaseWhenStarted(store, reservation, taskId, targetAttempt);
+        }
+        if (!reported)
+          console.error(
+            `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
+          );
+        reported = true;
+      } finally {
+        admissionLease.release();
+      }
       await new Promise((resolve) => setTimeout(resolve, 15_000));
     }
   } finally {
     rmSync(join(queue, ticket), { force: true });
   }
+}
+function admittedStarts(stateDirectory: string): number {
+  const queue = join(stateDirectory, 'capacity-queue');
+  try {
+    return readdirSync(queue).filter((name) => name.endsWith('.admitted') && liveTicket(queue, name)).length;
+  } catch {
+    return 0;
+  }
+}
+function liveTicket(queue: string, name: string): boolean {
+  const [, rawPid] = name.replace(/\.admitted$/, '').split('-');
+  const pid = Number(rawPid);
+  const identity = processIdentity(pid);
+  if (!identity) {
+    rmSync(join(queue, name), { force: true });
+    return false;
+  }
+  let contents: string;
+  try {
+    contents = readFileSync(join(queue, name), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      rmSync(join(queue, name), { force: true });
+      return false;
+    }
+    return sameProcess(identity);
+  }
+  try {
+    const expected = JSON.parse(contents) as { pid?: unknown; start?: unknown; boot?: unknown; group?: unknown };
+    if (expected.pid === pid && typeof expected.start === 'string' && typeof expected.boot === 'string') {
+      if (
+        identity.start !== expected.start ||
+        identity.boot !== expected.boot ||
+        (typeof expected.group === 'number' && identity.group !== expected.group)
+      ) {
+        rmSync(join(queue, name), { force: true });
+        return false;
+      }
+    }
+  } catch {
+    // Older queue tickets have no identity payload; keep their PID-based liveness behavior.
+  }
+  if (sameProcess(identity)) return true;
+  rmSync(join(queue, name), { force: true });
+  return false;
+}
+function releaseWhenStarted(
+  store: WorkerStore,
+  reservation: string,
+  taskId?: string,
+  targetAttempt?: number,
+): CapacityRelease {
+  const [, rawPid] = reservation.split('-');
+  const identity = processIdentity(Number(rawPid));
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    if (timer) clearInterval(timer);
+    rmSync(reservation, { force: true });
+  };
+  timer = setInterval(() => {
+    if (!identity || !sameProcess(identity)) {
+      release();
+      return;
+    }
+    if (!taskId) return;
+    try {
+      const attempts = store.attempts(taskId);
+      const current =
+        targetAttempt === undefined ? attempts.at(-1) : attempts.find((attempt) => attempt.attempt === targetAttempt);
+      if (current && current.state !== 'pending' && current.state !== 'waiting') {
+        release();
+      }
+    } catch {
+      // Callers release explicitly when preparation fails; transient store errors must not admit another start early.
+    }
+  }, 250);
+  timer.unref();
+  return release;
 }
 /** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
 export function capacityWaiters(stateDirectory: string): Set<string> {
@@ -386,9 +501,8 @@ export function capacityWaiters(stateDirectory: string): Set<string> {
   }
   const live = new Set<string>();
   for (const name of names) {
-    const [, pid, ...rest] = name.split('-');
-    const identity = processIdentity(Number(pid));
-    if (identity && sameProcess(identity)) live.add(rest.join('-'));
+    const [, , ...rest] = name.replace(/\.admitted$/, '').split('-');
+    if (liveTicket(queue, name)) live.add(rest.join('-'));
   }
   return live;
 }
@@ -401,16 +515,9 @@ export function waitersAhead(queue: string, ticket: string): number {
     return 0;
   }
   return names.filter((name) => {
-    if (name >= ticket) return false;
-    const pid = Number(name.split('-')[1]);
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return true;
-      rmSync(join(queue, name), { force: true });
-      return false;
-    }
+    const baseName = name.replace(/\.admitted$/, '');
+    if (baseName >= ticket || name.endsWith('.admitted')) return false;
+    return liveTicket(queue, name);
   }).length;
 }
 export async function launch(

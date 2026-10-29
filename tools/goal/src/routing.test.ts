@@ -27,7 +27,8 @@ test('routing uses observable features and task sequence; retry sequence does no
   expect(classifyTask({ ...brief(), citesSources: true })).toBe('claim');
   expect(classifyTask({ ...brief(), criticalPath: true, inseparable: true, waiting: ['dependent'] })).toBe('critical-path');
   for (const kind of ['interface', 'bulk-text', 'specification', 'research', 'mechanical'] as const) expect(classifyTask({ ...brief(), kind })).toBe(kind);
-  expect(() => classifyTask({ ...brief(), estimate: { lines: 401, files: 8 } })).toThrow('manager');
+  expect(() => classifyTask({ ...brief(), estimate: { lines: 1501, files: 8 } })).toThrow('manager');
+  expect(classifyTask({ ...brief(), estimate: { lines: 1500, files: 24 } })).toBe('implementation');
   expect(() => classifyTask({ ...brief(), acceptance: { ...brief().acceptance, failing: false } })).toThrow('manager');
 });
 

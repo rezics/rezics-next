@@ -251,8 +251,11 @@ reported as unknown rather than inferred.
 ### Host-capacity admission
 
 Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count running
-attempts through the `worker_attempts_state` expression index. Each poll issues one `COUNT(*)` query and does not
-decode attempt bodies. The existing 15-second polling interval and ticket ordering are unchanged.
+attempts through the `worker_attempts_state` expression index. An admitted start keeps its queue ticket in an admitted
+state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is recorded
+running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting check-wake
+attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path half-hour
+head start are unchanged.
 
 #### Cost: running-attempt count
 
@@ -329,7 +332,7 @@ Implement the behavior described by the failing acceptance test.
 Use the actual declared files and machine acceptance tests for the task. `manager` defaults to `goal`. Additional
 observable features are `inseparable`, `citesSources` and `hostileInput`. Kinds are `implementation`, `interface`,
 `bulk-text`, `claim`, `specification`, `research` and `mechanical`. A specified implementation must declare failing
-acceptance tests and fit within 400 lines and eight files. Mechanical work is refused by model dispatch. Risk paths,
+acceptance tests and fit within 1,500 lines and 24 files: one complete user-visible slice, never padded. Mechanical work is refused by model dispatch. Risk paths,
 source citations and hostile input take precedence over cheaper classes. Critical-path classification additionally
 requires waiting tasks and `inseparable`.
 
@@ -410,6 +413,9 @@ command on the dev base and marks an identical fingerprint as pre-existing. Batc
 acceptance against its cumulative candidate; a failed batch acceptance falls back to single landings so the failing
 task is identified and other entries can proceed. Integration rebases onto
 the integration branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
+(`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
+so `main` receives finished work while other In rows are still open.
 The `integrationChecks` setting lists `{ paths, command }` checks. After
 formatting and scope validation, each check runs in order only when a changed file matches its paths. By default,
 changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` install dependencies and construct the

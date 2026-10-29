@@ -331,6 +331,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   // Promotion runs the full root gate, which outlasts the integration gate's limit.
   const promotionGate: GateRunner =
     options.runGate ?? gateRunner(Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS));
+  // The dev verifier gates promotion, so its checks are admitted with landing checks, before workers' checks.
+  const verifierGate: GateRunner =
+    options.runGate ??
+    gateRunner(
+      Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS),
+      undefined,
+      LANDING_CHECK_ENVIRONMENT,
+    );
   let train!: MergeTrain;
   const pump = () => train.pump();
   // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
@@ -512,7 +520,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       );
     },
     promote: () => promoteNow(),
-    verify: () => verifyDev({ settings, store, inbox, runGate: promotionGate }),
+    verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
     evaluateFlow() {
       const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
       const flow = flowReport(readFlow(db, new Date(Date.now() - 30 * 86400_000).toISOString()), store.tasks());
