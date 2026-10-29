@@ -109,9 +109,15 @@ for (const person of ['other people', 'same person history'] as const) {
               );
               await db.admin.query(
                 `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-                 SELECT $1,'account',CASE WHEN $4 THEN $2 ELSE id END,command_kind,id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
-                 FROM unnest($3::uuid[]) id CROSS JOIN unnest(ARRAY['durable-test.create','durable-test.step']::text[]) AS commands(command_kind)`,
+                 SELECT $1,'account',CASE WHEN $4 THEN $2 ELSE id END,'durable-test.create',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+                 FROM unnest($3::uuid[]) id`,
                 [partitionOf(f.operation.route), f.id, ids, person === 'same person history'],
+              );
+              await db.admin.query(
+                `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+                 SELECT $1,'account',CASE WHEN $4 THEN $2 ELSE id END,'durable-test.step',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+                 FROM unnest($3::uuid[]) id`,
+                [partitionOf(f.target.route), f.id, ids, person === 'same person history'],
               );
               const targetIds = exerciseTargets;
               await db.admin.query(
