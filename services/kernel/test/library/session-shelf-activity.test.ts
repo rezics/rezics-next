@@ -200,8 +200,8 @@ test('profiled session head activity point work remains constant across unrelate
       const subjects = ids.map(() => newId(0x7b20));
       await database.admin.query(
         `INSERT INTO library.progress_session
-        (route, session_id, account_id, subject_id, mode, unit, state, revision, started_at, transaction_id, last_changed_at)
-        SELECT $1, id, $2, subject, 'scalar_amount', 'minute', 'abandoned', 2, $5, id, $5
+        (route, session_id, account_id, subject_id, mode, unit, completed_unit_count, state, revision, started_at, transaction_id, last_changed_at)
+        SELECT $1, id, $2, subject, 'scalar_amount', 'minute', 0, 'abandoned', 2, $5, id, $5
         FROM unnest($3::uuid[], $4::uuid[]) AS background(id, subject)`,
         [route(), owner.actor.accountId, ids, subjects, new Date(time)],
       );
