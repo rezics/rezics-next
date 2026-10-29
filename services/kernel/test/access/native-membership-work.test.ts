@@ -348,7 +348,7 @@ test('invalid configuration registers no operations and a later valid registrati
       await expect(
         createAccountsWorkModule().register({ ...context, env: { ...env, [variable]: value } }),
       ).rejects.toThrow(variable);
-      expect(operations).toHaveSize(0);
+      expect(operations.size).toBe(0);
     }
 
     await createAccountsWorkModule().register(context);
