@@ -13,7 +13,12 @@ JOIN semantic.subject AS s
  AND s.route >= input.partition_no * 16
  AND s.route < (input.partition_no + 1) * 16
  AND s.visibility = 'visible'
-LEFT JOIN semantic.account_agent_subject AS agent_subject
-  ON agent_subject.route = requested.route AND agent_subject.subject_id = requested.id
- AND agent_subject.route >= input.partition_no * 16
- AND agent_subject.route < (input.partition_no + 1) * 16;
+LEFT JOIN LATERAL (
+  SELECT agent.account_id, agent.verified
+  FROM semantic.account_agent_subject AS agent
+  WHERE agent.route = requested.route AND agent.subject_id = requested.id
+    AND agent.route >= input.partition_no * 16
+    AND agent.route < (input.partition_no + 1) * 16
+  -- Keep each ownership read correlated to its requested key, including absent links.
+  OFFSET 0
+) AS agent_subject ON true;

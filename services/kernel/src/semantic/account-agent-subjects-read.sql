@@ -6,7 +6,13 @@ SELECT agent.account_id::text AS account, agent.account_route AS route, agent.ro
        agent.verified, agent.receipt_id
 FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS requested(route, subject_id)
 CROSS JOIN input
-JOIN semantic.account_agent_subject AS agent
-  ON agent.route = requested.route AND agent.subject_id = requested.subject_id
- AND agent.route >= input.partition_no * 16
- AND agent.route < (input.partition_no + 1) * 16;
+JOIN LATERAL (
+  SELECT link.account_id, link.account_route, link.route, link.subject_id,
+         link.agent_id, link.verified, link.receipt_id
+  FROM semantic.account_agent_subject AS link
+  WHERE link.route = requested.route AND link.subject_id = requested.subject_id
+    AND link.route >= input.partition_no * 16
+    AND link.route < (input.partition_no + 1) * 16
+  -- A batch probes its keys; it must not hash unrelated links in the partition.
+  OFFSET 0
+) AS agent ON true;
