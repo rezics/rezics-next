@@ -257,10 +257,25 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
       'COMMIT',
     ]);
     const documents = raw.plans as PlanDocument[];
-    const schedulePlans = documents.filter((entry) => entry.Plan['Relation Name'] === 'auth_consent_erasure');
-    expect(schedulePlans).toHaveLength(1);
-    // Owner DELETE plus its FK cascade plans; consent is not one of them.
-    expect(documents.filter((entry) => !schedulePlans.includes(entry))).toHaveLength(13);
+    // Owner DELETE, all native FK cascades (including both provisioning receipt
+    // references), and the delayed schedule INSERT; consent itself is untouched.
+    expect(documents.map((entry) => entry.Plan['Relation Name']).sort()).toEqual([
+      'account',
+      'auth_barrier_proof',
+      'auth_client',
+      'auth_consent_erasure',
+      'auth_key_assertion',
+      'auth_provisioning_receipt',
+      'auth_provisioning_receipt',
+      'auth_public_key',
+      'auth_recovery',
+      'auth_session_opening',
+      'oauthAccessToken',
+      'oauthRefreshToken',
+      'passkey',
+      'session',
+      'user',
+    ]);
     for (const [table, column, index] of [
       ['auth_recovery', 'account_id', 'auth_recovery_account_id_idx'],
       ['auth_session_opening', 'subject_account_id', 'auth_session_opening_subject_account_id_idx'],
