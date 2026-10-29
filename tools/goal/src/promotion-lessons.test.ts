@@ -28,7 +28,7 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
       gates++;
       return success;
     });
-    expect(gates).toBe(2); // the candidate root and task acceptance gates
+    expect(gates).toBe(3); // the candidate root, task acceptance and boundary gate
     expect(h.head('stabilize')).toBe(h.head('dev'));
   } finally {
     h.dispose();
