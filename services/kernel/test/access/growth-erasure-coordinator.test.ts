@@ -286,7 +286,7 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
     const partition = partitionOf(route);
     const workflowId = `erasure-growth-held:${accountId}`;
     const explainFrontier = async (query: typeof frontierWork | typeof statusFrontier = frontierWork) => {
-      const input: Record<string, unknown> = { at: at.toISOString() };
+      const input: Record<string, unknown> = { workflow_until: 1000 };
       const { rows } = await db.admin.query(
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query.sql}`,
         query.params.map((name) => input[name]),

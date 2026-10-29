@@ -91,7 +91,7 @@ export function registerEffects(
       const locatorRows = [...partitions.values()].flatMap((jobs) =>
         jobs
           .filter(({ effect }) => ERASURE_LOCATOR_EFFECTS.has(effect.name))
-          .map(({ envelope, eventSeq, event, effect }) => ({
+          .map(({ envelope, eventSeq, effect }) => ({
             workflow_id: effectWorkflowId(envelope, eventSeq, effect.name),
             effect: effect.name,
           })),

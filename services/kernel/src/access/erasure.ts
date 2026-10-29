@@ -151,7 +151,7 @@ export async function acknowledgeErasure(
       if (
         record.workflowUntil !== null &&
         (await pendingLocator.run(tx, {
-          at: record.at,
+          workflow_until: record.workflowUntil,
         })) === null
       )
         await complete.run(tx, {
@@ -213,7 +213,7 @@ export async function readErasureStatus(client: AccessClient, accountId: string)
     row.completedAt === null &&
     (row.workflowUntil === null ||
       (await statusFrontier.run(client, {
-        at: row.at,
+        workflow_until: row.workflowUntil,
       })) !== null);
   const outcomes = row.outcomes as Record<
     string,
@@ -337,7 +337,7 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
       if (
         workflowUntil !== null &&
         (await pendingLocator.run(tx, {
-          at: record.at,
+          workflow_until: workflowUntil,
         })) === null
       ) {
         const completed = await complete.run(tx, {

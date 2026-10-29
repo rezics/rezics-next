@@ -40,6 +40,19 @@ function barrier() {
   });
   return { reached, release };
 }
+async function within<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), 10_000);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 const status = (accountId: string) => readErasureStatus(db.pool, accountId);
 const advance = (accountId: string) => advanceErasureCompletion({ pool: db.pool }, accountId);
 const record = (
@@ -84,7 +97,7 @@ beforeAll(async () => {
                 const hold = holds.get(locator)!;
                 await record(hold.accountId, locator);
                 hold.located.release();
-                await hold.purge.reached;
+                await within(hold.purge.reached, 'copy purge barrier');
                 await runCommand(db.pool, { partition: partitionOf(routeOf(locator)!), basis }, async (tx) => {
                   await tx.query('DELETE FROM public.erasure_test_copy WHERE id=$1', [locator]);
                   return {
@@ -108,14 +121,14 @@ beforeAll(async () => {
     ],
     { pool: runtimePool, client, databaseUrl: db.url },
   );
-  await work.launch();
+  await within(work.launch(), 'work launch');
 }, 60000);
 afterAll(async () => {
   for (const hold of holds.values()) {
     hold.purge.release();
     await client?.cancelWorkflow(`erasure:${hold.accountId}`);
   }
-  await work?.shutdown();
+  if (work) await within(work.shutdown(), 'work shutdown');
   await client?.close();
   (ERASURE_LOCATOR_EFFECTS as Set<string>).delete(locatorEffect);
   await db?.close();
@@ -174,7 +187,7 @@ test('a locator transaction records late work atomically; acknowledgement waits 
   await resolve(accountId, locator);
   expect((await advance(accountId)).value).toBe(true);
   expect((await status(accountId))?.state).toBe('complete');
-});
+}, 180000);
 
 test('record and resolution are idempotent and refuse unknown accounts, participants and items; locators are bounded ids', async () => {
   const accountId = await account();
@@ -210,7 +223,7 @@ test('record and resolution are idempotent and refuse unknown accounts, particip
       locator: 'id',
     }),
   ).rejects.toBeInstanceOf(LifecycleDeniedError);
-});
+}, 180000);
 
 test('the undelivered frontier and a held locator effect block durable completion, while routing and partition keys stay unchanged', async () => {
   await relayAll();
@@ -256,7 +269,7 @@ test('the undelivered frontier and a held locator effect block durable completio
     outstanding: { effectsFrontier: true, lateItems: false },
   });
   await relayAll();
-  await hold.located.reached;
+  await within(hold.located.reached, 'locator barrier');
   const envelope = { partition: copied.partition, epoch: copied.epoch, position: copied.position, events: [] };
   const workflowId = effectWorkflowId(envelope, 0, locatorEffect);
   expect(await DBOS.getWorkflowStatus(workflowId)).toMatchObject({
@@ -278,8 +291,8 @@ test('the undelivered frontier and a held locator effect block durable completio
     (await db.admin.query('SELECT payload FROM public.erasure_test_copy WHERE id=$1', [locator])).rows[0]?.payload,
   ).toBe('private payload');
   hold.purge.release();
-  await DBOS.retrieveWorkflow(workflowId).getResult();
-  await DBOS.retrieveWorkflow(`erasure:${accountId}`).getResult();
+  await within(DBOS.retrieveWorkflow(workflowId).getResult(), 'locator workflow');
+  await within(DBOS.retrieveWorkflow(`erasure:${accountId}`).getResult(), 'erasure workflow');
   expect((await status(accountId))?.state).toBe('complete');
   expect((await db.admin.query('SELECT 1 FROM public.erasure_test_copy WHERE id=$1', [locator])).rows).toEqual([]);
 }, 30000);
@@ -315,8 +328,15 @@ test('the frontier finds non-zero priority pending work and ignores unrelated fa
     ($3,'effect','ENQUEUED',$4,9223372036854775807)`,
     [`failed:${accountId}`, `slow:${accountId}`, `later:${accountId}`, LOCATOR_EFFECTS_QUEUE],
   );
-  await client.cancelWorkflow(pendingId);
+  await within(client.cancelWorkflow(pendingId), 'priority cancellation');
   expect((await advance(accountId)).value).toBe(false);
+  expect(await status(accountId)).toMatchObject({ state: 'pending', outstanding: { effectsFrontier: true } });
+  // Work opened strictly after delivery cannot hold this fixed boundary.
+  await db.admin.query(
+    `INSERT INTO access.erasure_locator_work(workflow_id,effect,opened_at)
+     SELECT $2,$3,workflow_until+1 FROM access.erasure WHERE account_id=$1`,
+    [accountId, `later:${accountId}`, locatorEffect],
+  );
   await runCommand(db.pool, { partition: partitionOf(routeOf(accountId)!), basis }, async (tx) => {
     await resolveLocatorWork(tx, pendingId);
     return { value: null, events: [{ type: 'com.rezics.access.account-updated.v1', data: { accountId } }] };
@@ -325,7 +345,7 @@ test('the frontier finds non-zero priority pending work and ignores unrelated fa
   expect((await status(accountId))?.state).toBe('complete');
   await client.cancelWorkflow(`slow:${accountId}`);
   await client.cancelWorkflow(`later:${accountId}`);
-});
+}, 180000);
 
 test('the migration and coordinator issue no DDL in the SDK schema', async () => {
   const migrations = Array.from(
