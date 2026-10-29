@@ -138,6 +138,16 @@ Current original and terminal disclosure still applies; a withheld original cann
 terminal or an arbitrary group representative. Native plans must support list and direct-target disclosure even
 when the only eligible original is the last in a large group, through maintained access paths and finite preparation.
 
+Direct mapping uses the existing Semantic Pool port, releasing source before ONE bounded indexed current-control
+pending observation and ONE coherent epoch probe, then revalidating source. An admission after source read is
+visible at that control snapshot; publication or a newer job cannot reuse stale mapped success. Unaffected points
+and fresh Search-absent self identities wait for neither list preparation nor publication, but source/control
+availability is required. Missing/unready/moved metadata yields unavailable. This is charged control I/O, not a
+source-only lookup or a new authorization path. Current original AND terminal privacy remains independent.
+Immutable full group inputs are retained atomically with pending intent; next generations are flat before later
+admission. The [native owner contract](../services/kernel/src/semantic/identity-epoch-contract.md#native-cutover-adoption)
+defines finite full-generation retention, minimized undo/custody, all-home cutover and final writer handoff.
+
 Stored personal originals are not rewritten. Canonical personal views select the owner's latest state while keeping
 conflict visible, union labels, and keep copies and sessions separate. New writes address current terminals.
 [Semantic](../services/kernel/src/semantic/README.md#identity) owns creation and durable identity publication;

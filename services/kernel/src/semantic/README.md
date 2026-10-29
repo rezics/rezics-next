@@ -303,6 +303,31 @@ with conflict visible, union labels, and keep copies/sessions separate. Collecti
 card; editing preserves every stored occurrence. New writes address current terminals. Corrections create new
 revisions and never roll back unrelated later edits. Stored references are not rewritten.
 
+### Native cutover and retained evidence
+
+The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) adopts complete immutable group
+input references plus a constant transform as the atomic pending index. Admission checks exact capped counts
+before effects; it does not insert an entire group in one step. Current generations are flat, with at most G+4
+full generations for G current groups, bounded reclamation before subsequent admission, and native minimized
+custody/undo records preserving live evidence. Current reads never traverse historical generations.
+
+`IdentityEpochStore.readMapping` takes the existing Pool. It releases source before ONE indexed fixed-control
+pending observation and ONE coherent epoch probe, then revalidates source against that basis. Unaffected and fresh
+points wait for neither list preparation nor publication; they still depend on current source/control availability.
+Missing/unready/moved ownership cannot become a self mapping. Source original/terminal privacy remains independent.
+
+Cutover covers all 4096 native homes and their owner epochs, including empty and unselected homes, every birth
+path, structural writer and queued continuation. Source exports become ACKable only after durable control custody;
+later/lower-key dirty heads survive exact-head ACK. The source barrier and deferred SAME-transaction final handoff
+guard preserve in-flight verification and reversal through retryable unavailability or native durable redrive.
+Accounts owns immutable decision/reversal intent production and delivery before the existing Store admission port;
+that delivery is currently MISSING. The exact record, native locators, terminal-erasure inventory and proposed
+existing-participant amendment are in the owning contract, not a new permission or deletion participant.
+
+Delivery order is Store, mapping and fixed Search/Library producers, coordinator, then real caller handoff. Primitive
+pending/cap proof cannot activate full publication. Native cutover cases remain red where producers are absent;
+co-owner review, Performance review of every Cost row and approved formatted-byte freeze precede runtime work.
+
 ### Library follow-count publication participant
 
 The durable epoch job includes the co-owned Library follow-count participant for affected originals and the new

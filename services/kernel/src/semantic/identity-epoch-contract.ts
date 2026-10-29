@@ -104,7 +104,11 @@ export type IdentityEpochStore = Readonly<{
   readEpoch(client: CommandTransaction): Promise<IdentityEpochState>;
   readJob(client: CommandTransaction, job: IdentityJobRef): Promise<IdentityJob | null>;
   findJob(client: CommandTransaction, receipt: IdentityReceipt): Promise<IdentityJob | null>;
-  readMapping(client: CommandTransaction, original: string): Promise<IdentityMapping>;
+  /** Releases source before ONE indexed fixed-control pending observation and ONE epoch probe.
+   * Revalidates the source against that coherent control basis; no list/publication wait.
+   * Missing/unready/moved source OR control is unavailable, never guessed self.
+   */
+  readMapping(pool: Pool, original: string): Promise<IdentityMapping>;
   /** Exact maintained group cardinality (including the terminal), cap 4096 BEFORE any effect.
    * Busy conflicts without a second pending epoch. Repeated identical receipt returns the same job.
    * Emits native durable wakeup in the same command as pending + immutable intent.
@@ -118,7 +122,10 @@ export type IdentityEpochStore = Readonly<{
   ): Promise<CommandResult<IdentityJobRef>>;
   /** Exact self mapping atomically with actual fresh revision-1 creation; never lazy or bootstrap. */
   initializeSubject(tx: CommandTransaction, original: string): Promise<void>;
-  /** Stable affected-original index, <=100 rows, terminal destinations included for split/repoint. */
+  /** Immutable complete input-generation refs + constant transform, atomically retained at admission.
+   * <=100 RAW inputs including overlap/lookahead/retry; same DTO and unique originals.
+   * Terminal/self destinations included; next generation is flat before later admission.
+   */
   pageChanges(
     client: CommandTransaction,
     job: IdentityJobRef,
