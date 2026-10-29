@@ -663,7 +663,7 @@ test('native Auth suspension rejects the old Collection bearer and sign-in witho
       scope: actions,
     });
     expect(refused.status).toBe(403);
-    expect(JSON.stringify(await refused.json())).toContain('ACCOUNT_SUSPENDED');
+    expect(await refused.json()).toEqual({ error: 'account_suspended' });
     expect(refused.headers.getSetCookie()).toEqual([]);
     expect(await sessions()).toEqual(before);
     const wrong = await auth.request('/signin', {

@@ -26,11 +26,20 @@ const db = await openGrowthDatabase();
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let kernel: ReturnType<typeof testKernel>;
 let bearer: string;
+let ownerSession: Headers;
 let ownerId: string;
 const publicationPositions = new Map<string, SessionComponent>();
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let worker: Awaited<ReturnType<typeof composeWork>>;
 const backgroundServices: (WorkService & { pause?: () => Promise<void> })[] = [];
+
+async function refreshBearer() {
+  // Native access tokens last five minutes. Issuance belongs to fixture preparation,
+  // outside the measured Collection command/publication operation.
+  const issued = await auth.request('/token', {}, ownerSession);
+  expect(issued.status).toBe(200);
+  bearer = ((await issued.json()) as { access_token: string }).access_token;
+}
 
 async function pauseBackgroundRelays() {
   // Keep the default workflow registrations and executor live. Quiesce only our
@@ -157,9 +166,8 @@ beforeAll(async () => {
     scope: scopes,
   });
   expect(signed.status).toBe(200);
-  const issued = await auth.request('/token', {}, cookies(signed));
-  expect(issued.status).toBe(200);
-  bearer = ((await issued.json()) as { access_token: string }).access_token;
+  ownerSession = cookies(signed);
+  await refreshBearer();
   await bootstrapRelease(db.pool, bundledRelease);
   await call('POST', '/v1/platform/exposure/collections:open');
   await call('POST', '/v1/grants', {
@@ -207,7 +215,17 @@ beforeAll(async () => {
     env: workerTestEnv({ DATABASE_URL: db.url }),
   });
   await worker.launch();
-}, 180_000);
+  await pauseBackgroundRelays();
+  // Point-lookup plans need a real native baseline at the smallest measured scale.
+  // Build both Collection and SDK history through their actual commands/workflows;
+  // no fabricated rows, planner switches, harness exceptions or changed bounds.
+  for (let i = 0; i < 1500; i++) {
+    if (i % 50 === 0) await refreshBearer();
+    const c = await collection();
+    await publish(await notification(c.id));
+  }
+  await refreshBearer();
+}, 600_000);
 
 afterAll(async () => {
   await worker?.shutdown();
@@ -260,6 +278,7 @@ test('a finite native workflow segment continues from its durable Collection loc
   const c = await collection();
   const subjects: string[] = [];
   for (let i = 0; i < 201; i++) {
+    if (i % 50 === 0) await refreshBearer();
     const s = await subject();
     subjects.push(s);
     await add(c.id, s);
@@ -318,6 +337,7 @@ test('a collapsed public-private-public cycle advances ordering without publishi
 for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] as const) {
   test(`native visibility publication rows, blocks and statements ignore unrelated ${axis}`, async () => {
     await pauseBackgroundRelays();
+    await refreshBearer();
     const unrelatedSubject = await subject();
     const fixedPartition = routeOf(unrelatedSubject)! >> 4;
     const populatedPartitions = new Set<number>();
@@ -325,6 +345,7 @@ for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] a
     const targets: { collection: CollectionView; subjects: string[] }[] = [];
     // Every measured write/effect uses fresh real source truth, with a fixed four-subject page.
     for (let i = 0; i < 30; i++) {
+      if (i % 10 === 0) await refreshBearer();
       const c = await collection();
       const subjects = await Promise.all(Array.from({ length: 4 }, () => subject()));
       for (const s of subjects) await add(c.id, s);
@@ -345,7 +366,9 @@ for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] a
       scales: [1, 4, 16],
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (_db, scale, previous) => {
+        await refreshBearer();
         for (let i = previous * 8; i < scale * 8; i++) {
+          if (i % 32 === 0) await refreshBearer();
           if (axis === 'Collections') {
             const c = await collection('private');
             await add(c.id, unrelatedSubject);
@@ -368,6 +391,7 @@ for (const axis of ['Collections', 'subjects', 'member history', 'partitions'] a
       },
       operation: execute,
       warmup: execute,
+      prepare: refreshBearer,
     });
     for (const sample of report.samples) {
       expect(sample.cost.rows).toBeGreaterThan(0);
@@ -404,6 +428,7 @@ test('native visibility publication grows linearly only with the changed Collect
     scales: [1, 4, 16],
     bounds: { rows: 'linear', blocks: 'linear', statements: 'linear' },
     grow: async (_db, scale) => {
+      await refreshBearer();
       targets = [];
       index = 0;
       for (let i = 0; i < 10; i++) {
@@ -423,6 +448,7 @@ test('native visibility publication grows linearly only with the changed Collect
       const c = await flip(target.collection, 'private');
       await publish(await notification(c.id));
     },
+    prepare: refreshBearer,
   });
   console.log(
     JSON.stringify({
