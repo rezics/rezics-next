@@ -411,15 +411,17 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   `open-library@3` edition revision 11 → 12 and the actual exported Wikidata converter revision, currently
   `wikidata-4` from producer dependency `17183ec750d8f577bd7e86c570b9638c34b986da`. Synthetic Q571 retains
   source revision 24681012 → 24681013 and identical fixture bytes. Only the converter-revision binding changed;
-  all business assertions remain. Current-producer native acceptance is pending; the earlier receipt remains
-  qualified to its original base.
+  all business assertions remain. At tested revision `eceb114710`, current-producer acceptance passed all three
+  cases with 3,392 assertions (check `3d253830-6c17-40fd-9f11-25934deb5667`), logging actual `wikidata-4`.
+  The earlier receipt remains qualified to its original base.
   Local formatting, direct conversion/importer compilers, caller TypeScript parsing and production module/registration
   resolution passed. The direct kernel compiler needs a native database for Reylo SQL analysis, unavailable locally;
-  its validation remains part of the named native check.
+  the passing named native check supplied it and wrote 683 analyses. No root or sibling regression check was repeated.
   Cases assert actual tuple claims, retrieved cited candidates, unchanged reopen, supported refresh, independent
   community adoption, immutable bootstrap bytes/keys/receipts and malformed/truncated/mass-disappearance stops
   preserving the completed baseline with zero public writes. Their exact byte/seal/effect observations are
-  emitted by the caller; on the original base: first-input bytes 1,263 / 762 / 3,105, subjects 3 / 2 / 2 and post-refresh importer
+  emitted by the caller; on both the original and current producer: first-input bytes 1,263 / 762 / 3,105,
+  subjects 3 / 2 / 2 and post-refresh importer
   receipts 17 / 22 / 21 for Bangumi / Open Library / Wikidata. All nine unsafe-input stops produced zero public
   writes and preserved completed baselines. Covers and unknown-licensed prose remain separate; no general metadata, words,
   classification, VNDB archive/statistics or discovery-matrix closure is claimed.

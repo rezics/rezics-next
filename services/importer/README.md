@@ -432,11 +432,15 @@ preserved its completed baseline. Exact consumed-byte and seal counters are emit
 
 The current producer dependency `17183ec750d8f577bd7e86c570b9638c34b986da` ships `wikidata-4`. The caller
 imports its actual `converter_revision` instead of asserting the historical `wikidata-3`; source `lastrevid`,
-fixture bytes and business assertions are unchanged. Current-producer native acceptance is pending; the original
-receipt above remains evidence only for its original base.
+fixture bytes and business assertions are unchanged. At tested revision `eceb114710`, current-producer native
+acceptance passed all three cases with 3,392 assertions (check `3d253830-6c17-40fd-9f11-25934deb5667`).
+The log records actual `wikidata-4` proposals, unchanged first-input bytes and receipt counts above, and zero
+public writes for all nine unsafe-input stops. The original receipt remains evidence only for its original base.
+
 Local reconciliation preflight passed formatting, direct conversion/importer package compilers, caller TypeScript
 parsing and production module/registration resolution to `wikidata-4`. The direct kernel compiler requires a
-native database for Reylo SQL analysis (`No database URL` locally); native acceptance supplies that prerequisite.
+native database for Reylo SQL analysis (`No database URL` locally); the passing native check supplied that
+prerequisite and wrote 683 analyses. No root or sibling regression check was repeated for this reconciliation.
 
 Caller corrections retain exact values and public contracts: the edition type expectation changed from
 `schema:BookEdition` to the existing native observation `bf:Instance`; native URL/sameAs property expectations
