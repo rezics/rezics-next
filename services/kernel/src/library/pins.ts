@@ -215,7 +215,7 @@ export function createPins(deps: { pool: Pool; access: Access; tokens: KeyRing; 
         },
       );
     } catch (error) {
-      if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+      if (error instanceof GrantDeniedError) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
       throw error;
     }
   }
