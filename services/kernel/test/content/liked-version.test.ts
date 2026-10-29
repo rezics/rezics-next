@@ -11,17 +11,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { reactionFixture, request } from './reactions.test.ts';
 
 const migrationName = '20261029172138_reaction_liked_version.sql';
-const readers = liked as unknown as {
-  readLikedVersion: (client: Pool, input: { actorAccountId: string }) => Promise<bigint>;
-  readLikedSubjectPage: (
-    client: Pool,
-    input: { actorAccountId: string; after?: string; limit: number },
-  ) => Promise<{ subjects: readonly unknown[]; version: bigint }>;
-  readLikedMembership: (
-    client: Pool,
-    input: { actorAccountId: string; subjectIds: readonly string[] },
-  ) => Promise<{ subjects: ReadonlySet<string>; version: bigint }>;
-};
+const readers = liked;
 
 let f: Awaited<ReturnType<typeof reactionFixture>>;
 let commands: typeof import('../../src/content/reactions.ts');

@@ -7,8 +7,9 @@ import { principalCommandIdentity } from '../../src/command/command.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { readLikedMembership, readLikedSubjectPage } from '../../src/content/liked-read.ts';
+import { readLikedMembership, readLikedSubjectPage, readLikedVersion } from '../../src/content/liked-read.ts';
 import likedPage from '../../src/content/liked-page.sql';
+import likedVersion from '../../src/content/liked-version.sql';
 import { measure } from '../support/growth.ts';
 import { reactionFixture, request } from './reactions.test.ts';
 
@@ -280,6 +281,7 @@ test('the liked page reads current like and love subject reactions in subject id
   expect(second.next).toBeUndefined();
   const pageBlockSamples: number[][] = [];
   const distractors = await distractorTemplates();
+  const versionSamples: Array<{ rows: number; blocks: number }> = [];
   let previous = 0;
   for (const scale of [0, 1_000, 10_000]) {
     // Each fixture pair contributes one thread reaction and one post reaction.
@@ -301,7 +303,27 @@ test('the liked page reads current like and love subject reactions in subject id
       blocks.push(await likedPageSharedHitBlocks(after));
     }
     pageBlockSamples.push(blocks);
-    console.info(`Liked page growth: ${scale} other reactions; statements per page: 1; shared hit blocks: ${blocks}`);
+    const { value: version, cost: versionCost } = await measure(f.db, () =>
+      withClient((client) => readLikedVersion(client, { actorAccountId: f.accountId })),
+    );
+    expect(version).toBe(first.version);
+    expect(versionCost.statements).toBe(1);
+    const parameters = { route: f.home, actor_id: f.accountId };
+    const plan = await f.db.admin.query<{ 'QUERY PLAN': Array<{ Plan: { 'Shared Hit Blocks': number } }> }>(
+      `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${likedVersion.sql}`,
+      likedVersion.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    const versionBlocks = plan.rows[0]!['QUERY PLAN'][0]!.Plan['Shared Hit Blocks'];
+    versionSamples.push({ rows: versionCost.rows, blocks: versionBlocks });
+    expect(versionCost.rows).toBe(versionSamples[0]!.rows);
+    expect(versionBlocks).toBeLessThanOrEqual(4);
+    expect(versionBlocks - versionSamples[0]!.blocks).toBeLessThanOrEqual(0);
+    console.info(
+      `Liked version raw primitive growth: ${scale} other reactions; rows: ${versionCost.rows}; statements: 1; shared hit blocks: ${versionBlocks}`,
+    );
+    console.info(
+      `Liked page raw primitive growth: ${scale} other reactions; statements per page: 1; shared hit blocks: ${blocks}`,
+    );
     for (const [index, hits] of blocks.entries()) {
       expect(hits).toBeLessThanOrEqual(16);
       expect(hits - pageBlockSamples[0]![index]!).toBeLessThanOrEqual(4);
@@ -348,7 +370,8 @@ test('liked membership answers which of up to 256 subjects the account currently
   const result = await withClient((client) =>
     readLikedMembership(client, { actorAccountId: f.accountId, subjectIds: [liked, loved, laughed, empty, liked] }),
   );
-  expect(result).toEqual(new Set([liked, loved]));
+  expect(result.subjects).toEqual(new Set([liked, loved]));
+  expect(result.version).toBe(await withClient((client) => readLikedVersion(client, { actorAccountId: f.accountId })));
   await expect(
     withClient((client) =>
       readLikedMembership(client, { actorAccountId: f.accountId, subjectIds: Array(257).fill(liked) }),
@@ -364,6 +387,6 @@ test('liked membership issues exactly one statement for 256 ids', async () => {
   const { value, cost } = await measure(f.db, () =>
     withClient((client) => readLikedMembership(client, { actorAccountId: f.accountId, subjectIds: batch })),
   );
-  expect(value).toEqual(new Set([id]));
+  expect(value.subjects).toEqual(new Set([id]));
   expect(cost.statements).toBe(1);
 });
