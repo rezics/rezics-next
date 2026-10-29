@@ -101,7 +101,10 @@ export async function loadSubjectPage(
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
     if (typeof result.data.account === 'string') {
-      const raw = result.data as unknown as SubjectPageData;
+      const raw = {
+        ...result.data,
+        account: { id: result.data.account, handle: '' },
+      } as unknown as SubjectPageData;
       const reads = planReads(platformRegistry, raw.document as CompositionDocument, pageContext(raw)).reads;
       for (const [key, read] of Object.entries(reads)) {
         if (read.kind !== 'account' || raw.reads[key]?.status !== 200) continue;
