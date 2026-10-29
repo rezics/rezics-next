@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
+import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import fixtures from '../src/kernel/fixtures.json';
 import { startThreadRequest } from '../src/threads/post-writes';
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
@@ -29,7 +31,12 @@ function client(existingThreadId?: string, subjectReads: string[] = []) {
   return {
     threads: Object.assign(() => ({}), { post: async () => conflict(existingThreadId) }),
     subjects: (params: { id: string }) => ({
-      threads: { get: async () => { subjectReads.push(params.id); return { data: { threads: [], next: null } }; } },
+      threads: {
+        get: async () => {
+          subjectReads.push(params.id);
+          return { data: { threads: [], next: null } };
+        },
+      },
     }),
   } as unknown as KernelClient;
 }
@@ -61,7 +68,12 @@ test('submitting a review makes no subject threads request with 1, 30 or 300 rev
         },
       }),
       subjects: (params: { id: string }) => ({
-        threads: { get: async () => { requests.push(`GET /v1/subjects/${params.id}/threads`); return { data: { threads: [], next: null } }; } },
+        threads: {
+          get: async () => {
+            requests.push(`GET /v1/subjects/${params.id}/threads`);
+            return { data: { threads: [], next: null } };
+          },
+        },
       }),
     } as unknown as KernelClient;
     const result = await startThreadRequest(input, request, {}, fakeClient, refusal);
@@ -69,4 +81,19 @@ test('submitting a review makes no subject threads request with 1, 30 or 300 rev
     expect(reviewCount).toBeGreaterThan(0);
     expect(requests).toEqual(['POST /v1/threads']);
   }
+});
+
+test('the fake review create returns a conflict with an optional existingThreadId', async () => {
+  const fake = createFakeKernelFetch(fixtures as never);
+  const create = (headers = new Headers()) =>
+    fake('https://kernel.test/v1/threads', {
+      method: 'POST',
+      headers: new Headers({ 'content-type': 'application/json', ...Object.fromEntries(headers) }),
+      body: JSON.stringify({ kind: 'review' }),
+    });
+  const present = await (await create()).json();
+  const absent = await (await create(new Headers({ 'x-fake-omit-existing-thread-id': 'true' }))).json();
+  expect(present).toMatchObject({ code: 'review_exists', existingThreadId: id(9) });
+  expect(absent).toMatchObject({ code: 'review_exists' });
+  expect(absent).not.toHaveProperty('existingThreadId');
 });

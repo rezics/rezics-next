@@ -117,29 +117,27 @@ test('a duplicate live review links to the existing review', () => {
   const actions = source('src/threads/actions.ts');
   const composer = source('src/threads/composer.tsx');
 
-  expect(writes).toContain('findExistingReview');
+  expect(writes).not.toContain('findExistingReview');
   expect(actions).toContain('existingReviewId');
   expect(composer).toContain('href={`/${locale}/threads/${failure.existingReviewId}`}');
   expect(composer).toContain('thread_review_duplicate');
 });
 
-test('a second live review returns the matching review id from the subject index', async () => {
+test('a second live review returns the id named by the conflict without reading the subject index', async () => {
   const existingReviewId = id(9);
   const calls: string[] = [];
   const fakeClient = {
     threads: Object.assign(() => ({}), {
-      post: async () => ({ status: 409, headers: new Headers(), error: { value: { code: 'review_exists' } } }),
-    }),
-    boards: (input: { id: string }) => ({
-      get: async () => {
-        calls.push(`board:${input.id}`);
-        return { data: { board: { realmId: id(8) } } };
-      },
+      post: async () => ({
+        status: 409,
+        headers: new Headers(),
+        error: { value: { code: 'review_exists', existingThreadId } },
+      }),
     }),
     subjects: (input: { id: string }) => ({
       threads: {
         get: async (request: { query: { place: string; kind: string } }) => {
-          calls.push(`subject:${input.id}:${request.query.place}:${request.query.kind}`);
+          calls.push(`subject:${input.id}`);
           return {
             data: {
               threads: [
@@ -182,7 +180,7 @@ test('a second live review returns the matching review id from the subject index
   );
 
   expect(result).toMatchObject({ ok: false, reason: 'conflict', existingReviewId });
-  expect(calls).toEqual([`board:${id(1)}`, `subject:${id(3)}:${id(8)}:review`]);
+  expect(calls).toEqual([]);
 });
 
 test('the subject Reviews view offers board selection to members and a sign-in prompt to visitors', () => {
