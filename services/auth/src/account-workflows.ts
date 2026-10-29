@@ -276,7 +276,8 @@ export function clientAuthority(
              FROM (SELECT $1::text AS client_id,$2::bigint AS boundary OFFSET 0) cursor
              CROSS JOIN LATERAL (
                SELECT consent.account_id,consent.traversal_ordinal FROM auth_consent consent
-               WHERE consent.client_id=cursor.client_id AND consent.traversal_ordinal>cursor.boundary
+               WHERE (consent.client_id,consent.traversal_ordinal)>(cursor.client_id,cursor.boundary)
+                 AND consent.client_id=cursor.client_id
                ORDER BY consent.traversal_ordinal LIMIT $3
              ) page`,
             [input.clientId, after, input.limit + 1],
