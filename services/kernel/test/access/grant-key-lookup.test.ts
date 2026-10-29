@@ -23,7 +23,7 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
     action: 'organization:create',
     actor_id: actor,
     principal_id: '',
-    roles: JSON.stringify([{ account_id: actor, organization_id: actor, role: 'owner', member: true, valid: '(,)' }]),
+    roles: [{ account_id: actor, organization_id: actor, role: 'owner', member: true, valid: '(,)' }],
     grant_roles: [],
   };
   async function probe(at: string, allowed: boolean) {
