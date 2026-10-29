@@ -2606,7 +2606,10 @@ test('each run and every container it starts share one run slice', async () => {
   const fixture = runFixture();
   const result = fixture.execute(scripts.run);
   expect(result.status, result.stderr).toBe(7);
-  const bunInvocations = fixture.events().filter((event) => event.command === 'bun').map((event) => event.args);
+  const bunInvocations = fixture
+    .events()
+    .filter((event) => event.command === 'bun')
+    .map((event) => event.args);
   expect(bunInvocations).toHaveLength(2);
   expect(bunInvocations[0]).toEqual(['--eval', expect.any(String), expect.any(String)]);
   expect(bunInvocations[1]).toEqual(['install', '--frozen-lockfile']);
