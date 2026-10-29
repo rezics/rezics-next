@@ -239,7 +239,6 @@ export async function runWorkerCheck(
     return code;
   };
   if (remoteEligible) {
-    beginLedger('remote', 0);
     const growthProfile = env.GROWTH_PROFILE;
     let growthProfilePath: string | undefined;
     let growthProfileRelative: string | undefined;
@@ -268,6 +267,7 @@ export async function runWorkerCheck(
       growthProfileRelative = relativeProfile.split('\\').join('/');
       if (existsSync(growthProfilePath)) previousGrowthProfile = readFileSync(growthProfilePath, 'utf8');
     }
+    beginLedger('remote', 0);
     let remoteOutput = '';
     const remoteCommand =
       growthProfileRelative === undefined
