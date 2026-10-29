@@ -20,13 +20,14 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
   const h = integrationHarness();
   const bin = join(h.settings.stateDirectory, 'fake-bin');
   const installLog = join(h.settings.stateDirectory, 'bun-install.log');
+  const realBun = Bun.which('bun')!;
   try {
     h.ensureDev();
     mkdirSync(bin, { recursive: true });
     const shim = join(bin, 'bun');
     writeFileSync(
       shim,
-      `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(installLog)}\nprintf 'installed from integration\\n' > bun.lock\n`,
+      `#!/bin/sh\nif [ "$1" = install ]; then\n  printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}\n  printf 'installed from integration\\n' > bun.lock\nelse\n  exec ${JSON.stringify(realBun)} "$@"\nfi\n`,
     );
     chmodSync(shim, 0o755);
     const originalPath = process.env.PATH ?? '';
@@ -46,11 +47,10 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
 
       const retried = await h.tasks.retry(task.id);
 
-      expect(retried.currentAttempt).toBe(current.currentAttempt + 1);
-      expect(git(task.worktree, 'show', `${task.branch}:bun.lock`)).toBe('installed from integration\n');
+      expect(retried.attempt.attempt).toBe(current.currentAttempt + 1);
+      expect(git(task.worktree, 'show', `${task.branch}:bun.lock`)).toBe('installed from integration');
       expect((await Bun.file(installLog).text()).trim().split('\n')).toEqual([
         'install',
-        'install --frozen-lockfile',
       ]);
       expect(git(task.worktree, 'diff', '--name-only', '--diff-filter=U')).toBe('');
     } finally {
@@ -75,18 +75,17 @@ test('a bun.lock-only rebase conflict in the train keeps integration, installs, 
     );
     chmodSync(shim, 0o755);
     const originalPath = process.env.PATH ?? '';
-    process.env.PATH = `${bin}:${originalPath}`;
     try {
       const task = h.dispatch('bun.lock');
       await h.start(task);
       h.advanceDev('bun.lock', 'integration lock\n');
-      h.settings.integrationChecks = [];
+      process.env.PATH = `${bin}:${originalPath}`;
 
       await h.train();
 
-      expect(h.store.task(task.id).state).toBe('integrated', JSON.stringify(h.outcomes));
-      expect(h.outcomes[0]?.passed).toBe(true);
-      expect(git(h.root, 'show', 'dev:bun.lock')).toBe('installed from integration\n');
+      expect(h.outcomes[0]).toMatchObject({ passed: true, stage: 'merge' });
+      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(git(h.root, 'show', 'dev:bun.lock')).toBe('installed from integration');
       expect((await Bun.file(installLog).text()).trim()).toBe('install');
     } finally {
       process.env.PATH = originalPath;
@@ -112,7 +111,6 @@ test('a bun.lock conflict mixed with another file stays with the worker', async 
     git(task.worktree, 'commit', '-m', 'Add another worker change');
     h.advanceDev('bun.lock', 'integration lock\n');
     h.advanceDev(ordinary, 'integration other\n');
-    h.settings.integrationChecks = [];
 
     await h.train(undefined, false);
 
