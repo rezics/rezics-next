@@ -13,16 +13,19 @@ import { projectBatch } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
+import { nativeFixture, cookies, password } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createPersonas, type Persona } from '../support/personas.ts';
-import { testKernel, type TestKernel } from '../support/test-kernel.ts';
+import { registerTestClient, testKernel, type TestKernel } from '../support/test-kernel.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let kernel: TestKernel;
 let people: Awaited<ReturnType<typeof createPersonas>>;
+let reporter: Persona;
+let growthActor: Persona;
 let subjectId: string;
 let boardId: string;
 
@@ -58,6 +61,25 @@ beforeAll(async () => {
     }),
   });
   people = await createPersonas(kernel, { version: 1, pool: db.pool, auth });
+  // These accounts have no organization ownership or software-operator obligations.
+  const clientId = `erasure_${crypto.randomUUID()}`;
+  const scopes = [...actionCatalogue(kernel).keys()].filter((action) => action !== 'media:complete').sort();
+  await registerTestClient(auth.host.service, { clientId, firstParty: true, scopes });
+  async function ordinary(): Promise<Persona> {
+    const account = await auth.person(`erasure_${crypto.randomUUID()}`);
+    const signed = await auth.request('/signin', {
+      account_id: account.accountId,
+      password,
+      client_id: clientId,
+      scope: scopes,
+    });
+    expect(signed.status).toBe(200);
+    const token = await auth.request('/token', {}, cookies(signed));
+    expect(token.status).toBe(200);
+    return { accountId: account.accountId, bearer: (await token.json()).access_token };
+  }
+  reporter = await ordinary();
+  growthActor = await ordinary();
   // Keep native community setup independent of the full product catalogue.
   const release: Release = {
     format: 'https://rezics.com/definitions/release/1',
@@ -310,7 +332,7 @@ test("account erasure clears the account's reactions with their counts and proje
 test("account erasure removes the account's report evidence text and reporter id and keeps the report and its decision", async () => {
   const target = await thread();
   const reports: string[] = [];
-  for (const person of [people.orgOwner, people.bob])
+  for (const person of [reporter, people.bob])
     reports.push(
       (
         await call(
@@ -335,7 +357,7 @@ test("account erasure removes the account's report evidence text and reporter id
     .rows;
   expect(decision).toHaveLength(1);
   expect(before.report.outcome).toBe('actioned');
-  expect(await erase(people.orgOwner)).toBe(1);
+  expect(await erase(reporter)).toBe(1);
   const after = await call('GET', `/v1/reports/${reports[0]}`, people.staff);
   expect(after.report).toEqual({ ...before.report, evidence: null, reporterId: null });
   expect(await call('GET', `/v1/reports/${reports[1]}`, people.staff)).toEqual(other);
@@ -345,8 +367,8 @@ test("account erasure removes the account's report evidence text and reporter id
   expect(
     (
       await db.admin.query('SELECT * FROM content.report_reporter WHERE route=$1 AND reporter_account_id=$2', [
-        routeOf(people.orgOwner.accountId),
-        people.orgOwner.accountId,
+        routeOf(reporter.accountId),
+        reporter.accountId,
       ])
     ).rows,
   ).toHaveLength(0);
@@ -370,15 +392,15 @@ test("account erasure removes the account's report evidence text and reporter id
   expect(
     (
       await db.admin.query('SELECT * FROM content.report_reporter WHERE route=$1 AND reporter_account_id=$2', [
-        routeOf(people.orgOwner.accountId),
-        people.orgOwner.accountId,
+        routeOf(reporter.accountId),
+        reporter.accountId,
       ])
     ).rows,
   ).toHaveLength(0);
 }, 180000);
 
 test("an account reaction and report erasure page stays within its bound as other accounts' reactions and reports grow", async () => {
-  const person = people.operator;
+  const person = growthActor;
   const target = await thread();
   await call('PUT', `/v1/posts/${target.firstPost.id}/reaction`, person, { kind: 'like' });
   await call(
