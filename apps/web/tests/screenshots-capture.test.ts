@@ -11,7 +11,8 @@ function extracted<T>(startName: string, endName: string, ending = `\nreturn ${s
   const ordinaryEnd = source.indexOf(`\nfunction ${endName}(`, start);
   const end = asyncEnd < 0 ? ordinaryEnd : ordinaryEnd < 0 ? asyncEnd : Math.min(asyncEnd, ordinaryEnd);
   if (start < 0 || end < 0) throw new Error(`Could not extract ${startName}.`);
-  return new Function(`${source.slice(start, end)}${ending}`)() as T;
+  const code = new Bun.Transpiler({ loader: 'ts' }).transformSync(`${source.slice(start, end)}${ending}`);
+  return new Function(code)() as T;
 }
 
 type Job = { id: string; locale: string; theme: string };
