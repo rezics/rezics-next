@@ -25,7 +25,9 @@ fast-forwards that branch without running a gate. Promotion to `main` is a separ
 finalized through the real integration outcome sink.
 
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. The integration stage regenerates files
-during rebase; the promotion stage regenerates files on the `dev` head before promotion gates run.
+during rebase. Promotion-stage files may declare `inputs`; a dev landing that changes one of those inputs runs the
+declared generator against the rebased candidate and includes changed outputs in its landing commit. Promotion still
+runs promotion-stage generators on the `dev` head before its final gates.
 
 Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
 ` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller runs the

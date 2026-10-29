@@ -73,12 +73,14 @@
     {
       "path": "packages/client/src/kernel/**",
       "stage": "promotion",
-      "command": ["bun", "run", "--cwd", "services/kernel", "derived"]
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived"],
+      "inputs": ["services/kernel/**"]
     },
     {
       "path": "contracts/openapi.json",
       "stage": "promotion",
-      "command": ["bun", "run", "--cwd", "services/kernel", "derived"]
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived"],
+      "inputs": ["services/kernel/**"]
     }
   ],
   "integration": {
