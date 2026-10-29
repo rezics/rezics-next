@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   copyFileSync,
@@ -30,6 +30,7 @@ import {
   readHosts,
   runScript,
   selectSlotClass,
+  slotScript,
   workspaceFiles,
   parseCommandPhases,
 } from './remote-check.ts';
@@ -844,6 +845,157 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
     },
   };
 }
+
+function slotScriptFor(rootPath: string, slots: number, shortRun = false, gate = false, count = 1): string {
+  return slotScript(
+    {
+      name: 'test',
+      address: 'test',
+      identity: 'test',
+      memoryMaxGiB: 16,
+      cpuQuotaPercent: 800,
+      slots,
+      processorsPerSlot: 2,
+    },
+    count,
+    slots,
+    slots - 1,
+    slots - 1,
+    shortRun,
+    shortRun ? 40 : undefined,
+    gate,
+    undefined,
+  ).replaceAll('/srv/rezics-check', rootPath);
+}
+
+function slotScriptEnvironment(testRoot: string, tasksCurrent = 0): Record<string, string> {
+  const bin = join(testRoot, 'bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(
+    join(bin, 'systemctl'),
+    '#!/bin/sh\ncase "$1" in show) printf "%s\\n" "${TASKS_CURRENT:-0}" ;; list-units) ;; esac\n',
+  );
+  writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
+  chmodSync(join(bin, 'systemctl'), 0o755);
+  chmodSync(join(bin, 'docker'), 0o755);
+  return { ...process.env, PATH: `${bin}:${process.env.PATH}`, TASKS_CURRENT: String(tasksCurrent) };
+}
+
+async function waitForSlotToken(holder: ReturnType<typeof Bun.spawn>, count: number): Promise<void> {
+  const reader = holder.stdout.getReader();
+  let output = '';
+  while (!new RegExp(`SLOTS ${count}\\n`).test(output)) {
+    const part = await reader.read();
+    if (part.done) throw new Error(`slot script exited before granting: ${output}`);
+    output += new TextDecoder().decode(part.value);
+  }
+  reader.releaseLock();
+}
+
+test('generated slot scripts use only slot locks in their reserved descriptor range', () => {
+  for (const slots of [1, 3, 5]) {
+    for (const [shortRun, gate] of [[false, false], [true, false], [false, true]] as const) {
+      const script = slotScriptFor('/tmp/descriptor-check', slots, shortRun, gate);
+      const firstSlotFd = 10;
+      const lastSlotFd = firstSlotFd + slots - 1;
+      for (const match of script.matchAll(/^exec (\d+)[<>](.*)$/gm)) {
+        const fd = Number(match[1]);
+        if (fd >= firstSlotFd && fd <= lastSlotFd && !match[2]!.startsWith('&-')) {
+          expect(match[2]).toMatch(/"[^\n]*\/slots\/(?:\d+|express)\.lock"/);
+        }
+      }
+      expect(script).toContain('exec 9>"/tmp/descriptor-check/bases/.lock"');
+    }
+  }
+});
+
+test('ordinary and express slot locks stay held until the slot holder input closes', async () => {
+  const testRoot = mkdtempSync(join(root, 'slot-locks-'));
+  const hostRoot = join(testRoot, 'host');
+  const environment = slotScriptEnvironment(testRoot);
+  mkdirSync(testRoot, { recursive: true });
+  for (const slots of [1, 3, 5]) {
+    const ordinaryCount = slots - 1;
+    for (let target = 0; target < ordinaryCount; target += 1) {
+      const blockers: ReturnType<typeof spawn>[] = [];
+      for (let index = 0; index < target; index += 1) {
+        const lock = join(hostRoot, 'slots', `${index}.lock`);
+        mkdirSync(join(hostRoot, 'slots'), { recursive: true });
+        const blocker = spawn('flock', ['-n', lock, 'sh', '-c', 'sleep 30']);
+        blockers.push(blocker);
+        await Bun.sleep(25);
+        expect(blocker.exitCode).toBeNull();
+      }
+      const script = slotScriptFor(hostRoot, slots);
+      const holder = Bun.spawn(['sh', '-c', script], {
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: environment,
+      });
+      try {
+        holder.stdin.write(`ordinary-${slots}-${target}\n`);
+        await holder.stdin.flush();
+        await waitForSlotToken(holder, 1);
+        const selectedLock = join(hostRoot, 'slots', `${target}.lock`);
+        expect(existsSync(join(hostRoot, 'runs', `ordinary-${slots}-${target}`, 'slots'))).toBe(true);
+        expect(spawnSync('flock', ['-n', selectedLock, '-c', 'true']).status).not.toBe(0);
+        await holder.stdin.end();
+        expect(await holder.exited).toBe(0);
+        expect(spawnSync('flock', ['-n', selectedLock, '-c', 'true']).status).toBe(0);
+      } finally {
+        try { await holder.stdin.end(); } catch {}
+        for (const blocker of blockers) blocker.kill();
+      }
+    }
+
+    const blockers: ReturnType<typeof spawn>[] = [];
+    for (let index = 0; index < ordinaryCount; index += 1) {
+      const lock = join(hostRoot, 'slots', `${index}.lock`);
+      mkdirSync(join(hostRoot, 'slots'), { recursive: true });
+      const blocker = spawn('flock', ['-n', lock, 'sh', '-c', 'sleep 30']);
+      blockers.push(blocker);
+      await Bun.sleep(25);
+      expect(blocker.exitCode).toBeNull();
+    }
+    const holder = Bun.spawn(['sh', '-c', slotScriptFor(hostRoot, slots, true)], {
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: environment,
+    });
+    try {
+      holder.stdin.write(`express-${slots}\n`);
+      await holder.stdin.flush();
+      await waitForSlotToken(holder, 1);
+      const expressLock = join(hostRoot, 'slots', 'express.lock');
+      expect(spawnSync('flock', ['-n', expressLock, '-c', 'true']).status).not.toBe(0);
+      await holder.stdin.end();
+      expect(await holder.exited).toBe(0);
+      expect(spawnSync('flock', ['-n', expressLock, '-c', 'true']).status).toBe(0);
+    } finally {
+      try { await holder.stdin.end(); } catch {}
+      for (const blocker of blockers) blocker.kill();
+    }
+  }
+});
+
+test('live runs with recorded slots bound admission when all slot locks are free', async () => {
+  const testRoot = mkdtempSync(join(root, 'live-slot-count-'));
+  const hostRoot = join(testRoot, 'host');
+  const liveRun = join(hostRoot, 'runs', 'live-run');
+  mkdirSync(liveRun, { recursive: true });
+  writeFileSync(join(liveRun, '.remote-check-slot-count'), '2\n');
+  const run = Bun.spawn(['sh', '-c', slotScriptFor(hostRoot, 3, false, false, 2)], {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: slotScriptEnvironment(testRoot, 4),
+  });
+  expect(await run.exited).toBe(75);
+  expect(existsSync(join(hostRoot, 'slots', '0.lock'))).toBe(false);
+  expect(existsSync(join(hostRoot, 'slots', '1.lock'))).toBe(false);
+});
 
 function workspace(): string {
   const directory = mkdtempSync(join(root, 'workspace-'));

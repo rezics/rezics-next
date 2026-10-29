@@ -504,7 +504,7 @@ function landingMarkerScript(id: string, slots: number, arrivalOrder: string): s
 }
 
 /** Takes all requested slots together, or none. The host reservation protects only this short take. */
-function slotScript(
+export function slotScript(
   host: Host,
   count: number,
   slotLimit: number,
@@ -518,10 +518,11 @@ function slotScript(
   memoryReservationBytes: number,
   landingWaiterId: string | undefined,
 ): string {
+  const slotFdStart = 10;
   const ordinaryLocks = (start: number, end: number, action: 'count' | 'take' | 'skip'): string =>
     Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
       const slot = start + offset;
-      const fd = slot + 9;
+      const fd = slotFdStart + slot;
       const lockPath = `${ROOT}/slots/${slot}.lock`;
       return `exec ${fd}>"${lockPath}"
 if flock -n ${fd}; then
@@ -546,7 +547,7 @@ fi`;
   const countBusyOrdinary = ordinaryLocks(0, ordinaryCapacity, 'count');
   const takeOrdinary = ordinaryLocks(0, ordinaryCapacity, 'take');
   const countOtherOrdinary = ordinaryLocks(ordinaryCapacity, host.slots - 1, 'skip');
-  const expressFd = host.slots + 8;
+  const expressFd = slotFdStart + host.slots - 1;
   const expressTake = shortRun
     ? `if [ "$acquired" -lt ${count} ]; then
   exec ${expressFd}>"${ROOT}/slots/express.lock"
@@ -724,6 +725,20 @@ if [ -e "$express_lock" ]; then
 fi
 memory_max_bytes=$(awk -v memory_gib="${host.memoryMaxGiB}" 'BEGIN { printf "%.0f", memory_gib * 1073741824 }')
 if [ "$((held_memory + ${count} * ${memoryReservationBytes}))" -gt "$memory_max_bytes" ]; then exit ${SLOT_BUSY}; fi
+live_run_slots=0
+for run in ${ROOT}/runs/*; do
+  [ -d "$run" ] || continue
+  [ -f "$run/.remote-check-slot-count" ] || continue
+  [ ! -e "$run/exit-status" ] || continue
+  run_slots=$(cat "$run/.remote-check-slot-count" 2>/dev/null || echo 0)
+  case "$run_slots" in ''|*[!0-9]*) continue ;; esac
+  run_id=\${run##*/}
+  run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+  tasks=$(systemctl show --property=TasksCurrent --value "$run_slice" 2>/dev/null || echo 0)
+  case "$tasks" in ''|*[!0-9]*) tasks=0 ;; esac
+  if systemctl is-active --quiet "$run_slice" && [ "$tasks" -gt 0 ]; then live_run_slots=$((live_run_slots + run_slots)); fi
+done
+if [ "$((live_run_slots + ${count}))" -gt ${slotLimit} ]; then exit ${SLOT_BUSY}; fi
 occupied=0
 acquired=0
 reserved_slots=
@@ -764,6 +779,8 @@ if IFS= read -r run_id; then
   if [ -n "$run_id" ]; then
     run_directory=${ROOT}/runs/$run_id
     run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+    mkdir -p "$run_directory"
+    printf '%s\\n' ${count} > "$run_directory/.remote-check-slot-count"
   fi
 fi
 cleanup_orphan() {

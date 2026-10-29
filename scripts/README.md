@@ -78,6 +78,7 @@ Otherwise both groups use the original hosts file. Admission still checks actual
 `stack-run.ts` uses a nonempty `KERNEL_CHECK_REMOTE` first. Otherwise it looks for the readable shared file
 `<main checkout>/.temp/goal/remote-check-hosts.json`. An unreadable explicit path does not use that fallback.
 Once a host answers, a busy run queues. Later probe silence does not send it back locally.
+Slot locks own the host's reserved descriptor range, and admission also bounds the sum of recorded slots for live runs by the host's slot count.
 With no answering host, it runs locally and explains placement on stderr.
 A run already under `/srv/rezics-check/runs/` executes there without another placement.
 The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. The slot holder also stops its run's systemd scope and slice and removes that run's labelled containers if its SSH input ends before the run writes `exit-status`. The slot and its processes therefore end together; the stale-file sweep remains a backstop. Each run has a 3-hour default deadline, configurable with `--max-ms <n>`; expiration stops the run slice, prints the deadline and exits with code 124, distinct from transport failure code 75.
