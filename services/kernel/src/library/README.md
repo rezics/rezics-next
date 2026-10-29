@@ -1156,15 +1156,23 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   production-shaped `semantic.revision` rows for its route, subject, release and kind. The ordinary shared lifecycle
   settles and analyzes these rows before every capture. Every run records whole-command rows, statements, blocks,
   nested `auto_explain` documents and backend ids. The measured exact `core.receipt` lookup is attributed with the
-  shared statement-occurrence records; raw warm-up plans retain its actual normalized statement, backend and plan
-  shape so the custom-to-generic transition and steady measured plan can be checked from observations. Every
+  shared statement-occurrence records; raw warm-up plans retain its normalized statement, backend and plan
+  shape. These plan observations do not establish execution counts or a custom-to-generic transition. Every
   measured `semantic.revision` node must use the same bounded primary-key point plan at the smallest and largest
   scales, with no sequential scan or unrelated revision filtering. The source and counter relations also require
   positive work and zero sequential scans. Synthetic negative cardinality and isolated rollback/overflow/DDL
   invariants remain primitive-only; every positive measured follow/unfollow uses the native fixture and production
   commands. `growth.json` retains populations, per-occurrence accounting and the actual series verdict; `plans.json`
   retains raw nested plans with rows/removals, loops and buffers.
-  **Calibrated result: pending the committed acceptance run.**
+  **Calibrated result: incomplete.** The current shared `GrowthCheck`/`ReportSample` API exposes statement
+  occurrences only for accepted measured runs. In `test/support/growth.ts`, `checkGrowth` captures each warm-up
+  locally, retains its backend IDs for pool warming, and discards its statement occurrences, errors and inputs;
+  cold-backend discarded invocations likewise have no occurrence report. Calling the exported `capture` inside
+  a `warmup` hook instead fails with `A growth capture is already active for this database`. Consequently this
+  probe cannot prove the required exact per-backend receipt execution sequence, including warm-ups, through
+  the current shared API. Shared occurrence reporting for those invocations is a prerequisite; raw plan counts
+  must not stand in for executions. The authored steady-plan assertions and storage/correctness cases remain
+  unchanged, and no new calibrated pass is claimed.
 
 ### Follow read
 
