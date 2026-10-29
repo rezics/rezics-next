@@ -377,7 +377,10 @@ export class WorkerTasks {
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const ref = { taskId, attempt: task.currentAttempt };
-    if (this.store.retryIntent(ref)?.status === 'pending') throw new Error('a retry is already pending');
+    // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
+    // tasks and lose their branches. The pending retry then starts the amended brief.
+    if (task.state !== 'held' && this.store.retryIntent(ref)?.status === 'pending')
+      throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const attempt = this.store.attempt(ref);
       if (!['pending', 'stopped', 'exited'].includes(attempt.state))

@@ -37,6 +37,42 @@ test('retry --brief on a held task replaces its brief and keeps it held until de
   }
 });
 
+test('retry --brief amends a held task whose retry is already pending and keeps that retry', async () => {
+  const h = harness();
+  try {
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = await h.tasks.retry(task.id);
+    await worker.exited;
+    h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
+      current.state = 'ready';
+    });
+    h.tasks.queueRetry(task.id);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })?.status).toBe('pending');
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
+      attempt.state = 'exited';
+    });
+    h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
+      current.state = 'held';
+      current.brief.after = [dependency.id];
+    });
+    const amended = join(h.root, '.temp/goal/amended-pending.md');
+    const amendedText = markdown
+      .replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`)
+      .concat('\nAmended while held with a pending retry.\n');
+    writeFileSync(amended, amendedText);
+
+    h.tasks.queueRetry(task.id, { brief: amended });
+
+    const updated = h.store.task(task.id);
+    expect(updated.state).toBe('held');
+    expect(updated.brief.markdown).toBe(amendedText);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })?.status).toBe('pending');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('a refused retry writes no brief file', async () => {
   const h = harness();
   try {
