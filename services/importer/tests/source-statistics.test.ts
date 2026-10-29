@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { Importer } from '../src/importer.ts';
@@ -178,3 +181,164 @@ test('Bangumi score fields remain omitted because its licence does not cover rat
     });
   }
 });
+
+// Local HTTP protocol doubles exercise the real transport, coordinator and durable
+// stores. Native Auth, receipts and events are proved by the separate frozen suite.
+async function statisticRefreshFixture() {
+  const directory = await mkdtemp(join(tmpdir(), 'statistic-refresh-'));
+  const path = join(directory, 'journal.sqlite');
+  const sequence = { value: 0 };
+  const batches: BatchWriteRequest[] = [];
+  const writes: { body: string; key: string | null }[] = [];
+  let failure: 'denied' | 'lost' | null = null;
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'local-protocol-token',
+    sleep: async () => {},
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      if (request.method === 'GET' && url.pathname === '/v1/sourceFences:check')
+        return Response.json({ fenced: false, securityRevision: null });
+      if (request.method === 'POST' && url.pathname === '/v1/subjects:batchWrite') {
+        const body = (await request.json()) as BatchWriteRequest;
+        batches.push(body);
+        return Response.json(resultFor(body, sequence));
+      }
+      if (request.method !== 'PUT' || url.pathname !== `/v1/subjects/${subjectId}/source-statistics/vndb`)
+        throw new Error('Unexpected local protocol request');
+      const body = await request.text();
+      writes.push({ body, key: request.headers.get('idempotency-key') });
+      if (failure === 'denied') return Response.json({ code: 'forbidden' }, { status: 403 });
+      if (failure === 'lost') throw new TypeError('Local statistic acknowledgement unavailable');
+      return Response.json({ source: 'vndb', ...JSON.parse(body) });
+    }) as typeof fetch,
+  });
+  const open = () =>
+    new Importer({
+      path,
+      transport: {
+        batchWrite: (request, signal) => transport.batch(request, signal),
+        readFence: (tuple, signal) =>
+          transport.fence(
+            { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group },
+            signal,
+          ),
+        writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
+      },
+    });
+  let importer = open();
+  const owner = { source: 'vndb', external_id: 'v123' };
+  return {
+    batches,
+    writes,
+    get importer() {
+      return importer;
+    },
+    fail(value: typeof failure) {
+      failure = value;
+    },
+    run(average: number) {
+      return importer.runRecords(
+        createSourceRegistration('vndb'),
+        (async function* () {
+          yield vnRecord(average, 20, 7);
+        })(),
+      );
+    },
+    semanticState() {
+      return {
+        claim: importer.session.bindings.claim(owner),
+        candidates: importer.session.bindings.candidates(owner, 'facts', { limit: 100 }),
+        journals: batches.flatMap((batch) =>
+          batch.commands.map((command) => importer.session.bindings.journal(owner, command.key)),
+        ),
+      };
+    },
+    async reopen() {
+      await importer.close();
+      importer = open();
+    },
+    async close() {
+      try {
+        await importer.close();
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  };
+}
+
+test('same-revision statistic refresh commits its projection, retains semantic journals and becomes a reopened no-op', async () => {
+  const f = await statisticRefreshFixture();
+  try {
+    expect((await f.run(735)).status).toBe('committed');
+    const semantic = f.semanticState();
+    expect(semantic.candidates.length).toBeGreaterThan(0);
+    const baseline = f.importer.session.store.source('vndb');
+    const originalRow = f.importer.session.store.key('vndb', 'v123').baseline;
+    const batchCount = f.batches.length;
+    await f.reopen();
+    const changed = await f.run(810);
+    expect(changed.status).toBe('committed');
+    expect(changed.counts.changed).toBe(1);
+    expect(f.semanticState()).toEqual(semantic);
+    expect(f.batches).toHaveLength(batchCount);
+    expect(f.writes).toHaveLength(2);
+    expect(JSON.parse(f.writes[1]!.body).mean).toBe(8.1);
+    expect(f.writes[1]!.key).not.toBe(f.writes[0]!.key);
+    const refreshed = f.importer.session.store.source('vndb');
+    expect(refreshed.count).toBe(1);
+    expect(refreshed.generation).not.toBe(baseline.generation);
+    expect(f.importer.session.store.key('vndb', 'v123').baseline?.recordRevision).toBe(originalRow?.recordRevision);
+    const complete = f.importer.session.store.key('vndb', 'v123', {
+      source: 'vndb',
+      id: refreshed.generation!,
+      lease: '',
+    });
+    expect(complete.staged?.projection.normalizedRecord).toMatchObject({ vn: { c_average: 810 } });
+    await f.reopen();
+    expect((await f.run(810)).status).toBe('committed');
+    expect(f.importer.session.store.source('vndb')).toEqual(refreshed);
+    expect(f.semanticState()).toEqual(semantic);
+    expect(f.batches).toHaveLength(batchCount);
+    expect(f.writes).toHaveLength(2);
+  } finally {
+    await f.close();
+  }
+});
+
+for (const failure of ['denied', 'lost'] as const) {
+  test(`unacknowledged statistic refresh (${failure}) preserves the completed baseline and resumes under its original key`, async () => {
+    const f = await statisticRefreshFixture();
+    try {
+      expect((await f.run(735)).status).toBe('committed');
+      const baseline = f.importer.session.store.source('vndb');
+      const row = f.importer.session.store.key('vndb', 'v123').acknowledged;
+      const semantic = f.semanticState();
+      f.fail(failure);
+      expect((await f.run(810)).status).toBe('bulk-failed');
+      expect(f.importer.session.store.source('vndb')).toEqual(baseline);
+      expect(f.importer.session.store.key('vndb', 'v123').acknowledged).toEqual(row);
+      expect(f.importer.session.store.activeRun('vndb')).not.toBeNull();
+      expect(f.semanticState()).toEqual(semantic);
+      const uncertain = f.writes.slice(1);
+      expect(uncertain).toHaveLength(failure === 'denied' ? 1 : 5);
+      for (const write of uncertain) expect(write).toEqual(uncertain[0]!);
+      await f.reopen();
+      expect(f.importer.session.store.source('vndb')).toEqual(baseline);
+      f.fail(null);
+      expect((await f.run(810)).status).toBe('committed');
+      expect(f.writes.at(-1)).toEqual(uncertain[0]!);
+      expect(f.semanticState()).toEqual(semantic);
+      const refreshed = f.importer.session.store.source('vndb');
+      expect(refreshed.generation).not.toBe(baseline.generation);
+      const count = f.writes.length;
+      expect((await f.run(810)).status).toBe('committed');
+      expect(f.writes).toHaveLength(count);
+      expect(f.importer.session.store.source('vndb')).toEqual(refreshed);
+    } finally {
+      await f.close();
+    }
+  });
+}

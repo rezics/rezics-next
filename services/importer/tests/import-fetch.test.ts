@@ -127,3 +127,73 @@ test('uncertain keyed writes retry while unkeyed writes do not', async () => {
   );
   expect(calls).toBe(1);
 });
+
+const statisticPath = '/v1/subjects/00000000-0000-4000-8000-000000000101/source-statistics/vndb';
+
+test('only the exact keyed VNDB statistic PUT retries uncertainty with unchanged wire bytes and headers', async () => {
+  const sent: { url: string; method: string; headers: [string, string][]; body: string }[] = [];
+  const client = createImportFetch({
+    origin,
+    token: async () => 'statistic-actor',
+    sleep: async () => {},
+    fetch: (async (input, init) => {
+      const req = new Request(input, init);
+      sent.push({ url: req.url, method: req.method, headers: [...req.headers], body: await req.text() });
+      if (sent.length === 1) throw new TypeError('Committed response lost');
+      return Response.json({ mean: 8.1 });
+    }) as typeof fetch,
+  });
+  expect(
+    (
+      await client(origin + statisticPath, {
+        method: 'PUT',
+        headers: {
+          'idempotency-key': '"statistic-refresh"',
+          'content-type': 'application/json',
+          'rezics-session-token': 'session',
+        },
+        body: '{ "mean": 8.1, "count": 20 }',
+      })
+    ).status,
+  ).toBe(200);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[0]!.body).toBe('{ "mean": 8.1, "count": 20 }');
+  expect(new Headers(sent[0]!.headers).get('authorization')).toBe('Bearer statistic-actor');
+});
+
+test('unrelated PUT routes and absent or malformed statistic keys never retry', async () => {
+  const cases: [string, string | null][] = [
+    [statisticPath, null],
+    [statisticPath, 'unquoted'],
+    [statisticPath, '""'],
+    [statisticPath, '"unterminated'],
+    [statisticPath, '"a", "b"'],
+    [statisticPath, JSON.stringify('x'.repeat(256))],
+    [statisticPath + '/extra', '"key"'],
+    [statisticPath + '/', '"key"'],
+    [statisticPath.replace('/vndb', '/bangumi'), '"key"'],
+    [statisticPath.replace('00000000-0000-4000-8000-000000000101', 'not-a-subject'), '"key"'],
+    ['/v1/subjects/00000000-0000-4000-8000-000000000101', '"key"'],
+  ];
+  for (const [path, key] of cases) {
+    let calls = 0;
+    const client = createImportFetch({
+      origin,
+      token: async () => 'actor',
+      sleep: async () => {},
+      fetch: (async () => {
+        calls++;
+        throw new TypeError('Uncertain write');
+      }) as typeof fetch,
+    });
+    await expect(
+      client(origin + path, {
+        method: 'PUT',
+        headers: key === null ? {} : { 'idempotency-key': key },
+        body: '{}',
+      }),
+    ).rejects.toThrow('Uncertain write');
+    expect(calls).toBe(1);
+  }
+});
