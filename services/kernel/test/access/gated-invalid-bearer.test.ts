@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setSystemTime, spyOn, test } from 'bun:test';
 import { decodeJwt } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
+import * as appModule from '../../src/http/app.ts';
 import * as catalogue from '../../src/access/gates/catalogue.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { AuthenticationError } from '../../src/request/access.ts';
@@ -42,28 +43,37 @@ async function exposure(open: boolean) {
 beforeAll(async () => {
   auth = await nativeFixture(pool);
   const service = auth.host.service;
-  kernel = testKernel({
-    pool,
-    auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
-    writeRate: createWriteRateLimiter({ secret: 'invalid-bearer-native-rate-secret-32-bytes' }),
+  const original = appModule.createApp;
+  const composition = spyOn(appModule, 'createApp').mockImplementation((dependencies) => {
+    const app = original(dependencies);
+    for (const [path, exposure, operation] of [
+      [gatedPath, `gate:${group}`, 'gated_read'],
+      [publicPath, 'public', 'public_read'],
+    ] as const) {
+      const detail = {
+        operationId: `fixture.${operation}`,
+        'x-action': 'fixture:read',
+        'x-exposure': exposure,
+        security: [{ bearerAuth: [] }],
+      };
+      app.get(path, { detail }, async ({ actor }) => {
+        if (actor.kind === 'anonymous') throw new AuthenticationError(401, 'Bearer');
+        handlerCalls++;
+        await pool.query('SELECT 1');
+        domainReads++;
+        return { value: 'fixture' };
+      });
+    }
+    return app;
   });
-  for (const [path, exposure, operation] of [
-    [gatedPath, `gate:${group}`, 'gated_read'],
-    [publicPath, 'public', 'public_read'],
-  ] as const) {
-    const detail = {
-      operationId: `fixture.${operation}`,
-      'x-action': 'fixture:read',
-      'x-exposure': exposure,
-      security: [{ bearerAuth: [] }],
-    };
-    kernel.get(path, { detail }, async ({ actor }) => {
-      if (actor.kind === 'anonymous') throw new AuthenticationError(401, 'Bearer');
-      handlerCalls++;
-      await pool.query('SELECT 1');
-      domainReads++;
-      return { value: 'fixture' };
+  try {
+    kernel = testKernel({
+      pool,
+      auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+      writeRate: createWriteRateLimiter({ secret: 'invalid-bearer-native-rate-secret-32-bytes' }),
     });
+  } finally {
+    composition.mockRestore();
   }
   personas = await createPersonas(kernel, { version: 1, pool, auth });
 }, 120_000);
