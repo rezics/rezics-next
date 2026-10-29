@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
-import { processIdentity, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
+import { processIdentity, sameProcess, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
@@ -387,12 +387,8 @@ export function capacityWaiters(stateDirectory: string): Set<string> {
   const live = new Set<string>();
   for (const name of names) {
     const [, pid, ...rest] = name.split('-');
-    try {
-      process.kill(Number(pid), 0);
-      live.add(rest.join('-'));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') live.add(rest.join('-'));
-    }
+    const identity = processIdentity(Number(pid));
+    if (identity && sameProcess(identity)) live.add(rest.join('-'));
   }
   return live;
 }
