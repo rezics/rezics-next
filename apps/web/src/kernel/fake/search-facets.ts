@@ -171,7 +171,7 @@ export const routes: FakeRoute[] = [
     method: 'POST',
     path: '/v1/subjects:facets',
     story: async ({ request, recordings }) => {
-      const story = await storyFacets(request.clone());
+      const story = await storyFacets(request);
       if (story) return story;
       const body = await requestBody(request);
       if (!body) return undefined;
