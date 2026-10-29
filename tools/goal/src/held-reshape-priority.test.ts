@@ -32,7 +32,7 @@ test('retry --brief on a held task replaces its brief and keeps it held until de
   }
 });
 
-test('a refused retry writes no brief file', () => {
+test('a refused retry writes no brief file', async () => {
   const h = harness();
   try {
     const task = h.tasks.dispatch(h.briefFile);
