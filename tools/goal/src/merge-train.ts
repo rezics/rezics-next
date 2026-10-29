@@ -1260,8 +1260,14 @@ export class MergeTrain {
               let accepted = cached
                 ? { passed: true, output: cached.output, timedOut: false }
                 : await (o.runGate ?? gateRunner())(command, memberTree, member.result.logPath);
-              const changed = git(memberTree, 'rev-parse', 'HEAD') !== finalCandidate || changedWorkingFiles(memberTree).length > 0;
-              if (changed) accepted = { ...accepted, passed: false, output: accepted.output || 'Acceptance command changed its worktree' };
+              const changed =
+                git(memberTree, 'rev-parse', 'HEAD') !== finalCandidate || changedWorkingFiles(memberTree).length > 0;
+              if (changed)
+                accepted = {
+                  ...accepted,
+                  passed: false,
+                  output: accepted.output || 'Acceptance command changed its worktree',
+                };
               if (accepted.passed && !cached) passedAcceptance.set(key, { output: accepted.output, command });
               for (const entry of pending) o.fence.assertCurrent(entry.request);
               if (target() !== base) {
