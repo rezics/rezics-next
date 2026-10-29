@@ -32,6 +32,7 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
+import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readIdentityEpochCutover } from './identity-epoch-bootstrap.ts';
@@ -151,11 +152,12 @@ export async function prepareIdentityEpochAdmission(
   const second = await capture(pool, input);
   if (fingerprint(first) !== fingerprint(second)) throw unavailable();
   const groups = [...new Map(second.map((r) => [r.generation, r])).values()];
+  const intent = input.intent;
   const resulting =
-    input.intent.kind === 'merge'
+    intent.kind === 'merge'
       ? groups.reduce((n, r) => n + BigInt(r.observed_count), 0n)
-      : input.intent.kind === 'repoint'
-        ? BigInt(second.find((r) => r.input_original === input.intent.terminal)!.observed_count) +
+      : intent.kind === 'repoint'
+        ? BigInt(second.find((r) => r.input_original === intent.terminal)!.observed_count) +
           (groups.length === 1 ? 0n : 1n)
         : 1n;
   const home = Math.min(...groups.map((r) => r.partition_no));
@@ -208,7 +210,8 @@ async function load(pool: Pool, ref: IdentityJobRef) {
   return withReadTransaction(pool, async (tx) => {
     const home = identityJobPartition(ref);
     const saved = (await tx.query(job.sql, [home, ref.jobId, ref.epoch.toString()])).rows[0];
-    if (!saved) throw unavailable();
+    const owner = await readPartition(tx, home);
+    if (!saved || !owner || owner.writeState !== 'active') throw unavailable();
     const planned = (await tx.query(plans.sql, [home, ref.jobId])).rows;
     const bases = (await tx.query(sources.sql, [home, ref.jobId])).rows;
     return { saved, planned, bases };
@@ -236,6 +239,36 @@ async function receivingReceipt(pool: Pool, ref: IdentityJobRef, home: number, s
   });
 }
 
+async function deliverHome(pool: Pool, ref: IdentityJobRef, scope: string, home: number, stage: 'acquired' | 'closed') {
+  try {
+    await runCommand(pool, { partition: home }, async (tx) => {
+      await tx.query(selectControl.sql, [home]);
+      // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
+      if (stage === 'acquired') await tx.query(acquire.sql, [home, ref.jobId, ref.epoch.toString(), scope]);
+      const duplicate = (await tx.query(receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage])).rows[0];
+      if (duplicate) return noEffect(null);
+      if (stage === 'closed') await tx.query(close.sql, [home, ref.jobId, ref.epoch.toString(), scope]);
+      recordIdentityEpochNativeCommit(tx, 'admission');
+      registerCommandCallback(tx, async (transactionId) => {
+        const recorded = await tx.query(record.sql, [home, transactionId, ref.jobId, stage]);
+        if (recorded.rowCount !== 1) throw stale();
+      });
+      return { value: null, events: [wake(ref)] };
+    });
+  } catch (error) {
+    translate(error);
+  }
+}
+
+/** Receiving-home RPC used by recovery. A lost response never allocates a replacement attempt. */
+export async function acquireIdentityEpochAdmissionHome(pool: Pool, ref: IdentityJobRef, home: number): Promise<void> {
+  const { saved, planned } = await load(pool, ref);
+  if (!planned.some((p) => p.resource_home === home)) throw stale();
+  // Disposition is finally enforced by the receiving fence, including first-absence cancellation.
+  if (saved.state !== 'preparing') throw stale();
+  await deliverHome(pool, ref, saved.scope_digest, home, 'acquired');
+}
+
 /** Job-home CAS chooses cancellation. It does not release any slot or claim by itself. */
 export async function cancelIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef): Promise<void> {
   await runCommand(pool, { partition: identityJobPartition(ref) }, async (tx) => {
@@ -258,29 +291,7 @@ export async function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef
   if (next) {
     let received = await receivingReceipt(pool, ref, next.resource_home, stage);
     if (!received) {
-      try {
-        await runCommand(pool, { partition: next.resource_home }, async (tx) => {
-          // Recheck under the same native control lock used by acquire and first-absence close.
-          await tx.query(selectControl.sql, [next.resource_home]);
-          const duplicate = (await tx.query(receipt.sql, [next.resource_home, ref.jobId, ref.epoch.toString(), stage]))
-            .rows[0];
-          if (duplicate) return noEffect(null);
-          await tx.query((closing ? close : acquire).sql, [
-            next.resource_home,
-            ref.jobId,
-            ref.epoch.toString(),
-            saved.scope_digest,
-          ]);
-          recordIdentityEpochNativeCommit(tx, 'admission');
-          registerCommandCallback(tx, async (transactionId) => {
-            const recorded = await tx.query(record.sql, [next.resource_home, transactionId, ref.jobId, stage]);
-            if (recorded.rowCount !== 1) throw stale();
-          });
-          return { value: null, events: [wake(ref)] };
-        });
-      } catch (error) {
-        translate(error);
-      }
+      await deliverHome(pool, ref, saved.scope_digest, next.resource_home, stage);
       received = await receivingReceipt(pool, ref, next.resource_home, stage);
     }
     if (!received || received.scope_digest !== saved.scope_digest) throw stale();

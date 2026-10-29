@@ -5,6 +5,13 @@ import { noEffect, runCommand } from '../../src/command/command.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { writeSubject } from '../../src/semantic/subject.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
+import {
+  prepareIdentityEpochAdmission,
+  stepIdentityEpochAdmission,
+  cancelIdentityEpochAdmission,
+  acquireIdentityEpochAdmissionHome,
+} from '../../src/semantic/identity-epoch-admission.ts';
+import acquireAdmission from '../../src/semantic/identity-epoch-admission-acquire.sql';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
 import {
   readIdentityEpochCutover,
@@ -424,4 +431,111 @@ test('one native RR cut stays coherent when admission commits between source and
   // The snapshot predates the admission; neither a later control cut nor an extra source snapshot is mixed in.
   expect(await observation).toMatchObject({ state: 'mapped', terminal: survivor });
   expect(await store.readMapping(f.pool, survivor)).toEqual({ state: 'pending', original: survivor, job });
+});
+
+test('ordered PREPARING recovery and cancellation keep P=1 local, including uncertain and delayed acquisition', async () => {
+  const create = async (label: string, route: number) => (await f.create(label, route)).subject.id;
+  const actor = await f.actor();
+  const authority = {
+    basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+    authorization: await f.authorization('subject:merge'),
+  };
+  const prepare = async (survivor: string, redirected: string) => {
+    const key = randomUUID();
+    const input = {
+      intent: { kind: 'merge', survivor, redirected, release: release.digest } as const,
+      receipt: {
+        kind: 'subject.merge',
+        command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
+      } as const,
+    };
+    return { input, job: await prepareIdentityEpochAdmission(f.pool, authority, input) };
+  };
+  // A terminal admitted job at the highest resource waits for real participants, never a lease.
+  const occupiedA = await create('Highest occupied A', 0x6330);
+  const occupiedB = await create('Highest occupied B', 0x6330);
+  const occupied = (
+    await (
+      await admission({ kind: 'merge', survivor: occupiedA, redirected: occupiedB, release: release.digest })
+    ).execute()
+  ).value;
+  const highA = await create('High lower group', 0x6320);
+  const highB = await create('High upper group', 0x6330);
+  const high = await prepare(highB, highA);
+  expect(home(high.job.jobId)).toBe(home(highA));
+  expect(await prepareIdentityEpochAdmission(f.pool, authority, high.input)).toEqual(high.job);
+  expect(await store.readMapping(f.pool, highA)).toEqual({ state: 'pending', original: highA, job: high.job });
+  await stepIdentityEpochAdmission(f.pool, high.job); // Real first-home receipt moves into job custody.
+  await expect(stepIdentityEpochAdmission(f.pool, high.job)).rejects.toMatchObject({
+    code: 'identity_epoch_unavailable',
+  });
+  const lowA = await create('Low first group', 0x6310);
+  const lowB = await create('Low next group', 0x6320);
+  const low = await prepare(lowB, lowA);
+  await stepIdentityEpochAdmission(f.pool, low.job);
+  await expect(stepIdentityEpochAdmission(f.pool, low.job)).rejects.toMatchObject({
+    code: 'identity_epoch_unavailable',
+  });
+  const plans = (
+    await f.admin.query(
+      'SELECT job_id,resource_home FROM semantic.identity_epoch_admission_plan WHERE job_id=ANY($1::uuid[]) ORDER BY job_id,resource_home',
+      [[high.job.jobId, low.job.jobId]],
+    )
+  ).rows;
+  for (const job of [high.job, low.job])
+    expect(plans.filter((p) => p.job_id === job.jobId).map((p) => p.resource_home)).toEqual(
+      job === high.job ? [home(highA), home(highB)] : [home(lowA), home(lowB)],
+    );
+  const unrelated = await create('Unrelated fresh shelf', 0x6340);
+  expect(await readableSubjects({ pool: f.pool, access: f.access }, actor, [lowA, highA, unrelated])).toEqual([
+    unrelated,
+  ]);
+  // Cancellation closes acquired AND never-acquired homes without taking another slot.
+  await cancelIdentityEpochAdmission(f.pool, high.job);
+  for (let i = 0; i < 3; i++) await stepIdentityEpochAdmission(f.pool, high.job);
+  expect((await store.readJob(f.pool, high.job))?.state).toBe('cancelled');
+  expect((await store.readJob(f.pool, occupied))?.state).toBe('pending');
+  expect(await store.readMapping(f.pool, highA)).toMatchObject({ state: 'mapped', terminal: highA });
+  const scope = (
+    await f.admin.query('SELECT scope_digest FROM semantic.identity_epoch_job WHERE job_id=$1', [high.job.jobId])
+  ).rows[0].scope_digest;
+  // This is the actual native receiving operation a delivery already in flight would execute.
+  for (const resource of [home(highA), home(highB)])
+    await expect(
+      runCommand(f.pool, { partition: resource }, async (tx) => {
+        await tx.query(acquireAdmission.sql, [resource, high.job.jobId, high.job.epoch.toString(), scope]);
+        return noEffect(null);
+      }),
+    ).rejects.toMatchObject({ message: 'identity_effect_stale' });
+  const closed = (
+    await f.admin.query(
+      "SELECT r.partition_no FROM semantic.identity_epoch_admission_receipt r JOIN semantic.identity_epoch_native_commit c USING(partition_no,transaction_id) WHERE r.job_id=$1 AND r.stage='closed' AND r.xmin=c.xmin",
+      [high.job.jobId],
+    )
+  ).rows;
+  expect(closed).toHaveLength(2);
+  expect(
+    (
+      await f.admin.query('SELECT count(*)::text n FROM semantic.identity_epoch_input WHERE job_id=$1', [
+        high.job.jobId,
+      ])
+    ).rows[0].n,
+  ).toBe('0');
+  // Lose the response after the real receiving commit, then retry it and reconcile its native receipt.
+  await acquireIdentityEpochAdmissionHome(f.pool, low.job, home(lowB));
+  await acquireIdentityEpochAdmissionHome(f.pool, low.job, home(lowB));
+  await stepIdentityEpochAdmission(f.pool, low.job);
+  expect((await stepIdentityEpochAdmission(f.pool, low.job)).state).toBe('pending');
+  await expect(cancelIdentityEpochAdmission(f.pool, low.job)).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  expect(
+    (
+      await f.admin.query(
+        "SELECT count(*)::text n FROM semantic.identity_epoch_admission_attempt WHERE partition_no=$1 AND state='acquired'",
+        [home(lowB)],
+      )
+    ).rows[0].n,
+  ).toBe('1');
+  await expect(
+    runCommand(f.pool, { partition: home(low.job.jobId) }, (tx) => store.publish(tx, low.job)),
+  ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
 });
