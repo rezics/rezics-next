@@ -48,11 +48,11 @@ fixture correction is present in this checkout.
 
 Re-extracting the twenty `release_own_work` records reproduces these nearest-rank percentiles:
 
-| Operation | p50 ms | p95 ms |
-| --- | ---: | ---: |
-| Validation | 389.34 | 605.31 |
-| Digest | 4.57 | 7.96 |
-| Validation plus digest | 392.57 | 611.42 |
+| Operation                              | p50 ms | p95 ms |
+| -------------------------------------- | -----: | -----: |
+| Validation                             | 389.34 | 605.31 |
+| Digest                                 |   4.57 |   7.96 |
+| Validation plus digest                 | 392.57 | 611.42 |
 | Process CPU, including runtime threads | 573.91 | 815.61 |
 
 Seven validation samples exceeded 500 ms. Twelve distinct real definitions-publish deadline records range from
@@ -118,14 +118,14 @@ as isolated performance percentiles. The final exact-4-MiB cold probe ran separa
 These are operation experiments, not native HTTP acceptance or benchmark success claims.
 
 | Pinned probe, in call order within each process | Validation ms | Proof calls / checkpoints | Proof ms | Canonical calls |
-| --- | ---: | ---: | ---: | ---: |
-| Bundle, first proof use | 1,043.34 | 15 / 14,474 | 1,003.71 | 207 |
-| Same bundle, warm VM/JIT, new local cache | 705.24 | 15 / 14,474 | 681.83 | 207 |
-| 128 properties, shared literal pattern | 6.12 | 1 / 11 | 1.93 | 257 |
-| 128 properties, distinct literal patterns | 107.88 | 128 / 1,408 | 101.32 | 257 |
-| 4,096 properties, shared literal pattern | 241.95 | 1 / 11 | 67.12 | 8,193 |
-| 4,096 properties, distinct literal patterns | 1,801.13 | 4,096 / 45,056 | 1,618.84 | 8,193 |
-| Exact 4 MiB, 4,096 distinct patterns, cold | 1,858.07 | 4,096 / 45,056 | 1,660.51 | 8,193 |
+| ----------------------------------------------- | ------------: | ------------------------: | -------: | --------------: |
+| Bundle, first proof use                         |      1,043.34 |               15 / 14,474 | 1,003.71 |             207 |
+| Same bundle, warm VM/JIT, new local cache       |        705.24 |               15 / 14,474 |   681.83 |             207 |
+| 128 properties, shared literal pattern          |          6.12 |                    1 / 11 |     1.93 |             257 |
+| 128 properties, distinct literal patterns       |        107.88 |               128 / 1,408 |   101.32 |             257 |
+| 4,096 properties, shared literal pattern        |        241.95 |                    1 / 11 |    67.12 |           8,193 |
+| 4,096 properties, distinct literal patterns     |      1,801.13 |            4,096 / 45,056 | 1,618.84 |           8,193 |
+| Exact 4 MiB, 4,096 distinct patterns, cold      |      1,858.07 |            4,096 / 45,056 | 1,660.51 |           8,193 |
 
 All synthetic rows above have zero violations and zero per-call schema compilations. The 4,096 pair has
 3,920,207 bytes. Patterns are `^x0000$` through `^x4095$`; the shared case uses only `^x0000$`.
