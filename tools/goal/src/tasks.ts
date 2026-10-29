@@ -419,7 +419,8 @@ export class WorkerTasks {
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const attempt = this.store.attempt(ref);
-      if (!['pending', 'stopped', 'exited'].includes(attempt.state))
+      // A held task's waiting attempt is never woken (the wake sweep reads running tasks only), so it can be reshaped too.
+      if (!['pending', 'stopped', 'exited', 'waiting'].includes(attempt.state))
         throw new Error(`task cannot be held for retry: ${taskId} attempt ${task.currentAttempt} (${attempt.state})`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (!reshaped) throw new Error('a held task can only be retried with --brief');
