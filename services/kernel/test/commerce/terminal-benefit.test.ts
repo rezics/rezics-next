@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { RELEASE_FORMAT, type Release } from '@rezics/definitions';
 import canonicalize from 'canonicalize';
 import { Pool, type PoolClient } from 'pg';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
@@ -47,6 +47,25 @@ let failShare = false;
 let gate: { orderId: string; beforeAccount: boolean; reached(pid: number): void; wait: Promise<void> } | undefined;
 const accountShare = (sql: string) => /FROM access\.account\b[\s\S]*FOR SHARE/i.test(sql);
 const orderLock = (sql: string) => /FROM commerce\.purchase_order\b[\s\S]*FOR UPDATE/i.test(sql);
+// Commerce needs a real target subject, with no catalogue properties or library profile.
+// Keep its native definition input independent of unrelated bundled catalogue validation.
+const targetRelease: Release = {
+  format: RELEASE_FORMAT,
+  catalogue: { id: 'https://kernel.test/terminal-benefit', version: '1' },
+  generator: { name: 'terminal-benefit-native-fixture', version: '1' },
+  prefixes: { schema: 'http://schema.org/' },
+  types: {
+    'schema:Book': {
+      iri: 'http://schema.org/Book',
+      labels: { en: 'Book' },
+      mappings: [],
+      bases: [],
+      properties: [],
+      facets: [],
+    },
+  },
+  properties: {},
+};
 
 // Scheduling preserves native statements/results. Failure control asks PostgreSQL itself to cancel a
 // blocked account read; it never supplies lifecycle truth or an application exception.
@@ -133,7 +152,7 @@ beforeAll(async () => {
       201,
     );
   }
-  await bootstrapRelease(pool, bundledRelease);
+  await bootstrapRelease(pool, targetRelease);
   targetSubjectId = (
     await post(
       first.staff,
