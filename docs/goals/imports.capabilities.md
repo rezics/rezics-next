@@ -57,7 +57,7 @@ Search indexing nor readiness. Prerequisite descriptors do not create runtime da
 
 | Required fixture/data                     | Actual delivery and missing closure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Owner                                                                              |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Genuine words                             | Released Book `schema:wordCount` maps to P6570 and admits a closed integer amount plus unit 1/min 0; `schema:keywords` and `wdt:P7937` Concept facet are released. The actual `CountProducerInput`/schema/owner contract and native proposal are integrated at `a26e06cf`; that native attempt was 0 pass/6 fail/216 admission assertions, not producer proof. The approved next-version direction is multivalued word/character evidence; current released cardinality remains singular. Specification closure `c679` reconciles DTO, native citation, bounds, canonical language/calendar and provenance before freeze. Controlled builder amounts remain editorial assertions; genuine producer declarations and holder/language/version association remain missing | Semantic release/measurement producer; imports reviewed mappings                   |
+| Genuine words                             | Released Book `schema:wordCount` maps to P6570 and admits a closed integer amount plus unit 1/min 0; `schema:keywords` and `wdt:P7937` Concept facet are released. The actual `CountProducerInput`/schema/owner contract and native proposal are integrated at `a26e06cf`; that native attempt was 0 pass/6 fail/216 admission assertions, not producer proof. The approved next-version direction is multivalued word/character evidence; current released cardinality remains singular. The adopted measurement specification closure reconciles DTO, native citation, bounds, canonical language/calendar and provenance before freeze. Controlled builder amounts remain editorial assertions; genuine producer declarations and holder/language/version association remain missing | Semantic release/measurement producer; imports reviewed mappings                   |
 | Book range controls                       | Builder specifies `B-long` 1,200,001, `B-edge` 1,000,000, `B-short` 999,999, `B-unknown` absent and `B-characters` without words. The old environment-qualified run's six discovery consumers failed at word admission before enumeration; newest run fails earlier in shared setup. Separate character 1,400,000 producer and crossed/unknown measurement controls remain missing; edition pages never fill work words                                                                                                                                                                                                                                                                                                                                                | Semantic shared builder/definitions                                                |
 | Form/tag controls                         | Actual builder creates public scheme/Concept receipts and selects `FORM = wdt:P7937`, `LN`/`HAREM` actual created IDs. `B-long`/`B-edge`/`B-characters` both; `B-short` form only; `B-unknown` harem/unknown form; alternate-form `B-tag-only`; `B-form-only` no harem. Complete Book group/discovery still fails word admission; logical names are never IDs                                                                                                                                                                                                                                                                                                                                                                                                          | Semantic definitions/Concept receipts; imports reviewed bindings                   |
 | Recipe controls, separate editorial input | Released recipe/diet and cook-time terms are admitted, but the fixture's required authored values are not a successful native population. Require `R-quick` vegetarian/25, `R-edge`/30, `R-slow`/31, `R-meat` nonvegetarian/20, `R-unknown` unknown diet/20, `R-cooked`/20 Alice-completed and `R-other-cooked`/20 Bob-only completed. Registration is not execution                                                                                                                                                                                                                                                                                                                                                                                                   | Semantic editorial/release data; commerce completion facts                         |
@@ -278,17 +278,20 @@ failed at `Collection exposure setup failed: 403` before importer SQLite opened;
 The Open Library edition is a separate `bf:Instance`; unsupported native `number_of_pages` stays unknown. The
 default importer now has bounded own-reference refresh: it point-reads relation keys through its configured source
 alias, records a bounded signature, and replans unchanged input when that signature changes. This implementation
-is committed on its READY worker branch and is not integrated runtime proof. The latest frozen native run on
-`c79e538dfd` had 1 pass/1 fail and 145 assertions. It passed the real claim, relation resolution, target-addressed
-candidate retrieval/adoption, stable replay, and denied replay in its first flow. Its late-learning flow failed because the bounded relay returned `busy` after
-the first adoption. An earlier completed native run reached the resolved proposal, stable source metadata, old
-history, community adoption and stable replay, then failed only its final unknown-author wire assertion: the actual
-read property includes `data_type: external-id`, which the frozen helper omits. The initial duplicate-candidate
-failure was fixed by retaining semantically unchanged proposals; neither the earlier failure nor the final typed
-read mismatch is evidence of a green native file. A local immutable old-bootstrap/reopen regression passed two
-cases and 16 assertions, preserving original bytes, key and receipt; this does not replace native permission or
-history proof. The latest root typecheck, adjacent import-session check and deferred-cover check are unverified
-after infrastructure failures; earlier passes are not current-tree proof. No client-injected work ID is allowed.
+is committed on its READY worker branch and is not integrated runtime proof. Its latest old-contract native run had
+1 pass/1 fail and 79 assertions: the first flow passed real claim, relation resolution, target-addressed candidate
+retrieval/adoption, stable replay and denied replay; late learning stopped when the bounded relay returned `busy`
+after the first adoption. An earlier completed native run had 1 pass/1 fail and 145 assertions: the resolved
+proposal, stable source metadata, old history, community adoption and stable replay passed before its final
+unknown-author wire assertion failed because the read property includes `data_type: external-id`, which the frozen
+helper omits. The initial duplicate-candidate failure was fixed by retaining semantically unchanged proposals.
+The authorized wire correction was not delivered or tested: automatic environment admission occurred before its
+changed guard. A separate bounded-busy proposal remains unapproved; no readiness or new API is inferred. Neither
+the relay-busy nor typed-read result is a green native file. A local immutable
+old-bootstrap/reopen regression passed two cases and 16 assertions, preserving original bytes, key and receipt;
+this does not replace native permission or history proof. A later root typecheck passed all 13 workspaces with
+zero diagnostics after transport retry; three adjacent post-retention suites remain unverified after
+infrastructure failures. No client-injected work ID is allowed.
 Bangumi observed manga metadata and separate ordinary novel-tag controls establish non-inference only. No imported
 genuine words, resolved four-provider release identities, reviewed classification mapping or complete
 import-to-discovery capability is established.
@@ -298,8 +301,11 @@ metadata specification and `GET /v1/subjects/{id}` → `subject.sourceRecords` p
 producer remains undelivered: there is no `SourceRecord` storage/read/write implementation or mounted route in the
 current kernel. A reviewed binding specification is registered, not an implementation or native binding receipt.
 Registration aliases supply no general display metadata. The original unknown-array failure is not positive
-attribution, and the newest run did not reach it. Imports' metadata journal/runtime/native ordering is also not
-yet frozen: acquired, validated and sealed metadata plus mass-loss admission must precede remote effects; for
+attribution, and the newest run did not reach it. A later metadata candidate remains unintegrated: frozen hashes
+matched, but native and root-typecheck commands both failed before execution during pinned-Bun transfer. No
+endpoint, types, runtime producer or metadata-ACK-first binding was delivered. Imports'
+metadata journal/runtime/native ordering is also not yet frozen: acquired, validated and sealed metadata plus
+mass-loss admission must precede remote effects; for
 eligible rows, metadata acknowledgement must precede a new bootstrap; bound/unchanged rows need current-run
 catch-up while old receipt bytes remain immutable. No speculative operation or writer is called here. Source
 record metadata/licence is not inferred from aliases or URLs and is distinct from facts rights, summary rights and
@@ -435,7 +441,7 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   functional native proof is 39 cases/267 assertions, kernel publication 7/55 and root typecheck 0. The final
   unconditional validation-policy union is integrated at `f63484c149ec424a362a54c23886d6de9e882a0c`; its actual
   three-file acceptance passed 40 cases, 271 assertions. The fixed-schema equality and invalid-pointer checks remain,
-  while unconditional pattern validation is restored. The 8b wildcard proof, three Accounts regression cases and
+  while unconditional pattern validation is restored. The bounded wildcard IRI proof, three Accounts regression cases and
   65 release/schema/recording artifacts were byte-preserved. This closes the wildcard admission and validation
   union only; no root typecheck was repeated for this one-block no-type change. The full package was not green, and
   no Imports input, metadata, privacy or measurement pass follows.
