@@ -30,6 +30,7 @@ import { coverOf, coverSubject } from '../media/summary';
 import { subjectHref } from '../subject/subject-href';
 import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
+import { fieldLabel } from '../features/pages/shared';
 import { hitYear, localizedLabel, ResultList, SubjectMeta, type Fact, type ResultHit } from './results.tsx';
 import type { SuggestionResult } from './suggestions.ts';
 type SearchBody = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
@@ -412,7 +413,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
             </>
           )}
           {data?.groups.map((group) => {
-            const propertyLabel = localizedLabel(group.labels, locale);
+            const propertyLabel = fieldLabel(localizedLabel(group.labels, locale), locale);
             const selected = selectedFacets[group.property] ?? [];
             const unique = [...new Map(group.values.map((entry) => [entry.value, entry])).values()];
             const labelCounts = new Map<string, number>();

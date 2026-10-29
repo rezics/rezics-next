@@ -25,6 +25,7 @@ import * as overview from './overview';
 import {
   bestRank,
   ExternalValue,
+  fieldLabel,
   isRecord,
   linkClass,
   linkColor,
@@ -459,7 +460,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
           {qualifiers.length > 0 && (
             <dl className="ms-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {qualifiers.map(({ qualifier, shownValue }, index) => {
-                const name = relatedLabel(qualifier.property.id);
+                const name = fieldLabel(relatedLabel(qualifier.property.id), options.locale);
                 return (
                   <div className="contents" key={index}>
                     <dt lang={name.lang}>{name.text || options.messages.unlabelled}</dt>
@@ -485,7 +486,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
         className="grid gap-y-2 border-b border-border/60 pb-5 last:border-0 last:pb-0 sm:grid-cols-[minmax(10rem,1fr)_3fr] sm:gap-x-6 in-data-[density=compact]:pb-3"
       >
         <dt lang={label.lang} className="font-semibold">
-          {label.text || options.messages.unlabelled}
+          {fieldLabel(label, options.locale).text || options.messages.unlabelled}
         </dt>
         {values}
       </div>,

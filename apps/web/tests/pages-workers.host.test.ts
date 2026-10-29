@@ -112,7 +112,7 @@ test('Workers HTML and JSON-LD use the same aggregate public subject representat
     expect(main).toMatch(new RegExp(`<h1[^>]*>${jsonLd.name}</h1>`));
     expect(main).toContain(`href="/en/subjects/${author}/${encodeURIComponent(slug(authorLabel))}"`);
     expect(main).toContain(`>${authorLabel}</a>`);
-    expect(main).toContain('>author</');
+    expect(main).toContain('>Author</');
     expect(main).toContain('April 6, 1943');
     expect(html).not.toContain(worker!.privateSentinel);
     expect(JSON.stringify(jsonLd)).not.toContain(worker!.privateSentinel);

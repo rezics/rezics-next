@@ -198,8 +198,8 @@ test(
       await main.getByRole('link', { name: 'Libro', exact: true }).click();
       await page.waitForURL((url) => url.searchParams.get('type') === book);
       expect(new URL(page.url()).searchParams.get('q')).toBe('Kokoro');
-      expect(await main.getByRole('group', { name: 'autor' }).count()).toBe(1);
-      expect(await main.getByRole('group', { name: 'género' }).count()).toBe(1);
+      expect(await main.getByRole('group', { name: 'Autor' }).count()).toBe(1);
+      expect(await main.getByRole('group', { name: 'Género' }).count()).toBe(1);
       expect(await main.getByRole('checkbox', { name: 'Natsume Sōseki (libro)' }).count()).toBe(1);
       expect(await main.getByRole('checkbox', { name: 'Natsume Sōseki (receta)' }).count()).toBe(1);
       expect(await main.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(0);
@@ -263,14 +263,14 @@ test(
     try {
       const main = page.getByRole('main');
       expect(await main.getByText('Libro', { exact: true }).count()).toBeGreaterThan(0);
-      const property = main.getByRole('group', { name: 'autor' });
+      const property = main.getByRole('group', { name: 'Autor' });
       expect(await property.count()).toBe(1);
       expect(await property.getByRole('checkbox', { name: 'Natsume Sōseki (libro)' }).count()).toBe(1);
       expect(await property.getByRole('checkbox', { name: 'Natsume Sōseki (receta)' }).count()).toBe(1);
       expect(await property.locator('input[type="checkbox"]').count()).toBe(2);
       expect(await property.locator('legend').getAttribute('lang')).toBe('es');
       expect(await property.locator('label').first().getAttribute('lang')).toBe('es');
-      const fallback = main.getByRole('group', { name: 'publication date' });
+      const fallback = main.getByRole('group', { name: 'Publication date' });
       expect(await fallback.locator('legend').getAttribute('lang')).toBe('en');
     } finally {
       await page.context().close();
@@ -384,7 +384,7 @@ test(
       await page.setViewportSize({ width: 1280, height: 860 });
       expect(await main.getByRole('checkbox').count()).toBeGreaterThan(0);
       const resultBox = await result.boundingBox();
-      const facetBox = await main.getByRole('group', { name: 'author' }).boundingBox();
+      const facetBox = await main.getByRole('group', { name: 'Author' }).boundingBox();
       expect(resultBox && facetBox && facetBox.x).toBeLessThan(resultBox?.x ?? 0);
     } finally {
       await page.context().close();

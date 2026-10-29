@@ -45,6 +45,13 @@ export function pageText(value: unknown, locale: string, original?: string) {
   };
 }
 
+/** A property label used as a field or section name, capitalized in the label's language. */
+export function fieldLabel<T extends { text: string; lang?: string | undefined }>(label: T, locale: string): T {
+  if (!label.text) return label;
+  const [first, ...rest] = Array.from(label.text);
+  return { ...label, text: `${first!.toLocaleUpperCase(label.lang ?? locale)}${rest.join('')}` };
+}
+
 export function PlainLink({ href, lang, className, children }: LinkProps) {
   return (
     <a href={href} lang={lang} className={className}>

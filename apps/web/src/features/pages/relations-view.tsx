@@ -9,6 +9,7 @@ import { countText, GROUP_TITLES, holderItems, yearText, type Item, type RowValu
 import { ViewHeading } from './subject-frame';
 import { loadSubjectPage } from './subject';
 import { subjectViewHref, type SubjectHrefInput } from '../../subject/subject-href';
+import { fieldLabel } from './shared';
 
 /** One page of the subject's relations: one property when `property` is given, otherwise every property. */
 export type RelationsViewData = {
@@ -76,6 +77,7 @@ export function RelationsView({
   const heading = data.property
     ? (definition(data.property)?.label ?? m.subject_relations({}, options))
     : m.subject_relations({}, options);
+  const fieldHeading = data.property ? fieldLabel({ text: heading }, locale).text : heading;
   const items: Item[] = (listed?.items ?? []).map((item) => {
     const entry = definition(item.property);
     const year = yearText(item.date, locale);
@@ -89,7 +91,7 @@ export function RelationsView({
     <section data-slot="relations-view" className="mx-auto w-full max-w-5xl min-w-0 space-y-6">
       {frame}
       <ViewHeading
-        label={heading}
+        label={fieldHeading}
         count={
           listed && (
             <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
