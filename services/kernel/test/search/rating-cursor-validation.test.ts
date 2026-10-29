@@ -25,7 +25,7 @@ test('rating metadata rejects malformed Global literals and private populations 
     const token = await encodeRatingCursor(ring, binding, context, cursor, 1000);
     for (const populationId of ['00000000-0000-8000-8000-0000000', context.populationId + '\n', id, '']) {
       const current = { ...context, populationId };
-      await expect(async () => await encodeRatingCursor(ring, binding, current, cursor, 1000)).rejects.toThrow();
+      await expect(encodeRatingCursor(ring, binding, current, cursor, 1000)).rejects.toThrow();
       expect(await decodeRatingCursor(ring, binding, current, token, 1001)).toEqual(invalid);
       const signed = await wire(['rating-v1', context.questionId, populationId, 1, phase, ...after]);
       expect(await decodeRatingCursor(ring, binding, { ...context, priorEpoch: 2 }, signed, 1001)).toEqual(invalid);

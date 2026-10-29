@@ -239,7 +239,7 @@ test('invalid ordering values throw on encode and signed malformed ordering fail
   ];
   for (const bad of malformed) {
     await expect(
-      async () => await encodeRatingCursor(ring, binding, context, { generation: 3, ...bad } as typeof position, 1000),
+      encodeRatingCursor(ring, binding, context, { generation: 3, ...bad } as typeof position, 1000),
     ).rejects.toThrow();
     expect(
       await decodeRatingCursor(
@@ -260,11 +260,9 @@ test('invalid ordering values throw on encode and signed malformed ordering fail
   }
   for (const score of [NaN, Infinity, -Infinity])
     await expect(
-      async () => await encodeRatingCursor(ring, binding, context, { ...position, after: [score, 'A', id] }, 1000),
+      encodeRatingCursor(ring, binding, context, { ...position, after: [score, 'A', id] }, 1000),
     ).rejects.toThrow();
-  await expect(
-    async () => await encodeRatingCursor(ring, binding, { ...context, priorEpoch: null }, position, 1000),
-  ).rejects.toThrow();
+  await expect(encodeRatingCursor(ring, binding, { ...context, priorEpoch: null }, position, 1000)).rejects.toThrow();
 });
 
 test('name slots reject runtime objects, arrays and nonfinite or nonstring primitives', async () => {
@@ -272,14 +270,13 @@ test('name slots reject runtime objects, arrays and nonfinite or nonstring primi
     for (const name of [undefined, {}, [], ['A'], false, 0, NaN, Infinity, -Infinity]) {
       const after = phase === 'scored' ? [0, name, id] : [name, id];
       await expect(
-        async () =>
-          await encodeRatingCursor(
-            ring,
-            binding,
-            context,
-            { generation: 3, phase, after } as unknown as Parameters<typeof encodeRatingCursor>[3],
-            1000,
-          ),
+        encodeRatingCursor(
+          ring,
+          binding,
+          context,
+          { generation: 3, phase, after } as unknown as Parameters<typeof encodeRatingCursor>[3],
+          1000,
+        ),
       ).rejects.toThrow();
     }
   }
@@ -298,9 +295,7 @@ test('invalid current contexts and hostile runtime inputs fail closed', async ()
       priorEpoch,
     })),
   ]) {
-    await expect(
-      async () => await encodeRatingCursor(ring, binding, bad as RatingCursorContext, position, 1000),
-    ).rejects.toThrow();
+    await expect(encodeRatingCursor(ring, binding, bad as RatingCursorContext, position, 1000)).rejects.toThrow();
     expect(await decodeRatingCursor(ring, binding, bad as RatingCursorContext, await token(), 1001)).toEqual(invalid);
   }
   for (const bad of [
@@ -315,11 +310,9 @@ test('invalid current contexts and hostile runtime inputs fail closed', async ()
   ])
     expect(await decodeRatingCursor(ring, binding, context, bad as string, 1001)).toEqual(invalid);
   for (const generation of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
-    await expect(
-      async () => await encodeRatingCursor(ring, binding, context, { ...position, generation }, 1000),
-    ).rejects.toThrow();
+    await expect(encodeRatingCursor(ring, binding, context, { ...position, generation }, 1000)).rejects.toThrow();
   for (const now of [NaN, Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
-    await expect(async () => await encodeRatingCursor(ring, binding, context, position, now)).rejects.toThrow();
+    await expect(encodeRatingCursor(ring, binding, context, position, now)).rejects.toThrow();
     expect(await decodeRatingCursor(ring, binding, context, await token(), now)).toEqual(invalid);
   }
 });
@@ -345,7 +338,7 @@ test('encoded cursors respect native name bounds and the shared token limit incl
   expect(await decodeRatingCursor(ring, binding, context, encoded, 1001)).toEqual({ ok: true, ...escaped });
   for (const name of ['A'.repeat(4097), 'A'.repeat(3000), '名'.repeat(1000), 'A'.repeat(513), '🐈'.repeat(257)])
     await expect(
-      async () => await encodeRatingCursor(ring, binding, context, { ...position, after: [0, name, id] }, 1000),
+      encodeRatingCursor(ring, binding, context, { ...position, after: [0, name, id] }, 1000),
     ).rejects.toThrow();
   for (const name of ['A'.repeat(513), '🐈'.repeat(257)]) {
     for (const phase of ['scored', 'unscored'] as const) {
