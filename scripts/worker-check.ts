@@ -66,7 +66,8 @@ function applyTaskPriority(root: string, env: NodeJS.ProcessEnv): void {
   const file = join(root, '.temp', 'goal', 'task-priority');
   try {
     const value = readFileSync(file, 'utf8').trim();
-    if (value !== 'critical' && value !== 'normal') throw new Error(`worker-check: ${file} must contain critical or normal`);
+    if (value !== 'critical' && value !== 'normal')
+      throw new Error(`worker-check: ${file} must contain critical or normal`);
     if (value === 'critical') env.REMOTE_CHECK_PRIORITY = 'critical';
     else delete env.REMOTE_CHECK_PRIORITY;
   } catch (error) {

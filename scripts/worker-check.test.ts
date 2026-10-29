@@ -95,11 +95,16 @@ test('critical priority: worker-check rereads task-priority and overrides inheri
   process.env.REMOTE_CHECK_PRIORITY = 'landing';
   try {
     writeFileSync(file, 'critical\n');
-    await runWorkerCheck(['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY)"], directory, false, log);
+    await runWorkerCheck(['bun', '-e', 'console.log(process.env.REMOTE_CHECK_PRIORITY)'], directory, false, log);
     expect(readFileSync(log, 'utf8')).toContain('critical');
     writeFileSync(file, 'normal\n');
     writeFileSync(log, '');
-    await runWorkerCheck(['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY ?? 'normal')"], directory, false, log);
+    await runWorkerCheck(
+      ['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY ?? 'normal')"],
+      directory,
+      false,
+      log,
+    );
     expect(readFileSync(log, 'utf8')).toContain('normal');
   } finally {
     if (oldTask === undefined) delete process.env.GOAL_TASK_ID;
@@ -121,21 +126,36 @@ test('critical priority: invalid task priority names its file and missing priori
   process.env.REMOTE_CHECK_PRIORITY = 'critical';
   const errors: string[] = [];
   const originalError = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: string | Uint8Array) => { errors.push(String(chunk)); return true; }) as typeof process.stderr.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    errors.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
   try {
     writeFileSync(file, 'urgent\n');
     await expect(runWorkerCheck(['bun', '-e', 'process.exit(0)'], directory, false, log)).rejects.toThrow(file);
     rmSync(file);
     writeFileSync(log, '');
-    await runWorkerCheck(['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY ?? 'normal')"], directory, false, log);
+    await runWorkerCheck(
+      ['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY ?? 'normal')"],
+      directory,
+      false,
+      log,
+    );
     writeFileSync(log, '');
-    await runWorkerCheck(['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY ?? 'normal')"], directory, false, log);
+    await runWorkerCheck(
+      ['bun', '-e', "console.log(process.env.REMOTE_CHECK_PRIORITY ?? 'normal')"],
+      directory,
+      false,
+      log,
+    );
     expect(errors.join('')).toContain(`${file} unavailable; using normal priority`);
     expect(errors.join('').split(`${file} unavailable; using normal priority`).length - 1).toBe(1);
   } finally {
     process.stderr.write = originalError;
-    if (oldTask === undefined) delete process.env.GOAL_TASK_ID; else process.env.GOAL_TASK_ID = oldTask;
-    if (oldPriority === undefined) delete process.env.REMOTE_CHECK_PRIORITY; else process.env.REMOTE_CHECK_PRIORITY = oldPriority;
+    if (oldTask === undefined) delete process.env.GOAL_TASK_ID;
+    else process.env.GOAL_TASK_ID = oldTask;
+    if (oldPriority === undefined) delete process.env.REMOTE_CHECK_PRIORITY;
+    else process.env.REMOTE_CHECK_PRIORITY = oldPriority;
   }
 });
 
