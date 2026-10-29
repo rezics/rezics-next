@@ -805,8 +805,11 @@ export async function settle(
     const notices: string[] = [];
     if (relations.length === 0) return notices;
     const client = await database.admin.connect();
-    const captureNotice = (notice: { severity?: string; message?: string }) => {
-      if (notice.message) notices.push(`${notice.severity ?? 'NOTICE'}: ${notice.message}`);
+    const captureNotice = (notice: unknown) => {
+      if (typeof notice !== 'object' || notice === null) return;
+      const message = 'message' in notice && typeof notice.message === 'string' ? notice.message : undefined;
+      const severity = 'severity' in notice && typeof notice.severity === 'string' ? notice.severity : 'NOTICE';
+      if (message) notices.push(`${severity}: ${message}`);
     };
     client.on('notice', captureNotice);
     try {
