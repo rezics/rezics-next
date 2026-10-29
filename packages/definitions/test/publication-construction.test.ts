@@ -41,6 +41,16 @@ test('copied native validation and dependency counters preserve full outputs on 
   }
 }, 240_000);
 
+test('linear uniqueness diagnostics match the historical validator for malformed hashed members', async () => {
+  const report = await constructionEvidence();
+  const row = report.rows.find((candidate) => candidate.name === 'malformed-unique-members')!;
+  expect(row.instrumented).toEqual(row.original);
+  expect(row.original).toContainEqual({ pointer: '/types/grow:Root/bases', code: 'invalid' });
+  expect(row.original).toContainEqual({ pointer: '/types/grow:Root/mappings', code: 'invalid' });
+  expect(row.original).toContainEqual({ pointer: '/types/grow:Root/facets', code: 'invalid' });
+  expect(row.original).toContainEqual({ pointer: '/properties/grow:code/qualifiers', code: 'invalid' });
+});
+
 for (const member of ['bases', 'mappings', 'qualifiers']) {
   test(`invalid duplicate-heavy ${member} must have linear native diagnostics before TypeBox Errors copies`, async () => {
     const report = await constructionEvidence();

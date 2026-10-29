@@ -389,6 +389,25 @@ async function probe(): Promise<Evidence> {
         else release.types[rootType]![member] = Array(count).fill('schema:Thing');
         measure(`duplicate-${member}-${count}`, 'release', release, { duplicates: count - 1 });
       }
+    // Differential witnesses exercise TypeBox's pinned structural hash on
+    // malformed members, including sorted object keys and numeric -0 equality.
+    const malformed = constructionFixture();
+    const members = [{ a: 1, b: 2 }, { b: 2, a: 1 }, -0, 0, null, null];
+    malformed.types[rootType]!.bases = structuredClone(members) as unknown as string[];
+    malformed.types[rootType]!.mappings = structuredClone(members) as unknown as string[];
+    malformed.types[rootType]!.facets = structuredClone(members) as unknown as string[];
+    malformed.properties[code]!.qualifiers = structuredClone(members) as unknown as string[];
+    malformed.properties[code]!.mappings = structuredClone(members) as unknown as string[];
+    const itemProperty = Object.values(malformed.properties).find((property) => property.datatype === 'wikibase-item');
+    if (itemProperty) itemProperty.targets = structuredClone(members) as unknown as string[];
+    const quantityProperty = Object.values(malformed.properties).find((property) => property.datatype === 'quantity');
+    if (quantityProperty) quantityProperty.units = structuredClone(members) as unknown as string[];
+    const relationProperty = Object.values(malformed.properties).find((property) => property.relation);
+    if (relationProperty?.relation) relationProperty.relation.filter = structuredClone(members) as unknown as string[];
+    for (const profile of Object.values(malformed.libraryProfiles ?? {}))
+      for (const source of profile.importSources ?? [])
+        source.recordKinds = structuredClone(members) as unknown as string[];
+    measure('malformed-unique-members', 'release', malformed, { malformedMembers: members.length });
     const filterRoom = 1024 - Object.keys(bundledRelease.filters ?? {}).length;
     for (const invalid of [false, true]) {
       const mark = (release: Release) => {
