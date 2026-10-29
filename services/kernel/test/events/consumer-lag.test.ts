@@ -46,15 +46,26 @@ async function append(partition: number): Promise<void> {
   }
 }
 
-async function until(condition: () => boolean | Promise<boolean>, timeoutMs = 60_000): Promise<void> {
+async function until(
+  condition: () => boolean | Promise<boolean>,
+  timeoutMs = 10_000,
+  errors: unknown[][] = [],
+): Promise<void> {
   const deadline = performance.now() + timeoutMs;
-  while (!(await condition())) {
+  for (;;) {
+    if (errors.length > 0) throw new Error(`relay logged an error: ${String(errors[0]?.[0])}`);
+    if (await condition()) {
+      if (errors.length > 0) throw new Error(`relay logged an error: ${String(errors[0]?.[0])}`);
+      return;
+    }
     if (performance.now() > deadline) throw new Error('condition not reached');
     await Bun.sleep(10);
   }
 }
 
 test('relay ticks record the oldest pending envelope across partitions and a caught-up observation', async () => {
+  const errors: unknown[][] = [];
+  const errorSpy = spyOn(console, 'error').mockImplementation((...args: unknown[]) => errors.push(args));
   const consumer = await consumerAtHead();
   const partitions = (
     await admin.query<{ partition_no: number }>('SELECT partition_no FROM core.partition ORDER BY partition_no LIMIT 2')
@@ -80,7 +91,7 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
     { intervalMs: 20, concurrency: 1 },
   );
   try {
-    await until(async () => (await withConnection(pool, (client) => readConsumerLag(client, consumer))) !== null);
+    await until(async () => (await withConnection(pool, (client) => readConsumerLag(client, consumer))) !== null, 10_000, errors);
     const caughtUp = await withConnection(pool, (client) => readConsumerLag(client, consumer));
     expect(caughtUp?.oldestPendingAt).toBeNull();
     expect(caughtUp?.observedAt).toBeInstanceOf(Date);
@@ -94,16 +105,21 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
       [partitions],
     );
     await running;
-    await until(async () => {
-      const lag = await withConnection(pool, (client) => readConsumerLag(client, consumer));
-      return lag?.oldestPendingAt?.getTime() === expected.rows[0]?.oldest.getTime();
-    });
+    await until(
+      async () => {
+        const lag = await withConnection(pool, (client) => readConsumerLag(client, consumer));
+        return lag?.oldestPendingAt?.getTime() === expected.rows[0]?.oldest.getTime();
+      },
+      10_000,
+      errors,
+    );
     const pending = await withConnection(pool, (client) => readConsumerLag(client, consumer));
     expect(pending?.oldestPendingAt).toEqual(expected.rows[0]?.oldest);
     expect(pending?.observedAt).toBeInstanceOf(Date);
   } finally {
     release();
     await relay.stop();
+    errorSpy.mockRestore();
   }
 });
 
