@@ -185,6 +185,14 @@ async function pageRecording(
 const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle']);
 
 function recordedResponse(recording: KernelRecording): Response {
+  const recordedHeaders = new Headers({
+    'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json',
+  });
+  if (isRecord(recording.headers))
+    for (const [name, value] of Object.entries(recording.headers))
+      if (typeof value === 'string') recordedHeaders.set(name, value);
+  if (recording.status === 204 && isRecord(recording.headers))
+    return new Response(null, { status: 204, headers: recordedHeaders });
   if (recording.status === 204) return new Response(null, { status: 204 });
   // Fake modules use this envelope when a kernel response body is not an object, such as a list response.
   if (Object.hasOwn(recording, '__responseBody'))
@@ -197,6 +205,8 @@ function recordedResponse(recording: KernelRecording): Response {
     if (requestKeys.has(key)) continue;
     body[key] = value;
   }
+  delete body.headers;
+  if (isRecord(recording.headers)) return Response.json(body, { status: recording.status, headers: recordedHeaders });
   return Response.json(body, {
     status: recording.status,
     headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },

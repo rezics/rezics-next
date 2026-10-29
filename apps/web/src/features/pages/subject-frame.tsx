@@ -120,6 +120,7 @@ export function SubjectFrame({
   tabs,
   tabLabels,
   view,
+  base: tabBase,
 }: {
   frame: SubjectFrameData;
   locale: string;
@@ -132,6 +133,8 @@ export function SubjectFrame({
   tabs: readonly ViewTab[];
   tabLabels: ViewTabLabels;
   view: View;
+  /** The page-view address when this subject is embedded in a routed Zone. */
+  base?: string;
 }) {
   const title = frame.title.text || unlabelled;
   const base = subjectHref({ id: frame.id, label: title }, locale).href;
@@ -167,7 +170,13 @@ export function SubjectFrame({
           {facts.length > 0 && <p className="text-sm text-muted-foreground">{facts.join(' · ')}</p>}
         </div>
       </header>
-      <ViewTabs tabs={withCurrent(tabs, view)} active={view} locale={locale} base={base} labels={tabLabels} />
+      <ViewTabs
+        tabs={withCurrent(tabs, view)}
+        active={view}
+        locale={locale}
+        base={tabBase ?? base}
+        labels={tabLabels}
+      />
     </div>
   );
 }

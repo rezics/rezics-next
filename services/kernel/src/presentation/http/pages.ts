@@ -16,8 +16,8 @@ import {
 } from '@rezics/composition';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import type { TProperties } from 'typebox';
 import { readPublicAccountByAgent } from '../../access/account-data.ts';
+import { PageResponseSchema } from './page-contract.ts';
 import { withConnection } from '../../database/pool.ts';
 import type { createApp } from '../../http/app.ts';
 import { customMethod, customMethodPath } from '../../http/custom-method.ts';
@@ -31,6 +31,7 @@ import { decodeSession, encodeSession, mergeSession, type SessionComponent } fro
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
 import { readPage } from '../reads.ts';
+export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 
 const resource = { route: 0, id: GLOBAL_CONTEXT };
 const closed = { additionalProperties: false } as const;
@@ -38,31 +39,6 @@ const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 const profileRoute = new RegExp(PROFILE_ROUTE_PATTERN, 'u');
 const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const readResult = t.Object({ status: t.Integer(), body: t.Any() }, closed);
-export const PageResponseSchema = t.Object(
-  {
-    subject: t.Optional(t.String()),
-    account: t.Optional(t.String()),
-    profile: t.String(),
-    template: t.Object(
-      {
-        scope: t.Union([t.Literal('route'), t.Literal('type'), t.Literal('base'), t.Literal('generic')]),
-        key: t.Union([t.String(), t.Null()]),
-      },
-      closed,
-    ),
-    document: t.Any(),
-    views: t.Optional(t.Array(t.String())),
-    reads: t.Record(t.String(), readResult),
-  },
-  closed,
-);
-
-/** Builds a closed top-level extension of the common page response without mutating its schema. */
-export function extendPageResponseSchema<Extension extends TProperties>(extension: Extension) {
-  return t.Object({ ...PageResponseSchema.properties, ...extension }, closed);
-}
-
 const pageResponse = PageResponseSchema;
 const pageRedirect = t.Object({ redirect: t.Object({ from: t.String(), to: t.String() }, closed) }, closed);
 

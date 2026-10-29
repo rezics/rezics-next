@@ -957,6 +957,15 @@ declare const productEventTypes: {
         sourceEpoch: Type.TInteger;
         sourcePosition: Type.TString;
     }>;
+    readonly 'com.rezics.content.report-reporter.projected.v1': Type.TObject<{
+        reportId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.report-reporter.erased.v1': Type.TObject<{
+        reportId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.report.evidence-erased.v1': Type.TObject<{
+        reportId: Type.TString;
+    }>;
     readonly 'com.rezics.library.account-facts.purged.v1': Type.TObject<{
         accountId: Type.TString;
         kind: Type.TUnion<[Type.TLiteral<"entry">, Type.TLiteral<"copy">, Type.TLiteral<"follow">]>;

@@ -99,6 +99,7 @@ test('each recorded JSON response type-checks against the kernel client', async 
     'subject-page.json': 'PageResponse',
     'subject-ratings.json': 'SubjectRatingsResponse',
     'subject-source-statistics.json': 'SubjectSourceStatisticsResponse',
+    'zone-subject-page.json': 'PageResponse',
     'subject-reactions.json': 'SubjectReactionsResponse',
     'subject-reaction.json': 'SubjectOwnReactionResponse',
     'board.json': 'BoardResponse',

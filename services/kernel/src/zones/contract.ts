@@ -12,7 +12,7 @@ import {
 } from '@rezics/composition';
 import { t } from 'elysia';
 import type { Static, TLiteral, TOptional, TSchema, TUnion } from 'typebox';
-import { extendPageResponseSchema } from '../presentation/http/pages.ts';
+import { extendPageResponseSchema } from '../presentation/http/page-contract.ts';
 
 const closed = { additionalProperties: false } as const;
 const MAX_ZONE_MOUNTS = 16;

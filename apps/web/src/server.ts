@@ -404,7 +404,7 @@ async function pageRedirect(request: Request, url: URL): Promise<Response | unde
     return new Response(null, { status: 301, headers: { Location: url.href } });
   }
   const first = url.pathname.split('/')[1];
-  if (!locales.some((locale) => locale === first)) {
+  if (!url.pathname.startsWith('/_serverFn/') && !locales.some((locale) => locale === first)) {
     const locale = await extractLocaleFromRequestAsync(request);
     const location = localizeUrl(url, { locale });
     return new Response(null, {
@@ -415,11 +415,14 @@ async function pageRedirect(request: Request, url: URL): Promise<Response | unde
 }
 
 async function siteRequest(request: Request): Promise<Response> {
-  return paraglideMiddleware(request, () => fetchHandler(request)).then((response: Response) => {
-    const headers = new Headers(response.headers);
-    headers.set('Cache-Control', 'private, no-store');
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-  });
+  const pathname = new URL(request.url).pathname;
+  // Server function RPCs are locale-neutral and must reach Start at their root endpoint.
+  const response = pathname.startsWith('/_serverFn/')
+    ? await fetchHandler(request)
+    : await paraglideMiddleware(request, () => fetchHandler(request));
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 function matchUiLocaleTag(header: string | null): string | undefined {

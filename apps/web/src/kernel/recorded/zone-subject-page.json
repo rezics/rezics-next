@@ -1,0 +1,527 @@
+{
+  "subject": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01",
+  "profile": "sha256:47976876913edbfa03e4f2641f4c20d3ce57528e1f2d2fe9f23dc67b1665c885",
+  "template": {
+    "scope": "base",
+    "key": "schema:CreativeWork"
+  },
+  "document": {
+    "root": {
+      "props": {}
+    },
+    "content": [
+      {
+        "type": "Slot",
+        "props": {
+          "id": "header",
+          "name": "header",
+          "children": [
+            {
+              "type": "SubjectHeader",
+              "props": {
+                "id": "subject-header"
+              }
+            },
+            {
+              "type": "Slot",
+              "props": {
+                "id": "actions",
+                "name": "actions",
+                "children": []
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "Summary",
+        "props": {
+          "id": "summary"
+        }
+      },
+      {
+        "type": "Statements",
+        "props": {
+          "id": "statements",
+          "properties": [
+            "schema:author",
+            "schema:illustrator",
+            "schema:translator",
+            "schema:publisher",
+            "schema:datePublished",
+            "schema:inLanguage",
+            "schema:genre",
+            "schema:isPartOf"
+          ]
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "editions",
+          "title": {
+            "en": "Editions",
+            "zh-Hant": "版本",
+            "zh-Hans": "版本",
+            "ja": "版",
+            "ko": "판",
+            "de": "Ausgaben",
+            "fr": "Éditions",
+            "es": "Ediciones"
+          },
+          "property": "schema:exampleOfWork",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "side-stories",
+          "title": {
+            "en": "Side stories",
+            "zh-Hant": "外傳",
+            "zh-Hans": "外传",
+            "ja": "外伝",
+            "ko": "외전",
+            "de": "Nebengeschichten",
+            "fr": "Histoires parallèles",
+            "es": "Historias paralelas"
+          },
+          "property": "rezics:sideStoryOf",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "adaptations",
+          "title": {
+            "en": "Adaptations",
+            "zh-Hant": "改編作品",
+            "zh-Hans": "改编作品",
+            "ja": "派生作品",
+            "ko": "파생 작품",
+            "de": "Adaptionen",
+            "fr": "Adaptations",
+            "es": "Adaptaciones"
+          },
+          "property": "wdt:P144",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "versions",
+          "title": {
+            "en": "Alternative versions",
+            "zh-Hant": "其他版本",
+            "zh-Hans": "其他版本",
+            "ja": "別バージョン",
+            "ko": "다른 버전",
+            "de": "Alternative Fassungen",
+            "fr": "Versions alternatives",
+            "es": "Versiones alternativas"
+          },
+          "property": "rezics:alternativeVersion",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "related",
+          "title": {
+            "en": "Related",
+            "zh-Hant": "相關作品",
+            "zh-Hans": "相关作品",
+            "ja": "関連作品",
+            "ko": "관련 작품",
+            "de": "Verwandtes",
+            "fr": "Œuvres liées",
+            "es": "Obras relacionadas"
+          },
+          "property": "rezics:bangumiRelatedTo",
+          "limit": 12
+        }
+      },
+      {
+        "type": "Appearances",
+        "props": {
+          "id": "characters",
+          "direction": "forward",
+          "property": "schema:character",
+          "limit": 12
+        }
+      },
+      {
+        "type": "Credits",
+        "props": {
+          "id": "credits",
+          "direction": "forward",
+          "property": "schema:contributor",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RatingSummary",
+        "props": {
+          "id": "ratings"
+        }
+      },
+      {
+        "type": "ReviewList",
+        "props": {
+          "id": "reviews"
+        }
+      },
+      {
+        "type": "ThreadList",
+        "props": {
+          "id": "threads"
+        }
+      },
+      {
+        "type": "CollectionList",
+        "props": {
+          "id": "lists",
+          "title": {
+            "en": "Lists",
+            "zh-Hant": "清單",
+            "zh-Hans": "清单",
+            "ja": "リスト",
+            "ko": "목록",
+            "de": "Listen",
+            "fr": "Listes",
+            "es": "Listas"
+          },
+          "limit": 6
+        }
+      },
+      {
+        "type": "Sources",
+        "props": {
+          "id": "sources"
+        }
+      }
+    ]
+  },
+  "views": [
+    "overview",
+    "editions",
+    "characters",
+    "credits",
+    "relations",
+    "reviews",
+    "discussion",
+    "lists",
+    "details"
+  ],
+  "reads": {
+    "r0": {
+      "status": 200,
+      "body": {
+        "subject": {
+          "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01",
+          "type": "schema:Book",
+          "labels": {
+            "en": "Kokoro",
+            "zh-Hant": "心",
+            "zh-Hans": "心",
+            "ja": "こころ",
+            "ko": "마음",
+            "de": "Kokoro",
+            "fr": "Le Pauvre Cœur des hommes",
+            "es": "Kokoro"
+          },
+          "descriptions": {
+            "en": "1914 novel by Natsume Sōseki",
+            "zh-Hant": "夏目漱石於1914年發表的長篇小說",
+            "zh-Hans": "夏目漱石于1914年发表的长篇小说",
+            "ja": "夏目漱石の長編小説（1914年）",
+            "ko": "나쓰메 소세키의 1914년 장편소설",
+            "de": "Roman von Natsume Sōseki aus dem Jahr 1914",
+            "fr": "roman de Natsume Sōseki paru en 1914",
+            "es": "novela de Natsume Sōseki publicada en 1914"
+          },
+          "aliases": {
+            "ja": [
+              "こゝろ",
+              "心"
+            ]
+          },
+          "statements": {
+            "schema:author": [
+              {
+                "id": "0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f01",
+                "rank": "normal",
+                "property": {
+                  "id": "schema:author",
+                  "data_type": "wikibase-item"
+                },
+                "value": {
+                  "type": "value",
+                  "content": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e02"
+                },
+                "qualifiers": [],
+                "references": []
+              }
+            ],
+            "schema:genre": [
+              {
+                "id": "0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f02",
+                "rank": "preferred",
+                "property": {
+                  "id": "schema:genre",
+                  "data_type": "wikibase-item"
+                },
+                "value": {
+                  "type": "value",
+                  "content": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e04"
+                },
+                "qualifiers": [],
+                "references": []
+              },
+              {
+                "id": "0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f03",
+                "rank": "deprecated",
+                "property": {
+                  "id": "schema:genre",
+                  "data_type": "wikibase-item"
+                },
+                "value": {
+                  "type": "value",
+                  "content": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e05"
+                },
+                "qualifiers": [],
+                "references": []
+              }
+            ],
+            "schema:isbn": [
+              {
+                "id": "0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f04",
+                "rank": "normal",
+                "property": {
+                  "id": "schema:isbn",
+                  "data_type": "external-id"
+                },
+                "value": {
+                  "type": "value",
+                  "content": "978-4-10-101013-7"
+                },
+                "qualifiers": [],
+                "references": [
+                  {
+                    "hash": "a2f44edd45d46888e8e5d08e574f769440c626b2a30f6b695c77f1d57b19b1a8",
+                    "parts": [
+                      {
+                        "property": {
+                          "id": "schema:url",
+                          "data_type": "url"
+                        },
+                        "value": {
+                          "type": "value",
+                          "content": "https://www.aozora.gr.jp/cards/000148/card773.html"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "schema:numberOfPages": [
+              {
+                "id": "0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f05",
+                "rank": "normal",
+                "property": {
+                  "id": "schema:numberOfPages",
+                  "data_type": "quantity"
+                },
+                "value": {
+                  "type": "value",
+                  "content": {
+                    "amount": "+384",
+                    "unit": "1"
+                  }
+                },
+                "qualifiers": [
+                  {
+                    "property": {
+                      "id": "schema:url",
+                      "data_type": "url"
+                    },
+                    "value": {
+                      "type": "novalue"
+                    }
+                  }
+                ],
+                "references": []
+              }
+            ]
+          },
+          "cover": {
+            "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d5e01",
+            "width": 640,
+            "height": 960,
+            "placeholder": {
+              "thumbhash": "",
+              "color": "#3b4a6b"
+            },
+            "variants": [
+              {
+                "format": "avif",
+                "width": 160
+              },
+              {
+                "format": "webp",
+                "width": 160
+              },
+              {
+                "format": "avif",
+                "width": 320
+              },
+              {
+                "format": "webp",
+                "width": 320
+              }
+            ],
+            "focalPoint": null,
+            "credit": {
+              "rightsHolder": "Rezics fixture art",
+              "via": {
+                "name": "Rezics",
+                "url": "https://rezics.com"
+              },
+              "license": "CC0-1.0"
+            }
+          }
+        },
+        "account": null,
+        "related": {
+          "schema:author": {
+            "labels": {
+              "en": "author",
+              "ja": "著者"
+            }
+          },
+          "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e02": {
+            "labels": {
+              "en": "Natsume Sōseki",
+              "zh-Hant": "夏目漱石",
+              "zh-Hans": "夏目漱石",
+              "ja": "夏目漱石"
+            }
+          },
+          "schema:genre": {
+            "labels": {
+              "en": "genre",
+              "ja": "ジャンル"
+            }
+          },
+          "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e04": {
+            "labels": {
+              "en": "novel",
+              "zh-Hant": "長篇小說",
+              "zh-Hans": "长篇小说",
+              "ja": "長編小説",
+              "ko": "장편소설",
+              "de": "Roman",
+              "fr": "roman",
+              "es": "novela"
+            }
+          },
+          "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e05": {
+            "labels": {
+              "en": "short story",
+              "zh-Hant": "短篇小說",
+              "zh-Hans": "短篇小说",
+              "ja": "短編小説",
+              "ko": "단편소설",
+              "de": "Kurzgeschichte",
+              "fr": "nouvelle",
+              "es": "cuento"
+            }
+          },
+          "schema:isbn": {
+            "labels": {
+              "en": "ISBN",
+              "ja": "ISBN"
+            }
+          },
+          "schema:url": {
+            "labels": {
+              "en": "URL",
+              "ja": "URL"
+            }
+          },
+          "schema:numberOfPages": {
+            "labels": {
+              "en": "number of pages",
+              "ja": "ページ数"
+            }
+          }
+        }
+      }
+    },
+    "r1": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r2": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r3": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r4": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r5": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r6": {
+      "status": 200,
+      "body": {
+        "collections": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    }
+  }
+}

@@ -1093,6 +1093,18 @@ language through the client's `accept-language`.
 - **Growth check:** `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and
   refusal handling
 
+### Zone pages (`/<locale>/zones/<id>`)
+
+- **Touches:** One anonymous `POST /v1/zones/<id>:readPage` returns the public Zone header and the existing page
+  presentation. Subject pages add the subject page reads used by their global routes. The shared presentation renderer
+  applies the Zone's appearance tokens around each page, with page tokens taking precedence. Subject canonicals point
+  to `/<locale>/subjects/<id>`.
+- **Bound:** One Zone read per page view, plus the common subject page reads. A server render follows no more than four
+  `202` continuations. If work remains, it returns a no-store `503` preparing page and the browser resumes with the last
+  cursor. Personal subject controls load after hydration.
+- **Growth check:** `tests/zone-shell.test.ts` asserts that a home uses one Zone read and that a subject page adds one
+  request to the existing common subject reads.
+
 ### Sitemap export
 
 - **Touches:** One daily Workflow normally walks each feed once in cursor order, with one full restart if a cursor is
