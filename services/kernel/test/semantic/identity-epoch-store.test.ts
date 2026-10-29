@@ -6,6 +6,7 @@ import { writeSubject } from '../../src/semantic/subject.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
 import { readIdentityEpochCutover, stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
+import { resolveSubject } from '../../src/library/subject-anchor.ts';
 import {
   digest,
   epochFixture,
@@ -185,6 +186,21 @@ test('bounded bootstrap never infers self or readiness from absent mapping', asy
     (await admission({ kind: 'merge', survivor: original, redirected: concurrent, release: release.digest })).execute(),
   ).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
   expect(await storeSnapshot([original])).toEqual(before);
+});
+
+test('native current mapping resolves a created original through the real Library subject reader', async () => {
+  const created = await f.create('Library identity mapping consumer');
+  const mapping = await store.readMapping(f.pool, created.subject.id);
+  expect(mapping).toMatchObject({
+    state: 'mapped',
+    original: created.subject.id,
+    terminal: created.subject.id,
+    epoch: 1n,
+  });
+  expect(await resolveSubject({ pool: f.pool, access: f.access }, await f.actor(), created.subject.id)).toEqual({
+    subjectId: created.subject.id,
+    requestedSubjectId: null,
+  });
 });
 
 test('same native creation transaction initializes exact self and rolls back with the source', async () => {
