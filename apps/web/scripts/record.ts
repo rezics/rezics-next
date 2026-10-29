@@ -840,14 +840,10 @@ function applyStorySubjects(value: unknown, locale: string, name: string): unkno
         ? result.label.value
         : undefined,
   ].filter((label): label is string => typeof label === 'string');
-  const isPersonalStory = name.startsWith('library-') || name.startsWith('subject-page');
   const candidates = storySubjects.filter((entry) =>
     labelValues.some((label) => Object.values(entry.labels as Record<string, string>).includes(label)),
   );
-  const subject =
-    storySubjects.find((entry) => entry.id === result.id) ??
-    candidates.find((entry) => entry.id.startsWith('01a17a3b-') === isPersonalStory) ??
-    candidates[0];
+  const subject = storySubjects.find((entry) => entry.id === result.id) ?? candidates[0];
   if (subject) {
     result.id = subject.id;
     const labels = subject.labels as Record<string, string>;
