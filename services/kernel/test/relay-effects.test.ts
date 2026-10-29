@@ -235,15 +235,14 @@ test('effects relay discovery stays within its bound as outbox history grows', a
             if (entry && typeof entry === 'object' && 'Plan' in entry) visit((entry as { Plan: unknown }).Plan);
           }
         }
-        expect(
-          nodes.some(
-            (node) =>
-              node['Schema'] === 'core' &&
-              node['Relation Name'] === 'outbox' &&
-              node['Index Name'] === 'outbox_pkey' &&
-              String(node['Index Cond'] ?? '').includes('position'),
-          ),
-        ).toBe(true);
+        const nextEnvelopeProbe = nodes.some(
+          (node) =>
+            node['Schema'] === 'core' &&
+            node['Relation Name'] === 'outbox' &&
+            node['Index Name'] === 'outbox_pkey' &&
+            String(node['Index Cond'] ?? '').includes('position'),
+        );
+        if (!nextEnvelopeProbe) throw new Error(`missing next-envelope outbox probe: ${JSON.stringify(nodes)}`);
       },
       operation: async (db) => {
         const { rows } = await db.admin.query<{ position: string }>(
