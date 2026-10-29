@@ -118,6 +118,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
   const historyPerPartition = 125;
   const historyInitial = new Map<number, string>();
   const historyHeads = new Map<number, number>();
+  let hotHead: string | undefined;
   let savedCheckpoints: {
     partition_no: number;
     consumer: string;
@@ -143,6 +144,18 @@ test('effects relay discovery stays within its bound as outbox history grows', a
       [hot],
     );
     initialPositions.set(hot, hotPosition.rows[0]!.position);
+    const advancedHot = await growth.admin.query<{ epoch: number; position: string }>(
+      'UPDATE core.partition SET position = position + 1 WHERE partition_no = $1 RETURNING epoch, position::text',
+      [hot],
+    );
+    hotHead = advancedHot.rows[0]!.position;
+    const hotId = Bun.randomUUIDv7();
+    insertedIds.push(hotId);
+    await growth.admin.query(
+      `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
+       VALUES ($1, $2, 0, 1, $3, $4, $5, $6, $7)`,
+      [hot, hotHead, advancedHot.rows[0]!.epoch, hotId, CREATED, crypto.randomUUID(), { id: crypto.randomUUID() }],
+    );
     const history = await growth.admin.query<{ partition_no: number; previous: string }>(
       `UPDATE core.partition SET position = position + $3
        WHERE partition_no BETWEEN $1 AND $2
@@ -192,9 +205,21 @@ test('effects relay discovery stays within its bound as outbox history grows', a
         }
       },
       prepare: async (db) => {
-        const measured = await capture(db, () =>
-          withGrowthConnection(db, (client) => scanPartitions.run(client, { consumer: consumerName })),
+        await db.admin.query(
+          'UPDATE core.consumer_checkpoint SET position = $3 WHERE consumer = $1 AND partition_no = $2',
+          [consumerName, hot, String(BigInt(hotHead!) - 1n)],
         );
+        let measured;
+        try {
+          measured = await capture(db, () =>
+            withGrowthConnection(db, (client) => scanPartitions.run(client, { consumer: consumerName })),
+          );
+        } finally {
+          await db.admin.query(
+            'UPDATE core.consumer_checkpoint SET position = $3 WHERE consumer = $1 AND partition_no = $2',
+            [consumerName, hot, hotHead],
+          );
+        }
         const nodes: Record<string, unknown>[] = [];
         const visit = (value: unknown): void => {
           if (!value || typeof value !== 'object' || Array.isArray(value)) return;

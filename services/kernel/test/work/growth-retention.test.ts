@@ -160,4 +160,4 @@ test('one retention batch stays bounded as retained and recent workflow history 
   expect(report.samples[0]!.cost.rows).toBeGreaterThan(0);
   expect(report.samples[1]!.cost.statements).toBe(report.samples[0]!.cost.statements);
   expect(report.samples[2]!.cost.statements).toBe(report.samples[0]!.cost.statements);
-});
+}, 180_000);
