@@ -18,6 +18,7 @@ import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
@@ -422,52 +423,64 @@ test.serial(
 test.serial(
   'one refresh batch stays within its bound as candidates and reactions grow',
   async () => {
-    const baseAt = new Date(Date.now() + 20 * 60_000);
-    const background = refreshPopulation(baseAt);
-    const population: Population = {
-      ...background,
-      rows(placement) {
-        const rows = background.rows!(placement);
-        return {
-          ...rows,
-          'content.board_thread': rows['content.board_thread']!.map((row) => ({
-            ...row,
-            rank_refreshed_at: new Date(baseAt.getTime() + 60 * 60_000).toISOString(),
-          })),
-        };
-      },
-    };
-    const refresh = async () => {
-      // A fixed clock keeps completed batches outside the due window.
-      const refreshed = await refreshBoardRankBatch(db.pool, baseAt, [partitionOf(boardRoute)]);
-      expect(refreshed).toBe(500);
-      return refreshed;
-    };
-    const report = await checkGrowth(db, {
-      name: 'one hot rank refresh batch',
-      rule: 'series',
-      scales,
-      bounds: {
-        rows: 'constant',
-        blocks: 'logarithmic',
-        statements: 'constant',
-      },
-      repetitions: 1,
-      // Grow 500 × scale unrelated candidates and totals; consume two fresh due batches per scale.
-      grow: async (growthDb, scale, previous) => {
-        await seed(growthDb, population, { from: previous * 500, to: scale * 500 });
-        for (let batch = 0; batch < 2; batch++)
-          await seed(growthDb, refreshPopulation(baseAt), { from: 0, to: dueCandidates });
-      },
-      warmup: refresh,
-      operation: refresh,
-    });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-    expect(
-      report.samples.every((sample) =>
-        Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
-      ),
-    ).toBe(true);
+    // Keep the large growth population out of the later behavioral fixtures.
+    // The check runner keeps rezics as the migrated, connection-free template.
+    const databaseName = `board_rank_growth_${randomUUID().replaceAll('-', '')}`;
+    await db.admin.query(`CREATE DATABASE "${databaseName}" TEMPLATE rezics`);
+    const databaseUrl = new URL(db.url);
+    databaseUrl.pathname = `/${databaseName}`;
+    const growthDatabase = await openGrowthDatabase(databaseUrl.toString());
+    try {
+      const baseAt = new Date(Date.now() + 20 * 60_000);
+      const background = refreshPopulation(baseAt);
+      const population: Population = {
+        ...background,
+        rows(placement) {
+          const rows = background.rows!(placement);
+          return {
+            ...rows,
+            'content.board_thread': rows['content.board_thread']!.map((row) => ({
+              ...row,
+              rank_refreshed_at: new Date(baseAt.getTime() + 60 * 60_000).toISOString(),
+            })),
+          };
+        },
+      };
+      const refresh = async () => {
+        // A fixed clock keeps completed batches outside the due window.
+        const refreshed = await refreshBoardRankBatch(growthDatabase.pool, baseAt, [partitionOf(boardRoute)]);
+        expect(refreshed).toBe(500);
+        return refreshed;
+      };
+      const report = await checkGrowth(growthDatabase, {
+        name: 'one hot rank refresh batch',
+        rule: 'series',
+        scales,
+        bounds: {
+          rows: 'constant',
+          blocks: 'logarithmic',
+          statements: 'constant',
+        },
+        repetitions: 1,
+        // Grow 500 × scale unrelated candidates and totals; consume two fresh due batches per scale.
+        grow: async (growthDb, scale, previous) => {
+          await seed(growthDb, population, { from: previous * 500, to: scale * 500 });
+          for (let batch = 0; batch < 2; batch++)
+            await seed(growthDb, refreshPopulation(baseAt), { from: 0, to: dueCandidates });
+        },
+        warmup: refresh,
+        operation: refresh,
+      });
+      expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+      expect(
+        report.samples.every((sample) =>
+          Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
+        ),
+      ).toBe(true);
+    } finally {
+      await growthDatabase.close();
+      await dropTestDatabase(db.admin, databaseName);
+    }
   },
   180_000,
 );

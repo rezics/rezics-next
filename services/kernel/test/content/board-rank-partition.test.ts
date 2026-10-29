@@ -22,19 +22,19 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
   let warmupDueIds = Array.from({ length: 8 }, () => newId(warmupRoute));
   const freshId = newId(route);
   const zeroId = newId(route);
-  const population: Population = {
+  const makePopulation = (populationRoute: number): Population => ({
     name: `board-rank-other-partitions-${randomUUID()}`,
-    hotPartition: partitionOf(otherRoute),
+    hotPartition: partitionOf(populationRoute),
     hotShare: 1,
     rows: ({ ordinal }) => {
-      const board = newId(otherRoute);
-      const thread = newId(otherRoute);
+      const board = newId(populationRoute);
+      const thread = newId(populationRoute);
       return {
         'content.board': [
           {
-            route: otherRoute,
+            route: populationRoute,
             board_id: board,
-            subject_id: newId(otherRoute),
+            subject_id: newId(populationRoute),
             title: 'Other partition',
             visibility: 'published',
             security_revision: 1,
@@ -43,7 +43,7 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
         ],
         'content.board_thread': [
           {
-            route: otherRoute,
+            route: populationRoute,
             board_id: board,
             thread_id: thread,
             created_at: createdAt,
@@ -57,7 +57,7 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
         ],
         'content.reaction_total': [
           {
-            route: otherRoute,
+            route: populationRoute,
             target_id: thread,
             kind: 'upvote',
             count: 2,
@@ -67,7 +67,8 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
         ],
       };
     },
-  };
+  });
+  const population = makePopulation(otherRoute);
   const report = await checkGrowth(db, {
     name: 'partition board rank refresh',
     rule: 'series',
@@ -91,24 +92,27 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
       }
       if (previous === 0) {
         // Pad all shared indexes before the first scale without adding other due work.
-        await seed(
-          growthDb,
-          {
-            ...population,
-            name: `${population.name}-baseline`,
-            rows(placement) {
-              const rows = population.rows!(placement);
-              return {
-                ...rows,
-                'content.board_thread': rows['content.board_thread']!.map((row) => ({
-                  ...row,
-                  rank_refreshed_at: freshAt,
-                })),
-              };
+        for (const baselineRoute of [route, warmupRoute, otherRoute]) {
+          const baseline = makePopulation(baselineRoute);
+          await seed(
+            growthDb,
+            {
+              ...baseline,
+              name: `${baseline.name}-baseline`,
+              rows(placement) {
+                const rows = baseline.rows!(placement);
+                return {
+                  ...rows,
+                  'content.board_thread': rows['content.board_thread']!.map((row) => ({
+                    ...row,
+                    rank_refreshed_at: freshAt,
+                  })),
+                };
+              },
             },
-          },
-          { from: 0, to: 4096 },
-        );
+            { from: 0, to: 4096 },
+          );
+        }
       }
       dueIds = Array.from({ length: 8 }, () => newId(route));
       warmupDueIds = Array.from({ length: 8 }, () => newId(warmupRoute));
