@@ -179,6 +179,24 @@ test('open reports require a reason and statement for take down and offer dismis
   expect(markup).toContain('name="statement" required');
 });
 
+test('withheld and deleted report targets use the existing content placeholders', () => {
+  const markup = renderToStaticMarkup(
+    createElement(ModerationReportsView, {
+      reports: [
+        report(1, { kind: 'post', id: id(50) }),
+        report(2, { kind: 'post', id: id(51) }),
+      ],
+      targets: [
+        { key: `post:${id(50)}`, kind: 'post', value: { post: { availability: 'withheld' } } },
+        { key: `post:${id(51)}`, kind: 'post', value: { post: { availability: 'erased' } } },
+      ],
+      next: null,
+    }),
+  );
+  expect(markup).toContain('data-slot="withheld"');
+  expect(markup).toContain('data-slot="tombstone"');
+});
+
 test('the reports route is signed-in, noindex, private, and maps a refused read to not found', async () => {
   const route = await Bun.file(new URL('../src/routes/boards/$id_.moderation.tsx', import.meta.url)).text();
   const read = await Bun.file(new URL('../src/moderation/reports-read.ts', import.meta.url)).text();
