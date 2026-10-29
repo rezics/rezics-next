@@ -320,7 +320,7 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
         changed = true;
       }
       const delivered = await deliverFrontier.run(tx, key);
-      changed ||= delivered !== null;
+      changed ||= Array.isArray(delivered) ? delivered.length > 0 : delivered !== null;
       const pending = await pendingLocator.run(tx, { ...key, queue: LOCATOR_EFFECTS_QUEUE });
       let done = false;
       if (pending && !pending.pending) {
@@ -329,7 +329,7 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
           participants: [...participants(record.version)],
           at: authoritativeTimeValue(time),
         });
-        done = completed !== null;
+        done = Array.isArray(completed) ? completed.length > 0 : completed !== null;
         changed ||= done;
       }
       if (!changed) return noEffect(false);

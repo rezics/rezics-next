@@ -278,7 +278,7 @@ for (const [index, phase] of (['record', 'resolve'] as const).entries()) {
   }, 180000);
 }
 
-for (const [index, phase] of (['undelivered', 'locator'] as const).entries()) {
+for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entries()) {
   test(`completion with ${phase} frontier stays bounded as outbox history, erasures, late items and unrelated DBOS workflows grow`, async () => {
     const route = 0x4590 + index;
     const accountId = newId(route);
@@ -294,7 +294,7 @@ for (const [index, phase] of (['undelivered', 'locator'] as const).entries()) {
           await database.admin.query(
             `UPDATE access.erasure SET frontier=$3::jsonb,workflow_until=$4
             WHERE route=$1 AND account_id=$2`,
-            [route, accountId, JSON.stringify([{ partition, position: '2' }]), phase === 'locator' ? 1000 : null],
+            [route, accountId, JSON.stringify([{ partition, position: '2' }]), phase !== 'undelivered' ? 1000 : null],
           );
           await database.admin.query(
             `INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position)
@@ -306,6 +306,19 @@ for (const [index, phase] of (['undelivered', 'locator'] as const).entries()) {
             VALUES($1,'effect','PENDING',$2,7,10)`,
             [workflowId, LOCATOR_EFFECTS_QUEUE],
           );
+        }
+        if (previous === 0 && phase === 'late') {
+          await database.admin.query(
+            `INSERT INTO access.erasure_acknowledgement(route,account_id,participant,outcome)
+            VALUES($1,$2,'delivery','none')`,
+            [route, accountId],
+          );
+          await database.admin.query(
+            `INSERT INTO access.erasure_late_item(route,account_id,participant,locator)
+            VALUES($1,$2,'content','fixed-open-copy')`,
+            [route, accountId],
+          );
+          await database.admin.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid=$1', [workflowId]);
         }
         const ids = Array.from({ length: scale - previous }, () => newId(route));
         await accounts(database, route, ids, participants);
