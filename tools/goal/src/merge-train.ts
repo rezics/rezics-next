@@ -441,6 +441,12 @@ function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean 
   return result.status === 0;
 }
 
+class WorkerConflictError extends Error {
+  constructor(readonly path: string) {
+    super(`Worker change conflicts with dev in ${path}`);
+  }
+}
+
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
   return frozen
     .filter((file) => {
@@ -517,7 +523,8 @@ export function resolveMechanicalConflicts(
         if (merged.status === null || merged.status > 1) return false;
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
-        if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base) return false;
+        if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
+          throw new WorkerConflictError(file);
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -539,7 +546,7 @@ export function resolveMechanicalConflicts(
         comparableJson(merged.value) === comparableJson(ours) &&
         comparableJson(theirs) !== comparableJson(ours) &&
         comparableJson(theirs) !== comparableJson(base)
-      ) return false;
+      ) throw new WorkerConflictError(file);
       text = `${JSON.stringify(merged.value, null, 2)}\n`;
     } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
     if (text === undefined) return false;
@@ -1105,6 +1112,15 @@ export class MergeTrain {
             rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
+            if (error instanceof WorkerConflictError) {
+              refuseNoEffect(result, [error.path], logPath);
+              localOutcomes.set(entry.id, result);
+              try {
+                git(trainTree, 'rebase', '--abort');
+              } catch {}
+              resetTo(trainTree, previous);
+              continue;
+            }
             // Deferral is for a conflict with an earlier member of this batch. First in its batch, the landing
             // conflicts with dev itself and only its worker can resolve that: deferred again every round, a busy
             // queue kept one landing waiting 3 h 41 min with no outcome.
@@ -1759,7 +1775,15 @@ export class MergeTrain {
         if (workspace) {
           git(trainTree, 'reset', '--hard', base);
           git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
-        } else rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
+        } else {
+          try {
+            rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
+          } catch (error) {
+            if (!(error instanceof WorkerConflictError)) throw error;
+            refuseNoEffect(result, [error.path], logPath);
+            return finish();
+          }
+        }
         if (!stabilize && integratesIntoDev) regenerateLandingDerivedFiles(trainTree, base, derivedFiles, logPath);
         const frozen = workspace
           ? sharedStore!

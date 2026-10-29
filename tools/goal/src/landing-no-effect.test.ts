@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { resolveMechanicalConflicts } from './merge-train.ts';
+import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
 function setWorkerContent(task: { worktree: string }, content: string): void {
@@ -33,23 +36,33 @@ test('a Markdown union with no effect on dev returns the task to its worker and 
   }
 });
 
-test('a Markdown union that keeps only dev’s conflicting hunk is returned to the worker', async () => {
+test('a Markdown union that keeps only dev’s changed hunk is left for the worker', () => {
   const h = integrationHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('README.md', 'Fixture\n\nParagraph to edit.\n');
-    const task = h.dispatch('README.md');
-    setWorkerContent(task, 'Fixture\n\nWorker edit.\n');
-    await h.start(task);
-    h.advanceDev('README.md', 'Fixture\n\nParagraph changed on dev.\n');
-
-    await h.train();
-
-    const outcome = h.outcomes[0]!;
-    expect(outcome.passed).toBe(false);
-    expect(outcome.stage).toBe('rebase');
-    expect(outcome.conflictedFiles).toContain('README.md');
-    expect(h.store.task(task.id).state).toBe('ready');
+    const file = '.temp/union-conflict.md';
+    mkdirSync(join(h.root, '.temp'), { recursive: true });
+    writeFileSync(join(h.root, file), 'unmerged content\n');
+    const blobs = [
+      'before\nbase hunk\nafter\n',
+      'before\ndev hunk\nafter\n',
+      'before\nafter\n',
+    ].map((content) => {
+      const path = join(h.root, '.temp/blob');
+      writeFileSync(path, content);
+      return git(h.root, 'hash-object', '-w', path);
+    });
+    const indexInfo = blobs
+      .map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`)
+      .join('\n');
+    const staged = spawnSync('git', ['update-index', '--index-info'], {
+      cwd: h.root,
+      encoding: 'utf8',
+      input: `${indexInfo}\n`,
+    });
+    expect(staged.status).toBe(0);
+    expect(() => resolveMechanicalConflicts(h.root, [file], undefined, 'union')).toThrow(
+      'Worker change conflicts with dev',
+    );
   } finally {
     h.dispose();
   }
@@ -59,9 +72,9 @@ test('an empty landing tree is not attributed to an existing dev commit', async 
   const h = integrationHarness();
   try {
     h.ensureDev();
-    h.advanceDev('result.txt', 'already on dev');
     const task = h.dispatch('result.txt');
     await h.start(task);
+    h.advanceDev('result.txt', 'result.txt');
 
     await h.train();
 
