@@ -20,7 +20,7 @@ Catalogue Person/Organisation and a verified account are distinct kind hits: nei
 the other. A Realm's backing Space does not create a second hit. Undefined future identities stay unenabled.
 
 Use a hybrid topology: shared derived public projection plus native private producers at actual authority
-boundaries. Private Library facts, Collection membership and protected associations never enter the public
+boundaries. Private Library/Collection facts and protected associations never enter the public
 index, including hidden filter fields. A public resource's metadata and its private membership are different
 capabilities. New account, Realm, thread, post, Collection or Zone kinds need their owner's actual native
 projection, sorted result producer, current disclosure, explicit condition domain and Cost proof before going
@@ -56,8 +56,8 @@ resource references remain rejected, without recursion. No query-time account se
   Do not invent a generic filter for a nonrepresentable list. Unsupported unions return 422 before enumeration.
   Semantic maintains head/release-keyed compiled page predicates on configuration change: head plus at most
   sixteen compiled rows, not up to 256 raw descriptors re-derived on each request.
-- Realm is `{realm:{id:UUID}}`: subjects discussed by currently readable linked discussion AND review threads
-  on its boards, including granted protected boards natively. Raw `subject_thread` presence is not listing truth.
+- Realm is `{realm:{id:UUID}}`: subjects discussed by currently readable linked discussion or review threads
+  on its boards (both kinds participate), including granted protected boards natively. Raw `subject_thread` presence is not listing truth.
   Content checks current thread, opening post, board, place, subject reference and Access disclosure. Every Realm
   leaf requires current Realm read and ban checks, including under NOT. Ban is not a public-index predicate or
   public privacy-head fanout. A known-candidate batch alone is not a Realm-to-subject enumeration anchor.
