@@ -6,7 +6,7 @@ import { integrationHarness } from './test-support.ts';
 const success = { passed: true, output: '', timedOut: false };
 const failure = { passed: false, output: 'typecheck failed', timedOut: false };
 
-test('does not cut stabilize from dev until both quick gates pass', async () => {
+test('waits for a passing quick gate, then cuts from the newest passing dev head', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -21,6 +21,7 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
     expect(gates).toBe(1);
     expect(git(h.root, 'branch', '--list', 'stabilize')).toBe('');
 
+    const newestGreen = h.advanceDev('newest-green');
     const commands: string[][] = [];
     await promote({
       settings: h.settings,
@@ -34,7 +35,7 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
       ['bun', 'run', 'typecheck'],
       ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
     ]);
-    expect(h.head('stabilize')).toBe(h.head('dev'));
+    expect(h.head('stabilize')).toBe(newestGreen);
   } finally {
     h.dispose();
   }
