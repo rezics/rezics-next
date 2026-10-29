@@ -10,7 +10,15 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  costOf,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Row,
+} from '../support/growth.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
 
 let db: GrowthDatabase;
@@ -436,6 +444,191 @@ test('entitlement pages stay in the buyer partition and reject tampering and oth
   expect((await request('/v1/orders', null, { offerId: selling.id })).status).toBe(401);
 });
 
+test('order creation proves its constant native point prefix row cost under the calibrated series rule after production-shaped neighbours and framework history are seeded before the first scale', async () => {
+  const selling = await offer();
+  await order(selling.id);
+  // Clone only committed native envelopes, never Access or semantic/business evidence.
+  const templates = (
+    await db.admin.query<{ receipt: Row; events: Row[]; basis: Row | null }>(
+      `SELECT to_jsonb(r) - 'actor_account_id' AS receipt,
+         (SELECT jsonb_agg(to_jsonb(o)) FROM core.outbox o
+          WHERE o.partition_no=r.partition_no AND o.position=r.position) AS events,
+         (SELECT to_jsonb(b) - 'actor_account_id' FROM editorial.write_basis b
+          WHERE b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id) AS basis
+       FROM core.receipt r ORDER BY partition_no, position`,
+    )
+  ).rows;
+  expect(templates.map(({ receipt }) => receipt.command_kind).sort()).toEqual([
+    'commerce.checkout.record',
+    'commerce.offer.create',
+    'commerce.order.create',
+  ]);
+  expect(templates.filter(({ basis }) => basis !== null)).toHaveLength(2);
+  const neighboursPerScale = 2048;
+  const operation = async () => {
+    const calls = fake.requests.length;
+    const created = await order(selling.id, key());
+    expect(created).toMatchObject({ settlement: 'pending' });
+    expect(created.checkoutUrl).toStartWith('https://');
+    expect(fake.requests).toHaveLength(calls + 1);
+  };
+  const report = await checkGrowth(db, {
+    name: 'order creation: 2048/8192/32768 offer and order neighbours; 6144/24576/98304 native receipt and outbox neighbours; 4096/16384/65536 write bases',
+    rule: 'series',
+    scales: [1, 4, 16],
+    // Commerce Cost: one parent offer point, one order insert; checkout reads/updates
+    // one order and counts its c<=2 receipt prefix. Two k=1 command envelopes add
+    // fixed rows/statements and B-tree depth per probe: R/S O(1), B O(L(N)).
+    bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
+    async grow(database, scale, previous) {
+      const range = { from: previous * neighboursPerScale, to: scale * neighboursPerScale };
+      await seed(
+        database,
+        {
+          name: 'commerce-http-order-neighbours',
+          hotPartition: partitionOf(routeOf(buyer)!),
+          async write(target, placement) {
+            const sellerRoute = routeOf(seller)!;
+            const buyerRoute = routeOf(buyer)!;
+            const tx = { transactionId: newId(sellerRoute), time: new Date().toISOString() };
+            const neighbour = await store.insertOffer(
+              target.admin,
+              sellerRoute,
+              {
+                ...input(),
+                targetSubjectId: selling.targetSubjectId,
+                id: newId(sellerRoute),
+                creatorAccountId: seller,
+                royaltyBasisPoints: 9000,
+              },
+              tx,
+            );
+            await store.insertOrder(
+              target.admin,
+              buyerRoute,
+              {
+                id: newId(buyerRoute),
+                buyerAccountId: placement.hot ? buyer : other,
+                offer: neighbour,
+              },
+              { ...tx, transactionId: newId(buyerRoute) },
+            );
+          },
+        },
+        range,
+      );
+      const heads = new Map(
+        (
+          await database.admin.query<{ partition_no: number; epoch: number; position: string }>(
+            'SELECT partition_no, epoch, position::text FROM core.partition WHERE partition_no=ANY($1::integer[])',
+            [[partitionOf(routeOf(seller)!), partitionOf(routeOf(buyer)!)]],
+          )
+        ).rows.map((head) => [head.partition_no, head]),
+      );
+      await seed(
+        database,
+        {
+          name: 'commerce-http-native-envelopes',
+          hotPartition: partitionOf(routeOf(buyer)!),
+          rows({ ordinal }) {
+            const receipts: Row[] = [],
+              events: Row[] = [],
+              bases: Row[] = [];
+            for (const [index, template] of templates.entries()) {
+              const head = heads.get(Number(template.receipt.partition_no))!;
+              const position = (
+                BigInt(head.position) + BigInt((ordinal - range.from) * templates.length + index + 1)
+              ).toString();
+              const transactionId = newId(head.partition_no * 16);
+              const requestKey =
+                template.receipt.command_kind === 'commerce.checkout.record'
+                  ? `order:${newId(routeOf(buyer)!)}:checkout:0`
+                  : `history:${key()}`;
+              receipts.push({
+                ...template.receipt,
+                epoch: head.epoch,
+                position,
+                transaction_id: transactionId,
+                idempotency_key: requestKey,
+              });
+              events.push(
+                ...template.events.map((event) => ({
+                  ...event,
+                  epoch: head.epoch,
+                  position,
+                  id: newId(head.partition_no * 16),
+                })),
+              );
+              if (template.basis)
+                bases.push({ ...template.basis, epoch: head.epoch, position, transaction_id: transactionId });
+            }
+            return { 'core.receipt': receipts, 'core.outbox': events, 'editorial.write_basis': bases };
+          },
+          async finish(admin) {
+            // The next real command must append after the cloned committed positions.
+            for (const head of heads.values())
+              await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
+                head.partition_no,
+                (BigInt(head.position) + BigInt((range.to - range.from) * templates.length)).toString(),
+              ]);
+          },
+        },
+        range,
+      );
+    },
+    async warmup(_, scale) {
+      const warmed = await capture(db, operation);
+      const nodes = (value: unknown): Record<string, unknown>[] => {
+        if (Array.isArray(value)) return value.flatMap(nodes);
+        if (!value || typeof value !== 'object') return [];
+        const node = value as Record<string, unknown>;
+        return [node, ...Object.values(node).flatMap(nodes)];
+      };
+      const plans = nodes(warmed.capture.plans);
+      const prefix = plans.filter(
+        (node) => typeof node['Index Cond'] === 'string' && /idempotency_key >=/.test(node['Index Cond']),
+      );
+      console.info(
+        'commerce order creation native access',
+        JSON.stringify({
+          neighbours: scale * neighboursPerScale,
+          cost: costOf(warmed.capture),
+          prefix,
+        }),
+      );
+      expect(prefix).toHaveLength(1);
+      expect(prefix[0]!['Index Name']).toBe('receipt_pkey');
+      for (const column of ['partition_no', 'command_kind', 'idempotency_key'])
+        expect(prefix[0]!['Index Cond']).toContain(column);
+      expect(prefix[0]!['Index Cond']).toContain('commerce.checkout.record');
+      expect(prefix[0]!['Index Cond']).toContain('idempotency_key <');
+      expect(prefix[0]!['Actual Rows']).toBe(0);
+      expect(prefix[0]!['Rows Removed by Filter']).toBe(0);
+      for (const [index, columns] of [
+        ['offer_pkey', ['route', 'offer_id']],
+        ['purchase_order_pkey', ['route', 'order_id']],
+        ['receipt_pkey', ['partition_no', 'principal_kind', 'principal_id', 'command_kind', 'idempotency_key']],
+        ['partition_pkey', ['partition_no']],
+      ] as const) {
+        const point = plans.find((node) => node['Index Name'] === index && !prefix.includes(node));
+        expect(point).toBeDefined();
+        for (const column of columns) expect(point!['Index Cond']).toContain(`${column} =`);
+      }
+    },
+    operation,
+  });
+  console.info('commerce order creation series', JSON.stringify(report));
+  for (const sample of report.samples)
+    for (const cost of sample.repetitions) {
+      for (const relation of ['commerce.offer', 'commerce.purchase_order', 'core.receipt'])
+        expect(cost.relations[relation]!.sequentialScans).toBe(0);
+      // Per-relation Cost includes ModifyTable RETURNING rows: the create and
+      // checkout envelopes insert two receipts. Fresh keys read no prior receipt.
+      expect(cost.relations['core.receipt']!.rows).toBe(2);
+    }
+  expect(new Set(report.samples.flatMap((sample) => sample.repetitions.map((cost) => cost.statements))).size).toBe(1);
+});
+
 test('commerce request statement counts stay constant as total and buyer history grow', async () => {
   const selling = await offer(),
     entitlement = await paid(selling.id);
@@ -471,12 +664,6 @@ test('commerce request statement counts stay constant as total and buyer history
       { from: previous, to: scale },
     );
   for (const [name, operation] of [
-    [
-      'order creation',
-      async () => {
-        expect((await request('/v1/orders', buyer, { offerId: selling.id })).status).toBe(201);
-      },
-    ],
     [
       'order read',
       async () => {

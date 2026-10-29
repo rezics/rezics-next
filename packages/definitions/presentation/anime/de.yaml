@@ -12,12 +12,10 @@ properties:
   schema:numberOfEpisodes: Episodenanzahl
   schema:startDate: Startdatum
   wdt:P449: Sender der Erstausstrahlung
-  wdt:P7937: künstlerische Form
   wdt:P973: beschrieben in URL
 inverseProperties:
   schema:isPartOf: 'Episoden'
   wdt:P449: 'Erstausstrahlungen'
-  wdt:P7937: 'Werke dieser Form'
 libraryProfiles:
   anime.series:
     states:

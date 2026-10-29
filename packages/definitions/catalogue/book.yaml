@@ -31,6 +31,8 @@ classes:
       - genre
       - keywords
       - partOfSeries
+      - wordCount
+      - workFormat
     annotations:
       library:
         id: book.reading
@@ -58,7 +60,7 @@ classes:
             - id: digital
               statuses: [{ id: owned }]
         importSources: []
-      facets: author genre keywords partOfSeries datePublished contributor inLanguage
+      facets: author genre keywords partOfSeries datePublished contributor inLanguage wordCount workFormat
       schema_org_type: https://schema.org/Book
   Edition:
     is_a: CreativeWork
@@ -265,6 +267,17 @@ classes:
               statuses: [{ id: ordered }, { id: owned }, { id: lent }, { id: disposed }]
         importSources: []
 slots:
+  wordCount:
+    slot_uri: schema:wordCount
+    description: The exact number of words asserted for the book work, not characters or edition pages.
+    range: integer
+    minimum_value: 0
+    exact_mappings:
+      - wd:P6570
+    annotations:
+      datatype: quantity
+      units: '1'
+      exact: true
   exampleOfWork:
     slot_uri: schema:exampleOfWork
     description: The creative work represented by this edition.

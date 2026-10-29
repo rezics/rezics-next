@@ -2,6 +2,7 @@ types:
   schema:Book: '책'
   bf:Instance: 판
 properties:
+  schema:wordCount: '단어 수'
   schema:exampleOfWork: 다음의 판 또는 번역본
   schema:isbn: ISBN-13
   schema:publisher: 발행 주체

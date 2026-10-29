@@ -344,15 +344,3 @@ slots:
       inverse: schema:hasPart
       relation_order: name
       acyclic: true
-  workFormat:
-    slot_uri: wdt:P7937
-    description: The source format of this anime work, represented by a source concept.
-    range: Concept
-    multivalued: true
-    exact_mappings:
-      - wd:P7937
-    annotations:
-      datatype: wikibase-item
-      relation_group: classification
-      inverse: rezics:workInForm
-      relation_order: name

@@ -2,12 +2,14 @@ types:
   skos:Concept: 'Concepto'
   skos:ConceptScheme: 'Esquema de conceptos'
 properties:
+  wdt:P7937: forma artística
   skos:inScheme: 'en el esquema'
   skos:broader: 'tiene concepto más amplio'
   foaf:focus: 'sujeto representado'
   schema:keywords: 'palabras clave'
   schema:genre: 'género'
 inverseProperties:
+  wdt:P7937: 'Obras de esta forma'
   skos:inScheme: 'Conceptos de este esquema'
   skos:broader: 'Conceptos más específicos'
   foaf:focus: 'Conceptos que representan este sujeto'

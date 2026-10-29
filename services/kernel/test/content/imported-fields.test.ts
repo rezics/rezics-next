@@ -11,7 +11,8 @@ import { globalContextAnchor } from '../../src/semantic/context.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { assertGrowthPointPlans, seedMediaCommandHistory } from './support/media-fixtures.ts';
 
 setDefaultTimeout(120_000);
 
@@ -330,21 +331,60 @@ test('canonical Unicode and numeric extension payloads match the real document s
 });
 
 test('intentional changed-document and input-byte growth is linear', async () => {
-  await command(async (tx) =>
-    checkGrowth(db, {
-      name: 'imported changed documents',
-      scales: [1, 8, 64],
-      repetitions: 1,
-      bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
-      async grow() {},
-      async operation(_target, scale) {
-        for (let change = 0; change < scale; change++) {
-          const result = await appendImportedField(tx, input());
-          expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
-        }
-      },
-    }),
-  );
+  const value = input();
+  const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
+  const operation = async (_target: typeof db, scale: number) =>
+    command(async (tx) => {
+      for (let change = 0; change < scale; change++) {
+        const result = await appendImportedField(tx, input());
+        expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
+      }
+    });
+  const report = await checkGrowth(db, {
+    name: 'imported changed documents',
+    rule: 'series',
+    scales: [1, 8, 64],
+    repetitions: 1,
+    bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
+    async grow(target, _scale, previous) {
+      if (previous !== 0) return;
+      // Hold committed H fixed while varying k: rows/statements O(k), blocks O(k log H).
+      // A fresh command per warm-up/repetition keeps prior scales out of the live transaction.
+      await seed(
+        target,
+        {
+          name: 'fixed committed imported document history',
+          hotPartition: partitionOf(route),
+          hotShare: 1,
+          rows: ({ route: other }) => ({
+            'content.imported_field': [
+              {
+                route: other,
+                id: newId(other),
+                subject: newId(other),
+                candidate: newId(other),
+                revision: 1,
+                body: bytes,
+                body_sha256: Buffer.from(hash(bytes), 'hex'),
+                source: value.source,
+                rights: value.rights,
+                language: value.language,
+                availability: 'available',
+              },
+            ],
+          }),
+        },
+        { from: 0, to: 8192 },
+      );
+      await seedMediaCommandHistory(target, route, actorId, 'test.imported-field', 0, 8192);
+    },
+    operation,
+    async warmup(target, scale) {
+      const measured = await capture(target, () => operation(target, scale));
+      assertGrowthPointPlans(measured.capture, { 'content.imported_field': ['route', 'id'] });
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
 });
 
 test('checkGrowth captures actual append and exact read at fixed bytes with same-partition unrelated history', async () => {

@@ -12,12 +12,10 @@ properties:
   schema:numberOfEpisodes: 話数
   schema:startDate: 開始日
   wdt:P449: 放送当初のネットワーク
-  wdt:P7937: 創作物の形式
   wdt:P973: 詳細情報URL
 inverseProperties:
   schema:isPartOf: 'エピソード'
   wdt:P449: '初回放送作品'
-  wdt:P7937: 'この形式の作品'
 typeDescriptions:
   schema:TVSeries: 'テレビ番組シリーズ'
 libraryProfiles:

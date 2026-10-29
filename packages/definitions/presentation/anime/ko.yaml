@@ -12,12 +12,10 @@ properties:
   schema:numberOfEpisodes: 에피소드 수
   schema:startDate: 시작일
   wdt:P449: 다음에서 본방송을 함
-  wdt:P7937: 저작물의 형식
   wdt:P973: 기술되어 있는 URL
 inverseProperties:
   schema:isPartOf: '에피소드'
   wdt:P449: '최초 방영 작품'
-  wdt:P7937: '이 형식의 작품'
 libraryProfiles:
   anime.series:
     states:

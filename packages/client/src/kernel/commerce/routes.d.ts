@@ -4111,6 +4111,172 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     v1: {
         offers: {
             ":offerId": {
+                patch: {
+                    body: {
+                        unitAmountMinor: number;
+                    };
+                    params: {
+                        offerId: string;
+                    };
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            offer: {
+                                id: string;
+                                targetSubjectId: string;
+                                summary: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
+                                title: string;
+                                currency: string;
+                                unitAmountMinor: number;
+                                state: "active" | "delisted";
+                            };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        409: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        offers: {
+            ":offerId": {
                 $delist: {
                     post: {
                         body: unknown;

@@ -7,6 +7,7 @@ prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
   skos: http://www.w3.org/2004/02/skos/core#
   foaf: http://xmlns.com/foaf/0.1/
 default_range: string
@@ -31,6 +32,18 @@ classes:
     annotations:
       schema_org_type: https://schema.org/DefinedTermSet
 slots:
+  workFormat:
+    slot_uri: wdt:P7937
+    description: The form of the creative work, represented by a classification concept.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P7937
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:workInForm
+      relation_order: name
   inScheme:
     slot_uri: skos:inScheme
     description: A concept scheme to which the concept belongs.

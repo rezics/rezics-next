@@ -2,6 +2,7 @@ types:
   schema:Book: book
   bf:Instance: edition
 properties:
+  schema:wordCount: 'word count'
   schema:exampleOfWork: edition of
   schema:isbn: ISBN-13
   schema:publisher: publisher

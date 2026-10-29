@@ -1,10 +1,13 @@
 types:
   schema:Recipe: 요리법
 properties:
+  schema:suitableForDiet: '적합한 식단'
   schema:recipeInstructions: 조리 방법
   schema:recipeIngredient: 재료
   schema:cookTime: 조리 시간
   schema:recipeYield: 인분
+inverseProperties:
+  schema:suitableForDiet: '이 식단에 적합한 레시피'
 libraryProfiles:
   recipe.cooking:
     states:

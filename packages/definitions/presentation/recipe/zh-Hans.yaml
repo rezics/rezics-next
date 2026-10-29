@@ -1,10 +1,13 @@
 types:
   schema:Recipe: 食谱
 properties:
+  schema:suitableForDiet: '适用饮食'
   schema:recipeInstructions: 做法
   schema:recipeIngredient: 食材
   schema:cookTime: 烹饪时间
   schema:recipeYield: 份量
+inverseProperties:
+  schema:suitableForDiet: '适用此饮食的食谱'
 libraryProfiles:
   recipe.cooking:
     states:

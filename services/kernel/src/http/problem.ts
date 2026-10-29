@@ -20,6 +20,7 @@ export const PROBLEMS = {
   authentication_required: { status: 401, title: 'Authentication Required', retryable: false },
   invalid_credentials: { status: 401, title: 'Invalid Credentials', retryable: false },
   forbidden: { status: 403, title: 'Forbidden', retryable: false },
+  platform_closed: { status: 403, title: 'Platform Closed', retryable: false },
   stale_editorial_head: { status: 409, title: 'Stale Editorial Head', retryable: false },
   offer_unavailable: { status: 409, title: 'Offer Unavailable', retryable: false },
   media_unavailable: { status: 409, title: 'Media Unavailable', retryable: false },

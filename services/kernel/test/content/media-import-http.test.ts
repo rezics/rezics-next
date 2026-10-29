@@ -16,7 +16,10 @@ import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+
+import { tupleRoute } from '../../src/content/imported-contract.ts';
+import { assertGrowthPointPlans, seedMediaCommandHistory } from './support/media-fixtures.ts';
 
 const platformId = '00000000-0000-8000-8000-000000000000';
 const route = 42000;
@@ -350,8 +353,16 @@ test('production root forwards trusted import configuration to the actual native
 });
 
 test('checkGrowth proves rows statements and buffers match declared cost', async () => {
+  const sourceRoute = tupleRoute(routeKey, input.provenance.source, input.provenance.external_id);
+  const operation = async () => {
+    const result = await accepted();
+    const status = await poll(result.body.media.id);
+    expect(status.response.status).toBe(200);
+    expect(checkMediaImportStatus(status.body)).toEqual([]);
+  };
   const report = await checkGrowth(db, {
     name: 'HTTP native media import and protected point poll',
+    rule: 'series',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,
@@ -363,8 +374,55 @@ test('checkGrowth proves rows statements and buffers match declared cost', async
           name: 'unrelated and same-partition media',
           hotPartition: partitionOf(route),
           rows(placement) {
+            const actor = newId(placement.route);
             const id = newId(placement.route);
             return {
+              'access.account': [
+                { route: placement.route, account_id: actor, kind: 'actor', state: 'active', transaction_id: actor },
+              ],
+              'access.resource_grant': [
+                {
+                  route: 0,
+                  resource_id: platformId,
+                  subject_id: actor,
+                  action: 'media:import_from_url',
+                  valid: '(,)',
+                  transaction_id: actor,
+                },
+              ],
+              'access.resource_role_grant': [
+                {
+                  route: placement.route,
+                  resource_id: id,
+                  subject_id: accountId,
+                  grant_role: 'creator',
+                  valid: '(,)',
+                  transaction_id: actor,
+                },
+              ],
+              'access.resource_initialization': [
+                {
+                  route: placement.route,
+                  resource_id: id,
+                  resource_type: 'content.media',
+                  creator_id: accountId,
+                  initialized_at: '2026-01-01T00:00:00Z',
+                },
+              ],
+              'semantic.subject': [
+                { route: placement.route, subject_id: id, type: 'schema:Book', recorded_transaction_id: id },
+              ],
+              'semantic.context': [
+                { route: placement.route, context_id: id, kind: 'community', labels: {}, recorded_transaction_id: id },
+              ],
+              'content.source_fences': [placement.route, sourceRoute].map((home, index) => ({
+                route: home,
+                source: input.provenance.source,
+                external_id: `growth-${index}-${placement.ordinal}`,
+                field_group: 'cover',
+                taken_down: false,
+                security_revision: 1,
+              })),
               'content.media': [
                 {
                   route: placement.route,
@@ -380,17 +438,62 @@ test('checkGrowth proves rows statements and buffers match declared cost', async
                   transaction_id: id,
                 },
               ],
+              'content.media_variant': [
+                {
+                  route: placement.route,
+                  media_id: id,
+                  format: 'webp',
+                  width: 320,
+                  height: 200,
+                  media_type: 'image/webp',
+                  byte_count: 64,
+                  sha256: 'b'.repeat(64),
+                  key: `m/${id}/webp-320`,
+                  transaction_id: id,
+                },
+              ],
             };
           },
         },
-        { from: previous, to: scale },
+        { from: previous * 32, to: scale * 32 },
+      );
+      await seedMediaCommandHistory(
+        database,
+        route,
+        accountId,
+        'content.media.importFromUrl',
+        previous * 32,
+        scale * 32,
       );
     },
-    async operation() {
-      const result = await accepted();
-      const status = await poll(result.body.media.id);
-      expect(status.response.status).toBe(200);
-      expect(checkMediaImportStatus(status.body)).toEqual([]);
+    operation,
+    async warmup(database) {
+      const measured = await capture(database, operation);
+      assertGrowthPointPlans(measured.capture, {
+        'content.media': ['route', 'media_id'],
+        'content.media_variant': ['route', 'media_id'],
+        'content.source_fences': ['route', 'source', 'external_id', 'field_group'],
+        'access.resource_role_grant': [
+          'route',
+          'resource_id',
+          'subject_id',
+          'subject_kind',
+          'subject_role',
+          'grant_role',
+          'valid',
+        ],
+        'semantic.subject': ['route', 'subject_id'],
+        'semantic.context': ['route', 'context_id'],
+        'access.resource_grant': [
+          'route',
+          'resource_id',
+          'subject_id',
+          'subject_kind',
+          'subject_role',
+          'action',
+          'valid',
+        ],
+      });
     },
   });
   expect(report.samples).toHaveLength(3);

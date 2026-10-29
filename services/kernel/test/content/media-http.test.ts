@@ -10,7 +10,8 @@ import { type Access, type AccountActor } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { decideDownload } from '../../src/content/media.ts';
-import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { assertGrowthPointPlans } from './support/media-fixtures.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let app: ReturnType<typeof createKernel>;
@@ -491,79 +492,173 @@ test('Eden serializes .$complete.post and .$authorizeDownload.get as literal col
 
 test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
   const media = await available();
+  const digestBody = new Bun.CryptoHasher('sha256').update('{}').digest();
+  // 16 rows per scale unit puts every growing relation on point plans at N=32.
+  const operation = async (database: typeof db) => {
+    const decision = await decideDownload({ pool: database.pool, access }, media.id, { kind: 'anonymous' }, 'webp-320');
+    expect(decision.allowed).toBe(true);
+    const deadline = Date.now() + 10000;
+    const authenticated = await access.authenticate(await bearer('owner'), { pool: database.pool, deadline });
+    expect(
+      (
+        await decideDownload(
+          { pool: database.pool, access, downloadContext: { deadline } },
+          media.id,
+          authenticated,
+          'webp-320',
+        )
+      ).allowed,
+    ).toBe(true);
+  };
   const report = await checkGrowth(db, {
     name: 'media exact variant and current independent container chain decision',
+    rule: 'series',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
-      for (let index = previous; index < scale; index++) {
-        const r = index % 2 === 0 ? route : route + 16;
-        const id = newId(r);
-        const unrelatedActor = newId(r);
-        const unrelatedThread = newId(r);
-        const unrelatedPost = newId(r);
-        const unrelatedRevision = newId(r);
-        await database.admin.query(
-          "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
-          [r, unrelatedActor],
-        );
-        await database.admin.query(
-          `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-          VALUES ($1,$2,$3,$4,'Unrelated','published',1,$3)`,
-          [r, unrelatedThread, unrelatedActor, board],
-        );
-        await database.admin.query(
-          `WITH inserted AS (
-            INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
-            VALUES ($1,$2,$3,$4,$5,'published',1,$4) RETURNING route,thread_id,post_id
-          ) INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-          SELECT route,thread_id,post_id,$5,'{}'::bytea,sha256('{}'::bytea),'','CC0-1.0','{}',$6,'available',$4 FROM inserted`,
-          [r, unrelatedThread, unrelatedPost, unrelatedActor, unrelatedRevision, board],
-        );
-        await database.admin.query(
-          `INSERT INTO content.media(route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,state,key,transaction_id)
-          VALUES ($1,$2,$3,$4,$5,'post-image','image/png',256,'reserved',$6,$4)`,
-          [r, id, unrelatedThread, owner.accountId, `http-distractor-${index}`, `m/${id}/original`],
-        );
-        await database.admin.query(
-          `INSERT INTO content.media_variant(route,media_id,format,width,height,media_type,byte_count,sha256,key,transaction_id)
-          VALUES ($1,$2,'webp',320,200,'image/webp',64,$3,$4,$5)`,
-          [r, id, derivativeHash, `m/${id}/webp-320`, owner.accountId],
-        );
-        // Hot-resource distractors exercise the formula's subject-anchored probes.
-        await grant(unrelatedActor, 'media:read', media.id);
-      }
-      for (const table of [
-        'content.media',
-        'content.media_variant',
-        'content.thread',
-        'content.post',
-        'content.revision',
-        'access.account',
-        'access.resource_grant',
-      ])
-        await database.admin.query(`ANALYZE ${table}`);
-    },
-    async operation(database) {
-      const decision = await decideDownload(
-        { pool: database.pool, access },
-        media.id,
-        { kind: 'anonymous' },
-        'webp-320',
+      await seed(
+        database,
+        {
+          name: 'representative media, ancestry and subject-anchored ACL history',
+          hotPartition: Math.floor(route / 16),
+          rows({ ordinal }) {
+            const r = ordinal % 2 === 0 ? route : route + 16;
+            const boardRoute = ordinal % 2 === 0 ? routeOf(board)! : routeOf(board)! + 16;
+            const id = newId(r),
+              actor = newId(r),
+              t = newId(r),
+              p = newId(r),
+              revision = newId(r);
+            const b = newId(boardRoute);
+            return {
+              'access.account': [
+                { route: r, account_id: actor, kind: 'actor', state: 'active', transaction_id: actor },
+              ],
+              'content.board': [
+                {
+                  route: boardRoute,
+                  board_id: b,
+                  subject_id: actor,
+                  title: 'Unrelated',
+                  visibility: 'published',
+                  security_revision: 1,
+                  recorded_transaction_id: actor,
+                },
+              ],
+              'content.thread': [
+                {
+                  route: r,
+                  thread_id: t,
+                  author_account_id: actor,
+                  board_id: b,
+                  title: 'Unrelated',
+                  visibility: 'published',
+                  security_revision: 1,
+                  recorded_transaction_id: actor,
+                },
+              ],
+              'content.post': [
+                {
+                  route: r,
+                  thread_id: t,
+                  post_id: p,
+                  author_account_id: actor,
+                  head_revision_id: revision,
+                  visibility: 'published',
+                  security_revision: 1,
+                  recorded_transaction_id: actor,
+                },
+              ],
+              'content.revision': [
+                {
+                  route: r,
+                  thread_id: t,
+                  post_id: p,
+                  revision_id: revision,
+                  body: Buffer.from('{}'),
+                  body_sha256: Buffer.from(digestBody),
+                  search_text: '',
+                  licence: 'CC0-1.0',
+                  subject_ids: [],
+                  board_id: b,
+                  availability: 'available',
+                  recorded_transaction_id: actor,
+                },
+              ],
+              'content.media': [
+                {
+                  route: r,
+                  media_id: id,
+                  container_id: t,
+                  uploader_id: owner.accountId,
+                  reservation_request_id: `http-distractor-${ordinal}`,
+                  purpose: 'post-image',
+                  media_type: 'image/png',
+                  byte_count: 256,
+                  state: 'reserved',
+                  key: `m/${id}/original`,
+                  transaction_id: actor,
+                },
+              ],
+              'content.media_variant': ['webp', 'avif'].flatMap((format) =>
+                [320, 640, 960, 1280, 1920, 2560].map((width) => ({
+                  route: r,
+                  media_id: id,
+                  format,
+                  width,
+                  height: 200,
+                  media_type: `image/${format}`,
+                  byte_count: 64,
+                  sha256: derivativeHash,
+                  key: `m/${id}/${format}-${width}`,
+                  transaction_id: actor,
+                })),
+              ),
+              'access.resource_role_grant': [
+                {
+                  route: r,
+                  resource_id: id,
+                  subject_id: owner.accountId,
+                  grant_role: 'creator',
+                  valid: '(,)',
+                  transaction_id: actor,
+                },
+              ],
+              'access.resource_grant': [
+                {
+                  route,
+                  resource_id: media.id,
+                  subject_id: actor,
+                  action: 'media:read',
+                  valid: '(,)',
+                  transaction_id: actor,
+                },
+              ],
+            };
+          },
+        },
+        { from: previous * 16, to: scale * 16 },
       );
-      expect(decision.allowed).toBe(true);
-      const deadline = Date.now() + 10000;
-      const authenticated = await access.authenticate(await bearer('owner'), { pool: database.pool, deadline });
-      expect(
-        (
-          await decideDownload(
-            { pool: database.pool, access, downloadContext: { deadline } },
-            media.id,
-            authenticated,
-            'webp-320',
-          )
-        ).allowed,
-      ).toBe(true);
+    },
+    operation,
+    async warmup(database) {
+      const measured = await capture(database, () => operation(database));
+      assertGrowthPointPlans(measured.capture, {
+        'content.media': ['route', 'media_id'],
+        'content.media_variant': ['route', 'media_id', 'format', 'width'],
+        'content.thread': ['route', 'thread_id'],
+        'content.post': ['route', 'post_id'],
+        'content.board': ['route', 'board_id'],
+        'access.resource_grant': [
+          'route',
+          'resource_id',
+          'subject_id',
+          'subject_kind',
+          'subject_role',
+          'action',
+          'valid',
+        ],
+      });
     },
   });
   console.log('GrowthReport', JSON.stringify(report));

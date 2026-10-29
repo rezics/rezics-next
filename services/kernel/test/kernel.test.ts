@@ -39,6 +39,7 @@ const typed = [
   'POST /v1/webhooks/stripe',
   'GET /v1/offers/:offerId',
   'POST /v1/offers',
+  'PATCH /v1/offers/:offerId',
   'POST /v1/offers/:offerId/$delist',
   'POST /v1/orders',
   'GET /v1/orders/:orderId',
