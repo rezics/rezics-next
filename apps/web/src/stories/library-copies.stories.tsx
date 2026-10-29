@@ -71,7 +71,7 @@ export const TwoKinds: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
-    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_add(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_add() }));
     await within(document.body).findByRole('combobox', { name: m.library_copy_kind() });
   },
 };
@@ -80,7 +80,7 @@ export const NoLongerOffered: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
-    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_delete(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_delete() }));
     await within(document.body).findByText(m.library_copy_no_longer_offered());
   },
 };

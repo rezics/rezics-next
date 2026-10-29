@@ -2,7 +2,7 @@ import type { CopiesPageData } from './copies-read';
 import { m } from '../paraglide/messages.js';
 
 /** Ordinary forms remain usable before hydration or with JavaScript disabled. The kernel checks the pair. */
-export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrfToken?: string | null }) {
+export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrfToken?: string | null | undefined }) {
   const hidden = (name: string, value: string) => <input type="hidden" name={name} value={value} />;
   const identity = () => (
     <>

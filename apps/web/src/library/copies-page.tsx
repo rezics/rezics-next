@@ -164,8 +164,8 @@ export function CopyForm({
   onKey,
 }: {
   copy?: CopyItem;
-  profile?: CopyProfile;
-  sendKind?: boolean;
+  profile?: CopyProfile | undefined;
+  sendKind?: boolean | undefined;
   inline?: boolean;
   initialKind?: string;
   subjectId: string | null;
@@ -256,7 +256,7 @@ export function CopyForm({
           ...result.copy,
           kind: result.copy.kind ?? null,
           subject: null,
-          profile: choices,
+          ...(choices ? { profile: choices } : {}),
           kindLabel: selected?.label ?? m.library_other(),
           statusLabel:
             selected?.statuses.find((status) => status.id === result.copy.status)?.label ?? m.library_other(),
@@ -510,7 +510,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
   );
 }
 
-export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: string }) {
+export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: string | undefined }) {
   const [copies, setCopies] = useState(page.copies);
   const [addKey, setAddKey] = useState(page.addKey);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);

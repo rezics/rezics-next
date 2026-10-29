@@ -93,7 +93,6 @@ export const routes: FakeRoute[] = [
     story: () =>
       story
         ? {
-            status: 200,
             ...definitions,
             digest: 'copy-kinds-story',
             release: {

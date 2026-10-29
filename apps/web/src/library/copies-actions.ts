@@ -55,9 +55,10 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
       Object.assign(copy, { profile, ...copyLabels(release, type, copy.kind, copy.status, locale) });
     }
     if (page.subjectId) {
-      page.profile = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.profile;
       // An empty filtered list has no embedded subject; resolve just the explicitly selected subject.
-      if (!page.profile) page.profile = await resolveSubject(page.subjectId);
+      page.profile =
+        page.copies.find((copy) => copy.subject?.id === page.subjectId)?.profile ??
+        (await resolveSubject(page.subjectId));
     }
     page.csrfToken = (await readSessionIdentity(getRequest(), env as Partial<SessionEnv>)).csrfToken;
     return page;
