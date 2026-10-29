@@ -1063,6 +1063,20 @@ export async function promote(options: PromotionOptions): Promise<void> {
         if (!(await cutStabilizeCandidate(options, dev))) return;
         continue;
       }
+      if (stabilize === main && dev !== stabilize) {
+        if (!(await stabilizeQuickGate(options, dev))) return;
+        if (
+          head(settings.mainCheckout, settings.integrationBranch) !== dev ||
+          optionalHead(settings.mainCheckout, settings.stabilizeBranch) !== stabilize
+        )
+          continue;
+        try {
+          git(settings.mainCheckout, 'update-ref', ref(settings.stabilizeBranch), dev, stabilize);
+        } catch {
+          // A concurrent stabilize update wins; re-read it under the same promotion lease.
+        }
+        continue;
+      }
       const stabilization = stabilize !== undefined;
       const candidateBranch = stabilization ? settings.stabilizeBranch : settings.integrationBranch;
       let candidate = stabilize ?? dev;
