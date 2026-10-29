@@ -190,8 +190,9 @@ beforeAll(async () => {
   } finally {
     pg.Pool = NativePool;
   }
-  // Auth and Kernel each own the SDK in their process lifetime; registration has completed.
-  await auth.stop();
+  // Release Auth's workflow SDK before Kernel registration, while its native HTTP
+  // service and host-owned pool remain live for session-backed token renewal.
+  await auth.host.workflows.close();
   client = await createWorkClient(db.url);
   const modules = KERNEL_WORK_MODULES.map((module) => ({
     name: module.name,
