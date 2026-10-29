@@ -1,27 +1,14 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { readPublicFigureViews } from '../../src/rating/public-figure-http.ts';
 import { measure } from '../support/growth.ts';
 import { createFigureFixture, type FigureFixture } from './support/figure-fixture.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { restartWorker, worker } from '../community/community-driver.ts';
 
 let fixture: FigureFixture;
-let workerPaused = false;
 beforeAll(async () => {
   fixture = await createFigureFixture({ subjects: 256, partitions: 3 });
 }, 180_000);
-// Give the shared native worker an explicit lifetime for each scenario.
-beforeEach(async () => {
-  if (workerPaused) {
-    await restartWorker();
-    workerPaused = false;
-  }
-}, 90_000);
-afterEach(async () => {
-  await worker.stop();
-  workerPaused = true;
-}, 90_000);
 afterAll(async () => {
   await fixture?.close();
 });

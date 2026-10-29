@@ -29,9 +29,10 @@ export async function createFigureFixture(
     partitions > 4096
   )
     throw new TypeError('Invalid figure fixture subject or partition count');
-  const driver = await createCommunityDriver(
-    options.databaseUrl === undefined ? {} : { databaseUrl: options.databaseUrl },
-  );
+  const driver = await createCommunityDriver({
+    ...(options.databaseUrl === undefined ? {} : { databaseUrl: options.databaseUrl }),
+    settleTimeoutMs: 180_000,
+  });
   let cleanupDatabase: GrowthDatabase | undefined;
   try {
     const setup = await driver.provision();

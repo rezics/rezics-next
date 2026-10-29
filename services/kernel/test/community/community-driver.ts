@@ -268,10 +268,12 @@ function closeShared(base: SharedCommunity): Promise<void> {
 }
 
 /** A test file builds its system and worker once; each test gets its own driver state over them. */
-export async function createCommunityDriver(options: { databaseUrl?: string } = {}): Promise<CommunityDriver> {
+export async function createCommunityDriver(
+  options: { databaseUrl?: string; settleTimeoutMs?: number } = {},
+): Promise<CommunityDriver> {
   if (shared?.retired) await closeShared(shared);
   const base = (shared ??= await buildShared(options.databaseUrl));
-  return bindDriver(base);
+  return bindDriver(base, options.settleTimeoutMs ?? 30_000);
 }
 
 /** Ends the system and worker the file's drivers share. Call it once when the file is done. */
@@ -294,7 +296,7 @@ export async function queryCommunityDatabase<T extends QueryResultRow>(
   return (await shared.system.database.pool.query<T>(statement, values)).rows;
 }
 
-function bindDriver(base: SharedCommunity): CommunityDriver {
+function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDriver {
   const { system, kernel, worker, work, observer } = base;
   const pending = new Set<string>();
   let fixture: Fixture | undefined;
@@ -353,7 +355,7 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
     if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
     for (const id of pending) await work.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
     pending.clear();
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + settleTimeoutMs;
     for (;;) {
       if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
       const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
@@ -362,7 +364,7 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
       for (const workflow of workflows)
         await work.retrieveWorkflow(workflow.workflowID).getResult({ pollingIntervalMs: 10 });
       const behind = await system.database.pool.query(`
-        SELECT 1
+        SELECT partition.partition_no, partition.position, consumers.name, checkpoint.position AS checkpoint
           FROM core.partition AS partition
           CROSS JOIN (VALUES ('effects'::text), ('semantic_links'::text)) AS consumers(name)
           LEFT JOIN core.consumer_checkpoint AS checkpoint
@@ -370,7 +372,10 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
          WHERE partition.position > COALESCE(checkpoint.position, 0)
          LIMIT 1`);
       if (!behind.rowCount && workflows.length === 0) return;
-      if (Date.now() >= deadline) throw new Error('Production community worker did not settle');
+      if (Date.now() >= deadline)
+        throw new Error(
+          `Production community worker did not settle: ${JSON.stringify({ behind: behind.rows, workflows, exitCode: worker.child.exitCode })}`,
+        );
       await Bun.sleep(10);
     }
   }
