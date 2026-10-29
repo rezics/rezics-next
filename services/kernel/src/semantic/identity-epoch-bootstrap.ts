@@ -33,6 +33,7 @@ import bootstrapInsertTopologyCustody from './identity-epoch-bootstrap-insert-to
 import bootstrapUpdateBootstrapTopology from './identity-epoch-bootstrap-update-bootstrap-topology.sql';
 import closeHome from './identity-epoch-bootstrap-close-home.sql';
 import closureReceipt from './identity-epoch-bootstrap-closure-receipt.sql';
+import advanceCursor from './identity-epoch-bootstrap-advance-cursor.sql';
 import type { Pool } from 'pg';
 import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -385,10 +386,19 @@ export async function stepIdentityEpochBootstrapWork(pool: Pool): Promise<Identi
   if (!next) return null;
   const repair =
     next.remaining === 0
-      ? await withConnection(pool, async (tx) => (await tx.query(bootstrapSelectBootstrapHome3.sql)).rows[0])
+      ? await withConnection(
+          pool,
+          async (tx) => (await tx.query(bootstrapSelectBootstrapHome3.sql, [next.repair_partition])).rows[0],
+        )
       : null;
-  if (next.remaining === 0 && !repair) return null;
+  if (next.remaining === 0 && repair?.partition_no == null) return null;
   const partition = repair?.partition_no ?? next.next_partition;
+  // Retain the next scheduling position before contacting this source. A missing owner or
+  // pending group can pause its own work without pinning every unrelated source behind it.
+  await runCommand(pool, { partition: 0 }, async (tx) => {
+    await tx.query(advanceCursor.sql, [(partition + 1) % 4096]);
+    return { value: null, events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '0' } }] };
+  });
   const progress = await stepIdentityEpochBootstrap(pool, partition);
   const evidence = await withConnection(pool, async (tx) => {
     const owner = await readPartition(tx, partition);
