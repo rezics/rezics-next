@@ -228,6 +228,7 @@ Run `bun run check` from this workspace. It starts a disposable PostgreSQL datab
 schema dump, runs TypeScript, lint and formatting checks, then runs each test file on its own copy of the migrated
 database. A plain `bun test` shares one database across files, so run a single file when not running the check. The test
 database is removed at the end.
+The check starts its OpenSearch container after TypeScript, lint and formatting checks only when the plan is full or a selected test's static relative imports reach code that reads `OPENSEARCH_URL`.
 Every test file's processes read Reylo's SQL analyses from one analysis database cloned from the template once, named by
 `REYLO_CONFIG`, so no file re-analyses the statements it imports against its own copy.
 Each test file gets `KERNEL_POOL_ACQUIRE_TIMEOUT_MS=2000` so cold connections have more time to establish on a loaded check host.

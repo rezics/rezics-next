@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readdirSync,
   realpathSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -44,6 +45,50 @@ const POSTGRES_ACTIVITY_QUERY = 'SELECT datname, count(*) FROM pg_stat_activity 
 const ANALYSIS_DATABASE = 'kernel_analysis';
 
 type CheckPlan = { files: string[] | null; tests: string[] };
+
+function resolveTypeScriptImport(fromFile: string, specifier: string, moduleDirectory: string): string | null {
+  if (!specifier.startsWith('.')) return null;
+  const base = resolve(dirname(fromFile), specifier);
+  const extension = extname(base);
+  const candidates =
+    extension === '.ts'
+      ? [base]
+      : extension
+        ? [`${base.slice(0, -extension.length)}.ts`]
+        : [`${base}.ts`, resolve(base, 'index.ts')];
+  return candidates.find((candidate) => pathIsWithin(moduleDirectory, candidate) && existsSync(candidate)) ?? null;
+}
+
+/** Whether a check plan's static relative-import closure reads the search URL. */
+export function planNeedsSearch(plan: CheckPlan, moduleDirectory: string): boolean {
+  if (plan.files === null) return true;
+  const root = resolve(moduleDirectory);
+  const visited = new Set<string>();
+  const pending = plan.tests.map((file) => resolve(root, file));
+  const transpiler = new Bun.Transpiler({ loader: 'ts' });
+  while (pending.length) {
+    const file = pending.pop()!;
+    if (visited.has(file) || !pathIsWithin(root, file) || !existsSync(file)) continue;
+    visited.add(file);
+    const source = readFileSync(file, 'utf8');
+    if (source.includes('OPENSEARCH_URL')) return true;
+    for (const imported of transpiler.scanImports(source)) {
+      const dependency = resolveTypeScriptImport(file, imported.path, root);
+      if (dependency && !visited.has(dependency)) pending.push(dependency);
+    }
+  }
+  return false;
+}
+
+/** Keep search startup behind all configured quality checks. */
+export async function runChecksThenStartSearch<T>(
+  needsSearch: boolean,
+  checks: () => void | Promise<void>,
+  startSearch: () => T | Promise<T>,
+): Promise<T | null> {
+  await checks();
+  return needsSearch ? await startSearch() : null;
+}
 
 function moduleTests(moduleDirectory: string): string[] {
   return Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: moduleDirectory })).sort();
@@ -262,12 +307,14 @@ export function writeReyloProject(directory: string, analysisUrl: string): strin
 /** The environment of every process one test file starts: its own database copy, the shared search node and Reylo's analysis database. */
 export function fileEnvironment(
   base: NodeJS.ProcessEnv,
-  file: { url: string; database: string; searchUrl: string; reyloConfig: string },
+  file: { url: string; database: string; searchUrl?: string; reyloConfig: string },
 ): NodeJS.ProcessEnv {
+  const environment = { ...base };
+  delete environment.OPENSEARCH_URL;
   return {
-    ...base,
+    ...environment,
     DATABASE_URL: file.url.replace(/\/rezics(?=\?)/, `/${file.database}`),
-    OPENSEARCH_URL: file.searchUrl,
+    ...(file.searchUrl ? { OPENSEARCH_URL: file.searchUrl } : {}),
     REYLO_CONFIG: file.reyloConfig,
     KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '2000',
   };
@@ -705,34 +752,7 @@ async function main(): Promise<void> {
 
   // Remote hosts are shared: only this run's explicit cleanup may remove their containers.
   if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) cleanupStale();
-  const searchImage = buildSearchImage();
   container = startPostgresContainer();
-  searchContainer = docker([
-    'run',
-    '-d',
-    ...cgroupArgs(),
-    '--label',
-    `rezics.kernel.check.pid=${pid}`,
-    '-p',
-    '127.0.0.1::9200',
-    '--tmpfs',
-    '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
-    '-e',
-    'discovery.type=single-node',
-    '-e',
-    subjectAutoCreateIndexSetting,
-    '-e',
-    'DISABLE_SECURITY_PLUGIN=true',
-    '-e',
-    'DISABLE_INSTALL_DEMO_CONFIG=true',
-    '-e',
-    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
-    searchImage,
-  ]);
-  const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
-  const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
-  if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
-  const searchUrl = `http://127.0.0.1:${searchPortMatch[1]}`;
 
   const portOutput = docker(['port', container, '5432/tcp']);
   const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
@@ -758,35 +778,73 @@ async function main(): Promise<void> {
 
   const tsc = resolve(directory, '../../node_modules/.bin/tsc');
   const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
-  if (plan.files === null) {
-    run(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
-    run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], env);
-    run(oxfmt, ['--check', '.'], env);
-  } else {
-    const typecheck = await capture(
-      tsc,
-      ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
-      env,
-    );
-    const diagnostics = ownDiagnostics(
-      typecheck.output,
-      diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null),
-    );
-    if (diagnostics.length) fail(diagnostics.join('\n'));
-    if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
-      fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);
-    }
+  let searchUrl: string | undefined;
+  await runChecksThenStartSearch(
+    planNeedsSearch(plan, directory),
+    async () => {
+      if (plan.files === null) {
+        run(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+        run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], env);
+        run(oxfmt, ['--check', '.'], env);
+      } else {
+        const typecheck = await capture(
+          tsc,
+          ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
+          env,
+        );
+        const diagnostics = ownDiagnostics(
+          typecheck.output,
+          diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null),
+        );
+        if (diagnostics.length) fail(diagnostics.join('\n'));
+        if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
+          fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);
+        }
 
-    const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
-    if (lintFiles.length)
-      run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles], env);
+        const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
+        if (lintFiles.length)
+          run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles], env);
 
-    const formatFiles = formattedFiles(plan.files);
-    if (formatFiles.length) run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], env);
-  }
+        const formatFiles = formattedFiles(plan.files);
+        if (formatFiles.length) run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], env);
+      }
+    },
+    async () => {
+      const searchImage = buildSearchImage();
+      searchContainer = docker([
+        'run',
+        '-d',
+        ...cgroupArgs(),
+        '--label',
+        `rezics.kernel.check.pid=${pid}`,
+        '-p',
+        '127.0.0.1::9200',
+        '--tmpfs',
+        '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
+        '-e',
+        'discovery.type=single-node',
+        '-e',
+        subjectAutoCreateIndexSetting,
+        '-e',
+        'DISABLE_SECURITY_PLUGIN=true',
+        '-e',
+        'DISABLE_INSTALL_DEMO_CONFIG=true',
+        '-e',
+        'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+        searchImage,
+      ]);
+      const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
+      const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
+      if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
+      const url = `http://127.0.0.1:${searchPortMatch[1]}`;
+      await waitForSearch(url, searchContainer);
+      return url;
+    },
+  ).then((url) => {
+    searchUrl = url ?? undefined;
+  });
 
   const testFiles = plan.tests;
-  await waitForSearch(searchUrl, searchContainer);
   const samplerClient = new Client({
     connectionString: url.replace(/\/rezics(?=\?)/, '/postgres'),
     application_name: 'kernel-check-connection-sampler',
