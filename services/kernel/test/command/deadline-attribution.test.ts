@@ -17,9 +17,10 @@ import { closeCommunityDrivers, createCommunityDriver, restartWorker, worker } f
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
+let poolClosed = false;
 afterAll(async () => {
   await closeCommunityDrivers();
-  await pool.end();
+  if (!poolClosed) await pool.end();
 });
 const detail = {
   operationId: 'deadline.probe',
@@ -199,10 +200,13 @@ test('a successful bundled publish adds no log or SQL statements and leaves the 
     });
   try {
     expect(DEFAULT_REQUEST_DEADLINE_MS).toBe(2000);
+    // Warm Reylo's first-use schema validation equally before both measured executions.
     await publish();
-    const baseline = observer.records.map(({ statement }) =>
-      statement.replace(/statement_timeout = '\d+ms'/g, "statement_timeout = '<budget>ms'"),
-    );
+    const start = observer.records.length;
+    await publish();
+    const baseline = observer.records
+      .slice(start)
+      .map(({ statement }) => statement.replace(/statement_timeout = '\d+ms'/g, "statement_timeout = '<budget>ms'"));
     const offset = observer.records.length;
     await withCommandTiming(publish);
     expect(
@@ -218,6 +222,9 @@ test('a successful bundled publish adds no log or SQL statements and leaves the 
 });
 
 test('production bundled publish phase distributions with the fixture worker quiet and running', async () => {
+  // Fixture cloning needs the migrated source database to have no live clients.
+  await pool.end();
+  poolClosed = true;
   const driver = await createCommunityDriver();
   const fixture = await driver.provision();
   await driver.settle();
