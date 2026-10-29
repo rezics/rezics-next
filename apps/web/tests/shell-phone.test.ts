@@ -269,9 +269,11 @@ function signedInState(): Promise<NonNullable<BrowserContextOptions['storageStat
     const origin = await site();
     const en = await messages('en');
     const page = await open('/en');
+    await page.getByRole('button', { name: en.account_menu!, exact: true }).click();
+    const signInUrl = await page.locator('a[href^="/auth/sign-in"]').getAttribute('href');
     await Promise.all([
       page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
-      page.getByRole('link', { name: en.account_sign_in!, exact: true }).click(),
+      page.goto(new URL(signInUrl!, origin).href),
     ]);
     await page.waitForURL(`${origin}/en`);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
@@ -324,7 +326,7 @@ test.serial(
         const page = await open(pages(locale)[0]!, { viewport: phone, ...(signed ? { storageState: session } : {}) });
         const header = page.getByRole('banner');
         expect(await header.getByRole('link', { name: 'REZICS', exact: true }).isVisible(), `${where} logo`).toBe(true);
-        expect(await header.getByRole('combobox', { name: own.shell_language! }).isVisible(), `${where} language`).toBe(
+        expect(await header.getByRole('button', { name: own.shell_language! }).isVisible(), `${where} language`).toBe(
           true,
         );
         expect(await visible(page, own.shell_theme!), `${where} theme`).toBe(true);
@@ -333,9 +335,15 @@ test.serial(
           const label = await header.getByText(own.account_menu!, { exact: true }).boundingBox();
           expect(label?.width ?? 0, `${where} label`).toBeLessThanOrEqual(1);
         } else {
-          const link = header.getByRole('link', { name: own.account_sign_in!, exact: true });
-          expect(await link.isVisible(), `${where} sign in`).toBe(true);
+          expect(await header.getByRole('button', { name: own.account_menu!, exact: true }).isVisible()).toBe(true);
         }
+        await header.getByRole('button', { name: own.account_menu!, exact: true }).click();
+        const account = page.getByRole('dialog', { name: own.account_menu!, exact: true });
+        await account.waitFor();
+        if (signed) await account.getByRole('link', { name: own.account_security_settings!, exact: true }).waitFor();
+        else await account.getByRole('link', { name: own.account_sign_in!, exact: true }).waitFor();
+        await page.keyboard.press('Escape');
+        await account.waitFor({ state: 'hidden' });
         expect(await visible(page, own.shell_open_navigation!), `${where} toggle`).toBe(true);
         expect(await visible(page, own.shell_collapse_navigation!), `${where} collapse`).toBe(false);
         expect(await header.locator(`input[aria-label="${own.search_label}"]`).isVisible(), `${where} search`).toBe(

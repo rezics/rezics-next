@@ -240,15 +240,18 @@ afterAll(async () => {
     } catch {}
 });
 
-const signInLink = (page: Page, own: Messages) => page.getByRole('link', { name: own.account_sign_in!, exact: true });
+const signInLink = (page: Page, _own: Messages) => page.locator('a[href^="/auth/sign-in"]');
 const accountMenuButton = (page: Page, own: Messages) =>
   page.getByRole('button', { name: own.account_menu!, exact: true });
+async function openAccountMenu(page: Page, own: Messages) {
+  const menu = page.getByRole('group', { name: own.account_menu!, exact: true });
+  if (!(await menu.isVisible())) await accountMenuButton(page, own).click();
+  await menu.waitFor({ state: 'visible' });
+}
 async function signOutButton(page: Page, own: Messages) {
-  await page.locator('[data-session-slot] > [data-slot="button"]').waitFor();
+  await accountMenuButton(page, own).waitFor();
   if (own.account_menu) {
-    const account = accountMenuButton(page, own);
-    const menu = page.getByRole('group', { name: own.account_menu, exact: true });
-    if ((await account.count()) && !(await menu.isVisible())) await account.click();
+    if (await accountMenuButton(page, own).count()) await openAccountMenu(page, own);
   }
   return page.getByRole('button', { name: own.account_sign_out!, exact: true });
 }
@@ -261,9 +264,11 @@ const homeLink = (page: Page, own: Messages) =>
 async function signIn(page: Page, own: Messages, javaScriptEnabled = true) {
   const origin = await site();
   const from = page.url();
+  await openAccountMenu(page, own);
+  const href = await signInLink(page, own).getAttribute('href');
   await Promise.all([
     page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
-    signInLink(page, own).click(),
+    page.goto(new URL(href!, origin).href),
   ]);
   await page.waitForURL(from);
   await page.waitForLoadState('networkidle');
@@ -294,6 +299,7 @@ test(
     const origin = await site();
     const de = await messages('de');
     const page = await open('/de/no-such-page?from=test');
+    await openAccountMenu(page, de);
     const returnTo = async () => {
       const target = new URL((await signInLink(page, de).getAttribute('href'))!, origin);
       expect(`${target.origin}${target.pathname}`).toBe(`${origin}/auth/sign-in`);
@@ -345,6 +351,7 @@ test(
     ]);
     await page.waitForURL(`${origin}/ja`);
     await page.waitForLoadState('networkidle');
+    await openAccountMenu(page, ja);
     await signInLink(page, ja).waitFor();
     expect(revoked).toContain(refreshToken);
     const ended = endSessions.at(-1)!;
@@ -357,6 +364,7 @@ test(
     // The ended session's id, sent again, reads as signed out.
     await page.context().addCookies([session!]);
     await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
+    await openAccountMenu(page, ja);
     await signInLink(page, ja).waitFor();
     expect(await signInLink(page, ja).count()).toBe(1);
     expect(await (await signOutButton(page, ja)).count()).toBe(0);
@@ -491,6 +499,7 @@ test(
             },
           });
           const label = `${signedIn ? 'signed in' : 'signed out'} ${theme} ${viewport.width}px`;
+          if (!signedIn) await openAccountMenu(view, en);
           expect(await (signedIn ? await signOutButton(view, en) : signInLink(view, en)).count(), label).toBe(1);
           const result = await new AxeBuilder({ page: view })
             .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])

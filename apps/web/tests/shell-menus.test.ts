@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type Locator, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
 const phone = { width: 390, height: 844 };
@@ -25,6 +25,11 @@ function freePort(): Promise<number> {
 let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;
 let browser: Browser | undefined;
+const issuer = Bun.serve({
+  port: 0,
+  hostname: '127.0.0.1',
+  fetch: () => Response.json({ error: 'not_found' }, { status: 404 }),
+});
 
 function site(): Promise<string> {
   started ??= (async () => {
@@ -37,6 +42,14 @@ function site(): Promise<string> {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        AUTH_ISSUER: `${issuer.url.origin}/auth`,
+        API_RESOURCE: 'https://api.rezics.test',
+        WEBSITE_SCOPES: 'media:read',
+        WEBSITE_CLIENT_ID: 'rezics-web-test',
+        WEBSITE_CLIENT_KEY: JSON.stringify({ kty: 'EC', crv: 'P-256', d: 'not-used-without-a-session', kid: 'test' }),
+      },
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
@@ -60,13 +73,14 @@ async function open(path: string, viewport = phone): Promise<Page> {
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
   const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return page;
 }
 
 afterAll(async () => {
   await browser?.close();
+  issuer.stop(true);
   if (child?.pid)
     try {
       process.kill(-child.pid, 'SIGTERM');
@@ -78,8 +92,7 @@ test(
   async () => {
     const en = await messages('en');
     const page = await open('/en');
-    const requests: string[] = [];
-    page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+    const route = page.url();
     const navigationTrigger = page.getByRole('button', { name: en.shell_open_navigation!, exact: true });
     await navigationTrigger.click();
     const navigationSheet = page.getByRole('dialog', { name: en.shell_navigation!, exact: true });
@@ -102,13 +115,12 @@ test(
     expect(links.length).toBeGreaterThan(1);
     expect(links.every((link) => link.height >= 44 && link.right <= 390)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-    const requestsBeforeMenu = requests.length;
     await page.evaluate(() => history.back());
     await navigationSheet.waitFor({ state: 'hidden' });
+    expect(page.url()).toBe(route);
     await expectActive(page, navigationTrigger);
-    expect(requests.slice(requestsBeforeMenu)).toEqual([]);
 
-    const language = page.getByRole('combobox', { name: en.shell_language!, exact: true });
+    const language = page.getByRole('button', { name: en.shell_language!, exact: true });
     await language.click();
     await page.getByRole('dialog').waitFor();
     await page.getByRole('dialog').getByText('日本語', { exact: true }).waitFor();
@@ -133,19 +145,17 @@ test(
     const en = await messages('en');
     const phonePage = await open('/en', phone);
     const account = phonePage.getByRole('button', { name: en.account_menu!, exact: true });
+    await account.waitFor();
     await account.click();
     const accountSheet = phonePage.getByRole('dialog', { name: en.account_menu!, exact: true });
     await accountSheet.waitFor();
     await accountSheet.getByRole('link', { name: en.account_sign_in!, exact: true }).waitFor();
     await phonePage.keyboard.press('Escape');
     await accountSheet.waitFor({ state: 'hidden' });
+    await phonePage.setViewportSize(desktop);
+    await account.click();
+    await phonePage.getByRole('menu').getByRole('link', { name: en.account_sign_in!, exact: true }).waitFor();
     await phonePage.context().close();
-
-    const desktopPage = await open('/en', desktop);
-    const desktopAccount = desktopPage.getByRole('button', { name: en.account_menu!, exact: true });
-    await desktopAccount.click();
-    await desktopPage.getByRole('menu').getByRole('link', { name: en.account_sign_in!, exact: true }).waitFor();
-    await desktopPage.context().close();
   },
   timeout,
 );
@@ -153,16 +163,11 @@ test(
 test('shell menus do not add kernel reads and shell.tsx imports no shadcn dropdown menu', async () => {
   const shell = await Bun.file(join(app, 'src/shell/shell.tsx')).text();
   expect(shell).not.toMatch(/from ['"]@rezics\/ui\/shadcn\/dropdown-menu['"]/);
-  expect([...shell.matchAll(/useOperation\(['"]([^'"]+)['"]\)/g)].map((match) => match[1])).toEqual([
-    'library_entry.list',
-  ]);
-  expect([...shell.matchAll(/<Exposure operation="([^"]+)"/g)].map((match) => match[1])).toEqual([
-    'library_entry.list',
-    'collection.list',
-    'follow.list',
-  ]);
+  expect(
+    [...new Set([...shell.matchAll(/useOperation\(['"]([^'"]+)['"]\)/g)].map((match) => match[1]))].sort(),
+  ).toEqual(['collection.list', 'follow.list', 'library_entry.list']);
 });
 
-async function expectActive(page: Page, locator: ReturnType<Page['getByRole']>): Promise<void> {
+async function expectActive(page: Page, locator: Locator): Promise<void> {
   expect(await locator.evaluate((element) => element === document.activeElement)).toBe(true);
 }

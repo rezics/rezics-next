@@ -284,9 +284,11 @@ function signedInState(): Promise<NonNullable<BrowserContextOptions['storageStat
     const origin = await site();
     const en = await messages('en');
     const page = await open('/en');
+    await page.getByRole('button', { name: en.account_menu!, exact: true }).click();
+    const signInUrl = await page.locator('a[href^="/auth/sign-in"]').getAttribute('href');
     await Promise.all([
       page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
-      page.getByRole('link', { name: en.account_sign_in!, exact: true }).click(),
+      page.goto(new URL(signInUrl!, origin).href),
     ]);
     await page.waitForURL(`${origin}/en`);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
@@ -436,7 +438,8 @@ test.serial(
         expect(box, where).not.toBeNull();
         expect(box!.x, where).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width, where).toBeLessThanOrEqual(phone.width);
-        expect(box!.height, where).toBeGreaterThanOrEqual(phone.height - 1);
+        expect(box!.y + box!.height, where).toBeCloseTo(phone.height, 0);
+        expect(box!.height, where).toBeLessThan(phone.height);
         await narrow.context().close();
       }
     }

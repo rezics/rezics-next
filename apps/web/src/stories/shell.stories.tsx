@@ -12,10 +12,10 @@ export const SignedIn: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.account_menu() }));
-    const menu = await canvas.findByRole('group', { name: m.account_menu() });
+    const menu = await within(document.body).findByRole('group', { name: m.account_menu() });
     await expect(menu).toBeVisible();
-    await canvas.findByRole('link', { name: m.account_security_settings() });
-    await canvas.findByRole('button', { name: m.account_sign_out() });
+    await within(menu).findByRole('link', { name: m.account_security_settings() });
+    await within(menu).findByRole('button', { name: m.account_sign_out() });
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths.shell} />,
 };
@@ -23,6 +23,11 @@ export const SignedOut: Story = {
   name: 'Signed Out',
   play: async (context) => {
     await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.account_menu() }));
+    const menu = await within(document.body).findByRole('group', { name: m.account_menu() });
+    await expect(menu).toBeVisible();
+    await within(menu).findByRole('link', { name: m.account_sign_in() });
     // Interface links are plain at rest, whether the underline sits on the link or on text inside it.
     const links = [...context.canvasElement.querySelectorAll('main a')];
     await expect(links.length).toBeGreaterThan(0);

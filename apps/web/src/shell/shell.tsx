@@ -1,17 +1,7 @@
-import { Exposure, useOperation } from '../kernel/exposure';
+import { useOperation } from '../kernel/exposure';
 import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@rezics/ui/shadcn/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
-import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@rezics/ui/shadcn/sheet';
+import { Menu } from '@rezics/ui/menu';
 import {
   Sidebar,
   SidebarContent,
@@ -48,7 +38,6 @@ import {
   Sun,
   UserRound,
   Users,
-  X,
 } from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
 import type { SessionState } from '../session/state.ts';
@@ -146,7 +135,6 @@ function Logo() {
   );
 }
 function Navigation({ pathname, session }: { pathname: string; session: ShellSession }) {
-  const { setOpenMobile } = useSidebar();
   const offered = useOfferedDestinations(session);
   return (
     <nav aria-label={m.shell_navigation()} className="flex min-h-0 w-full flex-1 flex-col">
@@ -161,7 +149,7 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                     className="h-10"
                     isActive={destinationCurrent(pathname, item.to)}
                     tooltip={item.message()}
-                    render={<Link to={item.to} onClick={() => setOpenMobile(false)} />}
+                    render={<Link to={item.to} />}
                   >
                     <Icon aria-hidden="true" className="text-sidebar-primary" />
                     <span>{item.message()}</span>
@@ -189,39 +177,9 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
     </nav>
   );
 }
-// On a phone the navigation is a sheet the header button opens. Before script runs, and where there is none, the same
-// destinations are a plain list under the header, so the page always has one named primary navigation.
-function PhoneNavigation({ pathname, session }: { pathname: string; session: ShellSession }) {
-  const { openMobile, setOpenMobile } = useSidebar();
-  return (
-    <Sheet open={openMobile} onOpenChange={setOpenMobile}>
-      <SheetContent
-        side="left"
-        showCloseButton={false}
-        className="w-72 max-w-[85vw] gap-0 bg-sidebar p-0 text-sidebar-foreground motion-reduce:translate-x-0! motion-reduce:transition-none sm:max-w-72"
-      >
-        <SheetHeader className="flex-row items-center justify-between border-b border-sidebar-border px-4 py-3">
-          <div className="flex items-center gap-2.5 px-1.5">
-            <Mark />
-            <span className="font-extrabold text-[15px] text-foreground tracking-[0.28em]">REZICS</span>
-          </div>
-          <SheetTitle className="sr-only">{m.shell_navigation()}</SheetTitle>
-          <SheetClose
-            render={
-              <Button variant="ghost" size="icon-lg" className="rounded-full" aria-label={m.shell_close_navigation()} />
-            }
-          >
-            <X aria-hidden="true" />
-          </SheetClose>
-        </SheetHeader>
-        <Navigation pathname={pathname} session={session} />
-      </SheetContent>
-    </Sheet>
-  );
-}
 function NavigationColumn({ pathname, session }: { pathname: string; session: ShellSession }) {
   const { isMobile } = useSidebar();
-  if (isMobile) return <PhoneNavigation pathname={pathname} session={session} />;
+  if (isMobile) return null;
   return (
     <Sidebar collapsible="icon" className="top-16! h-[calc(100svh-4rem)]!">
       <Navigation pathname={pathname} session={session} />
@@ -267,22 +225,56 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
     </noscript>
   );
 }
-function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { setOpenMobile } = useSidebar();
+function NavigationToggle({
+  collapsed,
+  onToggle,
+  pathname,
+  session,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+  pathname: string;
+  session: ShellSession;
+}) {
   const hydrated = useHydrated();
+  const offered = useOfferedDestinations(session);
+  const locale = getLocale();
+  const navigation = (
+    <nav aria-label={m.shell_navigation()} className="grid gap-1">
+      {offered.map((item) => {
+        const Icon = item.icon;
+        return (
+          <a
+            key={item.to}
+            href={`/${locale}${item.to === '/' ? '' : item.to}`}
+            aria-current={destinationCurrent(pathname, item.to) ? 'page' : undefined}
+            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-medium"
+          >
+            <Icon aria-hidden="true" className="size-4 text-sidebar-primary" />
+            {item.message()}
+          </a>
+        );
+      })}
+    </nav>
+  );
   return (
     <>
-      <Button
-        className={cn('md:hidden', headerControlClass)}
-        variant="ghost"
-        size="icon-lg"
-        data-open-navigation
-        disabled={!hydrated}
-        aria-label={m.shell_open_navigation()}
-        onClick={() => setOpenMobile(true)}
-      >
-        <MenuIcon aria-hidden="true" />
-      </Button>
+      <Menu
+        title={m.shell_navigation()}
+        content={navigation}
+        trigger={
+          <Button
+            className={cn('md:hidden', headerControlClass)}
+            variant="ghost"
+            size="icon-lg"
+            data-open-navigation
+            disabled={!hydrated}
+            aria-label={m.shell_open_navigation()}
+          >
+            <MenuIcon aria-hidden="true" />
+          </Button>
+        }
+      />
       <Button
         className={cn('hidden md:inline-flex', headerControlClass)}
         variant="ghost"
@@ -326,32 +318,34 @@ function ThemeControl() {
     document.cookie = `rezics_theme=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            className={headerControlClass}
-            variant="ghost"
-            size="icon-lg"
-            disabled={!hydrated}
-            aria-label={m.shell_theme()}
-            title={m.shell_theme()}
-          />
-        }
-      >
-        <Icon aria-hidden="true" className="size-5" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{m.shell_theme()}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme ?? 'system'} onValueChange={choose}>
-            <DropdownMenuRadioItem value="system">{m.shell_theme_system()}</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="light">{m.shell_theme_light()}</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="dark">{m.shell_theme_dark()}</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Menu
+      title={m.shell_theme()}
+      entries={[
+        {
+          type: 'radio',
+          label: m.shell_theme(),
+          value: theme ?? 'system',
+          options: [
+            { value: 'system', label: m.shell_theme_system() },
+            { value: 'light', label: m.shell_theme_light() },
+            { value: 'dark', label: m.shell_theme_dark() },
+          ],
+          onValueChange: choose,
+        },
+      ]}
+      trigger={
+        <Button
+          className={headerControlClass}
+          variant="ghost"
+          size="icon-lg"
+          disabled={!hydrated}
+          aria-label={m.shell_theme()}
+          title={m.shell_theme()}
+        >
+          <Icon aria-hidden="true" className="size-5" />
+        </Button>
+      }
+    />
   );
 }
 function LanguageControl() {
@@ -363,29 +357,36 @@ function LanguageControl() {
     document.cookie = `rezics_locale=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
     await setLocale(next);
   };
-  const options = locales.map((value) => ({ value, label: names[value] }));
   return (
     <>
-      <div data-language-js>
-        <Select value={locale} onValueChange={change} items={options} disabled={!hydrated}>
-          <SelectTrigger
-            aria-label={m.shell_language()}
-            className={cn(
-              headerControlClass,
-              'max-w-32 bg-transparent px-3 hover:bg-accent/60 max-md:w-9 max-md:justify-center max-md:px-0 max-md:[&>[data-slot=select-value]]:hidden max-md:[&>svg:last-child]:hidden',
-            )}
-          >
-            <Globe aria-hidden="true" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="end" alignItemWithTrigger={false} className="min-w-40">
-            {options.map((option) => (
-              <SelectItem key={option.value} value={option.value} lang={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div data-language-js className="contents">
+        <Menu
+          title={m.shell_language()}
+          entries={[
+            {
+              type: 'radio',
+              label: m.shell_language(),
+              value: locale,
+              options: locales.map((option) => ({ value: option, label: names[option] })),
+              onValueChange: change,
+            },
+          ]}
+          trigger={
+            <Button
+              aria-label={m.shell_language()}
+              className={cn(
+                headerControlClass,
+                'max-w-32 bg-transparent px-3 hover:bg-accent/60 max-md:w-9 max-md:justify-center max-md:px-0',
+              )}
+              variant="ghost"
+              size="lg"
+              disabled={!hydrated}
+            >
+              <Globe aria-hidden="true" />
+              <span className="hidden md:inline">{names[locale]}</span>
+            </Button>
+          }
+        />
       </div>
       <noscript>
         <details>
@@ -407,6 +408,9 @@ function LanguageControl() {
 function SessionControl({ session, csrfToken }: { session: ShellSession; csrfToken: string | null }) {
   const location = useLocation();
   const [securitySettingsHref, setSecuritySettingsHref] = useState('/security');
+  const canOpenLibrary = useOperation('library_entry.list');
+  const canOpenCollections = useOperation('collection.list');
+  const canOpenFollowing = useOperation('follow.list');
   useEffect(() => {
     if (session !== 'signed-in') return;
     let active = true;
@@ -421,81 +425,93 @@ function SessionControl({ session, csrfToken }: { session: ShellSession; csrfTok
   if (session === 'signed-in') {
     const locale = getLocale();
     return (
-      <>
-        <Button
-          id="account-menu-button"
-          className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
-          variant="ghost"
-          size="lg"
-          aria-label={m.account_menu()}
-          aria-controls="account-menu"
-          popoverTarget="account-menu"
-        >
-          <UserRound aria-hidden="true" />
-          <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
-        </Button>
-        <div
-          id="account-menu"
-          popover="auto"
-          role="group"
-          aria-labelledby="account-menu-button"
-          className="fixed inset-auto end-3 top-[4.5rem] m-0 grid w-64 max-w-[calc(100vw-1.5rem)] gap-1 rounded-2xl bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/5 outline-none dark:ring-foreground/10"
-        >
-          <Exposure operation="library_entry.list">
-            <a href={`/${locale}/library`} className={accountMenuLinkClass}>
-              <Library aria-hidden="true" className="size-4" />
-              {m.library_nav_library()}
-            </a>
-          </Exposure>
-          <Exposure operation="collection.list">
-            <a href={`/${locale}/collections`} className={accountMenuLinkClass}>
-              <Folders aria-hidden="true" className="size-4" />
-              {m.library_nav_collections()}
-            </a>
-          </Exposure>
-          <Exposure operation="follow.list">
-            <a href={`/${locale}/following`} className={accountMenuLinkClass}>
-              <Users aria-hidden="true" className="size-4" />
-              {m.library_nav_following()}
-            </a>
-          </Exposure>
-          <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
-            <Settings aria-hidden="true" className="size-4" />
-            {m.settings_heading()}
-          </a>
-          <a
-            href={securitySettingsHref}
-            data-account-security-settings
-            // React's client autoFocus only focuses on mount, while this popover is still hidden.
-            ref={(link) => {
-              link?.setAttribute('autofocus', '');
-            }}
-            className={accountMenuLinkClass}
+      <Menu
+        title={m.account_menu()}
+        trigger={
+          <Button
+            id="account-menu-button"
+            className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
+            variant="ghost"
+            size="lg"
+            aria-label={m.account_menu()}
+            aria-controls="account-menu"
           >
-            <ShieldCheck aria-hidden="true" className="size-4" />
-            {m.account_security_settings()}
-          </a>
-          <form method="post" action="/auth/sign-out" className="m-0">
-            <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-            <Button type="submit" variant="ghost" size="lg" className="w-full justify-start rounded-xl px-3">
-              <LogOut aria-hidden="true" />
-              {m.account_sign_out()}
-            </Button>
-          </form>
-        </div>
-      </>
+            <UserRound aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+          </Button>
+        }
+        content={
+          <div id="account-menu" role="group" aria-labelledby="account-menu-button" className="grid gap-1">
+            {canOpenLibrary ? (
+              <a href={`/${locale}/library`} className={accountMenuLinkClass}>
+                <Library aria-hidden="true" className="size-4" />
+                {m.library_nav_library()}
+              </a>
+            ) : null}
+            {canOpenCollections ? (
+              <a href={`/${locale}/collections`} className={accountMenuLinkClass}>
+                <Folders aria-hidden="true" className="size-4" />
+                {m.library_nav_collections()}
+              </a>
+            ) : null}
+            {canOpenFollowing ? (
+              <a href={`/${locale}/following`} className={accountMenuLinkClass}>
+                <Users aria-hidden="true" className="size-4" />
+                {m.library_nav_following()}
+              </a>
+            ) : null}
+            <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
+              <Settings aria-hidden="true" className="size-4" />
+              {m.settings_heading()}
+            </a>
+            <a
+              href={securitySettingsHref}
+              data-account-security-settings
+              // React's client autoFocus only focuses on mount, while this popover is still hidden.
+              ref={(link) => {
+                link?.setAttribute('autofocus', '');
+              }}
+              className={accountMenuLinkClass}
+            >
+              <ShieldCheck aria-hidden="true" className="size-4" />
+              {m.account_security_settings()}
+            </a>
+            <form method="post" action="/auth/sign-out" className="m-0">
+              <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
+              <Button type="submit" variant="ghost" size="lg" className="w-full justify-start rounded-xl px-3">
+                <LogOut aria-hidden="true" />
+                {m.account_sign_out()}
+              </Button>
+            </form>
+          </div>
+        }
+      />
     );
   }
   const returnTo = location.publicHref.split('#')[0]!;
   return (
-    <a
-      data-slot="button"
-      className={cn(buttonVariants({ size: 'lg' }), headerControlClass, 'w-full px-3 sm:px-4')}
-      href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
-    >
-      <LogIn aria-hidden="true" />
-      <span className="sr-only sm:not-sr-only">{m.account_sign_in()}</span>
-    </a>
+    <Menu
+      title={m.account_menu()}
+      trigger={
+        <Button
+          className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
+          variant="ghost"
+          size="lg"
+          aria-label={m.account_menu()}
+        >
+          <LogIn aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+        </Button>
+      }
+      content={
+        <div role="group" aria-label={m.account_menu()} className="grid gap-1">
+          <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} className={accountMenuLinkClass}>
+            <LogIn aria-hidden="true" className="size-4" />
+            {m.account_sign_in()}
+          </a>
+        </div>
+      }
+    />
   );
 }
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -540,7 +556,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       />
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
         <div className="flex h-16 items-center gap-2 px-3">
-          <NavigationToggle collapsed={railCollapsed} onToggle={() => setCollapsed(!railCollapsed)} />
+          <NavigationToggle
+            collapsed={railCollapsed}
+            onToggle={() => setCollapsed(!railCollapsed)}
+            pathname={location.pathname}
+            session={session}
+          />
           <Logo />
           <div className="ms-auto flex items-center gap-2">
             {location.pathname !== '/' && location.pathname !== '/search' ? (
