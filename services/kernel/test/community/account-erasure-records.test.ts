@@ -1,6 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver, Fixture, Realm } from '../../../../specs/community-driver.ts';
 import { banAccount } from '../../src/community/ban.ts';
+import { createSpace } from '../../src/community/space.ts';
+import { createRealm } from '../../src/community/realm.ts';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
@@ -24,7 +26,32 @@ async function json<T>(response: Response, status: number): Promise<T> {
   expect(response.status, await response.clone().text()).toBe(status);
   return response.json() as Promise<T>;
 }
-async function realm(driver: CommunityDriver, fixture: Fixture) {
+async function realm(driver: CommunityDriver, fixture: Fixture, createdAt?: string) {
+  if (createdAt) {
+    const { system } = communityFixtureRuntime();
+    const auth = await createProductionAccess({ actions: [...system.actions.keys()] });
+    const owner = await auth.authenticate(system.database.pool, fixture.owner.id, [...system.actions.keys()]);
+    const deps = {
+      pool: system.database.pool,
+      access: auth.access,
+      routeKey: system.routeKey,
+      clock: () => new Date(createdAt),
+    };
+    const context = () => ({ deadline: Date.now() + 30000, idempotencyKey: crypto.randomUUID() });
+    const space = await createSpace(deps, owner, { title: 'Historical erasure host' }, context());
+    const result = await createRealm(
+      deps,
+      owner,
+      {
+        spaceId: space.value.spaceId,
+        title: 'Historical erasure Realm',
+        visibility: 'public',
+        contextId: fixture.contextId,
+      },
+      context(),
+    );
+    return { realmId: result.value.realmId };
+  }
   const { space } = await json<{ space: { spaceId: string } }>(
     await driver.request({
       actor: fixture.owner,
@@ -75,7 +102,7 @@ async function erase(state: Awaited<ReturnType<typeof setup>>, ids: string[]) {
   );
   await drain(state.driver, [...ids, state.account.id]);
   const phase = await import('../../src/community/account-erasure-records.ts');
-  let after = null;
+  let after: import('../../src/community/account-erasure-records.ts').CommunityRecordsCursor | null = null;
   let reasonsKeptUntil: string | null = null;
   let found = 0;
   do {
@@ -99,7 +126,7 @@ test.serial(
     const state = await setup();
     const { driver, fixture, system, account } = state;
     const targetRealm = await realm(driver, fixture);
-    const modRealm = await realm(driver, fixture);
+    const modRealm = await realm(driver, fixture, new Date(Date.now() - 201 * DAY).toISOString());
     expect((await driver.grantModerator(modRealm.realmId, account)).status).toBe(201);
     await ban(driver, fixture.owner, targetRealm.realmId, account, 'Against erased account');
     // Use the command clock, while keeping authorization on a real bearer from the membership fixture.
@@ -110,6 +137,7 @@ test.serial(
       {
         pool: system.database.pool,
         access: auth.access,
+        routeKey: system.routeKey,
         clock: () => new Date(oldAt),
         tokens: system.tokenKeys,
         workClient: async () => {
@@ -187,7 +215,7 @@ test.serial(
   async () => {
     const state = await setup();
     const { driver, fixture, system, account } = state;
-    const place = await realm(driver, fixture);
+    const place = await realm(driver, fixture, new Date(Date.now() - 61 * DAY).toISOString());
     expect((await driver.grantModerator(place.realmId, account)).status).toBe(201);
     const auth = await createProductionAccess({ actions: [...system.actions.keys()] });
     const actor = await auth.authenticate(system.database.pool, account.id, [...system.actions.keys()]);
@@ -197,6 +225,7 @@ test.serial(
         {
           pool: system.database.pool,
           access: auth.access,
+          routeKey: system.routeKey,
           clock: () => new Date(times[index]!),
           tokens: system.tokenKeys,
           workClient: async () => {
