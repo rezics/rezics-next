@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
+import pg from 'pg';
 import { checkGrowth, openGrowthDatabase } from './growth.ts';
 
 const scales = [1, 4, 16] as const;
@@ -7,7 +8,7 @@ const vacuum = 'VACUUM (INDEX_CLEANUP ON) "dbos"."workflow_status"';
 
 test('checkGrowth measures a database that has no dbos schema', async () => {
   const db = await openGrowthDatabase();
-  const queries = spyOn(db.admin, 'query');
+  const queries = spyOn(pg.Client.prototype, 'query');
   try {
     // The kernel check gives this file its own migrated database, including DBOS.
     await db.admin.query('DROP SCHEMA IF EXISTS dbos CASCADE');
@@ -34,7 +35,7 @@ test('checkGrowth measures a database that has no dbos schema', async () => {
 
 test('checkGrowth settles dbos.workflow_status before measured repetitions once the schema exists', async () => {
   const db = await openGrowthDatabase();
-  const queries = spyOn(db.admin, 'query');
+  const queries = spyOn(pg.Client.prototype, 'query');
   const vacuumCounts: number[] = [];
   let created = false;
   try {
