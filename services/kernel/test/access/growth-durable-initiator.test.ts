@@ -166,11 +166,26 @@ for (const person of ['other people', 'same person history'] as const) {
 }
 
 test('restoration keeps constant statements and rows at 16, 103 and 512 consented scopes', async () => {
-  const costs: [number, number][] = [];
+  const fixtures = [];
   for (const count of [16, 103, MAX_CONSENTED_SCOPES]) {
     const scopes = ['subject:write', 'account:delegate', ...Array.from({ length: count - 2 }, (_, i) => `scope:${i}`)];
-    const f = await h.fixture(false, scopes);
-    const sample = await measure(h.db, () => h.step(f));
+    fixtures.push({ count, fixture: await h.fixture(false, scopes) });
+  }
+  // Hold the stored neighbourhood fixed while only the selected scope count changes.
+  await h.db.admin.query('VACUUM (ANALYZE)');
+  const costs: [number, number][] = [];
+  const complete = new Error('Restoration measured before target writes');
+  for (const { count, fixture } of fixtures) {
+    const sample = await measure(h.db, async () => {
+      await expect(
+        h.step(fixture, {
+          onActor: async (actor) => {
+            expect(actor.scopes).toHaveLength(count);
+            throw complete;
+          },
+        }),
+      ).rejects.toBe(complete);
+    });
     costs.push([sample.cost.statements, sample.cost.rows]);
   }
   expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!]);
