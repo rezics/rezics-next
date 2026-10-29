@@ -71,9 +71,19 @@ test('capture keeps constant statements and rows at 8, 64 and 512 consented scop
     },
     async operation(_database, scale) {
       const f = fixtures.get(scale)!;
-      expect(await captureDurableInitiator(f.context, f.actor)).toMatchObject({
-        originalAccount: { minimumAuthnEpoch: '1' },
-      });
+      const complete = new Error('Capture measured before target writes');
+      await expect(
+        captureAttempt(
+          f,
+          async (context) => {
+            expect(await captureDurableInitiator(context, f.actor)).toMatchObject({
+              originalAccount: { minimumAuthnEpoch: '1' },
+            });
+            throw complete;
+          },
+          false,
+        ),
+      ).rejects.toBe(complete);
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([8, 64, MAX_CONSENTED_SCOPES]);

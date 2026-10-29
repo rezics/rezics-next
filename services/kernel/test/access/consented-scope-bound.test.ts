@@ -219,7 +219,6 @@ test('the full default website catalogue commits membership and content actor sn
   for (const [resource, action] of [
     [realm, 'realm:join'],
     [post, 'post:erase'],
-    [actor.accountId, 'account:read'],
     [PLATFORM_RESOURCE.id, 'client:manage'],
   ])
     await pool.query(
