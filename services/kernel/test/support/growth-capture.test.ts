@@ -123,7 +123,9 @@ test('failed and unplanned statements retain backend and error details without p
     database,
     () =>
       withConnection(database.pool, async (client) => {
-        await expect(client.query('SELECT * FROM growth_capture_test.missing')).rejects.toMatchObject({ code: '42P01' });
+        await expect(client.query('SELECT * FROM growth_capture_test.missing')).rejects.toMatchObject({
+          code: '42P01',
+        });
         await client.query("SET application_name = 'growth capture test'");
       }),
     { includeBackends: true },
@@ -138,7 +140,7 @@ test('failed and unplanned statements retain backend and error details without p
 
 test('the same SQL keeps separate plans across a rolled back serialization attempt and committed retry', async () => {
   const database = db!;
-  await database.admin.query("ALTER SEQUENCE growth_capture_test.retry_sequence RESTART WITH 1");
+  await database.admin.query('ALTER SEQUENCE growth_capture_test.retry_sequence RESTART WITH 1');
   const query = 'SELECT growth_capture_test.serialization_retry()';
   const result = await capture(database, () =>
     withConnection(database.pool, async (client) => {
@@ -264,15 +266,17 @@ test('captures nested statements run by a trigger function', async () => {
         plan['Query Text'].includes('SELECT id FROM growth_capture_test.lookup WHERE id = NEW.id'),
     ),
   ).toBe(true);
-  expect(result.capture.plans.flatMap((plan, index) =>
-    typeof plan === 'object' &&
-    plan !== null &&
-    'Query Text' in plan &&
-    typeof plan['Query Text'] === 'string' &&
-    plan['Query Text'].includes('SELECT id FROM growth_capture_test.lookup WHERE id = NEW.id')
-      ? [result.capture.planStatements?.[index]]
-      : [],
-  )).toEqual([0]);
+  expect(
+    result.capture.plans.flatMap((plan, index) =>
+      typeof plan === 'object' &&
+      plan !== null &&
+      'Query Text' in plan &&
+      typeof plan['Query Text'] === 'string' &&
+      plan['Query Text'].includes('SELECT id FROM growth_capture_test.lookup WHERE id = NEW.id')
+        ? [result.capture.planStatements?.[index]]
+        : [],
+    ),
+  ).toEqual([0]);
 });
 
 test('captures statements from every connection the operation checks out', async () => {
