@@ -19,7 +19,7 @@ function allow(value: unknown): asserts value {
 
 /** Trusted recovery port. The close checkpoint is committed with the tombstone.
  * A page's receipt retains its release list before any actor anchor is checked
- * out. Replays finish that same list before advancing the durable cursor. */
+ * out. Replays finish that same list before advancing the durable random row-key cursor. */
 export function createOrganizationCloseRunner(config: { pool: Pool; clock?: () => Date }) {
   const execute = lifecycleExecutor(config.pool, config.clock);
   const lifecycle = createLifecycleInternals({

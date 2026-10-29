@@ -160,6 +160,10 @@ committed key as any Auth deletion continuation. Member accounts,
 their grants and their other memberships are preserved, including suspended or deleted members' accounts.
 Deleted organization public identities expose only `{ id, state, kind }`.
 
+The close now traverses an independent random row key; no Access cursor stores an account id. The operator page's
+reservation id is also an independent key; relation residue erasure removes its subject bindings. This replaces the
+member-ID and validity-range ordering described above.
+
 Resources owned by the organization in other modules, including Realm roles and content, remain those modules'
 responsibility. They learn of deletion from `account-updated`; organization close changes no such resources.
 

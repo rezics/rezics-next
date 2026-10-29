@@ -4,14 +4,12 @@ WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :organization_id::uuid AS organization_id,
          :transaction_id::uuid AS transaction_id
 ), batch AS MATERIALIZED (
-  SELECT m.ctid AS tid, m.member_account_id, m.valid
+  SELECT m.ctid AS tid, m.row_key
   FROM input i, access.organization_close w
   JOIN access.organization_member m ON m.route = w.route AND m.organization_id = w.organization_id
   WHERE w.route = i.route AND w.organization_id = i.organization_id
-    AND (m.member_account_id, m.valid) >
-        (COALESCE(w.cursor_member, '00000000-0000-0000-0000-000000000000'::uuid),
-         COALESCE(w.cursor_valid, 'empty'::tstzrange))
-  ORDER BY m.member_account_id, m.valid
+    AND m.row_key > COALESCE(w.cursor_row_key, '00000000-0000-0000-0000-000000000000'::uuid)
+  ORDER BY m.row_key
   LIMIT 100
 ), removed AS (
   DELETE FROM access.organization_member m
@@ -28,8 +26,9 @@ WITH input AS NOT MATERIALIZED (
   RETURNING s.member_account_id, s.reservation_id
 ), checkpoint AS (
   UPDATE access.organization_close w
-  SET cursor_member = last.member_account_id, cursor_valid = last.valid
-  FROM input i, (SELECT * FROM batch ORDER BY member_account_id DESC, valid DESC LIMIT 1) last
+  SET cursor_row_key = CASE WHEN (SELECT count(*) FROM batch) = 100
+    THEN (SELECT row_key FROM batch ORDER BY row_key DESC LIMIT 1) END
+  FROM input i
   WHERE w.route = i.route AND w.organization_id = i.organization_id
   RETURNING w.organization_id
 )
