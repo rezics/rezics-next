@@ -178,15 +178,73 @@ authority. Preserve every outstanding schedule in the original contract with the
 
 ## Delivery evidence
 
-The diagnostic has not yet produced accepted measurements. Raw parent-reviewed JSON belongs in the managed check
-log, with its exact revision/runtime/host/load; no numbers are populated before execution. The required final
-checks are the two-file kernel check and root typecheck once after the final implementation commit. A queued
-check stays queued until its managed terminal result. Diagnostic success and the deliberately red original HTTP
-case must be reported separately. No passing heap assertion closes publication admission or this Goal.
+The real Worker diagnostic completed serially: one Worker, eighteen jobs, no database connections, no replacement,
+and a logical finish followed by `close`. The transferred parent buffer returned with its SHA-256 and original
+length intact, and its detached length was zero after return. For each job the Worker explicitly retained the
+transferred input, maximum context witness, decoded text, parsed release, canonical release string, validation
+errors and digest until the measurements completed; then it nulled the job root before returning the input and
+bounded result fields. The 8 MiB parent ArrayBuffer raised the parent's collected heap size from 14,141,050 to
+22,529,820 bytes, while the Worker's collected heap stayed within 4,128 bytes of its calibration idle reading.
+This validates the per-VM counters on this run; it says nothing about physical thread reclamation.
 
-The required managed two-file check was launched from the worktree root with
-`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/semantic/definition-publication-work.test.ts test/semantic/definition-publication-heap.test.ts`.
-The launcher returned check id `cc17b74b-c3bc-4eab-a92a-194095ca1469`; its terminal result and complete log are
-recorded at delivery. This supersedes the earlier malformed `--run --` launch attempt, which never created a check
-or started a Worker. It is not diagnostic evidence. Root typecheck remains required after the final implementation
-commit. The original HTTP excess assertion remains unchanged and is reported separately from heap observations.
+| Observation               | Result                                                                                                                                                                                                                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime                   | Bun 1.4.4, revision `a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b`, executable `bun@1.4.4-canary.20261027.1`                                                                                                                                                                |
+| Host                      | `B`, Linux `6.12.113+deb13-cloud-amd64`, 16 processors; load averages at Worker initialization 12.08 / 8.95 / 8.28                                                                                                                                                      |
+| Initialized idle H0       | Three forced-GC readings ranged 25,781,902–25,782,566 bytes (24.57 MiB) after bundled validation and checker initialization                                                                                                                                             |
+| Per-job idle baseline     | 25,771,923–27,892,311 bytes (24.58–26.60 MiB) across the eighteen serial samples; this drift is observed and included per sample, not hidden by reusing initialization H0                                                                                               |
+| Exercised c               | Maximum upper endpoint 23.373442 at invalid node-dense scale 256; that sample's lower endpoint is 23.370306. The 0.003136 spread comes from the recorded three post-GC readings and baseline extrema only, not a confidence interval or systematic uncertainty estimate |
+| Sampled boundary capacity | Maximum `heapCapacity` 114,342,699 bytes (109.0 MiB), at invalid node-dense scale 256. It is the maximum of phase-boundary readings, not the synchronous-phase peak                                                                                                     |
+| Actual true peak          | Unavailable; `truePeak` remains null                                                                                                                                                                                                                                    |
+
+The exercised c formula for each sample is `max(0, maximum post-GC heap - per-job H0 - transferred wire bytes) / transferred wire bytes`, with the transferred input subtracted once. The tested property, string and node shapes each grew independently at scales 16/64/256; each family includes valid and invalid cases. The table gives all eighteen wire-byte sizes and c intervals. All inputs remained under the diagnostic's 1 MiB cap; the maximum observed input was 473,797 bytes. Invalid samples each produced one actual validator error, under the existing 64-error cap.
+
+The actual maximum context witness was 6,304 canonical bytes, and its canonical envelope-minus-body overhead was
+6,312 bytes. The measurement retains that context with the input and parsed/canonical forms. The Worker reply
+contains the returned input buffer, actual digest, up to 64 errors, shape/counts and phase readings; its structured
+clone byte size was not measured. Parent result and DB parameter copies therefore remain an explicit native
+binding cost rather than an inferred zero.
+
+| Family / validity    | Wire bytes at scales 16 / 64 / 256 | JSON nodes at scales 16 / 64 / 256 | Measured c interval at scales 16 / 64 / 256                     |
+| -------------------- | ---------------------------------- | ---------------------------------- | --------------------------------------------------------------- |
+| Properties / valid   | 162,276 / 224,580 / 473,797        | 7,548 / 8,268 / 11,148             | 19.280035–19.281613 / 13.075412–13.076552 / 9.748561–9.754099   |
+| Properties / invalid | 162,262 / 224,566 / 473,783        | 7,548 / 8,268 / 11,148             | 15.137703–15.210912 / 10.112283–10.113423 / 8.391297–8.433916   |
+| Strings / valid      | 160,874 / 210,026 / 406,634        | 7,464 / 7,464 / 7,464              | 11.603628–11.630978 / 10.312718–10.313937 / 8.575869–8.576499   |
+| Strings / invalid    | 160,860 / 210,012 / 406,620        | 7,464 / 7,464 / 7,464              | 10.779703–10.781294 / 9.895973–9.897592 / 8.494469–8.495099     |
+| Nodes / valid        | 149,868 / 165,960 / 230,328        | 8,233 / 10,537 / 19,753            | 11.792464–11.794172 / 12.614052–12.626151 / 14.788910–14.841956 |
+| Nodes / invalid      | 152,627 / 177,203 / 275,507        | 11,557 / 23,845 / 72,997           | 13.464033–13.469196 / 16.713413–16.714858 / 23.370306–23.373442 |
+
+Each sample records these actual phases, elapsed times excluding diagnostic GC, post-GC live heap ranges, and
+before/after-GC capacity readings: receive input/context (0.001–0.006 ms); decode/parse (1.106–3.111 ms);
+unchanged validation including the real checker (47.496–740.966 ms); retained release canonicalization
+(2.696–6.558 ms); and actual `releaseDigest` with its own JCS/hash (3.420–8.679 ms). The largest post-GC
+heap reading over all samples was 34,607,237 bytes. Phase-internal transients can be higher: observed capacity
+reached 114,342,699 bytes during invalid node-dense validation. These timings are observations, never a deadline
+or admission proof. The three readings describe only within-reading GC variation; host/runtime changes, repeated
+run variation and omitted shapes remain unmeasured.
+
+This is not approved worst-case `c`, `K`, `Amax`, process memory, or a Cost limit. The unsampled axes remain
+explicit: construction-bounded maximum valid/invalid shapes, the quadratic duplicate-heavy 4 MiB case, maximum
+body/context, deep and escaped/Unicode structures, independent bases/qualifiers/saved-filter density, true
+synchronous-phase peak, native result/JSONB copies, physical Worker exit/reclamation and idle native margin at
+executed `Amax + 8,193 = 24,577` checkpoints under the unchanged 2,000 ms deadline. Later margin depends on the
+construction producer and final native ingress/DB binding. The exact limits, input transfer/retirement ownership,
+result accounting, and shutdown proof remain open as specified above.
+
+The required managed checks ran after implementation commit `efd5852426`:
+
+- Check `24610784-35cb-4f60-b8e8-1ab0feb7bfbd` ran
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/semantic/definition-publication-work.test.ts test/semantic/definition-publication-heap.test.ts`.
+  The heap diagnostic passed (one test, 1,034 assertions). The command
+  exited 1 only because the unchanged original HTTP publication assertion remains the contract's expected
+  red: valid excess returned 201 with digest `sha256:e6c0f126b003a7cb15829cd8332d167e7da5961c05963a57b2e796d9a7172a56`,
+  where the frozen contract requires 422 `definition_work_exceeded`. It wrote one release, receipt, outbox and
+  write-basis row; all other tracked effect-table row deltas were zero. The other original HTTP outcomes passed.
+- Root typecheck check `a06fdd5b-b2e6-4649-87f5-72a3be2604f8` passed with exit 0.
+
+Complete raw Worker JSON, exact phase readings, outputs and the expected HTTP red are in managed log
+`.temp/goal/checks/worker-check-2026-10-29T20-38-54.542Z-f2aead8b.log` (SHA-256
+`575ba6dc5cd03d31fc5806812cfcb50f0a8da54602de905f63fa00ad177d1428`). The root typecheck log is
+`.temp/goal/checks/worker-check-2026-10-29T20-38-54.540Z-f5056076.log` (SHA-256
+`f0c97240c686a7f5255444a0120dd6c1bf8c1df28df6920bcdf51d1b5a1d041838`). Neither the diagnostic success nor
+the retained HTTP red closes publication admission, native margin, physical cleanup or the Semantic Goal.
