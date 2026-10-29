@@ -695,7 +695,10 @@ Each row's `opened_at` is the database millisecond clock when the relay commits 
 opened for an envelope delivered before the snapshot, including old failed work on a partition absent from the
 frontier. Completion and status probe only the partial index of open rows with `opened_at <= workflow_until`, never
 DBOS history. The B-tree minimum-key probe visits at most the first open entry, then compares it with the boundary;
-it does not scan later open work. The migration initializes empty-index statistics before delivery begins.
+it does not scan later open work. The state constraint makes excluding `done` and `resolved` exactly the open set.
+The partial index and probe use that exclusion predicate so the planner does not mistake an unmeasured text equality
+for a single qualifying row before the first statistics collection. The migration initializes empty-index statistics
+before delivery begins.
 Later traffic cannot hold the erasure.
 
 After `effect.run` succeeds, the durable `effect.locator.done` step marks only its own workflow id done. Failures,

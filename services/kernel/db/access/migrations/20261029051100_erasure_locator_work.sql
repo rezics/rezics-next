@@ -7,7 +7,10 @@ CREATE TABLE access.erasure_locator_work (
   resolution_transaction_id uuid,
   CHECK ((state = 'resolved') = (resolution_transaction_id IS NOT NULL))
 );
-CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work (opened_at) WHERE state = 'open';
+-- The state constraint makes excluding the two terminal states exactly the open set.
+-- This also avoids estimating an unknown text equality as one row before the first ANALYZE.
+CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work (opened_at)
+  WHERE state <> 'done' AND state <> 'resolved';
 -- Initialize the empty partial index's page estimate before relay delivery begins.
 ANALYZE access.erasure_locator_work;
 
