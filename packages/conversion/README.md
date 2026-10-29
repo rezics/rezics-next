@@ -272,12 +272,14 @@ exact-quantity validation, independent of property names or holder types.
 Ordinary quantity and default conversion semantics remain unchanged.
 
 Wikidata applies this rule in converter revision `wikidata-4`. It detects
-unmapped qualifier keys on exact quantities without reading their bodies, and
-withholds the measurement if any qualifier was omitted or cannot be carried
-losslessly. Detection uses the admitted fixed value schema, not the source
-property name. Focused pure controls live in
-`tests/wikidata-exact-quantity.test.ts`; frozen native and receipt evidence is
-recorded in the linked audit report.
+unmapped qualifier keys on exact quantities without reading their bodies. It
+also treats a mapped qualifier that cannot be normalized as qualification loss.
+If any qualifier was omitted or cannot be carried losslessly, the whole
+measurement is withheld with a diagnostic. Detection uses the admitted fixed
+value schema, not the source property name. Focused pure controls live in
+`tests/wikidata-exact-quantity.test.ts`; the frozen native scenario names, hash,
+outcome and returned bootstrap receipt observations are recorded in the linked
+audit report.
 
 The current bundle admits schema:wordCount with exact P6570 mapping, integer
 amount, unit 1, minimum 0 and qualifiers[]. Its mapping alone is unsafe provider
@@ -289,7 +291,8 @@ StoryArc only, so it cannot stand for an arbitrary counted text part. Do not nar
 method/part/digest properties or supply fabricated native identities.
 
 The [handoff evidence and frozen native scenarios](../../docs/research/imports-audit/exact-quantity-qualifiers.md)
-exercise rejection on the actual bundled runtime before default converter repair.
+exercise rejection on the actual bundled runtime through the ordinary importer
+and public batch write path after converter repair.
 The reviewed Q55867126 revision 1717031358 count (+1450/unit 1, P459 Q718390,
 P518 Q63246861, no statement references) belongs to a letter/text. Its explicit
 transplant into a controlled synthetic Book shell proves no observed Book count.
