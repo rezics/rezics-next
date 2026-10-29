@@ -178,7 +178,7 @@ function offerReady(recording: typeof offerRecording, available: boolean) {
     const { currency, title, unitAmountMinor } = recording.offer;
     const digits = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
     const subjectLabels = subjectRecording.subject.labels as Record<string, string>;
-    await view.findByRole('heading', { level: 1, name: subjectLabels[getLocale()] ?? subjectLabels.en });
+    await view.findByRole('heading', { level: 1, name: subjectLabels[getLocale()] ?? subjectLabels.en! });
     await view.findByText(title, { exact: false });
     await view.findByText(
       new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(unitAmountMinor / 10 ** (digits ?? 2)),
@@ -220,10 +220,7 @@ export const orderPendingReady = orderReady(
   () => m.order_confirming(),
 );
 export const orderCanceledReady = async (context: { canvasElement: HTMLElement }) => {
-  await orderReady(
-    () => m.order_pending(),
-    () => m.order_canceled(),
-  )(context);
+  await orderReady(() => m.order_canceled())(context);
   await viewOf(context).findByRole('link', { name: m.order_back() });
 };
 export const orderFailedReady = async (context: { canvasElement: HTMLElement }) => {

@@ -60,15 +60,19 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
   }, [order.id, order.settlement]);
 
   const pending = openSettlement.has(order.settlement);
+  const canceled = checkout === 'canceled' && order.settlement !== 'paid';
+  const confirming = pending && !canceled;
   const locale = getLocale();
   const heading =
     order.settlement === 'paid'
       ? m.order_paid()
-      : gaveUp && pending
-        ? m.order_still_processing()
-        : pending
-          ? m.order_pending()
-          : m.order_failed();
+      : canceled
+        ? m.order_canceled()
+        : gaveUp && pending
+          ? m.order_still_processing()
+          : pending
+            ? m.order_pending()
+            : m.order_failed();
 
   return (
     <article className="max-w-3xl min-w-0 space-y-8 text-foreground">
@@ -115,7 +119,7 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
           <p className="min-w-0 break-words pt-1 font-serif text-xl text-foreground">{order.subject.subject.title}</p>
         </div>
       )}
-      {pending && (
+      {confirming && (
         <Alert role="status">
           <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>
         </Alert>
@@ -124,14 +128,12 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
         <Alert role="status">
           <AlertDescription className="space-y-3 text-foreground">
             <p>{m.order_failed_detail()}</p>
-            <Exposure operation="offer.get">
-              <a
-                href={`/${locale}/offers/${order.offerId}`}
-                className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-              >
-                {m.order_back()}
-              </a>
-            </Exposure>
+            <a
+              href={`/${locale}/offers/${order.offerId}`}
+              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+            >
+              {m.order_back()}
+            </a>
           </AlertDescription>
         </Alert>
       )}
@@ -155,21 +157,24 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
             >
               {m.order_open_library()}
             </a>
+            <a
+              href={`/${locale}/offers/${order.offerId}`}
+              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+            >
+              {m.order_back()}
+            </a>
           </div>
         </section>
       )}
       {checkout === 'canceled' && (
         <Alert role="status">
           <AlertDescription className="space-y-3 text-foreground">
-            <p role="note">{m.order_canceled()}</p>
-            <Exposure operation="offer.get">
-              <a
-                href={`/${locale}/offers/${order.offerId}`}
-                className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-              >
-                {m.order_back()}
-              </a>
-            </Exposure>
+            <a
+              href={`/${locale}/offers/${order.offerId}`}
+              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+            >
+              {m.order_back()}
+            </a>
           </AlertDescription>
         </Alert>
       )}

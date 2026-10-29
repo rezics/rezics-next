@@ -1,11 +1,17 @@
-import { expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { expect, mock, test } from 'bun:test';
+import { createElement, Fragment, type ReactNode } from 'react';
 import { renderToString } from 'react-dom/server';
 import { formatOfferPrice } from '../src/checkout/price.ts';
-import { OfferPage } from '../src/checkout/offer-page.tsx';
-import { OrderPage, type OrderPageData } from '../src/checkout/order-page.tsx';
 import type { OfferPageData } from '../src/checkout/offer.ts';
+import type { OrderPageData } from '../src/checkout/order.ts';
 import { subjectCover } from '../src/checkout/subject-cover.tsx';
+
+// These page renders inspect presentational content; the browser stories cover the live exposure query and gate.
+mock.module('../src/kernel/exposure', () => ({
+  Exposure: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
+}));
+const { OfferPage } = await import('../src/checkout/offer-page.tsx');
+const { OrderPage } = await import('../src/checkout/order-page.tsx');
 
 const subjectId = '01a17a79-d88a-77aa-a166-81d2b657df87';
 const offerId = '01a17a7a-477c-777f-9812-c7322f4814a8';
