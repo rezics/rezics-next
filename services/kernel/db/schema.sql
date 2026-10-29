@@ -44,6 +44,62 @@ CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
 COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';
 
 
+--
+-- Name: history_store_kind; Type: TYPE; Schema: core; Owner: -
+--
+
+CREATE TYPE core.history_store_kind AS ENUM (
+    'kernel'
+);
+
+
+--
+-- Name: history_guard_locator(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_guard_locator() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE guard_phase text;
+BEGIN
+  INSERT INTO core.history_seal (partition_no, account_route, account_id)
+    VALUES (NEW.partition_no, NEW.account_route, NEW.account_id) ON CONFLICT DO NOTHING;
+  SELECT phase INTO STRICT guard_phase FROM core.history_seal
+    WHERE partition_no = NEW.partition_no AND account_route = NEW.account_route AND account_id = NEW.account_id
+    FOR SHARE;
+  IF guard_phase <> 'open' THEN
+    RAISE EXCEPTION 'history account partition is sealed' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: history_preserve_seal(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_preserve_seal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.phase <> 'open' THEN
+      RAISE EXCEPTION 'history seal is irreversible' USING ERRCODE = '23514';
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF (NEW.partition_no, NEW.account_route, NEW.account_id) IS DISTINCT FROM
+     (OLD.partition_no, OLD.account_route, OLD.account_id) OR
+     (OLD.phase <> 'open' AND (NEW.barrier_id IS DISTINCT FROM OLD.barrier_id OR NEW.phase = 'open')) OR
+     (OLD.phase = 'complete' AND NEW.phase <> 'complete') THEN
+    RAISE EXCEPTION 'history seal is irreversible' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -74,6 +130,94 @@ CREATE TABLE core.consumer_lag (
     oldest_pending_at timestamp with time zone,
     observed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT consumer_lag_consumer_check CHECK ((consumer ~ '^[a-z][a-z0-9_]{0,62}$'::text))
+-- Name: history_locator; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_locator (
+    partition_no integer NOT NULL,
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    artifact_type text NOT NULL COLLATE pg_catalog."C",
+    locator bytea NOT NULL,
+    roles integer NOT NULL,
+    minimizer_version integer NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    proof_barrier uuid,
+    CONSTRAINT history_locator_account_route_check CHECK (((account_route >= 0) AND (account_route <= 65535))),
+    CONSTRAINT history_locator_artifact_type_check CHECK ((artifact_type = ANY (ARRAY['command-receipt/v1'::text, 'outbox-event/v1'::text, 'durable-work/v1'::text]))),
+    CONSTRAINT history_locator_check CHECK ((account_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT history_locator_check1 CHECK ((((state = 'pending'::text) AND (proof_barrier IS NULL)) OR ((state = 'minimized'::text) AND (proof_barrier IS NOT NULL) AND (proof_barrier = account_id)))),
+    CONSTRAINT history_locator_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
+    CONSTRAINT history_locator_minimizer_version_check CHECK ((minimizer_version = 1)),
+    CONSTRAINT history_locator_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT history_locator_roles_check CHECK (((roles >= 1) AND (roles <= 63))),
+    CONSTRAINT history_locator_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'minimized'::text])))
+);
+
+
+--
+-- Name: history_progress; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_progress (
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    barrier_id uuid NOT NULL,
+    store_kind core.history_store_kind NOT NULL,
+    partition_no integer NOT NULL,
+    partition_epoch integer NOT NULL,
+    artifact_type text COLLATE pg_catalog."C",
+    locator bytea,
+    state text DEFAULT 'pending'::text NOT NULL,
+    proof text,
+    CONSTRAINT history_progress_account_route_check CHECK (((account_route >= 0) AND (account_route <= 65535))),
+    CONSTRAINT history_progress_artifact_type_check CHECK ((artifact_type = ANY (ARRAY['command-receipt/v1'::text, 'outbox-event/v1'::text, 'durable-work/v1'::text]))),
+    CONSTRAINT history_progress_check CHECK ((barrier_id = account_id)),
+    CONSTRAINT history_progress_check1 CHECK ((account_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT history_progress_check2 CHECK (((artifact_type IS NULL) = (locator IS NULL))),
+    CONSTRAINT history_progress_check3 CHECK (((state = 'pending'::text) = (proof IS NULL))),
+    CONSTRAINT history_progress_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
+    CONSTRAINT history_progress_partition_epoch_check CHECK ((partition_epoch > 0)),
+    CONSTRAINT history_progress_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT history_progress_proof_check CHECK ((proof = ANY (ARRAY['erased'::text, 'none'::text]))),
+    CONSTRAINT history_progress_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: history_seal; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_seal (
+    partition_no integer NOT NULL,
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    barrier_id uuid,
+    phase text DEFAULT 'open'::text NOT NULL,
+    CONSTRAINT history_seal_account_route_check CHECK (((account_route >= 0) AND (account_route <= 65535))),
+    CONSTRAINT history_seal_check CHECK ((account_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT history_seal_check1 CHECK ((((phase = 'open'::text) AND (barrier_id IS NULL)) OR ((phase <> 'open'::text) AND (barrier_id IS NOT NULL) AND (barrier_id = account_id)))),
+    CONSTRAINT history_seal_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT history_seal_phase_check CHECK ((phase = ANY (ARRAY['open'::text, 'sealed'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: history_work; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_work (
+    partition_no integer NOT NULL,
+    work_id uuid NOT NULL,
+    request_digest bytea NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    owner_ready boolean DEFAULT false NOT NULL,
+    retired_at timestamp with time zone,
+    CONSTRAINT history_work_check CHECK (((state <> 'ready'::text) OR owner_ready)),
+    CONSTRAINT history_work_check1 CHECK (((state = 'retired'::text) = (retired_at IS NOT NULL))),
+    CONSTRAINT history_work_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT history_work_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT history_work_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'ready'::text, 'retired'::text])))
 );
 
 
@@ -195,6 +339,35 @@ ALTER TABLE ONLY core.consumer_checkpoint
 
 ALTER TABLE ONLY core.consumer_lag
     ADD CONSTRAINT consumer_lag_pkey PRIMARY KEY (consumer);
+-- Name: history_locator history_locator_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_locator
+    ADD CONSTRAINT history_locator_pkey PRIMARY KEY (partition_no, account_route, account_id, artifact_type, locator);
+
+
+--
+-- Name: history_progress history_progress_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_progress
+    ADD CONSTRAINT history_progress_pkey PRIMARY KEY (account_route, account_id, barrier_id, store_kind, partition_no);
+
+
+--
+-- Name: history_seal history_seal_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_seal
+    ADD CONSTRAINT history_seal_pkey PRIMARY KEY (partition_no, account_route, account_id);
+
+
+--
+-- Name: history_work history_work_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_work
+    ADD CONSTRAINT history_work_pkey PRIMARY KEY (partition_no, work_id);
 
 
 --
@@ -253,11 +426,88 @@ CREATE INDEX consumer_checkpoint_consumer_idx ON core.consumer_checkpoint USING 
 
 
 --
+-- Name: history_locator_pending; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_locator_pending ON core.history_locator USING btree (partition_no, account_route, account_id, artifact_type, locator) WHERE (state = 'pending'::text);
+
+
+--
+-- Name: history_locator history_locator_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_locator_guard BEFORE INSERT OR UPDATE OF partition_no, account_route, account_id, artifact_type, locator, roles, minimizer_version ON core.history_locator FOR EACH ROW EXECUTE FUNCTION core.history_guard_locator();
+
+
+--
+-- Name: history_seal history_seal_preserve; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_seal_preserve BEFORE DELETE OR UPDATE ON core.history_seal FOR EACH ROW EXECUTE FUNCTION core.history_preserve_seal();
+
+
+--
 -- Name: consumer_checkpoint consumer_checkpoint_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
 --
 
 ALTER TABLE ONLY core.consumer_checkpoint
     ADD CONSTRAINT consumer_checkpoint_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: history_locator history_locator_account_route_proof_barrier_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_locator
+    ADD CONSTRAINT history_locator_account_route_proof_barrier_fkey FOREIGN KEY (account_route, proof_barrier) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: history_locator history_locator_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_locator
+    ADD CONSTRAINT history_locator_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: history_progress history_progress_account_route_barrier_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_progress
+    ADD CONSTRAINT history_progress_account_route_barrier_id_fkey FOREIGN KEY (account_route, barrier_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: history_progress history_progress_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_progress
+    ADD CONSTRAINT history_progress_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: history_seal history_seal_account_route_barrier_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_seal
+    ADD CONSTRAINT history_seal_account_route_barrier_id_fkey FOREIGN KEY (account_route, barrier_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: history_seal history_seal_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_seal
+    ADD CONSTRAINT history_seal_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: history_work history_work_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_work
+    ADD CONSTRAINT history_work_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
 
 
 --
