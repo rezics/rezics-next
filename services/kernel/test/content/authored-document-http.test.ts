@@ -6,7 +6,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 
 setDefaultTimeout(120_000);
@@ -266,73 +266,74 @@ test('authored document read', async () => {
   const ids: { id: string }[] = [];
   const bytes = Buffer.from(serializeDocument(document));
   const digest = createHash('sha256').update(bytes).digest();
+  const population = (remember: boolean): Population => ({
+    name: 'authored document reads in one partition',
+    hotPartition: partitionOf(route),
+    hotShare: 1,
+    rows: ({ route: itemRoute }) => {
+      const subject = newId(itemRoute);
+      const candidate = newId(itemRoute);
+      const id = newId(itemRoute);
+      const transaction = newId(itemRoute);
+      if (remember) ids.push({ id });
+      return {
+        'semantic.subject': [
+          { route: itemRoute, subject_id: subject, type: 'schema:Recipe', recorded_transaction_id: transaction },
+        ],
+        'semantic.revision': [
+          {
+            route: itemRoute,
+            subject_id: subject,
+            revision: 1,
+            kind: 'propose',
+            release: bundledDigest,
+            recorded_transaction_id: transaction,
+          },
+        ],
+        'semantic.candidate': [
+          {
+            route: itemRoute,
+            subject_id: subject,
+            candidate_id: candidate,
+            slot_id: candidate,
+            property,
+            rank: 'normal',
+            statement: {},
+            release: bundledDigest,
+            revision: 1,
+            origin: 'proposal',
+          },
+        ],
+        'content.authored_field': [
+          {
+            route: itemRoute,
+            id,
+            subject,
+            candidate,
+            revision: 1,
+            author_account_id: author,
+            body: bytes,
+            body_sha256: digest,
+            licence,
+            language,
+            availability: 'available',
+          },
+        ],
+      };
+    },
+  });
+  // Include both document storage and its semantic disclosure keys at the first
+  // sample; background identities never replace the sampled document shape.
+  await seed(db, population(false), { from: 0, to: 2048 });
   const report = await checkGrowth(db, {
     name: 'authored document read',
+    rule: 'series',
     scales: [64, 512, 4096],
     warmups: 1,
     repetitions: 1,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(target, scale, previous) {
-      await seed(
-        target,
-        {
-          name: 'authored document reads in one partition',
-          hotPartition: partitionOf(route),
-          hotShare: 1,
-          rows: ({ route: itemRoute }) => {
-            const subject = newId(itemRoute);
-            const candidate = newId(itemRoute);
-            const id = newId(itemRoute);
-            const transaction = newId(itemRoute);
-            ids.push({ id });
-            return {
-              'semantic.subject': [
-                { route: itemRoute, subject_id: subject, type: 'schema:Recipe', recorded_transaction_id: transaction },
-              ],
-              'semantic.revision': [
-                {
-                  route: itemRoute,
-                  subject_id: subject,
-                  revision: 1,
-                  kind: 'propose',
-                  release: bundledDigest,
-                  recorded_transaction_id: transaction,
-                },
-              ],
-              'semantic.candidate': [
-                {
-                  route: itemRoute,
-                  subject_id: subject,
-                  candidate_id: candidate,
-                  slot_id: candidate,
-                  property,
-                  rank: 'normal',
-                  statement: {},
-                  release: bundledDigest,
-                  revision: 1,
-                  origin: 'proposal',
-                },
-              ],
-              'content.authored_field': [
-                {
-                  route: itemRoute,
-                  id,
-                  subject,
-                  candidate,
-                  revision: 1,
-                  author_account_id: author,
-                  body: bytes,
-                  body_sha256: digest,
-                  licence,
-                  language,
-                  availability: 'available',
-                },
-              ],
-            };
-          },
-        },
-        { from: previous, to: scale },
-      );
+      await seed(target, population(true), { from: previous, to: scale });
     },
     async operation(_target, scale) {
       const response = await request('GET', `/v1/documents/${ids[scale - 1]!.id}`);

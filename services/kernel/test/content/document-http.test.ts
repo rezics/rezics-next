@@ -15,7 +15,7 @@ import type { Access } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const route = 0xc120;
 const subject = newId(route);
@@ -429,87 +429,80 @@ test('exact erased references keep rights digest and identity, while the origina
 });
 
 test('checkGrowth includes actual Accounts formula and constant exact document candidate and tuple probes', async () => {
-  // A fixed catalogue makes the measured growth about document/candidate history
-  // and tuples, without tiny-table sequential scans of the subject anchor.
-  await db.admin.query(
-    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id)
-     SELECT $1,id,'schema:Book',id FROM unnest($2::uuid[]) AS id`,
-    [route, Array.from({ length: 2048 }, () => newId(route))],
-  );
-  await db.admin.query('ANALYZE semantic.subject');
+  // Start every growing document, semantic and source-fence relation on its
+  // representative exact-key plan, before measuring unrelated history.
+  const population: Population = {
+    name: 'same-partition unrelated documents candidates and tuples',
+    hotPartition: partitionOf(route),
+    hotShare: 1,
+    rows(placement) {
+      const other = newId(placement.route);
+      return {
+        'semantic.subject': [
+          { route: placement.route, subject_id: other, type: 'schema:Book', recorded_transaction_id: other },
+        ],
+        'content.imported_field': [
+          {
+            route: placement.route,
+            id: other,
+            subject: other,
+            candidate: other,
+            revision: 1,
+            body: bytes,
+            body_sha256: Buffer.from(digest, 'hex'),
+            source,
+            rights,
+            language: 'en',
+            availability: 'available',
+          },
+        ],
+        'semantic.revision': [
+          {
+            route: placement.route,
+            subject_id: other,
+            revision: 1,
+            kind: 'propose',
+            release: `sha256:${'a'.repeat(64)}`,
+            recorded_transaction_id: other,
+          },
+        ],
+        'semantic.candidate': [
+          {
+            route: placement.route,
+            subject_id: other,
+            candidate_id: other,
+            slot_id: other,
+            property: 'schema:description',
+            rank: 'normal',
+            statement: {},
+            release: `sha256:${'a'.repeat(64)}`,
+            revision: 1,
+            origin: 'proposal',
+          },
+        ],
+        'content.source_fences': [
+          {
+            route: (partitionOf(home) << 4) | (placement.route & 15),
+            source: 'example',
+            external_id: other,
+            field_group: 'summary',
+            taken_down: true,
+            security_revision: 1,
+          },
+        ],
+      };
+    },
+  };
+  await seed(db, population, { from: 0, to: 2048 });
   const report = await checkGrowth(db, {
     name: 'Native imported document HTTP disclosure',
+    rule: 'series',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,
     warmups: 1,
     async grow(database, scale, previous) {
-      await seed(
-        database,
-        {
-          name: 'same-partition unrelated documents candidates and tuples',
-          hotPartition: partitionOf(route),
-          hotShare: 1,
-          rows(placement) {
-            const other = newId(placement.route);
-            return {
-              'semantic.subject': [
-                { route: placement.route, subject_id: other, type: 'schema:Book', recorded_transaction_id: other },
-              ],
-              'content.imported_field': [
-                {
-                  route: placement.route,
-                  id: other,
-                  subject: other,
-                  candidate: other,
-                  revision: 1,
-                  body: bytes,
-                  body_sha256: Buffer.from(digest, 'hex'),
-                  source,
-                  rights,
-                  language: 'en',
-                  availability: 'available',
-                },
-              ],
-              'semantic.revision': [
-                {
-                  route: placement.route,
-                  subject_id: other,
-                  revision: 1,
-                  kind: 'propose',
-                  release: `sha256:${'a'.repeat(64)}`,
-                  recorded_transaction_id: other,
-                },
-              ],
-              'semantic.candidate': [
-                {
-                  route: placement.route,
-                  subject_id: other,
-                  candidate_id: other,
-                  slot_id: other,
-                  property: 'schema:description',
-                  rank: 'normal',
-                  statement: {},
-                  release: `sha256:${'a'.repeat(64)}`,
-                  revision: 1,
-                  origin: 'proposal',
-                },
-              ],
-              'content.source_fences': [
-                {
-                  route: (partitionOf(home) << 4) | (placement.route & 15),
-                  source: 'example',
-                  external_id: other,
-                  field_group: 'summary',
-                  taken_down: true,
-                  security_revision: 1,
-                },
-              ],
-            };
-          },
-        },
-        { from: previous, to: scale },
-      );
+      await seed(database, population, { from: previous, to: scale });
     },
     async operation() {
       const result = await get(availableId, authorBearer);

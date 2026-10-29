@@ -352,28 +352,32 @@ test('readBoard returns current public metadata with an authoritative partition 
 
 test('checkGrowth bounds real board disclosure as unrelated data in the same partition grows', async () => {
   const f = await fixture();
+  // The measured neighbourhood combines four public reads: fixed board/post
+  // disclosure plus one post and one revision candidate. Their fixed hydration
+  // caps give constant rows and a sum of logarithmic history probes, plus Access.
+  const populate = async (scale: number, previous: number) => {
+    for (let ordinal = previous; ordinal < scale; ordinal++) {
+      const id = newId(route);
+      await database.admin.query(
+        `INSERT INTO content.board
+         (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+         VALUES ($1, $2, $3, 'Distractor', 'published', 1, $2)`,
+        [route, id, subject],
+      );
+      await reply(f.thread, f.post, f.author);
+      await insertRevision(f.thread, f.post, newId(contentRoute), 'History distractor');
+    }
+    await database.admin.query('ANALYZE content.board');
+    await database.admin.query('ANALYZE content.post');
+    await database.admin.query('ANALYZE content.revision');
+  };
+  await populate(2048, 0);
   const report = await checkGrowth(database, {
-    name: 'current board disclosure',
+    name: 'current board, post, post-page and revision-page disclosure',
+    rule: 'series',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    async grow(db, scale, previous) {
-      // Setup is outside measurement. The operation, response and resource stay
-      // fixed; only unrelated rows sharing the exact route grow.
-      for (let ordinal = previous; ordinal < scale; ordinal++) {
-        const id = newId(route);
-        await db.admin.query(
-          `INSERT INTO content.board
-           (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
-           VALUES ($1, $2, $3, 'Distractor', 'published', 1, $2)`,
-          [route, id, subject],
-        );
-        await reply(f.thread, f.post, f.author);
-        await insertRevision(f.thread, f.post, newId(contentRoute), 'History distractor');
-      }
-      await db.admin.query('ANALYZE content.board');
-      await db.admin.query('ANALYZE content.post');
-      await db.admin.query('ANALYZE content.revision');
-    },
+    grow: (_db, scale, previous) => populate(scale, previous),
     async operation(db) {
       const result = await readBoard({ pool: db.pool, access, tokens }, board.id, { actor, ...context() });
       expect(result.value?.id).toBe(board.id);

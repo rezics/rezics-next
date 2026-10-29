@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { Pool } from 'pg';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -6,6 +7,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId } from '../../src/route/route.ts';
 import { encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
@@ -22,11 +24,31 @@ const protectedPartition = { boards: 0x500, threads: 0x600 };
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let app: ReturnType<typeof createKernel>;
 
-beforeAll(async () => {
-  db = await openGrowthDatabase();
+let owner: Pool;
+let databaseName: string;
+const source = new URL(process.env.DATABASE_URL!);
+
+beforeAll(() => {
+  const maintenance = new URL(source);
+  maintenance.pathname = '/postgres';
+  owner = new Pool({ connectionString: maintenance.href });
+});
+beforeEach(async () => {
+  // Each series starts from the same migrated template, so prior feeds cannot
+  // add an undeclared offset to the shared content and Realm index populations.
+  databaseName = `sitemap_${randomUUID().replaceAll('-', '')}`;
+  const template = decodeURIComponent(source.pathname.slice(1)).replaceAll('"', '""');
+  await owner.query(`CREATE DATABASE ${databaseName} TEMPLATE "${template}"`);
+  const isolated = new URL(source);
+  isolated.pathname = `/${databaseName}`;
+  db = await openGrowthDatabase(isolated.href);
   app = createKernel({ pool: db.pool, routeKey, tokens });
 });
-afterAll(() => db.close());
+afterEach(async () => {
+  await db?.close();
+  await dropTestDatabase(owner, databaseName);
+});
+afterAll(() => owner.end());
 
 type Feed = 'boards' | 'threads';
 async function page(feed: Feed, values: Record<string, string>) {
@@ -206,29 +228,47 @@ async function grow(listed: Population, scale: number, previous: number) {
 for (const feed of ['boards', 'threads'] as const) {
   test(`${feed} sitemap page stays within its bound as listed items grow`, async () => {
     const listed = population(`listed-${feed}`, listedPartition[feed], null);
-    // Each test grows its own region and starts its walk there.
+    // Seed every relation used by disclosure/projection before the first scale.
+    // Later UUIDv7 neighbours follow this initial page within each route.
+    await seed(db, listed, { from: 0, to: 2048 });
     const cursor = await cursorAtRoute(feed, listedPartition[feed] * 16);
+    const firstPage = await page(feed, { limit: String(pageSize), cursor });
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, listed items`,
+      rule: 'series',
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: (_database, scale, previous) => grow(listed, scale, previous),
       operation: async () => {
         const result = await page(feed, { limit: String(pageSize), cursor });
         expect(result.items).toHaveLength(pageSize);
+        expect(result.items).toEqual(firstPage.items);
         expect(result.next).toEqual(expect.any(String));
         return result;
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+    for (const sample of report.samples) {
+      for (const relation of [
+        'content.board',
+        'content.board_thread',
+        'content.thread',
+        'content.post',
+        'content.revision',
+      ]) {
+        expect(sample.cost.relations[relation]?.sequentialScans, relation).toBe(0);
+      }
+    }
   }, 180_000);
 
   test(`${feed} sitemap page stays within its bound as protected Realm content grows`, async () => {
     const partition = protectedPartition[feed];
     const hidden = population(`protected-${feed}`, partition, 'protected');
+    await seed(db, hidden, { from: 0, to: 2048 });
     // The walk reaches the protected content first, so each page scans only that.
     const cursor = await cursorAtRoute(feed, partition * 16);
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, protected Realm content`,
+      ...(feed === 'boards' ? { rule: 'series' as const } : {}),
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: (_database, scale, previous) => grow(hidden, scale, previous),
       operation: async () => {
@@ -239,5 +279,12 @@ for (const feed of ['boards', 'threads'] as const) {
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+    if (feed === 'boards') {
+      for (const sample of report.samples) {
+        for (const relation of ['content.board', 'community.realm', 'community.realm_revision']) {
+          expect(sample.cost.relations[relation]?.sequentialScans, relation).toBe(0);
+        }
+      }
+    }
   }, 180_000);
 }
