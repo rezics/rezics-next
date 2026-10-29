@@ -344,6 +344,30 @@ export const identityEpochStore: IdentityEpochStore = {
     // not a current epoch, and a process-local/default value would let a moved home look current.
     const owner = await readPartition(tx, command.partition);
     if (!owner || owner.writeState !== 'active') throw unavailable();
+    const existing = (
+      await tx.query(
+        `SELECT m.terminal,m.epoch,m.origin,m.recorded_transaction_id,g.recorded_transaction_id AS gate_transaction_id,
+          g.pending_job,g.pending_epoch
+        FROM semantic.identity_epoch_mapping m
+        LEFT JOIN semantic.identity_epoch_home_gate g
+          ON (g.route,g.destination,g.original)=(m.route,m.original,m.original)
+        WHERE (m.route,m.original)=($1,$2)`,
+        [originalRoute, original],
+      )
+    ).rows[0];
+    if (existing) {
+      if (
+        existing.terminal === original &&
+        BigInt(existing.epoch) === owner.epoch &&
+        existing.origin === 'creation' &&
+        existing.recorded_transaction_id === source.recorded_transaction_id &&
+        existing.gate_transaction_id === source.recorded_transaction_id &&
+        !existing.pending_job &&
+        existing.pending_epoch === null
+      )
+        return;
+      throw new TypeError('Identity self mapping already exists outside this exact creation transaction');
+    }
     await tx.query(
       `INSERT INTO semantic.identity_epoch_mapping(route,original,terminal,epoch,origin,recorded_transaction_id)
       VALUES ($1,$2,$2,$3,'creation',$4)`,
