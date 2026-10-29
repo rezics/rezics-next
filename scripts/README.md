@@ -28,6 +28,13 @@ latest non-empty line are printed when the wait yields, including while admissio
 live only on its recorded host and when `/proc/<pid>/cmdline` identifies this script's `--run <id>` invocation;
 otherwise the log modification time determines whether it is silent. One dead or silent runner is rerun detached
 under the same id. A second dead or silent runner ends as an infrastructure failure with exit status 1.
+Memory admission and remote slot waits write their current capacity state to stderr and the check log immediately
+and at least every 60 seconds. Silence is measured from the log's modification time across successive waits.
+A recorded local runner whose pid no longer exists is detected immediately; a record from another host, an unrelated pid or a record
+without a runner pid is judged only by log growth. A silent verified local runner's process group is stopped first.
+The rerun gets a fresh log and records its reason, host and old log; its own exit status follows the infrastructure
+line. Treat that infrastructure line as a `tool` blocker, even if the rerun passed. A completed command that exits
+75 prints `check: exit status 75`, while a wait that yields prints `check: still running`.
 
 The gate requests four slots per group by default (`GATE_REMOTE_SLOTS` overrides this).
 It partitions eligible hosts between groups when at least two qualify by configured slot count.

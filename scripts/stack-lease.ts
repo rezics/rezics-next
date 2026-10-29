@@ -264,8 +264,8 @@ export async function acquireStackSlot(
         const held = heldSlots.length;
         if (performance.now() - lastLog >= repeatMs) {
           const line = `stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`;
-          if (onWaiting) onWaiting(line);
-          else console.error(line);
+          console.error(line);
+          onWaiting?.(line);
           lastLog = performance.now();
         }
         wait.begin();

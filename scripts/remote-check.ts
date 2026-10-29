@@ -1272,7 +1272,6 @@ async function acquire(
   gate = false,
   waitRepeatMs = 60_000,
 ): Promise<Lease | null> {
-  let announced = false;
   let answered = false;
   let slots = requestedSlots;
   let warnedGateReduction = false;
@@ -1280,16 +1279,20 @@ async function acquire(
   let markerHost: string | undefined;
   const multiWaiterId = !gate && slots > 1 ? randomUUID() : undefined;
   const wait = checkWaitRecorder();
-  let lastAnnouncement = -Infinity;
-  const announceWait = (ranked: RankedHost[]): void => {
-    wait.begin();
-    if (announced && performance.now() - lastAnnouncement < waitRepeatMs) return;
-    const state = ranked.length
-      ? ranked.map(({ host, freeSlots, slotLimit }) => `${host.name} ${freeSlots}/${slotLimit} free`).join(', ')
+  let waitingHosts: RankedHost[] = [];
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const printWaiting = (): void => {
+    const state = waitingHosts.length
+      ? waitingHosts.map(({ host, freeSlots, slotLimit }) => `${host.name} ${freeSlots}/${slotLimit} free`).join(', ')
       : 'no responding hosts';
     console.error(`remote-check: every check slot is busy; waiting for a free one (${state})`);
-    announced = true;
-    lastAnnouncement = performance.now();
+  };
+  const announceWait = (ranked: RankedHost[]): void => {
+    wait.begin();
+    waitingHosts = ranked;
+    if (heartbeat) return;
+    printWaiting();
+    heartbeat = setInterval(printWaiting, waitRepeatMs);
   };
   try {
     while (true) {
@@ -1396,6 +1399,7 @@ async function acquire(
       await sleep(pollMs, signal);
     }
   } finally {
+    clearInterval(heartbeat);
     if (marker) await marker.release();
     wait.stop();
   }
@@ -1873,9 +1877,8 @@ function parse(argv: string[]): RemoteCheck {
     process.env.REMOTE_CHECK_RETRY_BACKOFF_MS === undefined
       ? undefined
       : Number(process.env.REMOTE_CHECK_RETRY_BACKOFF_MS);
-  const waitRepeatMs = process.env.REMOTE_CHECK_WAIT_REPEAT_MS === undefined
-    ? undefined
-    : Number(process.env.REMOTE_CHECK_WAIT_REPEAT_MS);
+  const waitRepeatMs =
+    process.env.REMOTE_CHECK_WAIT_REPEAT_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_WAIT_REPEAT_MS);
   if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
     throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
   return {

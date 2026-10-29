@@ -55,6 +55,13 @@ const LOG_STALL_MS = 10 * 60 * 1000;
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const WAIT_POLL_MS = 25;
 
+type CheckMonitor = {
+  stallMs?: number;
+  pollMs?: number;
+  rerunStallMs?: number;
+  write?: (text: string) => void;
+};
+
 function recordPath(cwd: string, id: string): string {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`Invalid check id: ${id}`);
   return join(cwd, '.temp', 'goal', 'checks', 'results', `${id}.json`);
@@ -402,7 +409,7 @@ export async function waitWorkerCheck(
   id: string,
   cwd = process.cwd(),
   timeoutMs = WAIT_TIMEOUT_MS,
-  monitor: { stallMs?: number; pollMs?: number; rerunWaitMs?: number; rerunStallMs?: number; leaseRepeatMs?: number; write?: (text: string) => void } = {},
+  monitor: CheckMonitor = {},
 ): Promise<number> {
   const root = resolve(cwd);
   const started = Date.now();
@@ -433,9 +440,16 @@ export async function waitWorkerCheck(
     } else if (modifiedAt > lastGrowth) {
       lastGrowth = modifiedAt;
     }
-    const alive = recordedRunnerAlive(record, root, id);
+    const alive = recordedRunnerAlive(record, id);
     if (alive === false) {
-      return await rerunInterruptedCheck(record, root, id, 'runner process exited', Math.max(0, timeoutMs - (Date.now() - started)), monitor);
+      return await rerunInterruptedCheck(
+        record,
+        root,
+        id,
+        'runner process exited',
+        Math.max(0, timeoutMs - (Date.now() - started)),
+        monitor,
+      );
     }
     if (Date.now() - lastGrowth >= stallMs) {
       if (alive === true && record.runnerPid !== undefined) stopRunner(record.runnerPid);
@@ -448,7 +462,9 @@ export async function waitWorkerCheck(
         monitor,
       );
     }
-    await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
+    await new Promise((resolveWait) =>
+      setTimeout(resolveWait, Math.min(pollMs, Math.max(0, timeoutMs - (Date.now() - started)))),
+    );
     record = readRecord(root, id);
   }
   if (record.infrastructureFailure) {
@@ -461,13 +477,12 @@ export async function waitWorkerCheck(
   const code = record.exitCode ?? 1;
   const absoluteLog = join(root, record.log);
   write(`check: exit status ${code}\n`);
-  if (code !== 0 && existsSync(absoluteLog))
-    write(`check: failure summary\n${failureSummary(absoluteLog)}\n`);
+  if (code !== 0 && existsSync(absoluteLog)) write(`check: failure summary\n${failureSummary(absoluteLog)}\n`);
   write(`check: log ${record.log}\n`);
   return code;
 }
 
-function recordedRunnerAlive(record: CheckRecord, root: string, id: string): boolean | undefined {
+function recordedRunnerAlive(record: CheckRecord, id: string): boolean | undefined {
   if (record.runnerHost !== hostname() || record.runnerPid === undefined) return undefined;
   try {
     process.kill(record.runnerPid, 0);
@@ -477,7 +492,7 @@ function recordedRunnerAlive(record: CheckRecord, root: string, id: string): boo
   try {
     const command = readFileSync(`/proc/${record.runnerPid}/cmdline`, 'utf8').split('\0');
     const script = resolve(import.meta.path);
-    const isThisRunner = command.some((part) => resolve(part) === script) && command.some((part, index) => part === '--run' && command[index + 1] === id);
+    const isThisRunner = command[1] === script && command[2] === '--run' && command[3] === id;
     return isThisRunner ? true : undefined;
   } catch {
     return undefined;
@@ -487,10 +502,10 @@ function recordedRunnerAlive(record: CheckRecord, root: string, id: string): boo
 function stopRunner(pid: number): void {
   try {
     // startWorkerCheck creates a detached process group for this runner and its check process.
-    process.kill(-pid, 'SIGTERM');
+    process.kill(-pid, 'SIGKILL');
   } catch {
     try {
-      process.kill(pid, 'SIGTERM');
+      process.kill(pid, 'SIGKILL');
     } catch {
       // The runner may have exited between the liveness check and signal.
     }
@@ -499,7 +514,14 @@ function stopRunner(pid: number): void {
 
 function latestLogLine(file: string): string {
   try {
-    return readFileSync(file, 'utf8').trimEnd().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? '';
+    return (
+      readFileSync(file, 'utf8')
+        .trimEnd()
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .at(-1) ?? ''
+    );
   } catch {
     return '';
   }
@@ -511,7 +533,7 @@ async function rerunInterruptedCheck(
   id: string,
   reason: string,
   remainingMs: number,
-  monitor: { stallMs?: number; pollMs?: number; rerunWaitMs?: number; rerunStallMs?: number; leaseRepeatMs?: number; write?: (text: string) => void },
+  monitor: CheckMonitor,
 ): Promise<number> {
   const host = record.runnerHost ?? hostname();
   const oldLog = record.log;
@@ -521,7 +543,9 @@ async function rerunInterruptedCheck(
     record.infrastructureFailureFinal = true;
     record.infrastructureFailure = `worker-check: infrastructure failure (${reason}) on ${host}; second runner failed; log ${oldLog}`;
     writeRecord(record);
-    (monitor.write ?? ((text: string) => process.stdout.write(text)))(`${record.infrastructureFailure}\ncheck: exit status 1\ncheck: log ${oldLog}\n`);
+    (monitor.write ?? ((text: string) => process.stdout.write(text)))(
+      `${record.infrastructureFailure}\ncheck: exit status 1\ncheck: log ${oldLog}\n`,
+    );
     return 1;
   }
   const rerunLog = logPath(root);
@@ -548,7 +572,7 @@ async function rerunInterruptedCheck(
     writeRecord(record);
   });
   child.unref();
-  return waitWorkerCheck(id, root, monitor.rerunWaitMs ?? remainingMs, {
+  return waitWorkerCheck(id, root, remainingMs, {
     ...monitor,
     ...(monitor.rerunStallMs === undefined ? {} : { stallMs: monitor.rerunStallMs }),
   });
@@ -560,16 +584,20 @@ async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number
   record.runnerPid = process.pid;
   record.runnerHost = hostname();
   writeRecord(record);
-  try {
-    const exitCode = await runWorkerCheck(record.argv, root, false, join(root, record.log));
+  const finish = (exitCode: number): void => {
+    // A superseded runner must never overwrite its detached replacement's result.
+    const current = readRecord(root, id);
+    if (current.log !== record.log || current.status !== 'running') return;
     record.status = 'finished';
     record.exitCode = exitCode;
     writeRecord(record);
+  };
+  try {
+    const exitCode = await runWorkerCheck(record.argv, root, false, join(root, record.log));
+    finish(exitCode);
     return exitCode;
   } catch (error) {
-    record.status = 'finished';
-    record.exitCode = 1;
-    writeRecord(record);
+    finish(1);
     throw error;
   }
 }
