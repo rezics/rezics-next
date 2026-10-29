@@ -59,7 +59,7 @@ function workingFiles(cwd: string): string[] {
 async function regenerateDerivedHead(
   options: PromotionOptions,
   expected: string,
-  branch = options.settings.integrationBranch,
+  branch = 'dev-verified',
 ): Promise<{ head: string; retry: boolean }> {
   const settings = options.settings,
     checkout = settings.mainCheckout;
@@ -736,7 +736,7 @@ async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Pro
       confirmation,
       logs: [initialLog, confirmationLog],
     };
-    const currentDev = head(options.settings.mainCheckout, options.settings.integrationBranch);
+    const currentDev = head(options.settings.mainCheckout, 'dev-verified');
     const currentMain = head(options.settings.mainCheckout, options.settings.mainBranch);
     const next = createRun(
       options,
@@ -835,7 +835,7 @@ function publishPrefix(
 function mergeMainIntoDev(
   options: PromotionOptions,
   target: string,
-  branch = options.settings.integrationBranch,
+  branch = 'dev-verified',
 ): string | undefined {
   const settings = options.settings,
     checkout = settings.mainCheckout;
@@ -1014,7 +1014,7 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
       );
       if (!result.passed || git(tree, 'rev-parse', 'HEAD') !== dev || git(tree, 'status', '--porcelain')) return false;
     }
-    return head(checkout, settings.integrationBranch) === dev;
+    return head(checkout, 'dev-verified') === dev;
   } finally {
     git(checkout, 'worktree', 'remove', '--force', tree);
   }
@@ -1023,14 +1023,14 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
 async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Promise<boolean> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
-  const prepared = await regenerateDerivedHead(options, dev, settings.integrationBranch);
+  const prepared = await regenerateDerivedHead(options, dev, 'dev-verified');
   if (prepared.retry || optionalHead(checkout, settings.stabilizeBranch) !== undefined) return false;
   if (
     !(await stabilizeQuickGate(options, prepared.head)) ||
     optionalHead(checkout, settings.stabilizeBranch) !== undefined
   )
     return false;
-  if (head(checkout, settings.integrationBranch) !== prepared.head) return false;
+  if (head(checkout, 'dev-verified') !== prepared.head) return false;
   try {
     git(
       checkout,
@@ -1065,7 +1065,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
       const main = head(settings.mainCheckout, settings.mainBranch);
       let dev: string;
       try {
-        dev = head(settings.mainCheckout, settings.integrationBranch);
+        dev = head(settings.mainCheckout, 'dev-verified');
       } catch {
         return;
       }
@@ -1077,7 +1077,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
       if (stabilize === main && dev !== stabilize) {
         if (!(await stabilizeQuickGate(options, dev))) return;
         if (
-          head(settings.mainCheckout, settings.integrationBranch) !== dev ||
+          head(settings.mainCheckout, 'dev-verified') !== dev ||
           optionalHead(settings.mainCheckout, settings.stabilizeBranch) !== stabilize
         )
           continue;
@@ -1089,7 +1089,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
         continue;
       }
       const stabilization = stabilize !== undefined;
-      const candidateBranch = stabilization ? settings.stabilizeBranch : settings.integrationBranch;
+      const candidateBranch = stabilization ? settings.stabilizeBranch : 'dev-verified';
       let candidate = stabilize ?? dev;
       let derivedPrepared = false;
       if (run?.phase === 'blocked' && run.blockedOn) {
@@ -1181,7 +1181,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
         return;
       }
       if (run.phase === 'revert-planned') {
-        const currentDev = head(settings.mainCheckout, settings.integrationBranch);
+        const currentDev = head(settings.mainCheckout, 'dev-verified');
         if (run.revertCommit && isAncestor(settings.mainCheckout, run.revertCommit, currentDev)) {
           run.phase = 'revert-published';
           store.savePromotion(run);
@@ -1211,11 +1211,11 @@ export async function promote(options: PromotionOptions): Promise<void> {
             }
             store.savePromotion(run);
           }
-          if (head(settings.mainCheckout, settings.integrationBranch) === run.revertBase)
+          if (head(settings.mainCheckout, 'dev-verified') === run.revertBase)
             git(
               settings.mainCheckout,
               'update-ref',
-              ref(settings.integrationBranch),
+              ref('dev-verified'),
               run.revertCommit,
               run.revertBase!,
             );
@@ -1239,7 +1239,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
         store.savePromotion(run);
       }
       if (run.phase === 'gate-remainder') {
-        const currentDev = head(settings.mainCheckout, settings.integrationBranch);
+        const currentDev = head(settings.mainCheckout, 'dev-verified');
         const prepared = await regenerateDerivedHead(options, currentDev);
         if (prepared.retry) continue;
         const promoteHead = prepared.head;

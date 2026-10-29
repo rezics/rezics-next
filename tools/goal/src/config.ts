@@ -20,6 +20,7 @@ import { watch } from './watchdog.ts';
 import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
+import { verifyDev } from './dev-verifier.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
@@ -357,6 +358,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     sink: job,
     derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
     promote: () => promoteNow(),
+    verify: () => verifyDev({ settings, store, inbox, runGate: promotionGate }),
     runGate,
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,

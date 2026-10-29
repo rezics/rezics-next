@@ -503,6 +503,7 @@ bun tools/goal/src/cli.ts attempts --json
 bun tools/goal/src/cli.ts report [--json]
 bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
+bun tools/goal/src/cli.ts verify
 bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
 bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
@@ -532,6 +533,21 @@ stops those app-servers on shutdown, and a replacement host stops any surviving 
 threads. Recovery reopens each Codex viewer on the current endpoint with `codex resume <thread> --remote <endpoint>`.
 Codex managers use a goal budget. Claude uses its configured executable and configuration directory, interactive
 window and turn-accounting hooks.
+
+### Development verification
+
+Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head after the
+merge train has landed its batch. It starts from `dev-verified`, runs the root typecheck with `TYPECHECK_CHANGED`,
+the affected checks for changed paths, and each landed task's acceptance command (except specification and research
+tasks). Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries and rebases use that
+verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the verified commit,
+how many landings `dev` is ahead, and whether verification is pending, running or current.
+
+When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
+landings. It reverts each culprit's changes in one commit, returns the task to its manager with the failing log, and
+advances the verified ref past the culprits. The worker can retry from that verified base. Infrastructure failures
+rerun only the failed command, up to twice, and do not revert a landing. This moves expensive checks after integration
+and lets a batch share them while keeping unstable `dev` separate from promotion's verified input.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to write
 `.temp/goal/<manager>/CONTINUATION.md` with live task IDs and states, current decisions, pending cross-owner agreements
