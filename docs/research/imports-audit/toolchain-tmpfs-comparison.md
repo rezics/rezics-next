@@ -109,3 +109,32 @@ stack-lease preload, check routing runbook, importer and definitions manifests, 
 names, plus the definitions source diff needed to validate captured inputs. No reference-project implementation is
 required for this verification-environment correction. Only this report is a tracked change; no outside-path files
 are changed. Final acceptance is artifact presence only; the continuation explicitly excludes root/kernel/web gates.
+
+## Captured measurement checkout continuation
+
+The retained four receipts were revalidated as finished exit 0; the three historical PIDs remain absent.
+No additional original order entry exists. The assigned branch now starts at `c6e09111af650fe19f1e53ef0c480205d93bab85`;
+its product files are not used for the remaining measurements.
+
+A detached measurement checkout was created at
+`.temp/toolchain-tmpfs-comparison/measurement`, HEAD `34a2a6e6815f455d5179ebefcd8d6cb303676c04`,
+tracked tree `6308c34a7c1369c40b8d2880f980006a93eab04e`, clean after installation.
+This changes the absolute checkout prefix from the first two pairs; package cwd remains `services/importer`.
+`env TMPDIR=/tmp TMP=/tmp TEMP=/tmp bun install --frozen-lockfile` exited 0, installing 885 packages
+with Bun 1.4.3; log: `.temp/toolchain-tmpfs-comparison/dependency-install.log`.
+The checkout owns its dependency installation. Its `node_modules/@rezics/definitions` resolves into its own
+`packages/definitions`; no current workspace dependencies were transplanted.
+
+Both exact executable revisions were resolved again: the captured checkout's installed
+`node_modules/.bun/bun@1.4.4-canary.20261027.1/node_modules/bun/bin/bun.exe` is
+`a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b` (1.4.4), and `/home/edge/.bun/bin/bun` is
+`c6da4a4d3010e5553438c60f6bd76d981976867c` (1.4.3).
+Both probes with `TMPDIR=TMP=TEMP=/tmp` report `os.tmpdir()=/tmp`, filesystem `1021994` (tmpfs).
+These verified storage variables will be passed to each wrapper; inherited `GOAL_CHECK_WAIT_FILE` is unchanged.
+
+The measurement uses its original worker-check and preload, not replacement tooling. SHA-256:
+worker-check `b441b923ff37fd0a7a53ac8c5b1dcd978c771bfe8e936d01660637cf8dbf22df`;
+stack-lease-preload `04d94e46e48d9d85ec34fd4f371903f2bd72139034d31e607f662a2391783f20`;
+lockfile `aad3bf47b7bfa11c8bbe68e356fa3ca0974099c4be148f763b2392ebc1945c79`.
+All four remaining pairs are still UNEXECUTED at this checkpoint. The next admission is previous
+`cli-credentials-outcomes`, with the original shell/package cwd and exact test arguments above.
