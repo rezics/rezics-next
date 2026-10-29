@@ -410,6 +410,9 @@ command on the dev base and marks an identical fingerprint as pre-existing. Batc
 acceptance against its cumulative candidate; a failed batch acceptance falls back to single landings so the failing
 task is identified and other entries can proceed. Integration rebases onto
 the integration branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
+(`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
+so `main` receives finished work while other In rows are still open.
 The `integrationChecks` setting lists `{ paths, command }` checks. After
 formatting and scope validation, each check runs in order only when a changed file matches its paths. By default,
 changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` install dependencies and construct the
