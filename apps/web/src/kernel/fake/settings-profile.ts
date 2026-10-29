@@ -39,15 +39,19 @@ export const routes: FakeRoute[] = [
       const url = new URL(request.url);
       const id = url.searchParams.get('ids') ?? 'reader';
       const variant = storyVariant();
+      const byHandle = url.searchParams.has('handle');
+      const accountId = byHandle ? (variant.includes('organization') ? 'org-story-viewer' : 'story-viewer') : id;
       const kind = variant.includes('organization') ? 'organization' : id.startsWith('org') ? 'organization' : 'actor';
-      return { status: 200, accounts: [profile(id, kind, variant)], next: null };
+      return { status: 200, accounts: [profile(accountId, kind, variant)], next: null };
     },
     fixture: ({ request }) => {
       const url = new URL(request.url);
       const id = url.searchParams.get('ids') ?? 'reader';
       const variant = storyVariant();
+      const byHandle = url.searchParams.has('handle');
+      const accountId = byHandle ? (variant.includes('organization') ? 'org-story-viewer' : 'story-viewer') : id;
       const kind = variant.includes('organization') ? 'organization' : id.startsWith('org') ? 'organization' : 'actor';
-      return { status: 200, accounts: [profile(id, kind, variant)], next: null };
+      return { status: 200, accounts: [profile(accountId, kind, variant)], next: null };
     },
   },
   {

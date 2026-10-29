@@ -41,7 +41,12 @@ async function settingsReady(context: { canvasElement: HTMLElement }) {
   await view.findByRole('textbox', { name: m.settings_profile_display_name() });
   await view.findByRole('textbox', { name: m.settings_profile_biography() });
   await view.findByRole('heading', { level: 2, name: m.settings_public_activity_heading() });
-  for (const label of [m.settings_public_posts(), m.settings_public_reviews(), m.settings_public_collections(), m.settings_public_realms()])
+  for (const label of [
+    m.settings_public_posts(),
+    m.settings_public_reviews(),
+    m.settings_public_collections(),
+    m.settings_public_realms(),
+  ])
     await view.findByRole('switch', { name: label });
   await expect(view.queryByRole('switch', { name: m.settings_public_speakers() })).toBeNull();
 }

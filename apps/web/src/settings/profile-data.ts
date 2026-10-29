@@ -53,7 +53,13 @@ export async function loadProfileRecord(
   authorization: string,
   accountId: string,
 ): Promise<ProfileValues> {
-  const result = await client.accounts.get({ query: { ids: accountId }, headers: { authorization } });
+  const identity = await client.accounts.get({ query: { ids: accountId }, headers: { authorization } });
+  if (identity.error || !identity.data) throw new Error('Profile unavailable');
+  const ownIdentity = identity.data.accounts.find((item) => item.id === accountId);
+  const handle = ownIdentity?.handle;
+  if (!handle) throw new Error('Profile unavailable');
+
+  const result = await client.accounts.get({ query: { handle }, headers: { authorization } });
   if (result.error || !result.data) throw new Error('Profile unavailable');
   const found = result.data.accounts.find((item) => item.id === accountId);
   if (!found) throw new Error('Profile unavailable');
