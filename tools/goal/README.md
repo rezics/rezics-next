@@ -58,6 +58,9 @@ configured `formatCommand` on exactly these files before committing them and rec
 the formatter rejects a file, the controller restores the brief's original bytes, commits those, and reports the
 formatter output so the manager can repair the brief. The train checks hashes before formatting a landing and refuses
 integration if a worker changes a frozen file.
+When a retry reshapes a brief and drops a previously frozen path, the controller restores that file from the task's base
+commit when it existed there; it removes the file only when it was absent from the base. Paths still frozen by the new
+brief continue to be written and formatted from that brief.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
