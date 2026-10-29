@@ -115,6 +115,10 @@ export type ReportSample = {
   readonly seeding: SeedingCost;
   readonly statementRepetitions: readonly (readonly StatementAttribution[])[];
   readonly occurrenceRepetitions: readonly StatementOccurrences[];
+  /** Backend PIDs used by each accepted measured repetition, when known. */
+  readonly backendRepetitions: readonly (readonly number[])[];
+  /** Measured runs discarded because they touched a backend not seen earlier at this scale. */
+  readonly coldBackendDiscards: number;
   readonly counted?: CountedSample;
 };
 
@@ -190,6 +194,8 @@ function appendProfile(report: GrowthReport): void {
           ...(failedStatements === undefined ? {} : { failedStatements }),
         })),
       ),
+      backendRepetitions: samples.map(({ backendRepetitions }) => backendRepetitions),
+      coldBackendDiscards: samples.map(({ coldBackendDiscards }) => coldBackendDiscards),
       ...(samples.some(({ counted }) => counted !== undefined)
         ? { counted: samples.map(({ counted }) => counted ?? {}) }
         : {}),
@@ -364,13 +370,17 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs, settleMs };
     const availableRelationSizes = await readRelationSizes(db);
     let pendingWrites = new Map<GrowthDatabase, Set<string>>();
+    const seenBackends = new Set<number>();
     for (let warmup = 0; warmup < warmups; warmup++) {
+      let warmupCapture: Awaited<ReturnType<typeof capture>> | undefined;
       const warmed = await captureMeasuredRun(async () => {
-        await capture(db, async () => {
+        warmupCapture = await capture(db, async () => {
           if (check.warmup) await check.warmup(db, scale, repetition);
           else await check.operation(db, scale, repetition);
-        });
+        }, { includeBackends: true });
       });
+      for (const backend of warmupCapture.capture.statementBackends ?? [])
+        if (backend !== undefined) seenBackends.add(backend);
       for (const [target, relations] of warmed.writes) {
         const accumulated = pendingWrites.get(target) ?? new Set<string>();
         for (const relation of relations) accumulated.add(relation);
@@ -383,7 +393,11 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const statementRepetitions: StatementAttribution[][] = [];
     const occurrenceRepetitions: StatementOccurrences[] = [];
     const countedRuns: Record<string, number>[] = [];
+    const backendRepetitions: number[][] = [];
+    let coldBackendDiscards = 0;
     for (let run = 0; run < repetitions; run++) {
+      let accepted = false;
+      while (!accepted) {
       for (const target of pendingWrites.keys()) {
         const workflowStatus = await target.admin.query<{ exists: boolean }>(
           `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
@@ -399,12 +413,32 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       (seeding as { settleMs: number }).settleMs = settleMs;
       if (check.prepare) await check.prepare(db, scale, repetition);
       const captured = await captureMeasuredRun(() =>
-        capture(db, () => check.operation(db, scale, repetition), {
-          ...(check.includeBackends === undefined ? {} : { includeBackends: check.includeBackends }),
-        }),
+        capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
       );
-      pendingWrites = captured.writes;
+      const writes = captured.writes;
       const measured = captured.value;
+      const runBackends = [...new Set((measured.capture.statementBackends ?? []).filter(
+        (backend): backend is number => backend !== undefined,
+      ))];
+      const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
+      if (coldBackends.length > 0) {
+        coldBackendDiscards++;
+        if (coldBackendDiscards > 4)
+          throw new GrowthEvidenceError(
+            `${check.name}: operation keeps using cold backends at scale ${scale} (${coldBackends.join(', ')}); discarded more than 4 cold backend repetitions`,
+          );
+        for (const backend of runBackends) seenBackends.add(backend);
+        for (const [target, relations] of writes) {
+          const accumulated = pendingWrites.get(target) ?? new Set<string>();
+          for (const relation of relations) accumulated.add(relation);
+          pendingWrites.set(target, accumulated);
+        }
+        repetition++;
+        continue;
+      }
+      pendingWrites = writes;
+      for (const backend of runBackends) seenBackends.add(backend);
+      backendRepetitions.push(runBackends);
       const cost = costOf(measured.capture);
       if (check.counted) {
         const values = check.counted.read(measured.value, scale);
@@ -428,6 +462,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       statementRepetitions.push(statementAttributions(measured.capture));
       occurrenceRepetitions.push(statementOccurrences(measured.capture));
       repetition++;
+      accepted = true;
+      }
     }
     samples.push({
       scale,
@@ -438,6 +474,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       seeding,
       statementRepetitions,
       occurrenceRepetitions,
+      backendRepetitions,
+      coldBackendDiscards,
     });
     previous = scale;
   }

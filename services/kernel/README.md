@@ -402,7 +402,9 @@ the access each growing relation needs, a named index or a single partition, rat
 scans everywhere. Injected planner statistics do not replace seeding: they change only a plan's estimates, while a
 growth check measures executed work (`docs/research/growth-check-plan-stability.md`).
 
-Every scale is measured warm. Keep the default `warmups`. When the operation uses up the state it measures, pass
+Every scale is measured on backends already seen in a warm-up or earlier measured repetition; a repetition that
+reaches a new backend is discarded as a warm-up (up to four times per scale), because production backends are
+long-lived. Keep the default `warmups`. When the operation uses up the state it measures, pass
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
 backend's first. `checkGrowth` refuses fewer than one warm-up per scale. After each scale's `grow`, it settles the whole database
 with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. Each settle waits until
