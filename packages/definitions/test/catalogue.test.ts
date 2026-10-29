@@ -57,11 +57,13 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
       'schema:name',
       'schema:sameAs',
       'schema:url',
+      'schema:wordCount',
       'wdt:P155',
       'wdt:P179',
       'wdt:P361',
       'wdt:P5732',
       'wdt:P648',
+      'wdt:P7937',
     ],
   });
   expect(types['bf:Instance']).toMatchObject({
@@ -124,6 +126,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     'schema:recipeInstructions',
     'schema:recipeYield',
     'schema:sameAs',
+    'schema:suitableForDiet',
     'schema:url',
     'wdt:P186',
   ]);
