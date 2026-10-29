@@ -399,12 +399,11 @@ test("account erasure keeps the account's authored fields an anonymous reader is
 });
 
 test("an account upload and field erasure page stays within its bound as other uploaders' media and other authors' fields grow", async () => {
-  const owner = personas.revoked;
+  const owner = await website(personas.revoked);
   await field(owner, 'Growth field');
-  const web = await website(owner);
-  const post = await thread(web);
-  const retained = await media(web, post.id);
-  await ok(web, 'POST', `/v1/threads/${post.id}/posts`, {
+  const post = await thread(owner);
+  const retained = await media(owner, post.id);
+  await ok(owner, 'POST', `/v1/threads/${post.id}/posts`, {
     body: fromPlainText('Retained growth image'),
     mediaIds: [retained],
     licence: 'CC0-1.0',
