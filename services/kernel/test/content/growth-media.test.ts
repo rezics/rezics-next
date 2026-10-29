@@ -58,6 +58,8 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 
 const scales = [1, 8, 64] as const,
   ordinalsPerScale = 100;
+// Keep the first sample on the same indexed lookup/age-selection plans as later samples.
+const indexedHistory = 8192;
 const routeKey = new Uint8Array(32).fill(7);
 const platform = '00000000-0000-8000-8000-000000000000';
 let hash = 'a'.repeat(64);
@@ -120,8 +122,11 @@ function newPartition(): number { let selected: number; do selected = 64 + Math.
 
 // No constraint or read path of the measured operations ties a stored fence route to the hash of its tuple, so the
 // neighbours take fixed ids and spread over the hot partition's 16 routes without hashing.
-function sourceNeighbours(fixture: Pick<Fixture, 'sourcePartition'>): { externalId: string; route: number }[] {
-  return Array.from({ length: ordinalsPerScale * scales[2] }, (_, index) => ({
+function sourceNeighbours(
+  fixture: Pick<Fixture, 'sourcePartition'>,
+  count = ordinalsPerScale * scales[2],
+): { externalId: string; route: number }[] {
+  return Array.from({ length: count }, (_, index) => ({
     externalId: `neighbour-${index}`,
     route: fixture.sourcePartition * 16 + (index % 16),
   }));
@@ -313,9 +318,12 @@ async function ageMedia(media: readonly MediaAnchor[]) {
 
 async function growthPopulation(
   fixture: Fixture,
-  options: { sourceOnly?: boolean; includeSourceNeighbours?: boolean } = {},
+  options: { sourceOnly?: boolean; includeSourceNeighbours?: boolean; sourceNeighbourCount?: number } = {},
 ): Promise<Population> {
-  const sourceIds = options.sourceOnly || options.includeSourceNeighbours ? sourceNeighbours(fixture) : [];
+  const sourceIds =
+    options.sourceOnly || options.includeSourceNeighbours
+      ? sourceNeighbours(fixture, options.sourceNeighbourCount)
+      : [];
   // These populations use production account/content/media/Access/envelope shapes and source-fence tuple keys with valid groups and revisions.
   // prettier-ignore
   const population: Population = {
@@ -379,21 +387,46 @@ async function growthPopulation(
 // prettier-ignore
 async function runMediaGrowth(fixture: Fixture, name: string,
   operation: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown>,
-  options: { includeSourceNeighbours?: boolean; warmup?: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown> } = {}) {
-  const population = await growthPopulation(fixture, options);
+  options: { includeSourceNeighbours?: boolean; revisionHistory?: boolean;
+    warmup?: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown> } = {}) {
+  const population = await growthPopulation(fixture, { ...options,
+    sourceNeighbourCount: indexedHistory + ordinalsPerScale * scales[2] });
+  const seedHistory = async (database: GrowthDatabase, from: number, to: number) => {
+    const position = await database.admin.query<{ position: string }>(
+      'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [fixture.partition]);
+    fixture.basePosition = BigInt(position.rows[0]!.position) + 1n;
+    fixture.baseOrdinal = from;
+    await seed({ pool: database.pool, admin: database.admin }, population, { from, to });
+  };
+  // Pad every growing relation, including variants, authority, envelopes and the
+  // imported source's separate home. The fixed admitted actor inverse stays at 1,000.
+  await seedHistory(db!, 0, indexedHistory);
+  const revisions: Population = {
+    name: `growth-media:${fixture.tag}-target-revisions`, hotPartition: fixture.partition, hotShare: 1,
+    rows: () => ({ 'content.revision': [seedRow('revision', [fixture.route, fixture.threadId, fixture.postId,
+      newId(fixture.route), body, bodyHash, '', 'CC0-1.0', [], fixture.boardId, 'available', newId(fixture.route)])] }),
+  };
   return checkGrowth(db!, {
     name,
+    rule: 'series',
     scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     warmup: options.warmup ?? operation,
     grow: async (database, scale, previous) => {
-      const position = await database.admin.query<{ position: string }>(
-        'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [fixture.partition]);
-      fixture.basePosition = BigInt(position.rows[0]!.position) + 1n;
-      fixture.baseOrdinal = previous * ordinalsPerScale;
-      await seed({ pool: database.pool, admin: database.admin }, population,
-        { from: previous * ordinalsPerScale, to: scale * ordinalsPerScale });
+      if (options.revisionHistory) {
+        // Isolate r: unrelated media/Access/envelope histories stay fixed, while
+        // the named post gains revisions without changing the referenced revision.
+        await seed({ pool: database.pool, admin: database.admin }, revisions,
+          { from: previous * ordinalsPerScale, to: scale * ordinalsPerScale });
+        const result = await database.admin.query<{ revisions: number; head: string }>(
+          `SELECT (SELECT count(*)::integer FROM content.revision WHERE route=$1 AND post_id=$2) AS revisions,
+             head_revision_id::text AS head FROM content.post WHERE route=$1 AND post_id=$2`,
+          [fixture.route, fixture.postId]);
+        expect(result.rows).toEqual([{ revisions: 1 + scale * ordinalsPerScale, head: fixture.revisionId }]);
+      } else {
+        await seedHistory(database, indexedHistory + previous * ordinalsPerScale, indexedHistory + scale * ordinalsPerScale);
+      }
     },
     operation,
   });
@@ -543,7 +576,7 @@ growthTest('Media reservation and state reads stays within its bound as u grows'
 growthTest('Post media claim stays within its bound as r grows', async () => {
   const f = await makeAnchor(), media = await mediaAnchors(f, 'available', 3);
   return runMediaGrowth(f, 'Post media claim', (_db, _scale, i) => claimPostMedia(f, media[Math.floor(i / 2)]!.id, f.postId, f.revisionId),
-    { warmup: async () => claimPostMedia(f, (await mediaAnchor(f, 'available')).id, f.postId, f.revisionId) });
+    { revisionHistory: true, warmup: async () => claimPostMedia(f, (await mediaAnchor(f, 'available')).id, f.postId, f.revisionId) });
 });
 // prettier-ignore
 growthTest('Cover reference read and claim stays within its bound as u grows', async () => {
