@@ -1884,7 +1884,7 @@ export class MergeTrain {
           if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
             throw new Error('Acceptance changed the candidate commit');
         }
-        if (!controlPlane && !workspace) {
+        if ((!controlPlane || integratesIntoDev) && !workspace) {
           stage = 'gate';
           appendFileSync(
             logPath,
