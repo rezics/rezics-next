@@ -35,19 +35,21 @@ describe('native web publication driver interruptions', () => {
     const binding = await import('./web-publication-driver.ts');
     const isolated = await binding.createWebPublicationDriver();
     const restore = await isolated.interrupt('subject-view');
-    const started = performance.now();
     try {
       const isolatedFixture = await isolated.provision(data);
       const cold = await isolated.request(isolatedFixture.preparingView);
       expect(cold.status).toBe(200);
       expect(await cold.text()).toContain('Preparing this view');
 
+      const restoredAt = performance.now();
       await restore();
       await isolated.settle();
       const ready = await isolated.request(isolatedFixture.preparingView);
       expect(ready.status).toBe(200);
       expect(await ready.text()).not.toContain('Preparing this view');
-      console.info(`web-publication-interrupt: subject-view-restore-to-projection=${Math.round(performance.now() - started)}ms`);
+      console.info(
+        `web-publication-interrupt: subject-view-restore-to-projection=${Math.round(performance.now() - restoredAt)}ms`,
+      );
     } finally {
       await restore();
       await isolated.close();
