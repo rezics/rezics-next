@@ -1659,34 +1659,193 @@ of authority, a closed validity interval or a terminal flag does not itself eras
 [Access schema](../../db/access/schema.sql) has no account-deletion cascade. Auth has its
 [own inventory](../../../auth/README.md#retention-inventory); other domains decide their own data lifetimes.
 
-| Store / schema citation                                                                                                                                                                                                               | Account-linked personal fields or payload                                                                                                                                                                                          | Erasure or de-identification trigger and deadline                                                                                                                                                                                                     | Retention purpose                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `access.account`, identity/profile group ([schema](../../db/access/schema.sql), [fence SQL](lifecycle-fence.sql))                                                                                                                     | Handle, display name, avatar URL/id, biography, links, birth date, content preferences, suspension reason, registration ids/deadline, operator/controller ids                                                                      | Tombstone clears these in the barrier transaction; public views and speaker listing become false.                                                                                                                                                     | Keep only the lifecycle tombstone for attribution and refusal of future authority.                           |
-| `access.account`, remaining state ([schema](../../db/access/schema.sql))                                                                                                                                                              | Stable account id/kind, timestamps, authentication floor/fence receipt, relation version/reservation, handle operation id and latest five handle-change times, inverse status, rate tier, verified/pending subject and receipt ids | No erasure trigger or deadline for these residual fields; public disclosure is restricted by the deletion policy.                                                                                                                                     | Terminal identity and replay/fencing; no deletion-retention purpose specified for every residual field.      |
-| `access.account_preferences` ([schema](../../db/access/schema.sql), [writer](preferences.ts), [fence SQL](lifecycle-fence.sql))                                                                                                       | Account id, spoiler level, suitability, shelf, notification overrides, version                                                                                                                                                     | Tombstone erases the row in the barrier transaction; a fence without tombstone preserves it.                                                                                                                                                          | Private viewer choices while the account exists.                                                             |
-| `access.handle_claim` ([schema](../../db/access/schema.sql), [lifecycle](lifecycle.ts), [expiry](lifecycle-handle-expire.sql), [reservation](lifecycle-handle-reserve.sql))                                                           | Handle/account mapping, reservation and operation ids, expected prior handle, forwarding deadline                                                                                                                                  | Exact unclaimed registration holds can be released. Former-handle rows are never deleted or reassigned; after their 30-day forwarding deadline, only their allocation record remains. Account deletion retires the current handle without forwarding. | Prevent handle impersonation while retaining only allocation facts; forwarding, reservation and reuse rules. |
-| `access.lifecycle_handle_operation`, `access.lifecycle_handle_effect`, `access.lifecycle_registration_expiry` ([schema](../../db/access/schema.sql))                                                                                  | Account, handles/expected handle, operation/reservation ids, effects and transactions                                                                                                                                              | Completion/registration expiry records terminal state; no erasure trigger or deadline.                                                                                                                                                                | Idempotent handle and registration recovery.                                                                 |
-| `access.organization_member` ([schema](../../db/access/schema.sql))                                                                                                                                                                   | Organization/member ids, role, validity history, transaction                                                                                                                                                                       | Membership removal closes intervals; no account-deletion purge or deadline.                                                                                                                                                                           | Temporal membership authority/history.                                                                       |
-| `access.lifecycle_membership_slot`, `access.operator_relation_slot` ([schema](../../db/access/schema.sql))                                                                                                                            | Member/organization or operator/subject ids, reservations, terminal state                                                                                                                                                          | Terminalization preserves rows; no erasure trigger or deadline.                                                                                                                                                                                       | Prevent reservation reuse.                                                                                   |
-| `access.membership_inverse`, `access.membership_inverse_terminal` ([schema](../../db/access/schema.sql), [release](membership-inverse-20261025093747-release.sql))                                                                    | Account/group ids, reservation and source/proof transactions                                                                                                                                                                       | Verified release deletes the live inverse row; terminal proof remains. No deletion deadline or proof purge.                                                                                                                                           | Bounded inverse traversal and release proof.                                                                 |
-| `access.lifecycle_coordination` ([schema](../../db/access/schema.sql), [operator release](operator-release.sql), [membership release](lifecycle-membership-release.sql))                                                              | Account and related account ids, reservation, purpose                                                                                                                                                                              | Exact durable release deletes the hold when responsibility/membership resolves; holds have no TTL or erasure deadline.                                                                                                                                | Prevent orphaned authority during coordinated operations.                                                    |
-| `access.principal_assignment` ([schema](../../db/access/schema.sql))                                                                                                                                                                  | Principal, assigned actor, creator principal, request id, issued/current validity and revocation time                                                                                                                              | Revocation closes authority; no physical erasure trigger or deadline.                                                                                                                                                                                 | Delegation provenance and temporal authority.                                                                |
-| `access.resource_grant`, `access.resource_role_grant` ([schema](../../db/access/schema.sql), [grant revoke](grant-revoke.sql), [role mutation](role-grant-mutate.sql))                                                                | Identity/organization subject, account resource ids, roles/actions, validity, transaction                                                                                                                                          | Explicit revoke/change deletes or replaces selected grants; account deletion has no blanket purge or deadline.                                                                                                                                        | Current resource permission and role assignment.                                                             |
-| `access.resource_denial` ([schema](../../db/access/schema.sql))                                                                                                                                                                       | Subject/resource ids, reason, action, role and validity                                                                                                                                                                            | No account erasure trigger or deadline.                                                                                                                                                                                                               | Resource-specific denials.                                                                                   |
-| `access.resource_initialization`, `access.standing_parent_installation`, `access.governance_bootstrap`, `access.governance_reach` ([schema](../../db/access/schema.sql))                                                              | Account resource/actor ids, bootstrap account, actions, creator id, initialization time and transaction links                                                                                                                      | No account erasure trigger or deadline.                                                                                                                                                                                                               | Creation idempotency, standing permissions and governance provenance.                                        |
-| `access.rating_counter_controller` ([schema](../../db/access/schema.sql))                                                                                                                                                             | Account/controller ids and effective times                                                                                                                                                                                         | No erasure trigger or deadline.                                                                                                                                                                                                                       | Rating counting identity history.                                                                            |
-| `access.lifecycle_fence_receipt`, `access.credential_floor_receipt` ([schema](../../db/access/schema.sql))                                                                                                                            | Account, prior/current operator, reservation/continuation ids, floor, operation/effect/opening references/digests, transactions                                                                                                    | No erasure trigger or deadline.                                                                                                                                                                                                                       | Authenticate barriers and make reductions replay-safe.                                                       |
-| `access.operator_opening_receipt` ([schema](../../db/access/schema.sql))                                                                                                                                                              | Acting human, operator/subject, client/scopes, requested-by delegation, epochs, credential operation/effect, consumption and expiry                                                                                                | Authority expires within its bounded lifetime; no physical erasure trigger or deadline.                                                                                                                                                               | Prove authorized operator session/credential openings.                                                       |
-| `access.workflow_approval` ([schema](../../db/access/schema.sql), [sweep](workflow-approvals-sweep.sql))                                                                                                                              | Actor/client/scopes, requested-by, operation JSON (ids, handles, membership/credential references), keys/digests, epochs                                                                                                           | Expiry within 300 seconds (credential approvals within 60); bounded sweep removes expired rows when invoked. No registered sweep schedule or completion deadline.                                                                                     | Short-lived workflow authorization.                                                                          |
-| `access.committed_continuation`, `access.committed_continuation_entry`, `access.committed_continuation_completion`, `access.operator_fence_page` ([schema](../../db/access/schema.sql), [implementation](committed-continuations.ts)) | Account, prior handle/operator/reservation, operation key/digests, allowlist targets/keys, receipt links, cursors and completions                                                                                                  | Expiry refuses use; completion/renewal preserves the root and evidence. No physical erasure trigger or deadline.                                                                                                                                      | Finish only committed cleanup and prevent repeat effects.                                                    |
-| `access.agent_verification_request` ([schema](../../db/access/schema.sql), [review](agent-verification.ts))                                                                                                                           | Account/kind, requester/reviewer, catalogue subject, statement/links (evidence), decision reason, problem detail and receipts                                                                                                      | Withdrawal/decision/failure changes state; no evidence or request erasure trigger or deadline, including on account deletion.                                                                                                                         | Review and appeal evidence; duration unspecified.                                                            |
-| `access.write_rate_counter` ([schema](../../db/access/schema.sql), [expiry SQL](write-rate-expiry.sql), [scheduler](write-rate-expiry.ts))                                                                                            | Identity digest, command family, count, expiry and route                                                                                                                                                                           | Eligible 48 hours after counter expiry; optional admitted partition schedule visits one of sixteen routes each minute, 1000 rows per visit. No total backlog deadline; unconfigured partitions have no schedule.                                      | Temporary abuse protection; digests are account-linkable, not anonymous.                                     |
-| `core.receipt` ([core schema](../../db/schema.sql))                                                                                                                                                                                   | Principal/actor id, command/idempotency key, request digest, response JSON (including verification evidence/review, handle or approval results), transaction and time                                                              | No account erasure trigger or deadline.                                                                                                                                                                                                               | Command idempotency and stable replay.                                                                       |
-| `core.outbox`, `editorial.write_basis` ([core schema](../../db/schema.sql), [event payload catalogue](events.ts))                                                                                                                     | Event subject/data (including old handles, relationships, verification request ids/problem types), principal/client, requested-by, transaction/time                                                                                | No account erasure trigger or deadline identified.                                                                                                                                                                                                    | Event delivery/replay and editorial provenance.                                                              |
-| Kernel DBOS workflow/step/event/message/status payloads ([work retention](../work/retention.ts), [verification work](agent-verification-work.ts), [account effect](account-agent-effect.ts))                                          | Account/operation/request ids, workflow inputs/results and durable effect progress                                                                                                                                                 | Terminal history eligible after `KERNEL_WORKFLOW_RETENTION_DAYS` (default 30, range 7–365); every ten minutes, at most 60 batches of 1000. Running work remains; no account-deletion trigger or backlog deadline.                                     | Durable execution/recovery and bounded diagnostic history.                                                   |
+The dispositions below describe the current implementation, not completion of the
+[Access and Auth participant contract](../../../../docs/deletion.md#access-and-auth-participants). Schema citations
+cover retained fields and the absence of a deletion trigger; command citations identify narrower cleanup. No gap
+closes through this inventory. Its implementing capability must pass its named native acceptance test first.
 
-`access.exposure_opening` stores platform group intervals, not account identities; account-linked provenance of its
-commands is covered by the shared receipt, write-basis and outbox rows above.
+### Identity and allocation stores
+
+- `access.account`, subject profile: [the barrier](lifecycle-fence.sql) clears handle, name, avatars, biography,
+  links, birth date, content preferences, suspension reason, registration and own operator/controller fields;
+  public views and speaker listing become false. This is the immediate identity/write fence.
+- `access.account`, subject residue: [the schema](../../db/access/schema.sql) retains id/kind, timestamps, epoch/fence,
+  relation version/reservation, handle operation/change times, inverse status, rate tier and verification pointers.
+  No complete residual-field purge or deadline exists; creation time is guarded against change.
+- `access.account`, operator of another subject: [the barrier](lifecycle-fence.sql) changes only its own row;
+  [operator lifecycle work](lifecycle.ts) handles responsibility release, without a reverse historical purge.
+- `access.account`, controller of another subject: [controller history and account fields](../../db/access/schema.sql)
+  retain the link; own tombstoning does not erase another account's stored relationship/history.
+- `access.account_preferences`, owner: [the barrier](lifecycle-fence.sql) deletes private spoiler, suitability, shelf,
+  notification and version data with the tombstone; fencing without tombstone preserves the row.
+- `access.agent_page`, verified account: [account-agent effects](account-agent-effect.ts) wait for reversal/unmerge
+  and label synchronization; [reversal](agent-verification.ts) removes the exact receipt-bound pointer. The
+  [schema](../../db/access/schema.sql) has no account reverse index or general stale-pointer erasure sweep.
+- `access.handle_claim`, current owner: [lifecycle commands](lifecycle.ts) retire the deleted account's current handle
+  without forwarding. [The schema](../../db/access/schema.sql) still requires its account mapping.
+- `access.handle_claim`, former owner: [reservation/expiry](lifecycle-handle-expire.sql) can release unclaimed holds;
+  [handle retirement](lifecycle.ts) permanently reserves former allocations and limits forwarding to 30 days.
+  The account, reservation/operation, expected-handle and transaction fields have no erasure scrub.
+- `access.lifecycle_handle_operation`, subject: [the schema](../../db/access/schema.sql) retains terminal handle,
+  reservation and replay state without an account-erasure trigger or deadline; purpose is handle recovery.
+- `access.lifecycle_handle_effect`, subject: [the schema](../../db/access/schema.sql) retains handle/account,
+  operation/reservation, effect and transaction evidence without account-erasure cleanup.
+- `access.lifecycle_registration_expiry`, registrant: [the schema](../../db/access/schema.sql) retains expiry and
+  reservation evidence without account-erasure cleanup; expiry does not physically erase the proof.
+
+### Relationships and traversal stores
+
+- `access.organization_member`, organization subject: [organization close](organization-close-work.ts) deletes
+  membership history in [pages](organization-close-page.sql), then releases member inverses; no elapsed deadline.
+- `access.organization_member`, member: [membership closure](../../db/access/schema.sql) ends authority intervals;
+  historical intervals in surviving organizations have no member-erasure purge or deadline.
+- `access.lifecycle_membership_slot`, organization subject: [close pages](organization-close-page.sql) terminalize
+  slots; [the terminal guard](../../db/access/schema.sql) preserves them and rejects their deletion.
+- `access.lifecycle_membership_slot`, member: [the schema](../../db/access/schema.sql) retains historical reservations
+  and terminal state in organization partitions, without member-erasure cleanup.
+- `access.membership_inverse`, member: [verified release](membership-inverse-20261025093747-release.sql) removes the
+  live inverse using exact terminal proof. This locates current relationships, not every historical interval.
+- `access.membership_inverse`, group account: [organization-close work](organization-close-work.ts) finishes exact
+  member-side release; completion depends on native work, without an erasure deadline.
+- `access.membership_inverse_terminal`, member: [the schema](../../db/access/schema.sql) keeps immutable account,
+  reservation and transaction release proof; no physical purge or deadline.
+- `access.membership_inverse_terminal`, group account: [the schema](../../db/access/schema.sql) retains the group link
+  even after the live inverse is gone; no reverse erasure cleanup.
+- `access.lifecycle_coordination`, owning account: [operator release](operator-release.sql) and
+  [membership release](lifecycle-membership-release.sql) delete exact holds on successful native release, without TTL.
+- `access.lifecycle_coordination`, related member: [the schema](../../db/access/schema.sql) retains related-account
+  reservations in the owner's partition until release, without reverse-role erasure or a deadline.
+- `access.lifecycle_coordination`, related operator: [the schema](../../db/access/schema.sql) has the same hold and
+  release dependency; deleting this related account does not itself purge the owner's hold.
+- `access.lifecycle_coordination`, related organization: [membership release](lifecycle-membership-release.sql)
+  removes the exact resolved hold; no complete historical organization-role sweep exists in the schema.
+- `access.operator_relation_slot`, subject: [the schema](../../db/access/schema.sql) retains terminal relation slots,
+  reservations and transactions; no account-erasure cleanup.
+- `access.operator_relation_slot`, operator: [the schema](../../db/access/schema.sql) retains old operators on other
+  subjects' slots, without reverse-role cleanup.
+- `access.organization_close`, organization subject: [the finish update](organization-close-finish.sql) marks progress
+  complete but retains handle, receipt/key and cursor in [the row](../../db/access/schema.sql).
+- `access.organization_close`, cursor member: [the page writer](organization-close-page.sql) stores the last member
+  id and validity boundary; no member-erasure cursor cutover exists. It is a surviving organization's work.
+- `access.principal_assignment`, principal/granter/creator: [the schema](../../db/access/schema.sql) constrains
+  `creator_principal_id = principal_id`; revocation closes validity but preserves assignment/replay provenance.
+- `access.principal_assignment`, assigned actor/delegate: [the schema](../../db/access/schema.sql) retains active and
+  revoked actor links; the live speaker index excludes revoked rows and is not complete erasure discovery.
+
+### Permission and provenance stores
+
+The grant tables have no granter column ([schema](../../db/access/schema.sql)); granter identity is in command
+provenance, inventoried under shared stores below. Erasing a granter preserves surviving recipients' permissions,
+as required by the participant contract, while subject/account-resource grants are removed.
+
+- `access.resource_grant`, identity/member/organization subject: [grant commands](grant-commands.ts) can revoke selected grants;
+  [the schema](../../db/access/schema.sql) has no account-erasure purge covering every validity interval.
+- `access.resource_grant`, account resource: [the schema](../../db/access/schema.sql) retains resource permissions
+  without a deleted-resource purge. Sentinel subjects do not identify an account.
+- `access.resource_role_grant`, identity/member/organization subject: [the schema](../../db/access/schema.sql) retains
+  role/validity payload outside selected role mutations; no all-history account-erasure sweep.
+- `access.resource_role_grant`, account resource: [the schema](../../db/access/schema.sql) has no deleted-resource purge.
+- `access.resource_denial`, subject: [the schema](../../db/access/schema.sql) retains private reasons, scope and
+  temporal ban/suspension history, without an account-erasure deadline or adopted moderation exception.
+- `access.resource_denial`, account resource: [the schema](../../db/access/schema.sql) has no deleted-resource purge.
+- `access.resource_initialization`, resource account: [the schema](../../db/access/schema.sql) retains initialization
+  after account deletion, with no child-before-parent erasure path.
+- `access.resource_initialization`, creator of a surviving resource: [the schema](../../db/access/schema.sql) requires
+  creator attribution and retains it; there is no terminal minimization to a platform-origin marker.
+- `access.standing_parent_installation`, account resource: [the schema](../../db/access/schema.sql) retains standing
+  installation state without account-erasure cleanup; surviving resources' installations are separate obligations.
+- `access.governance_bootstrap`, bootstrap actor: [the schema](../../db/access/schema.sql) retains the actor and singleton
+  completion fence; no actor minimization exists. The fence prevents a second bootstrap.
+- `access.governance_reach`, actor/acting human: [the schema](../../db/access/schema.sql) retains action, resource and
+  transaction reach evidence without erasure cleanup.
+- `access.governance_reach`, operator: [the same schema](../../db/access/schema.sql) retains operator-origin reach
+  provenance; it has no separate reverse-role purge.
+- `access.governance_reach`, account resource: [the schema](../../db/access/schema.sql) retains transaction-led reach
+  records without resource-account erasure cleanup.
+- `access.rating_counter_controller`, subject: [the controller trigger](../../db/access/schema.sql) records effective
+  controller history, without account-erasure cleanup or a retention duration.
+- `access.rating_counter_controller`, controller/operator: [the schema](../../db/access/schema.sql) retains historical
+  links on surviving subjects; no reverse-role purge exists.
+
+### Proof and review stores
+
+- `access.lifecycle_fence_receipt`, subject: [the barrier](lifecycle-fence.sql) writes epoch, kind, operator and
+  transaction evidence; [the schema](../../db/access/schema.sql) has no payload minimization/purge deadline.
+- `access.lifecycle_fence_receipt`, prior/current operator: [the schema](../../db/access/schema.sql) retains the links
+  on other subjects' receipts, with no reverse-role cleanup.
+- `access.credential_floor_receipt`, credential subject: [the schema](../../db/access/schema.sql) retains opening,
+  operation, epoch and transaction evidence without cleanup; linked opening human/operator roles also lead here.
+- `access.credential_floor_receipt`, linked opening's acting human/operator: [the schema](../../db/access/schema.sql)
+  retains the opening reference without an indexed child relation covering its full subject/route or reverse-role purge.
+- `access.operator_opening_receipt`, operator: [the schema](../../db/access/schema.sql) expires authority in at most
+  60 seconds but retains scope, session/credential binding, relation/reservation and transaction payload.
+- `access.operator_opening_receipt`, acting human: [the schema](../../db/access/schema.sql) retains the human on a
+  surviving operator's opening; no reverse-role erasure exists.
+- `access.operator_opening_receipt`, subject: [the schema](../../db/access/schema.sql) retains the subject outside its
+  own route, with no subject-erasure purge.
+- `access.operator_opening_receipt`, requested-by principal/delegate: [the schema](../../db/access/schema.sql) retains
+  the delegation reference after expiry, without a resolved account-role locator or erasure cleanup.
+- `access.workflow_approval`, actor: [the schema](../../db/access/schema.sql) bounds authority to 300 seconds (60 for
+  credential approval); [the expiry sweep](workflow-approvals-sweep.sql) deletes expired rows when invoked, without
+  a registered completion guarantee.
+- `access.workflow_approval`, operation subject/operator/member/delegate/requested-by: [the schema](../../db/access/schema.sql)
+  retains operation JSON and delegation references without typed role discovery or account-erasure cleanup.
+- `access.committed_continuation`, owner: [continuation commands](committed-continuations.ts) refuse expired authority
+  but preserve roots through completion/renewal; no physical erasure path or deadline.
+- `access.committed_continuation`, prior operator/allowlist target: [the schema](../../db/access/schema.sql) retains
+  prior relation/handle, reservation, digest and target JSON, without role-complete native discovery.
+- `access.committed_continuation_entry`, target/key subject: [the schema](../../db/access/schema.sql) preserves immutable
+  allowlist children, without physical erasure after consumers finish.
+- `access.committed_continuation_completion`, target/receipt subject: [the schema](../../db/access/schema.sql) preserves
+  immutable receipt/completion payload, without a consumer-aware purge.
+- `access.operator_fence_page`, continuation owner: [the schema](../../db/access/schema.sql) retains immutable finite
+  allowlists and page proofs without cleanup.
+- `access.operator_fence_page`, allowlisted subject/cursor account: [the schema](../../db/access/schema.sql) retains
+  account-bearing cursors and allowlists even after expiry/completion, without typed role cleanup.
+- `access.agent_verification_request`, subject: [review commands](agent-verification.ts) change state but retain
+  statement, links, catalogue linkage, decision/problem details and receipts; no evidence-erasure deadline.
+- `access.agent_verification_request`, requester: [the schema](../../db/access/schema.sql) requires requester attribution
+  on surviving subjects' requests, with no requester minimization.
+- `access.agent_verification_request`, reviewer/acting human: [the schema](../../db/access/schema.sql) retains reviewer,
+  reason and problem details; no reverse-role erasure or adopted evidence expiry.
+
+### Rate, completion and shared stores
+
+- `access.write_rate_counter`, authenticated account: [identity derivation](write-rate-identity.ts) HMACs the account;
+  [expiry SQL](write-rate-expiry.sql) removes eligible digests/families 48 hours after expiry. The
+  [optional partition scheduler](write-rate-expiry.ts) visits one of sixteen routes per minute, sharing a 1000-row
+  budget with chunks. No account-specific purge, old-secret attribution coverage or backlog deadline exists.
+- `access.write_rate_chunk`, authenticated account: [the schema](../../db/access/schema.sql) stores the same digest plus
+  operation/chunk key; [expiry SQL](write-rate-expiry.sql) deletes it independently in that shared budget, without a
+  counter cascade or account-erasure guarantee. Anonymous transport buckets are not uniquely account-owned.
+- `access.erasure`, terminal subject: [the coordinator](erasure.ts) and [schema guard](../../db/access/schema.sql) keep
+  route/account, T, participant version and completion timestamp permanently; the tombstone creates the obligation.
+- `access.erasure_acknowledgement`, subject/participant: [the coordinator](erasure.ts) and
+  [schema guard](../../db/access/schema.sql) preserve immutable outcomes and bounded retention/resolution evidence;
+  the primitive does not establish that Access's own residue phases have run.
+- `core.receipt`, subject/actor/delegate/granter/operator/reviewer/member: [the core schema](../../db/schema.sql) retains
+  command key, digest, principal, response JSON and transaction/time for replay, with no account-erasure trigger.
+- `core.outbox`, subject/actor/delegate/granter/operator/reviewer/member: [the core schema](../../db/schema.sql) retains
+  event payload and transaction/time, including non-actor event subjects, without account-erasure minimization.
+- `editorial.write_basis`, actor/delegated principal/granter/operator/member: [the core schema](../../db/schema.sql)
+  retains client/principal/requested-by and transaction provenance, without role-complete erasure cleanup.
+- Kernel DBOS workflow/status/input/result/step/event/message copies, every business-input/result role above:
+  [terminal retention](../work/retention.ts) uses `KERNEL_WORKFLOW_RETENTION_DAYS` (default 30, range 7–365), every ten
+  minutes, at most 60 batches of 1000. Running work remains; there is no account-specific scrub or backlog deadline.
+
+`membership_inverse_coverage` is a view over `account`, not another stored copy; `access.exposure_opening` stores
+platform intervals without native account ids ([schema](../../db/access/schema.sql)). Its actor/granter provenance
+is still personal data in shared copies.
+
+Required protocol metadata is not implemented in [the current schema](../../db/access/schema.sql): erasure
+phase/progress/coverage and immutable outcome state (terminal subject); `operator_opening_account` (requested-by
+principal/delegate plus opening roles); `workflow_approval_account` (actor, subject, operator, member and delegate);
+`continuation_account` and full-key page associations (owner, prior operator and allowlist targets); rate digest
+bindings by secret generation (authenticated account); atomic copy locators (all producer roles); and independent
+traversal ordinals with removable id bindings (organization members and operator-page subjects). Their disposition
+must follow the participant contract: temporary locators/progress are removed after consumption, minimal native
+completion/refusal survives outside DBOS, and cursor boundaries never retain account ids. These requirements do
+not claim that existing payloads are already minimized or that shared-history handoff exists.
 
 ### Known retention gaps
 
