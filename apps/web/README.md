@@ -1276,17 +1276,20 @@ Full subject views page through their owner list read with the first page's para
 - **Growth check:** `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and
   refusal handling
 
-### Zone pages (`/<locale>/zones/<id>`)
+### Static Zone pages (`/<locale>/zones/<id>`)
 
-- **Touches:** One anonymous `POST /v1/zones/<id>:readPage` returns the public Zone header and the existing page
-  presentation. Subject pages add the subject page reads used by their global routes. The shared presentation renderer
-  applies the Zone's appearance tokens around each page, with page tokens taking precedence. Subject canonicals point
-  to `/<locale>/subjects/<id>`.
-- **Bound:** One Zone read per page view, plus the common subject page reads. A server render follows no more than four
-  `202` continuations. If work remains, it returns a no-store `503` preparing page and the browser resumes with the last
-  cursor. Personal subject controls load after hydration.
-- **Growth check:** `tests/zone-shell.test.ts` asserts that a home uses one Zone read and that a subject page adds one
-  request to the existing common subject reads.
+- **Touches:** The home and configured relative routes read one static page through `POST /v1/zones/<id>:readPage`.
+  The shared presentation renderer applies the Zone's appearance tokens around the configured document. A subject link
+  leaves the Zone and uses the subject's global URL.
+- **Closed source routes:** Zone subject targets, saved-scope and mounted-Collection reads, and source preparation are
+  not exposed by the web routes. Direct `/zones/<id>/subjects/<subjectId>` URLs are not found while those capabilities
+  remain closed. The header has no search box or scope control until the matching search capability is ready.
+- **Bound:** A static route reads its selected page once and does not enumerate other Zones, subjects, or Collections.
+  Private and unknown Zones render the same not-found outcome to an anonymous reader. Current read-time withholding is
+  reflected in the next page and metadata response; page reads use `private, no-store` so an authorized response cannot
+  be reused for another viewer.
+- **Growth check:** `tests/native/native-static-zones.host.test.ts` measures the same configured page at 1, 8, and 64
+  unrelated Zones and asserts one `readPage` request at each size.
 
 ### Sitemap export
 

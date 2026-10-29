@@ -227,6 +227,20 @@ test('static Zone pages do not offer closed source operations or invoke source-d
       ),
     ),
   ).toEqual([]);
+
+  const directStarted = stack.kernelRequests().length;
+  for (const path of [
+    `/en/zones/${fixture.publicZoneId}/subjects/${fixture.subjectId}`,
+    `/en/zones/${fixture.publicZoneId}/subjects/${fixture.subjectId}/details`,
+  ]) {
+    const direct = await stack.request(`${stack.web}${path}`);
+    expect(direct.status).toBe(404);
+    const html = await direct.text();
+    expect(html).toContain('Page not found');
+    expect(html).not.toContain(fixture.publicLabel);
+    expect(html).not.toContain(fixture.protectedSentinel);
+  }
+  expect(stack.kernelRequests().slice(directStarted)).toEqual([]);
 });
 
 test('the same static page uses one bounded kernel read with 1, 8, and 64 unrelated Zones', async () => {

@@ -286,16 +286,25 @@ export async function createNativeStaticZonesFixture(stack: NativeWebStack): Pro
       }),
       `record native ${route || 'home'} page`,
     );
-  const [home, guide, metadata] = await Promise.all([
+  const [home, guide, metadata, subjectMetadata, subjectPage] = await Promise.all([
     recordPage(publishedPublic.zone.id, ''),
     recordPage(publishedPublic.zone.id, 'guide'),
     json(await stack.kernel(`/v1/zones/${publishedPublic.zone.id}`), 'record native Zone metadata'),
+    json(await stack.kernel(`/v1/subjects/${subjectId}`), 'record native global subject'),
+    json(
+      await stack.kernel('/v1/pages:read', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: { subject: subjectId }, languages: ['en'] }),
+      }),
+      'record native global subject page',
+    ),
   ]);
   const recordingDirectory = join(repositoryRoot, '.temp');
   await mkdir(recordingDirectory, { recursive: true });
   await Bun.write(
     join(recordingDirectory, 'native-static-zones-recording.json'),
-    `${JSON.stringify({ home, guide, metadata }, null, 2)}\n`,
+    `${JSON.stringify({ home, guide, metadata, subjectMetadata, subjectPage }, null, 2)}\n`,
   );
 
   return {

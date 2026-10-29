@@ -92,9 +92,11 @@ test(
       expect(response.status).toBe(200);
       const html = await response.text();
       expect(html).toContain(locale === 'en' ? 'Field Notes' : '田野札记');
-      expect(html).toContain(locale === 'en' ? 'A clear view of the collection' : '从容查看收藏');
+      expect(html).toContain(
+        locale === 'en' ? 'A public page from the native Zone configuration.' : '原生区域页面内容。',
+      );
       expect(html).toContain('data-zone-shell');
-      expect(html).toContain(`/${locale}/zones/${zoneId}/subjects/${subjectId}`);
+      expect(html).toContain(`/${locale}/subjects/${subjectId}/kokoro`);
       expect(html).not.toContain('Secret mounted collection');
     }
   },
@@ -102,21 +104,26 @@ test(
 );
 
 test(
-  'subject overview and view pages keep the Zone shell and use the subject’s global page as canonical',
+  'direct subject-in-Zone URLs stay closed while the global subject URL remains available',
   async () => {
-    const overview = await fetch(`${await site()}/en/zones/${zoneId}/subjects/${subjectId}`);
-    expect(overview.status).toBe(200);
-    const overviewHtml = await overview.text();
-    expect(overviewHtml).toContain('data-zone-shell');
-    expect(overviewHtml).toContain('Kokoro');
-    expect(canonicalPath(overviewHtml)).toBe(`/en/subjects/${subjectId}`);
+    for (const path of [
+      `/en/zones/${zoneId}/subjects/${subjectId}`,
+      `/en/zones/${zoneId}/subjects/${subjectId}/details`,
+    ]) {
+      const response = await fetch(`${await site()}${path}`);
+      expect(response.status).toBe(404);
+      const html = await response.text();
+      expect(html).toContain('Page not found');
+      expect(html).not.toContain('data-zone-shell');
+      expect(html).not.toContain('Kokoro details in the Zone');
+    }
 
-    const view = await fetch(`${await site()}/en/zones/${zoneId}/subjects/${subjectId}/details`);
-    expect(view.status).toBe(200);
-    const viewHtml = await view.text();
-    expect(viewHtml).toContain('data-zone-shell');
-    expect(viewHtml).toContain('Kokoro details in the Zone');
-    expect(canonicalPath(viewHtml)).toBe(`/en/subjects/${subjectId}`);
+    const subject = await fetch(`${await site()}/en/subjects/${subjectId}/kokoro`);
+    expect(subject.status).toBe(200);
+    const subjectHtml = await subject.text();
+    expect(subjectHtml).toContain('Kokoro');
+    expect(subjectHtml).not.toContain('data-zone-shell');
+    expect(canonicalPath(subjectHtml)).toBe(`/en/subjects/${subjectId}/kokoro`);
   },
   timeout,
 );
@@ -135,14 +142,14 @@ test(
     expect(await page.locator('head style').count()).toBe(0);
     await page.context().close();
 
-    const subject = await open(`/en/zones/${zoneId}/subjects/${subjectId}`, { javaScriptEnabled: false });
-    const selected = subject.locator('[data-zone-shell] [data-zone-page]');
+    const guide = await open(`/en/zones/${zoneId}/guide`, { javaScriptEnabled: false });
+    const selected = guide.locator('[data-zone-shell] [data-zone-page]');
     expect(await selected.getAttribute('data-density')).toBe('comfortable');
     expect(await selected.getAttribute('data-radius')).toBe('lg');
     expect(await selected.getAttribute('data-surface')).toBe('flat');
-    expect(await selected.getAttribute('data-cover')).toBe('landscape');
+    expect(await selected.getAttribute('data-cover')).toBe('portrait');
     expect(await selected.getAttribute('data-heading-scale')).toBe('md');
-    await subject.context().close();
+    await guide.context().close();
 
     const outside = await open(`/en/subjects/${subjectId}`, { javaScriptEnabled: false });
     expect(await outside.locator('[data-zone-shell]').count()).toBe(0);
@@ -230,7 +237,7 @@ test('a 200 reached within the server continuation budget renders the completed 
   expect(response.status).toBe(200);
   const html = await response.text();
   expect(html).toContain('data-zone-shell');
-  expect(html).toContain('A clear view of the collection');
+  expect(html).toContain('Field Notes');
   expect(html).not.toContain('Preparing this Zone page');
 });
 
@@ -291,35 +298,36 @@ test(
     const initial = await response.text();
     expect(initial).toContain('Preparing this Zone page');
     expect(initial).toContain('cursor-5');
-    expect(initial).not.toContain('A clear view of the collection');
+    expect(initial).not.toContain('Field Notes');
 
     const page = await open(`/en/zones/${preparingZoneId}`);
-    await page.getByRole('heading', { name: 'A clear view of the collection' }).waitFor({ timeout: 30_000 });
+    await page.getByRole('heading', { name: 'Field Notes' }).waitFor({ timeout: 30_000 });
     expect(await page.locator('[data-zone-shell]').count()).toBe(1);
     await page.context().close();
   },
   timeout,
 );
 
-test('a 503 from readPage prepares without a cursor and retries after Retry-After', async () => {
+test('a 503 from readPage is unavailable without a cursor or empty-result claim', async () => {
   const response = await fetch(`${await site()}/en/zones/${unavailableZoneId}`);
   expect(response.status).toBe(503);
   expect(response.headers.get('cache-control')).toMatch(/\bno-store\b/);
   expect(response.headers.get('retry-after')).toBeTruthy();
   const html = await response.text();
-  expect(html).toContain('Preparing this Zone page');
+  expect(html).toContain('Something went wrong');
+  expect(html).not.toContain('Preparing this Zone page');
   expect(html).not.toMatch(/cursor-\d+/);
   expect(html).not.toContain('A clear view of the collection');
 });
 
 test(
-  'a no-cursor 503 retries after Retry-After and replaces the preparing page with the completed page',
+  'a no-cursor 503 remains unavailable instead of retrying as page preparation',
   async () => {
     const page = await open(`/en/zones/${recoveringZoneId}`);
-    expect(await page.getByRole('heading', { name: 'Preparing this Zone page' }).count()).toBe(1);
+    expect(await page.getByRole('heading', { name: 'Something went wrong' }).count()).toBe(1);
     expect(await page.content()).not.toMatch(/cursor-\d+/);
-    await page.getByRole('heading', { name: 'A clear view of the collection' }).waitFor({ timeout: 15_000 });
-    expect(await page.locator('[data-zone-shell]').count()).toBe(1);
+    expect(await page.locator('[data-zone-shell]').count()).toBe(0);
+    expect(await page.content()).not.toContain('A clear view of the collection');
     await page.context().close();
   },
   timeout,

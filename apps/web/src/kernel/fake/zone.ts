@@ -14,22 +14,21 @@ const revokedZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const recoveringReads = new Map<string, number>();
 
-type ZoneTarget = { route: string } | { subject: string; view?: string };
+type ZoneTarget = { route: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function homeDocument(zone: string) {
+function homeDocument() {
   const title = {
-    en: 'A clear view of the collection',
-    'zh-Hans': '从容查看收藏',
+    en: 'Field Notes',
+    'zh-Hans': '田野札记',
   };
   const description = {
-    en: 'A considered shelf of stories, subjects, and reading paths.',
-    'zh-Hans': '精心整理的故事、主题与阅读路径。',
+    en: 'A public page from the native Zone configuration.',
+    'zh-Hans': '原生区域页面内容。',
   };
-  const subjectHref = `/zones/${zone}/subjects/${subjectId}`;
   return {
     root: { props: {} },
     content: [
@@ -38,87 +37,44 @@ function homeDocument(zone: string) {
       {
         type: 'LinkGrid',
         props: {
-          id: 'mounted-collections',
-          links: [
-            {
-              href: '/collections/0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11',
-              label: { en: 'Stories to revisit', 'zh-Hans': '值得重读的故事' },
-            },
-            {
-              href: '/collections/0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e12',
-              label: { en: 'New perspectives', 'zh-Hans': '新的视角' },
-            },
-          ],
-        },
-      },
-      {
-        type: 'LinkGrid',
-        props: {
           id: 'featured-subject',
-          links: [{ href: subjectHref, label: { en: 'Kokoro', 'zh-Hans': '心' } }],
+          links: [{ href: `/subjects/${subjectId}/kokoro`, label: { en: 'Kokoro', 'zh-Hans': '心' } }],
         },
       },
     ],
   };
 }
 
-function subjectDocument(view?: string) {
-  if (view === 'details')
-    return {
-      root: { props: {} },
-      content: [
-        {
-          type: 'Heading',
-          props: {
-            id: 'zone-subject-details',
-            level: 1,
-            text: { en: 'Kokoro details in the Zone', 'zh-Hans': '专区中的《心》详情' },
-          },
-        },
-        {
-          type: 'Text',
-          props: {
-            id: 'zone-subject-details-copy',
-            text: {
-              en: 'The view keeps the Zone presentation and its page context.',
-              'zh-Hans': '此视图保留专区的呈现方式和页面上下文。',
-            },
-          },
-        },
-      ],
-    };
-  const recorded = subjectPage.document as { root: { props: Record<string, unknown> }; content: unknown[] };
+function guideDocument() {
   return {
-    ...recorded,
     root: {
-      ...recorded.root,
       props: {
-        ...recorded.root.props,
-        appearance: {
-          density: 'comfortable',
-          radius: 'lg',
-          surface: 'flat',
-          cover: 'landscape',
-          headingScale: 'md',
-        },
+        appearance: { density: 'comfortable', radius: 'lg', surface: 'flat', cover: 'portrait', headingScale: 'md' },
       },
     },
+    content: [
+      { type: 'Heading', props: { id: 'guide-title', level: 1, text: { en: 'Guide', 'zh-Hans': '指南' } } },
+      {
+        type: 'Text',
+        props: {
+          id: 'guide-copy',
+          text: { en: 'A second declared static page.', 'zh-Hans': '另一个已配置的静态页面。' },
+        },
+      },
+    ],
   };
 }
 
 function zoneResponse(id: string, target: ZoneTarget): KernelRecording {
   const alternate = id === alternateZoneId;
-  const isSubject = 'subject' in target;
-  const view = isSubject ? target.view : undefined;
-  const page = isSubject ? subjectPage : undefined;
+  const route = target.route;
+  if (route !== '' && route !== 'guide') return problem(404, { 'cache-control': 'no-store' });
   return {
     status: 200,
-    ...(isSubject ? { subject: target.subject } : {}),
-    profile: page?.profile ?? 'sha256:zone-story',
-    template: page?.template ?? { scope: 'route', key: null },
-    document: isSubject ? subjectDocument(view) : homeDocument(id),
-    ...(isSubject ? { views: ['overview', 'details'] } : {}),
-    reads: isSubject ? (page?.reads ?? {}) : {},
+    profile: 'sha256:zone-story',
+    template: { scope: 'route', key: route || null },
+    document: route === 'guide' ? guideDocument() : homeDocument(),
+    reads: {},
     zone: {
       id,
       revision: '1',
@@ -162,6 +118,7 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   }
   const target = isRecord(body) ? body.target : undefined;
   if (!isRecord(target)) return { status: 400, code: 'invalid_request' };
+  if (typeof target.route !== 'string') return problem(404, { 'cache-control': 'no-store' });
   const cursor = url.searchParams.get('cursor');
   if (id === recoveringZoneId) {
     const count = recoveringReads.get(id) ?? 0;
@@ -191,7 +148,6 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   }
   if (id !== zoneId && id !== alternateZoneId && id !== recoveringZoneId)
     return problem(404, { 'cache-control': 'no-store' });
-  if (!('route' in target) && target.subject !== subjectId) return problem(404, { 'cache-control': 'no-store' });
   return zoneResponse(id, target as unknown as ZoneTarget);
 }
 
@@ -204,14 +160,12 @@ async function subjectPageResponse(request: Request): Promise<KernelRecording | 
     return undefined;
   }
   if (!isRecord(target) || target.subject !== subjectId) return undefined;
-  const view = target.view;
-  if (view !== undefined && view !== 'overview' && view !== 'details') return undefined;
+  if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details') return undefined;
   return {
     ...subjectPage,
     status: 200,
     subject: subjectId,
     views: ['overview', 'details'],
-    ...(view === 'details' ? { document: subjectDocument('details') } : {}),
   };
 }
 

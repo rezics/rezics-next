@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isView, type View } from '@rezics/composition';
+import type { View } from '@rezics/composition';
 import { notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
@@ -32,6 +32,7 @@ type ZoneRouteClient = {
 export type ZonePageOutcome =
   | { kind: 'page'; page: ZonePageResponse }
   | { kind: 'preparing'; cursor?: string; retryAfter: string }
+  | { kind: 'unavailable'; retryAfter: string }
   | { kind: 'missing' }
   | { kind: 'error' };
 
@@ -50,6 +51,7 @@ export type ZonePageRouteOutcome =
       };
     }
   | { kind: 'preparing'; cursor?: string; retryAfter: string }
+  | { kind: 'unavailable'; retryAfter: string }
   | { kind: 'missing' }
   | { kind: 'redirect'; id: string }
   | { kind: 'error' };
@@ -68,15 +70,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function validTarget(value: unknown): value is ZonePageRequest['target'] {
-  if (!isRecord(value)) return false;
-  if ('route' in value)
-    return Object.keys(value).length === 1 && typeof value.route === 'string' && value.route.length <= 255;
+function validTarget(value: unknown): value is Extract<ZonePageRequest['target'], { route: string }> {
   return (
-    typeof value.subject === 'string' &&
-    idPattern.test(value.subject) &&
-    Object.keys(value).every((key) => key === 'subject' || key === 'view') &&
-    (!('view' in value) || isView(value.view))
+    isRecord(value) && Object.keys(value).length === 1 && typeof value.route === 'string' && value.route.length <= 255
   );
 }
 
@@ -130,7 +126,7 @@ export async function readZonePage(
     }
     if (result.status === 404) return { kind: 'missing' };
     if (result.status === 200 && result.data) return { kind: 'page', page: result.data as ZonePageResponse };
-    if (result.status === 503) return { kind: 'preparing', retryAfter: retryAfter(result.response) };
+    if (result.status === 503) return { kind: 'unavailable', retryAfter: retryAfter(result.response) };
     if (result.status !== 202 || !result.data || typeof (result.data as ZonePageReadProgress).next !== 'string')
       return { kind: 'error' };
     cursor = (result.data as ZonePageReadProgress).next;
@@ -174,6 +170,12 @@ function setReadResponse(outcome: ZonePageRouteOutcome, serverRender: boolean): 
     setResponseHeader('cache-control', 'no-store');
     setResponseHeader('retry-after', outcome.retryAfter);
     if (serverRender) setResponseStatus(503, 'Service Unavailable');
+    return;
+  }
+  if (outcome.kind === 'unavailable') {
+    setResponseHeader('cache-control', 'no-store');
+    setResponseHeader('retry-after', outcome.retryAfter);
+    setResponseStatus(503, 'Service Unavailable');
     return;
   }
   if (outcome.kind === 'missing' || outcome.kind === 'error') setResponseHeader('cache-control', 'no-store');
