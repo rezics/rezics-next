@@ -8,13 +8,7 @@ import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
-import {
-  assertGrowth,
-  measure,
-  openGrowthDatabase,
-  type GrowthDatabase,
-  type GrowthSample,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
@@ -281,59 +275,123 @@ test('primitive-only old prepared source SQL cutover retains incomplete legacy c
 });
 
 // Synthetic cardinality is primitive-only negative history. Measured positive paths
-// below are the actual native writer against the same released subject and account.
+// below use fresh released subjects for every run, with the same native owner/partition.
 test('native source hook rows and statements stay constant with logarithmic blocks as unrelated owners targets and own negative history grow', async () => {
   const owner = fixture.owner.actor;
-  const target = await fixture.createSubject('game');
-  await follows.follow(owner, target, entryKey());
-  await follows.unfollow(owner, target, entryKey());
-  const samples: GrowthSample[] = [];
-  let previous = 0;
-  for (const scale of [256, 1024, 4096]) {
-    await db.admin.query(
-      `INSERT INTO library.follow
+  const before = await inspect();
+  const slots: { target: string; followKey: string; unfollowKey: string; pendingSince: string }[] = [];
+  const populations: { scale: number; ownNegativeHistory: number; unrelatedOwnersAndTargets: number; slots: number }[] =
+    [];
+  const runs: { scale: number; repetition: number; target: string; plans: unknown[] }[] = [];
+  let activeRun: (typeof runs)[number] | undefined;
+  // Retain the actual nested auto_explain documents alongside the shared harness's
+  // per-occurrence accounting; this listener neither changes nor filters its costs.
+  const listeners = new Map<PoolClient, (notice: { message?: string }) => void>();
+  const listen = (client: PoolClient) => {
+    if (listeners.has(client)) return;
+    const listener = (notice: { message?: string }) => {
+      const message = notice.message;
+      if (activeRun && message?.startsWith('duration:') && message.includes('plan:\n'))
+        activeRun.plans.push(JSON.parse(message.slice(message.indexOf('plan:\n') + 6)));
+    };
+    listeners.set(client, listener);
+    client.on('notice', listener);
+  };
+  db.pool.on('acquire', listen);
+  const evidence = new URL('../../../../.temp/follow-count-source/', import.meta.url);
+  await mkdir(evidence, { recursive: true });
+  try {
+    const report = await checkGrowth(db, {
+      name: 'Native follow source replacements',
+      scales: [256, 1024, 4096],
+      rule: 'series',
+      warmups: 1,
+      repetitions: 5,
+      includeBackends: true,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(_db, scale, previous) {
+        await db.admin.query(
+          `INSERT INTO library.follow
        (route,account_id,target_id,target_type,state,reason,created_at,updated_at,transaction_id)
        SELECT $1, CASE WHEN population=0 THEN $2::uuid ELSE
          ('10000000-0000-7000-8000-' || lpad(to_hex($1::int),4,'0') || lpad(to_hex(n),8,'0'))::uuid END,
          ('20000000-0000-7000-8000-5678' || lpad(to_hex(n),8,'0'))::uuid,
          'subject','unfollowed','explicit',now(),now(),$3
        FROM generate_series($4::int+1,$5::int) n CROSS JOIN generate_series(0,1) population`,
-      [routeOf(owner.accountId), owner.accountId, newId(routeOf(owner.accountId)!), previous, scale],
-    );
-    await db.admin.query('VACUUM (ANALYZE) library.follow');
-    await db.admin.query('VACUUM (ANALYZE) library.follow_count_source');
-    await db.admin.query('VACUUM (ANALYZE) library.follow_count_owner');
-    // Warm the exact path; then capture both genuine replacements in one operation.
-    await follows.follow(owner, target, entryKey());
-    await follows.unfollow(owner, target, entryKey());
-    const measured = await measure(db, async () => {
-      await follows.follow(owner, target, entryKey());
-      await follows.unfollow(owner, target, entryKey());
+          [routeOf(owner.accountId), owner.accountId, newId(routeOf(owner.accountId)!), previous, scale],
+        );
+        // One warm-up plus five measured runs, all independent consumable pairs.
+        // Provision real subjects and the negative UPDATE baseline outside captures.
+        for (let slot = 0; slot < 6; slot++) {
+          const target = await fixture.createSubject('game');
+          await follows.follow(owner, target, entryKey());
+          await follows.unfollow(owner, target, entryKey());
+          slots.push({ target, followKey: entryKey(), unfollowKey: entryKey(), pendingSince: '' });
+        }
+        const prepared = await inspect();
+        for (const slot of slots.slice(-6)) {
+          const negative = source(prepared, slot.target);
+          expect(negative).toMatchObject({ revision: '2', source_following: false, desired_eligible: false });
+          slot.pendingSince = negative.pending_since;
+        }
+        populations.push({ scale, ownNegativeHistory: scale, unrelatedOwnersAndTargets: scale, slots: slots.length });
+      },
+      async operation(_db, scale, repetition) {
+        const slot = slots[repetition]!;
+        activeRun = { scale, repetition, target: slot.target, plans: [] };
+        runs.push(activeRun);
+        try {
+          const followed = await follows.follow(owner, slot.target, slot.followKey);
+          expect(followed).toMatchObject({
+            changed: true,
+            follow: { targetId: slot.target, targetType: 'subject', state: 'following', reason: 'explicit' },
+          });
+          const unfollowed = await follows.unfollow(owner, slot.target, slot.unfollowKey);
+          expect(unfollowed).toMatchObject({
+            changed: true,
+            follow: { targetId: slot.target, targetType: 'subject', state: 'unfollowed', reason: 'explicit' },
+          });
+        } finally {
+          activeRun = undefined;
+        }
+      },
     });
-    samples.push({ scale, cost: measured.cost });
-    for (const relation of ['library.follow_count_source', 'library.follow_count_owner']) {
-      expect(measured.cost.relations?.[relation]?.rows).toBeGreaterThan(0);
-      expect(measured.cost.relations?.[relation]?.sequentialScans).toBe(0);
+    // Keep every repetition, statement attribution and relation population, rather
+    // than treating returned row counts or an isolated sample as physical work.
+    await Bun.write(new URL('growth.json', evidence), JSON.stringify({ populations, report }, null, 2));
+    for (const sample of report.samples) {
+      for (const cost of sample.repetitions) {
+        expect(cost.rows).toBeGreaterThan(0);
+        expect(cost.statements).toBeGreaterThan(0);
+        expect(cost.blocks).toBeGreaterThan(0);
+        for (const relation of ['library.follow_count_source', 'library.follow_count_owner']) {
+          expect(cost.relations[relation]?.rows).toBeGreaterThan(0);
+          expect(cost.relations[relation]?.sequentialScans).toBe(0);
+        }
+      }
+      console.info(
+        'Native follow source growth:',
+        JSON.stringify({
+          population: populations.find(({ scale }) => scale === sample.scale),
+          repetitions: sample.repetitions.map(({ rows, statements, blocks }) => ({ rows, statements, blocks })),
+        }),
+      );
     }
-    previous = scale;
+    console.info('Native follow source series verdict:', JSON.stringify(report.shadow));
+    const after = await inspect();
+    expect(after.owner).toEqual(before.owner);
+    for (const slot of slots)
+      expect(source(after, slot.target)).toMatchObject({
+        revision: '4',
+        source_following: false,
+        desired_eligible: false,
+        pending_since: slot.pendingSince,
+      });
+    for (const run of runs.filter(({ repetition }) => repetition % 6 !== 0))
+      expect(run.plans.length).toBeGreaterThan(0);
+  } finally {
+    db.pool.off('acquire', listen);
+    for (const [client, listener] of listeners) client.off('notice', listener);
+    await Bun.write(new URL('plans.json', evidence), JSON.stringify({ populations, runs }, null, 2));
   }
-  console.info(
-    'Native follow source growth:',
-    JSON.stringify(
-      samples.map(({ scale, cost }) => ({
-        scale,
-        rows: cost.rows,
-        statements: cost.statements,
-        blocks: cost.blocks,
-        source: cost.relations?.['library.follow_count_source'],
-        owner: cost.relations?.['library.follow_count_owner'],
-      })),
-    ),
-  );
-  assertGrowth(samples, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
-  await mkdir(new URL('../../../../.temp/follow-count-source/', import.meta.url), { recursive: true });
-  await Bun.write(
-    new URL('../../../../.temp/follow-count-source/growth.json', import.meta.url),
-    JSON.stringify(samples, null, 2),
-  );
 }, 120_000);

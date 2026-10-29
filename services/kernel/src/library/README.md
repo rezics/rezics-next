@@ -1147,14 +1147,17 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
 - Bound: Constant changed rows/statements per edge and indexed depth `O(log N)`, with one-owner counter contention.
   No follower/target/history scan, global clock ordering, fanout, full backfill or owner/global COUNT. Count reads,
   maintained canonical support and full native API costs require their own evidence.
-- Growth check: `test/library/follow-count-source-storage.test.ts` captures actual native follow/unfollow with fixed
-  selected account/subject at scales 256, 1,024 and 4,096, growing unrelated source owners/targets and own negative
-  history. Whole captured rows/statements stay constant and blocks logarithmic, including nested storage work;
-  source/counter probes use indexes. Synthetic negative growth cardinality and isolated rollback/overflow/DDL
-  invariants are primitive-only, separate from native positive fixture/HTTP/owner-command evidence.
-  Recorded follow/unfollow captures examined 31 rows in 34 statements at all three scales, with 195, 194 and
-  197 shared hit/read blocks respectively. Each capture examined two source rows and two owner rows, with
-  zero sequential scans on either relation. All three focused native tests passed with 102 assertions.
+- Growth check: `test/library/follow-count-source-storage.test.ts` uses the shared `checkGrowth` series rule at
+  scales 256, 1,024 and 4,096, with one warm-up and five measured repetitions per scale. The selected native owner
+  and hot partition stay fixed while unrelated source owners/targets and own negative history grow. Every run
+  has a fresh released subject and idempotency keys, with its negative follow prepared through ordinary commands
+  outside captures. Both measured follow/unfollow replacements include ordinary command, Access, receipt, outbox,
+  write-basis and nested hook work. Constant rows/statements and logarithmic blocks use the shared kernel bounds;
+  each repetition additionally requires positive source/counter work and zero sequential scans on those relations.
+  The local `growth.json` evidence retains populations, every repetition and the actual series verdict;
+  `plans.json` retains the actual auto_explain documents, including nested plans, rows/removals, loops and buffers.
+  Synthetic negative growth cardinality and isolated rollback/overflow/DDL invariants remain primitive-only,
+  separate from native positive fixture/HTTP/owner-command evidence. Calibrated acceptance is pending execution.
 
 ### Follow read
 
