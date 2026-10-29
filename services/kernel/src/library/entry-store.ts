@@ -31,7 +31,11 @@ type EntryResult = Omit<NonNullable<Awaited<ReturnType<typeof entryRead.run>>>, 
   state: string;
   libraryProfilePin?: unknown;
 };
-type CopyResult = Omit<NonNullable<Awaited<ReturnType<typeof copyRead.run>>>, 'status'> & { status: string };
+type CopyResult = Omit<
+  NonNullable<Awaited<ReturnType<typeof copyRead.run>>>,
+  'status' | 'kind' | 'libraryProfilePin'
+> & { status: string };
+type CopyAcceptance = Readonly<{ pin: LibraryProfilePin; kind: string }>;
 
 const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
 const COPY_STATUSES = new Set<string>(['ordered', 'owned', 'lent', 'disposed']);
@@ -42,10 +46,6 @@ function queryClient(client: Client): Client {
 
 function iso(value: string): string {
   return new Date(value).toISOString();
-}
-
-function asStatus(value: string): CopyStatus {
-  return value;
 }
 
 function asEntry(row: EntryResult): Entry {
@@ -62,13 +62,31 @@ function asEntry(row: EntryResult): Entry {
 }
 
 function asCopy(row: CopyResult): Copy {
-  const { route: _route, ...copy } = row;
   return {
-    ...copy,
-    status: asStatus(copy.status),
-    createdAt: iso(copy.createdAt),
-    updatedAt: iso(copy.updatedAt),
+    id: row.id,
+    accountId: row.accountId,
+    subjectId: row.subjectId,
+    status: row.status,
+    location: row.location,
+    source: row.source,
+    acquiredOn: row.acquiredOn,
+    disposedOn: row.disposedOn,
+    note: row.note,
+    revision: row.revision,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    transactionId: row.transactionId,
   };
+}
+
+/** The caller owns current profile/access acceptance; storage only checks its private representation. */
+function copyAcceptance(accepted: CopyAcceptance | undefined) {
+  if (accepted === undefined) return { kind: null, library_profile_pin: null };
+  const pin = decodeLibraryProfilePin(accepted.pin);
+  if (pin === null) throw new Error('Invalid stored library profile pin');
+  if (typeof accepted.kind !== 'string' || !/^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/.test(accepted.kind))
+    throw new TypeError('Invalid library copy kind');
+  return { kind: accepted.kind, library_profile_pin: pin };
 }
 
 function assertState(state: string): void {
@@ -184,8 +202,15 @@ export async function pageEntries(client: Client, route: number, accountId: stri
   return rows.map((row) => asEntry(row));
 }
 
-export async function insertCopy(client: Client, route: number, copy: CopyDraft, context: WriteContext): Promise<Copy> {
-  assertStatus(copy.status);
+export async function insertCopy(
+  client: Client,
+  route: number,
+  copy: CopyDraft,
+  context: WriteContext,
+  accepted?: CopyAcceptance,
+): Promise<Copy> {
+  const acceptance = copyAcceptance(accepted);
+  if (accepted === undefined) assertStatus(copy.status);
   const rows = await copyInsert.run(queryClient(client), {
     route,
     copy_id: copy.id,
@@ -197,6 +222,7 @@ export async function insertCopy(client: Client, route: number, copy: CopyDraft,
     acquired_on: copy.acquiredOn,
     disposed_on: copy.disposedOn,
     note: copy.note,
+    ...acceptance,
     ...write(context),
   });
   const row = rows[0];
@@ -209,6 +235,16 @@ export async function readCopy(client: Client, route: number, copyId: string): P
   return row ? asCopy(row) : null;
 }
 
+/** Read the exact stored fact without resolving or revalidating current definitions. */
+export async function readCopyFact(
+  client: Client,
+  route: number,
+  copyId: string,
+): Promise<{ copy: Copy; pin: LibraryProfilePin | null; kind: string | null } | null> {
+  const row = await copyRead.run(queryClient(client), { route, copy_id: copyId });
+  return row ? { copy: asCopy(row), pin: decodeLibraryProfilePin(row.libraryProfilePin), kind: row.kind } : null;
+}
+
 export async function updateCopy(
   client: Client,
   route: number,
@@ -216,8 +252,10 @@ export async function updateCopy(
   revision: number,
   changes: CopyChanges,
   context: WriteContext,
+  accepted?: CopyAcceptance,
 ): Promise<Copy | null> {
-  assertStatus(changes.status);
+  const acceptance = copyAcceptance(accepted);
+  if (accepted === undefined) assertStatus(changes.status);
   const row = await copyUpdate.run(queryClient(client), {
     route,
     copy_id: copyId,
@@ -228,6 +266,7 @@ export async function updateCopy(
     acquired_on: changes.acquiredOn,
     disposed_on: changes.disposedOn,
     note: changes.note,
+    ...acceptance,
     ...write(context),
   });
   return row ? asCopy(row) : null;
