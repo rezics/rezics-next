@@ -173,7 +173,11 @@ test('restoration keeps constant statements and rows at 8, 64 and 512 consented 
     scales: [8, 64, MAX_CONSENTED_SCOPES],
     bounds: { statements: 'constant', rows: 'constant', blocks: 'linear' },
     async grow(_db, scale) {
-      const scopes = ['subject:write', 'account:delegate', ...Array.from({ length: scale - 2 }, (_, i) => `scope:${i}`)];
+      const scopes = [
+        'subject:write',
+        'account:delegate',
+        ...Array.from({ length: scale - 2 }, (_, i) => `scope:${i}`),
+      ];
       fixtures.set(scale, await h.fixture(false, scopes));
     },
     async operation(_db, scale) {
