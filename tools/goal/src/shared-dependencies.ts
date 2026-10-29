@@ -77,7 +77,7 @@ function copySkeleton(template: string, worktree: string): void {
   localWorkspaceLinks(worktree);
 }
 export function installPrivate(worktree: string): void { rmSync(join(worktree, 'node_modules'), { recursive: true, force: true }); runInstall(worktree); localWorkspaceLinks(worktree); writeFileSync(join(worktree, '.goal-private-dependencies'), dependencyKey(worktree)); }
-export function installShared(worktree: string, storeRoot = process.env.GOAL_DEPENDENCY_STORE_ROOT ?? join(dirname(worktree), '..', 'dependency-stores')): void {
+export function installShared(worktree: string, storeRoot = join(dirname(worktree), '..', 'dependency-stores')): void {
   if (!existsSync(join(worktree, 'package.json'))) return;
   const key = dependencyKey(worktree); const prior = readlinkStore(worktree);
   const marker = join(worktree, '.goal-private-dependencies');
@@ -97,6 +97,11 @@ export function installShared(worktree: string, storeRoot = process.env.GOAL_DEP
         for (const path of manifestPaths(worktree)) { const dest = join(temp, path); mkdirSync(dirname(dest), { recursive: true }); cpSync(join(worktree, path), dest); }
         for (const path of patchPaths(worktree)) { const dest = join(temp, relative(worktree, path)); mkdirSync(dirname(dest), { recursive: true }); cpSync(path, dest); }
         runInstall(temp, true);
+        if (!existsSync(join(temp, 'node_modules', '.bun'))) {
+          removeBuild(temp);
+          installPrivate(worktree);
+          return;
+        }
         const makeReadOnly = (path: string) => {
           for (const entry of readdirSync(path, { withFileTypes: true })) {
             const child = join(path, entry.name);

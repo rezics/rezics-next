@@ -81,16 +81,28 @@ test('an interrupted store build is discarded and the next use builds it cleanly
   } finally { h.close(); }
 });
 
+test('an install without node_modules/.bun stays private and publishes no store', () => {
+  const h = fixture();
+  try {
+    const a = h.tree('a'), stores = join(h.root, 'stores');
+    installShared(a, stores);
+    expect(existsSync(join(a, '.goal-private-dependencies'))).toBe(true);
+    expect(existsSync(join(stores, dependencyKey(a)))).toBe(false);
+    expect(lstatSyncSafe(join(a, 'node_modules', '.bun'))).toBe(false);
+  } finally { h.close(); }
+});
+
 test('concurrent first uses of the same key build one shared store', async () => {
   const h = fixture();
   try {
     const a = h.tree('a'), b = h.tree('b'), stores = join(h.root, 'stores'), bin = join(h.root, 'bin'), counter = join(h.root, 'builds');
     mkdirSync(bin);
-    writeFileSync(join(bin, 'bun'), `#!/bin/sh\nif [ "$1" = "--version" ]; then echo fixture-bun; exit 0; fi\necho build >> "$GOAL_TEST_BUILDS"\nsleep 0.2\nmkdir -p node_modules/.bun/pkg/node_modules/pkg node_modules/@test\necho package > node_modules/.bun/pkg/node_modules/pkg/data\nln -s "$(pwd)/packages/sample" node_modules/@test/sample\n`);
+    writeFileSync(join(bin, 'bun'), `#!/bin/sh\nif [ "$1" = "--version" ]; then echo fixture-bun; exit 0; fi\necho build >> ${counter}\nsleep 0.2\nmkdir -p node_modules/.bun/pkg/node_modules/pkg node_modules/@test\necho package > node_modules/.bun/pkg/node_modules/pkg/data\nln -s "$(pwd)/packages/sample" node_modules/@test/sample\n`);
     chmodSync(join(bin, 'bun'), 0o755);
     const module = new URL('./shared-dependencies.ts', import.meta.url).href;
-    const source = `import { installShared } from ${JSON.stringify(module)}; installShared(process.cwd(), process.env.GOAL_DEPENDENCY_STORE_ROOT);`;
-    const options = { env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GOAL_DEPENDENCY_STORE_ROOT: stores, GOAL_TEST_BUILDS: counter }, stdout: 'pipe' as const, stderr: 'pipe' as const };
+    const source = `import { installShared } from ${JSON.stringify(module)}; installShared(process.cwd(), ${JSON.stringify(stores)});`;
+    const childEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GOAL_')));
+    const options = { env: { ...childEnv, PATH: `${bin}:${process.env.PATH ?? ''}` }, stdout: 'pipe' as const, stderr: 'pipe' as const };
     const children = [a,b].map((cwd) => Bun.spawn([process.execPath,'-e',source], { ...options, cwd }));
     const results = await Promise.all(children.map(async (child) => ({ code: await child.exited, stderr: await new Response(child.stderr).text() })));
     expect(results).toEqual([{ code: 0, stderr: '' }, { code: 0, stderr: '' }]);
