@@ -226,12 +226,13 @@ async function createNativeContentSystemWithOptions(
     });
     nativeAuth = host.service;
     const ordinaryClient = { id: `${namespace}_ordinary`, kind: 'first-party' as const };
-    const registeredScopes = [...actions.keys()].filter((action) => action !== 'media:complete').sort();
-    const scopes = ordinaryScopes ?? registeredScopes;
+    // Auth validates both the issued consent and the registered client ceiling
+    // when a durable step restores its initiator.
+    const scopes = ordinaryScopes ?? [...actions.keys()].filter((action) => action !== 'media:complete').sort();
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
       firstParty: true,
-      scopes: registeredScopes,
+      scopes,
     });
     await host.start();
 
