@@ -45,8 +45,8 @@ handoff needs the deferred same-TX guard AND native barrier over all old writers
 
 | Native owner | Minimal retained data and indexed access |
 | --- | --- |
-| Original/source home | Exact self/current basis `(route,original) -> (control_home,group_incarnation,generation,basis_version)`; creation and structural gate, source head/export/frontier and exact native custody locators. Read these with the existing native source point. |
-| Current group control home | `group_header(home,incarnation)` PK: current sealed generation, exact count, CAS version, published basis version, ownership epoch, readiness/claim; immutable membership PK `(home,generation,original)` and inverse current-original locator. |
+| Original/source home | Exact self/current basis `(route,original) -> (control_home,group_incarnation,generation,basis_version)` in the existing native subject row, not a second membership table; creation gate, source head/export/frontier and exact native custody locators. Read it with the existing native source point. |
+| Current group control home | `group_header(home,incarnation)` PK: sealed generation, exact count, CAS version, published basis version, ownership epoch, readiness/claim; immutable membership PK `(home,generation,original)`. Inverse access is an index, not another membership copy. |
 | Receipt's stable job home | Unique native receipt binding, immutable operation/attempt/input references, state, planned homes, capacity/claim receipts, wakeup, progress and fixed completion custody. Index resumable state/key and receipt key, never scan historical JSON. |
 | Each participating control home | At most P occupied work slots, including preparing/cancelling/reclaim-blocked occupants; unique live claim `(home,group_incarnation)`, and attempt state keyed `(home,job,attempt)`. Reserve output/copy space here before admission. |
 | Actual effect/payload home | Native gate, expected prior/next effect scope, frontiers, transaction/component receipt and producer/consumer custody/minimization locators. Library payload remains Library-owned. |
@@ -92,8 +92,8 @@ checkpoints cannot become identity completion.
 
 ## Exact cap before effects, including cross-home races
 
-First perform an effects-free optimistic read collection of the at most two *current* changed groups. Capture each sealed count, incarnation,
-generation, version and native owner epoch. Finish all captures, then validate all captured versions with released indexed reads. All matches
+After authorization, resolve same-receipt replay read-only before fresh cap validation. Collect the at most two *current* changed groups' sealed
+counts, incarnations, generations, versions and native owner epochs. Finish all captures, then validate all with released indexed reads. All matches
 imply a common cut between the last capture and first validation: each unchanged interval covers that cut. Nonreuse/version monotonicity
 excludes ABA; missing/moved/unsealed/drifting evidence returns retryable unavailable, never overflow. Validate readiness too: an intermediate
 cross-home publication must remain gated, not present a stable half-updated count pair. SERIALIZABLE transactions on separate databases alone
@@ -110,7 +110,7 @@ them.
 If any result exceeds 4096, stop here: no job, draft, claim, slot, pending epoch, native command receipt/outbox, revision, redirect, mapping or
 participant effect. Do not run an effectful no-op command merely to record the refusal. Preserve the existing 4097/all-effects assertions, and
 extend future snapshots to new control tables rather than excluding them. The current fixture snapshot enumerates old tables; it is insufficient
-evidence for an added reservation table.
+evidence for an added reservation table. Recheck a raced same-receipt binding before overflow; admitted/preparing custody wins over a fresh refusal.
 
 For a safe read set, preparation commands may only claim those exact versions and retain those immutable input refs. CAS failure means
 drift/busy/unavailable and cleanup, not a new overflow verdict on freshly substituted counts. Once all claims succeed, group versions are frozen
@@ -203,8 +203,8 @@ for an unrelated group's publication. Metadata supplies no SourceAccess.
 The first source point yields the actual original's current control home and immutable group basis. That home is exactly one lookup destination
 for that original, not the terminal's guessed route or every former group owner. At control, two batched probes test pending
 membership/descriptor and coherent current-original/group basis. Claiming one input generation makes all its originals pending immediately
-without inserting 4096 pending rows. A different group on that home is unaffected. Use indexed `(home,original)` current membership joined to
-its header/claim; never enumerate that group's members to answer a point.
+without inserting 4096 pending rows. A different group on that home is unaffected. Probe exact `(home,generation,original)` from the source basis,
+joined to its header/claim; never enumerate current or historical memberships, or materialize another current-membership table.
 
 When a publication moves an original to a new group/control home, retain its old generation's pending/retired gate until every affected source
 basis has native handoff custody. An old source basis then sees pending/unavailable, never a ready old mapping paired with a new revision.
@@ -267,7 +267,7 @@ transactions have their different actual fences/enqueue costs, not a fabricated 
 indexed points plus K per command, not O(4096) membership writes. Job work follows affected originals plus actual structural scopes and native
 link/effect degree; reclaim follows retired payload. Fixed-neighborhood reads are O(log(Aq+Gq+P+R+L+H)) index height, not constant blocks as
 history grows. Measure B from actual `pg_relation_size` deltas for membership AND every index at each scale; bound payload bytes by
-(Aq+4P*4096)*B plus headers and separately measured R/L/H. Returned/affected row counts do not prove examined rows, heap/index/catalogue blocks,
+(Aq+4P*4096)*B plus headers, native subject-basis metadata and separately measured R/L/H. Returned rows do not prove examined rows, heap/index/catalogue blocks,
 engine calls or retained bytes. Preserve 1/8/64 history axes, 64/512/4096 groups, 100/101 raw boundaries, actual pools/cold-warm captures and
 growth checks; no planner pin or invented ready/ACK/performance result.
 
