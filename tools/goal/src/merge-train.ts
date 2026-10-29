@@ -1944,7 +1944,14 @@ export class MergeTrain {
         );
         if (controlPlane) this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
         else if (stabilize)
-          await this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath, runGate);
+          await this.mergeStabilizedCommitIntoDev(
+            candidate,
+            trainTree,
+            request.taskId,
+            recorded.manager,
+            logPath,
+            runGate,
+          );
         return finish();
       }
     } catch (error) {
@@ -2186,16 +2193,22 @@ export class MergeTrain {
         const merged = git(trainTree, 'rev-parse', 'HEAD');
         const introduced = new Set(git(this.options.mainCheckout, 'rev-list', `${expected}..${candidate}`).split('\n'));
         const store = this.options.fence as AttemptFence & { tasks?: () => Task[] };
-        const tasks = store.tasks?.().filter(
-          (task) =>
-            task.brief.target === 'stabilize' &&
-            task.state === 'integrated' &&
-            task.integratedCommit !== undefined &&
-            introduced.has(task.integratedCommit),
-        ) ?? [];
+        const tasks =
+          store
+            .tasks?.()
+            .filter(
+              (task) =>
+                task.brief.target === 'stabilize' &&
+                task.state === 'integrated' &&
+                task.integratedCommit !== undefined &&
+                introduced.has(task.integratedCommit),
+            ) ?? [];
         for (const task of tasks) {
           const command = task.brief.acceptance.command;
-          appendFileSync(logPath, `Stabilize acceptance for ${task.id} on merged ${devBranch} candidate ${merged}: ${command.join(' ')}\n`);
+          appendFileSync(
+            logPath,
+            `Stabilize acceptance for ${task.id} on merged ${devBranch} candidate ${merged}: ${command.join(' ')}\n`,
+          );
           const checked = await runGate(command, trainTree, logPath);
           if (!checked.passed) {
             const failure = firstFailure(checked.output);
@@ -2226,8 +2239,11 @@ export class MergeTrain {
     failure: ReturnType<typeof firstFailure>,
     candidate: string,
   ): void {
-    const summary = `Task ${task.id} acceptance command ${command.join(' ')} failed on merged dev candidate ${candidate}: first failure: ${failure.assertion}; ${failure.excerpt}`
-      .replace(/[\r\n]+/g, ' ');
+    const summary =
+      `Task ${task.id} acceptance command ${command.join(' ')} failed on merged dev candidate ${candidate}: first failure: ${failure.assertion}; ${failure.excerpt}`.replace(
+        /[\r\n]+/g,
+        ' ',
+      );
     const supermanager =
       this.options.supermanager ??
       localBranchSettings(this.options.mainCheckout).supermanager ??
@@ -2243,7 +2259,8 @@ export class MergeTrain {
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
       );
-      for (const manager of managers) inbox.deliver({ managerId: manager, taskId: task.id, kind: 'instruction', summary });
+      for (const manager of managers)
+        inbox.deliver({ managerId: manager, taskId: task.id, kind: 'instruction', summary });
     } finally {
       owned?.close();
     }

@@ -6,11 +6,7 @@ import { git } from './merge.ts';
 import { integrationHarness, markdown } from './test-support.ts';
 import type { GateRunner } from './merge.ts';
 
-function dispatchStabilize(
-  h: ReturnType<typeof integrationHarness>,
-  file: string,
-  manager: string,
-) {
+function dispatchStabilize(h: ReturnType<typeof integrationHarness>, file: string, manager: string) {
   const briefFile = join(h.settings.stateDirectory, `stabilize-${crypto.randomUUID()}.md`);
   const brief = markdown
     .replace('paths: [result.txt]', `paths: [${file}]`)
@@ -72,7 +68,11 @@ test('a failing stabilize acceptance keeps dev unchanged, leaves stabilize integ
     const dev = h.head('dev');
     const runner: GateRunner = async (command) =>
       command[1] === 'test'
-        ? { passed: false, output: 'AssertionError: pattern admission rejected\nExpected policy to pass', timedOut: false }
+        ? {
+            passed: false,
+            output: 'AssertionError: pattern admission rejected\nExpected policy to pass',
+            timedOut: false,
+          }
         : { passed: true, output: '', timedOut: false };
     await h.train(runner);
 
