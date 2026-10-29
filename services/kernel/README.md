@@ -128,13 +128,13 @@ hotspot beyond the fixed platform resource's intentional one-time installation.
 
 ### Bounded job steps
 
-| Limit | Maximum |
-| --- | --- |
-| Raw rows per page | 100 rows |
-| Pages per durable workflow segment | 100 pages |
-| Native command deadline | 5000 ms; a shorter caller deadline wins |
+| Limit                                    | Maximum                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------- |
+| Raw rows per page                        | 100 rows                                                                          |
+| Pages per durable workflow segment       | 100 pages                                                                         |
+| Native command deadline                  | 5000 ms; a shorter caller deadline wins                                           |
 | Continuation (keyset cursor or frontier) | 8 scalars and 2048 UTF-8 JSON bytes, including full unique tie keys; never OFFSET |
-| Workflow arguments and results | 4096 UTF-8 JSON bytes each, independent of population and input size |
+| Workflow arguments and results           | 4096 UTF-8 JSON bytes each, independent of population and input size              |
 
 These limits make every step constant, and a job's total work follows its finite input. A contract may adopt smaller
 limits but never larger ones; a larger limit is a performance decision. The deadline bounds waiting, not work, so each
