@@ -49,6 +49,7 @@ WITH input AS NOT MATERIALIZED (
             >= ROW(i.assignment_route, i.principal_id, i.assignment_request_id)
         AND ROW(p.route, p.principal_id, p.request_id)
             <= ROW(i.assignment_route, i.principal_id, i.assignment_request_id)
+      ORDER BY p.route, p.principal_id, p.request_id
       OFFSET 0
     ) p WHERE p.assigned_actor_id = i.actor_id AND p.valid @> t.at
   ) AS valid
