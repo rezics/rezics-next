@@ -5,6 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { DEFAULT_REQUEST_DEADLINE_MS, type CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { fullView } from '../../src/library/views.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { accessCheck, actorOf, type AccountActor } from '../../src/request/access.ts';
@@ -33,6 +34,7 @@ import readSubject from '../../src/semantic/read-subject.sql';
 import readVisibility from '../../src/semantic/read-visibility.sql';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
 import { capture, openGrowthDatabase } from '../support/growth.ts';
+import { testKernel } from '../support/test-kernel.ts';
 import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -48,11 +50,10 @@ const accounts = {
 const actions = ['subject:create', 'subject:read', 'subject:merge', 'moderation:hide'];
 const real = await createRealAccess(admin, accounts, actions);
 const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
-const kernel = createKernel({
+const kernel = testKernel({
   pool,
-  access: real.access,
+  auth: real.auth,
   tokens,
-  routeKey: new Uint8Array(32).fill(88),
   writeRate: real.writeRate,
 });
 const projection = linkProjection(pool);
@@ -149,8 +150,9 @@ async function call(
   path: string,
   persona: keyof typeof accounts,
   component: { partition: number; epoch: number; position: bigint },
+  reader: ReturnType<typeof createKernel> = kernel,
 ) {
-  const response = await kernel.handle(
+  const response = await reader.handle(
     new Request(`https://kernel.test/v1/subjects/${path}`, {
       headers: {
         authorization: `Bearer ${real.bearer(persona)}`,
@@ -416,6 +418,59 @@ test('an inbound pending-member wait that stays behind cannot return an earlier 
     expect(observer.records.slice(lastWait + 1).some(({ statement }) => statement === readVisibility.sql)).toBe(true);
   } finally {
     await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+    await observer.close();
+  }
+}, 60_000);
+
+test('a final native source read held beyond the original HTTP deadline returns the exact GET deadline problem', async () => {
+  const part = partition();
+  const subject = await create(part, 'Expired final source snapshot');
+  await catchUp(part);
+  let originalDeadline: number | undefined;
+  // Keep the production ceiling for this intentional expiry control. Observe the
+  // actual preparation context while forwarding the native proof unchanged.
+  const expiringKernel = createKernel({
+    pool,
+    tokens,
+    routeKey: new Uint8Array(32).fill(88),
+    writeRate: real.writeRate,
+    access(config) {
+      const native = real.access(config);
+      return deriveAccess(native, {
+        async prepare(actor, action, resource, context) {
+          originalDeadline = context.deadline;
+          return native.prepare!(actor, action, resource, context);
+        },
+      });
+    },
+  });
+  const observer = observeSql(pool);
+  const barrier = observer.hold({ statement: readVisibility.sql }, 'after');
+  const response = call(`${subject.id}/links?property=${encodeURIComponent(property)}`, 'reader', subject.component, expiringKernel);
+  try {
+    await Promise.race([
+      barrier.entered,
+      response.then(() => {
+        throw new Error('Read completed before final source barrier');
+      }),
+    ]);
+    if (originalDeadline === undefined) throw new Error('Native authorization did not expose its request deadline');
+    while (Date.now() <= originalDeadline) await Bun.sleep(Math.min(20, originalDeadline - Date.now() + 1));
+  } finally {
+    barrier.release();
+  }
+  try {
+    const result = await response;
+    expect(result.status, JSON.stringify(result.body)).toBe(503);
+    expect(result.body).toMatchObject({
+      status: 503,
+      code: 'deadline_exceeded',
+      retryable: true,
+      effect_status: 'not_applicable',
+    });
+    expect(result.body).not.toHaveProperty('links');
+    expect(result.body).not.toHaveProperty('redirect');
+  } finally {
     await observer.close();
   }
 }, 60_000);

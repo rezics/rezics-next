@@ -2,6 +2,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
+import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { Access, Resource } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -13,6 +14,7 @@ export type RealAccessCheck = {
 };
 
 export type RealAccessFixture<Persona extends string> = {
+  auth: AuthenticationConfig;
   access(config: AccessConfig): Access;
   writeRate: ReturnType<typeof createWriteRateLimiter>;
   bearer(persona: Persona): string;
@@ -101,6 +103,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   }
 
   return {
+    auth,
     access,
     writeRate: createWriteRateLimiter({ secret: 'semantic-real-access-test-secret' }),
     bearer(persona) {
