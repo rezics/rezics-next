@@ -16,6 +16,7 @@ export async function authenticated(
   access?: Access,
   scopes: readonly string[] = [...LIFECYCLE_ACTIONS.keys()],
 ): Promise<LifecycleRequest> {
+  const account = await withConnection(pool, (connection) => readAccount(connection, routeOf(id)!, id));
   const deadline = Date.now() + 30_000;
   const claims = {
     kind: 'account' as const,
@@ -27,7 +28,7 @@ export async function authenticated(
   };
   return {
     actor: access ? await authenticateAccount(access, { pool, deadline }, claims) : claims,
-    account: await withConnection(pool, (connection) => readAccount(connection, routeOf(id)!, id)),
+    account,
     deadline,
   };
 }
