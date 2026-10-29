@@ -276,7 +276,7 @@ The concrete physical configuration derives from existing bounds, rather than a 
   cannot release capacity while real fetch, body consumption or awaited body cancellation remains unsettled.
   Capacity is released after physical settlement; native connections never span provider I/O.
 
-Deadline, byte, nested-object, pagination and capacity failures are sanitized `StripeUnavailableError`, never
+Deadline, byte, transaction/object-limit, nested-object, pagination and capacity failures are sanitized `StripeUnavailableError`, never
 successful empty routing/payment evidence. Other provider errors retain existing sanitized rejection mapping.
 [Native loopback transport acceptance](../../test/commerce/stripe-transport.test.ts) uses the official SDK,
 streamed HTTP, real sends/termination and existing provider fixture exports. It checks boundaries, transient

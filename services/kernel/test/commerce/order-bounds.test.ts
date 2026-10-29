@@ -110,7 +110,9 @@ test('one over the cap is a visible adapter and workflow failure and writes noth
   const { order, session } = await fixture.checkout();
   fixture.transport.fake.pay(session.id);
   const before = await contents(order.id);
-  await expect(stripe.readCheckout(session.id)).rejects.toBeInstanceOf(CheckoutMismatchError);
+  // Commerce README's physical provider limits classify an incomplete over-cap read as unavailable.
+  // Keep the native trusted-snapshot mismatch assertion below and every no-write/workflow assertion.
+  await expect(stripe.readCheckout(session.id)).rejects.toBeInstanceOf(model.StripeUnavailableError);
   const event = await fixture.deliver('checkout.session.completed', session.id);
   await expect(fixture.finish(event.id)).rejects.toThrow();
   expect(await fixture.client.getWorkflow(event.id)).toMatchObject({ status: 'ERROR' });
