@@ -6,6 +6,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import type { PublicJwks } from '@rezics/auth';
 import { fromPlainText } from '@rezics/document';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { eraseAccountUploadsPage, type UploadErasureCursor } from '../../src/content/account-erasure-uploads.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
 import { processImage } from '../../src/content/image-job.ts';
@@ -24,6 +25,7 @@ let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let app: ReturnType<typeof testKernel>;
 let personas: Awaited<ReturnType<typeof createPersonas>>;
+let growthOwner: Persona;
 let websiteKey: Awaited<ReturnType<typeof generateKeyPair>>;
 let png: Buffer;
 const objects = new Map<string, Uint8Array>();
@@ -39,6 +41,8 @@ const storage: MediaStorage = {
   },
 };
 const options = () => ({ version: 1 as const, pool: db.pool, auth });
+const loginScopes = () =>
+  [...new Set([...productionActions().keys(), ...LIFECYCLE_ACTIONS.keys()])].filter((a) => a !== 'media:complete');
 async function call(persona: Persona | null, method: string, path: string, body?: unknown) {
   return app.handle(
     new Request(`https://ordinary.api.test${path}`, {
@@ -73,7 +77,7 @@ async function website(persona: Persona): Promise<Persona> {
     account_id: persona.accountId,
     password,
     client_id: 'uploads-login',
-    scope: actions.filter((a) => a !== 'media:complete'),
+    scope: loginScopes(),
   });
   expect(signed.status).toBe(200);
   const verifier = randomBytes(48).toString('base64url');
@@ -276,6 +280,7 @@ beforeAll(async () => {
     }),
   });
   personas = await createPersonas(app, options());
+  growthOwner = await auth.person(`uploads_growth_${crypto.randomUUID().replaceAll('-', '')}`);
   for (const action of ['subject:create', 'board:create']) {
     await db.admin.query(
       `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
@@ -290,7 +295,7 @@ beforeAll(async () => {
       [routeOf(persona.accountId), persona.accountId],
     );
   }
-  for (const persona of [personas.bob, personas.revoked]) {
+  for (const persona of [personas.bob, growthOwner]) {
     await grant(persona, GLOBAL_CONTEXT, ['subject:create', 'statement:propose']);
   }
   websiteKey = await generateKeyPair('ES256', { extractable: true });
@@ -298,7 +303,7 @@ beforeAll(async () => {
   await auth.host.service.internal.registerClient({
     clientId: 'uploads-login',
     firstParty: true,
-    scopes: scopes.filter((a) => a !== 'media:complete'),
+    scopes: loginScopes(),
   });
   await auth.host.service.internal.registerWebsiteClient({
     publicJwks: {
@@ -411,7 +416,7 @@ test("account erasure keeps the account's authored fields an anonymous reader is
 });
 
 test("an account upload and field erasure page stays within its bound as other uploaders' media and other authors' fields grow", async () => {
-  const owner = await website(personas.revoked);
+  const owner = await website(growthOwner);
   await field(owner, 'Growth field');
   const post = await thread(owner);
   const retained = await media(owner, post.id);
