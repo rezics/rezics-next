@@ -2455,7 +2455,9 @@ test('a remote run reports how long it waited, synced, installed and ran', async
 function runFixture() {
   const directory = mkdtempSync(join(root, 'run-'));
   const bin = join(directory, 'bin');
+  const pinnedBunDirectory = join(directory, 'pinned-bun');
   mkdirSync(bin);
+  mkdirSync(pinnedBunDirectory);
   const source = `#!${process.execPath}
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -2512,10 +2514,12 @@ if (command === 'systemd-run') {
 }
 writeFileSync(stateFile, JSON.stringify(state));
 `;
-  for (const command of ['systemd-run', 'systemctl', 'docker', 'date', 'bun']) {
+  for (const command of ['systemd-run', 'systemctl', 'docker', 'date']) {
     writeFileSync(join(bin, command), source);
     chmodSync(join(bin, command), 0o755);
   }
+  writeFileSync(join(pinnedBunDirectory, 'bun'), source);
+  chmodSync(join(pinnedBunDirectory, 'bun'), 0o755);
   const stateFile = join(directory, 'state');
   writeFileSync(
     stateFile,
@@ -2546,7 +2550,7 @@ writeFileSync(stateFile, JSON.stringify(state));
           env: {
             ...process.env,
             ...env,
-            REMOTE_CHECK_PINNED_BUN_PATH: join(bin, 'bun'),
+            REMOTE_CHECK_PINNED_BUN_PATH: join(pinnedBunDirectory, 'bun'),
             PATH: `${bin}:${process.env.PATH}`,
             RUN_FIXTURE: directory,
           },
