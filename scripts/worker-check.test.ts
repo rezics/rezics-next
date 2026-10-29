@@ -13,7 +13,13 @@ import {
 import { join } from 'node:path';
 import { hostname } from 'node:os';
 import { acquireStackSlot } from './stack-lease.ts';
-import { processTreeCpuTicks, runWorkerCheck, scopeRootTypecheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
+import {
+  processTreeCpuTicks,
+  runWorkerCheck,
+  scopeRootTypecheck,
+  startWorkerCheck,
+  waitWorkerCheck,
+} from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
 
 const dirs: string[] = [];
@@ -235,10 +241,21 @@ test('typecheck scope: worker typecheck includes committed, staged, unstaged, de
     else process.env.TYPECHECK_CHANGED = oldChanged;
   }
   const logDirectory = join(root, '.temp/goal/checks');
-  const log = readFileSync(join(logDirectory, readdirSync(logDirectory).find((name) => name.endsWith('.log'))!), 'utf8');
+  const log = readFileSync(
+    join(
+      logDirectory,
+      readdirSync(logDirectory).find((name) => name.endsWith('.log'))!,
+    ),
+    'utf8',
+  );
   expect(log).toContain(`worker-check: scripts/typecheck.ts scoped to ${expected.length} changed files from `);
   const summaryIndex = log.indexOf('\n', log.indexOf('worker-check: scripts/typecheck.ts scoped'));
-  expect(log.slice(summaryIndex + 1).trim().split('\n')).toEqual(expected);
+  expect(
+    log
+      .slice(summaryIndex + 1)
+      .trim()
+      .split('\n'),
+  ).toEqual(expected);
 });
 
 test('typecheck scope: scoped argv is an env prefix shared before local or remote placement', () => {
@@ -252,13 +269,10 @@ test('typecheck scope: scoped argv is an env prefix shared before local or remot
   const localPlacementArgv = [...scoped];
   const remotePlacementArgv = [...scoped];
   expect(localPlacementArgv).toEqual(remotePlacementArgv);
-  expect(localPlacementArgv.slice(0, 2)).toEqual(['env', `TYPECHECK_CHANGED=${[
-    'committed.txt',
-    'deleted.txt',
-    'staged.txt',
-    'unstaged.txt',
-    'untracked.txt',
-  ].join('\n')}`]);
+  expect(localPlacementArgv.slice(0, 2)).toEqual([
+    'env',
+    `TYPECHECK_CHANGED=${['committed.txt', 'deleted.txt', 'staged.txt', 'unstaged.txt', 'untracked.txt'].join('\n')}`,
+  ]);
   expect(localPlacementArgv.slice(2)).toEqual(input);
   expect(lines[0]).toContain('scoped to 5 changed files from');
 });
