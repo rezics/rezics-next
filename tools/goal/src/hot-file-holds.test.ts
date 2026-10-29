@@ -170,17 +170,15 @@ fi
         expect(git(task.worktree, 'status', '--porcelain')).toBe('');
         expect(git(task.worktree, 'merge-base', '--is-ancestor', h.head(), 'HEAD')).toBe('');
       } else {
+        const gated = join(h.settings.stateDirectory, 'gated');
         (
           h.settings as typeof h.settings & { integrationChecks: { paths: string[]; command: string[] }[] }
-        ).integrationChecks = [{ paths: ['bun.lock'], command: ['true'] }];
-        let gated = false;
-        await h.train(async (_command, cwd) => {
-          expect(readFileSync(join(cwd, 'bun.lock'), 'utf8')).toBe('regenerated lock\n');
-          expect(git(cwd, 'diff', '--name-only', '--diff-filter=U')).toBe('');
-          gated = true;
-          return { passed: true, timedOut: false, output: '' };
-        });
-        expect(gated).toBe(true);
+        ).integrationChecks = [{
+          paths: ['bun.lock'],
+          command: ['sh', '-c', `test "$(cat bun.lock)" = 'regenerated lock' && test -z "$(git diff --name-only --diff-filter=U)" && printf 'checked\\n' > ${JSON.stringify(gated)}`],
+        }];
+        await h.train();
+        expect(readFileSync(gated, 'utf8')).toBe('checked\n');
         expect(h.outcomes[0]).toMatchObject({ passed: true, stage: 'merge' });
         expect(git(h.root, 'show', 'dev:bun.lock')).toBe('regenerated lock');
       }
