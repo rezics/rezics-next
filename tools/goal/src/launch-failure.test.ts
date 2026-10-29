@@ -385,3 +385,26 @@ test('check host transport failures are recognized as capacity, ordinary tool fa
   for (const detail of ['Error loading config.toml: invalid transport', 'test failed: expected 3 received 2'])
     expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(false);
 });
+
+test('failed check-host Bun downloads are transport failures without hiding task failures', async () => {
+  const { CHECK_HOST_TRANSPORT } = await import('./records.ts');
+  for (const detail of [
+    'curl: (56) OpenSSL SSL_read: unexpected eof while reading',
+    'curl: (35) TLS connect error',
+    'curl: (6) Could not resolve host',
+    'curl: (7) Failed to connect',
+    'curl: (18) transfer closed with outstanding read data',
+    'curl: (28) Operation timed out',
+    'curl: (52) Empty reply from server',
+    'gzip: stdin: unexpected end of file',
+    'tar: Unexpected EOF in archive',
+    'remote-check: downloaded Bun does not match packageManager 1.4.4-canary.20261027.1',
+  ])
+    expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(true);
+
+  expect(
+    CHECK_HOST_TRANSPORT.test('mux_client_request_session: session request failed: Session open refused by peer'),
+  ).toBe(false);
+  expect(CHECK_HOST_TRANSPORT.test('test failed: expected curl to return a URL')).toBe(false);
+  expect(CHECK_HOST_TRANSPORT.test('Build output contains curl: (56) but the test assertion failed')).toBe(false);
+});

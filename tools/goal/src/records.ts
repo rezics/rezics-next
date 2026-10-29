@@ -50,7 +50,7 @@ export const MODEL_AT_CAPACITY =
  * attempt is continued like a capacity refusal and never counts toward a repeated launch failure.
  */
 export const CHECK_HOST_TRANSPORT =
-  /RemoteTransportError|Connection closed by [0-9a-f.:]+ port 22|kex_exchange_identification|ssh: connect to host|Connection reset by peer|rsync error: (?:unexplained error|error in rsync protocol)|SSH (?:exit(?:ed)? )?255|exit(?:ed)? (?:with )?(?:code )?255/i;
+  /RemoteTransportError|Connection closed by [0-9a-f.:]+ port 22|kex_exchange_identification|ssh: connect to host|Connection reset by peer|rsync error: (?:unexplained error|error in rsync protocol)|SSH (?:exit(?:ed)? )?255|exit(?:ed)? (?:with )?(?:code )?255|(?:^|\n)curl: \((?:6|7|18|28|35|52|56)\)|gzip: stdin: unexpected end of file|tar: Unexpected EOF in archive|remote-check: downloaded Bun does not match packageManager/i;
 /** A CLI's wording for a usage-limit refusal; the job confirms exhaustion against the latest quota reading. */
 export const POOL_EXHAUSTED =
   /usage limit|hit your limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;

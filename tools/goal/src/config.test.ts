@@ -28,6 +28,15 @@ test('derived file input globs load with the declared generator', () => {
   ).toThrow();
 });
 
+test('kernel schema dumps use the schema action of the derived generator', () => {
+  const defaults = JSON.parse(readFileSync(join(import.meta.dir, '../defaults.json'), 'utf8'));
+  expect(defaults.derivedFiles).toContainEqual({
+    path: 'services/kernel/db/*/schema.sql',
+    stage: 'integration',
+    command: ['bun', 'run', '--cwd', 'services/kernel', 'derived', 'schema'],
+  });
+});
+
 test('settings anchor to the main checkout from a linked worktree; local settings and environment override defaults', () => {
   const h = harness();
   try {
