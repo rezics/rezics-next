@@ -40,7 +40,7 @@ test('file-mode plans need search when a selected test static import closure rea
     {
       'test/ordinary.test.ts': "import './support/worker.ts';",
       'test/support/worker.ts': "import '../../src/search/work.ts';",
-      'src/search/work.ts': "export const url = process.env.OPENSEARCH_URL;",
+      'src/search/work.ts': 'export const url = process.env.OPENSEARCH_URL;',
     },
     (directory) => {
       expect(planNeedsSearch({ files: ['test/ordinary.test.ts'], tests: ['test/ordinary.test.ts'] }, directory)).toBe(
