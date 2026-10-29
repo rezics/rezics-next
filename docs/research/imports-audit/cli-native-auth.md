@@ -159,3 +159,52 @@ Root typecheck exited **0**. Logs:
 
 The implementation commit contains only the credential header change. No test, Auth policy, API behavior or frozen
 file was changed. Main or promotion evidence is not claimed.
+
+## Retraction observation correction and resumed native journey
+
+The native test's bounded candidate observation now reads the latest matching revision from
+`semantic.retraction` with a lateral point query keyed by the candidate's exact route, subject and candidate IDs,
+ordered by descending revision with `LIMIT 1`. It retains the candidate ID, statement, nullable retraction revision,
+route/subject anchor, candidate-ID order and limit of 100. The schema has no `semantic.candidate.retracted` column;
+the production candidate provenance projection reads this evidence from `semantic.retraction`. No lifecycle
+assertions or fixture behavior changed.
+
+The focused native acceptance was run once after that correction:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-native-auth.test.ts
+```
+
+The tested code revision, including the correction, is `3acc613122ff6da3c94818bc746b54964d31b254` (the report
+was updated afterward; no code changed after the checks).
+
+It exited **1**: 0 passed, 1 failed, 287 expectations. The corrected query succeeded. Native signin, token use,
+the initial import, same-input reopen, and bulk grant denial all ran. The denial was an actual API 403 with
+`effect_status: "not_applied"`; the test verified that prior effects were unchanged and durable pending work
+remained. During grant restoration, the next CLI invocation returned without consuming its 57-byte input, failing
+the existing `consumed` assertion (expected 57, received 0) before the recovery code, exact-key restoration, and
+final effect assertions. Therefore the later recovery transitions did **not** reach completion. The run did not
+capture the recovery CLI result or a recovery request response, so it does not establish a missing producer or a
+credential error-policy conflict. It does establish that recovery stopped before input processing after reopening
+durable work; diagnosing that path requires evidence beyond this assertion. No test transport header, success
+response or fabricated credential was introduced.
+
+The required local CLI credential outcomes command used the parent wrapper so its driver binding was established
+on the normal check host:
+
+```sh
+bun scripts/worker-check.ts -- bun scripts/stack-run.ts 'CLI credential outcomes' . . -- sh -c 'cd services/importer && exec ../../node_modules/.bin/bun test ./tests/cli-credentials-outcomes.test.ts'
+```
+
+It exited **0**. The required root typecheck first failed during route generation with `Lix worker is closed`;
+one retry exited **0**. These checks used the standard worker wrapper. No workspace-wide test gate ran.
+
+Logs:
+
+- Native acceptance: `.temp/goal/checks/worker-check-2026-10-29T01-22-18.997Z-df8e807e.log`
+- CLI credential outcomes: `.temp/goal/checks/worker-check-2026-10-29T01-28-20.358Z-6c984e10.log`
+- Root typecheck, first attempt: `.temp/goal/checks/worker-check-2026-10-29T01-28-40.650Z-27f9b132.log`
+- Root typecheck, retry: `.temp/goal/checks/worker-check-2026-10-29T01-34-28.354Z-0646182a.log`
+
+The earlier Origin and retraction evidence above remains historical evidence from its stated attempts. This run
+reached the denial transition but did not complete restoration, so it is not main or promotion evidence.
