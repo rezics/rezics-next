@@ -3,7 +3,12 @@ import { Database } from 'bun:sqlite';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import { observeDumpRetention } from '../src/dumps-bytes.ts';
 import { VndbTablesStore } from '../src/vndb-tables.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
@@ -14,8 +19,28 @@ const names = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.h
 const fixtures = names.map((name) =>
   Uint8Array.from(readFileSync(new URL(`../../../specs/fixtures/imports/vndb-tables/db/${name}`, import.meta.url))),
 );
-const constant = { rows: 'constant', statements: 'constant', blocks: 'constant' } as const;
-const strict = { rows: { absolute: 0, relative: 0 }, statements: { absolute: 0, relative: 0 } };
+type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
+const zero = { absolute: 0, relative: 0 };
+const sqlCheck: CountedCheck = {
+  read: (value) => value as CountedValues,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: { 'sqlite returned rows': zero, 'sqlite statements': zero },
+};
+const bufferCheck: CountedCheck = {
+  read: (value) => value as CountedValues,
+  bounds: { 'line capacity bytes': 'constant', 'input backing bytes': 'constant' },
+  slack: { 'line capacity bytes': zero, 'input backing bytes': zero },
+};
+const inputCheck: CountedCheck = {
+  read: (value) => value as CountedValues,
+  bounds: { 'input bytes': 'linear', 'entry and body events': 'linear' },
+  slack: { 'input bytes': zero, 'entry and body events': zero },
+};
+const retentionCheck: CountedCheck = {
+  read: (value) => value as CountedValues,
+  bounds: { 'retained total bytes': 'constant' },
+  slack: { 'retained total bytes': zero },
+};
 const counters = () => ({ entries: 0, bodies: 0, bytes: 0, closed: false, bodyClosed: 0, scans: 0 });
 function entry(
   path: string,
@@ -69,10 +94,11 @@ async function* archive(count: ReturnType<typeof counters>, reject = false) {
 
 // Each synchronous native execution is measured across the actual async stage.
 // Keep raw EQP evidence from createSqliteProbe, including rejection cleanup.
+// This wrapper observes prepared statement methods, not direct db.run/db.exec calls.
 function stageProbe(db: Database) {
   const probe = createSqliteProbe(db, { growingTables: ['vndb_table_runs', 'vndb_table_rows', 'vndb_table_spool'] });
   let active = false;
-  let cost = { rows: 0, statements: 0, blocks: 0 as const };
+  let counts = { 'sqlite returned rows': 0, 'sqlite statements': 0 };
   const wrapped = new WeakSet<object>();
   for (const method of ['query', 'prepare'] as const) {
     const native = db[method];
@@ -89,8 +115,8 @@ function stageProbe(db: Database) {
               value: (...binds: unknown[]) => {
                 if (!active) return Reflect.apply(execute, statement, binds);
                 const sample = probe.measure(() => Reflect.apply(execute, statement, binds));
-                cost.rows += sample.cost.rows;
-                cost.statements += sample.cost.statements;
+                counts['sqlite returned rows'] += sample.counts['sqlite returned rows'];
+                counts['sqlite statements'] += sample.counts['sqlite statements'];
                 return sample.value;
               },
             });
@@ -101,7 +127,7 @@ function stageProbe(db: Database) {
     });
   }
   return async (operation: () => Promise<void>) => {
-    cost = { rows: 0, statements: 0, blocks: 0 };
+    counts = { 'sqlite returned rows': 0, 'sqlite statements': 0 };
     const before = probe.verifyPlans().length;
     active = true;
     try {
@@ -110,15 +136,15 @@ function stageProbe(db: Database) {
       active = false;
     }
     const evidence = probe.verifyPlans().slice(before);
-    expect(evidence.length).toBe(cost.statements);
-    expect(cost.rows).toBeGreaterThan(0);
+    expect(evidence.length).toBe(counts['sqlite statements']);
+    expect(counts['sqlite returned rows']).toBeGreaterThan(0);
     for (const event of evidence) {
       for (const row of event.plan) {
         expect(row.detail).not.toMatch(/SCAN|TEMP B-TREE|AUTOMATIC/i);
         expect(row.detail).toMatch(/USING (?:COVERING )?INDEX .*\(source=\? AND run_id=\?/);
       }
     }
-    return { ...cost };
+    return { ...counts };
   };
 }
 
@@ -147,9 +173,9 @@ test('fixed admission rejection and ready staging keep exact-run SQL and live bu
   let db = new Database(path);
   const measure = stageProbe(db);
   const store = new VndbTablesStore(db, { maxArchiveEntries: 6, maxChunkBytes: 128 });
-  const rejected: GrowthSample[] = [],
-    ready: GrowthSample[] = [],
-    memory: GrowthSample[] = [];
+  const rejected: Sample[] = [],
+    ready: Sample[] = [],
+    memory: Sample[] = [];
   try {
     let previous = 0;
     for (const scale of scales) {
@@ -166,9 +192,9 @@ test('fixed admission rejection and ready staging keep exact-run SQL and live bu
           input = Math.max(input, sample.input);
           line = Math.max(line, sample.line);
         });
-        let cost;
+        let counts;
         try {
-          cost = await measure(async () => {
+          counts = await measure(async () => {
             const operation = store.stage('vndb', run, archive(count, reject));
             if (reject) await expect(operation).rejects.toThrow('VNDB table staging failed');
             else await operation;
@@ -176,7 +202,7 @@ test('fixed admission rejection and ready staging keep exact-run SQL and live bu
         } finally {
           restore();
         }
-        (reject ? rejected : ready).push({ scale, cost });
+        (reject ? rejected : ready).push({ scale, counted: countedSample([counts]) });
         expect(count.closed).toBe(true);
         expect(count.entries).toBe(reject ? 7 : 6);
         expect(count.bodies).toBe(6);
@@ -192,7 +218,10 @@ test('fixed admission rejection and ready staging keep exact-run SQL and live bu
             expect(db.query(`SELECT * FROM ${table} WHERE source=? AND run_id=?`).all('vndb', run)).toHaveLength(0);
         } else {
           expect(store.page('vndb', run, { after: null, limit: 16 }).records).toHaveLength(2);
-          memory.push({ scale, cost: { rows: line, statements: input, blocks: 0 } });
+          memory.push({
+            scale,
+            counted: countedSample([{ 'line capacity bytes': line, 'input backing bytes': input }]),
+          });
           expect(line).toBe(64 * 1024);
           expect(input).toBe(128);
         }
@@ -202,8 +231,8 @@ test('fixed admission rejection and ready staging keep exact-run SQL and live bu
           scale * 128,
         );
     }
-    // SQLite buffer counters are unavailable: blocks:0 is not a zero IO claim.
-    for (const samples of [rejected, ready, memory]) assertGrowth(samples, constant, strict);
+    for (const samples of [rejected, ready]) expect(countedViolations(sqlCheck, samples)).toEqual([]);
+    expect(countedViolations(bufferCheck, memory)).toEqual([]);
     db.close();
     db = new Database(path);
     const reopened = new VndbTablesStore(db);
@@ -221,8 +250,8 @@ test('fixed admission rejection and ready staging keep exact-run SQL and live bu
 // outside database measures. These are actual source/body pulls, not timing or heap estimates.
 test('entry and byte populations stop exactly before the excessive body with linear admitted input', async () => {
   for (const mode of ['entries', 'bytes'] as const) {
-    const input: GrowthSample[] = [],
-      memory: GrowthSample[] = [];
+    const input: Sample[] = [],
+      memory: Sample[] = [];
     for (const scale of scales) {
       const db = new Database(':memory:');
       const budget = scale * 8;
@@ -265,15 +294,20 @@ test('entry and byte populations stop exactly before the excessive body with lin
           bodyClosed: budget,
           scans: 0,
         });
-        input.push({ scale, cost: { rows: count.bytes, statements: count.entries + count.bodies, blocks: 0 } });
-        memory.push({ scale, cost: { rows: peak, statements: 0, blocks: 0 } });
+        input.push({
+          scale,
+          counted: countedSample([
+            { 'input bytes': count.bytes, 'entry and body events': count.entries + count.bodies },
+          ]),
+        });
+        memory.push({ scale, counted: countedSample([{ 'retained total bytes': peak }]) });
       } finally {
         restore();
         db.close();
       }
     }
-    assertGrowth(input, { rows: 'linear', statements: 'linear', blocks: 'constant' }, strict);
-    assertGrowth(memory, constant, strict);
+    expect(countedViolations(inputCheck, input)).toEqual([]);
+    expect(countedViolations(retentionCheck, memory)).toEqual([]);
   }
 });
 
