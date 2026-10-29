@@ -1283,7 +1283,7 @@ Driver contract: [specs/collection-source-driver.ts](../../specs/collection-sour
 - `stored a to z c z cannot masquerade as covered canonical order and exact stored misses cannot prove canonical absence`
 - `257 aliases with only the last readable retain the boundary and recover the actual positive witness after accepted bounded native repair`
 - `identity basis merge unmerge and repoint restart valid continuations while unrelated partition writes do not`
-- `current owner other anonymous suspended grants and source sink anchors conceal denial before any candidate work`
+- `current owner other anonymous grants and source sink anchors conceal denial before any candidate work`
 - `canonical coverage precedes subject rejection and truthful EOF lookahead rereads and empty seeks are all charged`
 - `aggregate reservations across multiple calls never exceed 256 and zero or indivisible extra dimensions stop before work`
 - `essential unknown retains its boundary independent true OR settles and ordinary rejection permits advancing empty pages`

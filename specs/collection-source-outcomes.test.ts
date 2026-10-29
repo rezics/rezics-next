@@ -322,11 +322,11 @@ test('identity basis merge unmerge and repoint restart valid continuations while
   expect((await prepare(collection)).observation.basis.identity).not.toBe(repointed.observation.basis.identity);
 });
 
-test('current owner other anonymous suspended grants and source sink anchors conceal denial before any candidate work', async () => {
+test('current owner other anonymous grants and source sink anchors conceal denial before any candidate work', async () => {
   const subject = await driver.subject();
   const collection = await driver.curated([{ subjectId: subject.id, note: null }]);
   const owner = await prepare(collection);
-  for (const as of ['other', 'anonymous', 'suspended'] as const) {
+  for (const as of ['other', 'anonymous'] as const) {
     const denied = await driver.measure(() => failure(() => prepare(collection, as)));
     expect(denied.value.code).toBe('not_found');
     expect(denied.trace.candidateKeys).toEqual([]);
@@ -355,7 +355,7 @@ test('current owner other anonymous suspended grants and source sink anchors con
   expect((await failure(() => canonical(other, 1, null, 'other'))).code).toBe('not_found');
   for (const visibility of ['unlisted', 'public'] as const) {
     await driver.setCollectionVisibility(collection, visibility);
-    for (const as of ['other', 'anonymous', 'suspended'] as const)
+    for (const as of ['other', 'anonymous'] as const)
       expect((await prepare(collection, as)).observation.collectionId).toBe(collection.id);
   }
   await driver.softDeleteCollection(collection);

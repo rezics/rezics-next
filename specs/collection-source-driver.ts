@@ -12,13 +12,15 @@ import type {
  * COLLECTION_SOURCE_DRIVER: absolute path/file URL exporting createCollectionSourceDriver().
  * This file is a test harness contract, NOT a functional driver or membership backend.
  * Each factory owns an isolated migrated native database, real Auth/Access personas and the production owner factory.
+ * Native suspended credentials are refused before source admission: HTTP 401, JSON invalid_credentials,
+ * and WWW-Authenticate: Bearer error="invalid_token" (challenge only, not the JSON code).
  * Setup uses real kernel HTTP/owner commands, trusted Definitions activation, real merge_member/repoint work,
  * publication and deletion workers. Never use fake Access, policyMap, synthetic SearchHit, stored expected answers,
  * in-memory membership/index, or a test repair that pretends canonical readiness. Native prerequisites may be absent;
  * those cases must stay red until the accepted implementation exists. No skips or conditional green fallbacks.
  * close stops/removes only resources this factory started. Trace/inspect read actual native evidence, not a model.
  */
-export type SourcePersona = 'owner' | 'other' | 'anonymous' | 'suspended';
+export type SourcePersona = 'owner' | 'other' | 'anonymous';
 export type FactKind = 'state' | 'label' | 'session' | 'holding';
 export interface SourceFixture {
   readonly id: string;
