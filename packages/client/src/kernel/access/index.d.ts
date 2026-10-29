@@ -1,15 +1,24 @@
-export { ERASURE_PARTICIPANTS, ERASURE_PARTICIPANT_VERSION, acknowledgeErasure, readErasureStatus, type ErasureOutcome, type ErasureStatus, } from './erasure.ts';
+export { ERASURE_PARTICIPANTS, ERASURE_PARTICIPANT_VERSION, acknowledgeErasure, readErasureStatus, resolveRetention, type RetentionException, type ErasureOutcome, type ErasureStatus, } from './erasure.ts';
 export { readPublicViews, type PublicViews } from './public-views.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 export { accessClock } from './access-clock.ts';
-import type { Access, AccessConfig as KernelAccessConfig, AccessContext, Actor, Resource } from '../request/access.ts';
+import type { Access, AccessConfig as KernelAccessConfig, AccessContext, Actor, Resource, ActionCatalogue } from '../request/access.ts';
 import { type AuthenticationConfig } from './authenticate.ts';
 export { createResourcePublicEligibility, createResourceAnonymousEligibility, type ResourceEligibility, type ResourceIdentity, type ResourceEligibilityOptions, type ResourceEligibilityPrepareContext, type ResourceEligibilityVerifyContext, } from './eligibility.ts';
 export type AccessConfig = KernelAccessConfig & {
     auth?: AuthenticationConfig;
 };
+/** Fixed native checks without mounted routes; call sites are listed in the Access README. */
+export declare const INTERNAL_ACTIONS: ActionCatalogue;
+/** Also called at kernel startup, before its lazy Access is first used. */
+export declare function assertInternalActionDeclarations(actions: ActionCatalogue): void;
+export declare function accessActionCatalogue(declared: ActionCatalogue): Map<string, {
+    anonymous: boolean;
+    replay?: 'self-account-read';
+    'x-resource-types'?: readonly string[];
+}>;
 /**
  * App-local Access factory; the kernel supplies the mounted route catalogue.
  * Optional auth overrides the deployment's AUTH_ISSUER (HTTPS origin),

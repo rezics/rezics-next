@@ -152444,6 +152444,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "cursor": {
+                    "maxLength": 4864,
                     "type": "string"
                   },
                   "descriptions": {

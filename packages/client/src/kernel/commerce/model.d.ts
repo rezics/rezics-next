@@ -89,6 +89,15 @@ export type DisputeState = {
     status: string;
     amountMinor: number;
 };
+/** Untrusted provider routing metadata, never a native binding, buyer authority or payment snapshot. */
+export type CheckoutLocator = {
+    sessionId: string;
+    clientReferenceId: string | null;
+    metadataOrderId: string | null;
+    livemode: boolean;
+    mode: 'payment' | 'setup' | 'subscription';
+    paymentIntentId: string | null;
+};
 /** Stripe's current state of one Checkout Session, read through the Stripe API, never taken from a webhook payload. */
 export type CheckoutSnapshot = {
     sessionId: string;
@@ -162,6 +171,10 @@ export type CheckoutSession = {
     url: string;
     expiresAt: string;
 };
+/** Additive factory capability; existing injected StripePort implementations need not implement it. */
+export interface StripeCheckoutLocatorPort {
+    readCheckoutLocator(sessionId: string): Promise<CheckoutLocator>;
+}
 export interface StripePort {
     /** Retrying with the same idempotency key returns the same session for 24 hours. */
     createCheckoutSession(request: CheckoutRequest, idempotencyKey: string): Promise<CheckoutSession>;
