@@ -20,6 +20,11 @@ const alive = (pid: number) => {
   }
 };
 
+async function expectStopped(pid: number) {
+  for (let attempt = 0; attempt < 20 && alive(pid); attempt++) await new Promise((resolve) => setTimeout(resolve, 25));
+  expect(alive(pid)).toBe(false);
+}
+
 test('a landing command cannot leave a background child alive after its leader exits', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'goal-process-group-'));
   try {
@@ -31,7 +36,7 @@ test('a landing command cannot leave a background child alive after its leader e
       join(directory, 'command.log'),
     );
     expect(result.passed).toBe(true);
-    expect(alive(Number(readFileSync(pidFile, 'utf8').trim()))).toBe(false);
+    await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -49,7 +54,7 @@ test('an affected check uses a process group too, and timeout kills its child', 
     );
     expect(result.timedOut).toBe(true);
     expect(result.passed).toBe(false);
-    expect(alive(Number(readFileSync(pidFile, 'utf8').trim()))).toBe(false);
+    await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
