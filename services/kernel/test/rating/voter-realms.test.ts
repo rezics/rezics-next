@@ -341,7 +341,7 @@ test('membership join and promotion cost constant rows and statements as other v
   const warmupVoterId = newId(route),
     warmupLeaving = newId(route),
     warmupWaiting = newId(route);
-  // The first scale already has 4096 other voters in both partial indexes. Grow their genuine
+  // Seed 4096 other voters in both partial indexes before the first scale. Grow their genuine
   // effect receipt/outbox shapes too; these service effects do not write an editorial basis.
   const historyVoter = newId(route);
   await effect.run(membership(historyVoter, newId(route), 'member'));
@@ -353,7 +353,7 @@ test('membership join and promotion cost constant rows and statements as other v
       receipt.position,
     ])
   ).rows[0]!;
-  const neighboursPerScale = 64;
+  const initialNeighbours = 4096;
   const result = await checkGrowth(database, {
     name: 'voter Realm membership',
     rule: 'series',
@@ -361,7 +361,7 @@ test('membership join and promotion cost constant rows and statements as other v
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     grow: async (db, scale, previous) => {
-      const from = previous * neighboursPerScale;
+      const from = previous === 0 ? 0 : initialNeighbours + previous;
       const position = Number(
         (await db.admin.query('SELECT position FROM core.partition WHERE partition_no = $1', [partitionOf(route)]))
           .rows[0]!.position,
@@ -373,7 +373,7 @@ test('membership join and promotion cost constant rows and statements as other v
           const transactionId = newId(route);
           const nextPosition = position + input.ordinal - from + 1;
           return {
-            ...population.rows(input),
+            ...population.rows!(input),
             'core.receipt': [
               {
                 ...receipt,
@@ -401,7 +401,7 @@ test('membership join and promotion cost constant rows and statements as other v
           ]);
         },
       };
-      await seed({ pool: db.pool, admin: db.admin }, history, { from, to: scale * neighboursPerScale });
+      await seed({ pool: db.pool, admin: db.admin }, history, { from, to: initialNeighbours + scale });
       for (const [probeVoter, probeLeaving, probeWaiting] of [
         [voterId, leaving, waiting],
         [warmupVoterId, warmupLeaving, warmupWaiting],
@@ -412,6 +412,18 @@ test('membership join and promotion cost constant rows and statements as other v
       }
     },
     warmup: async (_db, _scale, _repetition) => {
+      await effect.run(membership(warmupVoterId, warmupLeaving, null));
+      await effect.run(membership(warmupVoterId, newId(route), 'member'));
+      expect(await row(warmupVoterId, warmupWaiting)).toMatchObject({ state: 'adding' });
+    },
+    prepare: async () => {
+      // Plan assertions run outside checkGrowth's capture, on reset spare state.
+      await database.admin.query('DELETE FROM rating.voter_realm WHERE route = $1 AND voter_id = $2', [
+        route,
+        warmupVoterId,
+      ]);
+      await addRow(warmupVoterId, warmupLeaving, 'adding');
+      await addRow(warmupVoterId, warmupWaiting, 'uncounted');
       const measured = await capture(database, async () => {
         await effect.run(membership(warmupVoterId, warmupLeaving, null));
         await effect.run(membership(warmupVoterId, newId(route), 'member'));
