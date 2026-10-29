@@ -251,7 +251,9 @@ test('page, membership and version reads return the version in one statement, em
       () => readers.readLikedVersion(f.db.pool, { actorAccountId }),
     ];
     for (const operation of operations) {
-      const { value, cost } = await measure(f.db, operation);
+      const { value, cost } = await measure<
+        bigint | { subjects: readonly unknown[] | ReadonlySet<string>; version: bigint }
+      >(f.db, operation);
       expect(cost.statements).toBe(1);
       if (typeof value === 'bigint') expect(value).toBe(expected);
       else {
