@@ -203,9 +203,9 @@ test('native identity store admits one capped durable job with no early publicat
   await expect(
     runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
+  const snapshot = await storeSnapshot([survivor, redirected]);
   await f.real.revoke(globalResource, 'editor', 'subject:merge');
   try {
-    const snapshot = await storeSnapshot([survivor, redirected]);
     await expect(execute()).rejects.toThrow('Denied subject:merge');
     expect(await storeSnapshot([survivor, redirected])).toEqual(snapshot);
   } finally {

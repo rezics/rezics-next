@@ -78,7 +78,7 @@ export class IdentityEpochStoreError extends Error {
 const unavailable = () =>
   new IdentityEpochStoreError(
     'identity_epoch_unavailable',
-    'Identity bootstrap has no proven creation/structural writer cutover; observed cardinalities are incomplete',
+    'Identity source, native group generation or bootstrap closure is not current',
   );
 const invalidReceipt = () =>
   new IdentityEpochStoreError(
@@ -270,7 +270,7 @@ export const identityEpochStore: IdentityEpochStore = {
     const locked = (await tx.query(storeSelectGroup.sql, [command.partition, inputs.map((g) => g.terminal)])).rows;
     if (
       locked.some(
-        (g, i) =>
+        (g) =>
           !inputs.some(
             (v) =>
               v.terminal === g.terminal && v.generation === g.generation && BigInt(v.version) === BigInt(g.version),
