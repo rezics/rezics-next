@@ -8,7 +8,7 @@ import { createAuthService } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { AUTH_MAINTENANCE_SCHEDULE, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
 import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
-import { checkGrowth, GrowthSettleInfrastructureError, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 if (process.argv.includes('--growth-child')) {
   void runGrowth();
@@ -77,7 +77,6 @@ async function runGrowth() {
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
   let seedHistory: () => Promise<number>;
-  let lastMeasuredStart: number | undefined;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -155,8 +154,7 @@ async function runGrowth() {
           for (const table of ['session', 'verification', 'auth_signing_key_archive', '"user"'])
             await db.admin.query(`VACUUM ANALYZE ${table}`);
         },
-        async operation(_, scale) {
-          if (scale === 64) lastMeasuredStart = Date.now();
+        async operation() {
           // Preparation and affected-row checks use only the uncaptured admin pool.
           // The same oldest 1000 rows are admitted regardless of background size.
           await db.admin
@@ -233,24 +231,6 @@ async function runGrowth() {
         })),
       }),
     );
-  } catch (error) {
-    if (error instanceof GrowthSettleInfrastructureError && lastMeasuredStart) {
-      const writers = await db.admin.query(
-        `SELECT name,workflow_uuid,status,queue_name,created_at
-        FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE created_at >= $1 ORDER BY created_at,workflow_uuid`,
-        [lastMeasuredStart],
-      );
-      const workflowIds = writers.rows.map((row) => row.workflow_uuid);
-      const operations = workflowIds.length
-        ? await db.admin.query(
-            `SELECT workflow_uuid,function_name FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs
-            WHERE workflow_uuid = ANY($1::text[]) ORDER BY workflow_uuid,function_id`,
-            [workflowIds],
-          )
-        : { rows: [] };
-      console.error(JSON.stringify({ writers: writers.rows, operationOutputs: operations.rows }));
-    }
-    throw error;
   } finally {
     await workflows.close();
     await db.close();
