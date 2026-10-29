@@ -125,12 +125,17 @@ describe('deployment sequencing', () => {
   test('status exits 3 for a different live commit and 2 when the live build cannot be read', async () => {
     const outputLines: string[] = [];
     const localCommit = 'a'.repeat(40);
+    let reads = 0;
     const behindStatus = await runStatus({
       localCommit,
-      fetchBuild: async () => ({ commit: 'b'.repeat(40) }),
+      fetchBuild: async () => {
+        reads++;
+        return { commit: 'b'.repeat(40) };
+      },
       print: (line) => outputLines.push(line),
     });
     expect(behindStatus).toBe(3);
+    expect(reads).toBe(1);
     expect(outputLines.join('\n')).toContain(`Live commit: ${'b'.repeat(40)}`);
 
     for (const fetchBuild of [
@@ -139,9 +144,17 @@ describe('deployment sequencing', () => {
         throw new Error('unavailable');
       },
     ]) {
-      const unavailableStatus = await runStatus({ localCommit, fetchBuild, print: (line) => outputLines.push(line) });
+      const unavailableStatus = await runStatus({
+        localCommit,
+        fetchBuild: async () => {
+          reads++;
+          return fetchBuild();
+        },
+        print: (line) => outputLines.push(line),
+      });
       expect(unavailableStatus).toBe(2);
     }
+    expect(reads).toBe(3);
   });
 
   test('a real deployment skips a commit already published without building, uploading or routing', async () => {
@@ -201,7 +214,7 @@ describe('deployment sequencing', () => {
       isTreeClean: async () => [],
       print: () => {},
     });
-    expect(calls).toEqual(['fetch', 'build', 'smoke', 'upload', 'deploy', 'deploy', 'fetch']);
+    expect(calls).toEqual(['clean', 'build', 'smoke', 'upload', 'deploy', 'deploy', 'fetch']);
   });
 
   test('a real deployment refuses a dirty tree before building and names changed paths', async () => {
@@ -267,6 +280,7 @@ describe('deployment sequencing', () => {
     const events: string[] = [];
     const outputLines: string[] = [];
     const expected = 'a'.repeat(40);
+    let liveReads = 0;
     await runDeployment({
       dryRun: false,
       commit: expected,
@@ -285,13 +299,44 @@ describe('deployment sequencing', () => {
       },
       fetchBuild: async () => {
         events.push('verify live build');
-        return { commit: expected };
+        liveReads++;
+        return { commit: liveReads === 1 ? 'b'.repeat(40) : expected };
       },
+      isTreeClean: async () => [],
       print: (line) => outputLines.push(line),
     });
     expect(calls).toEqual(['build', 'smoke', 'upload', 'deploy', 'deploy']);
-    expect(events).toEqual(['versions upload', 'versions deploy', 'triggers deploy', 'verify live build']);
+    expect(events).toEqual([
+      'verify live build',
+      'versions upload',
+      'versions deploy',
+      'triggers deploy',
+      'verify live build',
+    ]);
+    expect(events.filter((event) => event === 'verify live build')).toHaveLength(2);
     expect(outputLines.join('\n')).toContain('https://ver-123.storybook.rezics.workers.dev');
+  });
+
+  test('a publishing deployment reads the live build once', async () => {
+    let liveReads = 0;
+    const calls: string[] = [];
+    await runDeployment({
+      dryRun: false,
+      commit: 'a'.repeat(40),
+      build: async () => calls.push('build'),
+      smoke: async () => calls.push('smoke'),
+      wrangler: async (args) => {
+        calls.push(args[1]!);
+        return args[1] === 'upload'
+          ? 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev'
+          : 'deployed';
+      },
+      fetchBuild: async () => ({ commit: ++liveReads === 1 ? 'b'.repeat(40) : 'a'.repeat(40) }),
+      isTreeClean: async () => [],
+      print: () => {},
+    });
+    expect(calls).toContain('upload');
+    expect(liveReads).toBe(1);
   });
 
   test('dry run invokes Wrangler dry run without publishing a version or routing the domain', async () => {
@@ -335,6 +380,9 @@ describe('deployment sequencing', () => {
             calls.push('smoke');
             if (failure === 'smoke') throw new Error('smoke failed');
           },
+          commit: 'a'.repeat(40),
+          isTreeClean: async () => [],
+          fetchBuild: async () => ({ commit: 'b'.repeat(40) }),
           wrangler: async () => {
             calls.push('upload');
             return '';
@@ -381,6 +429,7 @@ test('deployment applies the custom domain and verifies the live build commit', 
   const calls: string[][] = [];
   const outputLines: string[] = [];
   const expected = 'a'.repeat(40);
+  let liveReads = 0;
   await runDeployment({
     dryRun: false,
     commit: expected,
@@ -391,7 +440,8 @@ test('deployment applies the custom domain and verifies the live build commit', 
       if (args[1] === 'upload') return 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev';
       return 'deployed';
     },
-    fetchBuild: async () => ({ commit: expected }),
+    fetchBuild: async () => ({ commit: ++liveReads === 1 ? 'b'.repeat(40) : expected }),
+    isTreeClean: async () => [],
     print: (line) => outputLines.push(line),
   });
   expect(calls.map((args) => args.slice(0, 2))).toEqual([
@@ -401,6 +451,7 @@ test('deployment applies the custom domain and verifies the live build commit', 
   ]);
   expect(calls[1]).toContain('ver-123@100');
   expect(outputLines.join('\n')).toContain('https://ver-123.storybook.rezics.workers.dev');
+  expect(liveReads).toBe(2);
 });
 
 test('deployment fails when the live domain serves a different commit', async () => {
@@ -418,6 +469,7 @@ test('deployment fails when the live domain serves a different commit', async ()
           : 'deployed';
       },
       fetchBuild: async () => ({ commit: 'b'.repeat(40) }),
+      isTreeClean: async () => [],
       print: () => {},
     }),
   ).rejects.toThrow(/live build.*commit/i);
