@@ -704,3 +704,12 @@ For a standalone JSONL file, supply `--brief` or `--task`, `--start`, `--end`, `
 Optional `--baseline` accepts `{"input":0,"cached":0,"output":0}` with the actual preceding totals; `--table-version`
 and `--outcome` preserve known historical facts. Set `GOAL_STATE_DIRECTORY` to a scratch `.temp/` directory when
 testing imports; the database is always `goal.sqlite` inside that state directory.
+
+The control plane is agent-agnostic: CLI commands, session resume, exit parsing and agent-specific signals belong behind
+`AgentAdapter` in `src/agents.ts`. To add an agent, implement an adapter under `src/agents/`, register it in the adapter
+map, extend the `Cli` type in `src/types.ts`, and add tests for start/resume commands, output/session parsing and quota signals. Normalize provider events with
+`parseEvent`; the control plane aggregates tokens, tool steps and final answers without knowing the provider event
+format. `readSession` supplies optional session accounting, and `readAllowance` supplies pool observations. Existing
+quota-parser exports remain available for historical imports. Test an adapter through the real worker lifecycle with
+`withAgentAdapter`, whose binding stays local to that asynchronous lifecycle. Agents that cannot resume set
+`canResume` to false; retries then start a fresh session with the retry manifest.

@@ -1,8 +1,9 @@
+import { agentAdapter, agentCommands, allAgentAdapters, parseAgentExit } from './agents.ts';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { sameProcess } from './process.ts';
-import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED, readLogTail } from './records.ts';
+import { CHECK_HOST_TRANSPORT, readLogTail } from './records.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
@@ -34,8 +35,14 @@ type State = {
 
 const SIGNATURES = [
   { name: 'check-host transport', pattern: CHECK_HOST_TRANSPORT },
-  { name: 'model capacity', pattern: MODEL_AT_CAPACITY },
-  { name: 'allowance exhausted', pattern: POOL_EXHAUSTED },
+  {
+    name: 'model capacity',
+    pattern: { test: (text: string) => allAgentAdapters().some((adapter) => adapter.signals?.(text).capacity) },
+  },
+  {
+    name: 'allowance exhausted',
+    pattern: { test: (text: string) => allAgentAdapters().some((adapter) => adapter.signals?.(text).allowance) },
+  },
   { name: 'file watchers exhausted', pattern: /EMFILE/i },
   { name: 'out of memory or disk', pattern: /ENOSPC|ENOMEM|\bKilled\b|out of memory/i },
   { name: 'lease or lock timeouts', pattern: /Lease held|lease.*timeout|lock.*timeout|timeout.*(?:lease|lock)/i },
@@ -124,24 +131,11 @@ function failureSignature(error: string): (typeof SIGNATURES)[number] | undefine
   return SIGNATURES.find((signature) => signature.pattern.test(error));
 }
 
-function reportsBlocked(result: string): boolean {
-  let end = result.lastIndexOf('}');
-  while (end >= 0) {
-    let start = result.lastIndexOf('{', end);
-    while (start >= 0) {
-      try {
-        const value = JSON.parse(result.slice(start, end + 1));
-        if (value && typeof value === 'object' && 'status' in value) return value.status === 'blocked';
-      } catch {
-        /* A result can wrap its final status object in prose. */
-      }
-      if (start === 0) break;
-      start = result.lastIndexOf('{', start - 1);
-    }
-    if (end === 0) break;
-    end = result.lastIndexOf('}', end - 1);
-  }
-  return false;
+function reportsBlocked(result: string, attempt: Attempt): boolean {
+  const exit = parseAgentExit(result, attempt.profile?.cli ? agentAdapter(attempt.profile.cli) : undefined) as {
+    status?: unknown;
+  } | null;
+  return exit?.status === 'blocked';
 }
 
 function failureIncidents(
@@ -158,7 +152,7 @@ function failureIncidents(
   >();
   for (const attempt of store.attemptsEndedBetween(start, end)) {
     const result = typeof attempt.result === 'string' ? attempt.result : '';
-    if (!attempt.failureKind && !reportsBlocked(result)) continue;
+    if (!attempt.failureKind && !reportsBlocked(result, attempt)) continue;
     const blocker = typeof attempt.blocker === 'string' ? attempt.blocker : '';
     const error = [result, blocker].filter(Boolean).join('\n');
     const signature = failureSignature(error);
@@ -193,43 +187,10 @@ function failureIncidents(
 }
 
 function recentCommands(attempt: Attempt): string[] {
-  const seen = new Set<string>();
-  const command = (id: unknown, value: unknown): string[] => {
-    if (typeof value !== 'string' || !value.trim()) return [];
-    if (typeof id === 'string') {
-      if (seen.has(id)) return [];
-      seen.add(id);
-    }
-    return [value.trim()];
-  };
-  try {
-    return readLogTail(attempt.logPath)
-      .split(/\r?\n/)
-      .flatMap((line) => {
-        try {
-          const event = JSON.parse(line) as Record<string, any>;
-          const payload = event.payload ?? event;
-          const item = event.item ?? payload;
-          if (item.type === 'command_execution') return command(item.id, item.command);
-          if (event.type === 'assistant')
-            return (event.message?.content ?? []).flatMap((part: Record<string, any>) =>
-              part.type === 'tool_use' ? command(part.id, part.input?.command) : [],
-            );
-          if (payload.type === 'function_call') {
-            const input = payload.arguments ?? payload.input;
-            const args = typeof input === 'string' ? JSON.parse(input) : input;
-            return command(payload.call_id ?? payload.id, args?.cmd ?? args?.command);
-          }
-          return [];
-        } catch {
-          return [];
-        }
-      })
-      .filter(Boolean)
-      .slice(-RECENT_COMMANDS);
-  } catch {
-    return [];
-  }
+  return agentCommands(
+    readLogTail(attempt.logPath),
+    attempt.profile?.cli ? agentAdapter(attempt.profile.cli) : undefined,
+  ).slice(-RECENT_COMMANDS);
 }
 
 function elapsedText(ms: number): string {
@@ -239,7 +200,7 @@ function elapsedText(ms: number): string {
 }
 
 function inspectsProcesses(command: string): boolean {
-  // Codex command_execution records include the shell launcher around the requested script.
+  // A command can include the shell launcher around the requested script.
   const shell = /^(?:\S*\/)?(?:ba|z)?sh\s+-[a-z]*c\s+(['"])([\s\S]*)\1$/.exec(command);
   const script = shell?.[2] ?? command;
   return /(?:^|[;&|\n])\s*(?:\S*\/)?(?:ps|pgrep)(?:\s|$)/.test(script);

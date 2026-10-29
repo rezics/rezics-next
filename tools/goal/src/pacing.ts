@@ -1,3 +1,4 @@
+import { agentAdapter } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -90,7 +91,8 @@ export function pace(reading: PoolReading, pool: Pool, now: number, schedule?: C
   const window = longestWindow(reading);
   if (!window || window.resetsAt === null || !reading.observedAt) return undefined;
   let resetAt = window.resetsAt;
-  const announced = pool.cli === 'codex' && schedule?.scheduledAt ? Date.parse(schedule.scheduledAt) : NaN;
+  const announced =
+    agentAdapter(pool.cli).announcedReset && schedule?.scheduledAt ? Date.parse(schedule.scheduledAt) : NaN;
   if (Number.isFinite(announced) && announced > now && announced < resetAt) resetAt = announced;
   const hoursToReset = Math.max((resetAt - now) / 3_600_000, 0.25);
   const unusedPercent = Math.max(0, 100 - effectiveReserve(pool, window, now) - window.usedPercent);

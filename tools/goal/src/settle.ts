@@ -1,14 +1,7 @@
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
-import {
-  makeRecord,
-  POOL_EXHAUSTED,
-  readLogTail,
-  readMeasurement,
-  reportedApproaches,
-  reportsSuccess,
-} from './records.ts';
-import { recordClaudeRateLimit } from './usage.ts';
+import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSuccess } from './records.ts';
+import { agentAdapter } from './agents.ts';
 import { evidenceBundle } from './evidence.ts';
 import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
 import { attemptEnvironment, workerEnvironment, type RunningWorker } from './launch.ts';
@@ -90,9 +83,9 @@ export async function settle(
         a.after = pool ? tasks.reader(pool) : null;
       });
       const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory, maxLogBytes: 256 * 1024 });
-      if (pool?.cli === 'claude')
+      if (pool)
         try {
-          recordClaudeRateLimit(pool, readLogTail(attempt.logPath));
+          agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath));
         } catch {
           /* No log to read. */
         }
@@ -114,12 +107,18 @@ export async function settle(
           /* No stderr stream was created. */
         }
         // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
-        measurement.failureKind = POOL_EXHAUSTED.test(stderr) ? 'pool-exhausted' : 'tool';
+        measurement.failureKind = agentAdapter(attempt.profile.cli).signals?.(stderr).allowance
+          ? 'pool-exhausted'
+          : 'tool';
         measurement.result = stderr || `Worker CLI exited with code ${code} before starting a session`;
       }
       // Only a worker's own final answer, a success report or a stated blocker, lets its branch land. A worker killed
       // mid-work gives none, and its partial worktree must not be committed and integrated as if it had passed.
-      if (!measurement.failureKind && !measurement.blocker && !reportsSuccess(measurement.result)) {
+      if (
+        !measurement.failureKind &&
+        !measurement.blocker &&
+        !reportsSuccess(measurement.result, agentAdapter(attempt.profile.cli))
+      ) {
         measurement.failureKind = 'tool';
         measurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${measurement.result.slice(-500)}`;
       }
@@ -128,7 +127,7 @@ export async function settle(
         a.result = measurement.result;
         a.blocker = measurement.blocker;
         a.failureKind = measurement.failureKind;
-        a.approaches.push(...reportedApproaches(measurement.result));
+        a.approaches.push(...reportedApproaches(measurement.result, agentAdapter(attempt.profile.cli)));
       });
       store.putRecord(makeRecord(task, attempt, measurement));
       evidenceBundle(task, store.attempt(ref));

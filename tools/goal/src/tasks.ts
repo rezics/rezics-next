@@ -1,3 +1,4 @@
+import { agentAdapter } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -732,6 +733,14 @@ export class WorkerTasks {
               return reading ? pace(reading, candidate, now, schedule)?.urgency : undefined;
             },
       );
+      const resumeSession =
+        old?.session &&
+        agentAdapter(profile.cli).canResume &&
+        old.pool === pool.name &&
+        old.profile.cli === profile.cli &&
+        old.profile.model === profile.model
+          ? old.session
+          : undefined;
       const make = (n: number): Attempt => ({
         taskId,
         attempt: n,
@@ -818,7 +827,15 @@ export class WorkerTasks {
               this.settings.mainCheckout,
             );
             retryPrepared = true;
-            return await this.launcher(this.store, this.store.task(taskId), next, pool, prompt, this.settings.codex);
+            return await this.launcher(
+              this.store,
+              this.store.task(taskId),
+              next,
+              pool,
+              prompt,
+              this.settings.codex,
+              resumeSession,
+            );
           });
         }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
@@ -868,7 +885,7 @@ export class WorkerTasks {
         if (!files.length && options.escalation === 'rebase-conflict') files = options.conflictFiles ?? [];
         const prompt = workerPrompt(task, options.evidence, options.consultation, files, this.settings.mainCheckout);
         retryPrepared = true;
-        return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex);
+        return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
       } catch (error) {
         const failed = this.store.updateAttempt(next, (a) => {
           a.state = 'exited';

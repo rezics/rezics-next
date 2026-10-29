@@ -1,3 +1,4 @@
+import { isAgentCli } from './agents.ts';
 import { choosePool, choosePoolWithFallback as chooseByAllowance } from './allowance.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -36,7 +37,7 @@ export function readPoolPolicies(value: unknown, localFile: string): Pool[] {
       'pool',
     );
     if (pool.note !== undefined && typeof pool.note !== 'string') throw new Error('pool note must be text');
-    if (!['codex', 'grok', 'cursor', 'claude'].includes(String(pool.cli))) throw new Error('unsupported pool CLI');
+    if (!isAgentCli(pool.cli)) throw new Error('unsupported pool CLI');
     if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
       throw new Error('pool classes required');
     const policy = object(pool.policy, 'pool policy');
