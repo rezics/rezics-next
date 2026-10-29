@@ -116,7 +116,7 @@ test('the follower still settles that worker with its real exit code read after 
     writeFileSync(release, 'go');
     await settled;
     expect(h.store.attempt(worker.attempt).exitCode).toBe(7);
-    expect(requests.map((r) => r.attempt)).toEqual([1]);
+    expect(requests.map((r) => r.attempt)).toEqual([attempt.attempt]);
   } finally {
     h.dispose();
   }
