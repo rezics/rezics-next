@@ -1,0 +1,240 @@
+# Concurrent identity groups: native feasibility and type boundaries
+
+Research evidence, 2026-10-29. This report proposes a design for adoption; it changes no owner contract or executable port. `P` remains symbolic. Disjoint changed group sets must run concurrently; control, capacity and reclamation follow the changed groups. There is no globally bounded account verification demand and no global job lock, including during cutover.
+
+## Finding
+
+The smallest plausible design uses native, durable, home-local group claims; immutable, versioned inputs; one routable job decision; existing native effect receipts; and bounded released-home reconciliation. It needs no distributed transaction or coordination engine. It can preserve a literally effect-free coherent overflow rejection. It cannot preserve the old single-home `admit(tx)` and single-pending-job type unchanged, nor can a one-home observation distinguish remote admission from remote preparation without a clarified preparing observation.
+
+Adoption therefore needs the narrow decisions in §9 before implementation. In particular, preparation is real control work with native cleanup responsibility: it must never be hidden from effect snapshots, reported as effect-free overflow, or forgotten because an RPC failed. A conditional algorithm is specified below rather than claiming an executable implementation exists.
+
+## 1. Evidence and limits
+
+The current repository revision inspected is `b7efa45b3ce2c01e35ba0380a91f4a89cedb938a`. Primary local sources are:
+
+| Source | What it establishes |
+| --- | --- |
+| [Identity types](../../services/kernel/src/semantic/identity-epoch-contract.ts), [complete contract](../../services/kernel/src/semantic/identity-epoch-contract.md) | Specification-only native boundary; fixed participants, exact receipts, cap, mapping and missing producers. The global single-pending design is superseded for this question. |
+| [Native cutover cases](../../services/kernel/test/semantic/identity-epoch-cutover.test.ts), [553-line support](../../services/kernel/test/semantic/support/identity-epoch-cutover.ts) | Actual native fixture operations and assertions, including cross-home inputs, gates, receipt mismatches, raw paging, export/capture and reclamation. The 980-line suite does not supply the missing store/coordinator. |
+| [Admission](../../services/kernel/test/semantic/identity-epoch-admission.test.ts), [publication](../../services/kernel/test/semantic/identity-epoch-publication.test.ts), [HTTP](../../services/kernel/test/semantic/identity-operations-http.test.ts), [HTTP support](../../services/kernel/test/semantic/support/identity-operations-http.ts) | Existing 4097 rejection, authorization/replay, publication and public operation cases. HTTP snapshots include partition, receipt, outbox and discovered identity tables; reservations cannot be exempted. |
+| [Command implementation](../../services/kernel/src/command/command.ts), [fence SQL](../../services/kernel/src/command/fence.sql), [no-effect fence](../../services/kernel/src/command/no-effect-fence.sql), [receipt read](../../services/kernel/src/command/read-receipt.sql), [command contract](../../services/kernel/src/command/README.md) | One native owner per command, native transaction time, authorization before replay, final partition/authorization fence, receipt/outbox atomicity and rollback. Same position alone does not identify an effect transaction. |
+| [Operational transaction](../../services/kernel/src/command/operational.ts), [Work client](../../services/kernel/src/work/client.ts), [registration](../../services/kernel/src/work/registry.ts) | The actual operational primitive revision is `5b5c3be17ea1c7c747d09cdcdcfa0ac89ca37cfe`: fenced native owner writes plus `enqueueIntent` only. DBOS transactional enqueue exists; invented operational events/receipts/outboxes/positions do not. |
+| [Filtered lists](../filtered-lists.md#canonical-identity-and-personal-references), [read transaction](../../services/kernel/src/semantic/read.ts), [step authority](../../services/kernel/README.md#bounded-job-steps) | Current identity/privacy semantics, shared page budgets, released bounded reads and sole durable-step limits. |
+| [Library owner queries](../library-owner-queries.md), [Library owner](../../services/kernel/src/library/README.md), [directory evidence](library-owner-index-observation-deep.md), [follow counts](../private-follow-counts.md) | Structural owner candidates/support, actual source ownership, canonical winner semantics and follow support/fence requirements. Directory recommendations are not evidence of an implemented producer. |
+| [Merge](../../services/kernel/src/semantic/merges.ts), [move/reversal](../../services/kernel/src/semantic/merge-moves.ts), [account agents](../../services/kernel/src/semantic/account-agents.ts), [Access verification](../../services/kernel/src/access/agent-verification.ts), [delivery workflow](../../services/kernel/src/access/agent-verification-work.ts), [Access retention](../../services/kernel/src/access/README.md#account-deletion-policy) | Existing source-home operations, provenance-bound reversal, Accounts success shape, decision/pending/clear sequence, and native/shared-history retention gaps. |
+
+All eight items in each required Performance and Accounts review, and the integrated full review, were read at their actual locations:
+
+- `/home/edge/projects/rezics/rezics-next/.temp/goal/performance/identity-cutover-cost-review.md`
+- `/home/edge/projects/rezics/rezics-next/.temp/goal/accounts/identity-cutover-accounts-review.md`
+- `/home/edge/projects/rezics/rezics-next/.temp/goal/semantic/identity-cutover-integrated-full-review.md`
+
+Both [earlier current](identity-store-cutover-current.md) and [earlier deep](identity-store-cutover-deep.md) reports were read as **global-scope evidence only**. Their source capture, fencing and receipt reasoning remains useful; their sole-pending serialization proves nothing about concurrent claims. No other concurrent-groups report was read or coordinated.
+
+External primary sources were inspected read-only, reusing these reference clones; no dependency was installed, built or run:
+
+| Reference and licence | Inspected source and implication |
+| --- | --- |
+| PostgreSQL, PostgreSQL License; `.reference/library-shelf-maintenance/postgres`, HEAD `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | [Isolation documentation](https://www.postgresql.org/docs/19/transaction-iso.html), [locking documentation](https://www.postgresql.org/docs/19/explicit-locking.html); release source `0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89`, [`src/backend/commands/trigger.c`](https://github.com/postgres/postgres/blob/0b8bff042a997fe50fcd1c4c83b9ef1cc9ed8a89/src/backend/commands/trigger.c); HEAD [`indexcmds.c`](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/commands/indexcmds.c). Local locks/MVCC and multi-phase index handoff are real, but are not cross-server atomicity or an export ACK. |
+| DBOS Transact TypeScript, MIT; `.reference/search-worker-outcome-harness/dbos-transact-ts`, `980dc55095f445b189aecb59e7f3334345179f65` | [`src/dbos-executor.ts`](https://github.com/dbos-inc/dbos-transact-ts/blob/980dc55095f445b189aecb59e7f3334345179f65/src/dbos-executor.ts), [`src/dbos.ts`](https://github.com/dbos-inc/dbos-transact-ts/blob/980dc55095f445b189aecb59e7f3334345179f65/src/dbos.ts#L1245), [workflow documentation](https://docs.dbos.dev/typescript/tutorials/workflow-tutorial). Step results are journalled after the body; a native commit can precede journal persistence. `DBOS.sleepms` is durable in a workflow outside a step, but uses ordinary sleep inside a step. |
+
+The PostgreSQL reference HEAD is development source, not a measured deployment version. The kernel pins DBOS `5.4.6-preview`; the inspected reference is a separately pinned source revision, not proof of SDK-version equivalence. No native probe, ready ACK, benchmark or crash experiment was performed here. The integrated review reports bootstrap failure before the named native schedules executed; that is not passing evidence for them.
+
+Shared pattern: trust a persisted native state transition and its exact receipt, not a returned promise, exhausted scan, allocated number or scheduler result. Reference designs inform implementation in this repository's native stack; no files or long passages should be copied.
+
+## 2. Native routing, claims and capacity
+
+Distinguish three identities. A **group incarnation/version** describes one sealed flat input and its current routing; a **job** identifies one immutable admitted transformation; a **reader epoch** invalidates cursors. None substitutes for the others.
+
+Use a stable job home determined from the native receipt's owner route, including the account-home route for Accounts. It must survive representative, merge and split changes. The receipt-to-job key is indexed and unique at that home. A job is not routed by its first presently visible terminal. Public opaque operation IDs may encode a trusted locator internally without changing `202`, `Location` or poll DTOs.
+
+Each changed group header and claim belongs to its **current** native control home. The source's actual mapping basis must supply `(group key, incarnation, version, control partition, owner epoch)` directly. The terminal's partition is a possible group-home rule, but the owning contract must adopt the precise rule; the current API does not define it. A representative ID or an old capture is insufficient authority.
+
+Proposed logical records below are schema sketches, not existing table names or exports:
+
+```sql
+-- All keys begin with the actual native route/partition as required by the owner.
+group_head(group_key PK, incarnation, version, sealed_generation,
+           exact_count, control_partition, owner_epoch, claim_job)
+job(job_key PK, receipt_key UNIQUE, phase, immutable_intent, input_refs,
+    planned_homes, attempt, native_decision_receipt)
+claim(group_key PK, incarnation, version, job_locator, attempt, phase)
+closed_attempt(job_locator, attempt, PRIMARY KEY(job_locator, attempt))
+capacity_slot(slot_key PK, job_locator UNIQUE, phase, allocation_frontier)
+```
+
+Versions never repeat, including after split back to the same terminal, deletion/recreation or partition ownership change. Retained tombstone/incarnation identity prevents ABA; a reclaimed row is not permission to reuse its version. Original source basis changes atomically with its native mapping/revision. Indexes support receipt lookup, claim-by-group, job phase, generation references, and partition-local reclaim keysets; none requires enumerating an account's verification demand.
+
+After the read-only cap check below, reserve one of `P` slots at **every** partition that will hold charged job/control or full-generation material, not merely at the job home. Reserve job-home capacity as well if distinct. A local claim and its local reservation commit together; no full copy is built until all necessary reservations are custodied. Merge/repoint/split have a bounded set of input/output control homes; physical participant source homes stream effects and do not each acquire a full group copy. Every later allocation must fit the existing reservations; newly discovered routing invalidates preparation rather than escaping the cap.
+
+Visit planned partitions in a deterministic total order, then group keys within each partition. One command claims all of this attempt's local groups and its local slot atomically. It locks the local group headers, verifies the exact expected incarnation/version/count, checks `closed_attempt`, then inserts the unique claim and conditional slot reservation. Release the native client before visiting another home. Native `SERIALIZABLE`, unique constraints and final partition fence decide first-claim races; cross-home reads are not a transaction.
+
+```sql
+-- Proposed home-local body, within actual runCommand; its fence/receipt is not shown.
+SELECT * FROM group_head WHERE group_key = $1 FOR UPDATE;
+SELECT 1 FROM closed_attempt WHERE job_locator = $2 AND attempt = $3;
+-- Compare the locked incarnation/version/count and actual owner; reject mismatch.
+-- Lock the local capacity header, then reserve only if occupied < P.
+INSERT INTO claim(group_key, incarnation, version, job_locator, attempt, phase)
+VALUES ($1, $4, $5, $2, $3, 'preparing'); -- unique group key decides contention
+-- Pin the sealed generation and advance saved local progress in this transaction.
+```
+
+The capacity header needs a local row lock or equivalent atomic conditional update; counting unlocked slot rows races. The first-absence claim insertion must not treat `ON CONFLICT DO NOTHING` as success without comparing the existing owner/attempt. An abort closure and a delayed claimant must lock the same local attempt guard before checking/inserting; a non-locking tombstone read alone has a check/insert race. Real SQL must use indexed exact route keys and the existing native ownership fence.
+
+These are effectful native commands: they require the owning Semantic event/effect contract, actual native receipts and wakeup, not `noEffect` or fabricated operational output. That preparing event/record contract is presently missing. The native operational transaction remains appropriate only for its documented consumer-owned operational writes and transactional Work enqueue.
+
+`identity_epoch_busy` means an overlapping **reserved/pending changed group**, never an unrelated partition's work. Full `P` capacity or unfinished local reclamation yields a distinct retryable capacity/readiness outcome. It can prevent two disjoint jobs sharing a full control partition, but disjoint jobs with available slots must proceed. There is no global sole-pending row.
+
+An incomplete preparation either resumes acquisition in ascending order or durably enters `ABORTING`; it never steals an aged claim. Waiting on a higher ordered resource has no cycle. Reclamation must finish using its already reserved resources, without waiting for a new slot. Ownership/routing drift requires abort, not reordering a partially held acquisition. With finite arrivals, fair native execution and recovery of failed owners/workflows, the highest outstanding resource chain drains; arbitrary continuing arrivals or permanent outages have no finite latency guarantee.
+
+This proof has an important initial-custody condition: the job-home slot is in that same acquisition order, **not** implicitly held first. Recoverable intent/attempt custody must exist before a remote claim, but cannot consume an out-of-order capacity slot while waiting. Its compact locator/closure record is history/custody, not a hidden full job/input copy. The owner must explicitly define this distinction and its indexed recovery. If `P` instead counts even such incoming custody records, choose the first ordered resource home as the preparing job home and persist a native receipt-to-locator binding before admission. Keeping both an arbitrary pre-reserved job home and ordered waiting is invalid: two jobs can each hold its job-home slot and wait for the other's partition. This is a required capacity/routing clarification, not an assumed native ABI.
+
+Abort is a decision at the job home, mutually exclusive with admission. Cleanup sends a durable closed-attempt tombstone to **every planned home**, including homes with an uncertain RPC result. A delayed claim cannot recreate a closed attempt. Only after all closure/release receipts are custodied may the attempt become terminal or release its last recovery obligation. Missing response is neither an absent claim nor `not_applied`. No timeout, lease expiry, process memory or DBOS failure may clear this responsibility.
+
+## 3. Exact preeffect cap and immutable admission
+
+For each result group, calculate the exact count including its terminal from sealed flat inputs. Collapse identical input groups before summing; a split's singleton and remainder and a repoint's two results are checked separately. Input references plus a constant transformation suffice; do not copy 4096 memberships inside admission.
+
+Only sealed, currently routable, unclaimed input headers qualify for a pure cap observation. Preparing/pending input or a transitional/missing owner produces the corresponding busy/readiness result; partial output counts cannot be combined into a cap verdict. A first-ever subject still installs exact self mapping/count in its actual revision-1 native command, named or unnamed/imported, with rollback together. It needs neither a global control checkout nor Search. Bootstrap must preserve this writer rule across all homes/routes and transfer captured OLD/NEW/deletion heads only after control custody; a scan exhausted before a late lower-home birth is not a sealed cutover proof.
+
+For different homes, first perform a **read-only coherent collection** of the bounded input headers and original routing bases. Read all tuples in deterministic order twice; accept only equal, never-reused versions and counts in both passes. There is a common instant between the passes at which all accepted tuples coexisted. Include mapping/home/incarnation versions in this test. Local RR snapshots do not by themselves create that cross-home instant. Bound the attempt; version drift returns retryable unavailability rather than a scan or an unbounded stabilization loop.
+
+Mixed reads must not manufacture overflow. For example, repointing one original changes two groups from counts `(2048,2048)` to `(2047,2049)` while the total stays 4096. Reading the first old count and second new count produces a false 4097. Double collection rejects that inconsistent pair. Immutable versions cannot be overwritten in place or recycled back to the earlier count.
+
+If a coherent result exceeds 4096, reject **before** creating a job, claim, slot, epoch record, receipt, outbox, revision, redirect, mapping or participant effect. No write transaction is required for this rejection; an eventual rolled-back command is also effect-free. Keep every frozen 4097/all-effects assertion intact. Perform this read-only phase before any new Semantic intent/control custody. Records already present at the snapshot start remain present and compared; no table is exempt. If an Accounts overflow assertion starts before `recordPendingAgentVerification`/`commitReversal` and requires their newly committed intent to leave no effects too, that contradicts durable source-intent delivery: the owner must explicitly define that operation boundary, not exclude the intent from the snapshot.
+
+After a successful read-only cap check, preparing commands compare-and-claim those same versions. Holding every changed-group claim makes the count/input set stable. First-claim or version drift cannot change the selected input silently. After all receipts and immutable input references are in job-home custody, one native job-home command commits `ADMITTED`, pending intent and durable wakeup; it verifies its preparation state and actual receipt set. It does not write another partition. All native canonical effects require this irrevocable decision and their current home-local gate.
+
+The native state machine is `custodied intent → preparing → admitted → applying → published → reclaiming → terminal`, with `preparing → aborting → closed` as the only preadmission escape. Admission and abort compare the same saved attempt state under the job-home lock. Every arrow is a native committed record/receipt, not a scheduler state; publication is not slot release. Once admitted, failure resumes/repairs that job and cannot be reported as an unadmitted abort. Effect homes persist the admitted decision/gate custody before allowing effects; they never infer it from an old preparing capture.
+
+There is a necessary outcome distinction. Suppose the first home committed a claim, the second home changed version, and recalculation now exceeds the cap. Returning ordinary effect-free overflow would be false: claim receipts/outbox/history already exist even if compensated. The safe outcome is a side-effectful, retryable **preparation abort**, with complete native cleanup; it is not overflow and not domain admission. Re-evaluating the same operation into an overflow response after such work requires an explicit contract decision about that response's effect promise. Do not quietly narrow the snapshot or mint domain pending before cap.
+
+Similarly, a capacity refusal after another reservation requires durable unwind. A pure initial capacity observation can be effect-free but cannot reserve capacity. The current `admit(tx) -> CommandResult<JobRef>` has no place for these released-home phases or their cleanup outcomes. A stable attempt/intent must retain custody across caller retries; an unconfirmed late admission must resolve to the same job, never a false `not_applied` or a second job.
+
+## 4. Published observations and the minimal boundary change
+
+The present `controlPartition: number`, `readEpoch(client)`, one `pending.job`, and unlocated `IdentityJobRef` cannot represent two jobs at different control homes. Keeping those types while implementing concurrency would hide routing and make a client from one owner authoritative over another.
+
+Minimal proposed owner-boundary clarification:
+
+- Add a native job-home locator to `IdentityJobRef`; keep `jobId` stable and keep the native component/transaction identity unchanged. Preserve fixed participant version/name identities.
+- Separate sealed group basis/version from global reader epoch. `IdentityMapping` carries the coherent group observation internally; its `pending` job is routable. `IdentityEpochState.pending` has a published reader epoch and pending indication, not one arbitrary job for the whole system.
+- Route `readJob`, `findJob`, `pageChanges` and reconciliation through their actual owner/client or a released `Pool` wrapper. Retain a home-local final admission primitive; add a released preparation/cleanup protocol around it. Do not give `admit(tx)` hidden multi-home writes.
+- Specify a batch read-plan port that consumes existing original bases and existing page clients/snapshots. Keep standalone `readMapping(pool, original)` as a released bounded operation. This is a missing internal port, not a new public cursor or permission protocol.
+
+A remote-admission visibility counterexample also needs closure. Home H1 has a prepared claim; H2 holds the job decision. Two schedules have identical H1 state, but only one committed H2 admission. A reader allowed only H1 cannot distinguish them. The smallest conservative rule is that a cap-checked preparing claim already makes that group's point observation pending/preparing, even before public `202`; there are no domain effects yet. Otherwise the contract must permit unavailable during this window, or allow an extra job-home query. It cannot require immediate exact admitted-only pending while retaining one relevant control home/two probes and no distributed transaction. Busy must explicitly include these overlapping reservations.
+
+Keep the public protocol: ordinary merge returns `202` and the same `Location`/operation on identical receipt replay; different body conflicts; polls reauthorize original and terminal and withhold results until publication. Accounts successful DTOs remain the existing survivor/redirected/revision/subject/component shape, with native idempotent receipt semantics. Historical byte-identical component replay is not a new requirement. Internal preparing states are not extra public success DTOs.
+
+### Reader epoch without whole-job serialization
+
+An allocated epoch or `max(published job epoch)` is unsafe. Job J1 allocates 7 and stalls; disjoint J2 allocates 8 and publishes; a cursor binds 8; J1 later changes identity and publishes 7. The maximum remains 8, so the cursor accepts a changed basis. Sequence, time and UUID ordering do not prove commit order.
+
+If the existing scalar cursor epoch is retained, derive it from **committed summary reconciliation**, not job numbers. Each job-home partition maintains a monotonic committed summary version and active count in its native transaction. Arming a job raises its count; finishing/fully aborting lowers it. Each transition has a real native receipt. Before the first canonical effect, arm custody must reach the reader-epoch owner. That owner holds one latest `(partition, summaryVersion, activeCount)` row per native partition plus an aggregate active count and reader revision.
+
+One short native metadata command accepts only a newer proven summary, adjusts the aggregate by its count delta, and increments the reader revision under its row lock. Duplicate/older summaries are harmless; a newer summary may subsume earlier ones. The source partition's persisted version and receipt prove the transition; a precommit number is insufficient. A late lower-numbered job's finish creates a newer partition summary and, when accepted, a newer reader revision. No reader scans the summary rows or holds a historical vector. No full group or claim lives at this global metadata owner.
+
+Arming custody precedes effects; finishing custody follows local publication **and all required mapping/gate mirrors/receipt custody**, or complete abort cleanup. A crash leaves conservative pending, not stale mapped success. Reconciliation uses existing native commands/Work and bounded indexed points; it is not an ordinary Search checkpoint. Local out-of-order messages and duplicate finish cannot double-decrement because summary version replacement is atomic. The owner must specify this metadata command/event and receipt port; none is implemented by the current type.
+
+This serializes short reader-metadata commits, not whole jobs or their group claims. There are at most 4096 current summary rows, not one global per-job reservation queue. Lists still return preparation while the aggregate is nonzero; direct unaffected mapping does not wait. Under finite work and recoverable failures the aggregate reaches zero. Continuous disjoint work can continuously invalidate/prepare global-epoch lists: do not claim a bounded global arrival rate. Eliminating that existing global-list consequence would require a separate cursor/product decision and is not proposed here.
+
+### One relevant mapping control home and the fixed read budget
+
+Read the actual original basis to obtain its current group/control route. Batch the bounded requested group keys to that home/backend; the pending probe reads claims/preparing state and the epoch probe reads a coherent sealed group version/publication basis. Owner points are batched too. No per-ID control query loop, representative alias walk, global search, 4096-head vector or private allow certificate is involved. Metadata reads are charged control I/O, never `SourceAccess` or authorization.
+
+During merge/repoint/split, prepare new headers/gates before installing new original bases. Old and new group homes retain exact pending/fence custody until every affected basis and prior withdrawal/addition is acknowledged. The source basis changes atomically at its source home. Reading its old route observes old-home pending or unavailable; reading its new route observes new-home pending or its valid sealed version. Old homes must not prematurely reclaim those descriptors. A stale owner epoch cannot follow a forwarding chain into authority.
+
+For standalone same-backend source and control, use **one RR transaction, at most eight statements**: BEGIN, SET timeout, source owner, source basis, control owner, pending probe, epoch probe, COMMIT. One backend provides a coherent snapshot even when logical partitions differ. No actual counterexample requiring three same-backend visits was found. The source tuple must fit its existing basis query; adding a helper query exceeds the stated plan.
+
+For different backends, release source, inspect control, release control, then revalidate source against that exact observation. Ceilings remain source ≤10, control ≤6, total ≤16; a pending result stops at ≤11. If source version/route changed, or control publication/new claims invalidate the observation, return unavailable/retryable pending as specified; do not loop until stable or guess self. A coherent success linearizes at the control snapshot with unchanged enclosing source observations. Owner moves are unavailable until actual native ownership is re-established.
+
+Inside filtered PAGE, mapping shares the existing batched epoch/control-owner observation, exactly **two** probes, and existing source candidate points. It opens no extra client, transaction, snapshot or control statement. Batch across all reads of the page, partition predicates included, with one connection per backend; retain ≤12 statements/backend for one read and `8+4R` for composed pages. The reader-epoch owner belongs in the already budgeted shared epoch observation; group rows belong in the two existing batched probes at their actual backends. A schema/port that needs an extra global or per-group statement fails this budget and must be rejected at adoption.
+
+Keep current original **and** terminal privacy checks, and FOREIGN physical namespace safety, independent of routing. A public terminal or convenient supported original does not authorize a private original. Source physical queries wait for their own permission/namespace conditions, not metadata trust. An unaffected self identity remains observable without Search or list preparation; an unavailable source/control is never a guessed self mapping.
+
+## 5. Fixed participants, native fences and publication
+
+The job decision is followed by bounded native mapping work and exactly Search plus **one** Library participant. Effects at every physical destination use a local compare/lock gate in the same native transaction as the effect and frontier. The gate tests the actual job/incarnation/version and current partition ownership. A recorded owner epoch/capture or remote pre-read cannot authorize a later transaction.
+
+First absence must serialize: unique gate insertion and the first source application contend on the same native key. An old first apply committing before gate installation enters the dirty/late-work capture and must reach control custody; an old apply after installation is rejected or redirected through current work. Saving an empty head cannot ACK a later head. Capture OLD and NEW destinations and deletions before copying; retain source exports until the exact observed head and full control custody are durable. ACK of head h cannot clear h+1.
+
+Each effect manifest includes exact scope and full prior withdrawal, addition and fence obligations, including old destination after repoint or owner change. The receiving home records its actual native transaction ID plus `(partition, epoch, position)`. Reconciliation rereads the persisted job/version/scope/frontier and all half-effects before taking custody. A returned `complete`, wrong transaction at the same position, missing prior removal or wrong component is not an ACK. Search must prove the actual target/index incarnation and canonical effect scope; ordinary projection progress is insufficient.
+
+Library covers every canonical owner/source driver, structural directory rekey, concurrent first application, and follows/support/totals/fences under its existing fixed participant. No new participant or ownership transfer is required. One follow-only receipt cannot publish. Final publication occurs at the job home only after mapping and both actual fixed ACKs are custodied. Replaying native effect commands/receipts after a DBOS journal gap must recover the same effect, not execute a second transformation.
+
+The directory is structural: one candidate per `(owner, canonical)` plus supported `(owner, canonical, original, scope)` existence/count/extrema rows and inverse `(owner, original, scope)` access. Scope includes the real profile/lifecycle distinctions. A million sessions with the same owner/original/profile/lifecycle do **not** create a million directory rows. Native facts remain authoritative; directory counts/extrema require bounded native maintenance and range indexes for first/last removal. A per-fact witness mirror merely renames the forbidden copy.
+
+Canonical state chooses the owner's latest live write sequence before matching filters; labels union; physical copies and sessions retain their independent identities. Identity rekey reads structural support by original/scope and updates old/new canonical candidates without rewriting stored personal originals. It must not demand writes to the old `canonical_source_fact` shape as proof that the new structural directory was maintained. Current directory evidence is a design/adoption obligation, not a functioning adapter at this revision.
+
+## 6. Partition-local retention and honest cost
+
+For partition q, let `Gq` be its current sealed full generations and `Aq` their memberships. Every physical full-group copy is inventoried: bootstrap, unsealed builder, export, pinned input, abandoned attempt, partially deleted generation, and retry-created copy. A full export elsewhere is charged at its physical resident partition too; a ref is not a license to hide that copy.
+
+At most `P` charged slots coexist per partition. Each slot may account for **at most four extra full generations and 4×4096 memberships across all phases combined**. Thus physical live full-group storage is bounded by `Gq+4P` and `Aq+4P×4096`, separately from minimized R/L/H history. This is an allocation invariant, not an estimate that every phase gets four copies. Record allocation under the slot before writing and reuse stable generation identities after crashes.
+
+A valid schedule pins existing current inputs, streams at most the bounded result generations, then swaps current headers while retaining only the necessary old inputs/exports. On each allocation, include every still-live retired/staging/export copy; if it would exceed the four-copy charge, transfer custody and finish bounded deletion first. Bootstrap uses the same slots/inventory and a single resumable builder per allocated generation; unsealed/abandoned bootstrap rows are not free. No empty retry allocates another generation. Admission at that partition first advances eligible reclaim work and refuses real capacity when slots remain occupied; unrelated partitions continue.
+
+Slots survive publication through physical reclaim. Acquire/release a live generation ref under its native header lock; reclaim marks it deleting only with zero live refs and blocks new pins. Delete children by indexed `(partition, generation, original)` keyset, checkpoint real native progress, then remove the descriptor. A crash before/after a page retries the same bounded page/receipt. Never mark a partial delete reclaimed to open a slot. Native dead tuples/index space also require physical measurement; logical deletion is not an immediate byte-size proof.
+
+Undo retains minimized exact originals/prior-and-result terminal bindings, provenance-bound verification effect keys and necessary Context/property scope, not historical full generations. Move/export/cursor consumers receive bounded exact custody before refs are released; cursors retain a scalar invalidation basis, not an old generation. R/L/H are indexed history with their own owner retention/minimization obligations, not hidden memberships or per-fact witnesses. Grow each independently when measuring point/index cost.
+
+The only step authority is [kernel bounded-job-steps](../../services/kernel/README.md#bounded-job-steps): at most 100 raw rows/page, 100 pages/segment, 5000 ms/step, eight scalar/2048-byte continuation and 4096-byte workflow args/results; smaller is allowed. Shared raw input across two streams includes overlap, lookahead, duplicates and retries. Charge source capture/export, membership work, directory and effect rows, not just returned changes. A `floor((limit-c)/k)` formula needs proven `c_MAX` and `k_MAX` fitting the limit; otherwise continue **inside** an original by indexed scope/session/effect key. A heavily supported original must progress even when its whole unit does not fit. No larger step or namespace escape is proposed.
+
+Admission performs a constant number of maintained count/version/claim points, logarithmic in native index populations; it does not read 4096 rows. Execution is proportional to changed memberships plus actual Search/Library source/effect work, which can greatly exceed 4096 facts. Reclaim is proportional to actual retained rows with bounded pages. Storage is `O(Aq + P×4096 + Rq + Lq + Hq)` plus domain payload/index storage; directory cardinality follows structural supports, not session facts. Measure `pg_relation_size` deltas for relations and indexes, examined rows/blocks, serialized bytes and actual engine work; no measured budget success is asserted.
+
+A whole-partition physical owner move is an explicit unresolved boundary. If `Aq > 4P×4096`, copying the entire live partition before deleting the source violates the physical membership bound. A feasible native mover must transfer bounded generation/page custody within this copy budget, prevent old writers, and preserve active claim/job routing. No actual general partition-move producer proving this was found in the inspected ports. Either supply that producer/proof or explicitly define physical replica/move accounting; do not silently exempt the duplicate. Group merge/repoint/split routing changes still require the versioned gates above regardless of physical move accounting.
+
+## 7. Accounts delivery, terminal reversal and custody
+
+Access persists a consumer-owned intent at account home keyed by `(account-home route, account, direction, receipt)`, with canonical UTF-8 `[direction, accountId, receiptId]` identity. Verification writes it inside `recordPendingAgentVerification`; reversal writes it inside `commitReversal`. Role-first indexes must locate account, requested-by and decided-by work independently; there is no bound on an account's historical or current demand that permits scanning them all.
+
+The actual fenced operational transaction may mutate this Access-owned record and call `enqueueIntent` transactionally. It does not emit an event, native command receipt, outbox, write basis or position; it does not define an operational intent table/relay. DBOS operational intents belong to shared workflow history; consumer-derived rows belong to that consumer, not generically Access. Semantic takes durable native control custody of the locatable intent before structural admission; source retirement follows exact receiving custody, never an optimistic send.
+
+On overlap, delivery keeps the same intent and receipt and backs off; busy/capacity/version drift never becomes denied review or a new verification request. Final account state/decision/receipt fencing must reject a stale delivery that lost to terminal reversal. A pending older verify cannot reauthorize itself using old native captures after reversal or a newer verification. Undo targets only the exact committed verification provenance, and terminal reversal retains cleanup custody even if the account can no longer obtain ordinary authority.
+
+The existing **same workflow** must wait before approval, public-page completion, `finish` or pending clear. Use bounded indexed native steps for attempt/probe and durable workflow sleep outside the step:
+
+```text
+existing verification/reversal workflow:
+  read/fence the same persisted intent and direction
+  bounded step: deliver/resume/probe exact native job; return locator + pending/complete
+  while pending: DBOS durable sleep; bounded step: probe/resume that same intent/job
+  only after exact publication: existing approval/page/finish/clear sequence
+```
+
+These are algorithmic actions, not newly claimed exported function names. The existing direct successful Semantic call must still honor its publication guarantee and unchanged DTO; the internal Work delivery path needs the clarified resumable pending boundary. Sleeping throughout an outage inside one DBOS step is not durable workflow waiting. The current step retry maximum of ten is not an age/progress guarantee; failed registered workflow recovery must preserve native pending/control custody and resume indexed obligations rather than clear or deny them. Do not add a new queue or alter SDK registration/retention as part of this report.
+
+All-role erasure covers the native account/requester/reviewer/effect locators, minimized Semantic references/undo, Access evidence/intent, Library-derived structural/effect records, and shared receipt/outbox/write-basis/DBOS payload custodians. Semantic does not become the physical owner of Library payload purge or shared history. Keep exact physical owner/minimizer and OLD/NEW destination custody until transfer ACK. Late items, partial failures, failed registered workflow and fork all prevent an unsupported clear; none permits dropping the only cleanup locator. The existing Access inventory has retention gaps, not an erasure completion certificate.
+
+One existing public assertion conflicts with the required Accounts boundary: the frozen HTTP fixture expects suspended-bearer 403, whereas current required held-bearer behavior is real 401 `invalid_credentials` with Bearer `invalid_token`; suspended sign-in is 403 and kernel 403 is defensive. Keep this test unchanged here and resolve the owner-level contradiction before a combined implementation acceptance. It is not evidence that either native schedule ran successfully.
+
+## 8. Required multi-job schedules
+
+| Schedule | Required native result and recovery |
+| --- | --- |
+| `A+B` versus `B+C` | Sorted home/group claims choose one owner of B; only overlapping work is busy. A loser with prior reservations retains cleanup responsibility. No public second admitted job for the same group; after release it revalidates current incarnations/counts. |
+| `A+B` versus `C+D` | With local slots available, both admit and execute concurrently, including different control homes. One publication/reclaim cannot hold the other's unrelated partition. Full shared-partition capacity is reported as capacity, not scope busy. |
+| First claim commits, reply lost, then crash | Recover same attempt/receipt; inspect persisted claim and native receipt. On abort, close all planned homes before forgetting it; delayed RPC cannot recreate a claim. No false `not_applied`. |
+| Home effect commits before receipt custody/DBOS journal | Repeat exact native receipt reconciliation; do not rerun as a new effect or accept returned completion. Missing OLD withdrawal or fence blocks publication. |
+| Local publication commits, mirrors/epoch finish delayed | Published job remains resumable; point observations stay conservatively pending until their home has full custody. Global reader summary remains active until safe finish; unrelated jobs proceed. |
+| Reclaim crashes after child-page deletion | Ref/deleting state and native frontier survive. Retry same keyset/receipt; partially deleted generation and slot remain counted until final deletion. |
+| Merge/repoint/split changes group owner | A new incarnation/version and source basis route to the actual new control home. Earlier claims/captures cannot authorize a later effect; old descriptors stay until old-basis readers/custody are safe. Physical owner move also needs the missing bounded transfer proof. |
+| Lower job epoch commits after higher epoch | Native committed partition summary and accepted reader revision advance again; a cursor based on the intervening published revision restarts. `max(job epoch)` fails this schedule. |
+| Account becomes terminal during admitted verify/reversal | Native decision/account fences choose the legitimate obligation; exact committed reversal continues via existing workflow/custody, stale verify cannot win later, and pending is not cleared before publication or abandoned on workflow failure. |
+
+Each requires native commit barriers and real owner routes, components/transaction IDs and persisted manifests. The old fixture's returned/affected-row observer is not an examined-block capture; control movement is not a final account-fence race; canonical fact insertion is not structural-directory first-apply coverage. These limitations must stay explicit in future acceptance. No helper, missing adapter or ordinary Search checkpoint may manufacture readiness.
+
+## 9. Adoption decisions and recommendation
+
+Adopt this conditional design only after resolving these precise boundaries in the owning specification:
+
+1. **Preparation outcomes:** define durable cap-checked preparing claims, their pending/unavailable read meaning and overlapping busy scope; distinguish effect-free initial overflow from side-effectful drift/capacity abort with complete native cleanup. Decide replay behavior after a prepared attempt's inputs would now overflow. Never exempt reservations from the frozen all-effects snapshot.
+2. **Routing/types:** choose the native group-home rule, stable receipt/job-home locator, non-ABA group/source basis and owner-move behavior; replace sole-pending/global-control assumptions with explicit released-home ports. Preserve public operation/Accounts shapes and exact native receipt identities.
+3. **Reader publication:** adopt a committed summary-derived reader revision, including arm/finish custody and use of existing page observations, or provide another exact scalar derivation. Reject allocation-order/max-epoch proof and global whole-job serialization.
+4. **Physical bounds and missing producers:** supply allocation/ref/reclaim and bounded physical owner-transfer contracts, actual structural Library/Search adapters and first-apply controls. Treat `G+4P`/`A+4P×4096` as physical live-copy invariants. Choose `P` only through owner/Performance adoption; no demand assumption supplies it.
+5. **Accounts:** adopt native intent custody, same-workflow durable wait and terminal/reversal fences; resolve the held-bearer assertion conflict and the stale operational-primitive/ownership descriptions without inventing Core features.
+
+The research acceptance is report existence, not native conformance. Future executable acceptance must retain the original overflow/publication/HTTP cases and add the schedules in §8, coherent mixed-count/no-ABA races, preparing-read ambiguity, out-of-order summary delivery, physical allocation crash inventory, and in-unit continuation for a large supported original. This assignment changes no tests or frozen files. Native missing ports remain missing.
+
+The two independent concurrent-design reports must both be read in full and compared before protocol choice or freeze. After adoption, one owning specification closure should replace the superseded global assumptions; this evidence report does not perform that closure.
