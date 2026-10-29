@@ -75,7 +75,11 @@ async function seedShortBatch(
   );
 }
 
-async function warmRetentionBatch(growth: GrowthDatabase, kind: 'short-warmup' | 'full-warmup', expected: number): Promise<void> {
+async function warmRetentionBatch(
+  growth: GrowthDatabase,
+  kind: 'short-warmup' | 'full-warmup',
+  expected: number,
+): Promise<void> {
   const eligible = await growth.admin.query(
     `SELECT * FROM dbos.workflow_status
       WHERE workflow_uuid LIKE $1 AND completed_at < $2

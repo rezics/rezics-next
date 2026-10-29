@@ -2,7 +2,14 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import pg, { type PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandEvent } from '../src/command/command.ts';
 import { newId } from '../src/route/route.ts';
-import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from './support/growth.ts';
 import { readPartition } from '../src/partition/partition.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -178,13 +185,15 @@ test('New command stays within its bound as N grows', async () => {
       );
       const nodes = planNodes(measured.capture.plans);
       const receiptRead = nodes.find(
-        (node) => node['Schema'] === 'core' && node['Relation Name'] === 'receipt' && node['Index Name'] === 'receipt_pkey',
+        (node) =>
+          node['Schema'] === 'core' && node['Relation Name'] === 'receipt' && node['Index Name'] === 'receipt_pkey',
       );
       expect(receiptRead).toBeDefined();
       expect(String(receiptRead?.['Index Cond'] ?? '')).toContain('partition_no');
       expect(String(receiptRead?.['Index Cond'] ?? '')).toContain('idempotency_key');
       const partitionWrite = nodes.find(
-        (node) => node['Schema'] === 'core' && node['Relation Name'] === 'partition' && node['Index Name'] === 'partition_pkey',
+        (node) =>
+          node['Schema'] === 'core' && node['Relation Name'] === 'partition' && node['Index Name'] === 'partition_pkey',
       );
       expect(partitionWrite).toBeDefined();
       expect(Number(partitionWrite?.['Actual Rows'])).toBe(1);
