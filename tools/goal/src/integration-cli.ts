@@ -39,6 +39,7 @@ export type IntegrationRuntime = {
   deliverReminders?(): number;
   /** One promotion step; returns at once when a promotion holds the lease or nothing changed. */
   promote?(): Promise<void>;
+  verify?(): Promise<void>;
   db: Database;
   mainCheckout: string;
   stateDirectory: string;
@@ -354,6 +355,17 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       promotion.once('exit', () => closeSync(log));
       promotion.unref();
     };
+    let verifier: ReturnType<typeof spawn> | undefined;
+    const verify = () => {
+      if (!runtime.verify || (verifier && verifier.exitCode === null && verifier.signalCode === null)) return;
+      const log = openSync(join(runtime.stateDirectory, 'dev-verifier-runner.log'), 'a');
+      verifier = spawn(process.execPath, [process.argv[1]!, 'verify'], {
+        cwd: runtime.mainCheckout,
+        stdio: ['ignore', log, log],
+      });
+      verifier.once('exit', () => closeSync(log));
+      verifier.unref();
+    };
     // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
     let reapedAt = 0;
     const reap = () => {
@@ -368,6 +380,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, 60_000, () => {
       remind();
       promote();
+      verify();
       reap();
     });
     await new Promise<void>((resolve) => {
@@ -446,6 +459,10 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   }
   if (command === 'promote') {
     await runtime.promote?.();
+    return 0;
+  }
+  if (command === 'verify') {
+    await runtime.verify?.();
     return 0;
   }
   if (command === 'train') {
