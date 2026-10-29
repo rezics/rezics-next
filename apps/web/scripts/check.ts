@@ -10,20 +10,13 @@ import {
   type FileOutcome,
   type FileTiming,
 } from '../../../scripts/test-lanes.ts';
-import {
-  copyFileSync,
-  constants,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stackRun, type StackRun } from '../../../scripts/stack-run.ts';
+import { ensureLocalWorkerVars } from './dev-vars.ts';
+
+export { ensureLocalWorkerVars } from './dev-vars.ts';
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(app, '../..');
@@ -356,20 +349,7 @@ export async function runHostTests(
   if (code !== 0) throw new Error(`host tests failed with status ${code}`);
 }
 
-/** Give Wrangler's local Worker a test-only signing key without replacing developer configuration. */
-export function ensureLocalWorkerVars(directory = app): void {
-  const destination = join(directory, '.dev.vars');
-  if (existsSync(destination)) return;
-  try {
-    copyFileSync(join(directory, '.dev.vars.example'), destination, constants.COPYFILE_EXCL);
-  } catch (error) {
-    // Another process may have created local vars after the existence check.
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-  }
-}
-
 async function prepare(env: NodeJS.ProcessEnv): Promise<void> {
-  ensureLocalWorkerVars();
   await runCommand('generate', 'bun', ['run', 'generate'], env);
   await runCommand('route generation', 'bun', ['run', 'generate:routes'], env);
   await runCommand('dependency optimization', 'bun', ['x', 'vite', 'optimize', '--config', 'vite.config.ts'], env);
@@ -437,6 +417,7 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
 }
 
 async function main(args: string[]): Promise<void> {
+  ensureLocalWorkerVars();
   if (args.includes('--prepare-only')) {
     await prepare(process.env);
     return;

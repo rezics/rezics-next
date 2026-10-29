@@ -26,6 +26,8 @@ The wrapper generates Paraglide messages when they are missing or older than the
 `scripts/isolated.ts` to add their own generation step.
 Generation retries a Lix timeout twice in a new process.
 
+Test runs through `scripts/isolated.ts` or `check.ts` create `.dev.vars` from the committed development values in `.dev.vars.example` when it is absent, leaving existing local configuration untouched.
+
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 
 Set the `TURNSTILE_SITE_KEY` text binding to the public Turnstile site key for the site's hostname.

@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
+import { ensureLocalWorkerVars } from './dev-vars.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
 
 const rawCommand = process.argv.slice(2);
@@ -15,6 +16,7 @@ if (command.length === 0) {
   process.exitCode = 2;
 } else {
   const app = resolve(import.meta.dir, '..');
+  ensureLocalWorkerVars(app);
   const root = resolve(app, '../..');
   const appCommand =
     command[0] === 'bun' && command[1] === 'test'

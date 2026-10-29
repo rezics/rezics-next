@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { exportJWK, generateKeyPair } from 'jose';
 import page from '../../src/kernel/recorded/subject-page.json';
 import missing from '../../src/kernel/recorded/missing-subject-page.json';
 import active from '../../src/kernel/recorded/definitions-active.json';
@@ -38,7 +38,9 @@ export async function startPagesWorker() {
   const calls: Call[] = [];
   // This upstream-only canary is deliberately never included in a public response.
   const privateSentinel = 'upstream-only-private-pages-canary';
-  const state = await mkdtemp(join(tmpdir(), 'rezics-pages-worker-'));
+  const temporary = join(import.meta.dir, '../../../../.temp');
+  await mkdir(temporary, { recursive: true });
+  const state = await mkdtemp(join(temporary, 'pages-worker-'));
   let output = '';
   const keep = (chunk: Buffer) => {
     output = (output + chunk.toString()).slice(-12_000);
@@ -157,24 +159,31 @@ export async function startPagesWorker() {
       WEB_TEST_STATE_DIR: state,
       PUBLIC_ORIGIN: 'https://rezics.com',
     };
-    // The anonymous case has no credentials, regardless of the invoking developer's environment.
-    for (const name of [
-      'AUTH_ISSUER',
-      'WEBSITE_CLIENT_ID',
-      'WEBSITE_CLIENT_KEY',
-      'API_RESOURCE',
-      'WEBSITE_SCOPES',
-      'WORKER_INSPECTOR_PORT',
-    ])
+    // Auth text bindings come from process.env in cloudflare.config.ts, not .dev.vars.
+    // Removing them disables Auth even when .dev.vars contains development Auth values.
+    for (const name of ['AUTH_ISSUER', 'WEBSITE_CLIENT_ID', 'API_RESOURCE', 'WEBSITE_SCOPES', 'WORKER_INSPECTOR_PORT'])
       delete env[name];
+    // The client key is server configuration, never a visitor credential. The local .dev.vars
+    // secret takes precedence; this generated development key also covers an absent vars file.
+    const { privateKey } = await generateKeyPair('ES256', { extractable: true });
+    env.WEBSITE_CLIENT_KEY = JSON.stringify({
+      ...(await exportJWK(privateKey)),
+      kid: 'anonymous-pages-worker',
+      alg: 'ES256',
+      use: 'sig',
+    });
     // This is the same app command/config as auth-binding.host.test.ts. Its Cloudflare plugin runs
     // the ssr environment in workerd; the real route also imports cloudflare:workers bindings.
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'], {
-      cwd: join(import.meta.dir, '../..'),
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env,
-    });
+    child = spawn(
+      'bun',
+      ['--no-env-file', 'run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'],
+      {
+        cwd: join(import.meta.dir, '../..'),
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+      },
+    );
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     exit = 'running';
@@ -191,6 +200,8 @@ export async function startPagesWorker() {
       }),
     );
     const assertRunning = () => {
+      if (output.includes('Missing required secrets'))
+        throw new Error(`app is missing local Worker configuration\n${diagnostics()}`);
       if (ended || child!.exitCode !== null || child!.signalCode !== null || exit !== 'running')
         throw new Error(`app exited unexpectedly\n${diagnostics()}`);
     };
@@ -206,6 +217,19 @@ export async function startPagesWorker() {
       if (Date.now() >= deadline) throw new Error(`app startup deadline exceeded\n${diagnostics()}`);
       await Bun.sleep(250);
     }
+    // Exercise the real Worker boundary: local vars must not re-enable issuer discovery.
+    const signIn = await fetch(`${origin}/auth/sign-in?return_to=/en`, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
+    });
+    await signIn.text();
+    assertRunning();
+    if (
+      signIn.status !== 503 ||
+      signIn.headers.has('location') ||
+      signIn.headers.getSetCookie().some((cookie) => cookie.startsWith('__Host-rezics_session='))
+    )
+      throw new Error(`anonymous fixture unexpectedly enabled Auth\n${diagnostics()}`);
     return {
       calls,
       privateSentinel,
