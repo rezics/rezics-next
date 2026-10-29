@@ -451,3 +451,151 @@ Workspace @rezics/kernel finished in 65.56s
 $ bun run typecheck  (services/kernel)
 
 ```
+
+## Additive seventeen-case verification
+
+The formatted seventeen-case file retains the complete previous thirteen cases byte for byte, including the
+A-to-B schedule. The frozen Global aggregate-authority file is unchanged. Only the three declared files changed.
+The tests remain specification evidence awaiting full review; no runtime currentness or growth pass is claimed.
+
+### Initial root typecheck output
+
+Command: `bun scripts/worker-check.ts -- bun run typecheck`. Exit status: 1.
+Kernel and Auth typechecking completed; web route generation failed because the Lix service did not open within
+its native timeout. This infrastructure failure is retained in full; a bounded unchanged-command retry follows.
+Local log: `.temp/goal/checks/worker-check-2026-10-29T11-18-39.515Z-9b4e36cd.log`.
+
+```text
+remote-check: slot wait 211.688 s on b
+
+Number of files: 5,306 (reg: 4,977, dir: 328, link: 1)
+Number of created files: 38 (reg: 36, dir: 2)
+Number of deleted files: 0
+Number of regular files transferred: 153
+Total file size: 57,483,512 bytes
+Total transferred file size: 2,541,157 bytes
+Literal data: 748,532 bytes
+Matched data: 1,792,625 bytes
+File list size: 196,584
+File list generation time: 0.415 seconds
+File list transfer time: 0.000 seconds
+Total bytes sent: 474,703
+Total bytes received: 37,767
+
+sent 474,703 bytes  received 37,767 bytes  1,513.94 bytes/sec
+total size is 57,483,512  speedup is 112.17
+remote-check: rsync 338.357 s on b
+remote-check: running on b
+bun install v1.4.4-canary.1 (a0cc096ce)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+
++ @types/bun@1.4.4
++ bun@1.4.4-canary.20261027.1
++ oxfmt@0.74.0
++ oxlint@1.89.0
++ typescript@7.1.0-beta
+
+896 packages installed [3.70s]
+remote-check: bun install 3.796 s on b
+$ bun scripts/typecheck.ts
+Workspace @rezics/auth-contract finished in 0.86s
+$ bun run typecheck  (packages/auth-contract)
+
+Workspace @rezics/filter finished in 1.29s
+$ bun run typecheck  (packages/filter)
+
+Workspace @rezics/document finished in 1.47s
+$ bun run typecheck  (packages/document)
+
+Workspace @rezics/composition finished in 1.64s
+$ bun run typecheck  (packages/composition)
+
+Workspace @rezics/ui finished in 3.44s
+$ bun run typecheck  (packages/ui)
+
+Workspace @rezics/importer finished in 4.79s
+$ bun run typecheck  (services/importer)
+
+Workspace @rezics/client finished in 5.40s
+$ bun run typecheck  (packages/client)
+
+Workspace @rezics/conversion finished in 6.37s
+$ bun run typecheck  (packages/conversion)
+
+Workspace @rezics/definitions finished in 7.98s
+$ bun run typecheck  (packages/definitions)
+
+Workspace @rezics/auth-pages finished in 147.14s
+$ bun run typecheck  (apps/auth)
+
+Workspace @rezics/auth finished in 532.51s
+$ bun run typecheck  (services/auth)
+
+Workspace @rezics/kernel finished in 603.34s
+$ bun run typecheck  (services/kernel)
+
+Workspace @rezics/web finished in 132.60s
+$ bun run typecheck  (apps/web)
+vite v8.3.5 building client environment for development...
+ℹ [paraglide-js] Please check your translation files for syntax errors.
+✓ 0 modules transformed.
+$ bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json
+$ bun scripts/generate.ts
+$ vite build --config vite.config.ts --mode development --emptyOutDir false
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "../project.inlang/paraglide.config" without a file extension (scripts/generate.ts:2:21). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "../project.inlang/paraglide.config" without a file extension (scripts/generate.ts:2:21). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "../project.inlang/paraglide.config" without a file extension (scripts/generate.ts:2:21). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ ERROR  [paraglide-js] Failed to compile project: Lix open did not settle within 30000ms
+
+✗ Build failed in 1m 25s
+error during build:
+Build failed with 1 error:
+
+[plugin unplugin-paraglide-js]
+LixError: Lix open did not settle within 30000ms
+    at Timeout.<anonymous> (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/@lix-js+sdk@0.20.1/node_modules/@lix-js/sdk/dist/worker/client.js:750:56)
+    at listOnTimeout (node:internal/timers:685:17)
+    at process.processTimers (node:internal/timers:618:7)
+    at aggregateBindingErrorsIntoJsError (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/rolldown@1.2.15/node_modules/rolldown/dist/shared/error-D0SD8_tL.mjs:49:18)
+    at unwrapBindingResult (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/rolldown@1.2.15/node_modules/rolldown/dist/shared/error-D0SD8_tL.mjs:19:128)
+    at #build (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/rolldown@1.2.15/node_modules/rolldown/dist/shared/rolldown-CMhwwZPA.mjs:145:34)
+    at async buildEnvironment (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/vite@8.3.5+77d67c083a359184/node_modules/vite/dist/node/chunks/node.js:34849:66)
+    at async Object.build (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/vite@8.3.5+77d67c083a359184/node_modules/vite/dist/node/chunks/node.js:35270:19)
+    at async buildStartViteEnvironments (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/@tanstack+start-plugin-core@1.171.55+c8d6ea6b3663e5c1/node_modules/@tanstack/start-plugin-core/dist/esm/vite/planning.js:85:23)
+    at async Object.buildApp (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/@tanstack+start-plugin-core@1.171.55+c8d6ea6b3663e5c1/node_modules/@tanstack/start-plugin-core/dist/esm/vite/plugin.js:114:8)
+    at async Object.buildApp (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/vite@8.3.5+77d67c083a359184/node_modules/vite/dist/node/chunks/node.js:35262:6)
+    at async CAC.<anonymous> (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/vite@8.3.5+77d67c083a359184/node_modules/vite/dist/node/cli.js:790:3) {
+  errors: [Getter/Setter]
+}
+error: script "generate:routes" exited with code 1
+error: script "typecheck" exited with code 1
+
+error: script "typecheck" exited with code 1
+remote-check: command 609.570 s on b
+remote-check: run used 347.088 CPU seconds over 615.148 s (0.56 cores), peak memory 3376 MiB on b
+worker-check: bun run typecheck peak 3.3 GiB (weight 4)
+check: exit status 1
+check: failure summary
+Total bytes received: 37,767
+sent 474,703 bytes  received 37,767 bytes  1,513.94 bytes/sec
+ℹ [paraglide-js] Please check your translation files for syntax errors.
+ERROR  [paraglide-js] Failed to compile project: Lix open did not settle within 30000ms
+✗ Build failed in 1m 25s
+error during build:
+Build failed with 1 error:
+LixError: Lix open did not settle within 30000ms
+at aggregateBindingErrorsIntoJsError (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/rolldown@1.2.15/node_modules/rolldown/dist/shared/error-D0SD8_tL.mjs:49:18)
+at unwrapBindingResult (file:///srv/rezics-check/runs/mvtgehgi-72134fe4/node_modules/.bun/rolldown@1.2.15/node_modules/rolldown/dist/shared/error-D0SD8_tL.mjs:19:128)
+errors: [Getter/Setter]
+error: script "generate:routes" exited with code 1
+error: script "typecheck" exited with code 1
+check: log .temp/goal/checks/worker-check-2026-10-29T11-18-39.515Z-9b4e36cd.log
+```
