@@ -25,7 +25,6 @@ import { readSearchConfig, type SearchConfig } from './search/work.ts';
 import { createAccess, type AccessConfig } from './access/index.ts';
 import type { AuthenticationConfig } from './access/authenticate.ts';
 import type { AccessFactory } from './request/access.ts';
-import { MAX_BODY_LIMIT } from './http/body.ts';
 
 export type KernelRuntimeDefaults = {
   tokens: KeyRing;
@@ -268,7 +267,6 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
-    maxRequestBodySize: MAX_BODY_LIMIT,
     async fetch(request, transport) {
       let finish!: () => void;
       const active = new Promise<void>((resolve) => (finish = resolve));
