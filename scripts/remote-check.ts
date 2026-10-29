@@ -445,7 +445,7 @@ for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
     marker_sequence=
     read -r marker_slots marker_started marker_sequence <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
-    if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_started" -lt "$landing_waiting_started" ] || { [ "$marker_started" -eq "$landing_waiting_started" ] && [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; }; then
+    if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
       landing_waiting_slots=$marker_slots
       landing_marker_id=\${landing_marker##*/landing-wait-}
       landing_waiting_id=\${landing_marker_id%.lock}
@@ -588,7 +588,7 @@ for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
     marker_slots=; marker_started=; marker_sequence=
     read -r marker_slots marker_started marker_sequence <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
-    if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_started" -lt "$landing_waiting_started" ] || { [ "$marker_started" -eq "$landing_waiting_started" ] && [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; }; then
+    if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
       landing_waiting_slots=$marker_slots
       landing_marker_id=\${landing_marker##*/landing-wait-}; landing_waiting_id=\${landing_marker_id%.lock}
       landing_waiting_started=$marker_started

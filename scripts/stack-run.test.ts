@@ -49,7 +49,8 @@ if (script.includes('MemAvailable')) {
       '\\nLOAD 0\\nORDINARY_SLOTS_USED ' + ordinarySlotsUsed +
       '\\nEXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0) + '\\nGATE_WAITING 0' +
       '\\nMULTI_SLOT_WAITING_SLOTS 0\\nMULTI_SLOT_WAITING_ID -' +
-      '\\nLANDING_WAITING_SLOTS 0\\nLANDING_WAITING_ID -',
+      '\\nLANDING_WAITING_SLOTS 0\\nLANDING_WAITING_ID -' +
+      '\\nTMP_BYTES 17179869184\\nTMP_INODES 1000000',
   );
 } else if (script.includes('REMOTE_CHECK_RESERVATION')) {
   const lock = dir + '/' + hostKey + '.reservation';

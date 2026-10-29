@@ -3988,7 +3988,7 @@ test('landing priority: a waiting gate starts first and landing runs on one host
       .map((event) => String(event.script).match(/# REMOTE_CHECK_LANDING_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1]);
     const arrivalIds = events()
       .filter((event) => event.kind === 'landing-marker')
-      .sort((left, right) => BigInt(String(left.arrivalOrder)) < BigInt(String(right.arrivalOrder)) ? -1 : BigInt(String(left.arrivalOrder)) > BigInt(String(right.arrivalOrder)) ? 1 : Number(left.sequence) - Number(right.sequence))
+      .sort((left, right) => Number(left.sequence) - Number(right.sequence))
       .map((event) => String(event.id))
       .filter((id, index, ids) => ids.indexOf(id) === index);
     expect(gateGrant).toBeGreaterThanOrEqual(0);
