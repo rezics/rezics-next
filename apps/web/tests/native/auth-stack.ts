@@ -196,16 +196,18 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         // The callback is also on the web origin. Finish its document redirect
         // before returning a usable served web page. Its account control proves
         // that the web app has read the real session through its server function.
-        await page.waitForURL(
-          (url) => url.origin === new URL(stack.web).origin && url.pathname !== '/auth/callback',
-          { timeout: 30_000 },
-        );
+        await page.waitForURL((url) => url.origin === new URL(stack.web).origin && url.pathname !== '/auth/callback', {
+          timeout: 30_000,
+        });
         try {
           await page.locator('#account-menu-button').waitFor({ state: 'visible' });
         } catch (error) {
-          throw new Error(`Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}`, {
-            cause: error,
-          });
+          throw new Error(
+            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}`,
+            {
+              cause: error,
+            },
+          );
         }
       }
       await page.waitForLoadState('domcontentloaded');
