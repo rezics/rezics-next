@@ -24,6 +24,8 @@ type Options = {
   help: boolean;
 };
 type Job = { id: string; locale: string; theme: string };
+type CaptureFailure = { job: Job; error: string };
+type CaptureResult = { files: string[]; failures: CaptureFailure[] };
 type StoryPreview = {
   __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
 };
@@ -210,6 +212,15 @@ async function settle(page: Page, id: string, pageErrors: readonly string[] = []
   });
 }
 
+async function prepareFullPageCapture(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const overlay = document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]');
+    if (overlay) return;
+    window.scrollTo(0, 0);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+}
+
 async function captureOne(page: Page, origin: string, job: Job, out: string): Promise<string> {
   const url = `${origin}/iframe.html?id=${encodeURIComponent(job.id)}&globals=locale:${job.locale};theme:${job.theme}`;
   const pageErrors: string[] = [];
@@ -222,6 +233,7 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
   try {
     await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
     await settle(page, job.id, pageErrors);
+    await prepareFullPageCapture(page);
     const file = join(out, `${job.id}.${job.locale}.${job.theme}.png`);
     await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
     return file;
@@ -231,13 +243,58 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
   }
 }
 
+async function captureJobs(
+  jobs: readonly Job[],
+  run: (job: Job, worker: number) => Promise<string>,
+  workerCount = 1,
+): Promise<CaptureResult> {
+  const files = new Array<string | undefined>(jobs.length);
+  const failures: { index: number; value: CaptureFailure }[] = [];
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(workerCount, jobs.length) }, (_, worker) =>
+      (async () => {
+        for (;;) {
+          const index = cursor;
+          cursor += 1;
+          if (index >= jobs.length) return;
+          const job = jobs[index];
+          if (!job) return;
+          try {
+            files[index] = await run(job, worker);
+          } catch (error) {
+            failures.push({
+              index,
+              value: {
+                job,
+                error: (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').trim(),
+              },
+            });
+          }
+        }
+      })(),
+    ),
+  );
+  return {
+    files: files.filter((file): file is string => file !== undefined),
+    failures: failures.sort((left, right) => left.index - right.index).map(({ value }) => value),
+  };
+}
+
+function reportCaptureResults(files: string[], failures: CaptureFailure[], write: (text: string) => void): number {
+  for (const file of files) write(`${file}\n`);
+  write(`${files.length}\n`);
+  for (const { job, error } of failures) write(`${job.id} ${job.locale} ${job.theme}: ${error}\n`);
+  return failures.length === 0 ? 0 : 1;
+}
+
 async function capture(
   browser: Browser,
   origin: string,
   jobs: readonly Job[],
   out: string,
   width: number,
-): Promise<string[]> {
+): Promise<CaptureResult> {
   const pages: Page[] = [];
   for (let index = 0; index < Math.min(captureLimit, jobs.length); index += 1) {
     const context = await browser.newContext({
@@ -247,22 +304,7 @@ async function capture(
     });
     pages.push(await context.newPage());
   }
-  const files = new Array<string>(jobs.length);
-  let cursor = 0;
-  await Promise.all(
-    pages.map(async (page) => {
-      for (;;) {
-        const index = cursor;
-        cursor += 1;
-        if (index >= jobs.length) return;
-        const job = jobs[index];
-        if (!job) return;
-        const file = await captureOne(page, origin, job, out);
-        files[index] = file;
-      }
-    }),
-  );
-  return files.filter((file): file is string => file !== undefined);
+  return captureJobs(jobs, (job, worker) => captureOne(pages[worker]!, origin, job, out), pages.length);
 }
 
 function workspaceRelative(path: string): string | undefined {
@@ -325,9 +367,8 @@ async function captureScreenshots(options: Options): Promise<void> {
     const jobs = stories.flatMap((id) =>
       options.locales.flatMap((locale) => options.themes.map((theme) => ({ id, locale, theme }))),
     );
-    const files = await capture(browser, origin, jobs, options.out, options.width);
-    for (const file of files) process.stdout.write(`${file}\n`);
-    process.stdout.write(`${files.length}\n`);
+    const { files, failures } = await capture(browser, origin, jobs, options.out, options.width);
+    process.exitCode = reportCaptureResults(files, failures, (text) => process.stdout.write(text));
   } finally {
     await stop();
   }

@@ -34,15 +34,18 @@ test('one failed story does not stop later screenshot jobs', async () => {
 });
 
 test('failures print one line per failed job after files and produce a nonzero result', () => {
-  const report = extracted<(files: string[], failures: { job: Job; error: string }[], write: (s: string) => void) => number>(
-    'reportCaptureResults',
-    'captureScreenshots',
-  );
+  const report = extracted<
+    (files: string[], failures: { job: Job; error: string }[], write: (s: string) => void) => number
+  >('reportCaptureResults', 'captureScreenshots');
   const lines: string[] = [];
-  const code = report(['one.png', 'two.png'], [
-    { job: { id: 'broken-a', locale: 'en', theme: 'dark' }, error: 'render exploded' },
-    { job: { id: 'broken-b', locale: 'ja', theme: 'light' }, error: 'timeout\nsecond line' },
-  ], (line) => lines.push(line));
+  const code = report(
+    ['one.png', 'two.png'],
+    [
+      { job: { id: 'broken-a', locale: 'en', theme: 'dark' }, error: 'render exploded' },
+      { job: { id: 'broken-b', locale: 'ja', theme: 'light' }, error: 'timeout\nsecond line' },
+    ],
+    (line) => lines.push(line),
+  );
   expect(code).toBe(1);
   expect(lines.join('')).toBe(
     'one.png\ntwo.png\n2\nbroken-a en dark: render exploded\nbroken-b ja light: timeout second line\n',
@@ -50,17 +53,16 @@ test('failures print one line per failed job after files and produce a nonzero r
 });
 
 test('a run without failures retains its zero exit status and output', () => {
-  const report = extracted<(files: string[], failures: { job: Job; error: string }[], write: (s: string) => void) => number>(
-    'reportCaptureResults',
-    'captureScreenshots',
-  );
+  const report = extracted<
+    (files: string[], failures: { job: Job; error: string }[], write: (s: string) => void) => number
+  >('reportCaptureResults', 'captureScreenshots');
   const lines: string[] = [];
   expect(report(['one.png'], [], (line) => lines.push(line))).toBe(0);
   expect(lines.join('')).toBe('one.png\n1\n');
 });
 
 test('full page capture resets scroll only when no viewport overlay is open', async () => {
-  const prepare = extracted<((page: { evaluate: (fn: () => unknown) => Promise<unknown> }) => Promise<void>)>(
+  const prepare = extracted<(page: { evaluate: (fn: () => unknown) => Promise<unknown> }) => Promise<void>>(
     'prepareFullPageCapture',
     'captureOne',
   );
@@ -69,11 +71,22 @@ test('full page capture resets scroll only when no viewport overlay is open', as
   let framed = false;
   const page = {
     evaluate: async (fn: () => unknown) => {
-      // Exercise the actual browser callback with minimal DOM globals.
-      return Function('overlay', 'markScroll', 'markFrame', `return (${fn.toString()})();`)(
-        overlay,
-        () => { scrolled = true; },
-        () => { framed = true; },
+      return Function(
+        'window',
+        'requestAnimationFrame',
+        'document',
+        `return (${fn.toString()})();`,
+      )(
+        {
+          scrollTo: () => {
+            scrolled = true;
+          },
+        },
+        (callback: () => void) => {
+          framed = true;
+          callback();
+        },
+        { querySelector: () => (overlay ? {} : null) },
       );
     },
   };
