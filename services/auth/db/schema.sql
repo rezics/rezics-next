@@ -126,6 +126,39 @@ $$;
 
 
 --
+-- Name: auth_require_cursor_cutover(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_require_cursor_cutover() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('auth.cursor_backfill',true) IS DISTINCT FROM '2' AND NOT EXISTS
+     (SELECT 1 FROM auth_erasure_cursor_cutover WHERE singleton AND completed_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'Auth cursor cutover incomplete; quiesce writers and resume deployment';
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  IF TG_TABLE_NAME IN ('user','auth_consent') THEN
+    IF TG_OP = 'INSERT' THEN NEW.traversal_ordinal := nextval('auth_traversal_ordinal'); END IF;
+    IF NEW.traversal_ordinal IS NULL THEN RAISE EXCEPTION 'Auth ordinal required'; END IF;
+  ELSE
+    IF NEW.legacy_after_account IS NOT NULL THEN RAISE EXCEPTION 'Auth cursor worker version refused'; END IF;
+    IF TG_TABLE_NAME = 'auth_client_reduction_progress' THEN
+      IF TG_OP = 'UPDATE' AND NEW.completed IS DISTINCT FROM OLD.completed
+         AND current_setting('auth.cursor_worker',true) IS DISTINCT FROM '2'
+         AND current_setting('auth.cursor_backfill',true) IS DISTINCT FROM '2' THEN
+        RAISE EXCEPTION 'Auth cursor worker version refused';
+      END IF;
+      IF NEW.legacy_page_after IS NOT NULL OR NEW.legacy_terminal_account IS NOT NULL THEN
+        RAISE EXCEPTION 'Auth cursor worker version refused';
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_revoke_sessions(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -347,9 +380,10 @@ CREATE TABLE public.auth_client (
 
 CREATE TABLE public.auth_client_coverage (
     client_id text NOT NULL,
-    after_account text DEFAULT ''::text NOT NULL,
+    legacy_after_account text,
     ready boolean DEFAULT false NOT NULL,
-    ready_after timestamp with time zone DEFAULT (CURRENT_TIMESTAMP + '00:05:00'::interval) NOT NULL
+    ready_after timestamp with time zone DEFAULT (CURRENT_TIMESTAMP + '00:05:00'::interval) NOT NULL,
+    after_ordinal bigint DEFAULT 0 NOT NULL
 );
 
 
@@ -374,10 +408,15 @@ CREATE TABLE public.auth_client_reduction_progress (
     client_id text NOT NULL,
     scopes text[] NOT NULL,
     first_party boolean NOT NULL,
-    after_account text DEFAULT ''::text NOT NULL,
-    page_after text DEFAULT ''::text NOT NULL,
-    terminal_account text,
-    completed boolean DEFAULT false NOT NULL
+    legacy_after_account text,
+    legacy_page_after text,
+    legacy_terminal_account text,
+    completed boolean DEFAULT false NOT NULL,
+    after_ordinal bigint DEFAULT 0 NOT NULL,
+    page_after bigint DEFAULT 0 NOT NULL,
+    page_end bigint DEFAULT 0 NOT NULL,
+    terminal_ordinal bigint,
+    cutover_after bigint
 );
 
 
@@ -398,6 +437,7 @@ CREATE TABLE public.auth_consent (
     revision bigint DEFAULT 1 NOT NULL,
     pending_scopes text[],
     pending_reference text,
+    traversal_ordinal bigint,
     CONSTRAINT auth_consent_pending_pair CHECK (((pending_scopes IS NULL) = (pending_reference IS NULL))),
     CONSTRAINT auth_consent_revision_check CHECK ((revision > 0))
 );
@@ -438,6 +478,23 @@ CREATE TABLE public.auth_effect_receipt (
     opening_reference text,
     CONSTRAINT auth_credential_stage CHECK (((((operation_key IS NULL) AND (effect_reference IS NULL) AND (effect_digest IS NULL) AND (stage_version IS NULL) AND (stage_ciphertext IS NULL) AND (committed_result IS NULL) AND (committed_at IS NULL) AND (opening_receipt_id IS NULL)) OR ((operation_key IS NOT NULL) AND (effect_reference IS NOT NULL) AND (effect_digest ~ '^[a-f0-9]{64}$'::text) AND (stage_version = 1) AND (stage_ciphertext IS NOT NULL) AND (acting_human_id IS NOT NULL) AND (client_id IS NOT NULL) AND (scopes IS NOT NULL) AND (purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text, 'add-passkey'::text, 'remove-passkey'::text])) AND ((credential_row_id IS NULL) = (credential_row_version IS NULL)) AND (((committed_at IS NULL) AND (committed_result IS NULL) AND (opening_receipt_id IS NULL)) OR ((committed_at IS NOT NULL) AND (opening_receipt_id IS NOT NULL) AND (committed_result = jsonb_build_object('receiptId', receipt_id, 'replayed', false)))))) IS TRUE)),
     CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0))
+);
+
+
+--
+-- Name: auth_erasure_cursor_cutover; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_erasure_cursor_cutover (
+    singleton boolean DEFAULT true NOT NULL,
+    writer_version integer DEFAULT 2 NOT NULL,
+    phase text NOT NULL,
+    after_key text,
+    after_client text,
+    completed_at timestamp with time zone,
+    CONSTRAINT auth_erasure_cursor_cutover_phase_check CHECK ((phase = ANY (ARRAY['users'::text, 'consents'::text, 'coverage'::text, 'reduction'::text, 'done'::text]))),
+    CONSTRAINT auth_erasure_cursor_cutover_singleton_check CHECK (singleton),
+    CONSTRAINT auth_erasure_cursor_cutover_writer_version_check CHECK ((writer_version = 2))
 );
 
 
@@ -607,6 +664,18 @@ CREATE TABLE public.auth_signing_key_archive (
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT auth_signing_key_created_at_not_null NOT NULL,
     CONSTRAINT auth_signing_key_private_jwk_check CHECK (((private_jwk ->> 'd'::text) IS NOT NULL))
 );
+
+
+--
+-- Name: auth_traversal_ordinal; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.auth_traversal_ordinal
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 
 --
@@ -809,6 +878,7 @@ CREATE TABLE public."user" (
     "createdAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     "updatedAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     sessions_bounded boolean DEFAULT true NOT NULL,
+    traversal_ordinal bigint,
     CONSTRAINT inert_profile CHECK (((name = ''::text) AND (image IS NULL)))
 );
 
@@ -937,6 +1007,14 @@ ALTER TABLE ONLY public.auth_consent
 
 ALTER TABLE ONLY public.auth_effect_receipt
     ADD CONSTRAINT auth_effect_receipt_pkey PRIMARY KEY (receipt_id);
+
+
+--
+-- Name: auth_erasure_cursor_cutover auth_erasure_cursor_cutover_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_erasure_cursor_cutover
+    ADD CONSTRAINT auth_erasure_cursor_cutover_pkey PRIMARY KEY (singleton);
 
 
 --
@@ -1264,6 +1342,13 @@ CREATE INDEX "auth_client_userId_idx" ON public.auth_client USING btree ("userId
 
 
 --
+-- Name: auth_consent_client_ordinal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_consent_client_ordinal ON public.auth_consent USING btree (client_id, traversal_ordinal) INCLUDE (account_id);
+
+
+--
 -- Name: auth_consent_client_owner; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1338,6 +1423,12 @@ CREATE INDEX auth_session_opening_subject_account_id_idx ON public.auth_session_
 --
 
 CREATE INDEX auth_workflow_request_automated_registration ON public.auth_workflow_request USING btree (((request ->> 'registrationId'::text))) WHERE ((request ->> 'kind'::text) = 'automated'::text);
+
+
+-- Name: auth_user_ordinal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_user_ordinal ON public."user" USING btree (traversal_ordinal) INCLUDE (id);
 
 
 --
@@ -1523,10 +1614,24 @@ CREATE TRIGGER auth_barrier_proof_immutable BEFORE UPDATE ON public.auth_barrier
 
 
 --
+-- Name: auth_consent auth_consent_cursor_version; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_consent_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_require_cursor_cutover();
+
+
+--
 -- Name: auth_consent auth_consent_revision; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_consent_revision();
+
+
+--
+-- Name: auth_client_coverage auth_coverage_cursor_version; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_coverage_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON public.auth_client_coverage FOR EACH ROW EXECUTE FUNCTION public.auth_require_cursor_cutover();
 
 
 --
@@ -1548,6 +1653,20 @@ CREATE TRIGGER auth_passkey_used BEFORE UPDATE OF counter ON public.passkey FOR 
 --
 
 CREATE TRIGGER auth_provisioning_receipt_immutable BEFORE UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_provisioning_receipt_immutable();
+
+
+--
+-- Name: auth_client_reduction_progress auth_reduction_cursor_version; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_reduction_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON public.auth_client_reduction_progress FOR EACH ROW EXECUTE FUNCTION public.auth_require_cursor_cutover();
+
+
+--
+-- Name: user auth_user_cursor_version; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_user_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION public.auth_require_cursor_cutover();
 
 
 --

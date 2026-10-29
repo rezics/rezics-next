@@ -396,7 +396,7 @@ test('native website, password, key and delegated issuance materialize implicit 
 test('legacy deployment coverage is an explicit bounded barrier and migrations produce the committed dump', async () => {
   await auth.internal.registerClient({ clientId: 'legacy', firstParty: true, scopes: ['read'] });
   await pool.query(
-    "UPDATE auth_client_coverage SET ready=false,after_account='',ready_after=now()+interval '5 minutes' WHERE client_id='legacy'",
+    "UPDATE auth_client_coverage SET ready=false,after_ordinal=0,ready_after=now()+interval '5 minutes' WHERE client_id='legacy'",
   );
   await expect(
     auth.internal.beginClientReduction({

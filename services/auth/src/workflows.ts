@@ -327,6 +327,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   let registration: (input: RegistrationInput) => Promise<{ accountId: string; expired?: true }>;
   let operation: (input: AccountOperation) => Promise<{ accountId: string } | OperatorSuspension>;
   type ReductionInput = Extract<AccountOperation, { kind: 'client-reduction' }> & {
+    cursorVersion?: number;
     operationId?: string;
     after?: string;
   };
@@ -922,8 +923,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     });
     clientReduction = DBOS.registerWorkflow(
       async (input: ReductionInput): Promise<ReductionResult> => {
+        // Refuse recovered account-id pages before replaying cached owner lists or fences.
+        const { cursorVersion, ...request } = input;
+        if (cursorVersion !== 2) throw new Error('Auth cursor worker version refused');
         const operationId = input.operationId ?? required(DBOS.workflowID);
-        if (!input.operationId) await beginReduction(input);
+        if (!input.operationId) await beginReduction(request);
         const batch = await reductionPage(input.clientId, operationId, input.after ?? '');
         for (const id of batch.items) {
           const barrier = await reductionOwnerFence(input.clientId, operationId, id);
@@ -1200,13 +1204,33 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   }
   async function waitClientReduction(id: string): Promise<{ clientId: string }> {
     const progress = (
-      await database.query<{ client_id: string; completed: boolean; page_after: string }>(
-        'SELECT client_id,completed,page_after FROM auth_client_reduction_progress WHERE operation_id=$1',
+      await database.query<{ client_id: string; completed: boolean; page_after: string; cutover_after: string | null }>(
+        'SELECT client_id,completed,page_after,cutover_after FROM auth_client_reduction_progress WHERE operation_id=$1',
         [id],
       )
     ).rows[0];
     if (progress?.completed) return { clientId: progress.client_id };
-    if (progress?.page_after) id = `${id}:page:${hash(progress.page_after).toString('hex')}`;
+    if (progress?.cutover_after !== null && progress?.cutover_after !== undefined) {
+      const request = required(
+        (
+          await database.query<{ request: ReductionInput }>(
+            'SELECT request FROM auth_workflow_request WHERE workflow_id=$1',
+            [id],
+          )
+        ).rows[0],
+      ).request;
+      // Old DBOS IDs and cached pages cannot be translated in place. Deduplicate
+      // a replacement from the deployment snapshot, not the moving page boundary.
+      const operationId = id;
+      id = `${id}:cursor-v2`;
+      await DBOS.startWorkflow(clientReduction, { workflowID: id })({
+        ...request,
+        operationId,
+        after: progress.cutover_after,
+        cursorVersion: 2,
+      });
+    } else if (progress?.page_after && progress.page_after !== '0')
+      id = `${id}:page:${hash(progress.page_after).toString('hex')}`;
     while (true) {
       const status = await DBOS.getWorkflowStatus(id);
       let result: ReductionResult;
@@ -1504,7 +1528,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         )
       ).rows[0]!;
       if (!row.digest.equals(digest)) denied();
-      await DBOS.startWorkflow(clientReduction, { workflowID: id })(operation);
+      await DBOS.startWorkflow(clientReduction, { workflowID: id })({ ...operation, cursorVersion: 2 });
       return waitClientReduction(id);
     },
     authorizeOperatorOpening,

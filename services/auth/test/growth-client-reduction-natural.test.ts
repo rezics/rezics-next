@@ -242,7 +242,14 @@ test('three scale native growth remains within derived affected-owner bound', as
         await auth.internal.beginClientReduction(input);
         const result = await page(auth, clientId);
         if (dimension === 'affected') {
-          expect(result.next).toBe(idAt(clientId, P - 1));
+          expect(result.next).toBe(
+            (
+              await db.admin.query('SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 AND account_id=$2', [
+                clientId,
+                idAt(clientId, P - 1),
+              ])
+            ).rows[0].traversal_ordinal,
+          );
           await expect(auth.internal.finishClientReduction(input)).rejects.toThrow();
         } else {
           expect(result.next).toBeNull();
@@ -267,11 +274,17 @@ test('three scale native growth remains within derived affected-owner bound', as
         ).toBe(0);
         const saved = (
           await db.admin.query(
-            'SELECT completed,after_account FROM auth_client_reduction_progress WHERE operation_id=$1',
+            'SELECT completed,after_ordinal FROM auth_client_reduction_progress WHERE operation_id=$1',
             [input.operationId],
           )
         ).rows[0];
-        expect(saved).toEqual({ completed: dimension !== 'affected', after_account: idAt(clientId, P - 1) });
+        const ordinal = (
+          await db.admin.query('SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 AND account_id=$2', [
+            clientId,
+            idAt(clientId, P - 1),
+          ])
+        ).rows[0].traversal_ordinal;
+        expect(saved).toEqual({ completed: dimension !== 'affected', after_ordinal: ordinal });
         expect(await unrelated()).toEqual(before);
       }
       console.info('Natural dimension:', JSON.stringify(report));

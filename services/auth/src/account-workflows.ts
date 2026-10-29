@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
+import { AUTH_CURSOR_VERSION, requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
 
 type Progress = {
@@ -7,8 +8,9 @@ type Progress = {
   client_id: string;
   scopes: string[];
   first_party: boolean;
-  after_account: string;
-  terminal_account: string | null;
+  after_ordinal: string;
+  page_end: string;
+  terminal_ordinal: string | null;
   completed: boolean;
 };
 
@@ -21,35 +23,32 @@ async function advanceReductionOwner(
   deny: () => never,
   allowMissing = false,
 ) {
-  const acknowledged = (
-    await connection.query<{ done: boolean }>('SELECT $1::text <= $2::text AS done', [
-      input.accountId,
-      row.after_account,
-    ])
-  ).rows[0]!.done;
-  if (acknowledged) return;
-  const next = (
-    await connection.query<{ account_id: string }>(
-      'SELECT account_id FROM auth_consent WHERE client_id=$1 AND account_id>$2 ORDER BY account_id LIMIT 1',
-      [input.clientId, row.after_account],
+  const owner = (
+    await connection.query<{ traversal_ordinal: string }>(
+      // Keep the native binding stable through acknowledgement. Requiring the
+      // heap tuple also prevents an index-only scan of every ordinal for a client.
+      'SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 AND account_id=$2 FOR KEY SHARE',
+      [input.clientId, input.accountId],
     )
   ).rows[0];
-  if (next?.account_id !== input.accountId) {
+  // A removed native row has no surviving identity-to-ordinal binding. The next
+  // page/finish verifies the empty ordinal interval before accepting its boundary.
+  if (!owner) {
     if (!allowMissing) deny();
-    if (
-      next &&
-      (
-        await connection.query<{ before: boolean }>('SELECT $1::text < $2::text AS before', [
-          next.account_id,
-          input.accountId,
-        ])
-      ).rows[0]!.before
-    )
-      deny();
+    return;
   }
-  await connection.query('UPDATE auth_client_reduction_progress SET after_account=$2 WHERE operation_id=$1', [
+  if (BigInt(owner.traversal_ordinal) <= BigInt(row.after_ordinal)) return;
+  const next = (
+    await connection.query<{ account_id: string }>(
+      `SELECT account_id FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
+       ORDER BY traversal_ordinal LIMIT 1`,
+      [input.clientId, row.after_ordinal],
+    )
+  ).rows[0];
+  if (next?.account_id !== input.accountId) deny();
+  await connection.query('UPDATE auth_client_reduction_progress SET after_ordinal=$2 WHERE operation_id=$1', [
     input.operationId,
-    input.accountId,
+    owner.traversal_ordinal,
   ]);
 }
 
@@ -70,7 +69,7 @@ export async function completeDeletedClientReductionOwner(
   const connection = await pool.connect();
   try {
     await connection.query('BEGIN');
-    await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-client:${input.clientId}`]);
+    await requireErasureCursorVersion(connection, AUTH_CURSOR_VERSION, input.clientId);
     const row = (
       await connection.query<Progress>(
         'SELECT * FROM auth_client_reduction_progress WHERE operation_id=$1 FOR UPDATE',
@@ -183,7 +182,7 @@ export function clientAuthority(
     const connection = await pool.connect();
     try {
       await connection.query('BEGIN');
-      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-client:${clientId}`]);
+      await requireErasureCursorVersion(connection, AUTH_CURSOR_VERSION, clientId);
       const value = await action(connection);
       await connection.query('COMMIT');
       return value;
@@ -257,33 +256,46 @@ export function clientAuthority(
     async clientReductionPage(input) {
       bounded(input.limit);
       return transaction(input.clientId, async (connection) => {
+        // Keep small native tables on the ordinal index too; a seq scan here
+        // makes each page read unrelated consent rows at early deployment scales.
+        await connection.query('SET LOCAL enable_seqscan = off');
+        await connection.query('SET LOCAL enable_sort = off');
         const row = await progress(connection, input.clientId, input.operationId);
-        if (row.completed || row.after_account !== input.after) deny();
-        // Keep the cursor as a one-row outer input so the page uses a parameterized
-        // seek on auth_consent_client_owner even when a sequential scan looks cheaper.
+        const after = input.after === '' ? '0' : input.after;
+        if (!/^(0|[1-9][0-9]*)$/.test(after) || row.completed) deny();
+        if (row.after_ordinal !== after) {
+          // Owners can disappear after a page was returned. Accept its boundary
+          // only when no unacknowledged owner remains in the interval.
+          if (after !== row.page_end || BigInt(after) < BigInt(row.after_ordinal)) deny();
+          const pending = await connection.query(
+            `SELECT 1 FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
+             AND traversal_ordinal<=$3 LIMIT 1`,
+            [input.clientId, row.after_ordinal, after],
+          );
+          if (pending.rowCount) deny();
+        }
         const rows = (
-          await connection.query<{ account_id: string }>(
-            `SELECT page.account_id
-             FROM (SELECT $1::text AS client_id,$2::text AS after_account OFFSET 0) cursor
+          await connection.query<{ account_id: string; traversal_ordinal: string }>(
+            `SELECT page.account_id,page.traversal_ordinal
+             FROM (SELECT $1::text AS client_id,$2::bigint AS boundary OFFSET 0) cursor
              CROSS JOIN LATERAL (
-               SELECT consent.account_id FROM auth_consent consent
-               WHERE consent.client_id=cursor.client_id AND consent.account_id>cursor.after_account
-               ORDER BY consent.account_id LIMIT $3
+               SELECT consent.account_id,consent.traversal_ordinal FROM auth_consent consent
+               WHERE consent.client_id=cursor.client_id AND consent.traversal_ordinal>cursor.boundary
+               ORDER BY consent.traversal_ordinal LIMIT $3
              ) page`,
-            [input.clientId, input.after, input.limit + 1],
+            [input.clientId, after, input.limit + 1],
           )
         ).rows;
-        const items = rows.slice(0, input.limit).map((r) => r.account_id);
-        await connection.query('UPDATE auth_client_reduction_progress SET page_after=$2 WHERE operation_id=$1', [
-          input.operationId,
-          input.after,
-        ]);
-        if (rows.length <= input.limit)
-          await connection.query(
-            'UPDATE auth_client_reduction_progress SET terminal_account=$2 WHERE operation_id=$1',
-            [input.operationId, items.at(-1) ?? input.after],
-          );
-        return { items, next: rows.length > input.limit ? items.at(-1)! : null };
+        const page = rows.slice(0, input.limit);
+        await connection.query(
+          `UPDATE auth_client_reduction_progress SET after_ordinal=$2,page_after=$2,page_end=$4,
+           terminal_ordinal=CASE WHEN $3 THEN $4::bigint ELSE terminal_ordinal END WHERE operation_id=$1`,
+          [input.operationId, after, rows.length <= input.limit, page.at(-1)?.traversal_ordinal ?? after],
+        );
+        return {
+          items: page.map((r) => r.account_id),
+          next: rows.length > input.limit ? page.at(-1)!.traversal_ordinal : null,
+        };
       });
     },
     async completeClientReductionOwner(input) {
@@ -342,7 +354,15 @@ export function clientAuthority(
         const row = await progress(connection, input.clientId, input.operationId);
         same(row, input);
         if (row.completed) return;
-        if (row.terminal_account === null || row.after_account !== row.terminal_account) deny();
+        if (row.terminal_ordinal === null) deny();
+        if (row.after_ordinal !== row.terminal_ordinal) {
+          const pending = await connection.query(
+            `SELECT 1 FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
+             AND traversal_ordinal<=$3 LIMIT 1`,
+            [input.clientId, row.after_ordinal, row.terminal_ordinal],
+          );
+          if (pending.rowCount) deny();
+        }
         const gate = await connection.query(
           'SELECT client_id FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2',
           [input.clientId, input.operationId],
@@ -353,9 +373,10 @@ export function clientAuthority(
           row.scopes,
           row.first_party,
         ]);
-        await connection.query('UPDATE auth_client_reduction_progress SET completed=true WHERE operation_id=$1', [
-          input.operationId,
-        ]);
+        await connection.query(
+          'UPDATE auth_client_reduction_progress SET completed=true,after_ordinal=terminal_ordinal WHERE operation_id=$1',
+          [input.operationId],
+        );
         await connection.query('DELETE FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2', [
           input.clientId,
           input.operationId,
@@ -365,9 +386,11 @@ export function clientAuthority(
     async backfillClientIssuance(input) {
       bounded(input.limit);
       return transaction(input.clientId, async (connection) => {
+        await connection.query('SET LOCAL enable_seqscan = off');
+        await connection.query('SET LOCAL enable_sort = off');
         const coverage = (
           await connection.query<{
-            after_account: string;
+            after_ordinal: string;
             ready: boolean;
             drained: boolean;
             first_party: boolean;
@@ -381,23 +404,24 @@ export function clientAuthority(
         if (!coverage) return deny();
         if (coverage.ready) return { next: null, ready: true };
         const rows = (
-          await connection.query<{ id: string }>('SELECT id FROM "user" WHERE id>$1 ORDER BY id LIMIT $2', [
-            coverage.after_account,
-            input.limit + 1,
-          ])
+          await connection.query<{ id: string; traversal_ordinal: string }>(
+            'SELECT id,traversal_ordinal FROM "user" WHERE traversal_ordinal>$1 ORDER BY traversal_ordinal LIMIT $2',
+            [coverage.after_ordinal, input.limit + 1],
+          )
         ).rows;
-        const items = rows.slice(0, input.limit).map((r) => r.id);
+        const page = rows.slice(0, input.limit);
+        const items = page.map((r) => r.id);
         if (coverage.first_party && items.length)
           await connection.query(
             `INSERT INTO auth_consent (account_id,client_id,scopes)
             SELECT id,$2,$3 FROM unnest($1::text[]) id ON CONFLICT (account_id,client_id) DO NOTHING`,
             [items, input.clientId, coverage.scopes],
           );
-        const next = rows.length > input.limit ? items.at(-1)! : null;
+        const next = rows.length > input.limit ? page.at(-1)!.traversal_ordinal : null;
         const ready = next === null && coverage.drained;
-        await connection.query('UPDATE auth_client_coverage SET after_account=$2,ready=$3 WHERE client_id=$1', [
+        await connection.query('UPDATE auth_client_coverage SET after_ordinal=$2,ready=$3 WHERE client_id=$1', [
           input.clientId,
-          items.at(-1) ?? coverage.after_account,
+          page.at(-1)?.traversal_ordinal ?? coverage.after_ordinal,
           ready,
         ]);
         return { next, ready };

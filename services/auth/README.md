@@ -1345,6 +1345,26 @@ requiring the DBOS schema to exist during migration.
 The Cost table records the full/short native batch series and its fixed-batch,
 retained-child and long-lived-workflow qualifications.
 
+### Erasure cursor deployment
+
+Quiesce Auth issuers and account workers before applying the ordinal migration.
+Run `AUTH_DATABASE_URL=… bun services/auth/src/erasure-cursor-cutover.ts` from the repository root until
+it returns `done: true`. Each committed page writes at most 99 native keys plus
+one checkpoint, or translates one cursor through indexed predecessor lookups.
+The singleton `auth_erasure_cursor_cutover.completed_at` is the durable completion
+marker required by subsequent erasure drains. An empty installation records it
+in the migration. Restarting the deployment step resumes its last checkpoint.
+
+Start the ordinal writer and worker version together after completion. Native
+writes refuse an incomplete deployment; legacy cursor columns are renamed and
+cleared as their rows translate, and legacy worker completion is refused.
+Legacy DBOS reduction pages are refused before owner effects; a versioned,
+deduplicated replacement resumes from the acknowledged ordinal saved at cutover,
+including after executor restarts. User and consent-owner ordinals are sequence values on their native rows, indexed
+with their actual owner keys. Deleting a native row removes that binding; no
+separate identity mapping survives it. Retained consent has its own ordinal
+because consent can outlive the user until its delayed drain completes.
+
 ### Workflow ID reuse audit
 
 Retention removes execution history, not native command receipts or approval
@@ -1475,14 +1495,15 @@ completion. Encrypted staging, password hashes and account-linked public keys re
   all-role outcome/completion evidence and sends no acknowledgement.
 - `public.auth_client_coverage`, client owner: [the schema](db/schema.sql) has a non-cascading client FK;
   [coverage work](src/account-workflows.ts) leaves readiness, due time and progress after completion.
-- `public.auth_client_coverage`, account cursor: [the writer](src/account-workflows.ts) retains `after_account` even on
-  surviving clients; no account-erasure cleanup or independent ordinal cutover exists.
+- `public.auth_client_coverage`, account cursor: [the writer](src/account-workflows.ts) retains only an independent
+  `after_ordinal` boundary after the deployment cutover; native user deletion removes its identity binding.
 - `public.auth_client_reduction`, client owner: [reduction work](src/account-workflows.ts) removes the active lock on
   normal completion; [the schema](db/schema.sql) has a non-cascading client FK and no erasure-specific cleanup.
 - `public.auth_client_reduction_progress`, client owner: [the schema](db/schema.sql) retains operation/scopes/completion
   with a non-cascading client FK; completed progress has no account-erasure purge.
-- `public.auth_client_reduction_progress`, account cursor: [reduction work](src/account-workflows.ts) persists
-  `after_account`, `page_after` and `terminal_account`; no erasure cleanup removes these identities.
+- `public.auth_client_reduction_progress`, account cursor: [reduction work](src/account-workflows.ts) persists only
+  independent `after_ordinal`, `page_after`, `page_end` and `terminal_ordinal` boundaries after the deployment cutover;
+  native consent deletion removes the identity binding.
 
 ### Recovery, operating evidence and staging
 
@@ -1572,7 +1593,7 @@ They are outside this personal-data inventory and are not deleted or rotated per
 - No guaranteed elapsed deadline connects Access's deletion barrier to Auth user/cascade completion, including after continuation expiry.
 - Owned-client cascades can be blocked by non-cascading `session.clientId`, `auth_client_coverage`, `auth_client_reduction` and `auth_client_reduction_progress` FKs; their disposition is unfinished.
 - `auth_consent` has no user cascade. The existing 310-second marker and minute purge do not bound the inner client loop, persist all-role completion or acknowledge Auth; verification of the last issuance fence against token lifetime/verifier leeway and bounded delayed-consent pages remain required. There is no backlog completion deadline; surviving consent is inert, never continuing authority ([deletion](src/service.ts), [purge](src/consent-erasure.ts), [maintenance](src/maintenance.ts)).
-- Client coverage/progress retain account cursors without account-erasure cleanup or a retention duration; completed reduction locks are the only deleted group member.
+- Client coverage/progress retain independent ordinal boundaries after the deployment cutover; completed reduction locks are the only deleted group member. Client-owned state still needs its client erasure drain.
 - `auth_key_assertion` and consumed/expired `auth_recovery` rows survive until user deletion without an expiry purge; the duration of retained security evidence is unspecified.
 - Barrier-proof expiry has a bounded sweep primitive but no registered schedule or purge deadline; dependent recovery establishment evidence follows that incomplete cleanup path.
 - Session-opening provenance has no erasure trigger for a deleted acting human/operator while the subject survives, or deadline after session removal.
