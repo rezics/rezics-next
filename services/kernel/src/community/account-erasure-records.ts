@@ -85,7 +85,7 @@ async function remove(pool: Pool, accountId: string, route: number, row: Locator
     const parameters = { ...row, route, account_id: accountId };
     const result = await tx.query(
       removeLocator.sql,
-      removeLocator.params.map((name) => parameters[name]),
+      removeLocator.params.map((name) => parameters[name as keyof typeof parameters]),
     );
     return result.rowCount ? { value: null, events: [changed(accountId)] } : noEffect(null);
   });
@@ -102,7 +102,10 @@ async function terminal(pool: Pool, row: Locator): Promise<boolean> {
     // All membership producers commit the exact workflow ID as their command key.
     // It also survives minimization of another party on the same operation.
     const workflow = await readWorkflow.run(client, { id: operation.creation_idempotency_key });
-    return !!workflow && ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(workflow.status);
+    return (
+      typeof workflow?.status === 'string' &&
+      ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(workflow.status)
+    );
   });
 }
 
@@ -137,7 +140,7 @@ export async function eraseAccountCommunityRecordsPage(
         if (row.kind === 'ban_actor') {
           const result = await tx.query<{ kept_until: string | null }>(
             eraseBan.sql,
-            eraseBan.params.map((name) => params[name]),
+            eraseBan.params.map((name) => params[name as keyof typeof params]),
           );
           affected = result.rowCount ?? 0;
           kept = result.rows[0]?.kept_until ?? null;
@@ -146,7 +149,7 @@ export async function eraseAccountCommunityRecordsPage(
             row.kind === 'ban_target' ? eraseTarget : row.kind === 'verdict' ? eraseVerdict : eraseOperation;
           const result = await tx.query(
             statement.sql,
-            statement.params.map((name) => params[name]),
+            statement.params.map((name) => params[name as keyof typeof params]),
           );
           affected = result.rowCount ?? 0;
         }
@@ -181,7 +184,7 @@ export async function purgeAccountBanReasonsPage(
       const parameters = { ...key, ...row, purge: true };
       const result = await tx.query(
         eraseBan.sql,
-        eraseBan.params.map((name) => parameters[name]),
+        eraseBan.params.map((name) => parameters[name as keyof typeof parameters]),
       );
       return result.rowCount ? { value: null, events: [changed(accountId)] } : noEffect(null);
     });

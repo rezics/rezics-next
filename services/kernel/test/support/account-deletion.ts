@@ -48,7 +48,7 @@ function cookies(response: Response): Headers {
  * Cost: one sign-in, two Auth requests and one status point read per deletion; constant per deletion.
  */
 export async function deletePersona(
-  options: Pick<PersonasOptions, 'pool'> & {
+  options: Pick<PersonasOptions, 'pool'> & Partial<Pick<PersonasOptions, 'version'>> & {
     auth: Pick<PersonasOptions['auth'], 'request' | 'authPool'> & {
       host: Pick<PersonasOptions['auth']['host'], 'handler'> & {
         service: Pick<PersonasOptions['auth']['host']['service'], 'verifier'>;

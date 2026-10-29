@@ -200,7 +200,7 @@ async function createNativeContentSystemWithOptions(
           access,
           actions: new Map([...LIFECYCLE_ACTIONS, ...actions]),
           referenceKeys,
-          creationBinding: (input) => proofs.creationBinding(input),
+          creationBinding: (input: { registrationId: string; operationKey: string }) => proofs.creationBinding(input),
         });
         const ports: AccountOperationAccess = {
           context: () => ({ pool, deadline: Date.now() + 10000 }),

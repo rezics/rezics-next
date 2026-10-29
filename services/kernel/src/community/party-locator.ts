@@ -65,7 +65,7 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
             const parameters = { ...row, route: accountRoute };
             const inserted = await tx.query(
               upsert.sql,
-              upsert.params.map((name) => parameters[name]),
+              upsert.params.map((name) => parameters[name as keyof typeof parameters]),
             );
             if (inserted.rowCount === 0) return noEffect(null);
             return {
