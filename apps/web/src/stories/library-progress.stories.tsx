@@ -32,7 +32,7 @@ export const SelectorSheetOpen: Story = {
     await libraryProgressReady(context);
     const view = within(context.canvasElement);
     await userEvent.click((await view.findAllByRole('button', { name: /actions/i }))[0]!);
-    await view.findByRole('dialog');
+    await within(document.body).findByRole('dialog');
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-progress']} />,
 };

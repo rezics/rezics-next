@@ -349,8 +349,8 @@ export async function libraryProgressUpdateOpen(context: { canvasElement: HTMLEl
   await libraryProgressSessionReady(context);
   const view = viewOf(context);
   await userEvent.click(await view.findByRole('button', { name: m.library_progress_update() }));
-  await within(context.canvasElement).findByRole('dialog');
-  await within(context.canvasElement).findByRole('textbox', { name: m.library_progress_locator() });
+  await within(document.body).findByRole('dialog');
+  await within(document.body).findByRole('textbox', { name: m.library_progress_locator() });
 }
 export const libraryCollectionReady = libraryReady(
   () => libraryCollectionRecording.collection.title,
