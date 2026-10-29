@@ -220,6 +220,66 @@ CREATE FUNCTION library.library_profile_pin_valid(pin jsonb) RETURNS boolean
 $_$;
 
 
+--
+-- Name: record_follow_count_source(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.record_follow_count_source() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  edge library.follow;
+  live boolean;
+  previous_live boolean;
+  eligible boolean;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF (OLD.route, OLD.account_id, OLD.target_type, OLD.target_id)
+       IS DISTINCT FROM (NEW.route, NEW.account_id, NEW.target_type, NEW.target_id) THEN
+      RAISE EXCEPTION 'Follow original identity and owner route cannot change' USING ERRCODE = '23514';
+    END IF;
+    IF OLD IS NOT DISTINCT FROM NEW THEN RETURN NULL; END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN edge := OLD; ELSE edge := NEW; END IF;
+  live := TG_OP <> 'DELETE' AND edge.state = 'following';
+
+  -- The native command already holds shareAccount. This is only a keyed data read,
+  -- never Access authorization or a write in an account transition transaction.
+  SELECT live AND a.state = 'active' AND NOT a.authn_fenced INTO eligible
+    FROM access.account a WHERE a.route = edge.route AND a.account_id = edge.account_id;
+
+  -- Owner-local mutex also arbitrates future bounded bootstrap. Absence is incomplete,
+  -- so a first touch of a legacy live row adds its CURRENT state, not an unknown delta.
+  INSERT INTO library.follow_count_owner AS owner (route, account_id)
+    VALUES (edge.route, edge.account_id)
+    ON CONFLICT (route, account_id) DO UPDATE
+      SET observed_live_count = owner.observed_live_count;
+  SELECT s.source_following INTO previous_live FROM library.follow_count_source s
+    WHERE s.route = edge.route AND s.account_id = edge.account_id
+      AND s.target_type = edge.target_type AND s.target_id = edge.target_id
+    FOR UPDATE;
+
+  INSERT INTO library.follow_count_source AS source
+    (route, account_id, target_type, target_id, revision, source_following, desired_eligible, pending_since)
+    VALUES (edge.route, edge.account_id, edge.target_type, edge.target_id, 1,
+            live, COALESCE(eligible, false), statement_timestamp())
+    ON CONFLICT (route, account_id, target_type, target_id) DO UPDATE
+      SET revision = source.revision + 1,
+          source_following = EXCLUDED.source_following,
+          desired_eligible = EXCLUDED.desired_eligible,
+          pending_since = LEAST(source.pending_since, EXCLUDED.pending_since);
+
+  IF live IS DISTINCT FROM COALESCE(previous_live, false) THEN
+    UPDATE library.follow_count_owner
+      SET observed_live_count = observed_live_count + CASE WHEN live THEN 1 ELSE -1 END
+      WHERE route = edge.route AND account_id = edge.account_id;
+  END IF;
+  -- Native bigint overflow aborts the entire source statement and command transaction.
+  RETURN NULL;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -642,6 +702,56 @@ CREATE TABLE library.follow (
     CONSTRAINT follow_state_check CHECK ((state = ANY (ARRAY['following'::text, 'unfollowed'::text]))),
     CONSTRAINT follow_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text])))
 );
+
+
+--
+-- Name: follow_count_owner; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.follow_count_owner (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    observed_live_count bigint DEFAULT 0 NOT NULL,
+    bootstrap_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT follow_count_owner_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT follow_count_owner_observed_live_count_check CHECK ((observed_live_count >= 0)),
+    CONSTRAINT follow_count_owner_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: TABLE follow_count_owner; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.follow_count_owner IS 'Private source coverage, not a disclosed total. Missing or bootstrap_complete=false is unready. observed_live_count counts following pairs represented in follow_count_source only. No writer or reader here completes bootstrap.';
+
+
+--
+-- Name: follow_count_source; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.follow_count_source (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    target_type text NOT NULL,
+    target_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    source_following boolean NOT NULL,
+    desired_eligible boolean NOT NULL,
+    pending_since timestamp with time zone,
+    CONSTRAINT follow_count_source_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT follow_count_source_check1 CHECK (((NOT desired_eligible) OR source_following)),
+    CONSTRAINT follow_count_source_revision_check CHECK ((revision > 0)),
+    CONSTRAINT follow_count_source_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT follow_count_source_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text])))
+);
+
+
+--
+-- Name: TABLE follow_count_source; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.follow_count_source IS 'Current replacement per original, never a second graph or permission. Revision 1 is first observation, not legacy version zero. Retain negative rows and revisions until fenced terminal withdrawal and erasure. Delivery must reread current native account/follow under the account writer barrier.';
 
 
 --
@@ -1367,6 +1477,22 @@ ALTER TABLE ONLY library.fact_source_head
 
 
 --
+-- Name: follow_count_owner follow_count_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_owner
+    ADD CONSTRAINT follow_count_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: follow_count_source follow_count_source_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_source
+    ADD CONSTRAINT follow_count_source_pkey PRIMARY KEY (route, account_id, target_type, target_id);
+
+
+--
 -- Name: follow follow_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -1866,6 +1992,13 @@ CREATE INDEX follow_account_page ON library.follow USING btree (route, account_i
 
 
 --
+-- Name: follow_count_source_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_source_pending ON library.follow_count_source USING btree (route, account_id, pending_since, target_type, target_id) WHERE (pending_since IS NOT NULL);
+
+
+--
 -- Name: label_assignment_owner_label; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -2038,6 +2171,13 @@ CREATE TRIGGER entry_fact_source_rows AFTER INSERT OR DELETE ON library.entry FO
 --
 
 CREATE TRIGGER entry_fact_source_update AFTER UPDATE ON library.entry FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: follow follow_count_source_change; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER follow_count_source_change AFTER INSERT OR DELETE OR UPDATE ON library.follow FOR EACH ROW EXECUTE FUNCTION library.record_follow_count_source();
 
 
 --
