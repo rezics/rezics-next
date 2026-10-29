@@ -1745,11 +1745,6 @@ async function acquire(
         marker = undefined;
         markerHost = undefined;
       }
-      if (landingWaiterId && landingMarkerHost && !ranked.some(({ host }) => host.name === landingMarkerHost)) {
-        if (landingMarker) await landingMarker.release();
-        landingMarker = undefined;
-        landingMarkerHost = undefined;
-      }
       if (ranked.length > 0) {
         answered = true;
         onAnswered?.();
