@@ -7,6 +7,7 @@ import { testDatabase } from '../scripts/database.ts';
 import { createAuthService } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { AUTH_MAINTENANCE_SCHEDULE, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
+import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
 import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 if (process.argv.includes('--growth-child')) {
@@ -19,7 +20,6 @@ if (process.argv.includes('--growth-child')) {
         env: {
           ...process.env,
           AUTH_SCHEDULE_GROWTH_URL: fixture.url,
-          GROWTH_PROFILE: process.env.GROWTH_PROFILE ?? '/dev/stderr',
         },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -32,7 +32,6 @@ if (process.argv.includes('--growth-child')) {
       ]);
       if (code !== 0) throw new Error(`Native scheduled growth failed: ${output}\n${errors}`);
       expect(output).toContain('one durable Auth tick');
-      console.log(output.trim());
     } finally {
       fixture.close();
     }
@@ -95,6 +94,8 @@ async function runGrowth() {
   try {
     await workflows.start();
     await maintenance!.start('0 0 1 1 *');
+    await DBOS.pauseSchedule(AUTH_MAINTENANCE_SCHEDULE);
+    await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
     await db.admin.query(`INSERT INTO auth_client VALUES ('growth-web',true,ARRAY['read']);
       INSERT INTO "user" (id,name,"emailVerified") SELECT 'fixed-'||i,'',false FROM generate_series(1,16) i`);
     const reports = [];
