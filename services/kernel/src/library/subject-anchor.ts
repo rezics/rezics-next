@@ -6,7 +6,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
-import { readSubjectReference } from '../semantic/references.ts';
+import { readSubject } from '../semantic/subject.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 const MAX_SUBJECT_IDS = 100;
@@ -35,7 +35,7 @@ export async function resolveSubject(
       pool: deps.pool,
       deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
     });
-    return readSubjectReference(deps.pool, id, (client) => check(client, at));
+    return readSubject(deps.pool, id, (client) => check(client, at));
   }
 
   const visited = new Set<string>();
