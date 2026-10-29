@@ -1,5 +1,3 @@
-SELECT 1 AS pending FROM dbos.workflow_status
-WHERE queue_name = :queue::text AND status IN ('ENQUEUED', 'PENDING')
-  AND created_at <= :workflow_until::bigint
-ORDER BY queue_name, status, priority, created_at
+SELECT 1 AS pending FROM access.erasure_locator_work
+WHERE state = 'open' AND source_at <= :at::timestamptz
 LIMIT 1;

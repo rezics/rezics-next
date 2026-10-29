@@ -1,6 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkModule } from '../work/registry.ts';
-import { LOCATOR_EFFECTS_QUEUE } from '../work/queues.ts';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import {
@@ -9,6 +8,7 @@ import {
   hasLiveCommandTransaction,
   noEffect,
   runCommand,
+  registerCommandCallback,
   type CommandTransaction,
 } from '../command/command.ts';
 import type { AccessClient } from '../request/access.ts';
@@ -151,8 +151,7 @@ export async function acknowledgeErasure(
       if (
         record.workflowUntil !== null &&
         (await pendingLocator.run(tx, {
-          queue: LOCATOR_EFFECTS_QUEUE,
-          workflow_until: record.workflowUntil,
+          at: record.at,
         })) === null
       )
         await complete.run(tx, {
@@ -214,8 +213,7 @@ export async function readErasureStatus(client: AccessClient, accountId: string)
     row.completedAt === null &&
     (row.workflowUntil === null ||
       (await statusFrontier.run(client, {
-        queue: LOCATOR_EFFECTS_QUEUE,
-        workflow_until: row.workflowUntil,
+        at: row.at,
       })) !== null);
   const outcomes = row.outcomes as Record<
     string,
@@ -339,8 +337,7 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
       if (
         workflowUntil !== null &&
         (await pendingLocator.run(tx, {
-          queue: LOCATOR_EFFECTS_QUEUE,
-          workflow_until: workflowUntil,
+          at: record.at,
         })) === null
       ) {
         const completed = await complete.run(tx, {
@@ -394,3 +391,19 @@ export const erasureWorkModule: WorkModule = {
     ]);
   },
 };
+
+/** Explicit platform resolution, after the owner has handled the copy. The caller emits its command event. */
+export async function resolveLocatorWork(tx: CommandTransaction, workflowId: string): Promise<void> {
+  if (!hasLiveCommandTransaction(tx)) throw new LifecycleDeniedError();
+  const row = await tx.query('SELECT state FROM access.erasure_locator_work WHERE workflow_id=$1 FOR UPDATE', [
+    workflowId,
+  ]);
+  if (row.rowCount !== 1) throw new LifecycleDeniedError();
+  if (row.rows[0].state !== 'open') return;
+  registerCommandCallback(tx, async (transactionId) => {
+    await tx.query(
+      "UPDATE access.erasure_locator_work SET state='resolved',resolution_transaction_id=$2 WHERE workflow_id=$1 AND state='open'",
+      [workflowId, transactionId],
+    );
+  });
+}

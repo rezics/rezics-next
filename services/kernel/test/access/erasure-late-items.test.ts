@@ -7,6 +7,7 @@ import {
   ERASURE_PARTICIPANTS,
   erasureWorkModule,
   readErasureStatus,
+  resolveLocatorWork,
 } from '../../src/access/erasure.ts';
 import { recordLateErasureItem, resolveLateErasureItem } from '../../src/access/index.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle.ts';
@@ -300,6 +301,11 @@ test('the frontier finds non-zero priority pending work and ignores unrelated fa
     locatorEffect,
     {},
   );
+  await db.admin.query(
+    `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at)
+     VALUES($1,$2,'1970-01-01')`,
+    [pendingId, locatorEffect],
+  );
   await relayAll();
   expect((await advance(accountId)).value).toBe(false);
   expect((await status(accountId))?.outstanding.effectsFrontier).toBe(true);
@@ -310,6 +316,11 @@ test('the frontier finds non-zero priority pending work and ignores unrelated fa
     [`failed:${accountId}`, `slow:${accountId}`, `later:${accountId}`, LOCATOR_EFFECTS_QUEUE],
   );
   await client.cancelWorkflow(pendingId);
+  expect((await advance(accountId)).value).toBe(false);
+  await runCommand(db.pool, { partition: partitionOf(routeOf(accountId)!), basis }, async (tx) => {
+    await resolveLocatorWork(tx, pendingId);
+    return { value: null, events: [{ type: 'com.rezics.access.account-updated.v1', data: { accountId } }] };
+  });
   expect((await advance(accountId)).value).toBe(true);
   expect((await status(accountId))?.state).toBe('complete');
   await client.cancelWorkflow(`slow:${accountId}`);

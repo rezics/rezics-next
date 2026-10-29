@@ -286,7 +286,7 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
     const partition = partitionOf(route);
     const workflowId = `erasure-growth-held:${accountId}`;
     const explainFrontier = async (query: typeof frontierWork | typeof statusFrontier = frontierWork) => {
-      const input: Record<string, unknown> = { queue: LOCATOR_EFFECTS_QUEUE, workflow_until: '1000' };
+      const input: Record<string, unknown> = { at: at.toISOString() };
       const { rows } = await db.admin.query(
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query.sql}`,
         query.params.map((name) => input[name]),
@@ -294,7 +294,7 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
       return JSON.stringify(rows[0]);
     };
     const assertIndexed = (plan: string) => {
-      expect(plan).toContain('idx_workflow_status_in_flight_v2');
+      expect(plan).toContain('erasure_locator_work_open');
       expect(plan).not.toContain('Seq Scan');
       const searches = Array.from(plan.matchAll(/"Index Searches":(\d+)/g), (match) => Number(match[1]));
       expect(searches.length).toBeGreaterThan(0);
@@ -317,11 +317,12 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
             VALUES($1,'effects',1,1) ON CONFLICT(partition_no,consumer) DO UPDATE SET epoch=1,position=1`,
             [partition],
           );
-          await database.admin.query(
-            `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,priority,created_at)
-            VALUES($1,'effect','PENDING',$2,7,10)`,
-            [workflowId, LOCATOR_EFFECTS_QUEUE],
-          );
+          if (phase === 'locator')
+            await database.admin.query(
+              `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at)
+             VALUES($1,'locator','1970-01-01')`,
+              [workflowId],
+            );
         }
         if (previous === 0 && phase === 'late') {
           await database.admin.query(
@@ -351,7 +352,7 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
         );
         await database.admin.query(
           `INSERT INTO dbos.workflow_status(workflow_uuid,name,status,queue_name,priority,created_at)
-          SELECT 'erasure-growth:'||$1||':'||n,'unrelated',CASE WHEN n%2=0 THEN 'ERROR' ELSE 'PENDING' END,
+          SELECT 'erasure-growth:'||$1||':'||n,'unrelated',CASE WHEN n%2=0 THEN 'ERROR' ELSE 'SUCCESS' END,
             'effects',n%3,1 FROM generate_series($2::integer+1,$3::integer) n`,
           [accountId, previous, scale],
         );
@@ -362,12 +363,18 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
           FROM generate_series($2::integer+1,$3::integer) n`,
           [accountId, previous, scale, LOCATOR_EFFECTS_QUEUE],
         );
+        await database.admin.query(
+          `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at,state)
+           SELECT 'kept:'||$1||':'||n,'locator','1970-01-01','done'
+           FROM generate_series($2::integer+1,$3::integer) n`,
+          [accountId, previous, scale],
+        );
         // Capture both plans before asserting either: retain the pre/post-statistics evidence on failure.
         const before = {
           completion: await explainFrontier(),
           status: await explainFrontier(statusFrontier),
         };
-        await database.admin.query('ANALYZE dbos.workflow_status');
+        await database.admin.query('ANALYZE access.erasure_locator_work');
         const after = {
           completion: await explainFrontier(),
           status: await explainFrontier(statusFrontier),
@@ -391,18 +398,20 @@ for (const [index, phase] of (['undelivered', 'locator', 'late'] as const).entri
     expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
     for (const { cost } of report.samples) {
       expect(cost.relations['core.outbox']?.rows ?? 0).toBe(0);
-      expect(cost.relations['dbos.workflow_status']?.sequentialScans ?? 0).toBe(0);
+      expect(cost.relations['dbos.workflow_status']).toBeUndefined();
+      expect(cost.relations['access.erasure_locator_work']?.sequentialScans ?? 0).toBe(0);
       expect(cost.relations['access.erasure_late_item']?.sequentialScans ?? 0).toBe(0);
     }
     if (phase === 'locator') {
       // Explain the exact product SQL with its real parameters; never force an index or a planner setting.
       const plan = await explainFrontier();
-      expect(plan).toContain('idx_workflow_status_in_flight_v2');
+      expect(plan).toContain('erasure_locator_work_open');
       expect(plan).not.toContain('Seq Scan');
       const searches = Array.from(plan.matchAll(/"Index Searches":(\d+)/g), (match) => Number(match[1]));
       expect(searches.length).toBeGreaterThan(0);
       expect(Math.max(...searches)).toBeLessThanOrEqual(8);
     }
+    await db.admin.query("UPDATE access.erasure_locator_work SET state='done' WHERE workflow_id=$1", [workflowId]);
     await db.admin.query(
       'DELETE FROM dbos.workflow_status WHERE workflow_uuid=$1 OR workflow_uuid LIKE $2 OR workflow_uuid LIKE $3',
       [workflowId, `erasure-growth:${accountId}:%`, `erasure-newer:${accountId}:%`],

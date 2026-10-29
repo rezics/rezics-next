@@ -24,7 +24,12 @@ export function effectWorkflowId(envelope: Envelope, eventSeq: number, name: str
   return `fx:${envelope.epoch}:${envelope.partition}:${envelope.position}:${eventSeq}:${name}`;
 }
 
-export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonly Envelope[]): Promise<void> } {
+let compatibilityPool: Pool | undefined;
+
+export function registerEffects(
+  effects: Effect[],
+  pool?: Pool,
+): { enqueue(envelopes: readonly Envelope[]): Promise<void> } {
   const names = new Set<string>();
   for (const effect of effects) {
     if (!/^[a-z][a-z0-9_]{0,62}$/.test(effect.name)) throw new RangeError(`Invalid effect name: ${effect.name}`);
@@ -44,9 +49,27 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
     },
     { name: 'effect.run', retriesAllowed: true, intervalSeconds: 1, backoffRate: 2, maxAttempts: 10 },
   );
-  const workflow = DBOS.registerWorkflow(async (name: string, event: CloudEvent) => runEffect(name, event), {
-    name: 'effect',
-  });
+  const locatorPool = () => {
+    const selected = pool ?? compatibilityPool;
+    if (!selected) throw new Error('Locator effects require the work database pool');
+    return selected;
+  };
+  const done = DBOS.registerStep(
+    async (workflowId: string) => {
+      await locatorPool().query(
+        "UPDATE access.erasure_locator_work SET state='done' WHERE workflow_id=$1 AND state='open'",
+        [workflowId],
+      );
+    },
+    { name: 'effect.locator.done', retriesAllowed: true, maxAttempts: 10 },
+  );
+  const workflow = DBOS.registerWorkflow(
+    async (name: string, event: CloudEvent) => {
+      await runEffect(name, event);
+      if (ERASURE_LOCATOR_EFFECTS.has(name)) await done(DBOS.workflowID!);
+    },
+    { name: 'effect' },
+  );
 
   return {
     async enqueue(envelopes) {
@@ -64,6 +87,25 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
             }
           }
         }
+      }
+      const locatorRows = [...partitions.values()].flatMap((jobs) =>
+        jobs
+          .filter(({ effect }) => ERASURE_LOCATOR_EFFECTS.has(effect.name))
+          .map(({ envelope, eventSeq, event, effect }) => ({
+            workflow_id: effectWorkflowId(envelope, eventSeq, effect.name),
+            effect: effect.name,
+            source_at: event.time,
+          })),
+      );
+      if (locatorRows.length > 0) {
+        // A separate autocommit transaction precedes every enqueue, including partial batch failure.
+        await locatorPool().query(
+          `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at)
+           SELECT workflow_id,effect,source_at FROM jsonb_to_recordset($1::jsonb)
+             AS x(workflow_id text,effect text,source_at timestamptz)
+           ON CONFLICT (workflow_id) DO NOTHING`,
+          [JSON.stringify(locatorRows)],
+        );
       }
       await Promise.all(
         [...partitions.entries()].map(async ([partition, jobs]) => {
@@ -93,6 +135,7 @@ let worker: { stop(): Promise<void> } | undefined;
 /** Compatibility for tests that register effects before launching the shared executor. */
 export async function launchWork(options: WorkOptions): Promise<void> {
   const pool = options.systemDatabasePool ?? new pg.Pool({ connectionString: options.databaseUrl, max: 10 });
+  compatibilityPool = pool;
   const client = await createWorkClient(options.databaseUrl, pool);
   try {
     DBOS.setConfig({

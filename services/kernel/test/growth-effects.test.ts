@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg from 'pg';
+import { ERASURE_LOCATOR_EFFECTS } from '../src/access/erasure.ts';
 import { createPool } from '../src/database/pool.ts';
 import { effectWorkflowId, launchWork, registerEffects, shutdownWork } from '../src/events/effects.ts';
 import type { CloudEvent, Envelope } from '../src/events/log.ts';
@@ -11,6 +12,9 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const CREATED = 'com.rezics.subject.created.v1';
+const CONTEXT = 'com.rezics.semantic.context.created.v1';
+const locator = 'growth_locator';
+(ERASURE_LOCATOR_EFFECTS as Set<string>).add(locator);
 let nextPartition = 3584 + Math.floor(Math.random() * 256);
 const freshPartition = () => nextPartition++;
 let growth: GrowthDatabase;
@@ -21,6 +25,7 @@ const started = new Promise<void>((resolve) => (blockedStarted = resolve));
 const starts: string[] = [];
 
 const effects = registerEffects([
+  { name: locator, types: [CONTEXT], async run() {} },
   {
     name: 'ordered',
     types: [CREATED],
@@ -41,6 +46,7 @@ beforeAll(async () => {
 afterAll(async () => {
   releaseBlocked();
   await shutdownWork();
+  (ERASURE_LOCATOR_EFFECTS as Set<string>).delete(locator);
   await growth.close();
   await pool.end();
   await admin.end();
@@ -183,3 +189,51 @@ test('Effect persistence stays within its bound as N grows', async () => {
     ),
   );
 }, 120_000);
+
+test(`locator success adds one batch insert and stays bounded as kept rows and DBOS history grow`, async () => {
+  const namespace = `locator-growth:success:${crypto.randomUUID()}`;
+  const partitionBase = freshPartition();
+  const report = await checkGrowth(growth, {
+    name: `Locator effect success`,
+    scales: GROWTH_SCALES,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(db, scale, previous) {
+      await seedHistory(db, namespace, partitionBase, previous, scale);
+      await db.admin.query(
+        `INSERT INTO access.erasure_locator_work(workflow_id,effect,source_at,state)
+           SELECT $1||':'||n,'growth_locator','1970-01-01','done'
+           FROM generate_series($2::integer+1,$3::integer) n`,
+        [namespace, previous, scale],
+      );
+    },
+    async operation(_db, _scale, repetition) {
+      const partition = freshPartition();
+      const batch = [1n, 2n].map((position) => {
+        const item = envelope(partition, position, `locator-${partition}-${repetition}-${position}`);
+        item.events[0]!.type = CONTEXT;
+        return item;
+      });
+      await effects.enqueue(batch);
+      for (const item of batch) await DBOS.retrieveWorkflow(effectWorkflowId(item, 0, locator)).getResult();
+    },
+  });
+  expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
+  expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
+  for (const sample of report.samples) {
+    for (const statements of sample.statementRepetitions) {
+      const inserts = statements.filter(({ statement }) =>
+        statement.startsWith('INSERT INTO access.erasure_locator_work'),
+      );
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0]!.count).toBe(1);
+      if (phase === 'success') {
+        const updates = statements.filter(({ statement }) =>
+          statement.startsWith('UPDATE access.erasure_locator_work'),
+        );
+        expect(updates).toHaveLength(1);
+        expect(updates[0]!.count).toBe(2);
+      }
+    }
+    expect(sample.cost.relations['access.erasure_locator_work']?.sequentialScans ?? 0).toBe(0);
+  }
+}, 120000);

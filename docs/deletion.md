@@ -39,7 +39,8 @@ promises still hold.
    storage and caches). Each participant acknowledges that its cleanup actually happened or attests that no data of
    the account applies. Dispatching work or accepting an obligation is not completion; only minimized or erased
    payload is. Completion also waits for every open late item to be resolved and for the effects frontier: all
-   envelopes committed before T must be delivered and their registered locator effect workflows finished.
+   envelopes committed before T must be delivered and their registered locator effect workflows must succeed
+   or receive an explicit platform resolution.
    A minimal completion record lives in PostgreSQL outside DBOS history, so deleting workflow history
    cannot lose an unfinished obligation or let an old event reopen activity.
 3. **Every role.** Cleanup follows every role the account held: author, editor, uploader, reporter, buyer, seller,
@@ -69,7 +70,11 @@ promises still hold.
 7. **Completion.** The outcome distinguishes active cleanup complete, retention exceptions outstanding (each named
    by fields, purpose and expiry), and backup expiry outstanding. Unknown custody, a failed participant or an
    unresolved external write keeps it incomplete. Completion is checked by indexed existence probes, never by full
-   counts.
+   counts. Registered locator effects have a permanent, input-free open-work row committed by the relay before
+   enqueueing. Only success under that workflow id or an explicit platform resolution naming the row clears it.
+   ERROR, cancellation, exhausted recovery and deletion of DBOS history leave it open. A fork never clears the
+   original row. Any open row whose source envelope's authoritative time is at or before T holds every later
+   erasure, regardless of account; later envelopes do not hold it. Done and resolved rows remain.
 8. **First scope.** A coordinator plus each owner's cleanup uses the existing PostgreSQL, DBOS, OpenSearch and R2
    APIs. Account restore, a legal-hold engine, self-service export, a separate deletion service and per-account
    encryption are not built.

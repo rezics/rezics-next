@@ -666,7 +666,7 @@ commits. Resolution records one time, requires expiry to have arrived, is idempo
 participant or store. Like acknowledgement, it runs as the platform and restores no initiator.
 
 The terminal `access.erasure` workflow is started by the tombstone effect and retries completion durably until
-all participants acknowledge, no late item is open, and the effects frontier has passed. Acknowledgement alone
+all participants acknowledge, no late item is open, the effects frontier has passed, and no pre-T locator work is open. Acknowledgement alone
 never marks completion. `completedAt` means active cleanup complete even when retention remains. The minimal
 PostgreSQL record is independent of DBOS history and command receipts and never reopens on event replay.
 
@@ -681,24 +681,29 @@ item is handled; each effect reaching a closed fence handles its own copy throug
 
 Register locator effect names in `ERASURE_LOCATOR_EFFECTS`, beside `ERASURE_PARTICIPANTS`. The effects relay routes
 only those effects to `locator-effects`, with the effects queue's concurrency options including
-`partitionConcurrency: 1`. Workflow ids, partition keys, ordering, steps and retries remain the same.
+`partitionConcurrency: 1`. Workflow ids, partition keys, ordering and effect-run retries remain the same.
 
 In its first durable step after T, the coordinator reads the fixed partition map and effects checkpoints in one
 statement, storing only heads ahead of their checkpoint. Each retry probes those exact checkpoint keys. After all
-reach their stored positions, it freezes a database millisecond timestamp. It then checks for `ENQUEUED` or
-`PENDING` workflows on `locator-effects` created at or before that timestamp. Later work and unrelated queues,
-including failed workflows, cannot extend this frontier. It never scans outbox history or polls from a request.
-The individual `startWorkflow` enqueue used by the relay takes its creation timestamp from PostgreSQL, so the
-frozen database timestamp bounds every delivered enqueue.
+reach their stored positions, it freezes a database millisecond timestamp marking delivery. It never scans outbox
+history or polls from a request.
 
-DBOS 5.4.6-preview owns `idx_workflow_status_in_flight_v2` on `(queue_name, status, priority, created_at)`, partial on
-`ENQUEUED` and `PENDING`. The probe constrains queue and status, leaves priority unrestricted, and bounds
-`created_at`. Both completion and status first read the frozen timestamp, then pass it as a parameter to an ordered
-lookup with `ORDER BY queue_name, status, priority, created_at LIMIT 1`. This preserves the index's order and avoids
-the sequential-scan early-termination estimate of a correlated `EXISTS`. PostgreSQL 19's B-tree skip scan costs one
-descent per distinct priority on this dedicated queue. At every scale, the native growth test requires that index,
-no sequential scan and at most eight `Index Searches`, before and after `ANALYZE dbos.workflow_status`. The kernel
-issues no DDL in the DBOS schema.
+The relay commits one `access.erasure_locator_work` row per registered locator effect run before enqueueing any
+workflow in its batch. Deterministic workflow ids and `ON CONFLICT DO NOTHING` preserve done/resolved rows on replay.
+The source key is the outbox envelope's authoritative `recorded_at` (CloudEvent `time`), compared at full PostgreSQL
+precision to the tombstone's `at`, inclusively. The delivered checkpoint frontier remains a delivery barrier;
+`workflow_until` records that barrier passing, not a cutoff for source work. Completion and status probe only the
+partial index of open source times at or before T, never DBOS history. Later traffic cannot hold the erasure.
+
+After `effect.run` succeeds, the durable `effect.locator.done` step marks only its own workflow id done. Failures,
+cancellation, exhausted recovery and retention leave the row open, holding every subsequent erasure because custody
+is unknown. Resuming a cancelled/exhausted run can succeed under its own id; SDK 5.4.6 resume leaves ERROR and SUCCESS
+unchanged. A successful fork cannot clear its origin. After the owner handles the copy, platform work may call
+`resolveLocatorWork` inside a live command that emits its own event; its callback records the executor-minted
+resolution transaction id atomically with that command. Kept rows contain no workflow inputs or event data.
+`readErasureStatus` reports this condition through `outstanding.effectsFrontier` and keeps `state` pending.
+Each relay batch adds one multi-row insert only if it includes locator effects; successful locator work adds one
+primary-key update. The open-work probe has constant statements/rows and logarithmic blocks as kept rows grow.
 
 Internal/test-only `readErasureStatus(client, accountId)` returns version, T, `completedAt`, participant outcomes
 and retained exceptions with `resolvedAt` and `overdue`. `outstanding.lateItems` and
@@ -763,10 +768,9 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 ### Erasure status read
 
 - Touches: one statement reads the erasure record, at most P acknowledgements and their exceptions in one snapshot,
-  and probes the open-late-item partial index. An unfinished erasure with a delivered frontier adds one ordered DBOS
-  lookup using the frozen timestamp as a parameter; completed erasures need no workflow lookup.
-- Bound: at most two statements; O(P·X + log A + D·log W), D the distinct locator-queue priorities and W its in-flight
-  workflows. Neither outbox history nor unrelated queues are read.
+  and probes the open-late-item partial index. An unfinished erasure with a delivered frontier adds one open locator-work
+  existence probe bounded by T; completed erasures need no locator-work lookup.
+- Bound: at most two statements; O(P·X + log A + log W), W the open locator-work rows. Neither outbox nor DBOS history is read.
 - Growth check: `test/access/growth-erasure-coordinator.test.ts`, the same three scales; statements and rows stay constant.
 
 ### Record or resolve a late erasure item
@@ -779,10 +783,10 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 ### Advance erasure completion
 
 - Touches: one locked erasure key; once per erasure, one frontier snapshot statement over the fixed partition map;
-  one keyed checkpoint probe per stored frontier partition; one ordered DBOS locator-queue lookup through
-  `idx_workflow_status_in_flight_v2`; one open-late-item existence probe and the bounded acknowledgement count.
+  one keyed checkpoint probe per stored frontier partition; one open locator-work existence probe through
+  `erasure_locator_work_open`; one open-late-item existence probe and the bounded acknowledgement count.
 - Bound: constant statements and rows in account data and unrelated history; logarithmic blocks. The snapshot and
-  stored frontier are bounded by the fixed partition map; the DBOS lookup costs one descent per distinct priority.
+  stored frontier are bounded by the fixed partition map; open locator work uses one indexed probe.
 - Growth check: `test/access/growth-erasure-coordinator.test.ts`, fixed undelivered, locator and late-item frontiers
   as outbox history, unrelated workflows, erasures and late items grow through three scales.
 
@@ -1998,7 +2002,7 @@ not claim that existing payloads are already minimized or that shared-history ha
 - Recording or resolving touches one erasure primary-key probe and one keyed late-item insert or update. Statements
   and rows are constant; blocks are logarithmic as unrelated erasures and late items grow.
 - Completion probes the open-item partial index, at most one checkpoint per stored backlog partition, the bounded
-  acknowledgement range, and the SDK in-flight index. The one-time snapshot is bounded by the fixed partition map.
+  acknowledgement range, and the open locator-work partial index. The one-time snapshot is bounded by the fixed partition map.
   Outbox history is never read. Statements and rows are constant with unrelated data and history; blocks are
-  logarithmic for fixed frontier and priority cardinality.
+  logarithmic for fixed frontier cardinality.
 - Growth evidence: `test/access/growth-erasure-coordinator.test.ts`, three scales with the account and frontier fixed.

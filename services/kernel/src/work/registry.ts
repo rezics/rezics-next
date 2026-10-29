@@ -78,7 +78,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   } finally {
     accepting = false;
   }
-  const effects = registerEffects(collectedEffects);
+  const effects = registerEffects(collectedEffects, options.pool);
 
   // Stop every service. One failure does not skip the rest; the first one is returned.
   const stopServices = async (services: readonly WorkService[]): Promise<unknown> => {

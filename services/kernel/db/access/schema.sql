@@ -726,6 +726,21 @@ CREATE TABLE access.erasure_late_item (
 
 
 --
+-- Name: erasure_locator_work; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_locator_work (
+    workflow_id text NOT NULL,
+    effect text NOT NULL,
+    source_at timestamp with time zone NOT NULL,
+    state text DEFAULT 'open'::text NOT NULL,
+    resolution_transaction_id uuid,
+    CONSTRAINT erasure_locator_work_check CHECK (((state = 'resolved'::text) = (resolution_transaction_id IS NOT NULL))),
+    CONSTRAINT erasure_locator_work_state_check CHECK ((state = ANY (ARRAY['open'::text, 'done'::text, 'resolved'::text])))
+);
+
+
+--
 -- Name: exposure_opening; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -1346,6 +1361,14 @@ ALTER TABLE ONLY access.erasure_late_item
 
 
 --
+-- Name: erasure_locator_work erasure_locator_work_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_locator_work
+    ADD CONSTRAINT erasure_locator_work_pkey PRIMARY KEY (workflow_id);
+
+
+--
 -- Name: erasure erasure_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1623,6 +1646,13 @@ CREATE INDEX committed_continuation_operator_latest ON access.committed_continua
 --
 
 CREATE INDEX erasure_late_item_open ON access.erasure_late_item USING btree (route, account_id) WHERE (resolved_at IS NULL);
+
+
+--
+-- Name: erasure_locator_work_open; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work USING btree (source_at) WHERE (state = 'open'::text);
 
 
 --
