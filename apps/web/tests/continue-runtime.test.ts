@@ -131,8 +131,8 @@ test('Continue reads its ordered subjects, including an active session without a
   expect(calls.map((call) => call.operation)).toEqual(['continue', 'pages']);
   expect(calls[0]).toMatchObject({ input: { query: { limit: 6 } }, authorization: 'Bearer fresh-token' });
   expect(calls[1]).toMatchObject({
-    authorization: 'Bearer fresh-token',
     input: {
+      headers: { authorization: 'Bearer fresh-token' },
       reads: Object.fromEntries(
         subjects.map(({ subjectId }) => [`subject:${subjectId}`, { kind: 'subject', id: subjectId }]),
       ),
