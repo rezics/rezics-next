@@ -829,7 +829,7 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   const { env, events } = scenario({ a: { available: 4e9 }, b: { available: 30e9 } });
   const result = await kernelCheck(env);
 
-  expect(result.code).toBe(0);
+  expect(result.code, result.stderr).toBe(0);
   const seen = events();
   expect(seen.filter((event) => event.kind === 'docker')).toEqual([]);
   const sync = seen.find((event) => event.kind === 'rsync')!;
@@ -2277,6 +2277,7 @@ test('a gate wait is bounded by its original slot holders with 1, 10 and 100 que
       for (let index = 0; index < queueLength; index += 1) {
         const queueEnv = {
           ...env,
+          REMOTE_CHECK_POLL_MS: '100',
           GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, `queued-${index}-wait-ms`),
         };
         queued.push(startRemote(queueEnv, workspaceDirectory, ['sh', '-c', 'echo queued']));
@@ -2489,7 +2490,7 @@ if (command === 'systemd-run') {
 } else if (command === 'date') {
   console.log(args[0] === '+%s' ? (state.now ?? Math.floor(Date.now() / 1000)) : state.ticks++ * 1000000000);
 } else if (command === 'bun') {
-  process.exit(Number(process.env.INSTALL_EXIT ?? 0));
+  process.exit(args[0] === '--eval' ? 0 : Number(process.env.INSTALL_EXIT ?? 0));
 } else if (command === 'docker') {
   if (args[0] === 'run' || args[0] === 'create' || (args[0] === 'container' && ['run', 'create'].includes(args[1]!))) {
     const id = 'container-' + state.containers.length;
@@ -2985,7 +2986,7 @@ test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', asyn
   // KERNEL_CHECK_ON_REMOTE does not mean this process is on a check host. The shared decision still places the run.
   const onRemote = scenario({ a: { available: 4e9 } });
   const placed = await kernelCheck({ ...onRemote.env, KERNEL_CHECK_ON_REMOTE: '1' });
-  expect(placed.code).toBe(0);
+  expect(placed.code, placed.stderr).toBe(0);
   expect(placed.stderr).toContain('stack-run: kernel check on a');
   expect(onRemote.events().some((event) => event.kind === 'docker')).toBe(false);
   expect(onRemote.events().some((event) => event.kind === 'run')).toBe(true);
