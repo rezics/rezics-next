@@ -6,6 +6,9 @@ mock.module('@tanstack/react-router', () => ({
   Link: ({ children, to, params, className, ...props }: any) =>
     createElement('a', { ...props, href: `${to.replace(/\$id/, params?.id ?? '')}`, className }, children),
   useLocation: () => ({ publicHref: 'https://site.example/en/spaces/atlas' }),
+  notFound: () => {
+    throw new Error('Unexpected not-found response in community page test.');
+  },
 }));
 mock.module('../src/community/realm-membership', () => ({
   RealmMembership: () => createElement('button', { className: 'h-10 px-4' }, 'Join'),
