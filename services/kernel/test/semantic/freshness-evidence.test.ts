@@ -361,6 +361,73 @@ test('forced public audience survives a long native wait with the same authentic
   }
 }, 60_000);
 
+test('an inbound pending-member wait that stays behind cannot return an earlier authorization', async () => {
+  const part = partition();
+  const target = await create(part, 'Unsettled pending target');
+  const first = await create(part, 'Unsettled pending first', target.id);
+  const second = await create(part, 'Unsettled pending second', target.id);
+  await catchUp(part);
+  const [survivor, merged] = [first.id, second.id].sort() as [string, string];
+  const owner = await actor('owner');
+  const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+  const check = await accessCheck(
+    access,
+    owner,
+    'subject:merge',
+    { route: 0, id: GLOBAL_CONTEXT },
+    { pool, deadline },
+  );
+  await mergeSubjects(pool, {
+    subjects: [first.id, second.id],
+    survivor,
+    actor: owner,
+    idempotencyKey: randomUUID(),
+    digest: digest(merged),
+    release: { digest: bundledDigest, release: bundledRelease },
+    deadline,
+    authorization: {
+      action: 'subject:merge',
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      denied: () => new Error('Merge denied'),
+      authorize: async (client, attempt) => {
+        if (!(await check(client, attempt.time))) throw new Error('Merge denied');
+        return 'execute';
+      },
+    },
+  });
+  const denial = randomUUID();
+  const observer = observeSql(pool);
+  try {
+    const result = await held(
+      observer,
+      readPending.sql,
+      () => call(`${target.id}/links?property=${encodeURIComponent(property)}`, 'reader', target.component),
+      async () => {
+        await real.revoke(target, 'reader', 'subject:read');
+        await admin.query(
+          `INSERT INTO access.resource_denial
+           (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+           VALUES ($1,$2,$3,'','subject:read','resource','(,)'::tstzrange,$4)`,
+          [target.route, target.id, accounts.reader, denial],
+        );
+        // Leave the real merge work pending: this exercises the not-caught-up exit.
+      },
+    );
+    expect(result.status, JSON.stringify(result.body)).toBe(404);
+    expect(result.body).not.toHaveProperty('links');
+    expect(result.body).not.toHaveProperty('redirect');
+    const waits = observer.records.filter(({ statement }) => statement === readPending.sql);
+    expect(waits.length).toBeGreaterThan(1);
+    const lastWait = observer.records.findLastIndex(({ statement }) => statement === readPending.sql);
+    expect(
+      observer.records.slice(lastWait + 1).some(({ statement }) => statement === readVisibility.sql),
+    ).toBe(true);
+  } finally {
+    await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+    await observer.close();
+  }
+}, 60_000);
+
 for (const kind of ['links', 'relations'] as const) {
   for (const change of ['hide', 'revoke', 'redirect'] as const) {
     test(`${kind} final HTTP authorization observes ${change} during a native wait beyond evidence lifetime`, async () => {
