@@ -140,6 +140,33 @@ test('bounded bootstrap never infers self or readiness from absent mapping', asy
   expect(await store.readMapping(f.pool, members[0]!)).toMatchObject({ state: 'mapped', terminal: original });
 }, 600_000);
 
+test('native cross-home redirect withdraws its old group before the Library current route is disclosed', async () => {
+  const original = (await f.create('Cross-home native source', 0x6210)).subject.id;
+  const terminal = (await f.create('Cross-home native terminal', 0x6220)).subject.id;
+  await f.merge(original, terminal);
+  expect(await store.readMapping(f.pool, original)).toEqual({ state: 'unavailable', reason: 'bootstrap' });
+  await bootstrapHome(home(original));
+  expect(await store.readMapping(f.pool, original)).toMatchObject({ state: 'mapped', original, terminal });
+  expect(await resolveSubject({ pool: f.pool, access: f.access }, await f.actor(), original)).toEqual({
+    subjectId: terminal,
+    requestedSubjectId: original,
+  });
+  const copies = (
+    await f.admin.query('SELECT terminal,partition_no FROM semantic.identity_epoch_original WHERE original=$1', [
+      original,
+    ])
+  ).rows;
+  expect(copies).toEqual([{ terminal, partition_no: home(terminal) }]);
+  const counts = (
+    await f.admin.query(
+      'SELECT terminal,observed_count::text FROM semantic.identity_epoch_group WHERE terminal=ANY($1::uuid[]) ORDER BY terminal',
+      [[original, terminal]],
+    )
+  ).rows;
+  expect(counts.find((g) => g.terminal === original)?.observed_count).toBe('0');
+  expect(counts.find((g) => g.terminal === terminal)?.observed_count).toBe('2');
+});
+
 test('native identity store admits one capped durable job with no early publication and idempotent authorized receipt', async () => {
   const survivor = (await f.create()).subject.id;
   const redirected = (await f.create()).subject.id;
