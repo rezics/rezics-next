@@ -694,8 +694,9 @@ Each row's `opened_at` is the database millisecond clock when the relay commits 
 `workflow_until`. The delivered checkpoint frontier remains a delivery barrier: its timestamp fences every row
 opened for an envelope delivered before the snapshot, including old failed work on a partition absent from the
 frontier. Completion and status probe only the partial index of open rows with `opened_at <= workflow_until`, never
-DBOS history. Native GiST distance ordering under the one-row limit keeps that probe indexed before statistics
-refresh, using the same traversal pattern as the current-owner guard. Later traffic cannot hold the erasure.
+DBOS history. The B-tree minimum-key probe visits at most the first open entry, then compares it with the boundary;
+it does not scan later open work. The migration initializes empty-index statistics before delivery begins.
+Later traffic cannot hold the erasure.
 
 After `effect.run` succeeds, the durable `effect.locator.done` step marks only its own workflow id done. Failures,
 cancellation, exhausted recovery and retention leave the row open, holding every subsequent erasure because custody

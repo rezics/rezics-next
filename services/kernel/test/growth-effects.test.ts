@@ -31,13 +31,16 @@ const locator = 'growth_locator';
 let nextPartition = 3584 + Math.floor(Math.random() * 256);
 const freshPartition = () => nextPartition++;
 let growth: GrowthDatabase;
+let locatorGrowth: GrowthDatabase;
+let effects: ReturnType<typeof registerEffects>;
 let releaseBlocked!: () => void;
 let blockedStarted!: () => void;
 const blocked = new Promise<void>((resolve) => (releaseBlocked = resolve));
 const started = new Promise<void>((resolve) => (blockedStarted = resolve));
 const starts: string[] = [];
 
-const effects = registerEffects([
+function registerFixtureEffects() {
+  return registerEffects([
   { name: locator, types: [CONTEXT], async run() {} },
   {
     name: 'ordered',
@@ -50,10 +53,15 @@ const effects = registerEffects([
       }
     },
   },
-]);
+  ], locatorGrowth.pool);
+}
 
 beforeAll(async () => {
   growth = await openGrowthDatabase(databaseUrl);
+  // The existing series measures SDK persistence. This separate capture measures the added kernel writes,
+  // without charging timing-dependent SDK result polling to the locator-work operation.
+  locatorGrowth = await openGrowthDatabase(databaseUrl);
+  effects = registerFixtureEffects();
   await within(launchWork({ databaseUrl, systemDatabasePool: growth.openPool({ max: 4 }) }), 'executor launch');
 });
 afterAll(async () => {
@@ -61,6 +69,7 @@ afterAll(async () => {
   await within(shutdownWork(), 'executor shutdown');
   (ERASURE_LOCATOR_EFFECTS as Set<string>).delete(locator);
   await growth.close();
+  await locatorGrowth.close();
   await pool.end();
   await admin.end();
 });
@@ -209,7 +218,7 @@ test('Effect persistence stays within its bound as N grows', async () => {
 test(`locator success adds one batch insert and stays bounded as kept rows and DBOS history grow`, async () => {
   const namespace = `locator-growth:success:${crypto.randomUUID()}`;
   const partitionBase = freshPartition();
-  const report = await checkGrowth(growth, {
+  const report = await checkGrowth(locatorGrowth, {
     name: `Locator effect success`,
     scales: GROWTH_SCALES,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },

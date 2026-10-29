@@ -1652,7 +1652,7 @@ CREATE INDEX erasure_late_item_open ON access.erasure_late_item USING btree (rou
 -- Name: erasure_locator_work_open; Type: INDEX; Schema: access; Owner: -
 --
 
-CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work USING gist (opened_at) WHERE (state = 'open'::text);
+CREATE INDEX erasure_locator_work_open ON access.erasure_locator_work USING btree (opened_at) WHERE (state = 'open'::text);
 
 
 --
