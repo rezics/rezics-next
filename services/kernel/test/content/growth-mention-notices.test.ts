@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeDocument, serializeDocument } from '@rezics/document';
 import { createMentionNoticeEffect } from '../../src/content/mention-notices.ts';
+import { createContentWorkAccess } from '../../src/content/register.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -73,7 +74,10 @@ test('mention notice candidates stay bounded at 16, 64 and 256 mentions', async 
         await fixture.grant(id, 'post:read', { route, id: post });
         await fixture.grant(id, 'board:read', { route, id: board });
       }
-      const effect = createMentionNoticeEffect(_database.pool, fixture.access);
+      const effect = createMentionNoticeEffect(
+        _database.pool,
+        createContentWorkAccess(() => new Date(), _database.pool),
+      );
       await effect.run({
         specversion: '1.0',
         id: randomUUID(),
@@ -94,12 +98,14 @@ test('mention notice candidates stay bounded at 16, 64 and 256 mentions', async 
           activityAt: new Date().toISOString(),
         },
       } as never);
-      return (
+      const count = (
         await _database.admin.query(
           `SELECT count(*)::int AS count FROM content.notice WHERE kind='mention' AND post_id=$1`,
           [post],
         )
       ).rows[0]?.count;
+      expect(count).toBe(10);
+      return count;
     },
   });
   const count = await fixture.reader.query(`SELECT count(*)::int AS count FROM content.notice WHERE kind='mention'`);

@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeDocument, serializeDocument } from '@rezics/document';
-import { createMentionNoticeEffect } from '../../src/content/mention-notices.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
+import { contentNoticeEffects } from '../../src/content/relays.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -14,6 +14,17 @@ beforeAll(async () => {
   await fixture.reset();
 });
 afterAll(async () => fixture?.close());
+
+function registeredMentionEffect() {
+  const effects = contentNoticeEffects(
+    fixture.pool,
+    createContentWorkAccess(() => new Date(), fixture.pool),
+  );
+  expect(effects.map((effect) => effect.name)).toEqual(['content_mention_notice', 'content_reply_notice']);
+  const mentions = effects.filter((effect) => effect.name === 'content_mention_notice');
+  expect(mentions).toHaveLength(1);
+  return mentions[0]!;
+}
 
 function event(
   threadId: string,
@@ -150,7 +161,22 @@ async function postWithMentions(
     [route, thread, post, revision, body, digest, board],
   );
   await fixture.reader.query('COMMIT');
-  return { thread, post, revision, board, actor };
+  return { thread, post, revision, board, opening, actor };
+}
+
+async function grantRead(accountId: string, action: string, resourceId: string) {
+  await fixture.reader.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES($1,$2,$3,$4,'(,)',$3) ON CONFLICT DO NOTHING`,
+    [routeOf(resourceId), resourceId, accountId, action],
+  );
+}
+
+async function clearMentionPreference(accountId: string) {
+  await fixture.reader.query('DELETE FROM access.account_preferences WHERE route=$1 AND account_id=$2', [
+    routeOf(accountId),
+    accountId,
+  ]);
 }
 
 async function notices() {
@@ -163,6 +189,7 @@ async function notices() {
 test("a mention in a post's first published revision notifies each mentioned account up to ten, and a later revision notifies nobody", async () => {
   await fixture.reader.query('TRUNCATE content.notice');
   const recipient = fixture.recipient;
+  await clearMentionPreference(recipient);
   const actor = fixture.actor;
   const more = Array.from({ length: 11 }, () => newId(0x1234));
   for (const accountId of more)
@@ -171,8 +198,7 @@ test("a mention in a post's first published revision notifies each mentioned acc
       [routeOf(accountId), accountId],
     );
   const { thread, post, revision } = await postWithMentions([recipient, ...more, recipient, actor, fixture.principal]);
-  const access = createContentWorkAccess(() => new Date(), fixture.pool);
-  const effect = createMentionNoticeEffect(fixture.pool, access);
+  const effect = registeredMentionEffect();
   const created = event(thread, post, revision, actor);
   await effect.run(created);
   await effect.run({ ...created, id: randomUUID() });
@@ -195,34 +221,38 @@ test("a mentioned account who cannot read the post, turned mentions off, is dele
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES($1,$2,'actor','deleted',$2)`,
     [routeOf(deleted), deleted],
   );
-  const { thread, post, revision } = await postWithMentions(
+  const { thread, post, revision, board, opening } = await postWithMentions(
     [actor, fixture.recipient, fixture.principal, unreadable, deleted],
     {
       replyRecipient: fixture.principal,
       boardVisibility: 'protected',
     },
   );
+  for (const accountId of [actor, fixture.recipient, fixture.principal, deleted])
+    for (const [action, resourceId] of [
+      ['board:read', board],
+      ['thread:read', thread],
+      ['post:read', post],
+      ['post:read', opening],
+    ] as const) {
+      await grantRead(accountId, action, resourceId);
+    }
   await fixture.reader.query(
     `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,version,notifications)
     VALUES ($1,$2,0,'blur',1,'{"mention":false}'::jsonb) ON CONFLICT (route,account_id) DO UPDATE SET notifications=EXCLUDED.notifications`,
     [routeOf(fixture.recipient), fixture.recipient],
   );
-  await fixture.reader.query(`UPDATE access.account SET state='deleted' WHERE route=$1 AND account_id=$2`, [
-    routeOf(fixture.principal),
-    fixture.principal,
-  ]);
-  const access = createContentWorkAccess(() => new Date(), fixture.pool);
-  const effect = createMentionNoticeEffect(fixture.pool, access);
+  const effect = registeredMentionEffect();
   await effect.run(event(thread, post, revision, actor));
   expect(await notices()).toEqual([]);
 });
 
 test('replayed post events add no second notice', async () => {
   await fixture.reader.query('TRUNCATE content.notice');
+  await clearMentionPreference(fixture.recipient);
   const { thread, post, revision, actor } = await postWithMentions([fixture.recipient]);
   const source = event(thread, post, revision, actor);
-  const access = createContentWorkAccess(() => new Date(), fixture.pool);
-  const effect = createMentionNoticeEffect(fixture.pool, access);
+  const effect = registeredMentionEffect();
   await effect.run(source);
   const first = await notices();
   await effect.run(source);
@@ -231,20 +261,85 @@ test('replayed post events add no second notice', async () => {
 
 test('mention notices use public Realm eligibility and withhold sends after Realm read authority is denied', async () => {
   await fixture.reader.query('TRUNCATE content.notice');
+  const recipient = fixture.principal;
   const realmId = await publicRealm();
-  const access = createContentWorkAccess(() => new Date(), fixture.pool);
-  const effect = createMentionNoticeEffect(fixture.pool, access);
+  const effect = registeredMentionEffect();
 
-  const readable = await postWithMentions([fixture.recipient], { realmId });
+  const readable = await postWithMentions([recipient], { realmId });
   await effect.run(event(readable.thread, readable.post, readable.revision, readable.actor));
   expect((await notices()).map((row) => row.post_id)).toEqual([readable.post]);
 
-  const denied = await postWithMentions([fixture.recipient], { realmId });
+  const denied = await postWithMentions([recipient], { realmId });
   await fixture.reader.query(
     `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
      VALUES($1,$2,$3,'realm:read','resource','(,)',$3)`,
-    [0x1234, realmId, fixture.recipient],
+    [0x1234, realmId, recipient],
   );
   await effect.run(event(denied.thread, denied.post, denied.revision, denied.actor));
   expect((await notices()).map((row) => row.post_id)).toEqual([readable.post]);
+});
+
+test('mention notices withhold a protected Realm post after its recipient is banned', async () => {
+  await fixture.reader.query('TRUNCATE content.notice');
+  await clearMentionPreference(fixture.recipient);
+  const realmId = await publicRealm();
+  const protectedPost = await postWithMentions([fixture.recipient], {
+    realmId,
+    boardVisibility: 'protected',
+  });
+  for (const [action, resourceId] of [
+    ['realm:read', realmId],
+    ['board:read', protectedPost.board],
+    ['thread:read', protectedPost.thread],
+    ['post:read', protectedPost.post],
+  ] as const)
+    await grantRead(fixture.recipient, action, resourceId);
+  const effect = registeredMentionEffect();
+
+  await effect.run(event(protectedPost.thread, protectedPost.post, protectedPost.revision, protectedPost.actor));
+  expect((await notices()).map((row) => row.post_id)).toEqual([protectedPost.post]);
+
+  await fixture.reader.query(
+    `INSERT INTO community.realm_ban(route,realm_id,account_id,valid,reason,actor,transaction_id)
+     VALUES($1,$2,$3,tstzrange(clock_timestamp(),NULL,'[)'),'Mention notice test',$4,$4)`,
+    [routeOf(realmId), realmId, fixture.recipient, fixture.actor],
+  );
+  const afterBan = await postWithMentions([fixture.recipient], {
+    realmId,
+    boardVisibility: 'protected',
+  });
+  for (const [action, resourceId] of [
+    ['realm:read', realmId],
+    ['board:read', afterBan.board],
+    ['thread:read', afterBan.thread],
+    ['post:read', afterBan.post],
+  ] as const)
+    await grantRead(fixture.recipient, action, resourceId);
+  await effect.run(event(afterBan.thread, afterBan.post, afterBan.revision, afterBan.actor));
+  expect((await notices()).map((row) => row.post_id)).toEqual([protectedPost.post]);
+});
+
+test('mention notices recheck current board and every post ancestor before sending', async () => {
+  await fixture.reader.query('TRUNCATE content.notice');
+  await clearMentionPreference(fixture.recipient);
+  const effect = registeredMentionEffect();
+
+  const boardChanged = await postWithMentions([fixture.recipient]);
+  await fixture.reader.query(
+    `UPDATE content.board SET visibility='protected',security_revision=security_revision+1
+     WHERE route=$1 AND board_id=$2`,
+    [routeOf(boardChanged.board), boardChanged.board],
+  );
+  await effect.run(event(boardChanged.thread, boardChanged.post, boardChanged.revision, boardChanged.actor));
+
+  const ancestorChanged = await postWithMentions([fixture.recipient], { replyRecipient: fixture.principal });
+  await fixture.reader.query(
+    `UPDATE content.post SET visibility='taken_down',security_revision=security_revision+1
+     WHERE route=$1 AND post_id=(SELECT first_post_id FROM content.thread WHERE route=$1 AND thread_id=$2)`,
+    [routeOf(ancestorChanged.thread), ancestorChanged.thread],
+  );
+  await effect.run(
+    event(ancestorChanged.thread, ancestorChanged.post, ancestorChanged.revision, ancestorChanged.actor),
+  );
+  expect(await notices()).toEqual([]);
 });

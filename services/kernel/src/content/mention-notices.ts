@@ -1,16 +1,16 @@
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { accountStandingCheck, notificationAllowed } from '../access/index.ts';
+import { notificationAllowed } from '../access/index.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { Access, AccessContext, Resource } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { writeNotices } from './notices.ts';
 import readMentionSource from './read-mention-source.sql';
-import readMentionTargets from './read-mention-targets.sql';
+import { postReadableByAccount } from './reads.ts';
 
 const postCreated = 'com.rezics.content.post.created.v1';
 const MAX_MENTIONS = 10;
@@ -31,14 +31,6 @@ type MentionRow = {
   body: Buffer | null;
   board_id: string;
   board_visibility: string;
-};
-
-type TargetRow = {
-  id: string;
-  kind: 'thread' | 'post' | 'board';
-  visibility: string;
-  availability: string;
-  reply_to_post_id?: string | null;
 };
 
 function uniqueMentions(body: Buffer | null): string[] {
@@ -64,22 +56,6 @@ function uniqueMentions(body: Buffer | null): string[] {
 
 async function readSource(client: PoolClient, route: number, postId: string, revisionId: string) {
   return readMentionSource.run(client, { route, post_id: postId, revision_id: revisionId });
-}
-
-async function readable(access: Access, pool: Pool, recipient: string, rows: TargetRow[], deadline: number) {
-  const context: AccessContext = { pool, deadline };
-  for (const row of rows) {
-    if (!['published', 'protected'].includes(row.visibility) || row.availability !== 'available') return false;
-    const target: Resource = { route: routeOf(row.id)!, id: row.id };
-    const decisions = await accountStandingCheck(access, {
-      accountId: recipient,
-      action: `${row.kind}:read`,
-      target,
-      context,
-    });
-    if (decisions[row.id] !== true) return false;
-  }
-  return true;
 }
 
 /** The registered effects runner supplies the retryable, recorded DBOS step. */
@@ -122,34 +98,6 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
         return;
       const excluded = new Set([row.actor_id, row.reply_to_post_id ? row.parent_author_id : row.first_post_author_id]);
       const recipients = uniqueMentions(row.body).filter((id) => !excluded.has(id));
-      const targetRows = await withConnection(pool, async (client) => {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const result = await readMentionTargets.run(client, {
-            route,
-            post_id: row.post_id,
-            thread_id: row.thread_id,
-          });
-          await client.query('COMMIT');
-          return result as TargetRow[];
-        } catch (error) {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
-          }
-          throw error;
-        }
-      });
-      if (
-        targetRows.length < 3 ||
-        targetRows.length > 35 ||
-        targetRows[0]?.kind !== 'thread' ||
-        targetRows.at(-1)?.kind !== 'board' ||
-        targetRows.slice(1, -1).at(-1)?.reply_to_post_id
-      )
-        return;
-      const targets = targetRows;
       for (const recipientId of recipients) {
         const recipientRoute = routeOf(recipientId);
         if (recipientRoute === null) continue;
@@ -172,7 +120,11 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
             throw error;
           }
         });
-        if (!allowed || !(await readable(access, pool, recipientId, targets, deadline))) continue;
+        if (
+          !allowed ||
+          !(await postReadableByAccount({ pool, access }, recipientId, row.thread_id, row.post_id, { deadline }))
+        )
+          continue;
         await withConnection(pool, async (connection) => {
           await connection.query('BEGIN');
           try {

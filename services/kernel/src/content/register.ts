@@ -11,8 +11,7 @@ import type { KernelClock } from '../clock.ts';
 import type { Pool } from 'pg';
 import type { AccessRealmRoleReader } from '../request/access.ts';
 import { createRealmMembership } from '../community/membership.ts';
-import { contentEffects } from './relays.ts';
-import { createReplyNoticeEffect } from './reply-notices.ts';
+import { contentEffects, contentNoticeEffects } from './relays.ts';
 import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaImportFetchConfig } from './media-import.ts';
@@ -132,8 +131,8 @@ export const registerContent: WorkModule = {
       ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
     }).register(context);
     context.addEffects([
-      ...contentEffects(context.pool, context.client, context.clock),
-      createReplyNoticeEffect(context.pool, access),
+      ...contentEffects(context.pool, context.client),
+      ...contentNoticeEffects(context.pool, access),
     ]);
   },
 };
