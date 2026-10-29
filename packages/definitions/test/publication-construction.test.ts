@@ -86,6 +86,11 @@ test('ordinary native outcomes retain catalogue, one-level facets and cheap limi
   for (const [key, value] of Object.entries(bundledRelease.types)) expect(release.types[key]).toEqual(value);
   for (const [key, value] of Object.entries(bundledRelease.properties)) expect(release.properties[key]).toEqual(value);
   expect(validateRelease(release)).toEqual([]);
+  for (const saved of Object.values(release.filters ?? {})) {
+    const and = saved.filter as unknown as { and: { statement?: { property: string; in: string[] } }[] };
+    for (const child of and.and)
+      if (child.statement?.property === 'grow:code') child.statement.in = ['a'];
+  }
   release.properties['grow:code']!.value = { type: 'string', minLength: 1, maxLength: 1500, pattern: '^(a+)+$' };
   expect(validateRelease(release)).toEqual([
     { pointer: '/properties/grow:code/value/pattern', code: 'unsafe_pattern' },

@@ -94,7 +94,7 @@ test('raw mutable FilterRelease calls refresh patterns qualifiers typed facets a
     statement: {
       property: 'grow:code',
       in: ['A'],
-      qualifiers: [{ property: qualifier, in: ['x'] }],
+      qualifiers: [{ property: qualifier, in: ['A'] }],
     },
   } as const;
   expect(validateFilter(withQualifier, release, { saved: false })).toEqual([]);

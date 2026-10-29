@@ -367,13 +367,7 @@ async function probe(): Promise<Evidence> {
           state.types.add(type);
         }
       state.qualifiers.add(release.properties[code]!.qualifiers);
-      if (name.startsWith('duplicate-')) {
-        const member = name.split('-')[1]!;
-        const list = member === 'qualifiers' ? release.properties[code]!.qualifiers : release.types[rootType]![member];
-        state.uniqueArrays.add(list);
-      } else if (name === 'malformed-unique-members') {
-        state.uniqueArrays.add(release.types[rootType]!.mappings);
-      } else if (name === 'duplicate-unique-sites') {
+      if (name === 'duplicate-unique-sites') {
         for (const type of Object.values(release.types))
           for (const list of [type.bases, type.mappings, type.facets]) state.uniqueArrays.add(list);
         for (const property of Object.values(release.properties)) {
@@ -381,6 +375,12 @@ async function probe(): Promise<Evidence> {
             if (list) state.uniqueArrays.add(list);
           if (Array.isArray(property.relation?.filter)) state.uniqueArrays.add(property.relation.filter);
         }
+      } else if (name.startsWith('duplicate-')) {
+        const member = name.split('-')[1]! as 'bases' | 'mappings' | 'qualifiers';
+        const list = member === 'qualifiers' ? release.properties[code]!.qualifiers : release.types[rootType]![member];
+        state.uniqueArrays.add(list);
+      } else if (name === 'malformed-unique-members') {
+        state.uniqueArrays.add(release.types[rootType]!.mappings);
       }
       global.__publicationConstruction = state;
       const selected = Object.entries(release.filters ?? {}).filter(([key]) => key.startsWith('construction'));

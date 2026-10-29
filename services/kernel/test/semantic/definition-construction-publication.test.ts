@@ -33,9 +33,9 @@ if (input.original) {
     ['${root}/services/kernel/src/semantic/definitions.ts', 'services/kernel/src/semantic/definitions.ts'],
   ]);
   Bun.plugin({ name: 'historical-implementation', setup(build) {
-    build.onLoad({ filter: /\\.ts$/ }, ({ path }) => {
+    build.onLoad({ filter: /\\/(?:packages\\/definitions\\/src\\/index|packages\\/filter\\/src\\/filter|services\\/kernel\\/src\\/semantic\\/definitions)\\.ts$/ }, ({ path }) => {
       const source = paths.get(path);
-      if (!source) return;
+      if (!source) throw new Error('Unmapped historical source: ' + path);
       const result = Bun.spawnSync(['git', 'show', '2c86ce30ef:' + source], { cwd: '${root}' });
       if (result.exitCode) throw new Error(result.stderr.toString());
       return { contents: result.stdout.toString(), loader: 'ts' };
