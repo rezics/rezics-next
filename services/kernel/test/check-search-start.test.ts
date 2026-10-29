@@ -55,7 +55,7 @@ test('file-mode plans scan imports after a shebang in the selected import closur
     {
       'test/ordinary.test.ts': "import './support/worker.ts';",
       'test/support/worker.ts': "#!/usr/bin/env bun\nimport '../../src/search/work.ts';",
-      'src/search/work.ts': 'export const searchEnabled = true;',
+      'src/search/work.ts': 'export const url = process.env.OPENSEARCH_URL;',
     },
     (directory) => {
       expect(planNeedsSearch({ files: ['test/ordinary.test.ts'], tests: ['test/ordinary.test.ts'] }, directory)).toBe(
