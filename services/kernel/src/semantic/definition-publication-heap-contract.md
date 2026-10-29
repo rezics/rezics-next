@@ -58,9 +58,10 @@ includes module/schema initialization, current imported catalogue and diagnostic
 instrumented VM, not a claim about a future production worker's H0.
 
 First, three serial live-allocation witnesses (1,024/4,096/16,384 objects with strings) must increase the actual
-collected cell/byte counters. Release readings follow each witness. Next, 32,768 explicitly retained parent
-objects must appear in the parent's heap without appearing as that many additional Worker cells. This tests
-VM locality, rather than assuming that a process-wide metric becomes local when called from a Worker.
+collected cell/byte counters. Release readings follow each witness. Next, an explicitly retained and touched
+8 MiB parent ArrayBuffer must appear in the parent's collected heap size without adding half that byte count to
+the Worker's collected heap size. This tests VM locality through the runtime's documented external-memory
+accounting, rather than relying on object-count deltas that varied substantially across GC observations.
 
 The independent scales are 16/64/256, six series and eighteen jobs in total:
 

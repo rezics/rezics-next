@@ -100,7 +100,7 @@ function run(shape: HeapShape): HeapObservation {
     job!.errors = validateRelease(job!.parsed!.release);
   });
   phase('retained-release-canonicalization', () => {
-    job!.canonical = canonicalize(job!.parsed!.release);
+    job!.canonical = canonicalize(job!.parsed!.release)!;
   });
   phase('actual-release-digest-including-its-own-JCS', () => {
     job!.digest = releaseDigest(job!.parsed!.release);

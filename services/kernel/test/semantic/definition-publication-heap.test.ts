@@ -93,25 +93,25 @@ test('one real Worker measures idle and retained job heap across independent val
       previousGrowth = growth;
     }
 
-    // Independently establish VM locality: live parent objects are observable in
-    // the parent's heap, but not counted as new objects in the Worker's heap.
+    // Independently establish VM locality through per-VM external-memory counters.
     gcAndSweep();
-    const parentBefore = heapStats().objectCount;
-    const parentWitness = Array.from({ length: 32768 }, (_, index) => ({ index }));
+    const parentBefore = heapStats().heapSize;
+    const parentWitness = new ArrayBuffer(8 * 1024 * 1024);
+    new Uint8Array(parentWitness).fill(0xa5);
     gcAndSweep();
-    const parentAfter = heapStats().objectCount;
+    const parentAfter = heapStats().heapSize;
     worker.postMessage({ kind: 'idle' });
     const isolated = await next('idle');
-    expect(parentAfter - parentBefore).toBeGreaterThanOrEqual(parentWitness.length);
-    expect(isolated.heap!.collections[0]!.objectCount - calibration.idle!.collections[0]!.objectCount).toBeLessThan(
-      parentWitness.length,
+    expect(parentAfter - parentBefore).toBeGreaterThanOrEqual(parentWitness.byteLength);
+    expect(isolated.heap!.collections[0]!.heapSize - calibration.idle!.collections[0]!.heapSize).toBeLessThan(
+      parentWitness.byteLength / 2,
     );
     console.log(
       'definition-publication-heap VM locality',
       JSON.stringify({
         parentBefore,
         parentAfter,
-        retainedParentObjects: parentWitness.length,
+        retainedParentArrayBufferBytes: parentWitness.byteLength,
         worker: isolated.heap,
       }),
     );
