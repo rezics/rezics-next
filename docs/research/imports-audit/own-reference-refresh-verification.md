@@ -39,8 +39,43 @@ bun scripts/worker-check.ts -- bun scripts/typecheck.ts
 Check `95993fff-f007-4bce-830a-78972966d876` reached terminal **exit 0**. All 13 workspaces
 completed without errors. Log:
 `.temp/goal/checks/worker-check-2026-10-29T18-18-52.273Z-db91360d.log`.
-The full frozen file now compiles; focused native acceptance is the remaining required check.
-The earlier isolated compiler probe is not used as full-file evidence.
+The full frozen file now compiles. The earlier isolated compiler probe is not used as full-file evidence.
+
+Focused native acceptance then ran once on committed revision
+`2f7e1cc68802bb34d6906dfb0dbb1000669002fa` (only evidence prose differs from the typechecked revision):
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
+```
+
+Check `1e7682fe-3eb8-4f38-93d9-a9207c83bab2` reached terminal **exit 0: 2 pass, 0 fail,
+135 assertions**. Log:
+`.temp/goal/checks/worker-check-2026-10-29T18-20-58.441Z-19dd4fd1.log`.
+There were no load reruns or infrastructure reruns. Both checks used their original handles until terminal exit;
+no check remains running. Inherited routing selected b for typecheck and c for native acceptance; no host,
+runner, dependency, timeout, limit or routing setting was changed by this continuation.
+
+Both native flows reached all their assertions:
+
+- The first real work create response matched its exact own binding. The later edition proposal and actual
+  target-addressed candidate used that real work ID, with unchanged source/converter revisions. The unknown
+  author retained `somevalue` and its external identifier without acquiring an own binding. The editor accepted
+  and adopted the retrieved candidate; identical input preserved its listing. Revoking bulk permission made
+  replay return 403 without the work ID, preserving the own binding and candidate listing.
+- The edition initially produced an unresolved work candidate, which the editor accepted and adopted. Learning
+  the real work claim and repeating unchanged complete input produced a resolved candidate with a different
+  semantic body/key and identical source envelope. The old unresolved candidate's statement/revision remained
+  in history, and its earlier community adoption remained visible. The editor accepted/adopted the real resolved
+  candidate, and the subject disclosed the resolved relation after the exact subject-partition relay caught up.
+  Stable replay preserved both separately addressed candidate pages. The single unknown-author candidate had
+  the exact native read qualifier `{ id: 'wdt:P648', data_type: 'external-id' }`.
+
+The frozen file remains unchanged at the approved/registry hash. Inverting only the property factoring yields
+prior SHA-256 `720b74e64eb29d8a1a10403f16c9e9a329d01aab93255fe5c69bc46f97d1db51`, confirming
+that the complete one-hunk amendment contains no other byte changes. Native success establishes these two
+bounded default Open Library flows, not full imports capability, every injected-provider configuration,
+all-source recovery or new growth/PostgreSQL cost measurements. Local immutable-bootstrap/reopen evidence
+remains a separate qualified proof at its durable receipt-transport boundary.
 Runtime, storage and local regression bytes are identical to `c79e538dfd`, so the qualified local
 bootstrap/reopen **2 pass, 16 assertions** and post-retention adjacent **11 pass, 158 assertions**
 receipts below are reused. No production, shared-type, infrastructure or dependency change is made.
@@ -234,8 +269,8 @@ passes predate candidate retention and do not establish current recovery behavio
 ## Decisions and bounds
 
 Preserve existing semantically unchanged candidates and every immutable journal/bootstrap byte. Reuse qualified
-local evidence because its relevant product/test bytes are unchanged. Current shared-base differences require a
-fresh root typecheck and focused native acceptance after the authorized type-only correction; reuse the completed adjacent coverage. Do not rebase or merge this assigned branch. Existing Cost ceilings remain; candidate retention adds
+local evidence because its relevant product/test bytes are unchanged. The authorized property factoring required a
+fresh root typecheck followed by focused native acceptance; both now pass. Reuse the completed adjacent coverage. Do not rebase or merge this assigned branch. Existing Cost ceilings remain; candidate retention adds
 at most C × Q full-statement comparisons, C ≤ 300 current owned candidates and Q ≤ 100 actual Open Library proposals,
 with existing bounded statement bytes. This is local bounded work, with no new history scan or server query.
 
@@ -244,5 +279,5 @@ with existing bounded statement bytes. This is local bounded work, with no new h
 Read `docs/architecture.md`, `docs/scope.md`, the development workflow and Goal index, the imports capability contract,
 the importer README, the existing known-reference report, the frozen native acceptance, Open Library converter and
 context types, source registration and configured aliases, importer planning, run-store signatures, exact
-`RecordBindings.claim` and candidate APIs, and semantic relation-slot/candidate-listing contracts, the native read schemas, the controller's earlier three-hunk type amendment and its latest exact erased matcher generic. No reference
+`RecordBindings.claim` and candidate APIs, and semantic relation-slot/candidate-listing contracts, the native read schemas, the controller's earlier three-hunk type amendment, erased matcher generic and exact property factoring. No reference
 project or legacy source was consulted. No files outside the declared paths were changed.
