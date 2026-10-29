@@ -47,8 +47,19 @@ to a curated Collection creates independent occurrences; later reaction changes 
 There is no shelf endpoint, separate DTO, cursor codec, filter union or Liked-specific members engine.
 
 All discovery, point and member GETs are domain-read-only, including repeated empty reads. They create no
-header, grant, receipt, outbox event, repair, work intent or enqueue. Native read/session headers are not
-domain writes. Native authorization still applies; logical ownership is not a replacement Access decision.
+header, grant, receipt, outbox event or other domain state. List, point and logical discovery remain pure.
+The common members GET alone may start bounded derived preparation and its work intent as an idempotent
+cache fill, keyed by actual viewer, Collection, validated filter/sort and accepted release/meaning, within
+the shared quotas and budgets. It never caches authority or materializes the Collection. Native read/session
+headers are not domain writes. Native authorization still applies; logical ownership is not a replacement
+Access decision.
+
+Retained members preparation returns `202 application/json`, exactly `{preparing:true}`, with `Retry-After`
+and `private, no-store`. Retry the same validated URL and cursor. There are no members, next, operation ID,
+receipt, partial data or user-visible resource state in that response. Finite preparation must reach a useful
+page; unavailable work remains 503. Genuine exhausted empty reads remain `200 {members:[],next:null}`.
+The small native direct cases below do not force preparation or add a timing hook. This is the adopted
+[common members cache exception](dynamic-collections.md#model-and-identity), not a new runtime API.
 
 ## Current membership and independent facts
 
@@ -78,6 +89,10 @@ The actual Content HTTP write is `PUT /v1/subjects/{id}/reaction` with the close
 for absence; merged reads retain Content's native redirect behavior. These are current commands, not a
 new Collection write or reader adapter. Current subject reaction Access and original/terminal eligibility
 remain Content/native boundaries.
+For subject writes, the actual reaction command authorizes `reaction:set` on Global and independently checks
+current subject readability. `setupContent` installs the active-account standing grant, including in the native
+outcome driver. Ordinary reacting owners need no per-subject grant; the subject creator has no implied grant
+administration role. Thread/post reactions retain their actual resource and community participation checks.
 
 ## Indexed source, canonical pages and privacy
 
@@ -133,21 +148,29 @@ kinds, unprofiled subjects, thread/post controls, fact separation, useful signed
 real revoked suspended bearer. No driver injection, model, permission map, fake gate, successful fallback,
 skip or caught-as-pass path supplies acceptance.
 
-The committed fixture opens Collections through its actual governor. Before any Liked assertion can run,
-that governor's `POST /v1/platform/exposure/collections:open` must return 200 using native authorization.
-A 403 `forbidden` from that setup call is a shared fixture prerequisite failure, not a reached missing-Liked
-assertion or evidence that an owner should be denied. The shared producer must supply effective setup
-authority through its committed fixture; consumers cannot compensate with gate grants or a second bootstrap.
+The committed shared fixture opens Collections through its actual internal governor. It also exports
+`setup.openFeatures(['personal_library','reading_progress'])`, `setup.spaceCreation('alice')` and
+`inspect(sql, values?)`. The cases consume these actual exports on the same fixture: open the two required
+personal families for entry/session/copy controls, give the named Alice account the separate Global
+`space:create` setup capability for the real thread/post control, and inspect the owned kernel database
+through its native repeatable-read, read-only transaction. Space creation is separately privileged, not an
+exposure gate. No consumer grant loop, duplicate community bootstrap or second fixture supplies authority.
 
-Its current export does **not** expose
-the native pool/read-only inspection capability or a shared opener for other required families. It also has
-no same-owner read-only token factory. Those are shared fixture producer gaps: a native `platform_closed`
-response during required Library/progress setup is a prerequisite failure, not an owner-denial or empty-list
-pass. Consume only an actual committed shared gate/read-only capability export when provided; do not
-duplicate governance bootstrap, cast a hidden pool, install grants or guess its future signature.
-When that inspection capability is available, compare native header/grant/receipt/outbox state around GETs
-and inspect unchanged fact/pin state around reactions. Until then HTTP observations cannot prove those
-storage invariants. No new released word/form/diet data is required for basic Liked.
+Exact setup prerequisites are working native Auth/Access/default kernel, the bundled active definitions
+release, Collections opening and the two requested personal-family openings returning 200 through the actual
+governor, Content's installed Global active-account reaction standing, and the shared named-persona Space
+setup admitting Alice's ordinary Space creation. Actual Realm, board-scheme selection, board, thread and
+first-post commands must succeed for the discussion control. SQL inspection must operate read-only on that
+fixture's owned database. A setup 403, `platform_closed` or unavailable setup capability is a shared prerequisite
+failure, not a reached missing-Liked assertion or evidence that an owner should be denied. Preserve its actual
+status/problem and report the missing input distinctly; never compensate with injected policy or SQL writes.
+
+The native cases compare full header/grant/resource-initialization/receipt/outbox rows around repeated GETs,
+allowing only the common derived-cache exception. They also compare actual entry/session/holding/label,
+accepted-pin and state-support/sequence rows around ordinary reactions. An independent Alice/Bob/outsider
+reaction case establishes the real HTTP prerequisite without depending on an implemented Liked reader.
+Stable HTTP responses alone cannot prove storage purity. No new released word/form/diet data or synthetic
+profile is required for basic Liked.
 
 Separate missing runtime producers remain: the built-in identity tag and dynamic DTO/discovery/point reader;
 Content's indexed raw reader; shared native source/version, canonical epoch/current-disclosure ports; and

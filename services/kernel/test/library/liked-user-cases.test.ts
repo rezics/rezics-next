@@ -19,6 +19,8 @@ const changed = new Map<string, { owner: Owner; path: string }>();
 
 beforeAll(async () => {
   fixture = await createReleasedDiscoveryFixture({ version: 1 });
+  // Only the shared fixture's actual governor opens the required personal families.
+  await fixture.setup.openFeatures(['personal_library', 'reading_progress']);
 }, 180_000);
 afterEach(async () => {
   for (const [key, { owner, path }] of changed) {
@@ -87,6 +89,7 @@ async function exactMembers(ids: string[], owner: Owner = 'alice', kind: 'liked'
   expect(page.response.body.next).toBeNull();
 }
 async function react(owner: Owner, path: string, kind: string | null) {
+  const facts = await personalFacts(owner);
   const response = await fixture.request(
     owner,
     kind === null ? 'DELETE' : 'PUT',
@@ -98,6 +101,7 @@ async function react(owner: Owner, path: string, kind: string | null) {
   if (kind !== null) expect(response.body).toEqual({ kind });
   if (kind === null) changed.delete(`${owner}:${path}`);
   else changed.set(`${owner}:${path}`, { owner, path });
+  expect(await personalFacts(owner), 'Reactions must not write personal facts, pins or state support').toEqual(facts);
 }
 async function subjectReaction(owner: Owner, id: string, kind: string | null) {
   const path = `/v1/subjects/${id}/reaction`;
@@ -112,26 +116,40 @@ async function noPresence(owner: Owner = 'alice') {
   expect(items.filter((item) => item.builtin?.kind === 'state')).toHaveLength(0);
   await exactMembers([], owner, 'everything');
 }
-async function reactionSubject(type: string, name: string, owners: Owner[] = ['alice']) {
-  const subject = await fixture.createSubject(type, name);
-  // The actual creating editor administers only this subject's native reaction grant.
-  // This grants no Collection, Library family or gate authority and supplies no eligibility callback.
-  for (const owner of owners) {
-    const granted = await fixture.request(
-      'editor',
-      'POST',
-      '/v1/grants',
-      {
-        resource: { route: routeOf(subject.id)!, id: subject.id },
-        subject: { kind: 'account', id: fixture.personas[owner].accountId },
-        actions: ['reaction:set'],
-        valid: '(,)',
-      },
-      discoveryKey(),
-    );
-    status(granted, 201, 'Native fixture prerequisite: actual subject reaction grant administration');
-  }
-  return subject;
+async function personalFacts(owner: Owner) {
+  // Whole rows include actual accepted pins; inspection cannot create facts or authorize a reaction.
+  return (
+    await fixture.inspect(
+      `SELECT 'entry' AS family, to_jsonb(r) AS value FROM library.entry r WHERE account_id = $1
+       UNION ALL SELECT 'session', to_jsonb(r) FROM library.progress_session r WHERE account_id = $1
+       UNION ALL SELECT 'holding', to_jsonb(r) FROM library.copy r WHERE account_id = $1
+       UNION ALL SELECT 'label', to_jsonb(r) FROM library.label_assignment r WHERE account_id = $1
+       UNION ALL SELECT 'state_reference', to_jsonb(r) FROM library.builtin_collection_reference r WHERE account_id = $1
+       UNION ALL SELECT 'state_support', to_jsonb(r) FROM library.builtin_state_reference_source r WHERE account_id = $1
+       UNION ALL SELECT 'state_sequence', to_jsonb(r) FROM library.owner_write_counter r WHERE account_id = $1
+       ORDER BY family, value`,
+      [fixture.personas[owner].accountId],
+    )
+  ).rows;
+}
+async function domainState() {
+  // Derived preparation/cache and its work intent are permitted by the common members GET contract.
+  // These native domain tables must stay unchanged even if members need that preparation.
+  return (
+    await fixture.inspect(
+      `SELECT 'header' AS family, to_jsonb(r) AS value FROM library.collection r
+       UNION ALL SELECT 'grant', to_jsonb(r) FROM access.resource_grant r
+       UNION ALL SELECT 'role_grant', to_jsonb(r) FROM access.resource_role_grant r
+       UNION ALL SELECT 'resource', to_jsonb(r) FROM access.resource_initialization r
+       UNION ALL SELECT 'receipt', to_jsonb(r) FROM core.receipt r
+       UNION ALL SELECT 'outbox', to_jsonb(r) FROM core.outbox r
+       ORDER BY family, value`,
+    )
+  ).rows;
+}
+async function reactionSubject(type: string, name: string) {
+  // setupContent installs native active-account standing on Global, never on the created subject.
+  return fixture.createSubject(type, name);
 }
 
 test('every empty account discovers exactly one private dynamic Liked without changing Everything or state discovery', async () => {
@@ -161,8 +179,44 @@ test('repeated owner Liked point and member GETs return stable logical identity 
     first = response.body;
     await exactMembers([]);
   }
-  // The shared fixture currently exports no native pool for header/grant/receipt/outbox inspections.
-  // Stable HTTP responses alone are deliberately not claimed as proof of storage read-only behavior.
+}, 120_000);
+
+test('discovery point and repeated empty members GETs preserve native headers grants receipts and outbox', async () => {
+  expect(
+    (await fixture.inspect<{ read_only: string }>("SELECT current_setting('transaction_read_only') AS read_only")).rows,
+  ).toEqual([{ read_only: 'on' }]);
+  const before = await domainState();
+  const responses: HttpResponse[] = [];
+  for (const owner of ['alice', 'bob', 'outsider'] as const) {
+    for (let read = 0; read < 3; read++) {
+      for (const path of [
+        `/v1/collections?curatorAccountId=${fixture.personas[owner].accountId}&limit=100`,
+        `/v1/collections/${logicalId(owner, 'liked')}`,
+        `/v1/collections/${logicalId(owner, 'liked')}/members?limit=100`,
+      ])
+        responses.push(await fixture.request(owner, 'GET', path));
+    }
+  }
+  expect(await domainState(), 'GET must not materialize or mutate domain state').toEqual(before);
+  // These genuinely empty direct cases require final 200 pages; no preparation is forced by the test.
+  for (const response of responses) status(response, 200, 'Empty logical Liked native read');
+}, 120_000);
+
+test('ordinary Alice Bob and outsider react through native Global standing without per-subject grants or personal facts', async () => {
+  const subject = await reactionSubject('schema:Book', 'Ordinary subject reaction prerequisite');
+  for (const owner of ['alice', 'bob', 'outsider'] as const) {
+    expect(await personalFacts(owner)).toEqual([]);
+    const grants = await fixture.inspect(
+      `SELECT * FROM access.resource_grant
+       WHERE subject_id = $1 AND (resource_id = $2 OR action = 'reaction:set')`,
+      [fixture.personas[owner].accountId, subject.id],
+    );
+    expect(grants.rows).toEqual([]);
+    await subjectReaction(owner, subject.id, 'like');
+    await subjectReaction(owner, subject.id, 'love');
+    await subjectReaction(owner, subject.id, null);
+    expect(await personalFacts(owner)).toEqual([]);
+  }
 }, 120_000);
 
 for (const kind of ['like', 'love'] as const)
@@ -211,7 +265,7 @@ for (const kind of ['laugh', 'insightful', 'sad'] as const)
   }, 120_000);
 
 test('Bob subject reactions remain separate from Alice Liked even on the same readable subject', async () => {
-  const subject = await reactionSubject('schema:Book', 'Independent reacting owners', ['alice', 'bob']);
+  const subject = await reactionSubject('schema:Book', 'Independent reacting owners');
   await subjectReaction('bob', subject.id, 'love');
   await exactMembers([], 'alice');
   await exactMembers([subject.id], 'bob');
@@ -259,7 +313,8 @@ test('subject reactions create no native entry session holding or state sibling'
 
 test('thread and post like or love reactions referencing a subject do not qualify for Liked', async () => {
   const subject = await fixture.createSubject('schema:Book', 'Discussion reaction control');
-  // Ordinary community/Content setup, without gate grants or an alternate native world.
+  // Space creation is privileged separately from exposure; use only the shared named-persona setup.
+  await fixture.setup.spaceCreation('alice');
   const space = await fixture.request('alice', 'POST', '/v1/spaces', { title: 'Liked controls' }, discoveryKey());
   status(space, 201, 'Native fixture prerequisite: real Space creation');
   const realm = await fixture.request(
