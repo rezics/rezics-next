@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
+import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { processIdentity, sameProcess, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
@@ -303,6 +304,7 @@ open(exit_path+'.tmp','w').write(json.dumps({'code':code,'signal':sig}))
 os.rename(exit_path+'.tmp',exit_path)
 `;
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number };
+export type CapacityRelease = () => void;
 const DEFAULT_CAPACITY: HostCapacity = { maxWorkers: 32, minAvailableMiB: 6144 };
 /** Whether one more worker may start: below the worker cap and above the memory floor. */
 export function hasCapacity(running: number, availableMiB: number, capacity: HostCapacity): boolean {
@@ -322,7 +324,7 @@ export function capacityAvailable(store: WorkerStore, stateDirectory: string): b
   } catch {
     /* Defaults. */
   }
-  const running = store.runningAttemptsCount() + admittedStarts(store, stateDirectory);
+  const running = store.runningAttemptsCount() + admittedStarts(stateDirectory);
   return hasCapacity(running, availableMiB(), capacity);
 }
 /** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
@@ -340,10 +342,11 @@ export async function awaitHostCapacity(
   stateDirectory: string,
   first = false,
   taskId?: string,
-): Promise<void> {
+  targetAttempt?: number,
+): Promise<CapacityRelease> {
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
-  if (!existsSync(file)) return;
+  if (!existsSync(file)) return () => {};
   // Waiters hold tickets so the oldest starts first: polling alone let a start wait over an hour behind newer ones.
   const queue = join(stateDirectory, 'capacity-queue');
   // The ticket names its task, so the host can tell a waiting start from a lost one. Critical-path starts used to skip
@@ -352,38 +355,51 @@ export async function awaitHostCapacity(
   // its ticket half an hour earlier, so it goes ahead of recent waiters without starving older ones.
   const ticket = `${String(Date.now() - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
   mkdirSync(queue, { recursive: true });
-  writeFileSync(join(queue, ticket), '');
+  const owner = processIdentity();
+  if (!owner) throw new Error('Cannot identify capacity ticket owner');
+  writeFileSync(join(queue, ticket), JSON.stringify(owner));
   let reported = false;
   try {
     for (;;) {
-      if (!existsSync(file)) return;
-      let capacity = DEFAULT_CAPACITY;
+      let admissionLease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
-      } catch {
-        /* Defaults. */
+        admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'));
+      } catch (error) {
+        if (!(error instanceof LeaseHeldError)) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        continue;
       }
-      const admitted = admittedStarts(store, stateDirectory);
-      const running = store.runningAttemptsCount();
-      const ahead = waitersAhead(queue, ticket);
-      if (hasCapacity(running + admitted + ahead, availableMiB(), capacity)) {
-        const reservation = join(queue, `${ticket}.admitted`);
-        renameSync(join(queue, ticket), reservation);
-        releaseWhenStarted(store, stateDirectory, reservation, taskId);
-        return;
+      try {
+        if (!existsSync(file)) return () => {};
+        let capacity = DEFAULT_CAPACITY;
+        try {
+          capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
+        } catch {
+          /* Defaults. */
+        }
+        const admitted = admittedStarts(stateDirectory);
+        const running = store.runningAttemptsCount();
+        const ahead = waitersAhead(queue, ticket);
+        if (hasCapacity(running + admitted + ahead, availableMiB(), capacity)) {
+          const reservation = join(queue, `${ticket}.admitted`);
+          renameSync(join(queue, ticket), reservation);
+          return releaseWhenStarted(store, reservation, taskId, targetAttempt);
+        }
+        if (!reported)
+          console.error(
+            `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
+          );
+        reported = true;
+      } finally {
+        admissionLease.release();
       }
-      if (!reported)
-        console.error(
-          `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
-        );
-      reported = true;
       await new Promise((resolve) => setTimeout(resolve, 15_000));
     }
   } finally {
     rmSync(join(queue, ticket), { force: true });
   }
 }
-function admittedStarts(store: WorkerStore, stateDirectory: string): number {
+function admittedStarts(stateDirectory: string): number {
   const queue = join(stateDirectory, 'capacity-queue');
   try {
     return readdirSync(queue).filter((name) => name.endsWith('.admitted') && liveTicket(queue, name)).length;
@@ -393,35 +409,78 @@ function admittedStarts(store: WorkerStore, stateDirectory: string): number {
 }
 function liveTicket(queue: string, name: string): boolean {
   const [, rawPid] = name.replace(/\.admitted$/, '').split('-');
-  const identity = processIdentity(Number(rawPid));
-  if (identity && sameProcess(identity)) return true;
+  const pid = Number(rawPid);
+  const identity = processIdentity(pid);
+  if (!identity) {
+    rmSync(join(queue, name), { force: true });
+    return false;
+  }
+  let contents: string;
+  try {
+    contents = readFileSync(join(queue, name), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      rmSync(join(queue, name), { force: true });
+      return false;
+    }
+    return sameProcess(identity);
+  }
+  try {
+    const expected = JSON.parse(contents) as { pid?: unknown; start?: unknown; boot?: unknown; group?: unknown };
+    if (expected.pid === pid && typeof expected.start === 'string' && typeof expected.boot === 'string') {
+      if (
+        identity.start !== expected.start ||
+        identity.boot !== expected.boot ||
+        (typeof expected.group === 'number' && identity.group !== expected.group)
+      ) {
+        rmSync(join(queue, name), { force: true });
+        return false;
+      }
+    }
+  } catch {
+    // Older queue tickets have no identity payload; keep their PID-based liveness behavior.
+  }
+  if (sameProcess(identity)) return true;
   rmSync(join(queue, name), { force: true });
   return false;
 }
-function releaseWhenStarted(store: WorkerStore, stateDirectory: string, reservation: string, taskId?: string): void {
-  if (!taskId) return;
-  const queue = dirname(reservation);
+function releaseWhenStarted(
+  store: WorkerStore,
+  reservation: string,
+  taskId?: string,
+  targetAttempt?: number,
+): CapacityRelease {
   const [, rawPid] = reservation.split('-');
   const identity = processIdentity(Number(rawPid));
-  const timer = setInterval(() => {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    if (timer) clearInterval(timer);
+    rmSync(reservation, { force: true });
+  };
+  timer = setInterval(() => {
     if (!identity || !sameProcess(identity)) {
-      clearInterval(timer);
-      rmSync(reservation, { force: true });
+      release();
       return;
     }
+    if (!taskId) return;
     try {
       const attempts = store.attempts(taskId);
-      const current = attempts.at(-1);
+      const current =
+        targetAttempt === undefined
+          ? attempts.at(-1)
+          : attempts.find((attempt) => attempt.attempt === targetAttempt);
       if (current && current.state !== 'pending' && current.state !== 'waiting') {
-        clearInterval(timer);
-        rmSync(reservation, { force: true });
+        release();
       }
     } catch {
-      clearInterval(timer);
-      rmSync(reservation, { force: true });
+      // Callers release explicitly when preparation fails; transient store errors must not admit another start early.
     }
   }, 250);
   timer.unref();
+  return release;
 }
 /** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
 export function capacityWaiters(stateDirectory: string): Set<string> {
@@ -434,9 +493,8 @@ export function capacityWaiters(stateDirectory: string): Set<string> {
   }
   const live = new Set<string>();
   for (const name of names) {
-    const [, pid, ...rest] = name.replace(/\.admitted$/, '').split('-');
-    const identity = processIdentity(Number(pid));
-    if (identity && sameProcess(identity)) live.add(rest.join('-'));
+    const [, , ...rest] = name.replace(/\.admitted$/, '').split('-');
+    if (liveTicket(queue, name)) live.add(rest.join('-'));
   }
   return live;
 }
@@ -451,15 +509,7 @@ export function waitersAhead(queue: string, ticket: string): number {
   return names.filter((name) => {
     const baseName = name.replace(/\.admitted$/, '');
     if (baseName >= ticket || name.endsWith('.admitted')) return false;
-    const pid = Number(baseName.split('-')[1]);
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return true;
-      rmSync(join(queue, name), { force: true });
-      return false;
-    }
+    return liveTicket(queue, name);
   }).length;
 }
 export async function launch(

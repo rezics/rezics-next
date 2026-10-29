@@ -453,16 +453,27 @@ export class WorkerTasks {
     writeFileSync(path, task.brief.criticalPath ? 'critical\n' : 'normal\n');
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
-    await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)), taskId);
-    // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
-    // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const task = this.store.task(taskId);
+    const releaseCapacity = await awaitHostCapacity(
+      this.store,
+      this.settings.stateDirectory,
+      startsFirst(task),
+      taskId,
+      task.currentAttempt + 1,
+    );
     try {
-      // Another process may have started it while this one waited for capacity.
-      if (this.store.task(taskId).state !== 'ready') throw new LeaseHeldError(`Task already started: ${taskId}`);
-      return await this.startReleasedTask(taskId);
+      // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
+      // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
+      const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+      try {
+        // Another process may have started it while this one waited for capacity.
+        if (this.store.task(taskId).state !== 'ready') throw new LeaseHeldError(`Task already started: ${taskId}`);
+        return await this.startReleasedTask(taskId);
+      } finally {
+        lease.release();
+      }
     } finally {
-      lease.release();
+      releaseCapacity();
     }
   }
   private async startReleasedTask(taskId: string): Promise<RunningWorker> {
@@ -570,9 +581,14 @@ export class WorkerTasks {
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
-    if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId);
-    let lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    const targetAttempt = plan && !plan.hold ? this.store.task(taskId).currentAttempt + 1 : undefined;
+    const releaseCapacity =
+      plan && !plan.hold
+        ? await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId, targetAttempt)
+        : () => {};
+    let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
     try {
+      lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
@@ -890,6 +906,7 @@ export class WorkerTasks {
       }
     } finally {
       lease?.release();
+      releaseCapacity();
     }
   }
   async stop(taskId: string, cancelled = false): Promise<void> {

@@ -390,20 +390,31 @@ export class WorkerJob implements GateOutcomeSink {
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
     const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
     if (!pool) throw new Error(`Waiting attempt refers to missing pool ${attempt.pool}`);
-    await awaitHostCapacity(this.tasks.store, this.tasks.settings.stateDirectory, startsFirst(task), task.id);
+    const releaseCapacity = await awaitHostCapacity(
+      this.tasks.store,
+      this.tasks.settings.stateDirectory,
+      startsFirst(task),
+      task.id,
+      attempt.attempt,
+    );
     const prompt = [
       `The checks you started have finished or could not be found. ${message}`,
       'Continue the same task and session. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
-    const worker = await launch(
-      this.tasks.store,
-      task,
-      attempt,
-      pool,
-      prompt,
-      this.tasks.settings.codex,
-      attempt.session ?? undefined,
-    );
+    let worker: RunningWorker;
+    try {
+      worker = await launch(
+        this.tasks.store,
+        task,
+        attempt,
+        pool,
+        prompt,
+        this.tasks.settings.codex,
+        attempt.session ?? undefined,
+      );
+    } finally {
+      releaseCapacity();
+    }
     await this.follow(worker);
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
