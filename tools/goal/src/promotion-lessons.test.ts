@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { git } from './merge.ts';
+import { promote } from './promotion.ts';
 import { integrationHarness } from './test-support.ts';
 
 const success = { passed: true, output: '', timedOut: false };
@@ -11,7 +12,12 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
     h.ensureDev();
     h.advanceDev('feature');
     let gates = 0;
-    await h.promote(async () => (++gates === 1 ? failure : success));
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      runGate: async () => (++gates === 1 ? failure : success),
+    });
+    await h.job.drain();
     expect(gates).toBe(1);
     expect(git(h.root, 'branch', '--list', 'stabilize')).toBe('');
 
@@ -19,7 +25,7 @@ test('does not cut stabilize from dev until both quick gates pass', async () => 
       gates++;
       return success;
     });
-    expect(gates).toBe(6); // preflight, candidate gate, then preflight for the next window
+    expect(gates).toBe(2); // candidate gate, then the next candidate gate
     expect(h.head('stabilize')).toBe(h.head('dev'));
   } finally {
     h.dispose();

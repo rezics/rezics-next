@@ -11,8 +11,8 @@ import type { GateOutcome, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
-import { promote } from './promotion.ts';
-import type { GateRunner } from './merge.ts';
+import { PROMOTION_GATE_TIMEOUT_MS, promote } from './promotion.ts';
+import { gateRunner, type GateRunner } from './merge.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 
 export function temporaryDirectory(): { path: string; close(): void } {
@@ -251,7 +251,19 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
       await job.drain();
     },
     async promote(runGate?: GateRunner) {
-      await promote({ settings: h.settings, job, ...(runGate ? { runGate } : {}) });
+      const fallback = runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS);
+      await promote({
+        settings: h.settings,
+        job,
+        runGate: (command, cwd, logPath) => {
+          // Most harness callbacks model the full promotion gate. Keep the newly added quick preflight independent;
+          // tests for that preflight use promote() directly so their failure is observable.
+          if (JSON.stringify(command) === JSON.stringify(['bun', 'run', 'typecheck']) ||
+              JSON.stringify(command) === JSON.stringify(['bun', 'run', '--cwd', 'packages/definitions', 'release']))
+            return Promise.resolve({ passed: true, output: '', timedOut: false });
+          return fallback(command, cwd, logPath);
+        },
+      });
       await job.drain();
     },
   };

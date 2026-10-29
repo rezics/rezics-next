@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { git } from './merge.ts';
+import { promote } from './promotion.ts';
 import { integrationHarness } from './test-support.ts';
 
 const failure = { passed: false, output: 'AssertionError: incompatible fixture', timedOut: false };
@@ -176,7 +177,12 @@ test('promotion without a stabilize branch does not cut from a dev commit that f
     const dev = h.head();
     await h.seed('last');
 
-    await h.promote(async (_command, cwd) => (existsSync(join(cwd, 'bad')) ? failure : success));
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      runGate: async (_command, cwd) => (existsSync(join(cwd, 'bad')) ? failure : success),
+    });
+    await h.job.drain();
 
     expect(h.store.task(first.id).state).toBe('integrated');
     expect(h.store.task(bad.id).currentAttempt).toBe(1);
