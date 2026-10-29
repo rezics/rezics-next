@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { DATA_TYPES } from '../src/index.ts';
 
 const safe = [
   '^[A-Z][a-z]+$',
@@ -33,7 +34,7 @@ async function evaluate(
   step: number,
   reverse: boolean,
   inputs: string[],
-  fixedSchemas = false,
+  fixedSchemas: string[] = [],
   repeat = true,
   datatypes = ['string', 'monolingualtext'],
 ) {
@@ -54,8 +55,7 @@ async function evaluate(
     });
     const results = [];
     try {
-      const datatypes = ${reverse} ? [...DATA_TYPES].reverse() : DATA_TYPES;
-      for (const datatype of ${fixedSchemas} ? datatypes : []) results.push(['fixed', datatype, validateRelease(fixture(datatype))]);
+      for (const datatype of ${JSON.stringify(fixedSchemas)}) results.push(['fixed', datatype, validateRelease(fixture(datatype))]);
       const patterns = ${JSON.stringify(inputs)};
       if (${reverse}) patterns.reverse();
       for (const pattern of ${repeat} ? [...patterns, ...patterns.slice().reverse()] : patterns) {
@@ -99,16 +99,21 @@ async function evaluate(
 
 for (const step of [3001, 0]) {
   for (const reverse of [false, true]) {
-    const suffix = step === 3001 && !reverse ? '' : ` (clock ${step}, reverse ${reverse})`;
-    test(`pattern safety verdicts are structural and independent of clock or host load${suffix}`, async () => {
-      const results = await evaluate(step, reverse, [], true);
-      for (const [, , issues] of results) expect(issues).toEqual([]);
-    });
+    for (const datatype of DATA_TYPES) {
+      const suffix =
+        step === 3001 && !reverse && datatype === 'wikibase-item'
+          ? ''
+          : ` (${datatype}, clock ${step}, reverse ${reverse})`;
+      test(`pattern safety verdicts are structural and independent of clock or host load${suffix}`, async () => {
+        const results = await evaluate(step, reverse, [], [datatype]);
+        for (const [, , issues] of results) expect(issues).toEqual([]);
+      });
+    }
   }
 }
 
 async function assertVerdicts(step: number, reverse: boolean, patterns: string[], repeat = true, datatypes?: string[]) {
-  const results = await evaluate(step, reverse, patterns, false, repeat, datatypes);
+  const results = await evaluate(step, reverse, patterns, [], repeat, datatypes);
   for (const [pattern, datatype, issues, compiler] of results) {
     if (safe.includes(pattern)) {
       expect(issues).toEqual([]);
@@ -143,9 +148,11 @@ for (const step of [3001, 0]) {
     // Every variant has an identical exact oracle, including repeated evaluations
     // in each cold subprocess. Separate units preserve the existing test deadline.
     for (const pattern of [...safe, ...hostile]) {
-      test(`cold and repeated compiler/release verdicts: ${pattern} (clock ${step}, reverse ${reverse})`, async () => {
-        await assertVerdicts(step, reverse, [pattern]);
-      });
+      for (const datatype of ['string', 'monolingualtext']) {
+        test(`cold and repeated compiler/release verdicts: ${pattern} (${datatype}, clock ${step}, reverse ${reverse})`, async () => {
+          await assertVerdicts(step, reverse, [pattern], true, [datatype]);
+        });
+      }
     }
   }
 }
