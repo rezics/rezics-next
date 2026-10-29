@@ -15,6 +15,7 @@ import { loadViewPages } from '../src/features/pages/subject-frame';
 import { readRelationsPage } from '../src/features/pages/relations-view';
 import { createKernelClient } from '@rezics/client';
 import { createRecordedKernelFetch } from '../src/kernel/fake';
+import { loadAgentPage } from '../src/features/pages/agent';
 
 const redirectedClient = (data: unknown) =>
   ({
@@ -274,3 +275,27 @@ test('the fake handle redirect follows in one hop with the original POST body an
   expect(requests).toHaveLength(2);
   expect(JSON.parse(new URL(requests[1]!).searchParams.get('target')!)).toEqual({ account: 'helper', view: 'details' });
 });
+
+for (const automated of [false, true]) {
+  test(`${automated ? 'software' : 'person'} page loading keeps its page and public identity read bound`, async () => {
+    const requests: string[] = [];
+    const fake = createRecordedKernelFetch({ 'agent-page': agentRecording });
+    const client = createKernelClient('https://kernel.test', {
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+        return fake(request);
+      }) as typeof fetch,
+    });
+    const result = await loadAgentPage(client, automated ? 'helper' : agentRecording.handle, undefined, 'en');
+    expect(result.kind).toBe('page');
+    if (result.kind !== 'page') throw new Error('expected an agent page');
+    expect(result.page.template.key).toBe(automated ? 'schema:SoftwareApplication' : 'schema:Person');
+    const profile = Object.values(result.page.reads).flatMap((read) => accountOf(read.body) ?? [])[0]!;
+    expect(profile.automated).toBe(automated);
+    const identities = profile.operatorId ? await readPageAuthors(client, [profile.operatorId]) : {};
+    if (automated)
+      expect(identities?.[profile.operatorId!]).toMatchObject({ handle: 'operator', displayName: 'Operator Name' });
+    expect(requests).toEqual(automated ? ['POST /v1/pages:read', 'GET /v1/accounts'] : ['POST /v1/pages:read']);
+  });
+}
