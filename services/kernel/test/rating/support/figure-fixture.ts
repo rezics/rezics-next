@@ -51,7 +51,7 @@ export async function createFigureFixture(
     const database = (cleanupDatabase = await openGrowthDatabase(system.database.pool.options.connectionString));
     let closed = false;
     const voterIds = new Set<string>();
-    const scopes = [...system.actions.keys()].filter((action) => action !== 'media:complete');
+    const scopes = system.auth.ordinaryScopes;
     const freshen = async (account: Account | null) => {
       if (account && voterIds.has(account.id) && (decodeJwt(account.bearer).exp ?? 0) * 1000 <= Date.now() + 30_000) {
         // Large native publication fixtures outlive access tokens. Sign in again through real Auth.
