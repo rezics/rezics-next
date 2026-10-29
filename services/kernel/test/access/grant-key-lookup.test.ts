@@ -43,6 +43,12 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
     }
   }
   try {
+    const indexes = await db.admin.query<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE schemaname = 'access' AND indexname = 'resource_grant_pkey_lookup'",
+    );
+    expect(indexes.rows[0]?.indexdef).toContain(
+      "WHERE ((route = 0) AND (resource_id = '00000000-0000-8000-8000-000000000000'::uuid))",
+    );
     await db.admin.query(
       `INSERT INTO access.resource_grant
        (route,resource_id,subject_id,subject_role,action,valid,transaction_id)
@@ -81,21 +87,11 @@ test('grant permission probes seek one exact-key predecessor across unrelated an
         );
         expect(scans.length).toBeGreaterThan(0);
         for (const node of scans) {
-          expect(
-            node['Node Type'],
-            JSON.stringify({
-              scale,
-              indexes: (
-                await database.admin.query(
-                  "SELECT indexdef FROM pg_indexes WHERE schemaname = 'access' AND tablename = 'resource_grant'",
-                )
-              ).rows,
-              scans,
-            }),
-          ).toBe('Index Only Scan');
+          expect(node['Node Type'], JSON.stringify({ scale, scans })).toBe('Index Only Scan');
           expect(node['Index Name']).toBe('resource_grant_pkey_lookup');
           const condition = String(node['Index Cond']);
-          for (const key of ['route', 'resource_id', 'subject_kind', 'subject_id', 'subject_role', 'action'])
+          // The partial index fixes route/resource; the remaining key is parameterized.
+          for (const key of ['subject_kind', 'subject_id', 'subject_role', 'action'])
             expect(condition).toContain(`${key} =`);
           expect(condition).toContain('valid <=');
           expect(node['Actual Rows']).toBeLessThanOrEqual(1);
