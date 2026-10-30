@@ -21,6 +21,8 @@ import {
   type WorkReceipt,
 } from './collection-source.ts';
 import readObservation from './collection-kind-read.sql';
+import { createCollectionKindPreparation } from './collection-kind-preparation.ts';
+import type { WorkClient } from '../work/client.ts';
 
 /** Presentation arithmetic only. These values are not Source, identity or disclosure evidence. */
 export type AutomaticCollectionKind =
@@ -137,25 +139,39 @@ export type CollectionKindSourceBindings = Readonly<{
   source(access: Access): CollectionSource;
   identity: IdentityScopedObservations;
   custody: NativeLibrarySourceCustody;
+  dependencies: CollectionKindPreparationDependencies;
 }>;
 
-/** Real producer factories; replacement bodies integrate under their authoritative module names. */
-export function collectionKindSourceBindings(dependencies: {
+export type CollectionKindPreparationDependencies = Readonly<{
   pool: Pool;
   clock?: KernelClock;
-}): CollectionKindSourceBindings {
+  access?: Access;
+  routeKey?: Uint8Array;
+  workClient?: WorkClient;
+}>;
+
+/** Real producer factories. Missing service configuration never becomes a worker principal. */
+export function collectionKindSourceBindings(
+  dependencies: CollectionKindPreparationDependencies,
+): CollectionKindSourceBindings {
+  // Only native reader handles are retained; this contains no Actor, permission or observation verdict.
+  const readers = new WeakMap<Access, CollectionSource>();
   return {
-    source: (access) => createCollectionSource({ ...dependencies, access }),
+    source(access) {
+      let reader = readers.get(access);
+      if (!reader) {
+        reader = createCollectionSource({ ...dependencies, access });
+        readers.set(access, reader);
+      }
+      return reader;
+    },
     identity: createIdentityScopedObservations(dependencies.pool),
     custody: createNativeLibrarySourceCustody(dependencies),
+    dependencies,
   };
 }
 
-/**
- * Explicit provisional owned adapter. Complete native Type/disclosure capture and audience preparation are not
- * executable yet; do not borrow Library capture as public capture, invent a work Actor, or reinterpret missing
- * coverage as empty. The owned consumer/storage/worker below is independent of this missing binding body.
- */
+/** Native preparation owner; Source traversal remains in readCollectionKindSourcePage. */
 export type CollectionKindPreparation = Omit<CollectionKindNative, 'page'> & {
   resume(input: { capture: CollectionKindCapture; deadline: number }): Promise<
     | NativeUnavailable
@@ -168,21 +184,9 @@ export type CollectionKindPreparation = Omit<CollectionKindNative, 'page'> & {
   >;
 };
 
-function unavailableKindPreparation(): CollectionKindPreparation {
-  const unavailable = async (): Promise<NativeUnavailable> => ({ status: 'unavailable', reason: 'source_unready' });
-  return {
-    prepare: unavailable,
-    resume: unavailable,
-    select: unavailable,
-    revalidate: unavailable,
-    adopt: unavailable,
-    retire: unavailable,
-  };
-}
-
 export function createCollectionKindNative(
   sources: CollectionKindSourceBindings,
-  preparation: CollectionKindPreparation = unavailableKindPreparation(),
+  preparation: CollectionKindPreparation = createCollectionKindPreparation(sources),
 ): CollectionKindNative {
   return {
     prepare: (input) => preparation.prepare(input),
@@ -483,7 +487,7 @@ export function validateCollectionKindPage(
 
 /** Fixed metadata/proof points only. Read callers retain their own Collection authorization and final reread. */
 export function createCollectionKindReads(
-  dependencies: { pool: Pool; clock?: KernelClock },
+  dependencies: CollectionKindPreparationDependencies,
   native: CollectionKindNative = createCollectionKindNative(collectionKindSourceBindings(dependencies)),
 ) {
   return async (
@@ -499,9 +503,6 @@ export function createCollectionKindReads(
   ): Promise<CollectionKind> => {
     if (row.presentationKind !== null)
       return { presentationKind: row.presentationKind, presentationKindSource: 'owner' };
-    // Only the actual complete curated count certifies this shortcut; dynamic sources never use self-zero.
-    if (row.membershipKind === 'curated' && row.memberCount === 0)
-      return { presentationKind: null, presentationKindSource: 'empty' };
     const selected = await native.select({ collectionId: row.id, actor, deadline });
     if (selected.status !== 'selected') return pendingCollectionKind();
     const route = routeOf(row.id);

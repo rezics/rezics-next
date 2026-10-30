@@ -1,5 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash } from 'node:crypto';
+import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
@@ -266,7 +267,13 @@ export async function retireCollectionKindPage(
 }
 
 export function registerCollectionKindWork(context: WorkContext) {
-  const native = createCollectionKindNative(collectionKindSourceBindings(context));
+  const native = createCollectionKindNative(collectionKindSourceBindings({
+    pool: context.pool,
+    clock: context.clock,
+    access: context.getAuthorization().access,
+    routeKey: readMembershipRouteKey(context.env),
+    workClient: context.client,
+  }));
   const step = DBOS.registerStep(
     async (input: CollectionKindWork) => {
       try {

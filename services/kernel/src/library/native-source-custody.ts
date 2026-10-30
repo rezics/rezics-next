@@ -8,6 +8,7 @@ import {
   type AuthoritativeTime,
   type CommandTransaction,
 } from '../command/command.ts';
+import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
@@ -112,7 +113,7 @@ export interface NativeLibrarySourceCustody {
       frontier: NativeSourceFrontier;
     },
   ): Promise<Unavailable | { status: 'complete'; capture: NativeSourceCapture; work: WorkReceipt }>;
-  /** Same native partition command client and T as adoption; never a foreign checkout/callback. */
+  /** Same live native command or admitted operational client and T; never a foreign checkout/callback. */
   readAndHold(
     input: NativeSourceCaptureWork & {
       client: CommandTransaction;
@@ -460,9 +461,21 @@ export function createNativeLibrarySourceCustody({
     validate(input.identity);
     if (commandTime(input.client) !== input.at) throw new Refused('binding');
     try {
-      const context = currentCommand(input.client);
-      if (context.partition !== partitionOf(input.identity.route) || context.time !== input.at)
-        throw new Refused('binding');
+      if (hasLiveOperationalTransaction(input.client)) {
+        const resources = currentOperationalResources(input.client);
+        if (
+          resources.pool !== pool ||
+          resources.mode !== 'work-step' ||
+          resources.partition !== partitionOf(input.identity.route) ||
+          resources.accounts.length !== 1 ||
+          resources.accounts[0] !== input.identity.accountId
+        )
+          throw new Refused('binding');
+      } else {
+        const context = currentCommand(input.client);
+        if (context.partition !== partitionOf(input.identity.route) || context.time !== input.at)
+          throw new Refused('binding');
+      }
       authoritativeTimeValue(input.at);
     } catch {
       throw new Refused('binding');
@@ -471,6 +484,7 @@ export function createNativeLibrarySourceCustody({
   return {
     retireCapture(input) {
       return account(input, async (work): Promise<NativeSourceRetirementResult> => {
+        if (hasLiveOperationalTransaction(input.client)) throw new Refused('binding');
         live(input);
         if (!uuid.test(input.captureId) || !/^(0|[1-9][0-9]{0,18})$/.test(input.sourceGeneration))
           throw new Refused('binding');
