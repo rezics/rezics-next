@@ -114,7 +114,7 @@ test('default registered worker pages charge actual native discovery, core comma
             workflowName: 'library.entryRetentionSegment',
             workflowID: root,
             queueName: 'maintenance',
-            delayUntilEpochMS: Date.now() + 86400000,
+            delaySeconds: 86400,
           },
           { root, sequence: 0, cutoff: new Date(time).toISOString(), cursor: { partition: 4096 } },
         );
