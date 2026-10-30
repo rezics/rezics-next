@@ -91,6 +91,12 @@ async function waitFor(predicate: () => boolean, label: string, timeoutMs = 3_00
 
 async function listen(path: string, onConnection: (socket: Socket) => void): Promise<Server> {
   const server = createServer(onConnection);
+  const sockets = new Set<Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
+  serverSockets.set(server, sockets);
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(path, resolve);
@@ -98,8 +104,13 @@ async function listen(path: string, onConnection: (socket: Socket) => void): Pro
   return server;
 }
 
+const serverSockets = new WeakMap<Server, Set<Socket>>();
+
 async function closeServer(server: Server): Promise<void> {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+    for (const socket of serverSockets.get(server) ?? []) socket.destroy();
+  });
 }
 
 function managerSpec(cwd: string, id: string): ManagerSpec {

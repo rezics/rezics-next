@@ -813,15 +813,23 @@ export class ManagerSessions {
   }
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
-  async recover(): Promise<void> {
+  async recover(onProgress?: () => void): Promise<void> {
     const states = this.list().filter(
       (state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal,
     );
+    let progressReported = false;
+    const reportProgress = () => {
+      if (progressReported) return;
+      progressReported = true;
+      onProgress?.();
+    };
+    if (!states.length) reportProgress();
     const results = await Promise.allSettled(
       states.map((state) =>
         this.serial(state.id, async () => {
           let current = this.get(state.id);
           if (current.pendingRenewal) {
+            reportProgress();
             if (
               current.threadId &&
               current.threadId !== current.pendingRenewal.oldThreadId &&
@@ -834,15 +842,21 @@ export class ManagerSessions {
               return;
             }
           }
-          if (current.status !== 'running' && current.status !== 'starting') return;
+          if (current.status !== 'running' && current.status !== 'starting') {
+            reportProgress();
+            return;
+          }
           if (current.engine === 'codex' && current.threadId) {
             const client = await this.client(current.pool);
-            const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: current.threadId });
+            const resume = client.request('thread/resume', { ...FULL_ACCESS, threadId: current.threadId });
+            reportProgress();
+            const resumed = await resume;
             current.activeTurnId =
               resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
             const goal = await client.request('thread/goal/get', { threadId: current.threadId });
             current.goalState = goal.goal;
           }
+          reportProgress();
           if (current.status === 'starting') {
             current.status = 'paused';
             this.save(current);

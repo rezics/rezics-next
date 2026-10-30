@@ -439,7 +439,22 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     });
     chmodSync(runtime.managerSocket, 0o600);
     if (stopRequested) return;
-    void managers.recover().catch((error) => console.error('manager recovery failed:', error));
+    let reportRecoveryProgress!: () => void;
+    const recoveryProgress = new Promise<void>((resolve) => (reportRecoveryProgress = resolve));
+    void managers.recover(reportRecoveryProgress).catch((error) => {
+      console.error('manager recovery failed:', error);
+      reportRecoveryProgress();
+    });
+    let readinessTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      recoveryProgress,
+      new Promise<void>((resolve) => {
+        readinessTimer = setTimeout(resolve, 100);
+      }),
+    ]);
+    if (readinessTimer) clearTimeout(readinessTimer);
+    // The socket is already accepting requests. Yield once so a submitted recovery RPC reaches its provider first.
+    await new Promise<void>((resolve) => setImmediate(resolve));
     console.log('ready');
     const remind = () => {
       try {
