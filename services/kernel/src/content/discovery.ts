@@ -56,7 +56,7 @@ export async function appendDiscoveryStart(
     !creationDeclares(tx, { route, id: input.threadId })
   )
     throw new Error('Discovery requires native thread creation');
-  const row = await create.run(tx, {
+  const rows = await create.run(tx, {
     route,
     thread_id: input.threadId,
     board_id: input.boardId,
@@ -65,7 +65,8 @@ export async function appendDiscoveryStart(
     realm_epoch: input.binding.realmEpoch,
     at: authoritativeTimeValue(input.time),
   });
-  return row ? [event(row)] : [];
+  if (rows.length > 1) throw new Error('Discovery creation is not a point write');
+  return rows.map(event);
 }
 
 /** Called after the native point mutation, in its same thread home. Replies have

@@ -1,5 +1,6 @@
 import { afterAll, expect, expectTypeOf, test } from 'bun:test';
 import pg from 'pg';
+import { newId } from '../../src/route/route.ts';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { CONTENT_EVENTS, type ContentEventData, type ContentEventType } from '../../src/content/events.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -30,6 +31,18 @@ const threadIndex = {
 };
 const media = { mediaId, containerId };
 const fixtures = {
+  'com.rezics.content.realm-discovery.changed.v1': {
+    realmId: newId(4321),
+    realmEpoch: '1',
+    spaceId: newId(4321),
+    boardId: newId(4321),
+    threadId: newId(1234),
+    sourceRoute: 1234,
+    creationDay: '2026-10-30',
+    sourceVersion: '1',
+    contributing: true,
+    change: 1,
+  },
   'com.rezics.content.thread.created.v1': { ...authored, ...threadIndex },
   'com.rezics.content.post.created.v1': { ...authored, ...threadIndex },
   'com.rezics.content.revision.created.v1': {
