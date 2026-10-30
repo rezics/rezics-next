@@ -38,7 +38,10 @@ function catalogueOf(routes: readonly MountedRoute[]): Catalogue {
   const declarations = operations
     .map((op) => JSON.stringify([op.method, op.path, op.operationId, op.action, op.exposure]))
     .sort();
-  catalogue = Object.freeze({ groups, digest: createHash('sha256').update(JSON.stringify(declarations)).digest('hex') });
+  catalogue = Object.freeze({
+    groups,
+    digest: createHash('sha256').update(JSON.stringify(declarations)).digest('hex'),
+  });
   catalogues.set(routes, catalogue);
   return catalogue;
 }

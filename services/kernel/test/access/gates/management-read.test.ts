@@ -74,12 +74,9 @@ async function nativeRead(
   query: { cursor?: string; limit?: number } = {},
   routes: readonly MountedRoute[] = kernel.routes,
 ) {
-  return readExposureManagementPage(
-    { pool, access, clock: () => instant, cursorKeys, routes },
-    actor,
-    query,
-    { deadline: Date.now() + 15_000 },
-  );
+  return readExposureManagementPage({ pool, access, clock: () => instant, cursorKeys, routes }, actor, query, {
+    deadline: Date.now() + 15_000,
+  });
 }
 
 beforeAll(async () => {
@@ -104,11 +101,7 @@ beforeAll(async () => {
         'x-exposure': `gate:${group}`,
         security: [{ bearerAuth: [] }, {}],
       };
-      app.get(
-        `/v1/management-fixture/${index}`,
-        { detail },
-        () => ({ ok: true }),
-      );
+      app.get(`/v1/management-fixture/${index}`, { detail }, () => ({ ok: true }));
     }
     const hidden = { hide: true, 'x-exposure': 'gate:management_hidden' };
     app.get('/v1/management-hidden', { detail: hidden }, () => ({}));
@@ -195,22 +188,31 @@ describe('Exact current direct Global exposure management authority reads bounde
     expect(result.headers.get('cache-control')).toBe('private, no-store');
     const page = await result.json();
     expect(Object.keys(page).sort()).toEqual(['exposureGroups', 'next']);
-    const installed = [...new Set(kernel.routes.flatMap((route) => {
-      if (route.hooks?.detail?.hide === true) return [];
-      const exposure = parseExposure(route.hooks?.detail);
-      return exposure.kind === 'gate' ? [exposure.group] : [];
-    }))].sort();
+    const installed = [
+      ...new Set(
+        kernel.routes.flatMap((route) => {
+          if (route.hooks?.detail?.hide === true) return [];
+          const exposure = parseExposure(route.hooks?.detail);
+          return exposure.kind === 'gate' ? [exposure.group] : [];
+        }),
+      ),
+    ].sort();
     expect(page.exposureGroups.map((item: { group: string }) => item.group)).toEqual(installed);
     expect(page.next).toBeNull();
     for (const item of page.exposureGroups) {
       expect(Object.keys(item).sort()).toEqual(['at', 'group', 'open']);
       expect(new Date(item.at).toISOString()).toBe(instant.toISOString());
     }
-    expect(page.exposureGroups.filter((item: { group: string }) => groups.includes(item.group)).map((item: { open: boolean }) => item.open))
-      .toEqual([false, false, true, false]);
-    const discovery = await kernel.handle(new Request('http://kernel.test/v1/platform/exposure', {
-      headers: { authorization: `Bearer ${await bearer(fixture.actorId, ['exposure:read', 'fixture:read'])}` },
-    }));
+    expect(
+      page.exposureGroups
+        .filter((item: { group: string }) => groups.includes(item.group))
+        .map((item: { open: boolean }) => item.open),
+    ).toEqual([false, false, true, false]);
+    const discovery = await kernel.handle(
+      new Request('http://kernel.test/v1/platform/exposure', {
+        headers: { authorization: `Bearer ${await bearer(fixture.actorId, ['exposure:read', 'fixture:read'])}` },
+      }),
+    );
     expect((await discovery.json()).admitted).toContain(groups[0]);
     expect((await nativeRead(await identity(), {})).exposureGroups.length).toBe(Math.min(20, installed.length));
   });
@@ -235,19 +237,37 @@ describe('Exact current direct Global exposure management authority reads bounde
       expect(preparations).toBe(2);
     } finally {
       interception.mockRestore();
-      await pool.query('DELETE FROM access.resource_denial WHERE resource_id = $1 AND subject_id = $2 AND action = $3',
-        [GLOBAL_CONTEXT.id, fixture.actorId, action]);
+      await pool.query(
+        'DELETE FROM access.resource_denial WHERE resource_id = $1 AND subject_id = $2 AND action = $3',
+        [GLOBAL_CONTEXT.id, fixture.actorId, action],
+      );
     }
-    await pool.query('UPDATE access.principal_assignment SET valid = tstzrange(NULL, $2::timestamptz) WHERE principal_id = $1',
-      [fixture.principalId, instant.toISOString()]);
-    await expect(nativeRead(await identity(fixture.actorId, [action], delegatedRequest))).rejects.toMatchObject({ code: 'forbidden' });
-    await expect(readExposureManagementPage({ pool, access, cursorKeys, routes: kernel.routes }, actor, {}, { deadline: Date.now() - 1 }))
-      .rejects.toMatchObject({ name: 'AccessUnavailableError', reason: 'deadline' });
+    await pool.query(
+      'UPDATE access.principal_assignment SET valid = tstzrange(NULL, $2::timestamptz) WHERE principal_id = $1',
+      [fixture.principalId, instant.toISOString()],
+    );
+    await expect(nativeRead(await identity(fixture.actorId, [action], delegatedRequest))).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+    await expect(
+      readExposureManagementPage(
+        { pool, access, cursorKeys, routes: kernel.routes },
+        actor,
+        {},
+        { deadline: Date.now() - 1 },
+      ),
+    ).rejects.toMatchObject({ name: 'AccessUnavailableError', reason: 'deadline' });
     // A real source connection failure stays unknown, even though a missing opening is closed.
     const unavailable = createPool(process.env.DATABASE_URL!);
     await unavailable.end();
-    await expect(readExposureManagementPage({ pool: unavailable, access, cursorKeys, routes: kernel.routes }, actor, {}, { deadline: Date.now() + 5000 }))
-      .rejects.toMatchObject({ code: 'dependency_unavailable' });
+    await expect(
+      readExposureManagementPage(
+        { pool: unavailable, access, cursorKeys, routes: kernel.routes },
+        actor,
+        {},
+        { deadline: Date.now() + 5000 },
+      ),
+    ).rejects.toMatchObject({ code: 'dependency_unavailable' });
   });
 
   test('uses bounded signed keysets bound to current viewer, query and frozen mounted declarations', async () => {
@@ -259,20 +279,35 @@ describe('Exact current direct Global exposure management authority reads bounde
     const cursor = page.next!;
     const next = await nativeRead(actor, { limit: 1, cursor }, routes);
     expect(next.exposureGroups[0]!.group > page.exposureGroups[0]!.group).toBe(true);
-    for (const limit of [0, 101, 1.5]) await expect(nativeRead(actor, { limit })).rejects.toMatchObject({ code: 'invalid_request' });
+    for (const limit of [0, 101, 1.5])
+      await expect(nativeRead(actor, { limit })).rejects.toMatchObject({ code: 'invalid_request' });
     await expect(nativeRead(actor, { limit: 2, cursor }, routes)).rejects.toMatchObject({ code: 'invalid_cursor' });
-    await expect(nativeRead(actor, { limit: 1, cursor: `${cursor}x` }, routes)).rejects.toMatchObject({ code: 'invalid_cursor' });
-    await expect(nativeRead(await identity(fixture.principalId), { limit: 1, cursor }, routes)).rejects.toMatchObject({ code: 'invalid_cursor' });
-    await expect(nativeRead({ ...actor, clientId: 'other-client' }, { limit: 1, cursor }, routes)).rejects.toMatchObject({ code: 'forbidden' });
-    const changed = routes.map((route) => route.path === '/v1/management-fixture/0'
-      ? { ...route, hooks: { detail: { ...route.hooks?.detail, 'x-exposure': 'gate:management_new' } } }
-      : route);
+    await expect(nativeRead(actor, { limit: 1, cursor: `${cursor}x` }, routes)).rejects.toMatchObject({
+      code: 'invalid_cursor',
+    });
+    await expect(nativeRead(await identity(fixture.principalId), { limit: 1, cursor }, routes)).rejects.toMatchObject({
+      code: 'invalid_cursor',
+    });
+    await expect(
+      nativeRead({ ...actor, clientId: 'other-client' }, { limit: 1, cursor }, routes),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    const changed = routes.map((route) =>
+      route.path === '/v1/management-fixture/0'
+        ? { ...route, hooks: { detail: { ...route.hooks?.detail, 'x-exposure': 'gate:management_new' } } }
+        : route,
+    );
     await expect(nativeRead(actor, { limit: 1, cursor }, changed)).rejects.toMatchObject({ code: 'invalid_cursor' });
     // Mutating construction metadata after capture cannot change this catalogue or its cursor meaning.
     routes.push(changed.find((route) => route.path === '/v1/management-fixture/0')!);
     expect((await nativeRead(actor, { limit: 1, cursor }, routes)).exposureGroups).toEqual(next.exposureGroups);
     const later = () => new Date(instant.getTime() + 16 * 60_000);
-    await expect(readExposureManagementPage({ pool, access, cursorKeys, routes, clock: later }, actor, { limit: 1, cursor }, { deadline: Date.now() + 15_000 }))
-      .rejects.toMatchObject({ code: 'invalid_cursor' });
+    await expect(
+      readExposureManagementPage(
+        { pool, access, cursorKeys, routes, clock: later },
+        actor,
+        { limit: 1, cursor },
+        { deadline: Date.now() + 15_000 },
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
   });
 });
