@@ -1,0 +1,154 @@
+import type { Pool, PoolClient } from 'pg';
+import { copyTransaction } from './erasure-copy.ts';
+
+export const NATIVE_ROLE_VERSION = 1;
+export const NATIVE_COVERAGE_PAGE = 48;
+// Source order matters: exact native witnesses are reconciled before consumers.
+// Composite keys are selected as transaction-local tuple locators, never saved
+// as account-bearing traversal cursors.
+export const nativeRoleStores = [
+  ['user', ['id']],
+  ['auth_client', ['client_id']],
+  ['auth_session_opening', ['session_id']],
+  ['session', ['id']],
+  ['verification', ['id']],
+  ['oauthRefreshFamily', ['id']],
+  ['oauthRefreshToken', ['id']],
+  ['oauthAccessToken', ['id']],
+  ['oauthClientAssertion', ['id']],
+  ['auth_recent_oidc_session', ['session_id']],
+  ['auth_barrier_proof', ['reference']],
+  ['auth_recovery_establishment', ['reference']],
+  ['auth_registration_stage', ['registration_id']],
+  ['auth_provisioning_receipt', ['idempotency_key']],
+  ['account', ['id']],
+  ['passkey', ['id']],
+  ['auth_recovery', ['proof_hash']],
+  ['auth_effect_receipt', ['receipt_id']],
+  ['auth_workflow_request', ['workflow_id']],
+  ['auth_public_key', ['account_id', 'kid']],
+  ['auth_key_assertion', ['account_id', 'jti']],
+  ['auth_attempt_account', ['account_id', 'key']],
+  ['auth_consent', ['account_id', 'client_id']],
+  ['auth_client_reduction_progress', ['operation_id']],
+  ['auth_client_reduction', ['client_id']],
+  ['auth_client_coverage', ['client_id']],
+  ['oauthClientResource', ['id']],
+] as const;
+export const nativeClientStores = [
+  ['session', 'id', 'clientId'],
+  ['verification', 'id', 'erasure_client_id'],
+  ['oauthAccessToken', 'id', 'clientId'],
+  ['oauthRefreshToken', 'id', 'clientId'],
+  ['oauthRefreshFamily', 'id', 'clientId'],
+  ['oauthClientAssertion', 'id', 'erasure_client_id'],
+  ['auth_recent_oidc_session', 'session_id', 'erasure_client_id'],
+  ['auth_session_opening', 'session_id', 'erasure_client_id'],
+  ['auth_barrier_proof', 'reference', 'erasure_client_id'],
+  ['auth_recovery_establishment', 'reference', 'erasure_client_id'],
+  ['auth_effect_receipt', 'receipt_id', 'client_id'],
+  ['auth_workflow_request', 'workflow_id', 'erasure_client_id'],
+  ['auth_client_reduction_progress', 'operation_id', 'client_id'],
+  ['auth_client_reduction', 'client_id', 'client_id'],
+  ['auth_client_coverage', 'client_id', 'client_id'],
+  ['oauthClientResource', 'id', 'clientId'],
+] as const;
+export const nativeAdditionalRoles = [
+  ...nativeClientStores.flatMap(([table, key]) => [
+    { table, key, role: 'erasure_client_owner_id' },
+    { table, key, role: 'erasure_source_client_owner_id' },
+  ]),
+  ...(['auth_registration_stage', 'auth_provisioning_receipt', 'auth_workflow_request'] as const).flatMap(
+    (table) => [
+      { table, key: table === 'auth_registration_stage' ? 'registration_id' : table === 'auth_provisioning_receipt' ? 'idempotency_key' : 'workflow_id', role: 'erasure_delegate_id' },
+      { table, key: table === 'auth_registration_stage' ? 'registration_id' : table === 'auth_provisioning_receipt' ? 'idempotency_key' : 'workflow_id', role: 'erasure_initiator_id' },
+    ],
+  ),
+] as const;
+const quote = (value: string) => `"${value}"`;
+const pools = new WeakSet<Pool>();
+
+/** A producer version belongs to a leased connection, never to public input or
+ * an idle shared socket. Reset completes BEFORE the real pool release. Existing
+ * leases and other pools remain old writers and are refused after the cut.
+ * Install only on the Auth-owned pool, before composing its native producers. */
+export function installNativeRoleProducer(pool: Pool): void {
+  if (pools.has(pool)) return;
+  pools.add(pool);
+  const connect = pool.connect.bind(pool);
+  const lease = async (): Promise<PoolClient> => {
+    const client = await connect();
+    const release = client.release.bind(client);
+    try {
+      await client.query("SELECT set_config('auth.native_role_producer','1',false)");
+    } catch (error) {
+      release(error as Error);
+      throw error;
+    }
+    let released = false;
+    return new Proxy(client, {
+      get(target, property) {
+        if (property === 'release') return (error?: Error | boolean) => {
+          if (released) return;
+          released = true;
+          if (error) return release(error);
+          void client.query('RESET auth.native_role_producer').then(() => release(), (failure: Error) => release(failure));
+        };
+        const value = Reflect.get(target, property);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  };
+  pool.connect = ((callback?: (error: Error | undefined, client?: PoolClient, release?: PoolClient['release']) => void) => {
+    if (!callback) return lease();
+    void lease().then((client) => callback(undefined, client, client.release), (error: Error) => callback(error));
+  }) as Pool['connect'];
+}
+
+/** Locks drain old in-flight writes. The durable armed bit plus BEFORE triggers
+ * fence old transactions that were queued behind the deployment lock. Coverage
+ * never follows from a momentary empty-table probe or an ordinal cutover. */
+export async function installNativeRoleCoverage(pool: Pool): Promise<void> {
+  await copyTransaction(pool, async (client) => {
+    // Same fixed lock order as the migration; no row lock held while acquiring it.
+    await client.query(`LOCK TABLE ${nativeRoleStores.map(([table]) => quote(table)).sort().join(',')} IN SHARE ROW EXCLUSIVE MODE`);
+    await client.query('UPDATE auth_native_role_deployment SET armed=true WHERE singleton AND version=1');
+  });
+}
+
+/** One store, <=48 raw tuple keys, no personal cursor. Classification and the
+ * store checkpoint commit together. Unknown is sticky even if an expiry worker
+ * subsequently removes a historical row; expiry is not recovered custody. */
+export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<number> {
+  return copyTransaction(pool, async (client) => {
+    const state = (await client.query<{ store_index: number; armed: boolean }>(
+      'SELECT store_index,armed FROM auth_native_role_deployment WHERE singleton AND version=1 FOR UPDATE',
+    )).rows[0];
+    if (!state?.armed) return 0;
+    const store = nativeRoleStores[state.store_index];
+    if (!store) return 0;
+    const [table, columns] = store;
+    await client.query("SELECT set_config('auth.native_role_reconcile','1',true)");
+    await client.query('SET LOCAL enable_seqscan=off');
+    const rows = (await client.query<{ locator: string }>(
+      `SELECT ctid::text AS locator FROM ${quote(table)} WHERE erasure_role_version=0
+       ORDER BY ${columns.map(quote).join(',')} LIMIT 48 FOR UPDATE`,
+    )).rows;
+    for (const row of rows)
+      await client.query(`UPDATE ${quote(table)} SET erasure_role_version=auth_native_role_resolve('${table}',to_jsonb(${quote(table)})) WHERE ctid=$1::tid`, [row.locator]);
+    if (!rows.length) {
+      await client.query('UPDATE auth_native_role_deployment SET store_index=store_index+1 WHERE singleton');
+      if (state.store_index + 1 === nativeRoleStores.length)
+        await client.query(`UPDATE auth_copy_coverage SET native_covered=NOT EXISTS(
+          SELECT 1 FROM auth_native_role_unknown LIMIT 1) WHERE singleton AND version=1`);
+    }
+    return rows.length || 1;
+  });
+}
+
+export async function nativeRoleDeploymentComplete(client: PoolClient): Promise<boolean> {
+  return Boolean((await client.query(
+    'SELECT 1 FROM auth_native_role_deployment WHERE singleton AND version=1 AND armed AND store_index=$1',
+    [nativeRoleStores.length],
+  )).rowCount);
+}
