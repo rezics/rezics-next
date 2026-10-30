@@ -174,46 +174,57 @@ test('a maximum canonical release in its compact envelope reaches native release
   expect(validateRelease(release)).toEqual([]);
   // An equal-width invalid format produces a release-validation pointer, before any database effect.
   release.format = RELEASE_FORMAT.replace(/1$/, '0');
-  const kernel = createKernel({
-    pool,
-    routeKey: new Uint8Array(32),
-    access: {
-      async authenticate() {
-        return {
-          kind: 'account',
-          accountId: '019a1b2c-3d4e-7000-8000-000000000001',
-          clientId: 'body-limit',
-          requestedBy: null,
-          authnEpoch: 0,
-          scopes: ['definitions:publish'],
-        };
+  const releasePool = createPool(process.env.DATABASE_URL!);
+  try {
+    // This mounted route reads its exposure gate before domain release validation.
+    await releasePool.query(
+      `INSERT INTO access.exposure_opening (route, "group", valid, transaction_id)
+       VALUES (0, 'definition_publication', '[2020-01-01,)', $1)`,
+      [Bun.randomUUIDv7()],
+    );
+    const kernel = createKernel({
+      pool: releasePool,
+      routeKey: new Uint8Array(32),
+      access: {
+        async authenticate() {
+          return {
+            kind: 'account',
+            accountId: '019a1b2c-3d4e-7000-8000-000000000001',
+            clientId: 'body-limit',
+            requestedBy: null,
+            authnEpoch: 0,
+            scopes: ['definitions:publish'],
+          };
+        },
+        async authorize() {
+          throw new Error('release validation must precede command authorization');
+        },
       },
-      async authorize() {
-        throw new Error('release validation must precede command authorization');
+      writeRate: {
+        async spend() {
+          return { allowed: true };
+        },
       },
-    },
-    writeRate: {
-      async spend() {
-        return { allowed: true };
-      },
-    },
-  });
-  const response = await kernel.handle(
-    new Request('http://kernel.test/v1/definitions/releases', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: 'Bearer probe',
-        'idempotency-key': '"maximum-release"',
-      },
-      body: JSON.stringify({ release }),
-    }),
-  );
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({
-    code: 'invalid_request',
-    errors: [{ pointer: '/release/format', code: 'invalid_format' }],
-  });
+    });
+    const response = await kernel.handle(
+      new Request('http://kernel.test/v1/definitions/releases', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer probe',
+          'idempotency-key': '"maximum-release"',
+        },
+        body: JSON.stringify({ release }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: 'invalid_request',
+      errors: [{ pointer: '/release/format', code: 'invalid_format' }],
+    });
+  } finally {
+    await releasePool.end();
+  }
 });
 
 test('native ingress reservations refuse excess requests before reading and release after responses', async () => {
