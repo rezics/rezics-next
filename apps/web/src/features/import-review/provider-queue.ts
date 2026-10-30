@@ -118,6 +118,17 @@ export async function readProviderQueue(
     if (result.status === 202 && result.data && 'next' in result.data && !('candidates' in result.data))
       return { state: 'preparing', next: result.data.next };
     if (result.status !== 200 || !result.data || !('candidates' in result.data)) return stateFor(result.status);
+    const candidates = result.data.candidates.flatMap((row) =>
+      candidateHasPayload(row.candidate) ? [{ ...row, candidate: row.candidate }] : [],
+    );
+    if (!candidates.length) {
+      if (result.data.next !== null) {
+        // Only filtering actual rows explains this continuation; do not repair an inconsistent native empty page.
+        if (!result.data.candidates.length || !result.data.next) return { state: 'unavailable' };
+        return { state: 'preparing', next: result.data.next };
+      }
+      if (!result.data.freshness.caught_up) return { state: 'unavailable' };
+    }
     const token = new Headers(result.headers).get('rezics-session-token');
     const names = Object.fromEntries(
       Object.entries(release.properties).map(([id, definition]) => [id, definition.labels ?? {}]),
@@ -137,9 +148,7 @@ export async function readProviderQueue(
       state: 'ready',
       page: {
         ...result.data,
-        candidates: result.data.candidates.flatMap((row) =>
-          candidateHasPayload(row.candidate) ? [{ ...row, candidate: row.candidate }] : [],
-        ),
+        candidates,
       },
       names,
       ...(token ? { session: token } : {}),

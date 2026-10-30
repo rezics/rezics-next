@@ -174,12 +174,11 @@ export async function readStatementConsent(
         next: page.data.next,
         ...(token ? { session: token } : {}),
       };
-    if (
-      candidateHasPayload(candidate) &&
-      (candidate.statement.id !== address.candidate || candidate.statement.property.id !== address.property)
-    )
+    // A deleted marker withholds the entire read, including a lagging public body. It proves no retraction.
+    if (!candidateHasPayload(candidate)) return consentFailure(404);
+    if (candidate.statement.id !== address.candidate || candidate.statement.property.id !== address.property)
       return consentFailure(409);
-    if (!candidateHasPayload(candidate) || candidate.retracted !== null)
+    if (candidate.retracted !== null)
       return {
         ok: true,
         candidate: null,

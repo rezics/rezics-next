@@ -13,7 +13,19 @@ import {
   type QueueTransport,
 } from '../../features/import-review/provider-queue';
 
-export type ProviderQueueScenario = 'loaded' | 'preparing' | 'empty' | 'denied' | 'unavailable' | 'invalid' | 'loading';
+export type ProviderQueueScenario =
+  | 'loaded'
+  | 'preparing'
+  | 'empty'
+  | 'denied'
+  | 'unavailable'
+  | 'invalid'
+  | 'loading'
+  | 'deleted'
+  | 'deleted-more'
+  | 'mixed'
+  | 'empty-more'
+  | 'empty-lagging';
 /** Isolated stories use the existing native candidate recording and the real generated-client transport. */
 export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded') {
   const native = candidateFixture();
@@ -26,6 +38,12 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
     next: null,
     freshness: { consistency: 'eventual' as const, target_seconds: 10 as const, caught_up: true },
   };
+  const deleted = {
+    subject: native.id,
+    candidate: { id: `${native.id.slice(0, -3)}889`, deleted: true },
+    adoption: null,
+  };
+  const next = 'opaque+/continuation==';
   const calls: {
     path: string;
     method: string;
@@ -69,12 +87,23 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
       return json({ next: 'opaque-continuation' }, 202);
     }
     if (current === 'empty') return json({ ...page, candidates: [] });
+    if (current === 'empty-more') return json({ ...page, candidates: [], next });
+    if (current === 'empty-lagging')
+      return json({ ...page, candidates: [], freshness: { ...page.freshness, caught_up: false } });
+    if (current === 'deleted') return json({ ...page, candidates: [deleted] });
+    if (current === 'deleted-more' && !url.searchParams.has('cursor'))
+      return json({ ...page, candidates: [deleted], next });
     const candidate = structuredClone(native.candidate);
     if (url.searchParams.get('status') === 'accepted_unselected') {
       candidate.decision = 'accepted';
       candidate.head = 1;
     }
-    return json({ ...page, candidates: [{ subject: native.id, candidate, adoption: null }] });
+    const candidates = [{ subject: native.id, candidate, adoption: null }];
+    return json({
+      ...page,
+      candidates: current === 'mixed' ? [deleted, ...candidates] : candidates,
+      next: current === 'mixed' ? next : null,
+    });
   }) as typeof fetch;
   const client = createKernelClient('https://queue.test', { fetch: fetcher });
   const transport: QueueTransport = {
@@ -94,6 +123,12 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
   const initial: QueueState =
     scenario === 'loaded' || scenario === 'empty'
       ? { state: 'ready', page: scenario === 'empty' ? { ...page, candidates: [] } : page, names }
-      : { state: scenario };
-  return { scope, initial, transport, calls, native, client };
+      : scenario === 'deleted' ||
+          scenario === 'deleted-more' ||
+          scenario === 'mixed' ||
+          scenario === 'empty-more' ||
+          scenario === 'empty-lagging'
+        ? { state: 'idle' }
+        : { state: scenario };
+  return { scope, initial, transport, calls, native, client, deleted, next };
 }

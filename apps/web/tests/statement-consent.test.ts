@@ -175,3 +175,78 @@ test('Terminal retraction clears withheld values, offers no undo and preserves n
     });
   }
 });
+
+test('Deleted tombstones withhold payload without claiming terminal retraction or undo authority', async () => {
+  for (const scenario of ['deleted', 'lagging-deletion'] as const) {
+    const fixture = consentFixture(scenario);
+    const native = await fixture.client.subjects({ id: fixture.address.id }).candidates.get({
+      query: { property: fixture.address.property, limit: 20 },
+      headers: { authorization: 'Bearer target-owner' },
+    });
+    expect(native.status).toBe(200);
+    expect(native.data).toEqual({
+      candidates: [{ id: fixture.address.candidate, deleted: true }],
+      adoption: null,
+      next: null,
+    });
+    const publicRead = await fixture.transport.public();
+    expect(publicRead.state).toBe(scenario === 'lagging-deletion' ? 'present' : 'absent');
+    fixture.calls.length = 0;
+
+    const read = await fixture.transport.read(undefined, 'prepared-session');
+    expect(read).toEqual({ ok: false, reason: 'missing' });
+    const html = renderToStaticMarkup(
+      createElement(StatementConsentPage, {
+        address: fixture.address,
+        locale: 'en',
+        transport: fixture.transport,
+        initial: read,
+      }),
+    );
+    expect(html).toContain('This assertion is unavailable or cannot be shown.');
+    expect(html).toContain('Reload current values');
+    expect(html).not.toContain('terminally retracted');
+    expect(html).not.toContain('no undo');
+    expect(html).not.toContain('>Share consent<');
+    expect(html).not.toContain('>Retract assertion<');
+    expect(html).not.toContain('Read current public result');
+    expect(html).not.toContain(fixture.address.slot!.target!);
+    expect(html).not.toContain('30-day');
+    expect(await fixture.transport.read()).toEqual({ ok: false, reason: 'missing' });
+    expect(fixture.calls).toHaveLength(4); // One candidate page and one public read per explicit reload.
+    expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
+    expect(fixture.calls.some((call) => call.path.includes('/definitions/'))).toBe(false);
+    expect(fixture.calls[0]).toMatchObject({
+      authorization: 'Bearer target-owner',
+      session: 'prepared-session',
+      cache: 'no-store',
+    });
+  }
+});
+
+test('A payload-bearing native retracted candidate still supplies terminal retraction evidence', async () => {
+  const fixture = consentFixture('retracted');
+  const read = await fixture.transport.read();
+  expect(read).toEqual({
+    ok: true,
+    candidate: null,
+    terminal: true,
+    disclosure: false,
+    field: {},
+    public: { state: 'absent' },
+    next: null,
+    session: 'consent-session',
+  });
+  const html = renderToStaticMarkup(
+    createElement(StatementConsentPage, {
+      address: fixture.address,
+      locale: 'en',
+      transport: fixture.transport,
+      initial: read,
+    }),
+  );
+  expect(html).toContain('terminally retracted');
+  expect(html).toContain('no undo');
+  expect(html).not.toContain('Reload current values');
+  expect(html).not.toContain(fixture.address.slot!.target!);
+});

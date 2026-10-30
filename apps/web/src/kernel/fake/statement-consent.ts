@@ -25,6 +25,8 @@ export type ConsentScenario =
   | 'unavailable'
   | 'pending'
   | 'read-unavailable'
+  | 'deleted'
+  | 'lagging-deletion'
   | 'retracted'
   | 'lost-response'
   | 'lagging-retraction';
@@ -75,7 +77,7 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
         ],
       },
     ];
-  let disclosed = scenario === 'public' || scenario === 'lagging-retraction';
+  let disclosed = scenario === 'public' || scenario === 'lagging-retraction' || scenario === 'lagging-deletion';
   let retracted = scenario === 'retracted';
   let lost = false;
   const calls: {
@@ -126,6 +128,8 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
         return json({ candidates: [], adoption: null, next: 'next-page' });
       if (scenario === 'missing') return json({ code: 'not_found' }, 404);
       if (!authorization) return json({ code: 'invalid_credentials' }, 401);
+      if (scenario === 'deleted' || scenario === 'lagging-deletion')
+        return json({ candidates: [{ id: candidateId, deleted: true }], adoption: null, next: null });
       return json({
         candidates: [{ ...candidate, retracted: retracted ? 3 : null }],
         adoption: { mode: 'replace', head: 1 },
@@ -137,6 +141,7 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
       (path === `/v1/statements/${candidateId}/disclose` || path === `/v1/statements/${candidateId}/retract`)
     ) {
       if (authorization !== 'Bearer target-owner') return json({ code: 'forbidden' }, 403);
+      if (scenario === 'deleted' || scenario === 'lagging-deletion') return json({ code: 'not_found' }, 404);
       const failure = { denied: 403, missing: 404, invalid: 400, conflict: 409, unavailable: 503 }[
         scenario as 'denied'
       ];
