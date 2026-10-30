@@ -65,7 +65,7 @@ function page(value: Record<string, unknown>) {
 
 function publicType(value: unknown): string | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !/^[a-z][a-z0-9_]*:[\x21-\x7e]+$/.test(value))
+  if (typeof value !== 'string' || !/^[a-z][a-z0-9_]*:[\x21-\x7e]+$(?![\s\S])/.test(value))
     throw new ProblemError('invalid_argument');
   return value;
 }
@@ -73,7 +73,9 @@ function publicType(value: unknown): string | undefined {
 // Validate exact timestamp strings without passing them through Date or losing microseconds.
 function timestamp(value: string): boolean {
   const match =
-    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-](\d{2})(?::?(\d{2}))?)$/.exec(value);
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-](\d{2})(?::?(\d{2}))?)$(?![\s\S])/.exec(
+      value,
+    );
   if (!match) return false;
   const [year, month, day, hour, minute, second, zoneH, zoneM] = match.slice(1).map(Number);
   const leap = year! % 4 === 0 && (year! % 100 !== 0 || year! % 400 === 0);

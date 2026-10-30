@@ -5,7 +5,7 @@ import { createDefaultShelfReads } from '../../src/library/shelf-reader-defaults
 import { readShelfFacets, readShelfSummary } from '../../src/library/shelf-reader-metadata.ts';
 import { lookupShelfType } from '../../src/library/shelf-reader-types.ts';
 import type { ShelfQuery, ShelfSeek } from '../../src/library/shelf-contract.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
 import { withReadTransaction } from '../../src/semantic/read.ts';
 import { authenticateAccount, admittedAccess } from '../support/admitted-access.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';

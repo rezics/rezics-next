@@ -31,7 +31,9 @@ export function createShelfCreatedDescReader(): ShelfDateReader {
       if (
         after !== null &&
         (routeOf(after.subjectId) === null ||
-          !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::?\d{2})?)$/.test(after.key))
+          !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::?\d{2})?)$(?![\s\S])/.test(
+            after.key,
+          ))
       )
         throw new TypeError('Invalid shelf seek');
       const statement =
