@@ -91,17 +91,14 @@ export function importedStatementDigest(
   return statementDigest(statement);
 }
 
-/** Summary and cover proposals record the subject resource. The grant check stays on the prepared target. */
+/** Imported content retains the original Global formula anchor and proves same-partition custody in its native hook. */
 export function guardBatchAuthorization(
   authorization: CommandAuthorization,
   command: BatchCommand,
   route: number,
   enforce: (tx: CommandTransaction) => Promise<void>,
 ): CommandAuthorization {
-  const bound: CommandAuthorization =
-    command.op === 'propose' && (command.source.field_group === 'summary' || command.source.field_group === 'cover')
-      ? { ...authorization, resource: { route, id: command.subject } }
-      : authorization;
+  const bound = authorization;
   return {
     action: bound.action,
     resource: bound.resource,

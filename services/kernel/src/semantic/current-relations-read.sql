@@ -80,6 +80,9 @@ WHERE redirect.target IS NULL AND COALESCE(live.body->>'rank','normal')<>'deprec
    SELECT 1 FROM semantic.hidden_candidate WHERE route=wanted.route AND subject_id=wanted.id AND candidate_id=wanted.candidate
      AND route>=input.home*16 AND route<(input.home+1)*16
    UNION ALL
+   SELECT 1 FROM semantic.record_lifecycle WHERE route=wanted.route AND subject_id=wanted.id AND candidate_id=wanted.candidate
+     AND state IN ('deleted','purging','purged') AND route>=input.home*16 AND route<(input.home+1)*16
+   UNION ALL
    SELECT 1 FROM semantic.statement_disclosure d WHERE route=wanted.route AND subject_id=wanted.id AND candidate_id=wanted.candidate
      AND route>=input.home*16 AND route<(input.home+1)*16
      AND (NOT d.disclosed AND NOT (input.moderator OR d.account_id=input.account) OR EXISTS (

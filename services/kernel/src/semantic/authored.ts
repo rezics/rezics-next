@@ -2,10 +2,13 @@ import type { Release } from '@rezics/definitions';
 import { currentCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { appendAuthoredField } from '../content/authored-fields.ts';
 import type { Resource } from '../request/access.ts';
+import { revisionResource } from './authorship.ts';
+import { creationDeclares } from '../access/index.ts';
 
-/** Record the subject binding while retaining the prepared Global Context grant check. */
+/** Compatibility wrapper retaining the actual prepared Global Context authority. */
 export function authoredAuthorization(authorization: CommandAuthorization, subject: Resource): CommandAuthorization {
-  return { ...authorization, resource: subject };
+  void subject;
+  return authorization;
 }
 
 export type ProposalInstall = (allocated: {
@@ -20,7 +23,15 @@ function authoredInstall(tx: CommandTransaction, subject: string, events: Author
   return async ({ candidate, revision, body }) => {
     const content = (body as { value: { content: { document: unknown; licence: string; language: string } } }).value
       .content;
-    const stored = await appendAuthoredField(tx, { subject, candidate, revision, ...content });
+    const stored = await appendAuthoredField(tx, {
+      subject,
+      ...(creationDeclares(tx, revisionResource(subject, revision))
+        ? { anchor: revisionResource(subject, revision).id }
+        : {}),
+      candidate,
+      revision,
+      ...content,
+    });
     events.push({
       type: 'com.rezics.content.authored-field.created.v1',
       subject,

@@ -134,7 +134,7 @@ async function shownFacts(tx: CommandTransaction, subject: string, property: str
   return (await slotView(tx, subject, property, GLOBAL_CONTEXT, {}, slot)).facts;
 }
 
-async function moderationLinks(
+export async function moderationLinks(
   tx: CommandTransaction,
   subject: string,
   revision: number,

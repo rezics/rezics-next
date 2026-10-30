@@ -30,6 +30,7 @@ import { createSubject, readRelated, readSubject, SubjectAccessDeniedError, subj
 import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
+import { createResourceCreationManifest, parentCreationAuthorization } from '../../access/index.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
 import { effectiveRelease } from '../extensions.ts';
 import { termContext } from '@rezics/definitions/extension';
@@ -60,13 +61,26 @@ import {
   globalContextAnchor,
   publicContextEligibility,
 } from '../context.ts';
-import type { CommandAuthorization } from '../../command/command.ts';
+import { currentCommand, type CommandAuthorization, type CommandTransaction } from '../../command/command.ts';
 import { REACTION_KINDS } from '../../content/events.ts';
 import { readReactionCounts, type ReactionKind } from '../../content/reaction-projection.ts';
 import readVisibility from '../read-visibility.sql';
 import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../agents.ts';
 import readRedirect from '../read-redirect.sql';
 import { SourceRecordSchema } from '../source-records.ts';
+import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts';
+import { requireAccessDeadline } from '../../access/unavailable.ts';
+import { withReadTransaction } from '../read.ts';
+import { readPartition } from '../../partition/partition.ts';
+import readContributionLifecycleLocator from '../contribution-lifecycle-read-locator.sql';
+import {
+  contributionAuthorResource,
+  deleteContribution,
+  restoreContribution,
+  ContributionLifecycleConflictError,
+  ContributionLifecycleNotFoundError,
+  SubjectPagePublicationUnavailableError,
+} from '../contribution-lifecycle.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const AgentSelfSourceSchema = t.Object(
@@ -545,6 +559,96 @@ function subjectRoutes(
   app: ReturnType<typeof createApp>,
   { pool, routeKey, tokens, access, clock }: SubjectRouteDependencies,
 ) {
+  function contributionAuthorization(
+    actor: AccountActor,
+    action: 'statement:delete' | 'statement:restore',
+    resource: Resource,
+    deadline: number,
+    includeGlobalPropose: boolean,
+  ): CommandAuthorization {
+    const context = { pool, deadline, partition: partitionOf(resource.route) };
+    const author = resourceAuthorization({
+      access: access(),
+      actor,
+      action,
+      anchor: {
+        resource,
+        async validate(client) {
+          const result = await client.query(
+            `SELECT 1 FROM access.resource_initialization
+             WHERE route=$1 AND resource_id=$2 AND resource_type='semantic.revision'`,
+            [resource.route, resource.id],
+          );
+          return result.rows.length === 1;
+        },
+      },
+      context,
+    });
+    if (!includeGlobalPropose) return author;
+    const proposal = resourceAuthorization({
+      access: access(),
+      actor,
+      action: 'statement:propose',
+      anchor: globalContextAnchor,
+      context,
+    });
+    return {
+      action,
+      resource: author.resource,
+      denied: () => new GrantDeniedError(),
+      async prepare(attempt) {
+        const authorProof = await author.prepare!(attempt);
+        const proposalProof = await proposal.prepare!(attempt);
+        return { authorProof, proposalProof };
+      },
+      async authorize(tx, attempt, proof) {
+        const prepared = proof as { authorProof: unknown; proposalProof: unknown };
+        await author.authorize(tx, attempt, prepared.authorProof);
+        await proposal.authorize(tx, attempt, prepared.proposalProof);
+        return 'execute';
+      },
+    };
+  }
+  const nativeCreationEntry = (
+    resource: Resource,
+    type: string,
+    accountId: string,
+    subject: string,
+    revision: number,
+  ) => ({
+    resource,
+    type,
+    creator: accountId,
+    creation: {
+      async validate(client: CommandTransaction, candidate: Readonly<Resource>): Promise<boolean> {
+        const command = currentCommand(client);
+        if (
+          candidate.route !== resource.route ||
+          candidate.id !== resource.id ||
+          command.basis?.actorAccountId !== accountId ||
+          command.authorization?.mode !== 'execute'
+        )
+          return false;
+        if (type === 'semantic.subject') {
+          const result = await client.query(
+            `SELECT 1 FROM semantic.subject s
+             JOIN semantic.revision r ON r.route=s.route AND r.subject_id=s.subject_id AND r.revision=1
+               AND r.recorded_transaction_id=s.recorded_transaction_id AND r.kind='create'
+             WHERE s.route=$1 AND s.subject_id=$2 AND s.recorded_transaction_id=$3::uuid`,
+            [resource.route, subject, command.transactionId],
+          );
+          return result.rows.length === 1;
+        }
+        const result = await client.query(
+          `SELECT 1 FROM semantic.revision r
+           WHERE r.route=$1 AND r.subject_id=$2 AND r.revision=$3
+             AND r.kind IN ('create','propose') AND r.recorded_transaction_id=$4::uuid`,
+          [resource.route, subject, revision, command.transactionId],
+        );
+        return result.rows.length === 1;
+      },
+    },
+  });
   return app
     .post(
       '/v1/subjects',
@@ -569,6 +673,7 @@ function subjectRoutes(
           operationId: 'subject.create',
           'x-exposure': 'public',
           'x-action': 'subject:create',
+          'x-resource-types': ['semantic.subject', 'semantic.revision'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
@@ -580,16 +685,23 @@ function subjectRoutes(
         if (!active) throw new ProblemError('semantic_not_ready');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = subjectTarget(routeKey, account.accountId, key);
-        const authorization = await authorizeSemanticWrite({
+        const firstRevision = revisionResource(target.id, 1);
+        const manifest = createResourceCreationManifest([
+          nativeCreationEntry(target, 'semantic.subject', account.accountId, target.id, 1),
+          nativeCreationEntry(firstRevision, 'semantic.revision', account.accountId, target.id, 1),
+        ]);
+        const authorization = parentCreationAuthorization({
           access: access(),
           actor: account,
           action: 'subject:create',
-          anchor: globalContextAnchor,
-          pool,
-          deadline: job.deadline,
-          targetPartition: partitionOf(target.route),
-          authorizeCommand,
-          denied: () => new SubjectAccessDeniedError(),
+          parent: globalContextAnchor,
+          context: {
+            pool,
+            deadline: job.deadline,
+            resource: target,
+            creation: nativeCreationEntry(target, 'semantic.subject', account.accountId, target.id, 1).creation,
+            manifest,
+          },
         });
         try {
           const result = await admission.run('normal', job, () =>
@@ -1060,6 +1172,7 @@ function subjectRoutes(
           operationId: 'subject.propose',
           'x-exposure': 'public',
           'x-action': 'statement:propose',
+          'x-resource-types': ['semantic.revision'],
           security: [{ bearerAuth: [] }],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
         },
@@ -1075,36 +1188,217 @@ function subjectRoutes(
         if (active && owner && !Object.hasOwn(active.release.properties, property as string))
           active = await effectiveRelease(pool, owner, true);
         if (!active) throw new ProblemError('semantic_not_ready');
-        const authorization = await authorizeSemanticWrite({
-          access: access(),
-          actor,
-          action: 'statement:propose',
-          anchor: globalContextAnchor,
-          pool,
-          deadline: job.deadline,
-          targetPartition: partitionOf(subjectRoute),
-          authorizeCommand,
-          denied: () => new SubjectAccessDeniedError(),
-        });
+        // Rebuild the entire declaration and authorization after a native revision collision.
+        // A serialization retry inside runCommand also reaches the same body check.
+        for (;;) {
+          requireAccessDeadline(job.deadline);
+          const current = await withReadTransaction(pool, async (client) => {
+            await readPartition(client, partitionOf(subjectRoute));
+            const result = await client.query<{ revision: number }>(
+              `SELECT revision FROM semantic.revision WHERE route=$1 AND subject_id=$2
+             ORDER BY revision DESC LIMIT 1`,
+              [subjectRoute, params.id],
+            );
+            return result.rows[0]?.revision;
+          });
+          if (current === undefined) throw new ProblemError('not_found');
+          const nextRevision = current + 1;
+          const anchor = revisionResource(params.id, nextRevision);
+          const manifest = createResourceCreationManifest([
+            nativeCreationEntry(anchor, 'semantic.revision', actor.accountId, params.id, nextRevision),
+          ]);
+          const authorization = parentCreationAuthorization({
+            access: access(),
+            actor,
+            action: 'statement:propose',
+            parent: globalContextAnchor,
+            context: {
+              pool,
+              deadline: job.deadline,
+              resource: anchor,
+              creation: nativeCreationEntry(anchor, 'semantic.revision', actor.accountId, params.id, nextRevision)
+                .creation,
+              manifest,
+            },
+          });
+          try {
+            const result = await admission.run('normal', job, () =>
+              proposeStatement(pool, {
+                subject: params.id,
+                statement: body.statement,
+                actor,
+                idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+                digest: requestDigest('subject.propose', actor, { subject: params.id, body }),
+                release: active,
+                authorization,
+                expectedRevision: nextRevision,
+                deadline: job.deadline,
+                clock,
+              }),
+            );
+            session.record(result.component);
+            set.status = 201;
+            return { candidate: result.candidate, revision: result.revision };
+          } catch (error) {
+            if (error instanceof StaleRevisionAuthorshipError) continue;
+            return candidateError(error);
+          }
+        }
+      },
+    )
+    .delete(
+      '/v1/subjects/:id/candidates/:candidate',
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: t.Optional(t.Object({}, { additionalProperties: false })),
+        response: {
+          200: withHeaders(
+            t.Object({
+              subject: t.String({ format: 'uuid' }),
+              candidate: t.String({ format: 'uuid' }),
+              deleted: t.Boolean(),
+            }),
+            {
+              [SESSION_HEADER]: t.String(),
+            },
+          ),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'statement.delete',
+          'x-exposure': 'public',
+          'x-action': 'statement:delete',
+          'x-resource-types': ['semantic.revision'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, body: _body, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null || routeOf(params.candidate) !== route) throw new ProblemError('not_found');
+        const located = await admission.run('normal', job, () =>
+          withConnection(pool, (client) =>
+            readContributionLifecycleLocator.run(client, {
+              route,
+              subject_id: params.id,
+              candidate_id: params.candidate,
+            }),
+          ),
+        );
+        if (!located) throw new ProblemError('not_found');
+        const resource = contributionAuthorResource(params.id, located.revision);
         try {
           const result = await admission.run('normal', job, () =>
-            proposeStatement(pool, {
+            deleteContribution(pool, {
               subject: params.id,
-              statement: body.statement,
+              candidate: params.candidate,
               actor,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-              digest: requestDigest('subject.propose', actor, { subject: params.id, body }),
-              release: active,
-              authorization,
+              authorization: contributionAuthorization(actor, 'statement:delete', resource, job.deadline, false),
+              routeKey,
               deadline: job.deadline,
               clock,
             }),
           );
           session.record(result.component);
-          set.status = 201;
-          return { candidate: result.candidate, revision: result.revision };
+          return { subject: result.subject, candidate: result.candidate, deleted: result.deleted };
         } catch (error) {
-          return candidateError(error);
+          if (error instanceof ContributionLifecycleNotFoundError) throw new ProblemError('not_found');
+          if (error instanceof ContributionLifecycleConflictError) throw new ProblemError('conflict');
+          if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+          if (error instanceof SubjectPagePublicationUnavailableError) throw new ProblemError('semantic_not_ready');
+          throw error;
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id/candidates/:candidate', 'restoreDeleted'),
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: t.Object({}, { additionalProperties: false }),
+        response: {
+          200: withHeaders(
+            t.Object({
+              subject: t.String({ format: 'uuid' }),
+              candidate: t.String({ format: 'uuid' }),
+              deleted: t.Boolean(),
+            }),
+            {
+              [SESSION_HEADER]: t.String(),
+            },
+          ),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'statement.restore_deleted',
+          'x-exposure': 'public',
+          'x-action': 'statement:restore',
+          'x-resource-types': ['semantic.revision'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, body: _body, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null || routeOf(params.candidate) !== route) throw new ProblemError('not_found');
+        const located = await admission.run('normal', job, () =>
+          withConnection(pool, (client) =>
+            readContributionLifecycleLocator.run(client, {
+              route,
+              subject_id: params.id,
+              candidate_id: params.candidate,
+            }),
+          ),
+        );
+        if (!located) throw new ProblemError('not_found');
+        const resource = contributionAuthorResource(params.id, located.revision);
+        try {
+          const result = await admission.run('normal', job, () =>
+            restoreContribution(pool, {
+              subject: params.id,
+              candidate: params.candidate,
+              actor,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              authorization: contributionAuthorization(actor, 'statement:restore', resource, job.deadline, true),
+              routeKey,
+              deadline: job.deadline,
+              clock,
+            }),
+          );
+          session.record(result.component);
+          return { subject: result.subject, candidate: result.candidate, deleted: result.deleted };
+        } catch (error) {
+          if (error instanceof ContributionLifecycleNotFoundError) throw new ProblemError('not_found');
+          if (error instanceof ContributionLifecycleConflictError) throw new ProblemError('conflict');
+          if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+          if (error instanceof SubjectPagePublicationUnavailableError) throw new ProblemError('semantic_not_ready');
+          throw error;
         }
       },
     )
@@ -1577,21 +1871,30 @@ function subjectRoutes(
           200: withHeaders(
             t.Object({
               candidates: t.Array(
-                t.Object({
-                  id: t.String({ format: 'uuid' }),
-                  source: t.Union([SemanticSourceSchema, t.Null()]),
-                  retracted: t.Union([t.Integer(), t.Null()]),
-                  retraction: t.Union([
-                    t.Object({ source: SemanticSourceSchema, references: t.Array(BatchReferenceSchema) }),
-                    t.Null(),
-                  ]),
-                  statement: StatementSchema,
-                  release: t.String(),
-                  revision: t.Integer(),
-                  decision: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Null()]),
-                  head: t.Union([t.Integer(), t.Null()]),
-                  rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
-                }),
+                t.Union([
+                  t.Object(
+                    { id: t.String({ format: 'uuid' }), deleted: t.Literal(true) },
+                    { additionalProperties: false },
+                  ),
+                  t.Object(
+                    {
+                      id: t.String({ format: 'uuid' }),
+                      source: t.Union([SemanticSourceSchema, t.Null()]),
+                      retracted: t.Union([t.Integer(), t.Null()]),
+                      retraction: t.Union([
+                        t.Object({ source: SemanticSourceSchema, references: t.Array(BatchReferenceSchema) }),
+                        t.Null(),
+                      ]),
+                      statement: StatementSchema,
+                      release: t.String(),
+                      revision: t.Integer(),
+                      decision: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Null()]),
+                      head: t.Union([t.Integer(), t.Null()]),
+                      rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
+                    },
+                    { additionalProperties: false },
+                  ),
+                ]),
               ),
               adoption: t.Union([
                 t.Object({

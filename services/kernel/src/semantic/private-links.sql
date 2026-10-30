@@ -33,6 +33,9 @@ selected AS MATERIALIZED (
     AND holder.visibility = 'visible' AND target.visibility = 'visible'
     AND NOT EXISTS (SELECT 1 FROM semantic.hidden_candidate h
       WHERE h.route = d.route AND h.subject_id = d.subject_id AND h.candidate_id = d.candidate_id)
+    AND NOT EXISTS (SELECT 1 FROM semantic.record_lifecycle lifecycle
+      WHERE lifecycle.route=d.route AND lifecycle.subject_id=d.subject_id AND lifecycle.candidate_id=d.candidate_id
+        AND lifecycle.state IN ('deleted','purging','purged'))
     AND EXISTS (SELECT 1 FROM semantic.adoption a
       WHERE a.route = d.route AND a.subject_id = d.subject_id AND a.slot_id = c.slot_id
         AND a.context_id = '00000000-0000-8000-8000-000000000000'::uuid

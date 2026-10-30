@@ -44,9 +44,10 @@ export type ProviderReviewScope = { source: string; context: string; status: Pro
 type NativePage = ReturnType<
   typeof subjectRoutes
 >['~Routes']['v1']['subjects'][':id']['candidates']['get']['response'][200];
+type LiveNativeCandidate = Extract<NativePage['candidates'][number], { statement: unknown }>;
 export type ProviderReviewCandidate = {
   subject: string;
-  candidate: NativePage['candidates'][number];
+  candidate: LiveNativeCandidate;
   adoption: NativePage['adoption'];
 };
 type Key = { subject_id: string; candidate_id: string };
@@ -336,9 +337,9 @@ async function hydrate(pool: Pool, keys: Key[], options: ReadOptions): Promise<P
   }
   const snapshots: {
     row: StoredCandidate;
-    decision: NativePage['candidates'][number]['decision'];
+    decision: LiveNativeCandidate['decision'];
     head: number | null;
-    rank: NativePage['candidates'][number]['rank'];
+    rank: LiveNativeCandidate['rank'];
     adoption: NativePage['adoption'];
   }[] = [];
   for (const [partition, group] of groups) {

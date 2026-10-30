@@ -407,8 +407,17 @@ The native producer additionally depends on compatible custody binding. Accounts
 Content imported/cover installation accepts the real Global action plus the same-partition binding. Authored
 installation on the subject route accepts `input.anchor?: UUID`, requires creationDeclares and stores that anchor.
 Only after these Content changes may the producer retire authored.ts/bulk.ts authorization-resource overwrites.
-These are actual pending production dependencies, not an alternative Access formula or live behavior supplied
-by this specification.
+The compatible custody ports are implemented in `access/parent-creation.ts`, `content/authored-fields.ts`,
+`content/imported-fields.ts` and `content/cover-reference.ts`. Their presence does not initialize Semantic
+revision grants: the native producer must still declare and initialize the exact resources described above.
+
+Contribution lifecycle also requires the native publication transition integration specified in
+[the publication slices](subject-pages-slices.md#shared-internal-contract). The required
+`recordSubjectPageTransition` export belongs to `subject-page-publication-store.ts`; that production module,
+its publication tables and native mutation hooks are currently absent. Only the specification and native
+publication acceptance describe them. Contribution delete/restore cannot preserve original-command-time
+public component transitions through that port until its implementation is available. Do not substitute a
+second publication writer, a worker-clock timestamp or an inert hook for this missing integration.
 
 Context deletion withholds its settings/defaults point, active extension and every Context-sensitive subject,
 candidate, relation and link read, including already warmed extension/composed-release caches. Authorized points

@@ -45,6 +45,12 @@ LEFT JOIN LATERAL (
     AND hidden.route >= input.partition_no * 16
     AND hidden.route < (input.partition_no + 1) * 16
   UNION ALL
+  SELECT 1 FROM semantic.record_lifecycle lifecycle
+  CROSS JOIN input
+  WHERE lifecycle.route=entry.route AND lifecycle.subject_id=entry.subject_id
+    AND lifecycle.candidate_id=entry.candidate_id AND lifecycle.state IN ('deleted','purging','purged')
+    AND lifecycle.route >= input.partition_no * 16 AND lifecycle.route < (input.partition_no + 1) * 16
+  UNION ALL
   SELECT 1 FROM semantic.statement_disclosure d
   CROSS JOIN input
   WHERE d.route = entry.route AND d.subject_id = entry.subject_id AND d.candidate_id = entry.candidate_id

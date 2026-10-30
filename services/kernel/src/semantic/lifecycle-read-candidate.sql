@@ -25,9 +25,15 @@ WITH input AS NOT MATERIALIZED (
   FROM assertion
   HAVING count(*) > 0 OR EXISTS (SELECT 1 FROM candidate WHERE origin = 'compact')
 )
-SELECT b.principal_id::text AS account_id
-FROM identity i
+SELECT b.principal_id::text AS account_id,
+       CASE WHEN l.state='purging' THEN 'deleted' ELSE coalesce(l.state, 'active') END AS state,
+       to_char(l.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS deleted_at,
+       to_char(l.purge_after AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS purge_after,
+       coalesce(l.held, false) AS held
+FROM identity i CROSS JOIN input requested
 LEFT JOIN editorial.write_basis b
   ON b.partition_no = :partition_no::integer AND b.transaction_id = i.recorded_transaction_id
   AND b.principal_kind = 'account' AND b.principal_id = :account_id::uuid
+LEFT JOIN semantic.record_lifecycle l
+  ON l.route = requested.route AND l.subject_id = requested.subject_id AND l.candidate_id = requested.candidate_id
 LIMIT 1;

@@ -8,6 +8,10 @@ JOIN LATERAL (
   SELECT candidate_id FROM semantic.hidden_candidate h
   WHERE h.route = input.route AND h.subject_id = input.subject_id AND h.candidate_id = wanted.candidate_id
   UNION ALL
+  SELECT candidate_id FROM semantic.record_lifecycle l
+  WHERE l.route = input.route AND l.subject_id = input.subject_id AND l.candidate_id = wanted.candidate_id
+    AND l.state IN ('deleted', 'purging', 'purged')
+  UNION ALL
   SELECT candidate_id FROM semantic.retraction t
   WHERE t.route = input.route AND t.subject_id = input.subject_id AND t.candidate_id = wanted.candidate_id
   UNION ALL

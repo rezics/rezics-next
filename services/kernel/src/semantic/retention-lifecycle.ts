@@ -2,6 +2,8 @@ import type { CommandTransaction } from '../command/command.ts';
 import { authoritativeTimeValue, currentCommand } from '../command/command.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readSemanticLifecycle } from './lifecycle-state.ts';
+import deleteContribution from './contribution-lifecycle-delete.sql';
+import restoreContribution from './contribution-lifecycle-restore.sql';
 
 /** Native source writer for the ordinary contribution command, after its existing original-revision
  * authorization. No actor, authorization callback, timestamp, disposition or document IDs are accepted.
@@ -22,6 +24,7 @@ export async function writeContributionRetentionLifecycle(
     command.authorization?.mode !== 'execute' ||
     command.authorization.action !== action ||
     command.authorization.resource.route !== route ||
+    input.transactionId !== command.transactionId ||
     !accountId
   )
     throw new TypeError('Ordinary record lifecycle requires its native authorized contribution command');
@@ -46,27 +49,32 @@ export async function writeContributionRetentionLifecycle(
   if (evidence.state === input.state) return false;
   const at = authoritativeTimeValue(command.time);
   if (input.state === 'active') {
-    const result = await tx.query(
-      `UPDATE semantic.record_lifecycle SET state='active',version=version+1
-      WHERE route=$1 AND subject_id=$2 AND candidate_id=$3 AND state='deleted' AND purge_after>$4::timestamptz`,
-      [route, input.subject, input.candidate, at],
-    );
-    if (!result.rowCount) throw new Error('record_restore_expired');
+    const result = await restoreContribution.run(tx, {
+      route,
+      subject_id: input.subject,
+      candidate_id: input.candidate,
+      at,
+    });
+    if (!result.length) throw new Error('record_restore_expired');
     return true;
   }
   if (evidence.state !== 'active') throw new Error('record_restore_expired');
-  const changed = await tx.query<{ deletion_generation: string }>(
-    `INSERT INTO semantic.record_lifecycle
-    (route,subject_id,candidate_id,revision,state,deletion_generation,deletion_transaction_id,deleted_at,purge_after)
-    VALUES($1,$2,$3,$4,'deleted',gen_random_uuid(),$5,$6,$6::timestamptz+interval '720 hours')
-    ON CONFLICT(route,subject_id,candidate_id) DO UPDATE SET state='deleted',version=record_lifecycle.version+1,
-     deletion_generation=EXCLUDED.deletion_generation,deletion_transaction_id=EXCLUDED.deletion_transaction_id,
-     deleted_at=EXCLUDED.deleted_at,purge_after=EXCLUDED.purge_after
-    WHERE record_lifecycle.state='active' RETURNING deletion_generation`,
-    [route, input.subject, input.candidate, candidate.revision, input.transactionId, at],
-  );
-  const generation = changed.rows[0]?.deletion_generation;
-  if (!generation) throw new Error('record_lifecycle_changed');
+  const changed = await deleteContribution.run(tx, {
+    route,
+    subject_id: input.subject,
+    candidate_id: input.candidate,
+    revision: candidate.revision,
+    transaction_id: command.transactionId,
+    at,
+  });
+  if (!changed.length) throw new Error('record_lifecycle_changed');
+  const generation = (
+    await tx.query<{ deletion_generation: string }>(
+      `SELECT deletion_generation::text FROM semantic.record_lifecycle
+     WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`,
+      [route, input.subject, input.candidate],
+    )
+  ).rows[0]!.deletion_generation;
   // These are Content's stored native reference positions, never a search for arbitrary embedded UUIDs.
   await tx.query(
     `INSERT INTO semantic.record_retention_document

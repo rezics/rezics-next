@@ -30,6 +30,21 @@ function record(value: unknown): value is Record<string, unknown> {
 
 export { validateIndexObservation as validateObservation } from './document.ts';
 
+/** Lifecycle invalidations carry only the native subject/candidate identities.
+ * Context lifecycle events have the same event names but are not subject mutations. */
+function subjectChanged(event: Envelope['events'][number]): boolean {
+  if (event.type.startsWith('com.rezics.subject.') || event.type === 'com.rezics.library.subject.listed.v1')
+    return true;
+  if (!['com.rezics.semantic.record.deleted.v1', 'com.rezics.semantic.record.restored.v1'].includes(event.type))
+    return false;
+  return (
+    lookupEventType(event.type)?.Check(event.data) === true &&
+    record(event.data) &&
+    event.data.kind === 'candidate' &&
+    event.data.subject === event.subject
+  );
+}
+
 export function createSubjectIndexer(options: {
   pool: Pool;
   search: OpenSearch;
@@ -56,10 +71,7 @@ export function createSubjectIndexer(options: {
             for (const envelope of envelopes) {
               if (envelope.partition !== partition) continue;
               for (const event of envelope.events) {
-                if (
-                  event.type.startsWith('com.rezics.subject.') ||
-                  event.type === 'com.rezics.library.subject.listed.v1'
-                ) {
+                if (subjectChanged(event)) {
                   if (!event.subject || seen.has(event.subject)) continue;
                   if (subjectPartition(event.subject) !== partition) continue;
                   seen.add(event.subject);
@@ -116,8 +128,7 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
           for (const envelope of envelopes)
             for (const event of envelope.events) {
               if (!event.subject || subjectPartition(event.subject) !== partition) continue;
-              if (event.type.startsWith('com.rezics.subject.') || event.type === 'com.rezics.library.subject.listed.v1')
-                subjects.add(event.subject);
+              if (subjectChanged(event)) subjects.add(event.subject);
               if (event.type === 'com.rezics.rating.public_figure.changed.v1') {
                 const data = event.data;
                 if (

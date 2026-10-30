@@ -1279,16 +1279,30 @@ declare const productEventTypes: {
         partition: Type.TInteger;
         generation: Type.TString;
     }>;
-    readonly "com.rezics.semantic.record.deleted.v1": Type.TObject<{
+    readonly "com.rezics.semantic.record.deleted.v1": Type.TUnion<[Type.TObject<{
         kind: Type.TLiteral<"context">;
         id: Type.TString;
         version: Type.TString;
-    }>;
-    readonly "com.rezics.semantic.record.restored.v1": Type.TObject<{
+    }>, Type.TObject<{
+        kind: Type.TLiteral<"candidate">;
+        id: Type.TString;
+        subject: Type.TString;
+        version: Type.TString;
+        deletedAt: Type.TUnion<[Type.TString, Type.TNull]>;
+        purgeAfter: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>]>;
+    readonly "com.rezics.semantic.record.restored.v1": Type.TUnion<[Type.TObject<{
         kind: Type.TLiteral<"context">;
         id: Type.TString;
         version: Type.TString;
-    }>;
+    }>, Type.TObject<{
+        kind: Type.TLiteral<"candidate">;
+        id: Type.TString;
+        subject: Type.TString;
+        version: Type.TString;
+        deletedAt: Type.TUnion<[Type.TString, Type.TNull]>;
+        purgeAfter: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>]>;
     readonly 'com.rezics.source-record.metadata-changed.v1': Type.TObject<{
         source: Type.TString;
         external_id: Type.TString;

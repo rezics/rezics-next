@@ -8,6 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { readAuthoredField } from '../../src/content/authored-fields.ts';
 import { readCandidateDisclosure } from '../../src/semantic/disclosure.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { revisionResource } from '../../src/semantic/authorship.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -145,7 +146,7 @@ async function stored(
     id: reference.document,
     digest: reference.digest,
     subject,
-    anchor: null,
+    anchor: revisionResource(subject, revision).id,
     candidate,
     revision,
     authorAccountId: accounts.editor,

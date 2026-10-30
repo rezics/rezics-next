@@ -67,6 +67,8 @@ import listOutboundLinks from './list-outbound-links-by-property.sql';
 import readOutboundLinkCount from './read-outbound-link-count.sql';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import { identityEpochStore } from './identity-epoch-store.ts';
+import { initializeRevisionAuthorship, revisionResource } from './authorship.ts';
+import { creationDeclares } from '../access/index.ts';
 import { readSourceRecords } from './source-records.ts';
 import readSourceMembers from './source-records-members.sql';
 
@@ -233,6 +235,9 @@ export async function writeSubject(
     transaction_id: transactionId,
     source: options.source ?? accountSource(tx, statementSubjects),
   });
+  // Historic trusted callbacks carry no creation capability and acquire no author rights.
+  if (authored && creationDeclares(tx, revisionResource(subjectId, 1)))
+    await initializeRevisionAuthorship(tx, { subject: subjectId, revision: 1 });
   await identityEpochStore.initializeSubject(tx, subjectId);
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },

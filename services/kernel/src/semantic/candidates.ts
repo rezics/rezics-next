@@ -14,6 +14,8 @@ import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
+import { initializeRevisionAuthorship, revisionResource, StaleRevisionAuthorshipError } from './authorship.ts';
+import { creationDeclares } from '../access/index.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { baseOf, layeredRelease } from './extensions.ts';
 import { termContext } from '@rezics/definitions/extension';
@@ -57,6 +59,7 @@ import insertEditorialRevision from './candidates-insert-editorial-revision.sql'
 import insertProposalRevision from './candidates-insert-proposal-revision.sql';
 import readAdoptionSubject from './candidates-read-adoption-subject.sql';
 import readCandidatePage from './candidates-read-candidate-page.sql';
+import readCandidateLifecycle from './candidates-read-lifecycle.sql';
 import readCompactCandidate from './candidates-read-compact-candidate.sql';
 import readDecisionCandidate from './candidates-read-decision-candidate.sql';
 import readHidden from './candidates-read-hidden.sql';
@@ -149,6 +152,8 @@ export async function proposeStatement(
     deadline: number;
     clock?: () => Date;
     routeKey?: Uint8Array;
+    /** Server declaration only; allocation remains inside the native body. */
+    expectedRevision?: number;
   },
 ) {
   const route = routeOf(options.subject);
@@ -189,6 +194,7 @@ export async function writeProposal(
   tx: CommandTransaction,
   transactionId: string,
   options: Pick<Parameters<typeof proposeStatement>[1], 'subject' | 'statement' | 'release'> & {
+    expectedRevision?: number;
     source?: Source | AgentSelfSource;
     routeKey?: Uint8Array;
     /** Sourced bulk summary and cover store content's reference instead of rejecting the datatype. */
@@ -200,6 +206,8 @@ export async function writeProposal(
   const route = routeOf(options.subject)!;
   const subject = listed(await readSubjectRevision.run(tx, { route, subject_id: options.subject }))[0];
   if (!subject) throw new SubjectNotFoundError();
+  if (options.expectedRevision !== undefined && subject.revision + 1 !== options.expectedRevision)
+    throw new StaleRevisionAuthorshipError();
   const redirect = await redirectOf(tx, options.subject);
   if (redirect) throw new SubjectRedirectError(options.subject, redirect);
   const input = validatedStatement(
@@ -277,6 +285,8 @@ export async function writeProposal(
       transaction_id: transactionId,
       source: options.source ?? accountSource(tx, [options.subject, ...input.items.map((item) => item.id)]),
     });
+    if (options.source === undefined && creationDeclares(tx, revisionResource(options.subject, revision)))
+      await initializeRevisionAuthorship(tx, { subject: options.subject, revision });
     await updateSubjectRelease.run(tx, {
       route,
       subject_id: options.subject,
@@ -1008,6 +1018,16 @@ export async function listCandidates(
           }));
       }
       const window = rows.slice(0, options.limit);
+      const lifecycleRows = window.length
+        ? listed(
+            await readCandidateLifecycle.run(client, {
+              route: routeOf(options.subject)!,
+              subject_id: options.subject,
+              candidate_ids: window.map((row) => row.candidate_id),
+            }),
+          )
+        : [];
+      const lifecycle = new Map(lifecycleRows.map((row) => [row.candidate_id, row.state]));
       const hidden = new Set<string>();
       if (window.length) {
         const owners = listed(
@@ -1043,7 +1063,9 @@ export async function listCandidates(
       // Hidden rows leave this page short. next stays set until the candidate sequence ends.
       const shown = window.filter((row) => !hidden.has(row.candidate_id));
       const releases = new Map<string, Release>();
-      for (const row of shown) {
+      for (const row of shown.filter(
+        (row) => !['deleted', 'purging', 'purged'].includes(lifecycle.get(row.candidate_id) ?? 'active'),
+      )) {
         if (releases.has(row.release)) continue;
         const release = await readRelease(client, row.release);
         if (!release) throw new Error('Candidate release is missing');
@@ -1056,18 +1078,21 @@ export async function listCandidates(
           (fact.body as { rank?: 'normal' | 'preferred' | 'deprecated' }).rank ?? null,
         ]),
       );
-      let candidates: {
-        source: Source | null;
-        retracted: number | null;
-        retraction: { source: Source; references: BatchReference[] } | null;
-        id: string;
-        statement: Statement;
-        release: string;
-        revision: number;
-        decision: 'accepted' | 'rejected' | null;
-        head: number | null;
-        rank: 'normal' | 'preferred' | 'deprecated' | null;
-      }[] = [];
+      let candidates: (
+        | { id: string; deleted: true }
+        | {
+            source: Source | null;
+            retracted: number | null;
+            retraction: { source: Source; references: BatchReference[] } | null;
+            id: string;
+            statement: Statement;
+            release: string;
+            revision: number;
+            decision: 'accepted' | 'rejected' | null;
+            head: number | null;
+            rank: 'normal' | 'preferred' | 'deprecated' | null;
+          }
+      )[] = [];
       for (const row of shown) {
         const provenance = listed(
           await readProvenance.run(client, {
@@ -1083,6 +1108,16 @@ export async function listCandidates(
               retraction: { source: Source; references: BatchReference[] } | null;
             }
           | undefined;
+        if (['deleted', 'purging', 'purged'].includes(lifecycle.get(row.candidate_id) ?? 'active')) {
+          if (options.routeKey && provenance?.source) {
+            const fenced = await fencedIds(client, options.routeKey, [
+              { id: row.candidate_id, source: provenance.source },
+            ]);
+            if (fenced.has(row.candidate_id)) continue;
+          }
+          candidates.push({ id: row.candidate_id, deleted: true });
+          continue;
+        }
         const fact = candidateFact(options.property, row);
         const dataTypes = factDataTypes(releases.get(row.release)!, [fact]);
         const statement = resolveItem(options.subject, [fact], '', dataTypes, {
@@ -1106,9 +1141,9 @@ export async function listCandidates(
         const gone = await fencedIds(
           client,
           options.routeKey,
-          candidates.map((row) => ({ id: row.id, source: row.source })),
+          candidates.flatMap((row) => ('deleted' in row ? [] : [{ id: row.id, source: row.source }])),
         );
-        candidates = candidates.filter((row) => !gone.has(row.id));
+        candidates = candidates.filter((row) => 'deleted' in row || !gone.has(row.id));
       }
       const last = window.at(-1);
       return {

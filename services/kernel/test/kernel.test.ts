@@ -151,6 +151,8 @@ const typed = [
   'GET /v1/payoutStatements/:statementId/lines',
   'POST /v1/payoutStatements/:statementId/$markPaid',
   'POST /v1/subjects/:id/candidates',
+  'DELETE /v1/subjects/:id/candidates/:candidate',
+  'POST /v1/subjects/:id/candidates/:candidate/$restoreDeleted',
   'POST /v1/subjects/:id/candidates/:candidate/$accept',
   'POST /v1/subjects/:id/candidates/:candidate/$reject',
   'POST /v1/subjects/:id/candidates/:candidate/$hide',

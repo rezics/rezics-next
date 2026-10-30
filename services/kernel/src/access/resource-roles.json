@@ -35,6 +35,7 @@
     "commerce.offer.standing": ["order:create"],
     "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"],
     "semantic.context.owner": ["context:accept", "context:adopt", "access:grant", "context:delete", "context:restore"],
+    "semantic.revision.author": ["statement:delete", "statement:restore"],
     "semantic.context.moderator": ["context:accept"],
     "library.collection.owner": ["collection:read", "collection:update", "collection:delete"],
     "semantic.zone.owner": [
@@ -88,6 +89,13 @@
     },
     "semantic.context": {
       "owner": "semantic.context.owner",
+      "standing": []
+    },
+    "semantic.revision": {
+      "owner": "semantic.revision.author",
+      "standing": []
+    },
+    "semantic.subject": {
       "standing": []
     },
     "library.collection": {

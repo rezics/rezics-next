@@ -50,6 +50,17 @@ const contextLifecycle = Type.Object(
   { kind: Type.Literal('context'), id: UUID, version: Type.String({ pattern: '^[1-9][0-9]*$' }) },
   { additionalProperties: false },
 );
+const candidateLifecycle = Type.Object(
+  {
+    kind: Type.Literal('candidate'),
+    id: UUID,
+    subject: UUID,
+    version: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    deletedAt: Type.Union([Type.String(), Type.Null()]),
+    purgeAfter: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
 
 export const SUBJECT_PAGE_DEPENDENCIES_CHANGED = 'com.rezics.semantic.subject_page.dependencies_changed.v1' as const;
 export const SUBJECT_PAGE_REPAIR_QUEUED = 'com.rezics.semantic.subject_page.repair_queued.v1' as const;
@@ -120,8 +131,8 @@ export const SEMANTIC_EVENTS = {
     { partition: Type.Integer({ minimum: 0, maximum: 4095 }), generation: Type.String({ pattern: '^[1-9][0-9]*$' }) },
     { additionalProperties: false },
   ),
-  [RECORD_DELETED]: contextLifecycle,
-  [RECORD_RESTORED]: contextLifecycle,
+  [RECORD_DELETED]: Type.Union([contextLifecycle, candidateLifecycle]),
+  [RECORD_RESTORED]: Type.Union([contextLifecycle, candidateLifecycle]),
   'com.rezics.source-record.metadata-changed.v1': Type.Object(
     {
       source: Type.String({ pattern: '^[a-z][a-z0-9_-]{0,31}$' }),

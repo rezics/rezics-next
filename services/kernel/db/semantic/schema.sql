@@ -2271,6 +2271,23 @@ CREATE TABLE semantic.candidate (
     CONSTRAINT candidate_view_order_check CHECK (((view_order >= 0) AND (view_order <= 32)))
 );
 
+CREATE TABLE semantic.contribution_lifecycle (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    state text DEFAULT 'deleted'::text NOT NULL,
+    deleted_at timestamp with time zone NOT NULL,
+    purge_after timestamp with time zone NOT NULL,
+    held boolean DEFAULT false NOT NULL,
+    security_revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT contribution_lifecycle_pkey PRIMARY KEY (route, subject_id, candidate_id),
+    CONSTRAINT contribution_lifecycle_window CHECK (purge_after = deleted_at + '720:00:00'::interval),
+    CONSTRAINT contribution_lifecycle_state_check CHECK (state = ANY (ARRAY['active'::text, 'deleted'::text, 'purged'::text])),
+    CONSTRAINT contribution_lifecycle_route_check CHECK (route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))),
+    CONSTRAINT contribution_lifecycle_candidate_route_check CHECK (route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11))),
+    CONSTRAINT contribution_lifecycle_security_revision_check CHECK (security_revision > 0)
+);
+
 
 --
 -- Name: context; Type: TABLE; Schema: semantic; Owner: -

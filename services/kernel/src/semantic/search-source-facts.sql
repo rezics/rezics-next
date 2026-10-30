@@ -29,6 +29,11 @@ requested AS MATERIALIZED (
     CROSS JOIN input
     WHERE f.route = requested.route AND f.subject_id = requested.subject_id AND f.kind = 'statement'
       AND NOT f.relation
+      AND NOT EXISTS (
+        SELECT 1 FROM semantic.record_lifecycle lifecycle
+        WHERE lifecycle.route=f.route AND lifecycle.subject_id=f.subject_id
+          AND lifecycle.candidate_id=f.statement_id AND lifecycle.state IN ('deleted','purging','purged')
+      )
       AND f.route >= input.partition_no * 16
       AND f.route < (input.partition_no + 1) * 16
     ORDER BY f.slot_id, f.log_seq
