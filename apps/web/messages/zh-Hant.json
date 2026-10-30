@@ -1327,6 +1327,7 @@
   "settings_profile_edit_denied": "目前的登入身分無法編輯這份個人資料。",
   "settings_profile_review_needed": "請對照最新資料檢查草稿，再重新儲存。",
   "settings_profile_self_unavailable": "暫時無法取得目前帳號的可編輯資料，請重新載入。部分沒有公開使用者名稱的帳號尚不支援編輯資料。",
+  "settings_profile_read_denied": "目前的登入無法讀取個人資料。快取的值已隱藏。本機變更和結果尚未確認的儲存請求會保留在記憶體中，直到你離開此頁面。",
   "settings_profile_retry_save": "重試原儲存請求",
   "settings_profile_reload_current": "重新載入目前資料",
   "settings_profile_review_draft": "檢查草稿",

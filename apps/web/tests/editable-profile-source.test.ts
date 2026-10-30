@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import type { EditableProfile } from '../src/settings/editable-profile-source';
-import { loadProfileRecord } from '../src/settings/profile-data';
+import { EditableProfileReadError, type EditableProfile } from '../src/settings/editable-profile-source';
+import {
+  loadProfileRecord,
+  profileReadResult,
+  profileReadValue,
+  type ProfileValues,
+} from '../src/settings/profile-data';
 import { ProfileEditor } from '../src/settings/profile-write';
 
 const profile: EditableProfile = {
@@ -53,4 +58,42 @@ test('the editable source rejects incomplete, foreign and non-closed native bodi
     await editor.submit('profile');
     expect(writes).toBe(0);
   }
+});
+
+test('native denial status survives the server boundary while transport failures retain the same-actor draft', async () => {
+  const { id: accountId, handle, bio: biography, ...fields } = profile;
+  const initial: ProfileValues = { accountId, biography, ...fields };
+  for (const status of [401, 403, 404, 503]) {
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async () =>
+        Response.json({ code: status === 503 ? 'dependency_unavailable' : 'forbidden' }, { status })) as typeof fetch,
+    });
+    const result = await profileReadResult(() => loadProfileRecord(client, 'Bearer unchanged', profile.id));
+    expect(result).toEqual({ ok: false, status });
+    expect(() => profileReadValue(result)).toThrow(EditableProfileReadError);
+    const editor = new ProfileEditor(
+      {
+        read: async () => profileReadValue(JSON.parse(JSON.stringify(result))),
+        save: async () => {
+          throw new Error('Must not write');
+        },
+      },
+      initial,
+    );
+    editor.edit({ biography: 'Local words' });
+    const draft = editor.snapshot().draft;
+    await editor.reload();
+    expect(editor.snapshot().known).toBe(initial);
+    expect(editor.snapshot().draft).toBe(draft);
+    expect(editor.snapshot().readAuthority).toBe(status === 503 ? 'allowed' : 'denied');
+    expect(editor.snapshot().phase).toBe('unavailable');
+    editor.review();
+    expect(editor.snapshot().phase).toBe(status === 503 ? 'idle' : 'unavailable');
+  }
+  const transportFailure = new Error('Connection interrupted');
+  await expect(
+    profileReadResult(async () => {
+      throw transportFailure;
+    }),
+  ).rejects.toBe(transportFailure);
 });

@@ -4,7 +4,8 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
-import { loadProfileRecord, saveProfileRecord, type ProfileValues } from './profile-data';
+import { loadProfileRecord, profileReadResult, saveProfileRecord } from './profile-data';
+import { EditableProfileReadError } from './editable-profile-source';
 import { parseProfileWrite } from './profile-write-input';
 import {
   loadManagedAccounts,
@@ -101,14 +102,16 @@ export const savePreferences = createServerFn({ method: 'POST' })
   });
 
 /** The supported self-profile projection starts only in the signed-in browser settings view. */
-export const readProfile = createServerFn({ method: 'GET' }).handler(async (): Promise<ProfileValues> => {
+export const readProfile = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
   await prepareSession(request, env as Partial<SessionEnv>);
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
-  if (!authorization || !accountId) throw new Error('Profile unavailable');
-  return loadProfileRecord(kernelClient(), authorization, accountId);
+  return profileReadResult(async () => {
+    if (!authorization || !accountId) throw new EditableProfileReadError(401);
+    return loadProfileRecord(kernelClient(), authorization, accountId);
+  });
 });
 
 export const saveProfile = createServerFn({ method: 'POST' })

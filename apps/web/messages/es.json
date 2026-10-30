@@ -1327,6 +1327,7 @@
   "settings_profile_edit_denied": "La sesión actual no permite editar este perfil.",
   "settings_profile_review_needed": "Compara tu borrador con el perfil actual antes de volver a guardarlo.",
   "settings_profile_self_unavailable": "El perfil editable de esta cuenta no está disponible. Vuelve a cargarlo para intentarlo de nuevo. Algunas cuentas sin nombre de usuario público aún no permiten editar el perfil.",
+  "settings_profile_read_denied": "Esta sesión no permite leer el perfil. Los valores guardados en caché están ocultos. Los cambios locales y cualquier guardado sin confirmar se conservan en memoria hasta que salgas.",
   "settings_profile_retry_save": "Reintentar el guardado original",
   "settings_profile_reload_current": "Recargar el perfil actual",
   "settings_profile_review_draft": "Revisar el borrador",

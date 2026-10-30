@@ -1,4 +1,10 @@
-import { profileChanges, type ProfilePatch, type ProfileSaveResult, type ProfileValues } from './profile-data';
+import {
+  profileChanges,
+  profileReadDenied,
+  type ProfilePatch,
+  type ProfileSaveResult,
+  type ProfileValues,
+} from './profile-data';
 
 export type ProfileScope = 'profile' | 'views';
 export type ProfileAttempt = Readonly<{
@@ -12,6 +18,7 @@ export type ProfileEditorIO = {
   read: () => Promise<ProfileValues>;
   save: (attempt: ProfileAttempt) => Promise<ProfileSaveResult>;
   confirmed?: (profile: ProfileValues) => void;
+  isCurrent?: () => boolean;
 };
 export type ProfileEditorState = {
   known: ProfileValues | null;
@@ -19,6 +26,7 @@ export type ProfileEditorState = {
   attempt: ProfileAttempt | null;
   phase: 'loading' | 'idle' | 'saving' | 'reloading' | 'saved' | 'uncertain' | 'refused' | 'review' | 'unavailable';
   scope: ProfileScope;
+  readAuthority: 'pending' | 'allowed' | 'denied';
   failure?: { status: number; message: string } | undefined;
 };
 
@@ -73,6 +81,9 @@ export function profileFieldErrors(profile: ProfileValues): Record<string, 'text
 export class ProfileEditor {
   private state: ProfileEditorState;
   private listeners = new Set<() => void>();
+  private active = true;
+  private readVersion = 0;
+  private pending = false;
   constructor(
     private io: ProfileEditorIO,
     initial: ProfileValues | null = null,
@@ -83,10 +94,12 @@ export class ProfileEditor {
       attempt: null,
       phase: initial ? 'idle' : 'loading',
       scope: 'profile',
+      readAuthority: initial ? 'allowed' : 'pending',
     };
   }
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
+    if (!this.active) return () => {};
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -96,31 +109,68 @@ export class ProfileEditor {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
+  private current() {
+    if (this.active && this.io.isCurrent && !this.io.isCurrent()) this.retire();
+    return this.active;
+  }
+  /** End this observation lifetime; an old promise must never revive it or publish confirmed data. */
+  retire() {
+    if (!this.active) return;
+    this.active = false;
+    this.readVersion++;
+    this.update({
+      known: null,
+      draft: null,
+      attempt: null,
+      phase: 'unavailable',
+      readAuthority: 'pending',
+      failure: undefined,
+    });
+    this.listeners.clear();
+    this.io = {
+      read: async () => {
+        throw new Error('Profile unavailable');
+      },
+      save: async () => {
+        throw new Error('Profile unavailable');
+      },
+    };
+  }
   receive(current: ProfileValues) {
+    if (!this.current() || this.state.readAuthority === 'denied') return;
     const { known, draft } = this.state;
     if (known && current.accountId !== known.accountId) throw new Error('Profile account changed');
     this.update({
       known: current,
       draft: known && draft ? rebaseProfile(known, draft, current) : current,
       phase: this.state.phase === 'loading' || this.state.phase === 'unavailable' ? 'idle' : this.state.phase,
+      readAuthority: 'allowed',
     });
   }
-  unavailable() {
-    this.update({ phase: 'unavailable' });
+  unavailable(error?: unknown) {
+    if (!this.current()) return;
+    const denied = profileReadDenied(error);
+    if (denied) this.readVersion++;
+    this.update({
+      phase: this.state.attempt ? 'uncertain' : 'unavailable',
+      ...(denied ? { readAuthority: 'denied' as const } : {}),
+    });
   }
   edit(patch: Partial<ProfileValues>) {
-    if (!this.state.draft) return;
+    if (!this.current() || !this.state.draft || this.state.readAuthority !== 'allowed') return;
     this.update({
       draft: { ...this.state.draft, ...patch },
       phase: this.state.phase === 'saved' ? 'idle' : this.state.phase,
     });
   }
   review() {
+    if (!this.current() || this.state.readAuthority !== 'allowed') return;
     this.update({ phase: this.state.attempt ? 'uncertain' : 'idle', failure: undefined });
   }
   async submit(scope: ProfileScope) {
+    if (!this.current() || this.state.readAuthority !== 'allowed') return;
     const { known, draft, attempt, phase } = this.state;
-    if (!known || !draft || attempt || ['saving', 'reloading', 'unavailable'].includes(phase)) return;
+    if (this.pending || !known || !draft || attempt || ['saving', 'reloading', 'unavailable'].includes(phase)) return;
     const after: ProfileValues =
       scope === 'profile'
         ? {
@@ -146,10 +196,19 @@ export class ProfileEditor {
     await this.send(false);
   }
   async retry() {
-    if (!this.state.attempt || ['saving', 'reloading'].includes(this.state.phase)) return;
+    if (!this.current() || this.pending || !this.state.attempt || ['saving', 'reloading'].includes(this.state.phase))
+      return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
+    this.pending = true;
+    try {
+      await this.sendAttempt(recovering);
+    } finally {
+      this.pending = false;
+    }
+  }
+  private async sendAttempt(recovering: boolean) {
     const attempt = this.state.attempt;
     if (!attempt) return;
     this.update({ phase: 'saving', failure: undefined });
@@ -157,9 +216,11 @@ export class ProfileEditor {
     try {
       result = await this.io.save(attempt);
     } catch {
+      if (!this.current()) return;
       this.update({ phase: 'uncertain' });
       return;
     }
+    if (!this.current()) return;
     if (!result.ok) {
       const uncertain = recovering || result.status >= 500;
       this.update({
@@ -169,20 +230,27 @@ export class ProfileEditor {
       });
       return;
     }
+    // A refusal of current reads is not permission to republish an earlier projection or acknowledgement.
+    if (this.state.readAuthority === 'denied') {
+      this.update({ phase: 'uncertain' });
+      return;
+    }
     // A new acknowledgement and a replay are both historical. Always read the current native profile.
     this.update({ phase: 'reloading' });
+    const version = this.readVersion;
     try {
       const current = await this.io.read();
+      if (!this.current() || version !== this.readVersion) return;
       this.finishRead(current, true);
-    } catch {
-      this.update({ phase: 'uncertain' });
+    } catch (error) {
+      if (this.current() && version === this.readVersion) this.unavailable(error);
     }
   }
   private finishRead(current: ProfileValues, acknowledged: boolean) {
     const { attempt, known, draft } = this.state;
     if (known && known.accountId !== current.accountId) throw new Error('Profile account changed');
     if (!draft) {
-      this.update({ known: current, draft: current, phase: 'idle', failure: undefined });
+      this.update({ known: current, draft: current, phase: 'idle', readAuthority: 'allowed', failure: undefined });
     } else if (attempt) {
       // Compare only the command's fields: unrelated current changes must not invalidate confirmation.
       const confirmed =
@@ -199,6 +267,7 @@ export class ProfileEditor {
             ? 'saved'
             : 'review',
         failure: undefined,
+        readAuthority: 'allowed',
       });
     } else {
       const nextDraft = known ? rebaseProfile(known, draft, current) : current;
@@ -207,17 +276,63 @@ export class ProfileEditor {
         draft: nextDraft,
         phase: Object.keys(profileChanges(current, nextDraft)).length ? 'review' : 'idle',
         failure: undefined,
+        readAuthority: 'allowed',
       });
     }
-    this.io.confirmed?.(current);
+    if (this.current() && this.state.readAuthority === 'allowed') this.io.confirmed?.(current);
   }
   async reload() {
-    if (['saving', 'reloading'].includes(this.state.phase)) return;
+    if (!this.current() || this.pending || ['saving', 'reloading'].includes(this.state.phase)) return;
+    this.pending = true;
     this.update({ phase: 'reloading', failure: undefined });
+    const version = this.readVersion;
     try {
-      this.finishRead(await this.io.read(), false);
-    } catch {
-      this.update({ phase: this.state.attempt ? 'uncertain' : 'unavailable' });
+      const current = await this.io.read();
+      if (!this.current() || version !== this.readVersion) return;
+      this.finishRead(current, false);
+    } catch (error) {
+      if (this.current() && version === this.readVersion) this.unavailable(error);
+    } finally {
+      this.pending = false;
     }
+  }
+}
+
+type ProfileSession = { state: string; subject?: string | null; csrfToken: string | null };
+type ProfileActor = { subject: string; incarnation: string };
+function profileActor(session: ProfileSession | undefined): ProfileActor | null {
+  return session?.state === 'signed-in' && session.subject && session.csrfToken
+    ? { subject: session.subject, incarnation: session.csrfToken }
+    : null;
+}
+
+/** Exactly one observation, with no history to reuse after an interrupted or replaced session. */
+export class ProfileEditorSession {
+  readonly actor: ProfileActor | null;
+  readonly key: readonly ['settings', 'profile', string | null, string | null, string];
+  readonly editor: ProfileEditor;
+  private active = true;
+  constructor(session: ProfileSession, createIO: (owner: ProfileEditorSession) => ProfileEditorIO) {
+    this.actor = profileActor(session);
+    // routes.ts creates a fresh CSRF token per session; store.ts retains it across credential refreshes.
+    this.key = [
+      'settings',
+      'profile',
+      this.actor?.subject ?? null,
+      this.actor?.incarnation ?? null,
+      crypto.randomUUID(),
+    ];
+    const io = createIO(this);
+    this.editor = new ProfileEditor({ ...io, isCurrent: () => this.isCurrent() && (io.isCurrent?.() ?? true) });
+    if (!this.actor) this.editor.unavailable();
+  }
+  matches(session: ProfileSession | undefined) {
+    const actor = profileActor(session);
+    return this.active && this.actor?.subject === actor?.subject && this.actor?.incarnation === actor?.incarnation;
+  }
+  isCurrent = () => this.active && !!this.actor;
+  retire() {
+    this.active = false;
+    this.editor.retire();
   }
 }

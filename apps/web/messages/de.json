@@ -1327,6 +1327,7 @@
   "settings_profile_edit_denied": "Mit deiner aktuellen Anmeldung kannst du dieses Profil nicht bearbeiten.",
   "settings_profile_review_needed": "Vergleiche deinen Entwurf mit dem aktuellen Profil, bevor du erneut speicherst.",
   "settings_profile_self_unavailable": "Das bearbeitbare Profil dieses Kontos ist nicht verfügbar. Lade es erneut. Einige Konten ohne öffentlichen Nutzernamen unterstützen die Profilbearbeitung noch nicht.",
+  "settings_profile_read_denied": "Mit dieser Anmeldung kann das Profil nicht gelesen werden. Zwischengespeicherte Werte werden ausgeblendet. Lokale Änderungen und unbestätigte Speichervorgänge bleiben bis zum Verlassen im Speicher.",
   "settings_profile_retry_save": "Ursprünglichen Speicherversuch wiederholen",
   "settings_profile_reload_current": "Aktuelles Profil neu laden",
   "settings_profile_review_draft": "Entwurf prüfen",

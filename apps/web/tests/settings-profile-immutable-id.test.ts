@@ -1,12 +1,15 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
   loadProfileRecord,
   saveProfileRecord,
   type ProfilePatch,
   type ProfileValues,
 } from '../src/settings/profile-data';
-import { ProfileEditor } from '../src/settings/profile-write';
+import { ProfileEditor, ProfileEditorSession, type ProfileAttempt } from '../src/settings/profile-write';
+import { EditableProfileReadError } from '../src/settings/editable-profile-source';
 
 const accountId = '019a0000-0000-7000-8000-000000000001';
 const mediaId = '019a0000-0000-7000-8000-000000000002';
@@ -149,5 +152,198 @@ test('The actual returned avatar/public-view fields are used and denied/unavaila
     api.respond(200, { profile: { id, handle: null, bio, ...fields } });
     await api.editor.reload();
     expect(api.editor.snapshot().known).toEqual(source());
+  }
+});
+
+test('A new or unready actor never receives a prior private profile and an explicit native read denial hides cached server values without converting a transport-uncertain save into an unapplied result', async () => {
+  const signedIn = { state: 'signed-in', subject: accountId, csrfToken: 'original-session' };
+  const original = new ProfileEditorSession(signedIn, () => ({
+    read: async () => source(),
+    save: async (attempt) => ({ ok: true, profile: attempt.after }),
+  }));
+  await original.editor.reload();
+  original.editor.edit({ biography: 'Unsent private draft', avatar: { media: 'local-avatar' } });
+  expect(original.matches({ ...signedIn })).toBe(true);
+  for (const session of [
+    { ...signedIn, subject: mediaId }, // Even a reused token never identifies another actor.
+    { ...signedIn, csrfToken: 'new-session' },
+    { ...signedIn, state: 'signed-out' },
+    { ...signedIn, state: 'unknown' },
+    { ...signedIn, state: 'unavailable' },
+    { ...signedIn, subject: null },
+    { ...signedIn, csrfToken: null },
+  ]) {
+    expect(original.matches(session)).toBe(false);
+    let reads = 0;
+    const next = new ProfileEditorSession(session, () => ({
+      read: async () => {
+        reads++;
+        return source();
+      },
+      save: async (attempt) => ({ ok: true, profile: attempt.after }),
+    }));
+    expect(next.key).not.toEqual(original.key);
+    expect(next.editor.snapshot().known).toBeNull();
+    expect(next.editor.snapshot().draft).toBeNull();
+    expect(next.editor.snapshot().attempt).toBeNull();
+    expect(reads).toBe(0);
+    if (!next.actor) {
+      await next.editor.reload();
+      await next.editor.submit('profile');
+      expect(reads).toBe(0);
+    }
+    next.retire();
+  }
+  original.retire();
+  const returned = new ProfileEditorSession(signedIn, () => ({
+    read: async () => source(),
+    save: async (attempt) => ({ ok: true, profile: attempt.after }),
+  }));
+  expect(original.matches(signedIn)).toBe(false);
+  expect(returned.key).not.toEqual(original.key);
+  expect(returned.editor.snapshot().draft).toBeNull();
+  returned.retire();
+
+  // Exercise the real cards' outer guards without introducing a browser or native harness.
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { ProfileCard } = await import('../src/settings/profile');
+  const { PublicViewsCard } = await import('../src/settings/public-views');
+  for (const unresolved of [false, true]) {
+    let denied = true;
+    const sent: ProfileAttempt[] = [];
+    const editor = new ProfileEditor(
+      {
+        read: async () => {
+          if (denied) throw new EditableProfileReadError(403);
+          return source();
+        },
+        save: async (attempt) => {
+          sent.push(attempt);
+          if (sent.length === 1) throw new Error('Response lost');
+          return { ok: false, status: 403, message: 'Forbidden' };
+        },
+      },
+      source(),
+    );
+    editor.edit({ biography: 'Retained unsent words', publicViews: { ...source().publicViews, posts: true } });
+    if (unresolved) await editor.submit('profile');
+    const before = editor.snapshot();
+    await editor.reload();
+    expect(editor.snapshot().readAuthority).toBe('denied');
+    expect(editor.snapshot().known).toBe(before.known);
+    expect(editor.snapshot().draft).toBe(before.draft);
+    expect(editor.snapshot().attempt).toBe(before.attempt);
+    const html = renderToStaticMarkup(
+      createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
+    );
+    for (const privateValue of ['Private editable source', 'Retained unsent words', 'example.test/notes', mediaId])
+      expect(html).not.toContain(privateValue);
+    expect(html).not.toContain('<input');
+    expect(html).not.toContain('<textarea');
+    expect(html).not.toContain('role="switch"');
+    editor.receive(source()); // A previously successful cached projection is not a new native authorized read.
+    editor.review();
+    expect(editor.snapshot().readAuthority).toBe('denied');
+    await editor.submit('profile');
+    expect(sent).toHaveLength(unresolved ? 1 : 0);
+    if (unresolved) {
+      await editor.retry();
+      expect(sent[1]).toBe(before.attempt);
+      expect(editor.snapshot().attempt).toBe(before.attempt);
+      expect(editor.snapshot().phase).toBe('uncertain');
+      expect(Object.isFrozen(editor.snapshot().attempt)).toBe(true);
+    }
+    denied = false;
+    await editor.reload();
+    expect(editor.snapshot().readAuthority).toBe('allowed');
+    expect(editor.snapshot().draft?.biography).toBe('Retained unsent words');
+    expect(editor.snapshot().draft?.publicViews.posts).toBe(true);
+    expect(editor.snapshot().attempt).toBe(before.attempt);
+    expect(editor.snapshot().phase).toBe(unresolved ? 'uncertain' : 'review');
+    const hidden = renderToStaticMarkup(createElement(ProfileCard, { editor, writable: false }));
+    expect(hidden).not.toContain('Retained unsent words');
+    expect(hidden).not.toContain('<input');
+    editor.retire();
+  }
+});
+
+test('retired actors ignore late read and save completions and release only their own callbacks', async () => {
+  for (const operation of ['read', 'save'] as const) {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const confirmed: ProfileValues[] = [];
+    let reads = 0;
+    const owner = new ProfileEditorSession({ state: 'signed-in', subject: accountId, csrfToken: 'old' }, () => ({
+      read: async () => {
+        reads++;
+        await pending;
+        return source();
+      },
+      save: async (attempt) => {
+        await pending;
+        return { ok: true, profile: attempt.after };
+      },
+      confirmed: (current) => confirmed.push(current),
+    }));
+    owner.editor.receive(source());
+    owner.editor.edit({ biography: 'Old local draft' });
+    let notifications = 0;
+    owner.editor.subscribe(() => {
+      notifications++;
+    });
+    const completing = operation === 'read' ? owner.editor.reload() : owner.editor.submit('profile');
+    owner.retire();
+    const retired = owner.editor.snapshot();
+    const count = notifications;
+    finish();
+    await completing;
+    owner.editor.receive(source());
+    await owner.editor.retry();
+    expect(owner.editor.snapshot()).toBe(retired);
+    expect(retired.known).toBeNull();
+    expect(retired.draft).toBeNull();
+    expect(retired.attempt).toBeNull();
+    expect(confirmed).toHaveLength(0);
+    expect(reads).toBe(operation === 'read' ? 1 : 0);
+    expect(notifications).toBe(count);
+  }
+  for (const operation of ['read', 'save'] as const) {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let published = 0;
+    let reads = 0;
+    const editor = new ProfileEditor(
+      {
+        read: async () => {
+          reads++;
+          await pending;
+          return source();
+        },
+        save: async (attempt) => {
+          await pending;
+          return { ok: true, profile: attempt.after };
+        },
+        confirmed: () => {
+          published++;
+        },
+      },
+      source(),
+    );
+    editor.edit({ biography: 'Retained local words' });
+    const completing = operation === 'read' ? editor.reload() : editor.submit('profile');
+    const original = editor.snapshot().attempt;
+    editor.unavailable(new EditableProfileReadError(403));
+    finish();
+    await completing;
+    expect(editor.snapshot().readAuthority).toBe('denied');
+    expect(editor.snapshot().draft?.biography).toBe('Retained local words');
+    expect(editor.snapshot().attempt).toBe(original);
+    expect(published).toBe(0);
+    expect(reads).toBe(operation === 'read' ? 1 : 0);
+    editor.retire();
   }
 });

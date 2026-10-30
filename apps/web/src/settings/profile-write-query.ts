@@ -1,69 +1,118 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useLayoutEffect } from 'react';
 import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
-import { csrfHeaders } from '../threads/composer';
+import { sessionQuery, useSession } from '../session/query';
 import { readProfile, saveProfile } from './actions';
-import type { ProfileValues } from './profile-data';
-import { ProfileEditor } from './profile-write';
+import { profileReadValue } from './profile-data';
+import { ProfileEditorSession } from './profile-write';
 
-type EditorEntry = { token: string | null; subject: string | null; editor: ProfileEditor; users: number };
+type EditorEntry = { owner: ProfileEditorSession; users: number; release?: () => void };
 const editors = new WeakMap<QueryClient, EditorEntry>();
+
+function retire(client: QueryClient, entry: EditorEntry) {
+  entry.release?.();
+  entry.release = undefined;
+  entry.owner.retire();
+  if (editors.get(client) === entry) editors.delete(client);
+  // Only this observation's query and callbacks belong to us.
+  void client.cancelQueries({ queryKey: entry.owner.key, exact: true });
+  client.removeQueries({ queryKey: entry.owner.key, exact: true });
+}
 
 export function useProfileEditor() {
   const session = useSession();
   const client = useQueryClient();
-  const writable = session.state === 'signed-in' && !!session.csrfToken;
-  const token = writable ? session.csrfToken : null;
-  const subject = writable ? (session.subject ?? null) : null;
-  // Session CSRF identity changes with sign-in. No private profile is reused by another session.
-  const key = ['settings', 'profile', token, subject] as const;
+  const sessionState = client.getQueryState(sessionQuery.queryKey);
+  const observed = sessionState?.status === 'error' ? { state: 'unavailable', csrfToken: null } : session;
   let entry = editors.get(client);
-  if (!entry || entry.token !== token || entry.subject !== subject) {
-    const editor = new ProfileEditor(
-      {
+  if (!entry || !entry.owner.matches(observed)) {
+    if (entry) retire(client, entry);
+    const owner = new ProfileEditorSession(observed, (owner) => {
+      const current = () => {
+        const query = client.getQueryState(sessionQuery.queryKey);
+        return (
+          owner.isCurrent() &&
+          editors.get(client)?.owner === owner &&
+          query?.status === 'success' &&
+          owner.matches(query.data)
+        );
+      };
+      const read = async () => {
+        if (!current()) throw new Error('Profile unavailable');
+        const profile = profileReadValue(await readProfile());
+        if (!current()) throw new Error('Profile unavailable');
+        if (profile.accountId !== owner.actor?.subject) throw new Error('Profile account changed');
+        return profile;
+      };
+      return {
+        isCurrent: current,
         read: async () => {
-          await client.cancelQueries({ queryKey: key });
-          return readProfile();
+          await client.cancelQueries({ queryKey: owner.key, exact: true });
+          return read();
         },
         save: async (attempt) => {
-          await client.cancelQueries({ queryKey: key });
-          return saveProfile({ data: attempt, headers: csrfHeaders() });
+          await client.cancelQueries({ queryKey: owner.key, exact: true });
+          if (!current()) throw new Error('Profile unavailable');
+          // Replay belongs to these original credentials, never an imperative transport's newer token.
+          return saveProfile({ data: attempt, headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' } });
         },
         confirmed: (profile) => {
-          if (editors.get(client)?.editor === editor) client.setQueryData(key, profile);
+          if (current()) client.setQueryData(owner.key, profile);
         },
-      },
-      token ? (client.getQueryData<ProfileValues>(key) ?? null) : null,
-    );
-    entry = { token, subject, editor, users: 0 };
+      };
+    });
+    entry = { owner, users: 0 };
     editors.set(client, entry);
   }
-  const editor = entry.editor;
-  const isCurrent = useCallback(() => editors.get(client) === entry && !!entry.token, [client, entry]);
+  const { owner } = entry;
+  const editor = owner.editor;
+  const writable = !!owner.actor && owner.isCurrent();
+  const isCurrent = useCallback(() => {
+    const query = client.getQueryState(sessionQuery.queryKey);
+    return (
+      editors.get(client) === entry && owner.isCurrent() && query?.status === 'success' && owner.matches(query.data)
+    );
+  }, [client, entry, owner]);
   useLayoutEffect(() => {
     entry.users++;
+    if (!entry.release) {
+      entry.release = client.getQueryCache().subscribe((event) => {
+        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        const query = client.getQueryState(sessionQuery.queryKey);
+        if (query?.status !== 'success' || !owner.matches(query.data)) retire(client, entry);
+      });
+    }
     return () => {
       entry.users--;
-      // The profile and activity sections share one mount. Cancelled navigation never releases it.
-      // A microtask lets StrictMode reconnect before retiring the last consumer's private draft.
+      // Let StrictMode reconnect before releasing the last consumer's private observation.
       queueMicrotask(() => {
-        if (entry.users === 0 && editors.get(client) === entry) editors.delete(client);
+        if (entry.users === 0) retire(client, entry);
       });
     };
-  }, [client, entry]);
+  }, [client, entry, owner]);
   const query = useQuery({
     ...personalRead,
-    queryKey: key,
-    queryFn: () => readProfile(),
+    queryKey: owner.key,
+    queryFn: async () => {
+      try {
+        if (!isCurrent()) throw new Error('Profile unavailable');
+        const profile = profileReadValue(await readProfile());
+        if (!isCurrent()) throw new Error('Profile unavailable');
+        if (profile.accountId !== owner.actor?.subject) throw new Error('Profile account changed');
+        return profile;
+      } catch (error) {
+        if (isCurrent()) editor.unavailable(error);
+        throw error;
+      }
+    },
     enabled: personalRead.enabled && writable,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
   useLayoutEffect(() => {
-    if (query.isError || (session.state !== 'unknown' && !writable)) editor.unavailable();
+    if (query.isError) editor.unavailable(query.error);
     else if (writable && query.data) editor.receive(query.data);
-  }, [editor, query.data, query.isError, session.state, writable]);
+  }, [editor, query.data, query.isError, query.error, writable]);
   return { editor, writable, isCurrent };
 }

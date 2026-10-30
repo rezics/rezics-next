@@ -34,7 +34,8 @@ export function ProfileFeedback({
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
-  const unavailable = state.phase === 'unavailable';
+  const denied = state.readAuthority === 'denied';
+  const unavailable = state.phase === 'unavailable' || denied;
   const failed = ['uncertain', 'refused', 'review'].includes(state.phase) && state.scope === scope;
   return (
     <div className="space-y-3">
@@ -46,13 +47,15 @@ export function ProfileFeedback({
           <AlertTitle>{m.settings_profile_error_title()}</AlertTitle>
           <AlertDescription>
             <p>
-              {unavailable
-                ? m.settings_profile_self_unavailable()
-                : state.phase === 'uncertain'
-                  ? m.settings_profile_network_error()
-                  : state.failure
-                    ? state.failure.message || profileError(state.failure.status)
-                    : m.settings_profile_review_needed()}
+              {denied
+                ? m.settings_profile_read_denied()
+                : unavailable
+                  ? m.settings_profile_self_unavailable()
+                  : state.phase === 'uncertain'
+                    ? m.settings_profile_network_error()
+                    : state.failure
+                      ? state.failure.message || profileError(state.failure.status)
+                      : m.settings_profile_review_needed()}
             </p>
             <div className="flex flex-wrap gap-2">
               {state.attempt ? (
@@ -69,7 +72,12 @@ export function ProfileFeedback({
                 {m.settings_profile_reload_current()}
               </Button>
               {state.draft ? (
-                <Button type="button" variant="outline" disabled={busy} onClick={() => editor.review()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!writable || busy || denied}
+                  onClick={() => editor.review()}
+                >
                   {m.settings_profile_review_draft()}
                 </Button>
               ) : null}
@@ -100,7 +108,7 @@ export function ProfileCard({
   avatarUpload?: AvatarUpload;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  const profile = state.draft;
+  const profile = writable && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
   const [validationAttempt, setValidationAttempt] = useState(0);
   const controls = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLDivElement | null>>({});
@@ -113,7 +121,7 @@ export function ProfileCard({
     if (field) (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
   }, [validationAttempt]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
-  const closed = !writable || state.phase === 'unavailable';
+  const closed = !writable || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
   const avatar = useProfileAvatarUpload(editor, closed, avatarUpload);
   useProfileNavigationUpload(avatar.controller);
   const uploading = avatar.blocked;

@@ -1385,6 +1385,7 @@
   "settings_profile_edit_denied": "You cannot edit this profile with the current sign-in.",
   "settings_profile_review_needed": "Review your draft against the current profile before saving again.",
   "settings_profile_self_unavailable": "The current account’s editable profile is unavailable. Reload to try again. Some accounts without a public handle do not yet support profile editing.",
+  "settings_profile_read_denied": "This sign-in cannot read the profile. Cached values are hidden. Local changes and any unconfirmed save stay in memory until you leave.",
   "settings_profile_retry_save": "Retry original save",
   "settings_profile_reload_current": "Reload current profile",
   "settings_profile_review_draft": "Review draft",

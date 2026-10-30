@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import {
   createEditableProfileSource,
+  EditableProfileReadError,
   type EditableProfile,
   type EditableProfileSource,
 } from './editable-profile-source';
@@ -27,6 +28,26 @@ export type ProfilePatch = {
 };
 /** The PATCH acknowledges a command. Only a subsequent GET confirms the current profile. */
 export type ProfileSaveResult = { ok: true; profile: ProfileValues } | { ok: false; status: number; message: string };
+
+/** Keep native read status intact across the server-function serialization boundary. */
+export type ProfileReadResult = { ok: true; profile: ProfileValues } | { ok: false; status: number };
+export async function profileReadResult(read: () => Promise<ProfileValues>): Promise<ProfileReadResult> {
+  try {
+    return { ok: true, profile: await read() };
+  } catch (error) {
+    if (error instanceof EditableProfileReadError) return { ok: false, status: error.status };
+    throw error;
+  }
+}
+
+export function profileReadValue(result: ProfileReadResult): ProfileValues {
+  if (!result.ok) throw new EditableProfileReadError(result.status);
+  return result.profile;
+}
+
+export function profileReadDenied(error: unknown): boolean {
+  return error instanceof EditableProfileReadError && [401, 403, 404].includes(error.status);
+}
 
 function accountProfile(value: EditableProfile): ProfileValues {
   return {

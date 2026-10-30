@@ -1328,6 +1328,7 @@
   "settings_profile_edit_denied": "当前登录身份无法编辑此资料。",
   "settings_profile_review_needed": "请对照最新资料检查草稿，然后重新保存。",
   "settings_profile_self_unavailable": "暂时无法获取当前账号的可编辑资料，请重新加载。部分没有公开用户名的账号尚不支持编辑资料。",
+  "settings_profile_read_denied": "当前登录无法读取个人资料。缓存的值已隐藏。本地更改和结果尚未确认的保存请求会保留在内存中，直到你离开此页面。",
   "settings_profile_retry_save": "重试原保存请求",
   "settings_profile_reload_current": "重新加载当前资料",
   "settings_profile_review_draft": "检查草稿",

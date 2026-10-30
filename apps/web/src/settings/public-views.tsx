@@ -16,10 +16,10 @@ export function PublicViewsSection() {
 
 export function PublicViewsCard({ editor, writable = true }: { editor: ProfileEditor; writable?: boolean }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  const profile = state.draft;
+  const profile = writable && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
   const busy = state.phase === 'saving' || state.phase === 'reloading';
-  const closed = !writable || state.phase === 'unavailable';
+  const closed = !writable || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
   const changed =
     profile &&
     state.known &&

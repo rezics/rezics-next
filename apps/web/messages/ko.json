@@ -1327,6 +1327,7 @@
   "settings_profile_edit_denied": "현재 로그인 상태에서는 이 프로필을 수정할 수 없습니다.",
   "settings_profile_review_needed": "최신 프로필과 초안을 비교한 후 다시 저장하세요.",
   "settings_profile_self_unavailable": "현재 계정의 편집 가능한 프로필을 불러올 수 없습니다. 다시 불러와 주세요. 공개 사용자 이름이 없는 일부 계정은 아직 프로필 편집을 지원하지 않습니다.",
+  "settings_profile_read_denied": "현재 로그인으로는 프로필을 읽을 수 없습니다. 캐시된 값은 숨겨집니다. 로컬 변경 사항과 확인되지 않은 저장 요청은 페이지를 떠날 때까지 메모리에 유지됩니다.",
   "settings_profile_retry_save": "원래 저장 요청 재시도",
   "settings_profile_reload_current": "최신 프로필 불러오기",
   "settings_profile_review_draft": "초안 검토",

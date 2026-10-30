@@ -1327,6 +1327,7 @@
   "settings_profile_edit_denied": "Votre connexion actuelle ne permet pas de modifier ce profil.",
   "settings_profile_review_needed": "Comparez votre brouillon au profil actuel avant de l’enregistrer à nouveau.",
   "settings_profile_self_unavailable": "Le profil modifiable de ce compte est indisponible. Rechargez-le pour réessayer. Certains comptes sans identifiant public ne permettent pas encore la modification du profil.",
+  "settings_profile_read_denied": "Cette connexion ne permet pas de lire le profil. Les valeurs en cache sont masquées. Les modifications locales et les enregistrements non confirmés restent en mémoire jusqu’à votre départ.",
   "settings_profile_retry_save": "Réessayer l’enregistrement initial",
   "settings_profile_reload_current": "Recharger le profil actuel",
   "settings_profile_review_draft": "Vérifier le brouillon",
