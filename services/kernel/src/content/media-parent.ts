@@ -39,13 +39,11 @@ export async function prepareRealmParticipation(
 ): Promise<RealmParticipationProof> {
   if (realmId === null || !check) return { realmId, allowed: true };
   return within(deadline, async () => {
-    const client = await pool.connect();
-    try {
-      const allowed = await check(deadlineClient(client, deadline), { realmId, actor }, time);
-      return { realmId, allowed };
-    } finally {
-      client.release();
-    }
+    // The Realm check prepares Access evidence through independent reads on
+    // this same pool. Keep the query port lazy so preparation never holds an
+    // anchor connection while those reads acquire theirs.
+    const allowed = await check(deadlineClient(pool, deadline), { realmId, actor }, time);
+    return { realmId, allowed };
   });
 }
 

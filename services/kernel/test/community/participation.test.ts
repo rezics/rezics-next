@@ -7,13 +7,17 @@ import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, type AccessConfig } from '../../src/access/index.ts';
 import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { createAccountsWorkModule, enqueueMembership } from '../../src/access/membership-work.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { recordResourceDenial, ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { createRealmMembership } from '../../src/community/membership.ts';
-import { createRealmParticipationCheck } from '../../src/community/participation.ts';
+import {
+  createRealmParticipationCheck,
+  prepareRealmParticipationResult,
+  type RealmParticipationResult,
+} from '../../src/community/participation.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -52,6 +56,7 @@ let kernel: ReturnType<typeof createKernel>;
 let workClient: Awaited<ReturnType<typeof createWorkClient>>;
 let workRuntime: Awaited<ReturnType<typeof composeWork>>;
 let access: ReturnType<typeof createAccess>;
+let installedAccessConfig: AccessConfig | undefined;
 let membership: ReturnType<typeof createRealmMembership>;
 let roleReader: ReturnType<typeof createRealmMembership>['roleReader'] | undefined;
 let scopes: string[];
@@ -156,6 +161,50 @@ async function grant(accountId: string, actions: string[]) {
   });
   expect(result.response.status).toBe(201);
   expect(result.value).toEqual({ grant: body });
+}
+
+async function grantResource(authorizer: Person, resourceId: string, accountId: string, actions: string[]) {
+  const route = routeOf(resourceId);
+  if (route === null) throw new Error(`Invalid grant resource ${resourceId}`);
+  const body = {
+    resource: { route, id: resourceId },
+    subject: { kind: 'account' as const, id: accountId },
+    actions,
+    valid: '(,)',
+  };
+  const result = await call('POST', '/v1/grants', {
+    bearer: authorizer.bearer,
+    key: crypto.randomUUID(),
+    body,
+  });
+  expect(result.response.status).toBe(201);
+  expect(result.value).toEqual({ grant: body });
+}
+
+async function revokeResource(authorizer: Person, resourceId: string, accountId: string, actions: string[]) {
+  const route = routeOf(resourceId);
+  if (route === null) throw new Error(`Invalid grant resource ${resourceId}`);
+  const body = {
+    resource: { route, id: resourceId },
+    subject: { kind: 'account' as const, id: accountId },
+    actions,
+    valid: '(,)',
+  };
+  const result = await call('POST', '/v1/grants:revoke', {
+    bearer: authorizer.bearer,
+    key: crypto.randomUUID(),
+    body,
+  });
+  expect(result.response.status).toBe(200);
+}
+
+async function banRealm(owner: Person, realmId: string, target: Person) {
+  const result = await call('PUT', `/v1/realms/${realmId}/bans/${target.accountId}`, {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    body: { reason: 'Native participation preparation control' },
+  });
+  expect(result.response.status).toBe(200);
 }
 
 async function createSpace(actor: Person, title: string) {
@@ -289,6 +338,7 @@ beforeAll(async () => {
     routeKey,
     tokens,
     access: (config) => {
+      installedAccessConfig = config;
       access = createAccess({
         ...config,
         auth: {
@@ -495,6 +545,177 @@ test.serial('a Realm ban denial overrides public participation', async () => {
   expect(denied.value).toMatchObject({ code: 'forbidden', effect_status: 'not_applicable' });
 });
 
+test.serial('native participation preparation uses one bounded connection and the supplied command time', async () => {
+  const owner = await personWithToken(`participation_single_owner_${crypto.randomUUID()}`, scopes);
+  const publicViewer = await personWithToken(`participation_single_public_${crypto.randomUUID()}`, scopes);
+  const member = await personWithToken(`participation_single_member_${crypto.randomUUID()}`, scopes);
+  const nonMember = await personWithToken(`participation_single_nonmember_${crypto.randomUUID()}`, scopes);
+  const readDenied = await personWithToken(`participation_single_read_denied_${crypto.randomUUID()}`, scopes);
+  const bannedMember = await personWithToken(`participation_single_banned_${crypto.randomUUID()}`, scopes);
+  await grant(owner.accountId, ['realm:create', 'space:create']);
+
+  const publicSpace = await createSpace(owner, `Single connection public host ${crypto.randomUUID()}`);
+  const publicRealm = await createRealm(
+    owner,
+    publicSpace.spaceId,
+    'public',
+    `Single connection public Realm ${crypto.randomUUID()}`,
+  );
+  const protectedSpace = await createSpace(owner, `Single connection protected host ${crypto.randomUUID()}`);
+  const protectedRealm = await protectRealm(
+    owner,
+    await createRealm(
+      owner,
+      protectedSpace.spaceId,
+      'public',
+      `Single connection protected Realm ${crypto.randomUUID()}`,
+    ),
+  );
+  for (const participant of [member, bannedMember]) {
+    const joined = await joinMember(protectedRealm.realmId, participant, owner);
+    expect(joined).toMatchObject({ status: 'completed', accountId: participant.accountId });
+  }
+  await grantResource(owner, protectedRealm.realmId, readDenied.accountId, ['realm:participate', 'realm:read']);
+  await grantResource(owner, protectedRealm.realmId, bannedMember.accountId, ['realm:read']);
+  await banRealm(owner, protectedRealm.realmId, bannedMember);
+
+  const config = installedAccessConfig;
+  if (!config) throw new Error('Native Access configuration was not captured');
+  const singlePool = db.openPool({ max: 1 });
+  const singleAccess = createAccess({
+    ...config,
+    auth: {
+      issuer,
+      audience,
+      jwksUrl: `${issuer}/.well-known/jwks.json`,
+      fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+    },
+    realmRoleReader: (client, input) => {
+      if (!roleReader) return Promise.resolve(null);
+      return roleReader(client, input);
+    },
+  });
+  let checkedOut = 0;
+  let peak = 0;
+  const acquire = () => {
+    checkedOut++;
+    peak = Math.max(peak, checkedOut);
+  };
+  const release = () => {
+    checkedOut--;
+  };
+  singlePool.on('acquire', acquire);
+  singlePool.on('release', release);
+
+  class ParticipationDenied extends Error {}
+  async function evaluate(person: Person, realmId: string) {
+    const deadline = Date.now() + 10_000;
+    const actor = await singleAccess.authenticate(person.bearer, { pool: singlePool, deadline });
+    if (actor.kind !== 'account') throw new Error('Native authentication did not yield an account actor');
+    const route = routeOf(realmId);
+    if (route === null) throw new Error(`Invalid native Realm ${realmId}`);
+    const resource = { route, id: realmId };
+    const observed: { action: string; at: string | null; client: AccessClient }[] = [];
+    const checkedAccess = accessObservingTime(observed, singleAccess);
+    const check = createRealmParticipationCheck({ pool: singlePool, access: checkedAccess });
+    let proof: RealmParticipationResult | undefined;
+    let commandAt: string | undefined;
+    let committed = false;
+    try {
+      await withRequestDeadline(deadline, () =>
+        runCommand(
+          singlePool,
+          {
+            ...principalCommandIdentity(actor),
+            partition: partitionOf(route),
+            deadline,
+            authorization: {
+              action: 'realm:participate',
+              resource,
+              denied: () => new ParticipationDenied('Native participation denied'),
+              async prepare(attempt) {
+                commandAt = authoritativeTimeValue(attempt.time);
+                proof = await prepareRealmParticipationResult(
+                  singlePool,
+                  check,
+                  actor,
+                  realmId,
+                  attempt.time,
+                  deadline,
+                );
+                return proof;
+              },
+              async authorize(tx, attempt, evidence) {
+                expect(commandTime(tx)).toBe(attempt.time);
+                return (evidence as RealmParticipationResult).allowed ? 'execute' : 'receipt-only';
+              },
+            },
+          },
+          async (tx, command) => {
+            expect(commandTime(tx)).toBe(command.time);
+            committed = true;
+            return {
+              value: { realmId },
+              events: [{ type: 'com.rezics.fixture.created.v1', subject: realmId, data: {} }],
+            };
+          },
+        ),
+      );
+    } catch (error) {
+      if (!(error instanceof ParticipationDenied)) throw error;
+    }
+    if (!proof || !commandAt) throw new Error('Native participation preparation did not produce a command proof');
+    expect(observed.map((entry) => entry.action)).toEqual(
+      proof.readable === true ? ['realm:participate'] : ['realm:participate', 'realm:read'],
+    );
+    expect(observed.every((entry) => entry.at === commandAt)).toBe(true);
+    expect(singlePool.waitingCount).toBe(0);
+    return { proof, committed, commandAt };
+  }
+
+  try {
+    const publicResult = await evaluate(publicViewer, publicRealm.realmId);
+    expect(publicResult.proof).toEqual({ realmId: publicRealm.realmId, allowed: true, readable: true });
+    expect(publicResult.committed).toBe(true);
+
+    const memberResult = await evaluate(member, protectedRealm.realmId);
+    expect(memberResult.proof).toEqual({ realmId: protectedRealm.realmId, allowed: true, readable: true });
+    expect(memberResult.committed).toBe(true);
+
+    const nonMemberResult = await evaluate(nonMember, protectedRealm.realmId);
+    expect(nonMemberResult.proof).toEqual({ realmId: protectedRealm.realmId, allowed: false, readable: false });
+    expect(nonMemberResult.committed).toBe(false);
+
+    const readAllowedResult = await evaluate(readDenied, protectedRealm.realmId);
+    expect(readAllowedResult.proof).toEqual({ realmId: protectedRealm.realmId, allowed: true, readable: true });
+    expect(readAllowedResult.committed).toBe(true);
+    await revokeResource(owner, protectedRealm.realmId, readDenied.accountId, ['realm:read']);
+    const readDeniedResult = await evaluate(readDenied, protectedRealm.realmId);
+    expect(readDeniedResult.proof).toEqual({ realmId: protectedRealm.realmId, allowed: false, readable: false });
+    expect(readDeniedResult.committed).toBe(false);
+
+    const retainedRead = await admin.query(
+      `SELECT count(*)::integer AS count FROM access.resource_grant
+       WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND subject_role=''
+         AND action='realm:read' AND valid @> clock_timestamp()`,
+      [routeOf(protectedRealm.realmId), protectedRealm.realmId, bannedMember.accountId],
+    );
+    expect(retainedRead.rows[0]?.count).toBe(1);
+    const bannedResult = await evaluate(bannedMember, protectedRealm.realmId);
+    expect(bannedResult.proof).toEqual({ realmId: protectedRealm.realmId, allowed: false, readable: false });
+    expect(bannedResult.committed).toBe(false);
+
+    expect(peak).toBe(1);
+    expect(checkedOut).toBe(0);
+    expect(singlePool.waitingCount).toBe(0);
+    expect(singlePool.totalCount).toBeLessThanOrEqual(1);
+  } finally {
+    singlePool.removeListener('acquire', acquire);
+    singlePool.removeListener('release', release);
+    await singlePool.end();
+  }
+});
+
 const clockStatement = 'SELECT clock_timestamp()::text AS at';
 
 function clientReplacingClockRead(at: string): AccessClient {
@@ -515,9 +736,12 @@ function clientReplacingClockRead(at: string): AccessClient {
   };
 }
 
-function accessObservingTime(observed: { action: string; at: string | null; client: AccessClient }[]) {
+function accessObservingTime(
+  observed: { action: string; at: string | null; client: AccessClient }[],
+  source: Access = access,
+) {
   return {
-    ...access,
+    ...source,
     async authorize(
       client: Parameters<typeof access.authorize>[0],
       checkedActor: Parameters<typeof access.authorize>[1],
@@ -527,7 +751,7 @@ function accessObservingTime(observed: { action: string; at: string | null; clie
       time: Parameters<typeof access.authorize>[5],
     ) {
       observed.push({ action, at: time ? authoritativeTimeValue(time) : null, client });
-      return access.authorize(client, checkedActor, action, resource, evidence, time);
+      return source.authorize(client, checkedActor, action, resource, evidence, time);
     },
   };
 }
