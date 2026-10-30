@@ -1,24 +1,28 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, dirname, relative, resolve, sep } from 'node:path';
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import {
   chromium,
   type Browser,
   type BrowserContext,
   type Page,
   type Response as PlaywrightResponse,
-} from 'playwright';
-import type { NativeWebStack } from './stack.ts';
-import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
+} from "playwright";
+import type { NativeWebStack } from "./stack.ts";
+import {
+  launchPrivateBrowser,
+  type PrivateBrowser,
+} from "./private-browser.ts";
 import {
   currentNativeLifecycle,
   settledWithin,
   type NativeProcessOwnership,
   type NativeTestLifecycle,
-} from './lifecycle.ts';
+} from "./lifecycle.ts";
 
-export type AuthPersona = 'alice' | 'bob' | 'governor' | 'suspended' | 'newcomer' | 'anonymous';
+export type AuthPersona =
+  "alice" | "bob" | "governor" | "suspended" | "newcomer" | "anonymous";
 export type AuthJourney = {
   url: string;
   context: BrowserContext;
@@ -26,7 +30,13 @@ export type AuthJourney = {
   response(): Promise<PlaywrightResponse>;
   requestHeaders(): Promise<Headers[]>;
   serverFunctionRequests(): Promise<
-    { url: string; method: string; headers: Record<string, string>; body: string | null; responseBody: string }[]
+    {
+      url: string;
+      method: string;
+      headers: Record<string, string>;
+      body: string | null;
+      responseBody: string;
+    }[]
   >;
 };
 export type NativeAuthStack = {
@@ -34,18 +44,22 @@ export type NativeAuthStack = {
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
   signIn(
-    persona: Exclude<AuthPersona, 'newcomer' | 'anonymous'>,
+    persona: Exclude<AuthPersona, "newcomer" | "anonymous">,
     options?: { returnTo?: string; context?: BrowserContext },
   ): Promise<AuthJourney>;
-  signUp(persona: 'newcomer'): Promise<AuthJourney>;
+  signUp(persona: "newcomer"): Promise<AuthJourney>;
   stop(): Promise<void>;
 };
 
-const authRoot = resolve(import.meta.dir, '../../../auth');
-const password = 'semantic outcome registration password with enough entropy';
+const authRoot = resolve(import.meta.dir, "../../../auth");
+const password = "semantic outcome registration password with enough entropy";
 
 async function freePort(): Promise<number> {
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() });
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(),
+  });
   const port = server.port;
   server.stop(true);
   return port;
@@ -59,7 +73,7 @@ async function waitForPage(
 ): Promise<void> {
   const deadline = Date.now() + 150_000;
   while (Date.now() < deadline) {
-    lifecycle.assertOpen('wait for Auth app startup');
+    lifecycle.assertOpen("wait for Auth app startup");
     if (child.exitCode !== null || child.signalCode !== null)
       throw new Error(`Auth app exited during startup: ${getOutput()}`);
     try {
@@ -73,7 +87,9 @@ async function waitForPage(
   throw new Error(`Auth app startup timed out: ${getOutput()}`);
 }
 
-async function stopChild(owner: NativeProcessOwnership | undefined): Promise<void> {
+async function stopChild(
+  owner: NativeProcessOwnership | undefined,
+): Promise<void> {
   if (!owner) return;
   try {
     await owner.close();
@@ -83,53 +99,81 @@ async function stopChild(owner: NativeProcessOwnership | undefined): Promise<voi
 }
 
 async function hydrate(page: Page): Promise<void> {
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  await page
+    .locator("html[data-hydrated]")
+    .waitFor({ state: "attached", timeout: 120_000 });
 }
 
-export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthStack> {
+export async function startAuthStack(
+  stack: NativeWebStack,
+): Promise<NativeAuthStack> {
   const lifecycle = currentNativeLifecycle();
-  if (!lifecycle) throw new Error('Native Auth stack startup requires an active native test lifecycle');
-  lifecycle.assertOpen('start native Auth stack');
+  if (!lifecycle)
+    throw new Error(
+      "Native Auth stack startup requires an active native test lifecycle",
+    );
+  lifecycle.assertOpen("start native Auth stack");
   const startupStarted = performance.now();
 
   const port = await freePort();
-  lifecycle.assertOpen('start native Auth app');
+  lifecycle.assertOpen("start native Auth app");
   const appOrigin = `http://127.0.0.1:${port}`;
   let origin: string | undefined;
   const turnstile = Bun.serve({
-    hostname: '127.0.0.1',
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
-      if (new URL(request.url).pathname !== '/api.js') return new Response('Not Found', { status: 404 });
+      if (new URL(request.url).pathname !== "/api.js")
+        return new Response("Not Found", { status: 404 });
       return new Response(
         `window.turnstile={ready:function(callback){callback()},render:function(node,options){queueMicrotask(function(){options.callback('native-test-token')});return 'native-widget'},reset:function(){},remove:function(){}};`,
-        { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } },
+        {
+          headers: {
+            "content-type": "text/javascript; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        },
       );
     },
   });
   lifecycle.register({
-    label: 'native Auth Turnstile listener',
+    label: "native Auth Turnstile listener",
     close: () => turnstile.stop(true),
     force: () => turnstile.stop(true),
   });
-  let output = '';
+  let output = "";
   let persistenceDirectory: string | undefined;
-  const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-    cwd: authRoot,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      REZICS_TEST_RUNTIME: '1',
-      REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
-      AUTH_ORIGIN: stack.issuerOrigin,
-      TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
-      TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
+  const child = spawn(
+    "bun",
+    [
+      "run",
+      "dev",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
+    {
+      cwd: authRoot,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        REZICS_TEST_RUNTIME: "1",
+        REZICS_TEST_PERSISTENCE_DIAGNOSTICS: "1",
+        AUTH_ORIGIN: stack.issuerOrigin,
+        TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+        TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
+      },
     },
-  });
-  const childOwner = lifecycle.ownProcessGroup('native Auth Vite app', child);
+  );
+  const childOwner = lifecycle.ownProcessGroup("native Auth Vite app", child);
   for (const stream of [child.stdout, child.stderr])
-    stream?.on('data', (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12_000)));
+    stream?.on(
+      "data",
+      (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12_000)),
+    );
   const contexts = new Map<AuthPersona, Promise<BrowserContext>>();
   const allContexts = new Set<Promise<BrowserContext>>();
   let browser: Browser | undefined;
@@ -141,30 +185,40 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
   let sampleMemory = async () => {};
   try {
     await waitForPage(appOrigin, child, () => output, lifecycle);
-    const effectivePersistence = output.match(/\[worker-persistence\]\s+app=auth\s+effective=(\S+)/u)?.[1];
+    const effectivePersistence = output.match(
+      /\[worker-persistence\]\s+app=auth\s+effective=(\S+)/u,
+    )?.[1];
     if (!effectivePersistence)
-      throw new Error(`Native Auth app did not report its effective Worker persistence path: ${output}`);
+      throw new Error(
+        `Native Auth app did not report its effective Worker persistence path: ${output}`,
+      );
     persistenceDirectory = dirname(effectivePersistence);
     const tmpRoot = realpathSync(tmpdir());
     const ownedRoot = realpathSync(persistenceDirectory);
     const relativePersistence = relative(tmpRoot, ownedRoot);
     if (
-      relativePersistence === '' ||
-      relativePersistence === '..' ||
+      relativePersistence === "" ||
+      relativePersistence === ".." ||
       relativePersistence.startsWith(`..${sep}`) ||
       dirname(ownedRoot) !== tmpRoot ||
-      !basename(ownedRoot).startsWith('rezics-auth-worker-') ||
+      !basename(ownedRoot).startsWith("rezics-auth-worker-") ||
       !existsSync(effectivePersistence)
     )
-      throw new Error(`Native Auth app reported an invalid Worker persistence path: ${effectivePersistence}`);
-    lifecycle.assertOpen('route Auth pages');
+      throw new Error(
+        `Native Auth app reported an invalid Worker persistence path: ${effectivePersistence}`,
+      );
+    lifecycle.assertOpen("route Auth pages");
     origin = await stack.routeAuthPages((request) => {
       const source = new URL(request.url);
       const target = new URL(source.pathname + source.search, appOrigin);
-      return fetch(new Request(target, request), { redirect: 'manual' });
+      return fetch(new Request(target, request), { redirect: "manual" });
     });
-    privateBrowser = await launchPrivateBrowser([stack.web, origin, turnstile.url.origin]);
-    lifecycle.assertOpen('finish private Auth browser startup');
+    privateBrowser = await launchPrivateBrowser([
+      stack.web,
+      origin,
+      turnstile.url.origin,
+    ]);
+    lifecycle.assertOpen("finish private Auth browser startup");
     browser = privateBrowser.browser;
     const cdp = await browser.newBrowserCDPSession();
     let cdpDetached = false;
@@ -174,11 +228,14 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         cdp.detach().then(() => true),
         1_000,
       );
-      if (!detached) throw new Error('Native Auth browser diagnostics session did not detach');
+      if (!detached)
+        throw new Error(
+          "Native Auth browser diagnostics session did not detach",
+        );
       cdpDetached = true;
     };
     lifecycle.register({
-      label: 'native Auth browser diagnostics session',
+      label: "native Auth browser diagnostics session",
       close: detachCdp,
       force: () => cdp.detach().catch(() => {}),
     });
@@ -186,10 +243,10 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       if (sampling) return;
       sampling = true;
       try {
-        const { processInfo } = await cdp.send('SystemInfo.getProcessInfo');
-        const pids = processInfo.map(({ id }) => id).join(',');
+        const { processInfo } = await cdp.send("SystemInfo.getProcessInfo");
+        const pids = processInfo.map(({ id }) => id).join(",");
         if (!pids) return;
-        const result = Bun.spawnSync(['ps', '-o', 'rss=', '-p', pids]);
+        const result = Bun.spawnSync(["ps", "-o", "rss=", "-p", pids]);
         if (result.exitCode === 0) {
           const bytes = result.stdout
             .toString()
@@ -205,21 +262,27 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     };
     memorySampler = setInterval(() => void sampleMemory().catch(() => {}), 500);
     lifecycle.register({
-      label: 'native Auth browser memory sampler',
+      label: "native Auth browser memory sampler",
       close: () => clearInterval(memorySampler),
       force: () => clearInterval(memorySampler),
     });
     await sampleMemory();
     // The Worker already uses this issuer; page routing needs no restart.
-    console.info(`Native Auth app startup: ${Math.round(performance.now() - startupStarted)}ms`);
+    console.info(
+      `Native Auth app startup: ${Math.round(performance.now() - startupStarted)}ms`,
+    );
     const createContext = (): Promise<BrowserContext> =>
       browser!.newContext({
         viewport: { width: 1280, height: 860 },
-        reducedMotion: 'reduce',
-        locale: 'en',
+        reducedMotion: "reduce",
+        locale: "en",
         javaScriptEnabled: true,
       });
-    const ownContext = (value: BrowserContext, owner: NativeTestLifecycle, label: string) => {
+    const ownContext = (
+      value: BrowserContext,
+      owner: NativeTestLifecycle,
+      label: string,
+    ) => {
       const close = async () => {
         const closed = await settledWithin(
           value.close().then(() => true),
@@ -227,7 +290,11 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         );
         if (!closed) throw new Error(`${label} did not close within 1500ms`);
       };
-      owner.register({ label, close, force: () => value.close().catch(() => {}) });
+      owner.register({
+        label,
+        close,
+        force: () => value.close().catch(() => {}),
+      });
     };
     const assertActive = (operation: string) => {
       lifecycle.assertOpen(operation);
@@ -251,10 +318,14 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       signup: boolean,
       options: { returnTo?: string; context?: BrowserContext } = {},
     ): Promise<AuthJourney> {
-      assertActive(signup ? 'start native sign-up journey' : 'start native sign-in journey');
+      assertActive(
+        signup
+          ? "start native sign-up journey"
+          : "start native sign-in journey",
+      );
       const journeyStarted = performance.now();
       const browserContext = options.context ?? (await context(persona));
-      assertActive('create Auth journey page');
+      assertActive("create Auth journey page");
       const page = await browserContext.newPage();
       const pageOwner = currentNativeLifecycle() ?? lifecycle;
       const closePage = async () => {
@@ -262,83 +333,144 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
           page.close().then(() => true),
           1_500,
         );
-        if (!closed) throw new Error('Native Auth journey page did not close within 1500ms');
+        if (!closed)
+          throw new Error(
+            "Native Auth journey page did not close within 1500ms",
+          );
       };
       pageOwner.register({
-        label: 'native Auth journey page',
+        label: "native Auth journey page",
         close: closePage,
         force: () => page.close().catch(() => {}),
       });
       page.setDefaultTimeout(15_000);
       const authResponses: PlaywrightResponse[] = [];
       const visitedUrls: string[] = [];
-      const pageRequests: import('playwright').Request[] = [];
+      const pageRequests: import("playwright").Request[] = [];
+      const pageResponses: { path: string; method: string; status: number }[] =
+        [];
+      const pageFailures: {
+        path: string;
+        method: string;
+        error: string | undefined;
+      }[] = [];
       const functionResponses = new Map<
-        import('playwright').Request,
-        { resolve(response: PlaywrightResponse): void; promise: Promise<PlaywrightResponse> }
+        import("playwright").Request,
+        {
+          resolve(response: PlaywrightResponse): void;
+          promise: Promise<PlaywrightResponse>;
+        }
       >();
-      page.on('request', (request) => {
+      page.on("request", (request) => {
         pageRequests.push(request);
-        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) visitedUrls.push(request.url());
-        if (new URL(request.url()).pathname.startsWith('/_serverFn/')) {
+        if (
+          request.isNavigationRequest() &&
+          request.frame() === page.mainFrame()
+        )
+          visitedUrls.push(request.url());
+        if (new URL(request.url()).pathname.startsWith("/_serverFn/")) {
           let resolve!: (response: PlaywrightResponse) => void;
-          const promise = new Promise<PlaywrightResponse>((done) => (resolve = done));
+          const promise = new Promise<PlaywrightResponse>(
+            (done) => (resolve = done),
+          );
           functionResponses.set(request, { resolve, promise });
         }
       });
-      page.on('response', (response) => {
-        if (new URL(response.url()).pathname === '/signin') authResponses.push(response);
+      page.on("response", (response) => {
+        const url = new URL(response.url());
+        pageResponses.push({
+          path: url.pathname,
+          method: response.request().method(),
+          status: response.status(),
+        });
+        if (url.pathname === "/signin") authResponses.push(response);
         functionResponses.get(response.request())?.resolve(response);
       });
-      assertActive('read native Auth account for browser sign-in');
-      const email = signup ? `${crypto.randomUUID()}@example.test` : (await stack.authPersona(persona)).email;
-      const formPassword = signup ? `newcomer-${crypto.randomUUID()}` : password;
-      const signInUrl = new URL('/auth/sign-in', stack.web);
-      if (options.returnTo !== undefined) signInUrl.searchParams.set('return_to', options.returnTo);
-      assertActive('open native Auth sign-in page');
-      await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
+      page.on("requestfailed", (request) =>
+        pageFailures.push({
+          path: new URL(request.url()).pathname,
+          method: request.method(),
+          error: request.failure()?.errorText,
+        }),
+      );
+      assertActive("read native Auth account for browser sign-in");
+      const email = signup
+        ? `${crypto.randomUUID()}@example.test`
+        : (await stack.authPersona(persona)).email;
+      const formPassword = signup
+        ? `newcomer-${crypto.randomUUID()}`
+        : password;
+      const signInUrl = new URL("/auth/sign-in", stack.web);
+      if (options.returnTo !== undefined)
+        signInUrl.searchParams.set("return_to", options.returnTo);
+      assertActive("open native Auth sign-in page");
+      await page.goto(signInUrl.href, { waitUntil: "domcontentloaded" });
       await hydrate(page);
       if (signup) {
-        assertActive('open native Auth sign-up page');
-        const signupLink = page.getByRole('link', { name: /create an account|sign up/i }).first();
+        assertActive("open native Auth sign-up page");
+        const signupLink = page
+          .getByRole("link", { name: /create an account|sign up/i })
+          .first();
         await signupLink.click();
-        await page.waitForURL((url) => url.origin === origin && url.pathname === '/signup');
+        await page.waitForURL(
+          (url) => url.origin === origin && url.pathname === "/signup",
+        );
         await hydrate(page);
-        assertActive('submit native Auth sign-up form');
-        await page.getByLabel('Handle', { exact: true }).fill(`newcomer-${crypto.randomUUID().slice(0, 8)}`);
-        await page.getByLabel('Email', { exact: true }).fill(email);
-        await page.getByLabel('Password', { exact: true }).fill(formPassword);
-        await page.getByRole('button', { name: 'Create an account', exact: true }).click();
+        assertActive("submit native Auth sign-up form");
+        await page
+          .getByLabel("Handle", { exact: true })
+          .fill(`newcomer-${crypto.randomUUID().slice(0, 8)}`);
+        await page.getByLabel("Email", { exact: true }).fill(email);
+        await page.getByLabel("Password", { exact: true }).fill(formPassword);
+        await page
+          .getByRole("button", { name: "Create an account", exact: true })
+          .click();
       } else {
         await page.getByLabel(/email/i).fill(email);
         await page.locator('input[name="password"]').fill(formPassword);
-        assertActive('submit native Auth sign-in form');
+        assertActive("submit native Auth sign-in form");
         await Promise.all([
-          page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
-          page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+          page.waitForResponse(
+            (response) => new URL(response.url()).pathname === "/signin",
+          ),
+          page.getByRole("button", { name: "Sign in", exact: true }).click(),
         ]);
       }
-      if (persona !== 'suspended') {
+      if (persona !== "suspended") {
         // The callback is also on the web origin. Finish its document redirect
         // before returning a usable served web page. Its account control proves
         // that the web app has read the real session through its server function.
-        assertActive('finish native Auth callback');
-        await page.waitForURL((url) => url.origin === new URL(stack.web).origin && url.pathname !== '/auth/callback', {
-          timeout: 30_000,
-          waitUntil: 'domcontentloaded',
-        });
+        assertActive("finish native Auth callback");
+        await page.waitForURL(
+          (url) =>
+            url.origin === new URL(stack.web).origin &&
+            url.pathname !== "/auth/callback",
+          {
+            timeout: 30_000,
+            waitUntil: "domcontentloaded",
+          },
+        );
         try {
-          await page.locator('#account-menu-button').waitFor({ state: 'visible' });
+          await page
+            .locator("#account-menu-button")
+            .waitFor({ state: "visible" });
         } catch (error) {
+          const cookieNames = (await browserContext.cookies()).map(
+            ({ name, domain, path }) => ({
+              name,
+              domain,
+              path,
+            }),
+          );
           throw new Error(
-            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}`,
+            `Signed-in web page was not ready at ${page.url()}: ${await page.locator("body").innerText()}; sign-in status=${authResponses.at(-1)?.status() ?? "missing"}; visited=${JSON.stringify(visitedUrls.map((value) => new URL(value).pathname))}; responses=${JSON.stringify(pageResponses)}; failed requests=${JSON.stringify(pageFailures)}; cookie names=${JSON.stringify(cookieNames)}; web output=${stack.webOutput()}`,
             {
               cause: error,
             },
           );
         }
       }
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState("domcontentloaded");
       await sampleMemory();
       if (!signup)
         console.info(
@@ -347,7 +479,10 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       const current = page.url();
       const response = () => {
         const latest = authResponses.at(-1);
-        if (!latest) throw new Error(`Auth did not receive a ${signup ? 'sign-up' : 'sign-in'} submission`);
+        if (!latest)
+          throw new Error(
+            `Auth did not receive a ${signup ? "sign-up" : "sign-in"} submission`,
+          );
         return latest;
       };
       return {
@@ -356,21 +491,33 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         visitedUrls,
         response,
         async requestHeaders() {
-          return Promise.all(pageRequests.map(async (request) => new Headers(await request.allHeaders())));
+          return Promise.all(
+            pageRequests.map(
+              async (request) => new Headers(await request.allHeaders()),
+            ),
+          );
         },
         async serverFunctionRequests() {
-          const requests = pageRequests.filter((request) => new URL(request.url()).pathname.startsWith('/_serverFn/'));
+          const requests = pageRequests.filter((request) =>
+            new URL(request.url()).pathname.startsWith("/_serverFn/"),
+          );
           return Promise.all(
             requests.map(async (request) => {
               const response = await functionResponses.get(request)?.promise;
               const headers = await request.allHeaders();
-              for (const name of ['cookie', 'authorization', 'host', 'content-length']) delete headers[name];
+              for (const name of [
+                "cookie",
+                "authorization",
+                "host",
+                "content-length",
+              ])
+                delete headers[name];
               return {
                 url: request.url(),
                 method: request.method(),
                 headers,
                 body: request.postData(),
-                responseBody: response ? await response.text() : '',
+                responseBody: response ? await response.text() : "",
               };
             }),
           );
@@ -385,12 +532,20 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
             item.then((value) => value.close().then(() => true)),
             2_000,
           );
-          if (!result) throw new Error('Native Auth browser context close exceeded 2000ms');
+          if (!result)
+            throw new Error(
+              "Native Auth browser context close exceeded 2000ms",
+            );
         }),
       );
-      for (const result of results) if (result.status === 'rejected') errors.push(result.reason);
+      for (const result of results)
+        if (result.status === "rejected") errors.push(result.reason);
       contexts.clear();
-      if (errors.length) throw new AggregateError(errors, 'Native Auth browser contexts did not all close');
+      if (errors.length)
+        throw new AggregateError(
+          errors,
+          "Native Auth browser contexts did not all close",
+        );
     };
     const forceAuth = async (): Promise<void> => {
       clearInterval(memorySampler);
@@ -405,7 +560,9 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
             sampleMemory().then(() => true),
             1_000,
           );
-          console.info(`Native Auth browser peak RSS: ${browserPeakMemoryBytes}bytes`);
+          console.info(
+            `Native Auth browser peak RSS: ${browserPeakMemoryBytes}bytes`,
+          );
           const errors: unknown[] = [];
           try {
             await closeContexts();
@@ -423,13 +580,20 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
           operations.push(
             stopChild(childOwner).then(() => {
               if (persistenceDirectory && existsSync(persistenceDirectory))
-                throw new Error(`Auth Worker left its owned persistence after shutdown: ${persistenceDirectory}`);
+                throw new Error(
+                  `Auth Worker left its owned persistence after shutdown: ${persistenceDirectory}`,
+                );
             }),
           );
           const closed = await Promise.allSettled(operations);
-          for (const result of closed) if (result.status === 'rejected') errors.push(result.reason);
+          for (const result of closed)
+            if (result.status === "rejected") errors.push(result.reason);
           turnstile.stop(true);
-          if (errors.length) throw new AggregateError(errors, 'Native Auth stack cleanup failed');
+          if (errors.length)
+            throw new AggregateError(
+              errors,
+              "Native Auth stack cleanup failed",
+            );
         })();
         const finished = await settledWithin(
           shutdown.then(() => true),
@@ -437,20 +601,24 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         );
         if (!finished) {
           await forceAuth();
-          throw new Error('Native Auth stack shutdown exceeded 18000ms');
+          throw new Error("Native Auth stack shutdown exceeded 18000ms");
         }
       })());
 
-    lifecycle.register({ label: 'native Auth stack fixture', close: stop, force: forceAuth });
+    lifecycle.register({
+      label: "native Auth stack fixture",
+      close: stop,
+      force: forceAuth,
+    });
     return {
       origin,
       context,
       async newContext(_persona) {
         const owner = currentNativeLifecycle() ?? lifecycle;
-        owner.assertOpen('create native Auth browser context');
+        owner.assertOpen("create native Auth browser context");
         const value = await createContext();
         allContexts.add(Promise.resolve(value));
-        ownContext(value, owner, 'native Auth temporary context');
+        ownContext(value, owner, "native Auth temporary context");
         return value;
       },
       signIn(persona, options) {
@@ -469,15 +637,22 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         stack.routeAuthPages().then(() => true),
         2_000,
       ).catch((cleanup) => cleanupErrors.push(cleanup));
-    await privateBrowser?.force().catch((cleanup) => cleanupErrors.push(cleanup));
+    await privateBrowser
+      ?.force()
+      .catch((cleanup) => cleanupErrors.push(cleanup));
     await stopChild(childOwner).catch((cleanup) => cleanupErrors.push(cleanup));
     if (persistenceDirectory && existsSync(persistenceDirectory))
       cleanupErrors.push(
-        new Error(`Auth Worker left its owned persistence after startup failure: ${persistenceDirectory}`),
+        new Error(
+          `Auth Worker left its owned persistence after startup failure: ${persistenceDirectory}`,
+        ),
       );
     turnstile.stop(true);
     if (cleanupErrors.length)
-      throw new AggregateError([error, ...cleanupErrors], 'Native Auth startup and cleanup failed');
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        "Native Auth startup and cleanup failed",
+      );
     throw error;
   }
 }

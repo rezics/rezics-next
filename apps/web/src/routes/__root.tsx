@@ -92,10 +92,18 @@ function Root() {
           status: string;
           error?: unknown;
           _notFound?: boolean;
+          routeId?: string;
           staticData?: { sessionReread?: boolean };
         };
+        const route = match.routeId
+          ? (router.routesById as unknown as Record<
+              string,
+              { options?: { staticData?: { sessionReread?: boolean } } }
+            >)[match.routeId]
+          : undefined;
         return (
           match.staticData?.sessionReread === true ||
+          route?.options?.staticData?.sessionReread === true ||
           match._notFound === true ||
           match.status === 'notFound' ||
           isNotFound(match.error) ||
