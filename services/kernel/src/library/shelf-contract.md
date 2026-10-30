@@ -416,7 +416,7 @@ the public closed helper declarations. The native maintenance runner composes th
 private WeakMap page and reloaded same-transaction run/build guard; no boolean fallback exists.
 
 `createShelfCounters()` is exported by `shelf-counters.ts` (also its default export) and the installed contract module.
-Entry creation/state/deletion/restoration and active Collection creation/deletion call these ports in the real command.
+Entry creation/state/deletion/restoration and active Collection creation/deletion/restoration call these ports in the real command.
 The shared maintenance `enterShelfWrite` holds account share and the maintained generation gate before the
 `shelf_writer_owner` counter serialization point and native placement rows. Only the shared gate owns readiness,
 epoch and active generation. Empty initialization publishes the exact nil generation; existing entry/Collection/session history records a

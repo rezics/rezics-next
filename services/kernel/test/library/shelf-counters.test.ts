@@ -39,3 +39,27 @@ test('active Collection counters retain exact replay and known zero', async () =
   expect((await commands.deleteCollection(identity.actor, first.value.id, first.value.revision, deleteKey)).replayed).toBe(true);
   expect(await count()).toEqual([{ n: '0' }]);
 });
+
+test('restoring an active Collection adds one counter delta and exact replay adds none', async () => {
+  const identity = await f.identity(['collection:create', 'collection:read', 'collection:delete', 'collection:update']);
+  const commands = createCollectionCommands(f);
+  const owner = identity.actor.accountId, route = routeOf(owner)!;
+  const count = async () => (await f.pool.query(
+    "SELECT n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 AND bucket='collections'",
+    [route, owner],
+  )).rows;
+  const created = await commands.createCollection(identity.actor,
+    { title: 'Restored native counter', visibility: 'private' }, entryKey());
+  const deleted = await commands.deleteCollection(identity.actor, created.value.id, created.value.revision, entryKey());
+  expect(await count()).toEqual([{ n: '0' }]);
+  const input = { deletionId: deleted.value.deletionId, revision: deleted.value.revision };
+  const key = entryKey();
+  const restored = await commands.restoreCollection(identity.actor, created.value.id, input, key);
+  expect(restored.value.state).toBe('active');
+  expect(await count()).toEqual([{ n: '1' }]);
+  expect(await commands.restoreCollection(identity.actor, created.value.id, input, key))
+    .toEqual({ ...restored, replayed: true });
+  expect(await count()).toEqual([{ n: '1' }]);
+  await expect(commands.restoreCollection(identity.actor, created.value.id, input, entryKey())).rejects.toThrow();
+  expect(await count()).toEqual([{ n: '1' }]);
+});
