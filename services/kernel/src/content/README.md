@@ -80,7 +80,16 @@ post/revision pairs within the bounded page. The decision form submits one reaso
 with one command key for an unchanged action intent across retries. Editing the reason starts a new intent.
 
 An authenticated report's exact reporter can read that report and its outcome through native `account:read` on
-their own account. This owner read does not disclose target document bytes. Moderators retain the existing
+their own account. The closed reporter response contains `id`, the submitted `target` and `revisionId`,
+`reason`, `evidence`, their own `reporterId`, `createdAt`, `resolvedAt`, native `outcome` and output-only
+`targetAvailability: 'available' | 'unavailable'`. A null outcome is presented as pending; actioned remains the
+report disposition even after an appeal. The original submission survives removal or loss of target access.
+Availability uses the existing exact native target, container and Realm disclosure with the request deadline;
+removed targets are unavailable. Infrastructure failures propagate rather than becoming unavailable. Reads release
+each home before touching another, perform bounded point/ancestry checks and never enumerate descendants.
+This owner read does not disclose target document bytes, titles, snippets, links, moderator notes or other reports.
+Availability grants no subsequent target read. Report ownership is never moderation inspection authority; lists
+retain their independently authorized moderator DTO with required partition and transaction metadata. Moderators retain the existing
 `moderation:read_reports` path and target checks; anonymous reports have no owner reader, and unrelated or
 otherwise private report reads return 404. The report GET advertises `account:read` and describes the moderator
 alternative.

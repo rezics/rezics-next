@@ -60,6 +60,13 @@ export type ReportView = Readonly<{
   transactionId: string;
   reporterId: string | null;
 }>;
+/** The reporter's submitted record, without moderator-only storage metadata. */
+export type ReporterReportView = Pick<
+  ReportView,
+  'id' | 'target' | 'revisionId' | 'reason' | 'evidence' | 'reporterId' | 'createdAt' | 'outcome' | 'resolvedAt'
+> &
+  Readonly<{ targetAvailability: 'available' | 'unavailable' }>;
+export type ReportReadView = ReportView | ReporterReportView;
 export type ReportDependencies = Readonly<{
   pool: Pool;
   access: Access;
@@ -469,50 +476,126 @@ function view(row: ReportRow): ReportView {
   };
 }
 
+async function loadReport(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  context: ReadContext,
+  includePrivate: boolean,
+  ownerAccountId: string | null = null,
+): Promise<Anchored<ReportRow | null>> {
+  return snapshot(dependencies, reportId, context.deadline, async (client) => {
+    const parameters = {
+      route: route(reportId),
+      report_id: reportId,
+      include_private: includePrivate,
+      owner_account_id: ownerAccountId,
+    };
+    const { rows } = await client.query<ReportRow>(
+      read.sql,
+      read.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    return rows[0] ?? null;
+  });
+}
+
+/** Native exact reads own current target/container/Realm disclosure. Each checkout
+ * is released before the next home is touched; failures propagate to the caller. */
+async function targetAvailability(
+  dependencies: ReportDependencies,
+  target: ReportTarget,
+  context: ReadContext,
+): Promise<ReporterReportView['targetAvailability']> {
+  const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
+  if (target.kind === 'board') {
+    const { value } = await readBoard(readers, target.id, context);
+    return value?.availability === 'available' && value.visibility !== 'taken_down' ? 'available' : 'unavailable';
+  }
+  if (target.kind === 'thread') {
+    const { value } = await readThread(readers, target.id, context);
+    return value?.availability === 'available' &&
+      value.visibility !== 'taken_down' &&
+      value.firstPost.availability === 'available'
+      ? 'available'
+      : 'unavailable';
+  }
+  const located = await snapshot(dependencies, target.id, context.deadline, (client) =>
+    readReportPostThread.run(client, { route: route(target.id), id: target.id }),
+  );
+  if (!located.value || routeOf(located.value.thread_id) !== route(target.id)) return 'unavailable';
+  const { value } = await readPost(readers, located.value.thread_id, target.id, context);
+  return value?.availability === 'available' && value.visibility !== 'taken_down' ? 'available' : 'unavailable';
+}
+
+/** Lists always use inspection, even when a moderator happens to own a report. */
+async function inspectReport(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  target: ReportTarget,
+  context: ReadContext,
+): Promise<Anchored<ReportView | null>> {
+  const initial = await inspect(dependencies, target, context);
+  if (!initial.value) return { ...initial, value: null };
+  const record = await loadReport(dependencies, reportId, context, true);
+  const final = await inspect(dependencies, target, context);
+  return {
+    ...record,
+    value:
+      record.value && final.value && record.value.target_kind === target.kind && record.value.target_id === target.id
+        ? view(record.value)
+        : null,
+  };
+}
+
 export async function readReport(
   dependencies: ReportDependencies,
   reportId: ReportId,
   context: ReadContext,
 ): Promise<Anchored<ReportView | null>> {
-  const load = (includePrivate: boolean, ownerAccountId: string | null = null) =>
-    snapshot(dependencies, reportId, context.deadline, async (client) => {
-      const parameters = {
-        route: route(reportId),
-        report_id: reportId,
-        include_private: includePrivate,
-        owner_account_id: ownerAccountId,
-      };
-      const { rows } = await client.query<ReportRow>(
-        read.sql,
-        read.params.map((name) => parameters[name as keyof typeof parameters]),
-      );
-      return rows[0] ?? null;
-    });
-  // Resolve only references until the current target's moderator check passes.
-  const reference = await load(false);
+  // Resolve only references until ownership or current target inspection passes.
+  const reference = await loadReport(dependencies, reportId, context, false);
   if (!reference.value) return { ...reference, value: null };
   const target: ReportTarget = { kind: reference.value.target_kind, id: reference.value.target_id };
 
   if (context.actor.kind === 'account' && reference.value.reporter_account_id === context.actor.accountId) {
     const owner = context.actor.accountId;
     if (await reporterCanReadOwnReport(dependencies, context.actor, owner, context)) {
-      const record = await load(true, owner);
+      const record = await loadReport(dependencies, reportId, context, true, owner);
       if (!record.value || !sameReportReference(reference.value, record.value)) return { ...record, value: null };
-      const finalReference = await load(false, owner);
+      const availability = await targetAvailability(dependencies, target, context);
+      const finalReference = await loadReport(dependencies, reportId, context, false, owner);
       if (
         !finalReference.value ||
         !sameReportReference(reference.value, finalReference.value) ||
         !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))
       )
         return { ...finalReference, value: null };
-      return { ...finalReference, value: view(record.value) };
+      // Retain the native adapter's existing complete signature for direct callers.
+      // HTTP uses reportReadView to expose only the reporter's submitted record.
+      const submitted = { ...view(record.value), targetAvailability: availability };
+      return { ...finalReference, value: submitted };
     }
   }
 
-  if (!(await inspect(dependencies, target, context)).value) return { ...reference, value: null };
-  const record = await load(true);
-  const final = await inspect(dependencies, target, context);
-  return { ...record, value: record.value && final.value ? view(record.value) : null };
+  return inspectReport(dependencies, reportId, target, context);
+}
+
+/** Closed reporter projection, independent of the required moderator/list fields. */
+export function reportReadView(report: ReportView): ReportReadView {
+  if (!('targetAvailability' in report)) return report;
+  if (report.targetAvailability !== 'available' && report.targetAvailability !== 'unavailable')
+    throw new TypeError('Invalid reporter target availability');
+  return {
+    id: report.id,
+    target: report.target,
+    revisionId: report.revisionId,
+    reason: report.reason,
+    evidence: report.evidence,
+    reporterId: report.reporterId,
+    createdAt: report.createdAt,
+    outcome: report.outcome,
+    resolvedAt: report.resolvedAt,
+    targetAvailability: report.targetAvailability,
+  };
 }
 
 export async function listTargetReports(
@@ -591,7 +674,7 @@ export async function listTargetReports(
       ).value !== target.id
     )
       continue;
-    const record = await readReport(dependencies, candidate.report_id, context);
+    const record = await inspectReport(dependencies, candidate.report_id, candidateTarget, context);
     if (
       !record.value ||
       record.value.target.id !== candidateTarget.id ||

@@ -16,6 +16,7 @@ import {
   createReport,
   listTargetReports,
   readReport,
+  reportReadView,
   ReportProofRequiredError,
   ReportProofUnavailableError,
   ReportUnavailableError,
@@ -180,7 +181,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
           'x-exposure': 'public',
           'x-action': 'account:read',
           description:
-            'A reporter reads their own report through account:read. Moderators retain report inspection through moderation:read_reports.',
+            'A reporter reads their submitted target/revision, reason/evidence, identity, times and outcome through account:read, with output-only current targetAvailability and no target content. Moderators retain report inspection through moderation:read_reports.',
           security: [{ bearerAuth: [] }],
         },
       },
@@ -193,7 +194,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
               const result = await readReport(dependencies, id, { actor, deadline: job.deadline });
               if (!result.value) throw new ProblemError('not_found');
               session.record(component(result.anchor));
-              return { report: result.value };
+              return { report: reportReadView(result.value) };
             }),
           true,
         );

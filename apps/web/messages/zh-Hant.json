@@ -1510,5 +1510,14 @@
   "realm_bans_conflict": "此請求與較早的變更衝突。請重新整理目前封鎖後重試。",
   "realm_bans_invalid": "請檢查帳號 ID 和原因後重試。",
   "realm_bans_write_unavailable": "無法確認結果。請重試同一請求以安全完成操作。",
-  "realm_bans_retry": "重試同一請求"
+  "realm_bans_retry": "重試同一請求",
+  "reporter_status_heading": "你的檢舉",
+  "reporter_status_view": "查看檢舉狀態",
+  "reporter_status_pending": "待審核",
+  "reporter_status_submitted": "提交時間",
+  "reporter_status_resolved": "處理時間",
+  "reporter_status_target": "檢舉對象",
+  "reporter_status_available": "目前可查看此項目。",
+  "reporter_status_revision": "提交時的修訂版本",
+  "reporter_status_unavailable": "無法載入你的檢舉，請重試。"
 }

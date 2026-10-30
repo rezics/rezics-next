@@ -1510,5 +1510,14 @@
   "realm_bans_conflict": "Esta solicitud entra en conflicto con un cambio anterior. Actualiza los bloqueos antes de volver a intentarlo.",
   "realm_bans_invalid": "Comprueba el ID de la cuenta y el motivo antes de volver a intentarlo.",
   "realm_bans_write_unavailable": "No se pudo confirmar el resultado. Reintenta la misma solicitud para completarla de forma segura.",
-  "realm_bans_retry": "Reintentar la misma solicitud"
+  "realm_bans_retry": "Reintentar la misma solicitud",
+  "reporter_status_heading": "Tu denuncia",
+  "reporter_status_view": "Ver estado de la denuncia",
+  "reporter_status_pending": "Pendiente de revisión",
+  "reporter_status_submitted": "Enviada",
+  "reporter_status_resolved": "Resuelta",
+  "reporter_status_target": "Elemento denunciado",
+  "reporter_status_available": "Este elemento está disponible actualmente.",
+  "reporter_status_revision": "Revisión enviada",
+  "reporter_status_unavailable": "No se pudo cargar tu denuncia. Inténtalo de nuevo."
 }

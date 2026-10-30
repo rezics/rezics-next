@@ -11,7 +11,7 @@ const signedInPaths = [
   /^\/creator\/statements(?:\/|$)/,
   /^\/entitlements(?:\/|$)/,
   /^\/(?:accounts(?:\/|$)|review\/account-verifications(?:\/|$))/,
-  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/|$)|moderation\/decisions\/[^/]+(?:\/|$))/,
+  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/|$)|moderation\/(?:decisions|reports)\/[^/]+(?:\/|$))/,
 ];
 
 /** Whether a localized route pathname belongs to a page protected by `requireSignedIn`. */

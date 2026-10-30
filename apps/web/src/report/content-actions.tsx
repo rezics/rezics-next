@@ -2,7 +2,8 @@ import { ContentActions } from '@rezics/ui/content-actions';
 import type { ReportDialogLabels, ReportSubmission } from '@rezics/ui/report-dialog';
 import { useCallback, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { useSession } from '../session/query';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { csrfHeaders } from '../threads/composer';
 import { sendReport } from './actions';
 import type { ReportResult } from './submit.server';
@@ -62,6 +63,8 @@ export function PostActions({
   verification: VerificationConfig;
 }) {
   const [token, setToken] = useState('');
+  const [reportId, setReportId] = useState<string | null>(null);
+  const { state: session } = useSession();
   const reset = useRef<(() => void) | null>(null);
   const key = useRef('');
   const start = useCallback(() => {
@@ -93,20 +96,28 @@ export function PostActions({
       reset.current?.();
       throw new Error(refusalText(result));
     }
+    setReportId(result.reportId);
   };
 
   return (
-    <ContentActions
-      ownsContent={false}
-      onCopyLink={copyLink}
-      onReport={report}
-      labels={{ moreActions: m.report_more(), copyLink: m.report_copy(), report: m.report_action() }}
-      reportLabels={labels()}
-      maxDetails={4096}
-      verified={Boolean(token)}
-      verification={
-        <Verification config={verification} locale={getLocale()} onToken={setToken} reset={reset} onStart={start} />
-      }
-    />
+    <>
+      <ContentActions
+        ownsContent={false}
+        onCopyLink={copyLink}
+        onReport={report}
+        labels={{ moreActions: m.report_more(), copyLink: m.report_copy(), report: m.report_action() }}
+        reportLabels={labels()}
+        maxDetails={4096}
+        verified={Boolean(token)}
+        verification={
+          <Verification config={verification} locale={getLocale()} onToken={setToken} reset={reset} onStart={start} />
+        }
+      />
+      {reportId && session === 'signed-in' ? (
+        <a className="text-sm underline underline-offset-4" href={localizeHref(`/moderation/reports/${reportId}`)}>
+          {m.reporter_status_view()}
+        </a>
+      ) : null}
+    </>
   );
 }

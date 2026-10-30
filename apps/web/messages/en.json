@@ -1511,5 +1511,14 @@
   "realm_bans_conflict": "This request conflicts with an earlier change. Refresh current bans before trying again.",
   "realm_bans_invalid": "Check the account ID and reason before trying again.",
   "realm_bans_write_unavailable": "The result could not be confirmed. Retry the same request to safely finish it.",
-  "realm_bans_retry": "Retry same request"
+  "realm_bans_retry": "Retry same request",
+  "reporter_status_heading": "Your report",
+  "reporter_status_view": "View report status",
+  "reporter_status_pending": "Pending review",
+  "reporter_status_submitted": "Submitted",
+  "reporter_status_resolved": "Resolved",
+  "reporter_status_target": "Reported item",
+  "reporter_status_available": "This item is currently available.",
+  "reporter_status_revision": "Submitted revision",
+  "reporter_status_unavailable": "Your report could not be loaded. Try again."
 }

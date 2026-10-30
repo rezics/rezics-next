@@ -1510,5 +1510,14 @@
   "realm_bans_conflict": "Cette demande est en conflit avec une modification précédente. Actualisez les bannissements avant de réessayer.",
   "realm_bans_invalid": "Vérifiez l’identifiant du compte et le motif avant de réessayer.",
   "realm_bans_write_unavailable": "Le résultat n’a pas pu être confirmé. Réessayez la même demande pour la terminer sans risque.",
-  "realm_bans_retry": "Réessayer la même demande"
+  "realm_bans_retry": "Réessayer la même demande",
+  "reporter_status_heading": "Votre signalement",
+  "reporter_status_view": "Voir le statut du signalement",
+  "reporter_status_pending": "En attente d’examen",
+  "reporter_status_submitted": "Envoyé le",
+  "reporter_status_resolved": "Traité le",
+  "reporter_status_target": "Élément signalé",
+  "reporter_status_available": "Cet élément est actuellement disponible.",
+  "reporter_status_revision": "Révision envoyée",
+  "reporter_status_unavailable": "Votre signalement n’a pas pu être chargé. Réessayez."
 }

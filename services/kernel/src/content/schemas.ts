@@ -13,7 +13,7 @@ import { REACTION_KINDS } from './events.ts';
 import type { AuthorPostEntry } from './author-item-reads.ts';
 import type { BoardView } from './model.ts';
 import type { ItemView, PostEntry, ThreadView } from './reads.ts';
-import type { ReportView } from './reports.ts';
+import type { ReporterReportView, ReportReadView, ReportView } from './reports.ts';
 import type { Operation } from './operation-contract.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
@@ -95,7 +95,7 @@ export const ReportInputSchema = t.Object(
   },
 );
 export const ReportReceiptSchema = t.Object({ reportId: ContentIdSchema }, closed);
-export const ReportResponseSchema = t.Object(
+const ModeratorReportResponseSchema = t.Object(
   {
     report: t.Unsafe<ReportView>(
       t.Object(
@@ -118,6 +118,30 @@ export const ReportResponseSchema = t.Object(
   },
   closed,
 );
+const reporterReport = t.Unsafe<ReporterReportView>(
+  t.Object(
+    {
+      id: ContentIdSchema,
+      target: reportTarget,
+      revisionId: nullableId,
+      reason: reportReason,
+      evidence: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+      reporterId: ContentIdSchema,
+      outcome: t.Union([t.Literal('actioned'), t.Literal('dismissed'), t.Null()]),
+      resolvedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+      createdAt: t.String({ format: 'date-time' }),
+      targetAvailability: t.Union([t.Literal('available'), t.Literal('unavailable')]),
+    },
+    closed,
+  ),
+);
+export const ReportResponseSchema = t.Object(
+  {
+    report: t.Unsafe<ReportReadView>(t.Union([reporterReport, ModeratorReportResponseSchema.properties.report])),
+  },
+  closed,
+);
+
 const subjects = t.Array(ContentIdSchema, { maxItems: 128, uniqueItems: true });
 const media = t.Array(ContentIdSchema, { maxItems: 32, uniqueItems: true });
 const voteCitation = t.Object(
@@ -514,7 +538,7 @@ export const MediaDownloadResponseSchema = t.Object(
 
 export const ReportPageResponseSchema = t.Object(
   {
-    reports: t.Array(ReportResponseSchema.properties.report, { maxItems: 100 }),
+    reports: t.Array(ModeratorReportResponseSchema.properties.report, { maxItems: 100 }),
     next: t.Union([t.String(), t.Null()]),
   },
   closed,

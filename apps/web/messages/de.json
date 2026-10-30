@@ -1510,5 +1510,14 @@
   "realm_bans_conflict": "Diese Anfrage steht im Konflikt mit einer früheren Änderung. Aktualisiere die Sperren vor einem neuen Versuch.",
   "realm_bans_invalid": "Prüfe Konto-ID und Grund und versuche es erneut.",
   "realm_bans_write_unavailable": "Das Ergebnis konnte nicht bestätigt werden. Wiederhole dieselbe Anfrage, um sie sicher abzuschließen.",
-  "realm_bans_retry": "Dieselbe Anfrage wiederholen"
+  "realm_bans_retry": "Dieselbe Anfrage wiederholen",
+  "reporter_status_heading": "Deine Meldung",
+  "reporter_status_view": "Meldestatus ansehen",
+  "reporter_status_pending": "Prüfung ausstehend",
+  "reporter_status_submitted": "Eingereicht",
+  "reporter_status_resolved": "Bearbeitet",
+  "reporter_status_target": "Gemeldeter Inhalt",
+  "reporter_status_available": "Dieser Inhalt ist derzeit verfügbar.",
+  "reporter_status_revision": "Eingereichte Revision",
+  "reporter_status_unavailable": "Deine Meldung konnte nicht geladen werden. Versuche es erneut."
 }

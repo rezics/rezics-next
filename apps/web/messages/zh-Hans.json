@@ -1511,5 +1511,14 @@
   "realm_bans_conflict": "此请求与较早的更改冲突。请刷新当前封禁后重试。",
   "realm_bans_invalid": "请检查账户 ID 和原因后重试。",
   "realm_bans_write_unavailable": "无法确认结果。请重试同一请求以安全完成操作。",
-  "realm_bans_retry": "重试同一请求"
+  "realm_bans_retry": "重试同一请求",
+  "reporter_status_heading": "你的举报",
+  "reporter_status_view": "查看举报状态",
+  "reporter_status_pending": "待审核",
+  "reporter_status_submitted": "提交时间",
+  "reporter_status_resolved": "处理时间",
+  "reporter_status_target": "举报对象",
+  "reporter_status_available": "目前可查看此项目。",
+  "reporter_status_revision": "提交时的修订版本",
+  "reporter_status_unavailable": "无法加载你的举报，请重试。"
 }
