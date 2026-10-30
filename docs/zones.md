@@ -72,6 +72,25 @@ or rewrite the saved site. A confirmed create navigates to its returned ID's con
 source-dependent starter pages remain subject to current source Access, feature admission and readiness.
 The form does not promise that creating the resource makes those reads available.
 
+The configuration editor connects route selection, the common composition editor, labels and appearance,
+released saved-scope selection and currently readable common Collection mounts in one workspace. Local
+unsaved edits are distinct from the saved configuration. Save submits the full configuration and mounts
+through Configure with the current quoted revision and an idempotency key. A confirmed save advances the
+editor's revision; a precondition failure preserves local edits while the editor loads the current head
+for reconciliation. Uncertain delivery retries the original command rather than issuing a new write.
+
+Preview opens the saved route through the ordinary Zone reader with the viewer's current credentials,
+session and languages. It makes no promise to render unsaved input. The editor explains before saving
+that changes to a public or unlisted Zone become visible immediately. Publish changes visibility only;
+returning to private uses that same command. Editing a Zone or changing its visibility never publishes,
+grants access to or changes a mounted Collection.
+
+Configured-route preview and eligible-subject navigation use the existing two page target kinds. Subject
+pages inherit the active common type/base/generic profile; there is no per-Zone subject-template editor.
+Code-owned list descriptors inherit the Zone's source restriction, including their default filters and
+ordering. The reader distinguishes a genuinely exhausted empty result from retained preparation and
+unavailable dependencies; it never fills an unavailable Zone list with a global catalogue query.
+
 Move to trash requires confirmation and calls the ordinary delete route; Restore calls the ordinary
 restore route. Both carry the row's quoted revision and a command-specific idempotency key. Uncertain
 delivery retains the original command for retry; a known conflict requires refreshing current state before
