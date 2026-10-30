@@ -9,7 +9,12 @@ export type GraphCheckpoint = {
   blockedCollection: string | null;
 };
 export const initialGraphCheckpoint = (): GraphCheckpoint => ({
-  phase: 0, parent: null, after: null, child: 0, retain: false, blockedCollection: null,
+  phase: 0,
+  parent: null,
+  after: null,
+  child: 0,
+  retain: false,
+  blockedCollection: null,
 });
 
 /** Finite workflow segment. Native page receipts and DBOS step checkpoints make
@@ -25,21 +30,32 @@ export async function runOwnedGraphSegment(
   const stats = { pages: 0, removed: 0 };
   while (cursor.phase < OWNED_PHASES.length && stats.pages < 100) {
     const phase = OWNED_PHASES[cursor.phase]!;
-    if (cursor.blockedCollection !== null &&
-        (phase === 'builtin_state_reference_source' || phase === 'builtin_collection_reference' ||
-         phase === 'owner_write_counter' || phase === 'fact_source_head')) {
+    if (
+      cursor.blockedCollection !== null &&
+      (phase === 'builtin_state_reference_source' ||
+        phase === 'builtin_collection_reference' ||
+        phase === 'owner_write_counter' ||
+        phase === 'fact_source_head')
+    ) {
       cursor.phase++;
       continue;
     }
-    const children = phase === 'sessions'
-      ? ['units', 'changes', 'sessionDelete'] as const
-      : cursor.retain
-        ? ['canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionRetain'] as const
-        : ['members', 'canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionDelete'] as const;
+    const children =
+      phase === 'sessions'
+        ? (['units', 'changes', 'sessionDelete'] as const)
+        : cursor.retain
+          ? (['canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionRetain'] as const)
+          : (['members', 'canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionDelete'] as const);
     const parentPhase = phase === 'sessions' || phase === 'collections';
     const kind = parentPhase && cursor.parent !== null ? children[cursor.child]! : phase;
-    const result = await page({ accountId, kind, parent: cursor.parent, after: cursor.after,
-      ordinal: stats.pages, segment });
+    const result = await page({
+      accountId,
+      kind,
+      parent: cursor.parent,
+      after: cursor.after,
+      ordinal: stats.pages,
+      segment,
+    });
     stats.pages++;
     stats.removed += result.removed;
     if (!parentPhase) {

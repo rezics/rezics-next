@@ -344,8 +344,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
   ): Promise<{ collections: CollectionView[]; next: string | null }> {
     const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit']);
     const curatorAccountId = options.curatorAccountId;
-    if (typeof curatorAccountId !== 'string')
-      throw new TypeError('Collection list options need a curator account id');
+    if (typeof curatorAccountId !== 'string') throw new TypeError('Collection list options need a curator account id');
     const route = routeOf(curatorAccountId);
     if (route === null) throw notFound();
     // Presentation visibility is read before opening the page transaction. A visible account path
