@@ -158,7 +158,8 @@ function preparedStatementText(client: PoolClient, name: string): string | undef
   const connection = client.connection as typeof client.connection & {
     readonly parsedStatements: Readonly<Record<string, string | undefined>>;
   };
-  return connection.parsedStatements[name];
+  const text = connection.parsedStatements[name];
+  return typeof text === 'string' ? text : undefined;
 }
 
 function nextWireStatement(client: PoolClient): WireStatement | undefined {
