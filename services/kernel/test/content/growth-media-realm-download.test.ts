@@ -271,7 +271,7 @@ test('native Realm media download cost stays bounded with unrelated Realm, ban, 
     },
   });
 
-  expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(new Set(report.samples.map(({ cost }) => cost.controlStatements)).size).toBe(1);
   expect(new Set(report.samples.map(({ cost }) => cost.catalogStatements)).size).toBe(1);
   for (const relation of [
