@@ -74,12 +74,10 @@ async function ownedStackHost(exclude: ReadonlySet<number>): Promise<ProcessInfo
   for (const pid of await childPids(process.pid)) {
     if (exclude.has(pid)) continue;
     const info = await processInfo(pid);
-    if (
-      info?.command.includes('tests/native/stack.ts') &&
-      info.environment.includes('NATIVE_WEB_STACK_HOST=1')
-    ) return info;
+    if (info?.command.includes('tests/native/stack.ts') && info.environment.includes('NATIVE_WEB_STACK_HOST=1'))
+      return info;
   }
-  throw new Error('Could not find this publication driver\'s native stack host process');
+  throw new Error("Could not find this publication driver's native stack host process");
 }
 
 async function durableWorker(hostPid: number): Promise<ProcessInfo> {
@@ -88,9 +86,10 @@ async function durableWorker(hostPid: number): Promise<ProcessInfo> {
     if (
       info?.command.includes('src/worker.ts') &&
       info.environment.some((entry) => /^KERNEL_EXECUTOR_ID=native-web-/.test(entry))
-    ) return info;
+    )
+      return info;
   }
-  throw new Error('Could not find this publication driver\'s durable-work worker process');
+  throw new Error("Could not find this publication driver's durable-work worker process");
 }
 
 async function waitForProcessState(pid: number, stopped: boolean): Promise<void> {
@@ -346,10 +345,17 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
               persona,
             );
             if (!response.ok)
-              throw new Error(`Could not create fixture book through kernel API: ${response.status} ${await response.text()}`);
+              throw new Error(
+                `Could not create fixture book through kernel API: ${response.status} ${await response.text()}`,
+              );
             const result = (await response.json()) as { subject?: { id: string } };
             if (!result.subject?.id) throw new Error('Fixture book API response lacked its created identity');
-            created.set(entry.key, { id: result.subject.id, label: entry.label, labels: entry.labels, type: entry.type });
+            created.set(entry.key, {
+              id: result.subject.id,
+              label: entry.label,
+              labels: entry.labels,
+              type: entry.type,
+            });
             continue;
           }
           const commands = batch.map(({ key, type, labels, descriptions }) => {

@@ -75,7 +75,9 @@ describe('native web publication driver interruptions', () => {
         await Bun.sleep(delay);
         delay = Math.min(delay * 2, 1000);
       }
-      console.info(`web-publication-interrupt: subject-view-restore-to-projection=${Math.round(performance.now() - restoredAt)}ms`);
+      console.info(
+        `web-publication-interrupt: subject-view-restore-to-projection=${Math.round(performance.now() - restoredAt)}ms`,
+      );
       expect(projected).toBe(true);
     } finally {
       await restore();
