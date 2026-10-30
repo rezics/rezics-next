@@ -419,8 +419,10 @@ release its source connection, resolve bounded current candidate evidence at sha
 return the native successor/version or fixed orphan timestamps inside Content's Realm-home transaction.
 The private role reader supplies direct role data only, not current account eligibility or authorization.
 Its optional trusted `access` input selects the actual installed catalogue; omission uses built-in definitions.
-The remaining native succession source seam is shared-T account eligibility and resumable live-role candidate
-custody: account state is mutable, and the cleanup discovery cursor is not an ordered current-role authority.
+The native current-role frontier and in-transaction active-account admission are available through Access. The
+remaining native succession seam is durable continuation from Community's erasure progress through bounded
+candidate pages to the verified Realm writer transaction, preserving the immutable erasure obligation and
+frontier across retries; the cleanup discovery cursor is not that candidate-work checkpoint.
 The [Access ownership contract](../services/kernel/src/access/README.md#native-realm-ownership) records the exact
 source fields and missing admission boundary. An approved platform claim application
 authority also remains unselected. Direct-owner inclusion in own-Realm discovery and Realm/Space delete/restore

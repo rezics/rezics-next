@@ -687,15 +687,15 @@ constructor/result exported yet. Content owns resource state, freeze/readability
 removal/restore records; Access must not store a parallel orphan owner or issue a foreign acknowledgement.
 No approved platform claim application authority is delivered. The 30-day deadline alone confers no grant power.
 
-The remaining succession seam is the native candidate source capability: `access.erasure` supplies the exact
-immutable `(route, account_id, version, at)` obligation, but `access.account` supplies mutable current state and
-`transaction_id`, without a temporal account-state read at shared T. Native grants provide temporal role rows;
-they provide neither a stable bounded live-role ordering frontier nor resumable candidate/account-evidence
-custody. The existing erasure discovery cursor enumerates stored rows for cleanup, including history, and is
-not such authority. A pool read, an account version in a body, or a released candidate page cannot establish
-that an exhausted frontier contains no eligible successor in the applying Realm transaction. Content's
-same-transaction succession consumer needs that source/admission seam selected before a truthful preparation
-and application constructor can be exported; the membership transition writer remains its sole producer.
+The native current-role frontier is supplied by `readCurrentResourceRolePage` and
+`verifyCurrentResourceRoleFrontier`; positive account admission is supplied by `shareAccount` on the live
+command transaction. Those primitives do not themselves bind an account's immutable
+`(route, account_id, version, at)` erasure obligation to a resumable Realm candidate traversal and its final
+same-transaction application. The existing erasure discovery cursor enumerates stored rows for cleanup,
+including history, and is not a candidate-work checkpoint. A released candidate page alone cannot certify the
+exhausted frontier at application time. The remaining seam is a durable continuation contract from Content's
+erasure progress to the verified Realm writer transaction, preserving the source obligation and frontier while
+resuming bounded pages after a crash. The membership transition writer remains its sole producer.
 
 ## Resource denials
 
