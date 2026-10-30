@@ -208,6 +208,21 @@ export async function importRestoredAuthProgress(
         ],
       )
     ).rows[0];
+    if (previous) {
+      const imported = await connection.query<{ matches: boolean }>(
+        `SELECT original_progress=$3::jsonb AS matches FROM auth_restore_replay
+         WHERE generation=$1 AND obligation_id=$2 FOR UPDATE`,
+        [restored.generation, previous.id, JSON.stringify(progress)],
+      );
+      if (imported.rows[0]) {
+        if (!imported.rows[0].matches) fail('original-progress-mismatch');
+        // Local native work may since have established its first cutoff or
+        // published its genuine consumer proof. Never overwrite that progress
+        // with the immutable evidence captured at the start of this generation.
+        await connection.query('COMMIT');
+        return previous.id;
+      }
+    }
     if (
       previous &&
       (previous.barrier !== progress.floor ||

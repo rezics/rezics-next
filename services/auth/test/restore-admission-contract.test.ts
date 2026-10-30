@@ -248,6 +248,7 @@ test('recover original committed Auth progress beyond the snapshot, replay bound
       (await restored.query('SELECT 1 FROM auth_effect_receipt WHERE receipt_id=$1', ['living-witness'])).rowCount,
     ).toBe(1);
     expect((await restored.query('SELECT 1 FROM "user" WHERE id=$1', [living.accountId])).rowCount).toBe(1);
+    expect(await importRestoredAuthProgress(restored, restoredGeneration, victim.accountId)).toBe(id);
     expect((await immutable()).rows[0]).toEqual(before);
     expect(
       (await restored.query('SELECT due_at FROM auth_consent_erasure WHERE account_id=$1', [victim.accountId])).rows[0]!

@@ -75,8 +75,9 @@ pending and cannot masquerade as current Source authority or consumer release.
 Even after the Source interface arrives, cutover must compose native required
 receiving closure and actual external-owner readiness before serving. Current
 admission fails explicitly with `source-authority-unavailable`; there is no
-successful unavailable placeholder or bypass RPC. Proof publication is held on
-a marked restore image, including old carried completion. This delivers no
+successful unavailable placeholder or bypass RPC. History completion publication
+is held on a marked restore image, including old carried completion; genuine
+original Source consumption still redrives independently. This delivers no
 physical backup/replica/mail/log deletion or final coordinator ACK. Outstanding
 external custody and backup expiry remain separate pending owner obligations in
 [the external custody contract](src/external-custody-contract.md). The protected

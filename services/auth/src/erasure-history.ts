@@ -114,9 +114,9 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
 /** Every Auth query has released its connection before any trusted kernel call.
  * A lost reply replays the same immutable tuple from permanent native progress. */
 export async function publishErasureProofs(database: Pool, ports: TrustedAccessPorts, id: string): Promise<number> {
-  // Source discharge already recovered from genuine original progress remains
-  // intact, but a restored copy cannot publish old completion as new closure.
-  if ((await database.query('SELECT 1 FROM auth_restore_generation LIMIT 1')).rowCount) return 0;
+  // Genuine original source consumption still redrives independently. A marked
+  // image cannot publish carried history completion as closure of restored bytes.
+  const restored = Boolean((await database.query('SELECT 1 FROM auth_restore_generation LIMIT 1')).rowCount);
   const row = (await database.query<Progress>('SELECT * FROM auth_erasure WHERE id=$1', [id])).rows[0];
   if (!row) return 0;
   const root = barrier(row);
@@ -138,6 +138,7 @@ export async function publishErasureProofs(database: Pool, ports: TrustedAccessP
   // Recovered obligations revisit the same native engine and any exact local
   // copy roles before their existing immutable completion can be published.
   const historyCovered =
+    !restored &&
     row.copies_completed_at &&
     !row.copies_published_at &&
     row.native_role_version === 1 &&
