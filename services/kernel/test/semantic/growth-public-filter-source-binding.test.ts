@@ -315,14 +315,16 @@ test('original capture survives native derived execution windows and exact relea
   const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
   const consumer = await consumerFixture(f, source);
   try {
+    const term = `native${randomUUID().replaceAll('-', '')}`;
     const root: PublicFilterConsumerCaptureInput = {
       sort: 'name',
       size: 3,
       pageSize: 2,
       filterDocument: undefined,
-      text: parseText('native -excluded'),
+      text: parseText(`${term} -excluded`),
     };
-    const book = await f.create('schema:Book');
+    const book: string = (await f.post('/v1/subjects', { type: 'schema:Book', labels: { en: term }, statements: {} }))
+      .subject.id;
     const captured = await consumer.operations.capture({ plan: root, snapshot: 'pit' }, readContext());
     if (captured.status === 'preparing') {
       const repair = await consumer.operations.repairStep(captured.repair, readContext());
