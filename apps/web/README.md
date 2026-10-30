@@ -1476,6 +1476,7 @@ current-state refresh; a failed refresh keeps content hidden. Late responses fro
 - **Acceptance:** `tests/moderation-decision.test.ts` retains the original cases and adds the named receipt/appeal
   outcome, unavailable-byte/final-denial race and denial/conflict/uncertain-confirmation cases. Execution is deferred
   to integration under the current minimal verification policy.
+- **Local verification:** `bun run --cwd apps/web typecheck` passes. Acceptance and story plays were not executed.
 
 Review the same IDs with the existing phone390/desktop1280 and light/dark globals:
 
