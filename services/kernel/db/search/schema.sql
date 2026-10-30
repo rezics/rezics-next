@@ -106,6 +106,114 @@ CREATE TABLE search.index_prefix_control (
 
 
 --
+-- Name: public_filter_execution; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_execution (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    id text NOT NULL COLLATE pg_catalog."C",
+    execution text NOT NULL,
+    CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576))
+);
+
+
+--
+-- Name: public_filter_observation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_observation (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    registration text NOT NULL COLLATE pg_catalog."C",
+    queried text NOT NULL,
+    covered text NOT NULL,
+    expires_at bigint NOT NULL,
+    state text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    prepared_rows text,
+    CONSTRAINT public_filter_observation_covered_check CHECK ((octet_length(covered) <= 4096)),
+    CONSTRAINT public_filter_observation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT public_filter_observation_prepared_rows_check CHECK ((octet_length(prepared_rows) <= 1048576)),
+    CONSTRAINT public_filter_observation_queried_check CHECK ((octet_length(queried) <= 65536)),
+    CONSTRAINT public_filter_observation_revision_check CHECK ((revision > 0)),
+    CONSTRAINT public_filter_observation_state_check CHECK ((state = ANY (ARRAY['open'::text, 'closing'::text, 'closed'::text])))
+);
+
+
+--
+-- Name: public_filter_pit; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_pit (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    id text NOT NULL COLLATE pg_catalog."C",
+    locator text NOT NULL,
+    state text NOT NULL,
+    CONSTRAINT public_filter_pit_locator_check CHECK ((octet_length(locator) <= 65536)),
+    CONSTRAINT public_filter_pit_state_check CHECK ((state = ANY (ARRAY['owned'::text, 'released'::text])))
+);
+
+
+--
+-- Name: public_filter_prepared; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_prepared (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    build text NOT NULL COLLATE pg_catalog."C",
+    generation numeric NOT NULL,
+    rows text NOT NULL,
+    CONSTRAINT public_filter_prepared_generation_check CHECK (((generation > (0)::numeric) AND (scale(generation) = 0))),
+    CONSTRAINT public_filter_prepared_rows_check CHECK ((octet_length(rows) <= 1048576))
+);
+
+
+--
+-- Name: public_filter_reference; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_reference (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    token uuid NOT NULL,
+    expires_at bigint NOT NULL
+);
+
+
+--
+-- Name: public_filter_registration; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_registration (
+    partition_no integer NOT NULL,
+    id text NOT NULL COLLATE pg_catalog."C",
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    consumer text NOT NULL,
+    definition text NOT NULL,
+    state text NOT NULL,
+    CONSTRAINT public_filter_registration_consumer_check CHECK ((octet_length(consumer) <= 8192)),
+    CONSTRAINT public_filter_registration_definition_check CHECK ((octet_length(definition) <= 1048576)),
+    CONSTRAINT public_filter_registration_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text])))
+);
+
+
+--
+-- Name: public_filter_target; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_target (
+    partition_no integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    incarnation text NOT NULL,
+    CONSTRAINT public_filter_target_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
 -- Name: index_home_coverage index_home_coverage_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -138,10 +246,73 @@ ALTER TABLE ONLY search.index_prefix_control
 
 
 --
+-- Name: public_filter_execution public_filter_execution_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_execution
+    ADD CONSTRAINT public_filter_execution_pkey PRIMARY KEY (partition_no, observation, id);
+
+
+--
+-- Name: public_filter_observation public_filter_observation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_observation
+    ADD CONSTRAINT public_filter_observation_pkey PRIMARY KEY (partition_no, observation);
+
+
+--
+-- Name: public_filter_pit public_filter_pit_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_pit
+    ADD CONSTRAINT public_filter_pit_pkey PRIMARY KEY (partition_no, observation, id);
+
+
+--
+-- Name: public_filter_prepared public_filter_prepared_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_prepared
+    ADD CONSTRAINT public_filter_prepared_pkey PRIMARY KEY (partition_no, registration, build, generation);
+
+
+--
+-- Name: public_filter_reference public_filter_reference_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_reference
+    ADD CONSTRAINT public_filter_reference_pkey PRIMARY KEY (partition_no, observation, token);
+
+
+--
+-- Name: public_filter_registration public_filter_registration_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_registration
+    ADD CONSTRAINT public_filter_registration_pkey PRIMARY KEY (partition_no, id);
+
+
+--
+-- Name: public_filter_target public_filter_target_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_target
+    ADD CONSTRAINT public_filter_target_pkey PRIMARY KEY (partition_no, physical_target);
+
+
+--
 -- Name: index_home_coverage_retire; Type: INDEX; Schema: search; Owner: -
 --
 
 CREATE INDEX index_home_coverage_retire ON search.index_home_coverage USING btree (consumer, index_uuid, partition_no);
+
+
+--
+-- Name: public_filter_pit_owned; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_pit_owned ON search.public_filter_pit USING btree (partition_no, observation, id) WHERE (state = 'owned'::text);
 
 
 --
@@ -153,52 +324,55 @@ ALTER TABLE ONLY search.index_incarnation
 
 
 --
+-- Name: public_filter_execution public_filter_execution_partition_no_observation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_execution
+    ADD CONSTRAINT public_filter_execution_partition_no_observation_fkey FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation(partition_no, observation);
+
+
+--
+-- Name: public_filter_observation public_filter_observation_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_observation
+    ADD CONSTRAINT public_filter_observation_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
+-- Name: public_filter_pit public_filter_pit_partition_no_observation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_pit
+    ADD CONSTRAINT public_filter_pit_partition_no_observation_fkey FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation(partition_no, observation);
+
+
+--
+-- Name: public_filter_prepared public_filter_prepared_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_prepared
+    ADD CONSTRAINT public_filter_prepared_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
+-- Name: public_filter_reference public_filter_reference_partition_no_observation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_reference
+    ADD CONSTRAINT public_filter_reference_partition_no_observation_fkey FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation(partition_no, observation);
+
+
+--
+-- Name: public_filter_registration public_filter_registration_partition_no_physical_target_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_registration
+    ADD CONSTRAINT public_filter_registration_partition_no_physical_target_fkey FOREIGN KEY (partition_no, physical_target) REFERENCES search.public_filter_target(partition_no, physical_target);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 
-CREATE TABLE search.public_filter_target (
-  partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-  physical_target text COLLATE "C" NOT NULL,
-  incarnation text NOT NULL,
-  PRIMARY KEY (partition_no, physical_target)
-);
-CREATE TABLE search.public_filter_registration (
-  partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-  id text COLLATE "C" NOT NULL,
-  physical_target text COLLATE "C" NOT NULL,
-  consumer text NOT NULL CHECK (octet_length(consumer) <= 8192),
-  definition text NOT NULL CHECK (octet_length(definition) <= 1048576),
-  state text NOT NULL CHECK (state IN ('active', 'retired')),
-  PRIMARY KEY (partition_no, id),
-  FOREIGN KEY (partition_no, physical_target) REFERENCES search.public_filter_target
-);
-CREATE TABLE search.public_filter_observation (
-  partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-  observation text COLLATE "C" NOT NULL,
-  registration text COLLATE "C" NOT NULL,
-  queried text NOT NULL CHECK (octet_length(queried) <= 65536),
-  covered text NOT NULL CHECK (octet_length(covered) <= 4096),
-  expires_at bigint NOT NULL,
-  state text NOT NULL CHECK (state IN ('open', 'closing', 'closed')),
-  revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
-  prepared_rows text CHECK (octet_length(prepared_rows) <= 1048576),
-  PRIMARY KEY (partition_no, observation),
-  FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration
-);
-CREATE TABLE search.public_filter_execution (
-  partition_no integer NOT NULL,
-  observation text COLLATE "C" NOT NULL,
-  id text COLLATE "C" NOT NULL,
-  execution text NOT NULL CHECK (octet_length(execution) <= 1048576),
-  PRIMARY KEY (partition_no, observation, id),
-  FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation
-);
-CREATE TABLE search.public_filter_reference (
-  partition_no integer NOT NULL,
-  observation text COLLATE "C" NOT NULL,
-  token uuid NOT NULL,
-  expires_at bigint NOT NULL,
-  PRIMARY KEY (partition_no, observation, token),
-  FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation
-);

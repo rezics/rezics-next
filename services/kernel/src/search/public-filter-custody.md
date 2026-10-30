@@ -39,3 +39,8 @@ capture measures examined rows and blocks separately; counters do not claim retu
 This metadata must fit inside the consumer's existing whole-read budget; custody introduces no extra allowance.
 Unknown custody remains pending for erasure/inventory. Complete coverage, all-role erasure, late-writer control,
 Source permission, full consumer/default wiring and public disclosure remain their respective owners' work.
+
+Native PIT locators are additionally retained in `public_filter_pit` keyed by `(partition_no,observation,id)`
+(the ID digests the full engine locator). Both CAS winners and losers remain owned until the observation drains;
+close releases exactly these locators in bounded batches. `public_filter_prepared`, keyed by
+`(partition_no,registration,build,generation)`, rejects different row sets for the same immutable generation.

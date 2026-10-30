@@ -45,5 +45,24 @@ CREATE TABLE search.public_filter_reference (
   PRIMARY KEY (partition_no, observation, token),
   FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation
 );
+CREATE TABLE search.public_filter_pit (
+  partition_no integer NOT NULL,
+  observation text COLLATE "C" NOT NULL,
+  id text COLLATE "C" NOT NULL,
+  locator text NOT NULL CHECK (octet_length(locator) <= 65536),
+  state text NOT NULL CHECK (state IN ('owned', 'released')),
+  PRIMARY KEY (partition_no, observation, id),
+  FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation
+);
+CREATE TABLE search.public_filter_prepared (
+  partition_no integer NOT NULL,
+  registration text COLLATE "C" NOT NULL,
+  build text COLLATE "C" NOT NULL,
+  generation numeric NOT NULL CHECK (generation > 0 AND scale(generation) = 0),
+  rows text NOT NULL CHECK (octet_length(rows) <= 1048576),
+  PRIMARY KEY (partition_no, registration, build, generation),
+  FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration (partition_no, id)
+);
+CREATE INDEX public_filter_pit_owned ON search.public_filter_pit (partition_no, observation, id) WHERE state = 'owned';
 -- migrate:down
 -- Forward only: retained immutable definitions/executions and retired identities are not reclaimed here.
