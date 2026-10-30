@@ -100,6 +100,14 @@ export type IdentityJob = Readonly<{
 }>;
 
 export type IdentityEffect =
+  | Readonly<{
+      kind: 'receiving';
+      job: IdentityJobRef;
+      original: string;
+      effectKey: string;
+      /** Locator of the committed effect-specific receiving record, never a transaction-only allow. */
+      receipt: IdentityNativeReceipt;
+    }>
   | Readonly<{ kind: 'structural'; job: IdentityJobRef; original: string }>
   | Readonly<{ kind: 'follow-count'; original: string; terminal: string; epoch: IdentityEpoch }>;
 

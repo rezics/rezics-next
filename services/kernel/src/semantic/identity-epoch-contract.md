@@ -1499,3 +1499,35 @@ This changes scheduling overhead, not closure meaning or Community's default 30s
 64/512/4096, nested-function RLS/crash schedules and the actual default Community worker are the focused witnesses;
 full participant/output-generation, all-nine Cost, Content consumer acceptance and main/root promotion remain
 separate obligations.
+
+
+### Receiving effect interface and missing Source validation seam
+
+`IdentityEffect` additionally represents the adopted receiving alternative exactly as
+`{kind: 'receiving', job, original, effectKey, receipt: IdentityNativeReceipt}`. Structural and ordinary follow
+alternatives keep their existing meanings. The receiving receipt locates an effect-specific committed native
+record; it is not a step ACK or authorization based on an arbitrary native command. Until the native producer
+can validate the actual Source provenance, Store rejects receiving effects, including at the original home.
+This declaration is interface delivery only; receiving admission and control custody are not implemented.
+
+The available Library Source module `library/collection-source-native.ts` supplies metadata, raw pages and
+original probes. `library/canonical-source-store.ts` supplies unavailable canonical operations. Neither exposes
+an exact committed identity receiving-effect provenance reader or a source-hold writer. The fixed
+`library/identity-epoch-participant.ts:stepLibraryIdentityEpoch` is also absent. Ordinary source metadata and a
+job-wide participant receipt cannot establish a source-specific receiving effect. The Store must not interpret
+either as permission to create a successful receiving record.
+
+The indispensable co-owned validation seam requested from the Library Source owner is one exact native
+source-record read/hold in its actual source command, addressed by the admitted job, original, effect key and
+source receipt. It must return persisted provenance binding the Source identity, incarnation, source generation,
+full scope, fixed participant/version, current owner, receiving home/owner epoch, and OLD/NEW/first-apply/handoff
+disposition to that effect. It must lock or retain the source obligation until receiving and subsequent control
+custody exist. Its receipt must identify the actual committed native transaction and component. Missing, moved,
+uncommitted, changed or cancelled source evidence must reject; returning a caller descriptor or an `allowed` flag
+is insufficient. The Source owner must select the actual table/transaction seam and closed callable; Semantic
+must not clone the six Library business drivers or select their truth from metadata.
+
+After that seam is delivered, Semantic can produce the planned/accepted receiving ledger at released homes,
+validate it locally in `admitHomeEffect`, and commit the effect/frontier receipt atomically before the existing
+released reconciliation takes control custody. No receiving ledger, successful proof row or native ACK is
+fabricated in the meantime. The existing positive receiving acceptance remains required after integration.

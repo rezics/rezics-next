@@ -144,6 +144,12 @@ authorization still checks the current native snapshot within the original reque
 
 ## Identity epoch status
 
+The adopted receiving `IdentityEffect` alternative is declared in `identity-epoch-contract.ts`. Its native
+source-to-owner provenance producer is still missing, so Store rejects it before the structural branch.
+The [receiving validation seam](identity-epoch-contract.md#receiving-effect-interface-and-missing-source-validation-seam)
+names the exact Source-owner dependency and the remaining implementation boundary. This is not admission readiness.
+
+
 `identityEpochStore.readMapping` is bound to the Library subject resolver. Revision-1 births store a self mapping in
 their source command, including unnamed account-agent births. `stepIdentityEpochBootstrap(pool, partition)` exports
 bounded native source pages and installs mappings only when their source transaction receipt is taken into control

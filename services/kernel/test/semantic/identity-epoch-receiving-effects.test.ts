@@ -74,8 +74,7 @@ test('an authentic native transaction cannot become receiving proof through the 
       { ...receiving, receipt: { ...receiving.receipt, transactionId: randomUUID() } },
     ]) {
       await expect(runCommand(f.pool, { partition }, async tx => {
-        // Exercise the adopted wire shape even before the receiving producer is delivered.
-        await store.admitHomeEffect(tx, effect as unknown as Parameters<typeof store.admitHomeEffect>[1]);
+        await store.admitHomeEffect(tx, effect);
         return noEffect(null);
       })).rejects.toMatchObject({ code: 'identity_effect_stale' });
     }

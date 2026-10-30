@@ -479,6 +479,9 @@ export const identityEpochStore: IdentityEpochStore = {
   },
   async admitHomeEffect(tx, effect) {
     const command = currentCommand(tx);
+    // A receiving locator needs its own committed source/owner proof. It must never
+    // fall through to original-home structural admission while that producer is absent.
+    if (effect.kind !== 'structural' && effect.kind !== 'follow-count') throw stale();
     const destination = effect.kind === 'follow-count' ? effect.terminal : effect.original;
     const destinationRoute = route(destination);
     if (command.partition !== partitionOf(destinationRoute)) throw stale();
