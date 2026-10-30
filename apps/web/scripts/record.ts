@@ -576,6 +576,7 @@ async function recordLibrary(input: {
 
   await call('physical copy', tokens.me, 'POST', '/v1/copies', 201, {
     subjectId: subject('prince'),
+    kind: 'physical',
     status: 'owned',
     location: 'Hallway shelf, second row',
     source: 'Kinokuniya Shinjuku',
@@ -584,6 +585,7 @@ async function recordLibrary(input: {
   });
   await call('digital copy', tokens.me, 'POST', '/v1/copies', 201, {
     subjectId: subject('kokoro'),
+    kind: 'digital',
     status: 'owned',
     location: 'Kobo library, e-book',
     source: 'Kobo',
@@ -595,8 +597,8 @@ async function recordLibrary(input: {
     (
       await call('progress session', tokens.me, 'POST', '/v1/progressSessions', 201, {
         subjectId: subject('kokoro'),
-        mode: 'cursor_position',
-        unit: 'chapter',
+        mode: 'scalar_amount',
+        unit: 'page',
       })
     ).progressSession,
     'progress session',
@@ -606,8 +608,7 @@ async function recordLibrary(input: {
     throw new Error(`Progress session is malformed: ${JSON.stringify(session)}`);
   await call('progress record', tokens.me, 'POST', `/v1/progressSessions/${sessionId}:record`, 200, {
     revision: session.revision,
-    locator: 'Part 2, chapter 14',
-    position: '42',
+    amount: '42',
   });
   const log = idOf(
     await call('published log', tokens.me, 'POST', '/v1/publishedLogs', 201, {
