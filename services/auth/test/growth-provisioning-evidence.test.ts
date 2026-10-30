@@ -201,6 +201,15 @@ test('checkGrowth native idempotent password and credentialless commits have con
       },
       ...targets.hooks,
     });
+    expect(targets.invocations.every(({ outcome }) => outcome === 'succeeded')).toBe(true);
+    for (const sample of report.samples) {
+      expect(targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'warmup')).toHaveLength(
+        1,
+      );
+      expect(
+        targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'measured'),
+      ).toHaveLength(sample.repetitions.length + (sample.coldBackendDiscards ?? 0));
+    }
     for (const { cost } of report.samples) {
       expect(cost.statements).toBe(11); // 15 including four BEGIN/COMMIT statements
       expect(cost.rows).toBeLessThanOrEqual(14);
@@ -275,7 +284,12 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
     ...targets.hooks,
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-  for (const { cost, repetitions, occurrenceRepetitions } of report.samples) {
+  expect(targets.invocations.every(({ outcome }) => outcome === 'succeeded')).toBe(true);
+  for (const { scale, cost, repetitions, occurrenceRepetitions, coldBackendDiscards } of report.samples) {
+    expect(targets.invocations.filter((run) => run.scale === scale && run.kind === 'warmup')).toHaveLength(1);
+    expect(targets.invocations.filter((run) => run.scale === scale && run.kind === 'measured')).toHaveLength(
+      repetitions.length + (coldBackendDiscards ?? 0),
+    );
     // Only accepted measured captures enter the report. Native producer ownership
     // retains nested FK/cascade documents on their actual source occurrence.
     const runs = occurrenceRepetitions.map(({ statements: occurrences }) => {

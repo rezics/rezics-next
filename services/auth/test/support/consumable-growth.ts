@@ -10,11 +10,40 @@ export function consumableGrowth<T>(options: {
 }) {
   let serial = 0;
   let prepared: { scale: number; repetition: number; id: string; target: T } | undefined;
-  const invocations: { id: string; scale: number; repetition: number; kind: 'warmup' | 'measured' }[] = [];
+  const invocations: {
+    id: string;
+    scale: number;
+    repetition: number;
+    kind: 'warmup' | 'measured';
+    outcome: 'running' | 'succeeded' | 'failed';
+  }[] = [];
   async function setup(db: GrowthDatabase, scale: number, repetition: number, kind: 'warmup' | 'measured') {
     const id = `${options.name}-${kind}-${scale}-${repetition}-${serial++}`;
     const target = await options.setup(db, scale, id);
     return { id, target, scale, repetition, kind };
+  }
+  async function invoke(
+    db: GrowthDatabase,
+    selected: { id: string; target: T; scale: number; repetition: number; kind: 'warmup' | 'measured' },
+  ) {
+    const invocation = {
+      id: selected.id,
+      scale: selected.scale,
+      repetition: selected.repetition,
+      kind: selected.kind,
+      outcome: 'running' as 'running' | 'succeeded' | 'failed',
+    };
+    invocations.push(invocation);
+    try {
+      const result = await options.run(db, selected.scale, selected.id, selected.target);
+      invocation.outcome = 'succeeded';
+      return result;
+    } catch (error) {
+      // Failure may follow a committed destructive step. Retain that physical
+      // invocation, but never make its consumed target available for replay.
+      invocation.outcome = 'failed';
+      throw error;
+    }
   }
   const hooks = {
     async prepare(db, scale, repetition) {
@@ -24,8 +53,7 @@ export function consumableGrowth<T>(options: {
     async warmup(db, scale, repetition) {
       if (prepared) throw new Error('Warmup cannot consume a measured target');
       const spare = await setup(db, scale, repetition, 'warmup');
-      invocations.push(spare);
-      return options.run(db, scale, spare.id, spare.target);
+      return invoke(db, spare);
     },
     async operation(db, scale, repetition) {
       const selected = prepared;
@@ -33,8 +61,7 @@ export function consumableGrowth<T>(options: {
         throw new Error('Fresh native target required');
       // A failed physical invocation must also get fresh state on any retry.
       prepared = undefined;
-      invocations.push({ ...selected, kind: 'measured' });
-      return options.run(db, scale, selected.id, selected.target);
+      return invoke(db, { ...selected, kind: 'measured' });
     },
   } satisfies Pick<GrowthCheck, 'prepare' | 'warmup' | 'operation'>;
   return { hooks, invocations };

@@ -192,6 +192,15 @@ async function revokeGrowth(db: GrowthDatabase) {
     },
     ...targets.hooks,
   });
+  expect(targets.invocations.every(({ outcome }) => outcome === 'succeeded')).toBe(true);
+  for (const sample of report.samples) {
+    expect(targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'warmup')).toHaveLength(
+      1,
+    );
+    expect(targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'measured')).toHaveLength(
+      sample.repetitions.length + (sample.coldBackendDiscards ?? 0),
+    );
+  }
   for (const sample of report.samples)
     for (const cost of [sample.cost, ...sample.repetitions]) {
       expect(cost.statements).toBeGreaterThanOrEqual(5);
@@ -362,6 +371,15 @@ async function maintenanceGrowth(db: GrowthDatabase) {
         },
         ...targets.hooks,
       });
+      expect(targets.invocations.every(({ outcome }) => outcome === 'succeeded')).toBe(true);
+      for (const sample of report.samples) {
+        expect(
+          targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'warmup'),
+        ).toHaveLength(1);
+        expect(
+          targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'measured'),
+        ).toHaveLength(sample.repetitions.length + (sample.coldBackendDiscards ?? 0));
+      }
       for (const sample of report.samples)
         for (const cost of [sample.cost, ...sample.repetitions]) {
           expect(cost.relations['public.auth_consent']!.rows).toBeGreaterThanOrEqual(100);
@@ -431,6 +449,15 @@ async function websiteGrowth(db: GrowthDatabase) {
       },
       ...targets.hooks,
     });
+    expect(targets.invocations.every(({ outcome }) => outcome === 'succeeded')).toBe(true);
+    for (const sample of report.samples) {
+      expect(targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'warmup')).toHaveLength(
+        1,
+      );
+      expect(
+        targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'measured'),
+      ).toHaveLength(sample.repetitions.length + (sample.coldBackendDiscards ?? 0));
+    }
     for (const sample of report.samples)
       for (const cost of [sample.cost, ...sample.repetitions]) {
         expect(cost.statements).toBeGreaterThan(5);

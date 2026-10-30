@@ -228,6 +228,57 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
     ).rows[0].n;
     expect(completedRuns).toBe(11);
     expect(await counts('fixture-')).toEqual(full.map(() => 0));
+
+    // A caller failure after native completion still consumes the entire unit.
+    // Retrying either branch at the same caller index must dispatch fresh work.
+    let failAfterCompletion = true;
+    const retries = consumableGrowth({
+      name: 'retry-fixture',
+      setup,
+      async run(_database, _scale, id) {
+        expect(await counts(`${id}-`)).toEqual(full);
+        await dispatch(id);
+        expect(await counts(`${id}-`)).toEqual(full.map(() => 0));
+        const outputs = (
+          await db.admin.query(
+            `SELECT output FROM ${schema}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
+            [id],
+          )
+        ).rows;
+        expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual(website ? [5000] : [1000, 0, 1000, 100]);
+        expect(await counts(website ? 'live-' : 'history-')).toEqual(
+          website ? [1000, 1000, 1000, 1000, 1000] : [1000, 1000, 1000, 1000],
+        );
+        expect(await counts('backlog-')).toEqual(website ? [1000, 1000, 1000, 1000, 1000] : [0, 0, 1000, 1000]);
+        if (failAfterCompletion) {
+          failAfterCompletion = false;
+          throw new Error('Caller failed after native completion');
+        }
+      },
+    });
+    await expect(retries.hooks.warmup(db, 1, 0)).rejects.toThrow('Caller failed after native completion');
+    await retries.hooks.warmup(db, 1, 0);
+    failAfterCompletion = true;
+    await retries.hooks.prepare(db, 1, 1);
+    await expect(retries.hooks.operation(db, 1, 1)).rejects.toThrow('Caller failed after native completion');
+    await expect(retries.hooks.operation(db, 1, 1)).rejects.toThrow('Fresh native target required');
+    await retries.hooks.prepare(db, 1, 1);
+    await retries.hooks.operation(db, 1, 1);
+    expect(retries.invocations.map(({ kind, outcome }) => ({ kind, outcome }))).toEqual([
+      { kind: 'warmup', outcome: 'failed' },
+      { kind: 'warmup', outcome: 'succeeded' },
+      { kind: 'measured', outcome: 'failed' },
+      { kind: 'measured', outcome: 'succeeded' },
+    ]);
+    expect(new Set([...targets.invocations, ...retries.invocations].map(({ id }) => id)).size).toBe(14);
+    expect(
+      (
+        await db.admin.query(
+          `SELECT count(*)::int AS n FROM ${schema}.workflow_status WHERE status='SUCCESS' AND workflow_uuid LIKE 'retry-fixture-%'`,
+        )
+      ).rows[0].n,
+    ).toBe(4);
+    expect(await counts('retry-fixture-')).toEqual(full.map(() => 0));
   } finally {
     await shutdown();
   }
