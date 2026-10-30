@@ -76,13 +76,13 @@ reviewed interface and promoted-main evidence remain required. Docs-only adoptio
 The kernel runner entry points import the original outcome specifications through their expected environment
 variables. They do not rewrite assertions, normalize responses, or treat a missing driver as a successful check.
 
-| Specification | Kernel entry point | Native source status |
-| --- | --- | --- |
-| [Library](../../specs/library-outcomes.test.ts) | [outcomes](../../services/kernel/test/library/outcomes.test.ts) | Existing [driver](../../services/kernel/test/library/support/outcome-driver.ts); whole-suite acceptance unverified. |
-| [Labels](../../specs/library-labels-outcomes.test.ts) | [labels-outcomes](../../services/kernel/test/library/labels-outcomes.test.ts) | Existing entry point; `support/native-labels-driver.ts` is absent. |
-| [Profiles](../../specs/library-profiles-outcomes.test.ts) | [profiles-outcomes](../../services/kernel/test/library/profiles-outcomes.test.ts) | Existing entry point; `support/native-profiles-driver.ts` is absent. |
-| [Dynamic Collections](../../specs/dynamic-collections-outcomes.test.ts) | [dynamic-outcomes](../../services/kernel/test/library/dynamic-outcomes.test.ts) | Existing entry point; `support/native-dynamic-driver.ts` is absent. |
-| [Shelves](../../specs/library-shelves-outcomes.test.ts) | [shelves-outcomes](../../services/kernel/test/library/shelves-outcomes.test.ts) | Existing entry point; `support/native-shelves-driver.ts` is absent. |
+| Specification                                                           | Kernel entry point                                                                | Native source status                                                                                                |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [Library](../../specs/library-outcomes.test.ts)                         | [outcomes](../../services/kernel/test/library/outcomes.test.ts)                   | Existing [driver](../../services/kernel/test/library/support/outcome-driver.ts); whole-suite acceptance unverified. |
+| [Labels](../../specs/library-labels-outcomes.test.ts)                   | [labels-outcomes](../../services/kernel/test/library/labels-outcomes.test.ts)     | Existing entry point; `support/native-labels-driver.ts` is absent.                                                  |
+| [Profiles](../../specs/library-profiles-outcomes.test.ts)               | [profiles-outcomes](../../services/kernel/test/library/profiles-outcomes.test.ts) | Existing entry point; `support/native-profiles-driver.ts` is absent.                                                |
+| [Dynamic Collections](../../specs/dynamic-collections-outcomes.test.ts) | [dynamic-outcomes](../../services/kernel/test/library/dynamic-outcomes.test.ts)   | Existing entry point; `support/native-dynamic-driver.ts` is absent.                                                 |
+| [Shelves](../../specs/library-shelves-outcomes.test.ts)                 | [shelves-outcomes](../../services/kernel/test/library/shelves-outcomes.test.ts)   | Existing entry point; `support/native-shelves-driver.ts` is absent.                                                 |
 
 The authorized [entry lifecycle reconciliation](../../services/kernel/src/library/README.md#entry-deletion-identity-and-restoration)
 is now represented in the original Library, profile and shelf specifications. The two historical-profile clear cases

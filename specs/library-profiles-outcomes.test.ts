@@ -1034,7 +1034,9 @@ test('migration bounds examined source keys through a long pinned prefix and int
   const rows = (await driver.inspect(fixture)).entries.toSorted((a, b) => a.subjectId.localeCompare(b.subjectId));
   for (const [index, row] of rows.entries()) {
     if (index < 512 || index % 2 === 0)
-      expect((await entry(row.subjectId, row.state, idempotencyKey(), await entryGuard(row.subjectId))).status).toBe(200);
+      expect((await entry(row.subjectId, row.state, idempotencyKey(), await entryGuard(row.subjectId))).status).toBe(
+        200,
+      );
   }
   const before = await driver.inspect(fixture);
   await driver.migrateOwner(fixture, release.digest);

@@ -564,10 +564,14 @@ test('entry incarnation guards reject missing foreign and ABA writes while exact
   for (const payload of [
     { state: 'paused', revision: first.revision },
     { state: 'paused', revision: first.revision, incarnationId: foreign.incarnationId },
-  ]) await problem(await write('PUT', path, payload), 409, 'conflict');
+  ])
+    await problem(await write('PUT', path, payload), 409, 'conflict');
   await problem(await write('DELETE', `${path}?revision=${first.revision}`), 409, 'conflict');
   await problem(
-    await write('DELETE', `${path}?revision=${first.revision}&incarnationId=${encodeURIComponent(foreign.incarnationId)}`),
+    await write(
+      'DELETE',
+      `${path}?revision=${first.revision}&incarnationId=${encodeURIComponent(foreign.incarnationId)}`,
+    ),
     409,
     'conflict',
   );
@@ -575,8 +579,9 @@ test('entry incarnation guards reject missing foreign and ABA writes while exact
 
   const requestKey = key();
   const originalInput = { state: 'paused', revision: first.revision, incarnationId: first.incarnationId };
-  const changed = (await body<{ libraryEntry: EntryView }>(await write('PUT', path, originalInput, 'owner', requestKey)))
-    .libraryEntry;
+  const changed = (
+    await body<{ libraryEntry: EntryView }>(await write('PUT', path, originalInput, 'owner', requestKey))
+  ).libraryEntry;
   const current = await entry(subject.id, 'completed', changed);
   expect(await body(await write('PUT', path, originalInput, 'owner', requestKey))).toEqual({ libraryEntry: changed });
   expect(await entryView(subject.id)).toEqual(current);
@@ -588,7 +593,11 @@ test('entry incarnation guards reject missing foreign and ABA writes while exact
   expect(racing.map((response) => response.status).sort()).toEqual([200, 409]);
   const winner = (await body<{ libraryEntry: EntryView }>(racing.find((response) => response.status === 200)!))
     .libraryEntry;
-  await problem(racing.find((response) => response.status === 409)!, 409, 'conflict');
+  await problem(
+    racing.find((response) => response.status === 409)!,
+    409,
+    'conflict',
+  );
   expect(winner.revision).toBe(current.revision + 1);
   expect(await entryView(subject.id)).toEqual(winner);
 

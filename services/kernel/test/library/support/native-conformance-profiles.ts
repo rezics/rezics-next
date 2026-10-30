@@ -1,26 +1,51 @@
 import { bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import type { ProfileReleaseScenario, LibraryProfileVertical } from '../../../../../specs/library-profiles-driver.ts';
-import { fixture, libraryProfile, legacyProfile, libraryLabels, LIBRARY_LOCALES, sourcesFor, unitData } from '../../../../../packages/definitions/test/support/library-profiles.ts';
+import {
+  fixture,
+  libraryProfile,
+  legacyProfile,
+  libraryLabels,
+  LIBRARY_LOCALES,
+  sourcesFor,
+  unitData,
+} from '../../../../../packages/definitions/test/support/library-profiles.ts';
 
 export const profileTypes: Record<LibraryProfileVertical, string> = {
-  game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', book: 'schema:Book',
-  'book-edition': 'bf:Instance', anime: 'schema:TVSeries', people: 'ex:Person', concept: 'ex:Concept',
+  game: 'ex:Child',
+  recipe: 'ex:Recipe',
+  record: 'ex:Record',
+  book: 'schema:Book',
+  'book-edition': 'bf:Instance',
+  anime: 'schema:TVSeries',
+  people: 'ex:Person',
+  concept: 'ex:Concept',
   'inheritance-child': 'ex:Child',
 };
 /** Compiler inputs only. No hand-built registry, compiled type pointers or accepting pins. */
 export function profileSources(scenario: ProfileReleaseScenario) {
   const game = libraryProfile('fixture.game');
   game.progress = legacyProfile().progress;
-  game.copies.kinds[0].statuses = ['ordered', 'owned', 'lent', 'disposed'].map(id => ({ id }));
+  game.copies.kinds[0].statuses = ['ordered', 'owned', 'lent', 'disposed'].map((id) => ({ id }));
   if (scenario === 'profile-v2-changed-ids') game.entryStateSet.states[1].id = 'reading';
-  if (scenario === 'profile-v3-removed-ids') game.entryStateSet.states = game.entryStateSet.states.filter((s: { id: string }) => s.id !== 'planned');
-  if (scenario === 'profile-import-declaration-only') game.importSources = [{ id: 'fixture-import', mappingVersion: 'v1', recordKinds: ['observation'] }];
+  if (scenario === 'profile-v3-removed-ids')
+    game.entryStateSet.states = game.entryStateSet.states.filter((s: { id: string }) => s.id !== 'planned');
+  if (scenario === 'profile-import-declaration-only')
+    game.importSources = [{ id: 'fixture-import', mappingVersion: 'v1', recordKinds: ['observation'] }];
   const recipe = libraryProfile('fixture.recipe', 'minute');
   const record = libraryProfile('fixture.record', 'minute');
-  record.progress = { allowed: [{ mode: 'completed_units', units: [unitData('track', 'completed_units')] }, ...legacyProfile().progress.allowed] };
-  const child = scenario === 'profile-inheritance-nearest' ? libraryProfile('fixture.nearest') :
-    scenario === 'profile-inheritance-conflict' ? libraryProfile('fixture.game', 'episode') : undefined;
+  record.progress = {
+    allowed: [
+      { mode: 'completed_units', units: [unitData('track', 'completed_units')] },
+      ...legacyProfile().progress.allowed,
+    ],
+  };
+  const child =
+    scenario === 'profile-inheritance-nearest'
+      ? libraryProfile('fixture.nearest')
+      : scenario === 'profile-inheritance-conflict'
+        ? libraryProfile('fixture.game', 'episode')
+        : undefined;
   const input = fixture(game, child);
   const schema = JSON.parse(input.schemas['fixture.yaml']!);
 
@@ -35,7 +60,10 @@ export function profileSources(scenario: ProfileReleaseScenario) {
   for (const locale of LIBRARY_LOCALES) {
     const labels = JSON.parse(input.presentation[`fixture/${locale}`]!);
     Object.assign(labels.types, { 'ex:Recipe': 'recipe', 'ex:Record': 'record', 'ex:Concept': 'concept' });
-    Object.assign(labels.libraryProfiles, { [recipe.id]: libraryLabels(recipe, locale), [record.id]: libraryLabels(record, locale) });
+    Object.assign(labels.libraryProfiles, {
+      [recipe.id]: libraryLabels(recipe, locale),
+      [record.id]: libraryLabels(record, locale),
+    });
     if (scenario === 'profile-absent') {
       for (const id of absentProfiles) delete labels.libraryProfiles[id];
     }

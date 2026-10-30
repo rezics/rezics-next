@@ -424,24 +424,40 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
     for (const person of knownPeople) await provisionAccount(person);
 
     async function consent(account: Anchor, requestedScopes: readonly string[]): Promise<string> {
-      const signed = await auth.handler(new Request(`${issuer}/signin`, {
-        method: 'POST', headers: { origin: issuer, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: `${account.id}@example.test`, password, client_id: 'web', scope: requestedScopes }),
-      }));
+      const signed = await auth.handler(
+        new Request(`${issuer}/signin`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            email: `${account.id}@example.test`,
+            password,
+            client_id: 'web',
+            scope: requestedScopes,
+          }),
+        }),
+      );
       if (signed.status !== 200) throw new Error(`Fixture scoped sign-in failed: ${signed.status}`);
-      const cookie = signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-      const issued = await auth.handler(new Request(`${issuer}/token`, {
-        method: 'POST', headers: { origin: issuer, 'content-type': 'application/json', cookie }, body: '{}',
-      }));
+      const cookie = signed.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const issued = await auth.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          body: '{}',
+        }),
+      );
       return (await expectJson<{ access_token: string }>('Issuing scoped fixture token', issued, 200)).access_token;
     }
     for (const [name, selected] of Object.entries({
       ownerReadOnly: ['collection:read', 'subject:read', 'library_entry:read', 'library_entry:list'],
-      libraryOnly: scopes.filter(scope => !scope.startsWith('progress_session:')),
-      progressOnly: scopes.filter(scope => !scope.startsWith('library_entry:')),
+      libraryOnly: scopes.filter((scope) => !scope.startsWith('progress_session:')),
+      progressOnly: scopes.filter((scope) => !scope.startsWith('library_entry:')),
       ungranted: [],
       unscoped: [],
-    })) tokens.set(name, await consent(ownerAccount, selected));
+    }))
+      tokens.set(name, await consent(ownerAccount, selected));
 
     const byRoute = async (
       token: string | null,
@@ -507,7 +523,11 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
       { release },
       { 'Idempotency-Key': key() },
     );
-    const publishedBody = await expectJson<{ digest: string }>('Publishing Library outcome definitions', published, 201);
+    const publishedBody = await expectJson<{ digest: string }>(
+      'Publishing Library outcome definitions',
+      published,
+      201,
+    );
     if (publishedBody.digest !== digest) throw new Error('Definitions returned a different compiled release digest');
     const currentHead = await byRoute(null, 'GET', '/v1/definitions/active');
     const expectedHead =
@@ -548,7 +568,6 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
       },
     );
     await expectJson('Suspending fixture persona', suspend, 200);
-
 
     workClient = await createWorkClient(databaseUrl);
     let activeInternalCapture: CapturedStatements | undefined;
@@ -898,8 +917,15 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
     }
 
     const nativeRequest: NativeConformanceWorld['native']['request'] = (as, input) => {
-      const person = as === 'steward' ? governor : as === 'anonymous' ? null : as === 'owner' || as === 'other' || as === 'suspended' ? accounts[as] : ownerAccount;
-      const bearer = person === null ? null : tokens.get(as) ?? tokenFor(person);
+      const person =
+        as === 'steward'
+          ? governor
+          : as === 'anonymous'
+            ? null
+            : as === 'owner' || as === 'other' || as === 'suspended'
+              ? accounts[as]
+              : ownerAccount;
+      const bearer = person === null ? null : (tokens.get(as) ?? tokenFor(person));
       return byRoute(bearer, input.method, input.path, input.body, input.headers);
     };
     const driver: NativeConformanceWorld = {
@@ -910,19 +936,35 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         workClient,
         steward: governor,
         token(as) {
-          const person = as === 'steward' ? governor : as === 'owner' || as === 'other' || as === 'suspended' ? accounts[as] : ownerAccount;
+          const person =
+            as === 'steward'
+              ? governor
+              : as === 'owner' || as === 'other' || as === 'suspended'
+                ? accounts[as]
+                : ownerAccount;
           return tokens.get(as) ?? tokenFor(person);
         },
         request: nativeRequest,
         async rawRequest(as, method, path, rawJson, headers = {}) {
-          return app.handle(new Request(`http://kernel.test${path}`, {
-            method, headers: { ...headers, 'content-type': 'application/json',
-              ...(as === 'anonymous' ? {} : { authorization: `Bearer ${driver.native.token(as)}` }) }, body: rawJson,
-          }));
+          return app.handle(
+            new Request(`http://kernel.test${path}`, {
+              method,
+              headers: {
+                ...headers,
+                'content-type': 'application/json',
+                ...(as === 'anonymous' ? {} : { authorization: `Bearer ${driver.native.token(as)}` }),
+              },
+              body: rawJson,
+            }),
+          );
         },
         async subject(type, author = 'steward') {
-          const response = await nativeRequest(author, { method: 'POST', path: '/v1/subjects',
-            body: { type, labels: { en: 'Native Library conformance subject' } }, headers: { 'Idempotency-Key': key() } });
+          const response = await nativeRequest(author, {
+            method: 'POST',
+            path: '/v1/subjects',
+            body: { type, labels: { en: 'Native Library conformance subject' } },
+            headers: { 'Idempotency-Key': key() },
+          });
           const result = await expectJson<{ subject: { id: string } }>('Creating native typed subject', response, 201);
           const route = routeOf(result.subject.id);
           if (route === null) throw new Error('Semantic returned an unroutable subject');
@@ -943,9 +985,13 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
           try {
             const result = await capture(db!, operation, { includeBackends: true });
             if (internal.statements.length)
-              throw new Error('Native cross-pool wire/backend attribution unavailable; refusing incomplete cost evidence');
+              throw new Error(
+                'Native cross-pool wire/backend attribution unavailable; refusing incomplete cost evidence',
+              );
             return result;
-          } finally { activeInternalCapture = undefined; }
+          } finally {
+            activeInternalCapture = undefined;
+          }
         },
       },
       accounts,
