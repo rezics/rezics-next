@@ -238,6 +238,17 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 
 ### Independent named feeds
 
+The [Open Library edition and cover CLI journey](../kernel/test/imports/openlibrary-cli-edition-media.test.ts)
+connects a five-column work/edition TSV to account-key Auth, the real coordinator, ordinary
+editor selection and public reads. The same edition bytes initially retain unresolved
+author/work citations, then resolve only the exact work claim learned within their configured
+source. Separate source cover IDs reach registered media jobs with independent unknown-rights
+credits; `-1` never becomes a media request. A cover tuple fence survives close/reopen without
+changing native entry identity/revision or immutable bootstrap/media requests. Unknown-licensed
+prose never becomes a proposal or public summary. See the
+[evidence record](../../docs/research/imports-audit/openlibrary-cli-edition-media.md)
+for fixture framing, observation boundaries and verification limits.
+
 Two configured aliases for Open Library share a provider and its bibliographic CC0-1.0
 permission, but share no native claims, dependency evidence, request journals, baseline or
 run ownership. Alias spelling supplies neither licensing evidence nor another provider.
