@@ -1,7 +1,7 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
+import { consumableGrowth } from './support/consumable-growth.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { PoolClient } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import {
   createAuthService,
@@ -163,6 +163,20 @@ test('checkGrowth exact valid, absent and mismatched evidence ignores growing re
 
 test('checkGrowth native idempotent password and credentialless commits have constant rows/statements', async () => {
   for (const automated of [false, true]) {
+    const targets = consumableGrowth({
+      name: automated ? 'robot' : 'person',
+      async setup(_database, _scale, id) { pending(id, automated); },
+      async run(_database, _scale, id) {
+        const commit = () =>
+          automated
+            ? service.internal.provisionCredentialless({ authorization: id })
+            : service.internal.provisionPassword(input(id));
+        const first = await commit();
+        expect(first.provisioningEvidence).toBeDefined();
+        expect(await commit()).toEqual(first);
+        expect((await db.admin.query('SELECT id FROM account WHERE "userId"=$1', [id])).rows).toHaveLength(1);
+      },
+    });
     const report = await checkGrowth(db, {
       name: `native ${automated ? 'credentialless' : 'password'} commit and exact replay`,
       bounds,
@@ -183,18 +197,7 @@ test('checkGrowth native idempotent password and credentialless commits have con
         if (count < scale * 1024) await grow(database, scale, count / 1024);
         else await database.admin.query('VACUUM (ANALYZE)');
       },
-      async operation(_database, _scale, repetition) {
-        const id = `${automated ? 'robot' : 'person'}-${repetition}`;
-        pending(id, automated);
-        const commit = () =>
-          automated
-            ? service.internal.provisionCredentialless({ authorization: id })
-            : service.internal.provisionPassword(input(id));
-        const first = await commit();
-        expect(first.provisioningEvidence).toBeDefined();
-        expect(await commit()).toEqual(first);
-        expect((await db.admin.query('SELECT id FROM account WHERE "userId"=$1', [id])).rows).toHaveLength(1);
-      },
+      ...targets.hooks,
     });
     for (const { cost } of report.samples) {
       expect(cost.statements).toBe(11); // 15 including four BEGIN/COMMIT statements
@@ -232,22 +235,22 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
     'user',
   ];
   type NativePlan = { Plan: { 'Relation Name': string }; 'Query Text': string };
-  const byScale = new Map<number, NativePlan[][]>();
-  const clients = new Set<PoolClient>();
-  let observing: NativePlan[] | undefined;
-  // Read the notices checkGrowth already captures; no extra native capture or SQL.
-  const observe = (notice: { message?: string | undefined }) => {
-    const message = notice.message;
-    if (observing && message?.startsWith('duration:') && message.includes('plan:\n'))
-      observing.push(JSON.parse(message.slice(message.indexOf('plan:\n') + 'plan:\n'.length)) as NativePlan);
-  };
-  const observeClient = (client: PoolClient) => {
-    if (clients.has(client)) return;
-    clients.add(client);
-    client.on('notice', observe);
-  };
-  db.pool.on('acquire', observeClient);
-  try {
+  const targets = consumableGrowth({
+    name: 'erase',
+    async setup(_database, _scale, id) {
+      pending(id, true);
+      const isolated = await createAuthService({ ...erasureOptions(), database: db.admin });
+      const proof = (await isolated.internal.provisionCredentialless({ authorization: id })).provisioningEvidence!;
+      Object.assign(accounts.get(id)!, { state: 'deleted', fenced: true });
+      return proof;
+    },
+    async run(_database, _scale, id, proof) {
+      await service.internal.eraseAccount(id);
+      expect(await createProvisioningEvidenceVerifier({ database: db.admin }).resolve(proof)).toBeNull();
+      expect((await db.admin.query('SELECT id FROM "user" WHERE id=$1', [id])).rowCount).toBe(0);
+      expect((await db.admin.query('SELECT id FROM account WHERE "userId"=$1', [id])).rowCount).toBe(0);
+    },
+  });
     const report = await checkGrowth(db, {
       name: 'native provisioning proof erasure',
       bounds,
@@ -267,32 +270,21 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
         } else if (count < scale * 1024) await grow(database, scale, count / 1024);
         await database.admin.query('VACUUM (ANALYZE)');
       },
-      async operation(_database, scale, repetition) {
-        const id = `erase-${repetition}`;
-        pending(id, true);
-        // Setup is outside the measured Auth pool, while actual native erasure is captured.
-        const isolated = await createAuthService({ ...erasureOptions(), database: db.admin });
-        const proof = (await isolated.internal.provisionCredentialless({ authorization: id })).provisioningEvidence!;
-        Object.assign(accounts.get(id)!, { state: 'deleted', fenced: true });
-        const documents: NativePlan[] = [];
-        observing = documents;
-        try {
-          await service.internal.eraseAccount(id);
-        } finally {
-          observing = undefined;
-        }
-        // Warmups emit no plans. Require exactly every measured repetition below.
-        if (documents.length) {
-          const runs = byScale.get(scale) ?? [];
-          runs.push(documents);
-          byScale.set(scale, runs);
-        }
-        expect(await createProvisioningEvidenceVerifier({ database: db.admin }).resolve(proof)).toBeNull();
-      },
+      ...targets.hooks,
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-    for (const { scale, cost, repetitions } of report.samples) {
-      const runs = byScale.get(scale)!;
+    for (const { cost, repetitions, occurrenceRepetitions } of report.samples) {
+      // Only accepted measured captures enter the report. Native producer ownership
+      // retains nested FK/cascade documents on their actual source occurrence.
+      const runs = occurrenceRepetitions.map(({ statements: occurrences }) => {
+        expect(occurrences.map(({ statement }) => statement)).toEqual([
+          'BEGIN',
+          'DELETE FROM "user" WHERE id=?',
+          'INSERT INTO auth_consent_erasure (account_id,due_at) VALUES (?,clock_timestamp()+interval ?) ON CONFLICT (account_id) DO NOTHING',
+          'COMMIT',
+        ]);
+        return occurrences.flatMap(({ planDocuments }) => planDocuments) as NativePlan[];
+      });
       expect(runs).toHaveLength(repetitions.length);
       for (const documents of runs) {
         expect(documents.map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
@@ -324,10 +316,7 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
     expect((actual.capture.plans as NativePlan[]).map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
     expect(costOf(actual.capture).statements).toBe(2);
     expect(costOf(actual.capture).controlStatements).toBe(2);
-  } finally {
-    db.pool.off('acquire', observeClient);
-    for (const client of clients) client.off('notice', observe);
-  }
+
 }, 120000);
 
 // A second native service uses the admin pool only for unmeasured erasure setup.

@@ -11,7 +11,6 @@ import { pruneExpiredProtocolState } from '../src/protocol-maintenance.ts';
 import { composeWork } from '../../kernel/src/work/registry.ts';
 import { createWorkClient } from '../../kernel/src/work/client.ts';
 import {
-  capture,
   checkGrowth,
   GrowthBoundError,
   openGrowthDatabase,
@@ -20,11 +19,11 @@ import {
   type GrowthSample,
 } from '../../kernel/test/support/growth.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
+import { consumableGrowth, prepareMaintenanceTarget, protocolRows, protocolTables } from './support/consumable-growth.ts';
 
 const issuer = 'https://growth-revoke.auth.test';
 const secret = 'growth-revoke-maintenance-secret-at-least-32-bytes';
 const repetitions = 3;
-const runs = repetitions + 1;
 const fixed = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 
 async function makeAuth(db: GrowthDatabase): Promise<AuthService> {
@@ -100,35 +99,15 @@ function series(samples: readonly GrowthSample[]) {
   }));
 }
 
-// Preserve the complete measured series on a violation, then explain one spare,
-// equivalent operation whose fresh rows were reserved by the final grow.
+// Failure evidence comes from the original measured series; no extra destructive capture.
 async function growth(db: GrowthDatabase, check: GrowthCheck) {
   try {
     const report = await checkGrowth(db, { repetitions, ...check });
     console.log(JSON.stringify({ name: report.name, bounds: report.bounds, samples: series(report.samples) }));
     return report;
   } catch (error) {
-    if (error instanceof GrowthBoundError) {
-      const diagnostic = await capture(db, () => check.operation(db, check.scales?.at(-1) ?? 64, 3 * runs), {
-        includeBackends: true,
-      });
-      // Repeated owner/client statements share a plan shape. Keep one complete
-      // executed plan per SQL text so a large fanout cannot truncate the failure.
-      const plans = new Map<string, unknown>();
-      for (const document of diagnostic.capture.plans) {
-        for (const plan of (Array.isArray(document) ? document : [document]) as Record<string, unknown>[])
-          plans.set(String(plan['Query Text']), plan);
-      }
-      console.error(
-        JSON.stringify({
-          name: check.name,
-          error: error.message,
-          samples: series(error.samples),
-          sql: [...new Set(diagnostic.capture.statements)],
-          plans: [...plans.values()],
-        }),
-      );
-    }
+    if (error instanceof GrowthBoundError)
+      console.error(JSON.stringify({ name: check.name, error: error.message, samples: error.samples }));
     throw error;
   }
 }
@@ -137,22 +116,16 @@ async function revokeGrowth(db: GrowthDatabase) {
   const auth = await makeAuth(db);
   await auth.internal.registerClient({ clientId: 'probe', firstParty: true, scopes: ['read'] });
   await auth.internal.registerClient({ clientId: 'other', firstParty: true, scopes: ['read'] });
-  const report = await growth(db, {
-    name: 'session revoke with native human proof and exact owner deletion',
-    // R/S=O(1): token/user/client/consent point reads, owner read and delete.
-    // Blocks are O(log N), including expired history belonging to this owner.
-    bounds: fixed,
-    async grow(_, scale, previous) {
-      await authHistory(db, 'unrelated-', previous * 1000 + 1, scale * 1000);
-      const start = (Math.log(scale) / Math.log(8)) * runs;
+  const targets = consumableGrowth({
+    name: 'revoke',
+    async setup(_database, scale, owner) {
       const connection = await db.admin.connect();
       try {
         await connection.query('BEGIN');
         // This is pre-upgrade history, as in the existing bounded-session check.
         // Restore the capacity trigger before any production operation executes.
         await connection.query('ALTER TABLE session DISABLE TRIGGER session_capacity');
-        for (let run = start; run < start + runs + (scale === 64 ? 1 : 0); run++) {
-          const owner = `revoke-${run}`;
+        {
           await connection.query(
             `INSERT INTO "user" (id,name,"emailVerified",sessions_bounded) VALUES ($1,'',false,false)`,
             [owner],
@@ -181,8 +154,8 @@ async function revokeGrowth(db: GrowthDatabase) {
         connection.release();
       }
     },
-    async operation(_, _scale, run) {
-      const id = `revoke-${run}-live-1`;
+    async run(_database, _scale, owner) {
+      const id = `${owner}-live-1`;
       const cookie = (await serializeSignedCookie('__Secure-better-auth.session_token', id, secret)).split(';')[0]!;
       const response = await auth.handler(
         new Request(`${issuer}/sessions/revoke`, {
@@ -198,13 +171,24 @@ async function revokeGrowth(db: GrowthDatabase) {
       expect(
         (
           await db.admin.query(`SELECT count(*)::int AS n FROM session WHERE "userId"=$1 AND "expiresAt">now()`, [
-            `revoke-${run}`,
+            owner,
           ])
         ).rows[0].n,
       ).toBe(63);
     },
   });
-  for (const { cost } of report.samples) {
+  const report = await growth(db, {
+    name: 'session revoke with native human proof and exact owner deletion',
+    // R/S=O(1): token/user/client/consent point reads, owner read and delete.
+    // Blocks are O(log N), including expired history belonging to this owner.
+    bounds: fixed,
+    async grow(_, scale, previous) {
+      await authHistory(db, 'unrelated-', previous * 1000 + 1, scale * 1000);
+    },
+    ...targets.hooks,
+
+  });
+  for (const sample of report.samples) for (const cost of [sample.cost, ...sample.repetitions]) {
     expect(cost.statements).toBeGreaterThanOrEqual(5);
     expect(cost.rows).toBeLessThanOrEqual(32);
     for (const table of [
@@ -276,6 +260,53 @@ async function maintenanceGrowth(db: GrowthDatabase) {
     await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
     for (const axis of ['history', 'clients'] as const) {
       const scales = axis === 'history' ? ([1, 8, 64] as const) : ([1, 4, 16] as const);
+      const targets = consumableGrowth({
+        name: `maintenance-${axis}`,
+        setup: (database, scale, id) => prepareMaintenanceTarget(database, id, `${axis}-history-`, axis === 'history' ? 16 : scale),
+        async run(_database, scale, id) {
+          // Dispatch the registered schedule's native workflow with a fresh
+          // explicit ID. Automatic schedule IDs are background in the harness.
+          const schedule = (await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE))!;
+          expect(schedule.workflowName).toBe('auth.maintenance.tick');
+          expect(schedule.queueName).toBe(AUTH_MAINTENANCE_SCHEDULE);
+          const tick = await DBOS.enqueueWorkflowWithOptions(
+            {
+              workflowName: schedule.workflowName,
+              queueName: schedule.queueName!,
+              workflowID: id,
+            },
+            new Date(0),
+            schedule.context,
+          );
+          await completed(db, AUTH_SYSTEM_SCHEMA, tick.workflowID);
+          await tick.getResult();
+          const outputs = (
+            await db.admin.query(
+              `SELECT output FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
+              [tick.workflowID],
+            )
+          ).rows;
+          expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual([1000, 0, 1000, 100]);
+          const tag = `${id}-%`;
+          expect(
+            (await db.admin.query('SELECT account_id FROM auth_consent WHERE account_id LIKE $1', [tag])).rowCount,
+          ).toBe(0);
+          expect(
+            (await db.admin.query('SELECT account_id FROM auth_consent_erasure WHERE account_id LIKE $1', [tag]))
+              .rowCount,
+          ).toBe(0);
+          expect((await db.admin.query('SELECT id FROM session WHERE id LIKE $1', [tag])).rowCount).toBe(0);
+          expect((await db.admin.query('SELECT id FROM verification WHERE id LIKE $1', [tag])).rowCount).toBe(0);
+          for (const [table, key, count] of [
+            ['auth_consent', 'account_id', scale * 1000],
+            ['auth_consent_erasure', 'account_id', scale * 1000],
+            ['session', 'id', scale * 2000],
+            ['verification', 'id', scale * 2000],
+          ] as const)
+            expect((await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [`${axis}-history-%`])).rows[0].n).toBe(count);
+
+        },
+      });
       const report = await growth(db, {
         name: `due consent native maintenance tick: ${axis}`,
         scales,
@@ -284,13 +315,6 @@ async function maintenanceGrowth(db: GrowthDatabase) {
         // blocks O(B*C*log N). With B,C fixed only indexed blocks may grow.
         bounds: axis === 'history' ? fixed : { rows: 'linear', blocks: 'linear', statements: 'linear' },
         async grow(_, scale, previous) {
-          // Clear only the final diagnostic cohort left by the preceding series.
-          if (previous === 0 && axis === 'clients') {
-            await db.admin.query(`DELETE FROM auth_consent WHERE account_id LIKE 'history-due-%'`);
-            await db.admin.query(`DELETE FROM auth_consent_erasure WHERE account_id LIKE 'history-due-%'`);
-            await db.admin.query(`DELETE FROM session WHERE id LIKE 'history-due-%'`);
-            await db.admin.query(`DELETE FROM verification WHERE id LIKE 'history-due-%'`);
-          }
           await authHistory(db, `${axis}-history-`, previous * 1000 + 1, scale * 1000);
           await durableHistory(
             db,
@@ -310,33 +334,6 @@ async function maintenanceGrowth(db: GrowthDatabase) {
             SELECT $1||i,$1||i,'history','2099-01-01' FROM generate_series($2::int,$3::int) i`,
             [`${axis}-history-`, previous * 1000 + 1, scale * 1000],
           );
-          const start = scales.findIndex((value) => value === scale) * runs;
-          const clients = axis === 'history' ? 16 : scale;
-          for (let run = start; run < start + runs + (scale === scales[2] ? 1 : 0); run++) {
-            const tag = `${axis}-due-${run}-`;
-            const date = new Date(Date.UTC(1990, 0, run + 1));
-            await db.admin.query(
-              `INSERT INTO auth_consent_erasure (account_id,due_at)
-              SELECT $1||i,$2 FROM generate_series(1,100) i`,
-              [tag, date],
-            );
-            await db.admin.query(
-              `INSERT INTO auth_consent (account_id,client_id,scopes)
-              SELECT $1||i,$2||j,ARRAY['read'] FROM generate_series(1,100) i CROSS JOIN generate_series(1,$3::int) j`,
-              [tag, `${axis}-history-`, clients],
-            );
-            await db.admin.query(
-              `INSERT INTO session
-              (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
-              SELECT $1||i,$1||i,$2||i,$2||i,$3,now(),'read',1,1,'pwd' FROM generate_series(1,1000) i`,
-              [tag, `${axis}-history-`, date],
-            );
-            await db.admin.query(
-              `INSERT INTO verification (id,identifier,value,"expiresAt")
-              SELECT $1||i,$1||i,'due',$2 FROM generate_series(1,1000) i`,
-              [tag, date],
-            );
-          }
           // Growing expired backlogs use different keys and later expiry than the
           // admitted cohorts; they also include the same owners as live history.
           await db.admin.query(
@@ -352,42 +349,9 @@ async function maintenanceGrowth(db: GrowthDatabase) {
             [`${axis}-history-`, previous * 1000 + 1, scale * 1000],
           );
         },
-        async operation(_, _scale, run) {
-          // Dispatch the registered schedule's native workflow with a fresh
-          // explicit ID. Automatic schedule IDs are background in the harness.
-          const schedule = (await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE))!;
-          expect(schedule.workflowName).toBe('auth.maintenance.tick');
-          expect(schedule.queueName).toBe(AUTH_MAINTENANCE_SCHEDULE);
-          const tick = await DBOS.enqueueWorkflowWithOptions(
-            {
-              workflowName: schedule.workflowName,
-              queueName: schedule.queueName!,
-              workflowID: `maintenance-${axis}-${run}`,
-            },
-            new Date(0),
-            schedule.context,
-          );
-          await completed(db, AUTH_SYSTEM_SCHEMA, tick.workflowID);
-          await tick.getResult();
-          const outputs = (
-            await db.admin.query(
-              `SELECT output FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
-              [tick.workflowID],
-            )
-          ).rows;
-          expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual([1000, 0, 1000, 100]);
-          const tag = `${axis}-due-${run}-%`;
-          expect(
-            (await db.admin.query('SELECT account_id FROM auth_consent WHERE account_id LIKE $1', [tag])).rowCount,
-          ).toBe(0);
-          expect(
-            (await db.admin.query('SELECT account_id FROM auth_consent_erasure WHERE account_id LIKE $1', [tag]))
-              .rowCount,
-          ).toBe(0);
-          expect((await db.admin.query('SELECT id FROM session WHERE id LIKE $1', [tag])).rowCount).toBe(0);
-        },
+        ...targets.hooks,
       });
-      for (const { cost } of report.samples) {
+      for (const sample of report.samples) for (const cost of [sample.cost, ...sample.repetitions]) {
         expect(cost.relations['public.auth_consent']!.rows).toBeGreaterThanOrEqual(100);
         expect(cost.relations[`${AUTH_SYSTEM_SCHEMA}.operation_outputs`]!.nodes).toBeGreaterThan(0);
       }
@@ -395,46 +359,6 @@ async function maintenanceGrowth(db: GrowthDatabase) {
   } finally {
     await DBOS.shutdown();
   }
-}
-
-const protocolTables = [
-  '"oauthAccessToken"',
-  '"oauthRefreshToken"',
-  '"oauthRefreshFamily"',
-  '"oauthClientAssertion"',
-  'auth_recent_oidc_session',
-] as const;
-
-async function protocolRows(db: GrowthDatabase, tag: string, from: number, to: number, date: Date) {
-  const range = [tag, from, to, date];
-  // Both the hot client/owner and other client/owner partitions grow. Families
-  // are intentionally retained independently from their newest token's expiry.
-  const client = `CASE WHEN i%2=0 THEN 'protocol-hot' ELSE 'protocol-other' END`;
-  await db.admin.query(
-    `INSERT INTO "oauthRefreshFamily" (id,"clientId",revoked,sequence,"expiresAt")
-    SELECT $1||i,${client},false,1,$4 FROM generate_series($2::int,$3::int) i`,
-    range,
-  );
-  await db.admin.query(
-    `INSERT INTO "oauthRefreshToken" (id,token,"clientId","userId","authorizationCodeId","expiresAt","createdAt",scopes)
-    SELECT $1||i,$1||i,${client},${client},$1||i,$4,now(),'["read"]'::jsonb FROM generate_series($2::int,$3::int) i`,
-    range,
-  );
-  await db.admin.query(
-    `INSERT INTO "oauthAccessToken" (id,token,"clientId","userId","refreshId","expiresAt","createdAt",scopes)
-    SELECT $1||i,$1||i,${client},${client},$1||i,$4,now(),'["read"]'::jsonb FROM generate_series($2::int,$3::int) i`,
-    range,
-  );
-  await db.admin.query(
-    `INSERT INTO "oauthClientAssertion" (id,"expiresAt")
-    SELECT $1||i,$4 FROM generate_series($2::int,$3::int) i`,
-    range,
-  );
-  await db.admin.query(
-    `INSERT INTO auth_recent_oidc_session (session_id,account_id,expires_at)
-    SELECT $1||i,${client},$4 FROM generate_series($2::int,$3::int) i`,
-    range,
-  );
 }
 
 async function websiteGrowth(db: GrowthDatabase) {
@@ -455,22 +379,12 @@ async function websiteGrowth(db: GrowthDatabase) {
       .query(`INSERT INTO "user" (id,name,"emailVerified") VALUES ('protocol-hot','',false),('protocol-other','',false);
       INSERT INTO auth_client (client_id,first_party,scopes) VALUES ('protocol-hot',true,ARRAY['read']),('protocol-other',true,ARRAY['read'])`);
     await work.launch();
-    const report = await growth(db, {
-      name: 'registered website maintenance sweep with dispatch and step persistence',
-      // Five fixed batches of 1000, <=2000 candidates/kind, exact TID locks
-      // and deletes plus indexed FK probes and a constant number of DBOS writes.
-      bounds: fixed,
-      async grow(_, scale, previous) {
-        await protocolRows(db, 'expired-', previous * 1000 + 1, scale * 1000, new Date('2000-01-01'));
-        await protocolRows(db, 'live-', previous * 1000 + 1, scale * 1000, new Date('2099-01-01'));
-        await durableHistory(db, 'dbos', 'maintenance', 'website-history-', previous * 1000 + 1, scale * 1000);
-        const start = (Math.log(scale) / Math.log(8)) * runs;
-        for (let run = start; run < start + runs + (scale === 64 ? 1 : 0); run++)
-          await protocolRows(db, `probe-${run}-`, 1, 1000, new Date(Date.UTC(1990, 0, run + 1)));
-      },
-      async operation(_, _scale, run) {
+    const targets = consumableGrowth({
+      name: 'website-probe',
+      setup: (database, _scale, id) => protocolRows(database, `${id}-`, 1, 1000, new Date('1990-01-01')),
+      async run(_database, scale, id) {
         const handle = await client.enqueue(
-          { workflowName: WEBSITE_MAINTENANCE_WORKFLOW, queueName: 'maintenance', workflowID: `website-probe-${run}` },
+          { workflowName: WEBSITE_MAINTENANCE_WORKFLOW, queueName: 'maintenance', workflowID: id },
           new Date(0),
           null,
         );
@@ -483,12 +397,27 @@ async function websiteGrowth(db: GrowthDatabase) {
         for (const table of protocolTables) {
           const key = table === 'auth_recent_oidc_session' ? 'session_id' : 'id';
           expect(
-            (await db.admin.query(`SELECT ${key} FROM ${table} WHERE ${key} LIKE $1`, [`probe-${run}-%`])).rowCount,
+            (await db.admin.query(`SELECT ${key} FROM ${table} WHERE ${key} LIKE $1`, [`${id}-%`])).rowCount,
           ).toBe(0);
+          for (const prefix of ['expired-', 'live-'])
+            expect((await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [`${prefix}%`])).rows[0].n).toBe(scale * 1000);
         }
       },
     });
-    for (const { cost } of report.samples) {
+    const report = await growth(db, {
+      name: 'registered website maintenance sweep with dispatch and step persistence',
+      // Five fixed batches of 1000, <=2000 candidates/kind, exact TID locks
+      // and deletes plus indexed FK probes and a constant number of DBOS writes.
+      bounds: fixed,
+      async grow(_, scale, previous) {
+        await protocolRows(db, 'expired-', previous * 1000 + 1, scale * 1000, new Date('2000-01-01'));
+        await protocolRows(db, 'live-', previous * 1000 + 1, scale * 1000, new Date('2099-01-01'));
+        await durableHistory(db, 'dbos', 'maintenance', 'website-history-', previous * 1000 + 1, scale * 1000);
+      },
+      ...targets.hooks,
+
+    });
+    for (const sample of report.samples) for (const cost of [sample.cost, ...sample.repetitions]) {
       expect(cost.statements).toBeGreaterThan(5);
       for (const table of [
         'oauthAccessToken',
