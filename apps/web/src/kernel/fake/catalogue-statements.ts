@@ -55,6 +55,8 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
       session: request.headers.get('rezics-session-token'),
     });
     if (path === '/v1/definitions/active') return json({ digest: definitions.digest, head: 1 });
+    // Generated clients percent-encode the digest's colon as a path parameter.
+    if (path === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`) return json(definitions);
     if (path === `/v1/definitions/releases/${definitions.digest}`) return json(definitions);
     if (path === `/v1/subjects/${base.id}/candidates` && request.method === 'POST') {
       if (!request.headers.has('authorization')) return json({ code: 'authentication_required' }, 401);
