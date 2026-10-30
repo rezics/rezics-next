@@ -804,9 +804,12 @@ digest through ordinary retractions/proposals, preserving native identity, immut
 independent editor Context selection. Unchanged input writes nothing; a current facts fence prevents the next
 source-only publication and hides sourced facts. No date mapping or native revision is invented.
 
-The bounded retention correction and callers are implemented. Local/compiler and managed native outcomes are
-recorded in the [verification notes](../research/imports-audit/source-only-provenance-refresh.md); this binding
-adds no growth series, full Imports closure or promotion claim. The confirmed VNDB statistic-only exception
+The bounded retention correction and callers are implemented. The single managed native acceptance passed
+with exit status 0 at `d1f050321ebc4f50af830ac4ef5cf14041d85303`. All eight requested local cases passed
+with 135 assertions, including the unchanged six source-statistic cases. The scoped importer compiler still
+reports only the three unchanged safety-test diagnostics recorded exactly in the
+[verification notes](../research/imports-audit/source-only-provenance-refresh.md). This binding adds no growth
+series, full Imports closure, main integration or promotion claim. The confirmed VNDB statistic-only exception
 retains its existing scope and acknowledgement requirements.
 
 ```sh

@@ -280,8 +280,12 @@ statistic effect; it does not become a generic source-metadata acknowledgement.
 The frozen [local caller](tests/source-only-provenance-refresh.test.ts), focused
 [partial-receipt/reopen caller](tests/source-provenance-recovery.test.ts), and
 [native ordinary CLI journey](../kernel/test/imports/source-only-provenance-refresh.test.ts) bind this outcome.
-[Evidence and limits](../../docs/research/imports-audit/source-only-provenance-refresh.md) record the actual results;
-native registration alone is not a passing receipt or promotion.
+The single managed native acceptance passed with exit status 0 at
+`d1f050321ebc4f50af830ac4ef5cf14041d85303`; the frozen caller proves changed source provenance,
+immutable native anchors, independent selection, unchanged no writes and current facts fencing.
+[Evidence and limits](../../docs/research/imports-audit/source-only-provenance-refresh.md) record the supplied
+receipt and the three unchanged importer safety-test compiler diagnostics. This scoped pass adds no growth,
+main integration or promotion claim.
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/source-only-provenance-refresh.test.ts

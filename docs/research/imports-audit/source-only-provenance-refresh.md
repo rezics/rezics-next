@@ -91,5 +91,23 @@ services/importer/tests/source-statistic-fence.test.ts(66,86): error TS2339: Pro
   Property 'subject' does not exist on type '{ state: "pending"; }'.
 ```
 
-The single managed native submission is pending. Its exact result will be recorded after execution; the
-source-derived failing sketch is not an execution receipt.
+## Managed native result
+
+The controller supplied the terminal result for the single managed invocation:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/source-only-provenance-refresh.test.ts
+```
+
+Tested revision: `d1f050321ebc4f50af830ac4ef5cf14041d85303`. Result: exit status 0, passed.
+The raw log receipt is `.temp/goal/checks/worker-check-2026-10-30T12-43-00.039Z-78f58d9c.log`.
+The supplied terminal record is the authority for this pass; no assertion count or infrastructure-rerun count
+was supplied, so neither is invented. The completed check was not polled or rerun.
+
+The unchanged frozen native caller therefore passed its real CLI changed-digest, fresh-proposal, old-owned
+retraction, immutable-receipt/bootstrap, independent-selection, unchanged-write and current-fence assertions.
+The fixture emits actual native claim/subject/candidate IDs, source digests and exact original receipts into the
+raw log; this document does not substitute fabricated anchors or modeled effects. No root/full-kernel or
+unrelated regression check was run. Final follow-up edits record this outcome only; they do not change the
+tested implementation, fixtures or frozen acceptance bytes. Main integration, broader growth and promotion
+remain unclaimed. The source-derived failing sketch remains a premise rather than a fabricated failing run.
