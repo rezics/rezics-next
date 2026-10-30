@@ -8,4 +8,6 @@ WITH captured AS MATERIALIZED (
   ) k
 )
 UPDATE semantic.identity_epoch_dirty d SET captured_revision=c.source_revision
-FROM captured c WHERE d.ctid=c.ctid;
+FROM captured c WHERE d.ctid=c.ctid
+  -- The exact locked physical keys also bound the target scan; the JSON estimate cannot select a history hash scan.
+  AND d.ctid=ANY(ARRAY(SELECT ctid FROM captured));

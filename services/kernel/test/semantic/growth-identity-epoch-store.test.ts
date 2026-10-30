@@ -131,7 +131,7 @@ async function seedNativeHistory() {
         for (const id of originals.slice(offset, offset + 32)) {
           const result = await writeSubject(tx, transactionId, {
             target: { route, id },
-            item: { type: 'schema:Person' },
+            item: { type: 'schema:Person', labels: { en: 'Native retained history' } },
             release,
           });
           events.push(...result.events);
