@@ -163,6 +163,7 @@ export async function runJourney() {
           source,
           active,
           pending: active ? session.store.pagePending(active, { limit: 100 }) : [],
+          staged: active ? feed.keys.map((key) => session.store.key(feed.source, key, active).staged) : [],
           records: feed.keys.map((key) => ({
             key,
             ...session.store.key(feed.source, key),
@@ -247,7 +248,8 @@ export async function runJourney() {
               observed += size;
               expect(backing).toBe(size);
             },
-            onVndbStore({ store }) {
+            onVndbStore({ importer, store }) {
+              coordinator = importer;
               const page = store.page.bind(store);
               store.page = (...args) => {
                 const value = page(...args);
@@ -535,6 +537,8 @@ export async function runJourney() {
       const drained = inspect(feed);
       expect(drained.active).toBeNull();
       expect(drained.pending).toEqual([]);
+      expect(drained.source.generation).toBe(pending.active!.id);
+      expect(drained.records.map((record) => record.baseline)).toEqual(pending.staged.map((record) => record!.row));
       expect(drained.records[0]!.baseline!.recordRevision).toBe(
         String(feed.source === 'vndb' ? 8 : entity.lastrevid + 1),
       );
@@ -556,6 +560,8 @@ export async function runJourney() {
       const invalidFresh = await invoke(feed, malformed);
       expect(invalidFresh.code).toBe(2);
       expect(invalidFresh.captured).toEqual([]);
+      expect(invalidFresh.authPaths).toEqual([]);
+      expect(invalidFresh.consumed).toBeGreaterThan(0);
       const invalidAfter = inspect(feed);
       expect(invalidAfter.source).toEqual(invalidBefore.source);
       expect(invalidAfter.records).toEqual(invalidBefore.records);
