@@ -4033,8 +4033,8 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 description: string | null;
                                 visibility: "private";
                                 revision: number;
-                                presentationKind: null;
-                                presentationKindSource: "empty";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
                                 cover: null;
                                 coverSource: "none";
                             } | {

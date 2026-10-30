@@ -23,6 +23,21 @@ SET row_security = off;
 CREATE SCHEMA zones;
 
 
+--
+-- Name: record_purge_generation(); Type: FUNCTION; Schema: zones; Owner: -
+--
+
+CREATE FUNCTION zones.record_purge_generation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.state='deleted' AND OLD.state='active' THEN
+  NEW.deletion_generation:=gen_random_uuid();NEW.deletion_transaction_id:=NEW.transaction_id;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -53,6 +68,8 @@ CREATE TABLE zones.zone (
     creation_transaction_id uuid NOT NULL,
     transaction_id uuid NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    deletion_generation uuid,
+    deletion_transaction_id uuid,
     CONSTRAINT zone_check CHECK ((route = ((get_byte(uuid_send(zone_id), 10) * 256) + get_byte(uuid_send(zone_id), 11)))),
     CONSTRAINT zone_check1 CHECK (((owner_id IS NULL) OR (route = ((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11))))),
     CONSTRAINT zone_check2 CHECK (((deleted_at IS NULL) = (restore_until IS NULL))),
@@ -88,6 +105,13 @@ CREATE INDEX zone_owner_keys ON zones.zone USING btree (route, owner_id, state, 
 
 
 --
+-- Name: zone_record_retention_due; Type: INDEX; Schema: zones; Owner: -
+--
+
+CREATE INDEX zone_record_retention_due ON zones.zone USING btree (route, zone_id) WHERE (state = 'deleted'::text);
+
+
+--
 -- Name: zone zone_erasure_capture; Type: TRIGGER; Schema: zones; Owner: -
 --
 
@@ -95,29 +119,42 @@ CREATE CONSTRAINT TRIGGER zone_erasure_capture AFTER INSERT OR UPDATE ON zones.z
 
 
 --
+-- Name: zone zone_record_purge_commit; Type: TRIGGER; Schema: zones; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER zone_record_purge_commit AFTER UPDATE ON zones.zone DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.resource_record_purge_commit();
+
+
+--
+-- Name: zone zone_record_purge_gate; Type: TRIGGER; Schema: zones; Owner: -
+--
+
+CREATE TRIGGER zone_record_purge_gate BEFORE DELETE OR UPDATE ON zones.zone FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_gate();
+
+
+--
+-- Name: zone zone_record_purge_generation; Type: TRIGGER; Schema: zones; Owner: -
+--
+
+CREATE TRIGGER zone_record_purge_generation BEFORE UPDATE ON zones.zone FOR EACH ROW EXECUTE FUNCTION zones.record_purge_generation();
+
+
+--
+-- Name: zone zone_record_purge_writer; Type: TRIGGER; Schema: zones; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER zone_record_purge_writer AFTER INSERT OR UPDATE ON zones.zone DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_resource_writer();
+
+
+--
+-- Name: zone zone_record_retention; Type: TRIGGER; Schema: zones; Owner: -
+--
+
+CREATE TRIGGER zone_record_retention AFTER INSERT OR UPDATE OF state, deleted_at ON zones.zone FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 
-
-CREATE TRIGGER zone_record_retention AFTER INSERT OR UPDATE OF state,deleted_at ON zones.zone
- FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
-CREATE INDEX zone_record_retention_due ON zones.zone(route,zone_id) WHERE state='deleted';
-
-ALTER TABLE zones.zone ADD COLUMN deletion_generation uuid;
-ALTER TABLE zones.zone ADD COLUMN deletion_transaction_id uuid;
-CREATE FUNCTION zones.record_purge_generation() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF NEW.state='deleted' AND OLD.state='active' THEN
-  NEW.deletion_generation:=gen_random_uuid();NEW.deletion_transaction_id:=NEW.transaction_id;
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER zone_record_purge_generation BEFORE UPDATE ON zones.zone
- FOR EACH ROW EXECUTE FUNCTION zones.record_purge_generation();
-CREATE CONSTRAINT TRIGGER zone_record_purge_commit AFTER UPDATE ON zones.zone
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.resource_record_purge_commit();
-CREATE TRIGGER zone_record_purge_gate BEFORE UPDATE OR DELETE ON zones.zone
- FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_gate();
-CREATE CONSTRAINT TRIGGER zone_record_purge_writer AFTER INSERT OR UPDATE ON zones.zone
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_resource_writer();

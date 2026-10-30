@@ -124,8 +124,8 @@ export declare const collectionReadSchema: import("typebox").TUnion<[import("typ
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TLiteral<"private">;
     revision: import("typebox").TInteger;
-    presentationKind: import("typebox").TNull;
-    presentationKindSource: import("typebox").TLiteral<"empty">;
+    presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
     cover: import("typebox").TNull;
     coverSource: import("typebox").TLiteral<"none">;
 } & {
@@ -274,8 +274,8 @@ export declare const collectionResourceSchema: import("typebox").TUnion<[import(
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TLiteral<"private">;
     revision: import("typebox").TInteger;
-    presentationKind: import("typebox").TNull;
-    presentationKindSource: import("typebox").TLiteral<"empty">;
+    presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
     cover: import("typebox").TNull;
     coverSource: import("typebox").TLiteral<"none">;
 }>]>;
@@ -4405,8 +4405,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 response: {
                     200: {
                         collection: {
-                            presentationKind: string | null;
-                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
+                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
                             cover: import("../semantic/summaries.ts").CoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
@@ -4417,8 +4417,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             revision: number;
                             membershipKind: 'dynamic';
                         } | {
-                            presentationKind: string | null;
-                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
+                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
                             cover: import("../semantic/summaries.ts").CoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
@@ -4433,8 +4433,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             createdAt: string;
                             updatedAt: string;
                         } | {
-                            presentationKind: string | null;
-                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
+                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
                             cover: import("../semantic/summaries.ts").CoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
@@ -4446,8 +4446,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             membershipKind: 'dynamic';
                             coverMediaId: string;
                         } | {
-                            presentationKind: string | null;
-                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
+                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
                             cover: import("../semantic/summaries.ts").CoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
@@ -4527,8 +4527,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             description: string | null;
                             visibility: "private";
                             revision: number;
-                            presentationKind: null;
-                            presentationKindSource: "empty";
+                            presentationKind: string | null;
+                            presentationKindSource: "empty" | "members" | "owner" | "pending";
                             cover: null;
                             coverSource: "none";
                         } | {
@@ -4802,8 +4802,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             description: string | null;
                             visibility: "private";
                             revision: number;
-                            presentationKind: null;
-                            presentationKindSource: "empty";
+                            presentationKind: string | null;
+                            presentationKindSource: "empty" | "members" | "owner" | "pending";
                             cover: null;
                             coverSource: "none";
                             previewMembers?: {
@@ -5125,8 +5125,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private";
                                     revision: number;
-                                    presentationKind: null;
-                                    presentationKindSource: "empty";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
                                     cover: null;
                                     coverSource: "none";
                                 } | {
@@ -5367,8 +5367,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 description: string | null;
                                 visibility: "private";
                                 revision: number;
-                                presentationKind: null;
-                                presentationKindSource: "empty";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
                                 cover: null;
                                 coverSource: "none";
                             } | {
@@ -5602,8 +5602,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private";
                                     revision: number;
-                                    presentationKind: null;
-                                    presentationKindSource: "empty";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
                                     cover: null;
                                     coverSource: "none";
                                 } | {
@@ -5835,8 +5835,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 description: string | null;
                                 visibility: "private";
                                 revision: number;
-                                presentationKind: null;
-                                presentationKindSource: "empty";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
                                 cover: null;
                                 coverSource: "none";
                             } | {
@@ -6185,8 +6185,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private";
                                     revision: number;
-                                    presentationKind: null;
-                                    presentationKindSource: "empty";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
                                     cover: null;
                                     coverSource: "none";
                                 } | {

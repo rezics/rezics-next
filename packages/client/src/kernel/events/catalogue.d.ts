@@ -967,6 +967,10 @@ declare const productEventTypes: {
         takenDownAt: Type.TOptional<Type.TString>;
         takedownId: Type.TOptional<Type.TString>;
     }>;
+    readonly 'com.rezics.content.edition.creator-indexed.v1': Type.TObject<{
+        editionId: Type.TString;
+        creatorAccountId: Type.TString;
+    }>;
     readonly 'com.rezics.content.edition.created.v1': Type.TObject<{
         editionId: Type.TString;
         editionRevision: Type.TString;

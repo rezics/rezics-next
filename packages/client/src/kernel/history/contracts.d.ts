@@ -224,6 +224,10 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     }>;
     'com.rezics.content.author-erasure.requested.v1': EventClassification;
     'com.rezics.content.author-item.projected.v1': EventClassification;
+    'com.rezics.content.edition.created.v1': EventClassification;
+    'com.rezics.content.edition.published.v1': EventClassification;
+    'com.rezics.content.edition.unpublished.v1': EventClassification;
+    'com.rezics.content.edition.creator-indexed.v1': EventClassification;
     'com.rezics.content.authored-field.created.v1': EventClassification;
     'com.rezics.content.authored-field.erased.v1': EventClassification;
     'com.rezics.content.board-thread.projected.v1': Readonly<{
@@ -327,6 +331,14 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         roles: readonly [];
     }>;
     'com.rezics.semantic.context.created.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
+    'com.rezics.semantic.record.deleted.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
+    'com.rezics.semantic.record.restored.v1': Readonly<{
         kind: 'non-personal';
         roles: readonly [];
     }>;
