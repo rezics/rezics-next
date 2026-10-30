@@ -737,7 +737,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       basis: { clientId: CLIENT_ID, requestedBy: null },
     };
     const kind = 'community.realm.membership.cancel';
-    return runCommand(
+    return runCommand<unknown>(
       pool,
       {
         ...identity,
