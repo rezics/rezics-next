@@ -21,7 +21,10 @@ export const COMMERCE_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.commerce.money.observed.v1': Type.Object(
-    { orderId: id, transactionIds: Type.Array(Type.String({ pattern: '^txn_.+$' }), { maxItems: 256, uniqueItems: true }) },
+    {
+      orderId: id,
+      transactionIds: Type.Array(Type.String({ pattern: '^txn_.+$' }), { maxItems: 256, uniqueItems: true }),
+    },
     { additionalProperties: false },
   ),
   'com.rezics.commerce.transactions.recorded.v1': Type.Object(

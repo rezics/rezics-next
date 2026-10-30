@@ -63,7 +63,12 @@ function currency(value: string | null): value is string {
 }
 
 // https://docs.stripe.com/api/balance_transactions/object: preserve Stripe's settlement amounts, fees and FX rate.
-function transaction(balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string, provenance: StripeMoneyProvenance): StripeTransaction {
+function transaction(
+  balance: Stripe.BalanceTransaction,
+  kind: TransactionKind,
+  sourceId: string,
+  provenance: StripeMoneyProvenance,
+): StripeTransaction {
   evidence(
     balance.object === 'balance_transaction' &&
       validId(balance.id, 'txn_') &&
@@ -352,29 +357,43 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
         const remember = (page: Stripe.ApiList<{ id: string }>) => {
           for (const item of page.data) versions.set(item.id, responseApiVersion(page));
         };
-        const lineage = (objectId: string, object: StripeMoneyProvenance['object'], context: StripeMoneyProvenance['context'], responseVersion: string | null): StripeMoneyProvenance => ({
-          accountNamespace: config.accountNamespace ?? 'direct', livemode: session.livemode,
-          objectId, object, context, requestApiVersion, responseApiVersion: responseVersion,
+        const lineage = (
+          objectId: string,
+          object: StripeMoneyProvenance['object'],
+          context: StripeMoneyProvenance['context'],
+          responseVersion: string | null,
+        ): StripeMoneyProvenance => ({
+          accountNamespace: config.accountNamespace ?? 'direct',
+          livemode: session.livemode,
+          objectId,
+          object,
+          context,
+          requestApiVersion,
+          responseApiVersion: responseVersion,
         });
         const refunds = intent
-          ? await boundedList(100, (limit, after) =>
-              stripe.refunds.list({
-                payment_intent: intent.id,
-                limit,
-                ...(after ? { starting_after: after } : {}),
-                expand: ['data.balance_transaction', 'data.failure_balance_transaction'],
-              }),
+          ? await boundedList(
+              100,
+              (limit, after) =>
+                stripe.refunds.list({
+                  payment_intent: intent.id,
+                  limit,
+                  ...(after ? { starting_after: after } : {}),
+                  expand: ['data.balance_transaction', 'data.failure_balance_transaction'],
+                }),
               remember,
             )
           : [];
         const disputes = intent
-          ? await boundedList(10, (limit, after) =>
-              stripe.disputes.list({
-                payment_intent: intent.id,
-                limit,
-                ...(after ? { starting_after: after } : {}),
-                expand: ['data.balance_transactions'],
-              }),
+          ? await boundedList(
+              10,
+              (limit, after) =>
+                stripe.disputes.list({
+                  payment_intent: intent.id,
+                  limit,
+                  ...(after ? { starting_after: after } : {}),
+                  expand: ['data.balance_transactions'],
+                }),
               remember,
             )
           : [];
@@ -442,12 +461,24 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
         }
         const transactions: StripeTransaction[] = [];
         const transactionIds = new Set<string>();
-        const addTransaction = (balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string, version: string | null) => {
+        const addTransaction = (
+          balance: Stripe.BalanceTransaction,
+          kind: TransactionKind,
+          sourceId: string,
+          version: string | null,
+        ) => {
           if (transactions.length === MAX_ORDER_TRANSACTIONS)
             throw new StripeUnavailableError('Stripe transaction limit exceeded');
           evidence(!transactionIds.has(balance.id), 'balance transaction identity repeated');
           transactionIds.add(balance.id);
-          transactions.push(transaction(balance, kind, sourceId, lineage(balance.id, 'balance_transaction', 'balance_transaction', version)));
+          transactions.push(
+            transaction(
+              balance,
+              kind,
+              sourceId,
+              lineage(balance.id, 'balance_transaction', 'balance_transaction', version),
+            ),
+          );
         };
         const chargeBalance = charge ? expanded(charge.balance_transaction) : null;
         if (charge && chargeBalance) addTransaction(chargeBalance, 'charge', charge.id, responseApiVersion(session));
@@ -461,18 +492,32 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
         // https://docs.stripe.com/api/disputes/object: balance_transactions includes withdrawals and reinstatements.
         for (const dispute of disputes) {
           for (const balance of dispute.balance_transactions) {
-            addTransaction(balance, balance.amount < 0 ? 'dispute' : 'dispute_reversal', dispute.id, versions.get(dispute.id) ?? null);
+            addTransaction(
+              balance,
+              balance.amount < 0 ? 'dispute' : 'dispute_reversal',
+              dispute.id,
+              versions.get(dispute.id) ?? null,
+            );
           }
         }
         assertTransactionBound(transactions);
         const local = session.presentment_details;
-        evidence(!local || (currency(local.presentment_currency) && minor(local.presentment_amount)), 'presentment amounts are inconsistent');
+        evidence(
+          !local || (currency(local.presentment_currency) && minor(local.presentment_amount)),
+          'presentment amounts are inconsistent',
+        );
         const snapshot: CheckoutSnapshot = {
-          integrationMoneyUnit: session.currency === null ? null : stripeEvidenceMoneyUnit(session.currency, 'checkout.integration'),
+          integrationMoneyUnit:
+            session.currency === null ? null : stripeEvidenceMoneyUnit(session.currency, 'checkout.integration'),
           providerApiVersion: responseApiVersion(session) ?? requestApiVersion,
           moneyProvenance: lineage(session.id, 'checkout.session', 'checkout.integration', responseApiVersion(session)),
-          presentment: local ? { currency: local.presentment_currency, amountMinor: local.presentment_amount,
-            moneyUnit: stripeEvidenceMoneyUnit(local.presentment_currency, 'checkout.presentment') } : null,
+          presentment: local
+            ? {
+                currency: local.presentment_currency,
+                amountMinor: local.presentment_amount,
+                moneyUnit: stripeEvidenceMoneyUnit(local.presentment_currency, 'checkout.presentment'),
+              }
+            : null,
           sessionId: session.id,
           clientReferenceId: session.client_reference_id,
           metadataOrderId: session.metadata?.order_id ?? null,

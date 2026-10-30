@@ -3,7 +3,10 @@ import { movementEconomics, MovementIntegrityError } from './settlement.ts';
 import { recordedMoneyUnit, sameMoneyUnit, type StripeMoneyUnit } from './money.ts';
 
 export class MoneyInterpretationUnavailable extends Error {
-  constructor() { super('Royalty money interpretation unavailable'); this.name = 'MoneyInterpretationUnavailable'; }
+  constructor() {
+    super('Royalty money interpretation unavailable');
+    this.name = 'MoneyInterpretationUnavailable';
+  }
 }
 
 export type RoyaltyLine = {
@@ -46,9 +49,15 @@ function ceiling(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator - 1n) / denominator;
 }
 
-function convertedTax(tax: bigint, from: string, fromUnit: StripeMoneyUnit | null | undefined, transaction: StripeTransaction): bigint {
+function convertedTax(
+  tax: bigint,
+  from: string,
+  fromUnit: StripeMoneyUnit | null | undefined,
+  transaction: StripeTransaction,
+): bigint {
   if (tax === 0n) return tax;
-  if (!recordedMoneyUnit(fromUnit) || !recordedMoneyUnit(transaction.moneyUnit)) throw new MoneyInterpretationUnavailable();
+  if (!recordedMoneyUnit(fromUnit) || !recordedMoneyUnit(transaction.moneyUnit))
+    throw new MoneyInterpretationUnavailable();
   if (from === transaction.currency) {
     if (!sameMoneyUnit(fromUnit, transaction.moneyUnit)) throw new MoneyInterpretationUnavailable();
     return tax;
@@ -66,7 +75,10 @@ function convertedTax(tax: bigint, from: string, fromUnit: StripeMoneyUnit | nul
   const denominator = 10n ** BigInt(Math.max(0, -power));
   // Assumption: the API above defines the rate, not rounding for an allocated tax component.
   // Reserve the next whole settlement minor unit so rounding cannot overpay the creator.
-  return ceiling(tax * numerator * 10n ** BigInt(transaction.moneyUnit!.exponent), denominator * 10n ** BigInt(fromUnit!.exponent));
+  return ceiling(
+    tax * numerator * 10n ** BigInt(transaction.moneyUnit!.exponent),
+    denominator * 10n ** BigInt(fromUnit!.exponent),
+  );
 }
 
 /** snapshotTax is Checkout total_details.amount_tax, in the Session's integration currency. */

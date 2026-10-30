@@ -21,7 +21,13 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { recordedMoneyUnit, sameMoneyUnit } from './money.ts';
 import { checkoutIntegrationMoney } from './money-observation.ts';
 import type { TransactionKind } from './model.ts';
-import { statementPeriod, royaltyLines, MoneyInterpretationUnavailable, type RoyaltyLine, type StatementTotal } from './royalty.ts';
+import {
+  statementPeriod,
+  royaltyLines,
+  MoneyInterpretationUnavailable,
+  type RoyaltyLine,
+  type StatementTotal,
+} from './royalty.ts';
 import { readOrder, readNamedOrderTransactions } from './store.ts';
 import retainedUnits from './payout-retained-units.sql';
 import record from './payout-record.sql';
@@ -233,7 +239,12 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
     const transactions = await readNamedOrderTransactions(pool, buyerRoute, orderId, ids);
     if (transactions.length !== ids.length) throw new MoneyInterpretationUnavailable();
     const integration = await checkoutIntegrationMoney(pool, buyerRoute, order);
-    const lines = royaltyLines(order, integration?.amountTaxMinor ?? order.amountTaxMinor ?? null, transactions, integration?.moneyUnit);
+    const lines = royaltyLines(
+      order,
+      integration?.amountTaxMinor ?? order.amountTaxMinor ?? null,
+      transactions,
+      integration?.moneyUnit,
+    );
     if (!lines.length) return { changed: false };
     const route = routeOf(order.creatorAccountId)!;
     try {
@@ -264,7 +275,12 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           const existing = await retainedUnits.run(tx, { route, ids });
           for (const row of existing) {
             const line = lines.find((line) => line.balanceTransactionId === row.id)!;
-            if (!sameMoneyUnit(row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)), line.moneyUnit))
+            if (
+              !sameMoneyUnit(
+                row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
+                line.moneyUnit,
+              )
+            )
               throw new MoneyInterpretationUnavailable();
           }
           const rows = await record.run(tx, {
@@ -310,8 +326,13 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
       if (error instanceof Unchanged) return { changed: false };
       // The exact-key conflict branch reaches the existing immutable-row guard, never an overwrite.
       // Serialization errors remain native retry signals; unrelated constraint failures propagate.
-      if (error instanceof Error && 'code' in error && error.code === '23514' &&
-          error.message === 'Statement money interpretation unavailable') throw new MoneyInterpretationUnavailable();
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === '23514' &&
+        error.message === 'Statement money interpretation unavailable'
+      )
+        throw new MoneyInterpretationUnavailable();
       if (
         error instanceof Error &&
         'code' in error &&
@@ -357,7 +378,8 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
         if (!current) throw notFound();
         const at = authoritativeTimeValue(command.time),
           period = statementPeriod(at);
-        if (current.moneyUnit === null || !recordedMoneyUnit(JSON.parse(current.moneyUnit))) throw new MoneyInterpretationUnavailable();
+        if (current.moneyUnit === null || !recordedMoneyUnit(JSON.parse(current.moneyUnit)))
+          throw new MoneyInterpretationUnavailable();
         if (current.state !== 'open' || current.period >= period) throw new ProblemError('conflict');
         const row = await paid.run(tx, { route, id, at, period, reference: paidReference });
         if (!row) throw new ProblemError('conflict');

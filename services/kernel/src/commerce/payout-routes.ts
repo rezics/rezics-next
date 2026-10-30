@@ -18,10 +18,19 @@ import { createPayouts, listPayoutLines, listPayoutStatements, readPayoutStateme
 
 const amount = t.Integer({ minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER });
 const id = t.String({ format: 'uuid' });
-const moneyUnit = t.Optional(t.Union([t.Object({
-  system: t.Literal('stripe-api'), exponent: t.Union([t.Literal(0), t.Literal(2)]),
-  factsVersion: t.Literal('stripe-money-v1'),
-}, { additionalProperties: false }), t.Null()]));
+const moneyUnit = t.Optional(
+  t.Union([
+    t.Object(
+      {
+        system: t.Literal('stripe-api'),
+        exponent: t.Union([t.Literal(0), t.Literal(2)]),
+        factsVersion: t.Literal('stripe-money-v1'),
+      },
+      { additionalProperties: false },
+    ),
+    t.Null(),
+  ]),
+);
 const statement = t.Object(
   {
     id,

@@ -917,39 +917,62 @@ export function createCommerceCommands(config: {
             decision.newTransactions.length === 0
           )
             decision = { changed: false };
-          if (!claim && state.order.observedAt !== null && Date.parse(snapshot.observedAt) < Date.parse(state.order.observedAt))
+          if (
+            !claim &&
+            state.order.observedAt !== null &&
+            Date.parse(snapshot.observedAt) < Date.parse(state.order.observedAt)
+          )
             throw new Unchanged();
           const businessChanged = decision.changed;
           let applied: Extract<store.AppliedCheckoutDecision, { changed: true }>;
           if (decision.changed) {
             const result = await store.applyCheckoutDecision(tx, r, state, decision, {
-            transactionId: command.transactionId,
-            time: authoritativeTimeValue(command.time),
-            newEntitlementId: newId(r),
-            amountTaxMinor: snapshot.amountTaxMinor,
-          });
+              transactionId: command.transactionId,
+              time: authoritativeTimeValue(command.time),
+              newEntitlementId: newId(r),
+              amountTaxMinor: snapshot.amountTaxMinor,
+            });
             if (!result.changed) throw new Unchanged();
             applied = result;
           } else {
-            applied = { changed: true, order: state.order, entitlement: state.entitlement,
-              entitlementAction: { kind: 'none' }, newTransactions: [] };
+            applied = {
+              changed: true,
+              order: state.order,
+              entitlement: state.entitlement,
+              entitlementAction: { kind: 'none' },
+              newTransactions: [],
+            };
           }
-          const observations = permitsBenefits ? await appendCheckoutMoneyObservations(tx, r, applied.order, snapshot, {
-            transactionId: command.transactionId, time: authoritativeTimeValue(command.time),
-          }) : [];
+          const observations = permitsBenefits
+            ? await appendCheckoutMoneyObservations(tx, r, applied.order, snapshot, {
+                transactionId: command.transactionId,
+                time: authoritativeTimeValue(command.time),
+              })
+            : [];
           if (!businessChanged) {
             if (!observations.length) throw new Unchanged();
-            const row = await metadataUpdate.run(tx, { route: r, id, revision: state.order.revision,
-              observed_at: snapshot.observedAt, at: authoritativeTimeValue(command.time), transaction_id: command.transactionId });
+            const row = await metadataUpdate.run(tx, {
+              route: r,
+              id,
+              revision: state.order.revision,
+              observed_at: snapshot.observedAt,
+              at: authoritativeTimeValue(command.time),
+              transaction_id: command.transactionId,
+            });
             if (!row) throw new SupersededRefresh();
-            applied = { ...applied, order: { ...applied.order, revision: row.revision, observedAt: snapshot.observedAt },
-              moneyMetadataChanged: true };
+            applied = {
+              ...applied,
+              order: { ...applied.order, revision: row.revision, observedAt: snapshot.observedAt },
+              moneyMetadataChanged: true,
+            };
           }
           const events: CommandEvent[] = [updated(id, applied.order.revision)];
-          if (observations.length) events.push({
-            type: 'com.rezics.commerce.money.observed.v1', subject: id,
-            data: { orderId: id, transactionIds: [...new Set(snapshot.transactions.map((t) => t.id))] },
-          });
+          if (observations.length)
+            events.push({
+              type: 'com.rezics.commerce.money.observed.v1',
+              subject: id,
+              data: { orderId: id, transactionIds: [...new Set(snapshot.transactions.map((t) => t.id))] },
+            });
           if (applied.newTransactions.length)
             events.push({
               type: 'com.rezics.commerce.transactions.recorded.v1',

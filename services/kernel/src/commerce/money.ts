@@ -123,7 +123,8 @@ export function sameMoneyUnit(a: StripeMoneyUnit | null | undefined, b: StripeMo
 export function recordedMoneyUnit(value: unknown): StripeMoneyUnit | null {
   if (typeof value !== 'object' || value === null) return null;
   const unit = value as Record<string, unknown>;
-  return unit.system === 'stripe-api' && (unit.exponent === 0 || unit.exponent === 2) &&
+  return unit.system === 'stripe-api' &&
+    (unit.exponent === 0 || unit.exponent === 2) &&
     unit.factsVersion === 'stripe-money-v1'
     ? { system: 'stripe-api', exponent: unit.exponent, factsVersion: 'stripe-money-v1' }
     : null;
