@@ -1,5 +1,14 @@
 import type { Pool, PoolClient } from 'pg';
 import { requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
+import {
+  closeCredentialConsumer,
+  registrationTerminal,
+  recoveryTerminal,
+  nativeRequestTerminal,
+  continueNativeConsumer,
+  type NativeConsumerRuntime,
+  type NativeConsumerLocator,
+} from './erasure-consumers.ts';
 
 // 48 locators of at most 1 KiB leave room for the progress anchor under 64 KiB.
 export const ERASURE_PAGE_SIZE = 48;
@@ -197,7 +206,13 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
     await connection.query<{ key: string }>(
       `SELECT CASE WHEN octet_length(${quote(store.key)})<=1024 THEN ${quote(store.key)} END AS key FROM ${quote(store.table)}
      WHERE ${quote(role)}=$1 AND ${quote(store.key)}>$2 ORDER BY ${quote(store.key)} LIMIT $3 FOR UPDATE`,
-      [owner, after, ERASURE_PAGE_SIZE],
+      [
+        owner,
+        after,
+        store.table === 'auth_provisioning_receipt' || store.table === 'auth_client_reduction_progress'
+          ? ERASURE_PAGE_SIZE - 2
+          : ERASURE_PAGE_SIZE,
+      ],
     )
   ).rows;
   let keys = 0;
@@ -213,17 +228,17 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
     if (store.table === 'auth_registration_stage') {
       const held = await connection.query(
         `SELECT 1 FROM auth_registration_stage WHERE registration_id=$1
-        AND completed_at IS NULL AND expired_at IS NULL AND erasure_release_at IS NULL`,
+        AND completed_at IS NULL AND expired_at IS NULL`,
         [key],
       );
-      if (held.rowCount) {
+      if (held.rowCount && !(await registrationTerminal(connection, key))) {
         // The release consumer needs the native reservation witness, not the
         // encrypted credential. A fenced producer cannot install it again.
         await connection.query(
           'UPDATE auth_registration_stage SET ciphertext=NULL,credential_digest=NULL WHERE registration_id=$1',
           [key],
         );
-        return { after, keys, blocked: 'native-stage' };
+        return { after, keys, blocked: 'native-stage', held: { store: store.table, key } };
       }
     }
     if (store.table === 'auth_workflow_request') {
@@ -231,50 +246,42 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
         'SELECT 1 FROM auth_workflow_request WHERE workflow_id=$1 AND terminal_at IS NULL',
         [key],
       );
-      if (held.rowCount) return { after, keys, blocked: 'native-request' };
+      if (held.rowCount && !(await nativeRequestTerminal(connection, key)))
+        return { after, keys, blocked: 'native-request' };
     }
     if (store.table === 'auth_client_reduction_progress') {
       const held = await connection.query(
         'SELECT 1 FROM auth_client_reduction_progress WHERE operation_id=$1 AND NOT completed',
         [key],
       );
-      if (held.rowCount) return { after, keys, blocked: 'native-release' };
+      if (held.rowCount) return { after, keys, blocked: 'native-release', held: { store: store.table, key } };
     }
     if (store.table === 'auth_effect_receipt') {
-      // The immutable committed result is written with the credential CAS only
-      // after the real opening/floor consumer has returned and been revalidated.
-      // Establishment children were checked above. An unfinished surviving
-      // subject's stage still needs its consumer's terminal-refusal proof.
-      const held = await connection.query(
-        `SELECT 1 FROM auth_effect_receipt r WHERE receipt_id=$1
-         AND stage_version IS NOT NULL AND committed_at IS NULL
-         AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)`,
+      const staged = await connection.query(
+        'SELECT 1 FROM auth_effect_receipt WHERE receipt_id=$1 AND stage_version IS NOT NULL',
         [key],
       );
-      if (held.rowCount) return { after, keys, blocked: 'native-release' };
+      if (staged.rowCount && !(await closeCredentialConsumer(connection, key)))
+        return { after, keys, blocked: 'native-release' };
     }
     if (store.table === 'auth_provisioning_receipt') {
       // A surviving subject's activation/release can still consume the immutable
       // provisioning witness. Its exact native stage supplies the terminal proof.
       const held = await connection.query(
         `SELECT 1 FROM auth_provisioning_receipt r WHERE idempotency_key=$1
-         AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)
          AND NOT EXISTS (SELECT 1 FROM auth_registration_stage s WHERE s.registration_id=r.erasure_stage_id
-           AND (s.completed_at IS NOT NULL OR s.expired_at IS NOT NULL OR s.erasure_release_at IS NOT NULL))`,
+           AND (s.completed_at IS NOT NULL OR s.expired_at IS NOT NULL
+             OR EXISTS (SELECT 1 FROM auth_native_consumer_proof p WHERE p.store='registration' AND p.key=s.registration_id
+               AND p.binding=jsonb_build_array(s.registration_id,s.consumer_workflow_id,s.activation_key,s.account_id,
+                 s.handle,s.reservation_id,s.erasure_operator_id,s.operator_reservation_id))))`,
         [key],
       );
-      if (held.rowCount) return { after, keys, blocked: 'native-release' };
+      if (held.rowCount) return { after, keys, blocked: 'native-release', held: { store: store.table, key } };
     }
-    // A surviving subject's live recovery release still owns its witness. Expiry
-    // makes this native verifier unusable; no shared-history completion is inferred.
-    if (store.table === 'auth_recovery_establishment') {
-      const held = await connection.query(
-        `SELECT 1 FROM auth_barrier_proof p WHERE p.reference=$1 AND p.expires_at>statement_timestamp()
-         AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=p.account_id)`,
-        [key],
-      );
-      if (held.rowCount) return { after, keys, blocked: 'native-release' };
-    }
+    // A verifier's expiry is not the source consumer's completion. Keep the
+    // exact establishment until its actual source release or terminal refusal.
+    if (store.table === 'auth_recovery_establishment' && !(await recoveryTerminal(connection, key)))
+      return { after, keys, blocked: 'native-release', held: { store: store.table, key } };
     await connection.query(`DELETE FROM ${quote(store.table)} WHERE ${quote(store.key)}=$1 AND ${quote(role)}=$2`, [
       key,
       owner,
@@ -307,8 +314,9 @@ async function checkpoint(
 /** Exactly one native store/role or one client/store page per transaction. The
  * only input/output crossing workflow history is an opaque progress id/code.
  */
-export async function nativeErasurePage(pool: Pool, id: string): Promise<ErasurePage> {
-  return transaction(pool, async (connection) => {
+export async function nativeErasurePage(pool: Pool, id: string, runtime?: NativeConsumerRuntime): Promise<ErasurePage> {
+  let held: NativeConsumerLocator | undefined;
+  const result = await transaction(pool, async (connection) => {
     const row = (await connection.query<Obligation>('SELECT * FROM auth_erasure WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!row) throw new Error('Auth erasure obligation missing');
     // Consent is the caller's durable user-deletion checkpoint, not a one-time
@@ -357,6 +365,7 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       const store = clientPhases[row.client_phase];
       if (store) {
         const page = await drainStore(connection, store, store.client!, row.client_id, row.after_key);
+        held = page.held;
         await checkpoint(connection, row, {
           after: page.keys || page.blocked ? page.after : '',
           clientPhase: row.client_phase + (page.keys || page.blocked ? 0 : 1),
@@ -389,6 +398,7 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
     const phase = subjectPhases[row.phase - 1];
     if (phase) {
       const page = await drainStore(connection, phase.store, phase.role, row.account_id, row.after_key);
+      held = page.held;
       if (page.keys) await connection.query('UPDATE auth_erasure SET applicable=true WHERE id=$1', [id]);
       await checkpoint(connection, row, {
         phase: row.phase + (page.keys || page.blocked ? 0 : 1),
@@ -473,7 +483,10 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       ).rows;
       if (requests.length) await connection.query('UPDATE auth_erasure SET applicable=true WHERE id=$1', [id]);
       for (const request of requests) {
-        if (!request.terminal_at) {
+        if (
+          !request.terminal_at &&
+          !(request.workflow_id && (await nativeRequestTerminal(connection, request.workflow_id)))
+        ) {
           await checkpoint(connection, row, { code: 'native-request' });
           return answer('pending', 'native-request');
         }
@@ -499,12 +512,17 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       row.consent_completed_at ? 'shared-copy-custody' : 'consent',
     );
   });
+  // The source-local page transaction has committed and released its only slot.
+  // An interrupted reply resumes this same raw key and original source command.
+  if (held && runtime && (await continueNativeConsumer(pool, id, held, runtime)))
+    return { id, state: result.state === 'consent' ? 'consent' : 'more', code: result.code };
+  return result;
 }
 
 /** Native scheduling survives deletion of every DBOS row. A tick does one page;
  * a pending owner cannot starve later owners because the revision rotates it.
  */
-export async function redriveNativeErasure(pool: Pool): Promise<number> {
+export async function redriveNativeErasure(pool: Pool, runtime?: NativeConsumerRuntime): Promise<number> {
   const next = (
     await pool.query<{ id: string }>(
       `SELECT id FROM auth_erasure WHERE native_completed_at IS NULL
@@ -512,6 +530,6 @@ export async function redriveNativeErasure(pool: Pool): Promise<number> {
     )
   ).rows[0];
   if (!next) return 0;
-  await nativeErasurePage(pool, next.id);
+  await nativeErasurePage(pool, next.id, runtime);
   return 1;
 }

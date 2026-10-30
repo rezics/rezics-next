@@ -45,6 +45,8 @@ import { answerRevocation, REVOKE_SESSIONS_STEP, sessionRevocation, stepFailureM
 import { sanitizedClientIp, verifyTurnstile, type TurnstileConfiguration } from './turnstile.ts';
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
+import { nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
+import { recordRegistrationActivation, type NativeConsumerRuntime } from './erasure-consumers.ts';
 
 type Command = { accountId: string; key: string };
 type OperatorSuspension = {
@@ -76,6 +78,7 @@ export interface AccountWorkflowOptions<Context = WorkflowContext> {
   turnstile?: TurnstileConfiguration;
   auth: AuthService;
   access: AccountWorkflowPorts<Context>;
+  completeRecovery?: (reference: string) => Promise<void>;
   clock?: () => Date;
   executorId?: string;
 }
@@ -111,7 +114,7 @@ function isUniqueViolation(error: unknown): boolean {
  * the 401/403 status. Recognized by this shape, never by class name, because
  * the binding rewrites the kernel's own error classes. */
 type Refusal = { readonly status: 401 | 403 };
-function isRefusal(error: unknown): error is Refusal {
+export function isRefusal(error: unknown): error is Refusal {
   return (
     typeof error === 'object' && error !== null && 'status' in error && (error.status === 401 || error.status === 403)
   );
@@ -179,6 +182,11 @@ function businessOperation(input: AccountOperation) {
  * executor side effects. Do not create two workflow hosts in one process. */
 export function createAccountWorkflows<Context = WorkflowContext>(options: AccountWorkflowOptions<Context>) {
   const { database, auth, access } = options;
+  const nativeConsumers: NativeConsumerRuntime = {
+    access,
+    auth,
+    ...(options.completeRecovery ? { completeRecovery: options.completeRecovery } : {}),
+  };
   if (options.stagingKey.byteLength !== 32) throw new Error('Configure a persistent 32-byte Auth staging key');
   let systemUrl: URL;
   let authUrl: URL;
@@ -262,7 +270,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const creator = context === undefined ? null : (access.actorAccountId?.(context) ?? null);
     const operator = operation?.kind === 'automated' ? operation.operatorAccountId : null;
     const result = await database.query<Stage & { request_digest: Buffer; credential_digest: Buffer | null }>(
-      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding,erasure_creator_id,erasure_operator_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
+      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding,erasure_creator_id,erasure_operator_id,consumer_workflow_id,activation_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
       [
         id,
         request,
@@ -274,6 +282,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         creation,
         creator,
         operator,
+        workflowId(operation?.kind === 'automated' ? `operation:${operation.operationKey}` : `registration:${request}`),
+        context === undefined
+          ? `wf:${workflowId(`registration:${request}`)}:activate`
+          : (access.stableCommandKey?.(context, 'activate') ??
+            `wf:${workflowId(`operation:${operation?.operationKey}`)}:activate`),
       ],
     );
     const row = required(result.rows[0]);
@@ -463,8 +476,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         try {
           // A committed activation receipt wins on replay, even past the pending
           // deadline. An uncommitted activation still uses Access's original TTL.
-          return (await access.activate({ accountId, evidence: proof, key: await authorizedKey(request, 'activate') }))
-            .value;
+          const activationKey = await authorizedKey(request, 'activate');
+          const result = (await access.activate({ accountId, evidence: proof, key: activationKey })).value;
+          await recordRegistrationActivation(database, id, activationKey, result);
+          return result;
         } catch {
           const row = await stage(id);
           if (required(row.expires_at).getTime() <= now().getTime()) return { accountId, expired: true as const };
@@ -514,7 +529,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const recoverErasure = step('native-erasure-obligation', (accountId: string) =>
       auth.internal.startAccountErasure(accountId),
     );
-    const erasurePage = step('native-erasure-page', (id: string) => auth.internal.nativeErasurePage(id));
+    const erasurePage = step('native-erasure-page', (id: string) => nativeErasurePage(database, id, nativeConsumers));
     const erase = async (accountId: string, request?: AccountOperation, operationKey?: string) => {
       // Old histories stored void at erase-auth-owner. Recover the same native
       // obligation rather than replaying the former user cascade.
@@ -737,13 +752,19 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const reserveOperator = step(
       'reserve-operator',
       async (request: AccountOperation, operatorAccountId: string, subjectAccountId: string) => {
-        return (
+        const held = (
           await required(access.reserveResponsibility)({
             operatorAccountId,
             subjectAccountId,
             key: await authorizedKey(request, 'reserve-operator'),
           })
         ).value;
+        if (request.kind === 'automated')
+          await database.query(
+            'UPDATE auth_registration_stage SET operator_reservation_id=$2 WHERE registration_id=$1 AND (operator_reservation_id IS NULL OR operator_reservation_id=$2)',
+            [request.registrationId, held.reservationId],
+          );
+        return held;
       },
     );
     const relation = step(
@@ -1220,7 +1241,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     ]);
     const row = (
       await database.query<{ digest: Buffer }>(
-        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
         [
           id,
           digest,
@@ -1243,6 +1264,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             : input.kind === 'delete'
               ? (input.responsibility?.operatorAccountId ?? null)
               : null,
+          input.kind === 'automated' ? input.registrationId : null,
         ],
       )
     ).rows[0]!;
@@ -1449,6 +1471,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       await install({ ...input, registrationId: ref.registrationId });
       return activateRegistration(ref.registrationId);
     },
+    redriveNativeErasure: () => redriveNativeErasure(database, nativeConsumers),
     async expireDueRegistrations() {
       active();
       let afterExpiry = '-infinity';
@@ -1605,8 +1628,19 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const digest = hash(operation);
       const row = (
         await database.query<{ digest: Buffer }>(
-          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
-          [id, digest, operation, null, access.actorAccountId?.(context) ?? null, null, input.clientId, null, null],
+          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+          [
+            id,
+            digest,
+            operation,
+            null,
+            access.actorAccountId?.(context) ?? null,
+            null,
+            input.clientId,
+            null,
+            null,
+            null,
+          ],
         )
       ).rows[0]!;
       if (!row.digest.equals(digest)) denied();

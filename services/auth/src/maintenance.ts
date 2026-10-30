@@ -21,6 +21,7 @@ export const AUTH_MAINTENANCE_CRON = '0 * * * * *';
 export function registerAuthMaintenance(
   auth: AuthService,
   retention: WorkflowRetentionConfig = readWorkflowRetentionConfig(process.env),
+  redrive = () => auth.internal.redriveNativeErasure(),
 ) {
   const step = (purpose: string, run: () => Promise<number>) =>
     DBOS.registerStep(
@@ -50,7 +51,7 @@ export function registerAuthMaintenance(
     }
   });
   const sweepExpiredVerifications = step('sweepExpiredVerifications', () => auth.internal.pruneExpiredVerifications());
-  const nativeErasure = step('nativeErasure', () => auth.internal.redriveNativeErasure());
+  const nativeErasure = step('nativeErasure', redrive);
   const eraseDueConsents = step('eraseDueConsents', () => auth.internal.eraseDueConsents(CONSENT_ERASURE_BATCH));
   const tick = DBOS.registerWorkflow(
     async (_scheduledAt: Date, _context: unknown): Promise<void> => {

@@ -338,6 +338,10 @@ export interface AuthService {
       clientId: string;
       limit: number;
     }): Promise<{ next: string | null; ready: boolean }>;
+    continueNativeClientReduction(
+      input: { operationId: string; obligationId: string },
+      ports: Pick<import('@rezics/auth-contract').AccountWorkflowPorts<never>, 'readAccount' | 'raiseFence'>,
+    ): Promise<boolean>;
     finishClientReduction(input: {
       clientId: string;
       operationId: string;

@@ -874,6 +874,50 @@ END $$;
 
 
 --
+-- Name: auth_native_credential_terminal_fence(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_credential_terminal_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM auth_native_credential_terminal WHERE receipt_id=NEW.receipt_id) THEN
+    RAISE EXCEPTION 'Native credential consumer is terminal' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_credential_terminal_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_credential_terminal_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Native credential terminal proof is immutable' USING ERRCODE='55000';
+END $$;
+
+
+--
+-- Name: auth_native_registration_identity(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_identity() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.consumer_workflow_id IS DISTINCT FROM OLD.consumer_workflow_id
+    OR NEW.activation_key IS DISTINCT FROM OLD.activation_key
+    OR (OLD.operator_reservation_id IS NOT NULL AND NEW.operator_reservation_id IS DISTINCT FROM OLD.operator_reservation_id) THEN
+    RAISE EXCEPTION 'Native registration consumer identity is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_passkey_used(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1206,7 +1250,10 @@ CREATE TABLE public.auth_client_reduction_progress (
     page_after bigint DEFAULT 0 NOT NULL,
     page_end bigint DEFAULT 0 NOT NULL,
     terminal_ordinal bigint,
-    cutover_after bigint
+    cutover_after bigint,
+    consumer_version smallint DEFAULT 0 NOT NULL,
+    page_count integer,
+    completed_count integer DEFAULT 0 NOT NULL
 );
 
 
@@ -1357,6 +1404,37 @@ CREATE TABLE public.auth_key_assertion (
 
 
 --
+-- Name: auth_native_consumer_proof; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_native_consumer_proof (
+    store text NOT NULL,
+    key text NOT NULL,
+    binding jsonb NOT NULL,
+    result jsonb NOT NULL,
+    CONSTRAINT auth_native_consumer_proof_key_check CHECK ((octet_length(key) <= 1024))
+);
+
+
+--
+-- Name: auth_native_credential_terminal; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_native_credential_terminal (
+    receipt_id text NOT NULL,
+    obligation_id bigint NOT NULL,
+    operation_key text NOT NULL,
+    effect_reference text NOT NULL,
+    effect_digest text NOT NULL,
+    outcome text NOT NULL,
+    committed_result jsonb,
+    CONSTRAINT auth_native_credential_terminal_effect_digest_check CHECK ((effect_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT auth_native_credential_terminal_outcome_check CHECK ((outcome = ANY (ARRAY['committed'::text, 'fenced-refusal'::text]))),
+    CONSTRAINT auth_native_credential_terminal_receipt_id_check CHECK ((octet_length(receipt_id) <= 1024))
+);
+
+
+--
 -- Name: auth_provisioning_receipt; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1465,7 +1543,10 @@ CREATE TABLE public.auth_registration_stage (
     creation_binding jsonb,
     erasure_release_at timestamp with time zone,
     erasure_creator_id text,
-    erasure_operator_id text
+    erasure_operator_id text,
+    consumer_workflow_id text,
+    activation_key text,
+    operator_reservation_id text
 );
 
 
@@ -1553,7 +1634,8 @@ CREATE TABLE public.auth_workflow_request (
     erasure_client_id text,
     erasure_member_id text,
     erasure_previous_operator_id text,
-    terminal_at timestamp with time zone
+    terminal_at timestamp with time zone,
+    erasure_stage_id text
 );
 
 
@@ -1942,6 +2024,22 @@ ALTER TABLE ONLY public.auth_erasure
 
 ALTER TABLE ONLY public.auth_key_assertion
     ADD CONSTRAINT auth_key_assertion_pkey PRIMARY KEY (account_id, jti);
+
+
+--
+-- Name: auth_native_consumer_proof auth_native_consumer_proof_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_native_consumer_proof
+    ADD CONSTRAINT auth_native_consumer_proof_pkey PRIMARY KEY (store, key);
+
+
+--
+-- Name: auth_native_credential_terminal auth_native_credential_terminal_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_native_credential_terminal
+    ADD CONSTRAINT auth_native_credential_terminal_pkey PRIMARY KEY (receipt_id);
 
 
 --
@@ -3087,6 +3185,34 @@ CREATE TRIGGER auth_credential_stage_immutable BEFORE UPDATE ON public.auth_effe
 
 
 --
+-- Name: auth_native_consumer_proof auth_native_consumer_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_consumer_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_credential_terminal_immutable();
+
+
+--
+-- Name: auth_effect_receipt auth_native_credential_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_credential_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_credential_terminal_fence();
+
+
+--
+-- Name: auth_native_credential_terminal auth_native_credential_terminal_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_credential_terminal_immutable BEFORE DELETE OR UPDATE ON public.auth_native_credential_terminal FOR EACH ROW EXECUTE FUNCTION public.auth_native_credential_terminal_immutable();
+
+
+--
+-- Name: auth_registration_stage auth_native_registration_identity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_registration_identity BEFORE UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_identity();
+
+
+--
 -- Name: passkey auth_passkey_used; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3471,6 +3597,14 @@ ALTER TABLE ONLY public.auth_erased_client
 
 ALTER TABLE ONLY public.auth_key_assertion
     ADD CONSTRAINT auth_key_assertion_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_native_credential_terminal auth_native_credential_terminal_obligation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_native_credential_terminal
+    ADD CONSTRAINT auth_native_credential_terminal_obligation_id_fkey FOREIGN KEY (obligation_id) REFERENCES public.auth_erasure(id);
 
 
 --

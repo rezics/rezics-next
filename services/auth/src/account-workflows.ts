@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { AUTH_CURSOR_VERSION, requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
+import type { AccountWorkflowPorts } from '@rezics/auth-contract';
+import { createHash } from 'node:crypto';
 
 type Progress = {
   operation_id: string;
@@ -12,6 +14,10 @@ type Progress = {
   page_end: string;
   terminal_ordinal: string | null;
   completed: boolean;
+  page_after: string;
+  consumer_version: number;
+  page_count: number | null;
+  completed_count: number;
 };
 
 type ReductionOwner = { clientId: string; operationId: string; accountId: string };
@@ -46,10 +52,28 @@ async function advanceReductionOwner(
     )
   ).rows[0];
   if (next?.account_id !== input.accountId) deny();
-  await connection.query('UPDATE auth_client_reduction_progress SET after_ordinal=$2 WHERE operation_id=$1', [
-    input.operationId,
-    owner.traversal_ordinal,
-  ]);
+  await connection.query(
+    'UPDATE auth_client_reduction_progress SET after_ordinal=$2,completed_count=completed_count+1 WHERE operation_id=$1',
+    [input.operationId, owner.traversal_ordinal],
+  );
+}
+
+async function admitNativeReduction(
+  connection: PoolClient,
+  clientId: string,
+  operationId: string,
+  obligationId: string,
+) {
+  const admitted = await connection.query(
+    `SELECT 1 FROM auth_erased_client c
+    JOIN auth_erasure e ON e.id=c.obligation_id
+    JOIN auth_client_reduction_progress p ON p.client_id=c.client_id
+    JOIN auth_client_reduction g ON g.client_id=p.client_id AND g.operation_id=p.operation_id
+    WHERE c.client_id=$1 AND p.operation_id=$2 AND e.id=$3 AND NOT p.completed`,
+    [clientId, operationId, obligationId],
+  );
+  if (!admitted.rowCount) throw new Error('Native client reduction obligation refused');
+  await connection.query("SELECT set_config('auth.erasure_obligation',$1,true)", [obligationId]);
 }
 
 /** Deleted owners cannot use tokens, but their retained consent still occupies the cursor. */
@@ -57,6 +81,7 @@ export async function completeDeletedClientReductionOwner(
   pool: Pool,
   readAccount: (accountId: string) => Promise<{ accountId: string; state: string } | null>,
   input: ReductionOwner,
+  obligationId?: string,
 ): Promise<boolean> {
   const deny: () => never = () => {
     throw new Error('Client reduction owner denied');
@@ -70,6 +95,7 @@ export async function completeDeletedClientReductionOwner(
   try {
     await connection.query('BEGIN');
     await requireErasureCursorVersion(connection, AUTH_CURSOR_VERSION, input.clientId);
+    if (obligationId) await admitNativeReduction(connection, input.clientId, input.operationId, obligationId);
     const row = (
       await connection.query<Progress>(
         'SELECT * FROM auth_client_reduction_progress WHERE operation_id=$1 FOR UPDATE',
@@ -96,6 +122,7 @@ export function clientAuthority(
   normalize: (value: unknown) => string[],
 ) {
   const issuance = new AsyncLocalStorage<{ clientId: string; connection: PoolClient }>();
+  const nativeReduction = new AsyncLocalStorage<{ operationId: string; obligationId: string }>();
   // Route both native Better Auth and our hooks through the held connection.
   // A request never holds one pool slot while waiting for a second slot.
   const database = new Proxy(pool, {
@@ -186,6 +213,8 @@ export function clientAuthority(
         "SELECT set_config('auth.cursor_worker','2',true),pg_advisory_xact_lock(hashtextextended($1,0))",
         [`auth-client:${clientId}`],
       );
+      const native = nativeReduction.getStore();
+      if (native) await admitNativeReduction(connection, clientId, native.operationId, native.obligationId);
       const value = await action(connection);
       await connection.query('COMMIT');
       return value;
@@ -220,6 +249,7 @@ export function clientAuthority(
     | 'completeClientReductionOwner'
     | 'finishClientReduction'
     | 'backfillClientIssuance'
+    | 'continueNativeClientReduction'
   > = {
     async beginClientReduction(input) {
       const granted = normalize(input.scopes);
@@ -231,7 +261,7 @@ export function clientAuthority(
         );
         if (!coverage.rowCount) deny();
         await connection.query(
-          `INSERT INTO auth_client_reduction_progress (operation_id,client_id,scopes,first_party) VALUES ($1,$2,$3,$4)
+          `INSERT INTO auth_client_reduction_progress (operation_id,client_id,scopes,first_party,consumer_version) VALUES ($1,$2,$3,$4,1)
            ON CONFLICT (operation_id) DO NOTHING`,
           [input.operationId, input.clientId, granted, input.firstParty],
         );
@@ -273,6 +303,13 @@ export function clientAuthority(
           );
           if (pending.rowCount) deny();
         }
+        if (
+          row.consumer_version === 1 &&
+          row.page_count !== null &&
+          after === row.page_end &&
+          row.completed_count !== row.page_count
+        )
+          deny();
         const rows = (
           await connection.query<{ account_id: string; traversal_ordinal: string }>(
             `WITH RECURSIVE batches(batch_no,boundary,items) AS (
@@ -311,8 +348,8 @@ export function clientAuthority(
         const page = rows.slice(0, input.limit);
         await connection.query(
           `UPDATE auth_client_reduction_progress SET after_ordinal=$2,page_after=$2,page_end=$4,
-           terminal_ordinal=CASE WHEN $3 THEN $4::bigint ELSE terminal_ordinal END WHERE operation_id=$1`,
-          [input.operationId, after, rows.length <= input.limit, page.at(-1)?.traversal_ordinal ?? after],
+           terminal_ordinal=CASE WHEN $3 THEN $4::bigint ELSE terminal_ordinal END,page_count=$5,completed_count=0 WHERE operation_id=$1`,
+          [input.operationId, after, rows.length <= input.limit, page.at(-1)?.traversal_ordinal ?? after, page.length],
         );
         return {
           items: page.map((r) => r.account_id),
@@ -321,11 +358,11 @@ export function clientAuthority(
       });
     },
     async completeClientReductionOwner(input) {
+      const current = await access.readFencedAccount(input.accountId);
       await transaction(input.clientId, async (connection) => {
         const row = await progress(connection, input.clientId, input.operationId);
         if (row.completed) deny();
         const receipt = input.barrier;
-        const current = await access.readFencedAccount(input.accountId);
         if (current && (current.accountId !== input.accountId || !current.fenced)) deny();
         const consent = await connection.query(
           'SELECT account_id FROM auth_consent WHERE account_id=$1 AND client_id=$2',
@@ -376,7 +413,8 @@ export function clientAuthority(
         const row = await progress(connection, input.clientId, input.operationId);
         same(row, input);
         if (row.completed) return;
-        if (row.terminal_ordinal === null) deny();
+        if (row.terminal_ordinal === null || (row.consumer_version === 1 && row.page_count !== row.completed_count))
+          deny();
         if (row.after_ordinal !== row.terminal_ordinal) {
           const pending = await connection.query(
             `SELECT 1 FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
@@ -404,6 +442,75 @@ export function clientAuthority(
           input.operationId,
         ]);
       });
+    },
+    async continueNativeClientReduction(input, ports) {
+      const row = (
+        await pool.query<Progress>('SELECT * FROM auth_client_reduction_progress WHERE operation_id=$1', [
+          input.operationId,
+        ])
+      ).rows[0];
+      if (!row || row.completed || row.consumer_version !== 1) return false;
+      // The current original page determines every source command key. Never
+      // reconstruct a page from history or start a different operation.
+      const next = (
+        await pool.query<{ account_id: string }>(
+          `SELECT account_id FROM auth_consent
+        WHERE client_id=$1 AND traversal_ordinal>$2 AND traversal_ordinal<=$3
+        ORDER BY traversal_ordinal LIMIT 1`,
+          [row.client_id, row.after_ordinal, row.page_end],
+        )
+      ).rows[0];
+      if (next) {
+        const owner = { clientId: row.client_id, operationId: row.operation_id, accountId: next.account_id };
+        if (await completeDeletedClientReductionOwner(pool, ports.readAccount, owner, input.obligationId)) return true;
+        const pageWorkflowId =
+          row.page_after === '0'
+            ? row.operation_id
+            : `${row.operation_id}:page:${createHash('sha256').update(JSON.stringify(row.page_after)).digest('hex')}`;
+        const barrier = (
+          await ports.raiseFence({ accountId: next.account_id, key: `wf:${pageWorkflowId}:fence:${next.account_id}` })
+        ).value;
+        await cleanupFencedSessions(next.account_id, {
+          ...barrier,
+          minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch),
+        });
+        await nativeReduction.run(input, () =>
+          internal.completeClientReductionOwner({
+            ...owner,
+            barrier: { ...barrier, minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch) },
+          }),
+        );
+        return true;
+      }
+      // An original raw row that disappeared without acknowledgement stays
+      // unknown, even if the remaining ordinal interval is empty.
+      if (row.page_count !== null && row.page_count !== row.completed_count) return false;
+      if (row.terminal_ordinal !== null) {
+        await nativeReduction.run(input, () =>
+          internal.finishClientReduction({
+            clientId: row.client_id,
+            operationId: row.operation_id,
+            scopes: row.scopes,
+            firstParty: row.first_party,
+          }),
+        );
+        await pool.query(
+          'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+          [row.operation_id],
+        );
+      } else {
+        // Only one additional raw owner is admitted on this erasure page. The
+        // producer's persisted page boundary preserves replay keys for old pages.
+        await nativeReduction.run(input, () =>
+          internal.clientReductionPage({
+            clientId: row.client_id,
+            operationId: row.operation_id,
+            after: row.page_end,
+            limit: 1,
+          }),
+        );
+      }
+      return true;
     },
     async backfillClientIssuance(input) {
       bounded(input.limit);

@@ -19,6 +19,7 @@ import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import { startNativeErasure, nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
+import { recordRecoveryCompletion } from './erasure-consumers.ts';
 import { chargeAccountAttempt } from './rate-limit.ts';
 import { eraseDueConsents, hasDueConsentErasure } from './consent-erasure.ts';
 import { clientAuthority } from './account-workflows.ts';
@@ -1331,6 +1332,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const connection = await database.connect();
         try {
           await connection.query('BEGIN');
+          // Match native erasure's client-before-source-row order. Admission is
+          // repeated by the existing write guard at the atomic credential CAS.
+          await connection.query(
+            'SELECT auth_erasure_admit_client($1),auth_erasure_admit($2),auth_erasure_admit($3),auth_erasure_admit($4)',
+            [b.clientId, b.subjectAccountId, b.actingHumanId, consumed.operatorAccountId],
+          );
           // Same native owner lock as session issuance/revocation. Credential-row
           // CAS still arbitrates recovery and legacy writers that use other locks.
           await connection.query('SELECT auth_assert_session_capacity($1,true)', [subject.accountId]);
@@ -1738,6 +1745,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             if (!success || completed.evidence[8] !== effectCommitment || success.authnEpoch !== account.authnEpoch)
               throw new Denied();
             await trustedAccess.completeRecovery(completed.reference);
+            await recordRecoveryCompletion(database, completed.reference);
             return json({ success: true });
           }
           // Native adapter reads use the same pool. Finish them before leasing a
@@ -1884,6 +1892,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             mutation.release();
           }
           await trustedAccess.completeRecovery(proof.reference);
+          await recordRecoveryCompletion(database, proof.reference);
           return json({ success: true });
         }
         if (url.pathname === '/signin/passkey/options' || url.pathname === '/passkeys/register/options') {

@@ -116,10 +116,11 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     ...(options.turnstile ? { turnstile: options.turnstile } : {}),
     auth: service,
     access: options.access,
+    ...(options.trustedAccess.completeRecovery ? { completeRecovery: options.trustedAccess.completeRecovery } : {}),
     executorId,
     handleSignals: false,
     registerWorkflows: () => {
-      maintenance = registerAuthMaintenance(service, retention);
+      maintenance = registerAuthMaintenance(service, retention, () => workflows.redriveNativeErasure());
     },
   });
   let starting: Promise<void> | undefined;
