@@ -570,7 +570,12 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       account: config.account,
       client: config.client,
       authOrigin: config.auth,
-      scopes: config.source === 'vndb' ? VNDB_IMPORTER_SCOPES : IMPORTER_SCOPES,
+      scopes:
+        config.source === 'vndb'
+          ? VNDB_IMPORTER_SCOPES
+          : config.source === 'bangumi'
+            ? [...IMPORTER_SCOPES, 'subject:read']
+            : IMPORTER_SCOPES,
       fetch: guardedFetch,
       signal: AbortSignal.any([signal, credentialLifetime.signal]),
       now: () => clock.now(),
