@@ -130,6 +130,24 @@ Realm Name"). The rules are the same on every surface:
   search runs inside a Realm-routed site, which uses that Realm's population and says so. A query parameter never
   selects a population implicitly.
 
+### Question and public-figure presentation
+
+The subject headline and its structured metadata use the existing `/figure` PublicFigure; Search renders the
+`figure` supplied on each hit without a second read. Display the published mean with Global, its count and its
+0–10 display units. The separately explained Bayesian score determines rating order; it is never substituted for
+the mean. A null mean is unknown, a published zero mean is valid, and a zero count draws no numeric figure.
+Below threshold, show only count and the publication requirement. Pending publication is labelled, while an
+already ready producer snapshot retains its published numbers. Native publication happens after processing, so a
+successful private vote write does not claim the public figure has changed.
+
+Load the standard question by its exact id for its label, revision, grain and stored scale. The standard question's
+stored bounds map to the documented 0–10 display domain; its stored `displayStep` determines valid input steps.
+Controls and server-side input validation use the returned bounds and step rather than hardcoded stored units.
+Zero is a vote and clear is a separate DELETE. The own-vote read stays private and session-bound.
+`/ratings` supplies distribution and labelled Realm details, never the headline or metadata value. Imported
+statistics follow native figures with their independent source, scale, count, as-of date, licence and attribution;
+they never supply or alter the native mean, vote count or ordering score.
+
 ## Reviews
 
 A review is a content item about one target. It may cite the author's vote on that target; a review never requires a

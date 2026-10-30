@@ -1084,5 +1084,14 @@
   "sources_open_detail": "查看已选事实及其来源说明",
   "library_collection_share": "分享",
   "library_collection_social_unavailable": "暂不支持对合集点赞、保存或举报。",
-  "library_collection_actions_unavailable": "无法加载合集操作，请重新加载后再试。"
+  "library_collection_actions_unavailable": "无法加载合集操作，请重新加载后再试。",
+  "rating_public_mean": "{mean} 分（满分 {maximum} 分）",
+  "rating_public_count": "Global · {count} 个评分",
+  "rating_public_updating": "公开评分正在更新。",
+  "rating_public_insufficient": "评分数量不足，暂不公布平均分。",
+  "rating_public_delay": "原生评分经处理后公布。你的评分可能先于公开数据更新。",
+  "rating_public_ordering": "评分排序采用同一问题与 Global 群体的贝叶斯分数。显示的数值为公开平均分。",
+  "rating_question_revision": "修订版 {revision}",
+  "rating_import_licence": "许可协议：{licence}",
+  "rating_import_attribution": "署名：{attribution}"
 }

@@ -1083,5 +1083,14 @@
   "sources_open_detail": "查看已選事實及其來源說明",
   "library_collection_share": "分享",
   "library_collection_social_unavailable": "暫不支援對合集按讚、儲存或檢舉。",
-  "library_collection_actions_unavailable": "無法載入合集操作，請重新載入後再試。"
+  "library_collection_actions_unavailable": "無法載入合集操作，請重新載入後再試。",
+  "rating_public_mean": "{mean} 分（滿分 {maximum} 分）",
+  "rating_public_count": "Global · {count} 個評分",
+  "rating_public_updating": "公開評分正在更新。",
+  "rating_public_insufficient": "評分數量不足，暫不公布平均分。",
+  "rating_public_delay": "原生評分經處理後公布。你的評分可能先於公開資料更新。",
+  "rating_public_ordering": "評分排序採用同一問題與 Global 群體的貝葉斯分數。顯示的數值為公開平均分。",
+  "rating_question_revision": "修訂版 {revision}",
+  "rating_import_licence": "授權條款：{licence}",
+  "rating_import_attribution": "姓名標示：{attribution}"
 }

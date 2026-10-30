@@ -1,0 +1,19 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as SubjectRatingStories from './subject-rating.stories';
+
+<Meta of={SubjectRatingStories} />
+
+# Subject Rating
+
+Subject pages reuse RatingsView and its question-driven control; Search rows reuse PublicRatingFigure.
+Ready, pending, below-threshold, empty and published-zero states render the same published DTO on both surfaces.
+A ready snapshot remains ready while native publication works; private vote changes never replace public numbers.
+The headline mean and the Bayesian ordering measure have separate explanations. Imported statistics retain their
+own scale, count, date, licence and attribution.
+
+Save clear zero uses keyboard Home, Save and Clear to distinguish a vote of zero from no vote. Save failure
+announces the error and keeps the stored vote unchanged. These interactions cover the view; command behavior is
+covered by the focused rating-figures outcome cases using the typed client.
+
+Review each story with the same ID using phone390/desktop1280, locale and theme globals. Web visual review,
+Root screenshots and postintegration acceptance are separate from local workspace typing.

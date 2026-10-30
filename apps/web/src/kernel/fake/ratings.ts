@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import type { Ratings } from '../../features/pages/subject-ratings';
+import type { PublicFigure, RatingQuestion, Ratings } from '../../features/pages/subject-ratings';
 import type { FakeRoute } from '../fake-modules';
 import subjectSourceStatisticsRecording from '../recorded/subject-source-statistics.json';
 
@@ -13,6 +13,30 @@ type VoteResponse = NonNullable<Awaited<ReturnType<ReturnType<SubjectRoutes['rat
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';
 export const IMPORTED_VN_SUBJECT_ID = '01a1773a-f700-7074-b1ee-5e05671d3be3';
+
+export const standardRatingQuestion: RatingQuestion = {
+  id: QUESTION,
+  revision: 1,
+  label: 'How much did you like this work?',
+  grain: 'work',
+  scale: { min: 0, max: 20, displayStep: 1 },
+};
+const emptyPublicFigure: PublicFigure = {
+  questionId: QUESTION,
+  populationId: GLOBAL,
+  scale: standardRatingQuestion.scale,
+  count: 0,
+  state: 'insufficient_data',
+  mean: null,
+  score: null,
+};
+const readyPublicFigure: PublicFigure = {
+  ...emptyPublicFigure,
+  count: 1203,
+  state: 'ready',
+  mean: 8.4,
+  score: 8.3,
+};
 
 const realmList = [
   { id: '01a1a000-0000-7000-8000-000000000002', name: 'The Quiet Novel Club' },
@@ -89,13 +113,27 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
     aggregate: aggregate([emptyGlobal]),
     statistics: emptyStatistics,
     voteStatus: 404,
-    preview: { figures: [emptyGlobal], statistics: emptyStatistics, realms: [], own: null },
+    preview: {
+      question: standardRatingQuestion,
+      figure: emptyPublicFigure,
+      figures: [emptyGlobal],
+      statistics: emptyStatistics,
+      realms: [],
+      own: null,
+    },
   },
   'subject-ratings-global': {
     aggregate: aggregate([globalScore]),
     statistics: emptyStatistics,
     voteStatus: 404,
-    preview: { figures: [globalScore], statistics: [], realms: [], own: null },
+    preview: {
+      question: standardRatingQuestion,
+      figure: readyPublicFigure,
+      figures: [globalScore],
+      statistics: [],
+      realms: [],
+      own: null,
+    },
   },
   'subject-ratings-realms': {
     aggregate: aggregate([
@@ -126,6 +164,8 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
     voteStatus: 200,
     vote: ownVote,
     preview: {
+      question: standardRatingQuestion,
+      figure: readyPublicFigure,
       figures: [
         globalScore,
         {
@@ -158,6 +198,8 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
     statistics: emptyStatistics,
     voteStatus: 404,
     preview: {
+      question: standardRatingQuestion,
+      figure: { ...emptyPublicFigure, count: 3 },
       figures: [{ population: GLOBAL, count: 3, remaining: 2 }],
       statistics: [],
       realms: [],
@@ -168,13 +210,27 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
     aggregate: aggregate([emptyGlobal]),
     statistics: importedStatistics,
     voteStatus: 404,
-    preview: { figures: [emptyGlobal], statistics: importedStatistics, realms: [], own: null },
+    preview: {
+      question: standardRatingQuestion,
+      figure: emptyPublicFigure,
+      figures: [emptyGlobal],
+      statistics: importedStatistics,
+      realms: [],
+      own: null,
+    },
   },
   'subject-ratings-own-forbidden': {
     aggregate: aggregate([emptyGlobal]),
     statistics: emptyStatistics,
     voteStatus: 403,
-    preview: { figures: [emptyGlobal], statistics: [], realms: [], own: null },
+    preview: {
+      question: standardRatingQuestion,
+      figure: emptyPublicFigure,
+      figures: [emptyGlobal],
+      statistics: [],
+      realms: [],
+      own: null,
+    },
   },
 };
 
@@ -245,4 +301,18 @@ function ratingsRoutes(): FakeRoute[] {
   ];
 }
 
-export const routes: FakeRoute[] = ratingsRoutes();
+export const routes: FakeRoute[] = [
+  ...ratingsRoutes(),
+  {
+    method: 'GET',
+    path: /^\/v1\/rating-questions\/[^/]+$/,
+    story: () => ({ status: 200, ...standardRatingQuestion }),
+    fixture: () => ({ status: 200, ...standardRatingQuestion }),
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/subjects\/[^/]+\/figure$/,
+    story: ({ request }) => ({ status: 200, figure: selectedFixture(request).preview.figure }),
+    fixture: ({ request }) => ({ status: 200, figure: selectedFixture(request).preview.figure }),
+  },
+];

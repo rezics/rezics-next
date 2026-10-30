@@ -3,7 +3,15 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { m } from '../../paraglide/messages.js';
 import { SubjectRatingControl } from './rating-control';
 import type { SubjectOwnRating } from './subject-ratings';
-import { GLOBAL, type Figure, type Ratings } from './subject-ratings';
+import {
+  displayRating,
+  hasPublicMean,
+  GLOBAL,
+  PUBLIC_RATING_SCALE,
+  type Figure,
+  type Ratings,
+} from './subject-ratings';
+import { PublicRatingFigure } from './public-rating-figure';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
@@ -88,7 +96,7 @@ export function RatingsView({
       : value;
   };
 
-  const figure = (item: Figure | undefined, label: string, global: boolean) => {
+  const figure = (item: Figure | undefined, label: string) => {
     if (!item || item.count === 0)
       return (
         <p>
@@ -97,11 +105,7 @@ export function RatingsView({
       );
 
     const count = number(item.count);
-    const countLabel = global
-      ? m.subject_ratings_count({ count, population: label }, options)
-      : m.subject_ratings_realm_count({ count, population: label }, options);
-    const histogram = item.histogram;
-    const maximum = histogram?.reduce((largest, current) => Math.max(largest, current), 1) ?? 1;
+    const countLabel = m.subject_ratings_realm_count({ count, population: label }, options);
     const mean = item.remaining === undefined ? item.mean : undefined;
 
     return (
@@ -109,7 +113,17 @@ export function RatingsView({
         <p>
           <MetaLine
             items={[
-              mean !== undefined ? <strong className="text-xl tabular-nums">{number(mean / 2, 1)}</strong> : null,
+              mean !== undefined ? (
+                <strong className="text-xl tabular-nums">
+                  {m.rating_public_mean(
+                    {
+                      mean: number(displayRating(mean, data.question.scale), 2),
+                      maximum: number(PUBLIC_RATING_SCALE.max),
+                    },
+                    options,
+                  )}
+                </strong>
+              ) : null,
               countLabel,
             ]}
           />
@@ -119,28 +133,13 @@ export function RatingsView({
             {m.subject_ratings_remaining({ count: number(item.remaining) }, options)}
           </p>
         )}
-        {global && mean !== undefined && histogram && (
-          <div
-            data-slot="histogram"
-            role="img"
-            aria-label={m.subject_ratings_distribution({}, options)}
-            className="mt-3 flex h-12 max-w-xs items-end gap-0.5"
-          >
-            {histogram.map((value, index) => (
-              <span
-                key={index}
-                title={`${number(index / 2, 1)}: ${number(value)}`}
-                className="min-w-0 flex-1 rounded-t bg-primary"
-                style={{ height: `${Math.max(2, (value / maximum) * 100)}%` }}
-              />
-            ))}
-          </div>
-        )}
       </div>
     );
   };
 
   const globalFigure = data.figures.find((item) => item.population === GLOBAL);
+  const threshold = ['episode', 'character'].includes(data.question.grain) ? 10 : 5;
+  const published = hasPublicMean(data.figure);
   const realms = data.realms
     .map((realm) => ({ realm, figure: data.figures.find((item) => item.population === realm.id) }))
     .sort((left, right) => (right.figure?.count ?? 0) - (left.figure?.count ?? 0));
@@ -150,20 +149,45 @@ export function RatingsView({
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
+      <p className="text-sm font-medium" data-slot="rating-question" data-revision={data.question.revision}>
+        {data.question.label}
+        <span className="ml-2 text-muted-foreground">
+          {m.rating_question_revision({ revision: number(data.question.revision) }, options)}
+        </span>
+      </p>
       <div data-slot="rating-figures" className={realms.length ? 'grid gap-6 md:grid-cols-2' : 'space-y-4'}>
-        <div>{figure(globalFigure, 'REZICS', true)}</div>
+        <div className="space-y-3">
+          <PublicRatingFigure figure={data.figure} locale={locale} remaining={threshold - data.figure.count} />
+          {data.figure.count === 0 && data.figure.state !== 'updating' && (
+            <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
+          )}
+          {published && globalFigure?.remaining === undefined && globalFigure?.histogram && (
+            <details>
+              <summary className="cursor-pointer text-sm">{m.subject_ratings_distribution({}, options)}</summary>
+              <ol className="mt-2 grid max-w-sm grid-cols-3 gap-x-4 gap-y-1 text-xs tabular-nums" data-slot="histogram">
+                {globalFigure.histogram.map((count, index) => (
+                  <li key={index}>
+                    {number(displayRating(data.question.scale.min + index, data.question.scale), 2)}: {number(count)}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+          <p className="text-xs text-muted-foreground">{m.rating_public_delay({}, options)}</p>
+          <p className="text-xs text-muted-foreground">{m.rating_public_ordering({}, options)}</p>
+        </div>
         {realms.length > 0 && (
           <ul className="space-y-4">
             {realms.map(({ realm, figure: item }) => (
-              <li key={realm.id}>{figure(item, realm.name, false)}</li>
+              <li key={realm.id}>{figure(item, realm.name)}</li>
             ))}
           </ul>
         )}
       </div>
       <div className="space-y-3">
-        {data.own !== null && (
+        {!control && data.own !== null && (
           <p data-slot="own-rating" className="text-sm text-muted-foreground">
-            {m.subject_ratings_yours({ score: number(data.own / 2, 1) }, options)}
+            {m.subject_ratings_yours({ score: number(displayRating(data.own, data.question.scale), 2) }, options)}
           </p>
         )}
         {data.statistics.map((item) => (
@@ -175,6 +199,8 @@ export function RatingsView({
                   {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
                 </strong>,
                 m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
+                item.licence ? m.rating_import_licence({ licence: item.licence }, options) : null,
+                item.attribution ? m.rating_import_attribution({ attribution: item.attribution }, options) : null,
               ]}
             />
           </p>
@@ -182,6 +208,7 @@ export function RatingsView({
         {control && (
           <SubjectRatingControl
             {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
+            question={data.question}
             locale={control.locale}
             own={control.own}
             returnTo={control.returnTo}

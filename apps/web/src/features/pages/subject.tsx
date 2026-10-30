@@ -1,3 +1,4 @@
+import type { PublicFigure } from './subject-ratings';
 import type { SubjectRead, KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -204,7 +205,7 @@ export function subjectPageJsonLd(
     origin?: string;
     typeLabel?: string;
     schemaOrgType?: string;
-    ratings?: { figures: { population: string; count: number; mean?: number; remaining?: number }[] };
+    ratings?: { figure: PublicFigure };
   } = {},
 ): string | undefined {
   const read = subjectBody(page);

@@ -13,22 +13,63 @@ export type Statistic = {
   mean: number;
   count: number;
   asOf: string;
+  licence?: string;
+  attribution?: string;
+  sourceRecordId?: string;
+  sourceAlias?: string;
 };
-export type Ratings = { figures: Figure[]; statistics: Statistic[]; realms: Realm[]; own: number | null };
-type Response<T> = { status: number; data?: T | null };
-type Route = {
-  ratings: { get(options: unknown): Promise<Response<{ figures: Figure[] }>> } & ((args: { questionId: string }) => {
-    vote: {
-      get(options: unknown): Promise<Response<{ units: number }>>;
-      put(
-        body: { units: number },
-        options: { headers: { authorization: string; 'idempotency-key': string } },
-      ): Promise<Response<unknown>>;
-      delete(options: { headers: { authorization: string; 'idempotency-key': string } }): Promise<Response<unknown>>;
-    };
-  });
-  'source-statistics': { get(options: unknown): Promise<Response<Statistic[]>> };
+type SubjectRoutes = ReturnType<KernelClient['subjects']>;
+export type RatingQuestion = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['rating-questions']>['get']>>['data']
+>;
+export type PublicFigure = NonNullable<Awaited<ReturnType<SubjectRoutes['figure']['get']>>['data']>['figure'];
+export type Ratings = {
+  question: RatingQuestion;
+  figure: PublicFigure;
+  figures: Figure[];
+  statistics: Statistic[];
+  realms: Realm[];
+  own: number | null;
 };
+
+/** PublicFigure numbers already use this documented display domain, rather than vote units. */
+export const PUBLIC_RATING_SCALE = { min: 0, max: 10 } as const;
+
+/** The standard question maps its stored bounds and step to the published display domain. */
+export function displayRating(units: number, scale: RatingQuestion['scale']): number {
+  return (
+    PUBLIC_RATING_SCALE.min +
+    ((units - scale.min) / (scale.max - scale.min)) * (PUBLIC_RATING_SCALE.max - PUBLIC_RATING_SCALE.min)
+  );
+}
+
+export function validRatingUnits(units: number, scale: RatingQuestion['scale']): boolean {
+  return (
+    Number.isSafeInteger(units) &&
+    units >= scale.min &&
+    units <= scale.max &&
+    (units - scale.min) % scale.displayStep === 0
+  );
+}
+
+export function hasPublicMean(figure: PublicFigure): figure is PublicFigure & { mean: number } {
+  return (
+    figure.questionId === QUESTION &&
+    figure.populationId === GLOBAL &&
+    figure.state === 'ready' &&
+    Number.isSafeInteger(figure.count) &&
+    figure.count > 0 &&
+    figure.mean !== null &&
+    Number.isFinite(figure.mean) &&
+    figure.mean >= PUBLIC_RATING_SCALE.min &&
+    figure.mean <= PUBLIC_RATING_SCALE.max
+  );
+}
+
+export async function readRatingQuestion(client: KernelClient): Promise<RatingQuestion | null> {
+  const result = await client['rating-questions']({ questionId: QUESTION }).get();
+  return result.status === 200 && result.data ? result.data : null;
+}
 
 export type SubjectOwnRating = { kind: 'ready'; units: number | null } | { kind: 'unavailable' };
 
@@ -39,7 +80,7 @@ export async function readRatings(
   memberships: Realm[] = [],
 ): Promise<Ratings | null> {
   const realms = memberships.slice(0, 3);
-  const subject = client.subjects({ id }) as unknown as Route;
+  const subject = client.subjects({ id });
   const headers = authorization ? { authorization } : {};
   try {
     const ownVote = authorization
@@ -51,7 +92,9 @@ export async function readRatings(
             throw error;
           })
       : null;
-    const [aggregate, sources, vote] = await Promise.all([
+    const [question, headline, aggregate, sources, vote] = await Promise.all([
+      readRatingQuestion(client),
+      subject.figure.get({ headers }),
       subject.ratings.get({
         query: { question: QUESTION, population: [GLOBAL, ...realms.map((realm) => realm.id)] },
         headers,
@@ -60,6 +103,10 @@ export async function readRatings(
       ownVote,
     ]);
     if (
+      !question ||
+      headline.status !== 200 ||
+      !headline.data ||
+      headline.data.figure.questionId !== question.id ||
       aggregate.status !== 200 ||
       !aggregate.data ||
       sources.status !== 200 ||
@@ -68,6 +115,8 @@ export async function readRatings(
     )
       return null;
     return {
+      question,
+      figure: headline.data.figure,
       figures: aggregate.data.figures,
       statistics: sources.data,
       realms,
@@ -88,7 +137,8 @@ export async function readOwnRating(
     await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (!authorization) return { kind: 'unavailable' };
-    const result = await (client.subjects({ id }) as unknown as Route)
+    const result = await client
+      .subjects({ id })
       .ratings({ questionId: QUESTION })
       .vote.get({ headers: { authorization } });
     if (result.status === 200) return { kind: 'ready', units: result.data?.units ?? null };
@@ -107,9 +157,13 @@ export async function writeOwnRating(
   units: number | null,
   idempotencyKey: string,
 ): Promise<boolean> {
-  const vote = (client.subjects({ id }) as unknown as Route).ratings({ questionId: QUESTION }).vote;
+  const vote = client.subjects({ id }).ratings({ questionId: QUESTION }).vote;
   const headers = { authorization, 'idempotency-key': idempotencyKey };
   try {
+    if (units !== null) {
+      const question = await readRatingQuestion(client);
+      if (!question || !validRatingUnits(units, question.scale)) return false;
+    }
     const result = units === null ? await vote.delete({ headers }) : await vote.put({ units }, { headers });
     return units === null ? result.status === 204 : result.status === 200;
   } catch {

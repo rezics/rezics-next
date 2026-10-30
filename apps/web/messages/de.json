@@ -1083,5 +1083,14 @@
   "sources_open_detail": "Ausgewählte Angaben und Quellen erläutern",
   "library_collection_share": "Teilen",
   "library_collection_social_unavailable": "Gefällt mir, Speichern und Melden sind für Sammlungen noch nicht verfügbar.",
-  "library_collection_actions_unavailable": "Die Aktionen für diese Sammlung konnten nicht geladen werden. Bitte lade die Seite neu."
+  "library_collection_actions_unavailable": "Die Aktionen für diese Sammlung konnten nicht geladen werden. Bitte lade die Seite neu.",
+  "rating_public_mean": "{mean} von {maximum}",
+  "rating_public_count": "Global · {count} Bewertungen",
+  "rating_public_updating": "Die öffentliche Bewertung wird aktualisiert.",
+  "rating_public_insufficient": "Für einen öffentlichen Mittelwert sind weitere Bewertungen nötig.",
+  "rating_public_delay": "Native Bewertungen werden nach der Verarbeitung veröffentlicht. Deine Stimme kann sich vor der öffentlichen Zahl ändern.",
+  "rating_public_ordering": "Die Bewertungssortierung nutzt einen Bayes-Wert derselben Frage und Global-Population. Angezeigt wird der öffentliche Mittelwert.",
+  "rating_question_revision": "Revision {revision}",
+  "rating_import_licence": "Lizenz: {licence}",
+  "rating_import_attribution": "Namensnennung: {attribution}"
 }

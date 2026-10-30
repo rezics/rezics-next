@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { changeSubjectRating } from './rating-actions';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
-import type { SubjectOwnRating } from './subject-ratings';
+import { displayRating, type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
 
 export type RatingControlState =
   | { kind: 'unknown' }
@@ -50,6 +50,7 @@ export async function applyOptimisticRatingChange(input: {
 }
 
 export function RatingControlView({
+  question,
   subjectId,
   locale,
   returnTo,
@@ -59,6 +60,7 @@ export function RatingControlView({
   onSet,
   onClear,
 }: {
+  question: RatingQuestion;
   subjectId: string;
   locale: string;
   returnTo: string;
@@ -88,7 +90,7 @@ export function RatingControlView({
         >
           {m.account_sign_in({}, options)}
         </a>
-        <NoScriptForm returnTo={returnTo} locale={locale} value={null} />
+        <NoScriptForm question={question} returnTo={returnTo} locale={locale} value={null} />
       </div>
     );
 
@@ -100,21 +102,32 @@ export function RatingControlView({
             {failure}
           </p>
         )}
-        <NoScriptForm returnTo={returnTo} locale={locale} value={null} />
+        <NoScriptForm question={question} returnTo={returnTo} locale={locale} value={null} />
       </div>
     );
 
   const value = draft;
-  const sliderValue = value ?? 10;
+  const scale = question.scale;
+  const sliderValue =
+    value ?? scale.min + Math.floor((scale.max - scale.min) / scale.displayStep / 2) * scale.displayStep;
   const display = (units: number | null) =>
     units === null
       ? m.subject_rating_control_unrated({}, options)
       : m.subject_rating_control_value(
-          { score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(units / 2) },
+          { score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(displayRating(units, scale)) },
           options,
         );
   const valueText = display(value);
   const clearOnKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.key === 'Home' &&
+      !pending &&
+      event.target instanceof HTMLElement &&
+      event.target.getAttribute('role') === 'slider'
+    ) {
+      editing.current = true;
+      setDraft(scale.min);
+    }
     if ((event.key === 'Delete' || event.key === 'Backspace') && !pending && state.units !== null) {
       event.preventDefault();
       editing.current = false;
@@ -132,7 +145,7 @@ export function RatingControlView({
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <label className="font-medium text-sm" htmlFor={`rating-${subjectId}`}>
-          {m.subject_rating_control_label({}, options)}
+          {question.label}
         </label>
         <output
           aria-live="polite"
@@ -144,26 +157,34 @@ export function RatingControlView({
         </output>
       </div>
       <Slider
-        aria-label={m.subject_rating_control_label({}, options)}
+        aria-label={question.label}
         aria-valuetext={valueText}
         className="[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary"
         disabled={pending}
         id={`rating-${subjectId}`}
-        max={20}
-        min={0}
+        max={question.scale.max}
+        min={question.scale.min}
         onValueChange={(next) => {
           const units = Array.isArray(next) ? next[0] : next;
           if (typeof units === 'number') {
             editing.current = true;
-            setDraft(Math.min(20, Math.max(0, Math.round(units))));
+            setDraft(
+              Math.min(
+                scale.max,
+                Math.max(
+                  scale.min,
+                  scale.min + Math.round((units - scale.min) / scale.displayStep) * scale.displayStep,
+                ),
+              ),
+            );
           }
         }}
-        step={1}
+        step={question.scale.displayStep}
         value={[sliderValue]}
       />
       <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
-        <span>0</span>
-        <span>10</span>
+        <span>{displayRating(scale.min, scale)}</span>
+        <span>{displayRating(scale.max, scale)}</span>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -194,27 +215,42 @@ export function RatingControlView({
           {failure}
         </p>
       )}
-      <NoScriptForm returnTo={returnTo} locale={locale} value={state.units} />
+      <NoScriptForm question={question} returnTo={returnTo} locale={locale} value={state.units} />
     </div>
   );
 }
 
-function NoScriptForm({ returnTo, locale, value }: { returnTo: string; locale: string; value: number | null }) {
+function NoScriptForm({
+  question,
+  returnTo,
+  locale,
+  value,
+}: {
+  question: RatingQuestion;
+  returnTo: string;
+  locale: string;
+  value: number | null;
+}) {
   const options = { locale: locale as never };
   return (
     <noscript>
       <form action={returnTo} className="mt-3 flex flex-wrap items-center gap-2" method="post">
         <label className="text-sm" htmlFor="rating-no-script">
-          {m.subject_rating_control_label({}, options)}
+          {question.label}
         </label>
         <input
-          aria-label={m.subject_rating_control_label({}, options)}
-          defaultValue={value ?? 10}
+          aria-label={question.label}
+          defaultValue={
+            value ??
+            question.scale.min +
+              Math.floor((question.scale.max - question.scale.min) / question.scale.displayStep / 2) *
+                question.scale.displayStep
+          }
           id="rating-no-script"
-          max={20}
-          min={0}
+          max={question.scale.max}
+          min={question.scale.min}
           name="units"
-          step={1}
+          step={question.scale.displayStep}
           type="range"
         />
         <button
@@ -236,6 +272,7 @@ function NoScriptForm({ returnTo, locale, value }: { returnTo: string; locale: s
 }
 
 export function SubjectRatingControl({
+  question,
   subjectId,
   locale,
   returnTo,
@@ -246,6 +283,7 @@ export function SubjectRatingControl({
   subjectId: string;
   locale: string;
   returnTo: string;
+  question: RatingQuestion;
   session: 'unknown' | 'unavailable' | 'signed-out' | 'signed-in';
   own: SubjectOwnRating | undefined;
   initialFailure?: boolean;
@@ -284,6 +322,8 @@ export function SubjectRatingControl({
 
   return (
     <RatingControlView
+      key={`${question.id}:${question.revision}`}
+      question={question}
       failure={failure}
       locale={locale}
       onClear={() => void change(null)}

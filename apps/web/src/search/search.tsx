@@ -37,7 +37,7 @@ type SearchResult = Omit<SearchData, 'subjects'> & {
   subjects: (SearchData['subjects'][number] & {
     descriptions?: Record<string, string>;
     facts?: Record<string, Fact[]>;
-  } & Pick<ResultHit, 'summary' | 'publicRating' | 'storyOverlay'>)[];
+  } & Pick<ResultHit, 'summary' | 'figure' | 'storyOverlay'>)[];
 };
 type FacetBody = Parameters<KernelClient['subjects']['$facets']['post']>[0] & { languages?: string[] };
 type FacetResult = {
@@ -607,6 +607,9 @@ function renderResults(
   const next = data?.discovery?.status === 'ready' ? data.discovery.page.next : result?.next;
   return (
     <>
+      {data?.sort === 'rating' && (
+        <p className="text-sm text-muted-foreground">{m.rating_public_ordering({}, { locale: locale as never })}</p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{m.search_results()}</p>
         <SearchSort

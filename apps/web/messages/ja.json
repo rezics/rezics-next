@@ -1083,5 +1083,14 @@
   "sources_open_detail": "選択済み情報と出典の説明を見る",
   "library_collection_share": "共有",
   "library_collection_social_unavailable": "コレクションへの「いいね」、保存、報告はまだ利用できません。",
-  "library_collection_actions_unavailable": "コレクションの操作を読み込めませんでした。再読み込みしてお試しください。"
+  "library_collection_actions_unavailable": "コレクションの操作を読み込めませんでした。再読み込みしてお試しください。",
+  "rating_public_mean": "{mean} / {maximum} 点",
+  "rating_public_count": "Global · {count} 件の評価",
+  "rating_public_updating": "公開評価を更新しています。",
+  "rating_public_insufficient": "平均を公開するには、さらに評価が必要です。",
+  "rating_public_delay": "サイト内の評価は処理後に公開されます。自分の評価の変更は公開値への反映に先行する場合があります。",
+  "rating_public_ordering": "評価順には同じ質問と Global 集団によるベイズスコアを使います。表示値は公開平均です。",
+  "rating_question_revision": "改訂 {revision}",
+  "rating_import_licence": "ライセンス：{licence}",
+  "rating_import_attribution": "帰属表示：{attribution}"
 }

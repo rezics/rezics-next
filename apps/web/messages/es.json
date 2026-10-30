@@ -1083,5 +1083,14 @@
   "sources_open_detail": "Consultar los datos seleccionados y sus fuentes",
   "library_collection_share": "Compartir",
   "library_collection_social_unavailable": "Las funciones Me gusta, Guardar y Denunciar aún no están disponibles para las colecciones.",
-  "library_collection_actions_unavailable": "No se pudieron cargar las acciones de esta colección. Recarga la página para volver a intentarlo."
+  "library_collection_actions_unavailable": "No se pudieron cargar las acciones de esta colección. Recarga la página para volver a intentarlo.",
+  "rating_public_mean": "{mean} de {maximum}",
+  "rating_public_count": "Global · {count} valoraciones",
+  "rating_public_updating": "Se está actualizando la valoración pública.",
+  "rating_public_insufficient": "Se necesitan más valoraciones para publicar una media.",
+  "rating_public_delay": "Las valoraciones nativas se publican tras su procesamiento. Tu voto puede cambiar antes de actualizarse la cifra pública.",
+  "rating_public_ordering": "El orden usa una puntuación bayesiana de la misma pregunta y población Global. La cifra mostrada es la media pública.",
+  "rating_question_revision": "Revisión {revision}",
+  "rating_import_licence": "Licencia: {licence}",
+  "rating_import_attribution": "Atribución: {attribution}"
 }

@@ -1083,5 +1083,14 @@
   "sources_open_detail": "선택된 정보와 출처 설명 보기",
   "library_collection_share": "공유",
   "library_collection_social_unavailable": "컬렉션의 좋아요, 저장, 신고 기능은 아직 사용할 수 없습니다.",
-  "library_collection_actions_unavailable": "컬렉션 작업을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요."
+  "library_collection_actions_unavailable": "컬렉션 작업을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.",
+  "rating_public_mean": "{maximum}점 만점에 {mean}점",
+  "rating_public_count": "Global · 평가 {count}개",
+  "rating_public_updating": "공개 평가를 갱신하고 있습니다.",
+  "rating_public_insufficient": "평균을 공개하려면 평가가 더 필요합니다.",
+  "rating_public_delay": "사이트 내 평가는 처리 후 공개됩니다. 내 평가가 공개 수치보다 먼저 변경될 수 있습니다.",
+  "rating_public_ordering": "평가 정렬에는 동일한 질문과 Global 집단의 베이지안 점수를 사용합니다. 표시되는 수치는 공개 평균입니다.",
+  "rating_question_revision": "개정 {revision}",
+  "rating_import_licence": "라이선스: {licence}",
+  "rating_import_attribution": "저작자 표시: {attribution}"
 }

@@ -1,3 +1,4 @@
+import type { PublicFigure } from './subject-ratings';
 import { pickLanguage } from '@rezics/composition';
 import { coverImagePreload } from '@rezics/ui/cover';
 import { coverSrc } from '../../media/cover-src';
@@ -23,7 +24,7 @@ type SubjectHeadContext = {
   page?: number;
   cursor?: string;
   includeJsonLd?: boolean;
-  ratings?: { figures: { population: string; count: number; mean?: number; remaining?: number }[] };
+  ratings?: { figure: PublicFigure };
 };
 
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];

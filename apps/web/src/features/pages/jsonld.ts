@@ -1,3 +1,5 @@
+import { hasPublicMean, PUBLIC_RATING_SCALE } from './subject-ratings';
+import type { PublicFigure } from './subject-ratings';
 import { pickLanguage } from '@rezics/composition';
 import {
   checkDocument,
@@ -241,7 +243,7 @@ export function subjectJsonLd({
   typeLabel?: string;
   subjectLabel?: string;
   schemaOrgType?: string;
-  ratings?: { figures: { population: string; count: number; mean?: number; remaining?: number }[] };
+  ratings?: { figure: PublicFigure };
   summary?: Summary | null;
 }): Record<string, JsonValue> {
   const original = originalLanguage(subject);
@@ -327,24 +329,15 @@ export function subjectJsonLd({
     if (key !== undefined && values.length) entries.push([key, values.length === 1 ? values[0]! : values]);
   }
   if (identifiers.length) entries.push(['identifier', identifiers]);
-  const global = ratings?.figures.find((figure) => figure.population === '00000000-0000-8000-8000-000000000000');
-  if (
-    global &&
-    Number.isSafeInteger(global.count) &&
-    global.count > 0 &&
-    global.mean !== undefined &&
-    Number.isFinite(global.mean) &&
-    global.mean >= 0 &&
-    global.mean <= 20 &&
-    global.remaining === undefined
-  ) {
+  const global = ratings?.figure;
+  if (global && hasPublicMean(global)) {
     entries.push([
       'aggregateRating',
       {
         '@type': 'AggregateRating',
         ratingValue: global.mean,
-        bestRating: 20,
-        worstRating: 0,
+        bestRating: PUBLIC_RATING_SCALE.max,
+        worstRating: PUBLIC_RATING_SCALE.min,
         ratingCount: global.count,
       },
     ]);

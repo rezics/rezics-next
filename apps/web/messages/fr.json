@@ -1083,5 +1083,14 @@
   "sources_open_detail": "Comprendre les données sélectionnées et leurs sources",
   "library_collection_share": "Partager",
   "library_collection_social_unavailable": "Les mentions J’aime, l’enregistrement et le signalement des collections ne sont pas encore disponibles.",
-  "library_collection_actions_unavailable": "Impossible de charger les actions de cette collection. Rechargez la page pour réessayer."
+  "library_collection_actions_unavailable": "Impossible de charger les actions de cette collection. Rechargez la page pour réessayer.",
+  "rating_public_mean": "{mean} sur {maximum}",
+  "rating_public_count": "Global · {count} notes",
+  "rating_public_updating": "La note publique est en cours de mise à jour.",
+  "rating_public_insufficient": "Il faut davantage de notes pour publier une moyenne.",
+  "rating_public_delay": "Les notes natives sont publiées après traitement. Votre note peut changer avant la mise à jour du chiffre public.",
+  "rating_public_ordering": "Le classement utilise un score bayésien de la même question et de la population Global. Le chiffre affiché est la moyenne publique.",
+  "rating_question_revision": "Révision {revision}",
+  "rating_import_licence": "Licence : {licence}",
+  "rating_import_attribution": "Attribution : {attribution}"
 }

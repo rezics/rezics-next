@@ -13,8 +13,7 @@ function validateChange(input: unknown): { subjectId: string; units: number | nu
   if (
     typeof value.subjectId !== 'string' ||
     !uuid.test(value.subjectId) ||
-    (value.units !== null &&
-      (!Number.isSafeInteger(value.units) || (value.units as number) < 0 || (value.units as number) > 20)) ||
+    (value.units !== null && (typeof value.units !== 'number' || !Number.isSafeInteger(value.units))) ||
     typeof value.idempotencyKey !== 'string' ||
     !uuid.test(value.idempotencyKey)
   )
@@ -98,9 +97,9 @@ export async function postSubjectRatingForm(
     units = null;
   } else {
     const values = fields.getAll('units');
-    if (values.length !== 1 || !/^(?:0|[1-9]\d?)$/.test(values[0]!)) return 'failure';
+    if (values.length !== 1 || !/^(?:0|-?[1-9]\d*)$/.test(values[0]!)) return 'failure';
     units = Number(values[0]);
-    if (!Number.isSafeInteger(units) || units < 0 || units > 20) return 'failure';
+    if (!Number.isSafeInteger(units)) return 'failure';
   }
 
   // The HTML is shared across readers, so it cannot embed a reader-specific CSRF token. The request middleware

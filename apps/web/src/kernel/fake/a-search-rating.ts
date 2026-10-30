@@ -1,3 +1,4 @@
+import { GLOBAL, QUESTION, type PublicFigure } from '../../features/pages/subject-ratings';
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import { isRecord } from './languages.ts';
@@ -33,6 +34,15 @@ const stories: KernelRecording = {
       labels: { en: 'Kokoro', 'zh-Hans': '心' },
       descriptions: { en: 'A classic novel by Natsume Soseki.', 'zh-Hans': '夏目漱石的经典小说。' },
       publicRating: rating(ids[0]!, 8.6),
+      figure: {
+        questionId: QUESTION,
+        populationId: GLOBAL,
+        scale: { min: 0, max: 20, displayStep: 1 },
+        count: 27,
+        state: 'ready',
+        mean: 8.6,
+        score: 8.5,
+      } satisfies PublicFigure,
       storyOverlay: true,
     },
     {
@@ -44,6 +54,15 @@ const stories: KernelRecording = {
         'zh-Hans': '飞行员遇见来自另一个世界的小小访客。',
       },
       publicRating: rating(ids[1]!, 8.1),
+      figure: {
+        questionId: QUESTION,
+        populationId: GLOBAL,
+        scale: { min: 0, max: 20, displayStep: 1 },
+        count: 27,
+        state: 'ready',
+        mean: 8.1,
+        score: 8.0,
+      } satisfies PublicFigure,
     },
     {
       id: ids[2],

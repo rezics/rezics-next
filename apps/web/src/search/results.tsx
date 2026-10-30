@@ -10,7 +10,8 @@ import {
 import { MemberListRow } from '@rezics/ui/list-presentation';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { ItemDescription } from '@rezics/ui/shadcn/item';
-import { m } from '../paraglide/messages.js';
+import { PublicRatingFigure } from '../features/pages/public-rating-figure';
+import type { PublicFigure } from '../features/pages/subject-ratings';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
 import { listKeyFacts } from '../media/type-presentation';
@@ -33,7 +34,7 @@ export type SubjectHit = {
 };
 export type ResultHit = SubjectHit & {
   descriptions?: Record<string, string>;
-  publicRating?: { score: number | null };
+  figure?: PublicFigure;
   storyOverlay?: boolean;
 };
 
@@ -110,7 +111,6 @@ export function ResultRow({
   const factProperties = releasedPresentation?.keyFacts ?? fallbackListFactProperties(subject.types);
   const facts = listKeyFacts(hit.facts, factProperties, yearProperties, locale);
   const badgeProperties = fallbackListFactProperties(subject.types) ?? [];
-  const score = hit.publicRating?.score;
   return (
     <MemberListRow
       href={subjectLink.href}
@@ -122,12 +122,9 @@ export function ResultRow({
       {...(listPresentation ? { listPresentation } : {})}
       {...(hit.storyOverlay ? { storyOverlay: true } : {})}
       trailing={
-        score !== undefined && score !== null && Number.isFinite(score) ? (
-          <div className="shrink-0 text-right text-sm" data-slot="public-rating-figure">
-            <span className="block text-xs text-muted-foreground">{m.search_global_score()}</span>
-            <strong className="tabular-nums">
-              {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score)}
-            </strong>
+        hit.figure ? (
+          <div className="max-w-48 shrink-0 text-right">
+            <PublicRatingFigure figure={hit.figure} locale={locale} />
           </div>
         ) : undefined
       }
