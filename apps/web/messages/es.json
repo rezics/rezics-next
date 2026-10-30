@@ -1000,5 +1000,7 @@
   "discovery_loading": "Cargando resultados…",
   "discovery_not_ready": "La búsqueda se está preparando. Inténtalo de nuevo en un momento.",
   "discovery_unnamed_account": "Cuenta sin nombre",
-  "discovery_verified_as": "Identidad verificada: {name}"
+  "discovery_verified_as": "Identidad verificada: {name}",
+  "library_history_unavailable": "El significado histórico no está disponible. Se muestran los valores guardados sin cambios.",
+  "library_current_choices": "Opciones actuales"
 }

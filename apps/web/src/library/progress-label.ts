@@ -33,26 +33,7 @@ export function progressView(progress: ProgressLabelInput | null, locale: string
   const inProgress = { text: m.home_continue_in_progress({}, options), percent: null };
 
   if (progress.mode === 'cursor_position' && progress.position == null) {
-    const locator = progress.locator?.trim();
-    if (!locator) return inProgress;
-    const partAndChapter = /^(?:part|Part)\s+(\d+)\s*[,;:]?\s*(?:chapter|Chapter)\s+(\d+)$/i.exec(locator);
-    if (partAndChapter) {
-      return {
-        text: m.library_progress_locator_part_chapter(
-          { part: number.format(Number(partAndChapter[1])), chapter: number.format(Number(partAndChapter[2])) },
-          options,
-        ),
-        percent: null,
-      };
-    }
-    const chapter = /^(?:chapter|Chapter)\s+(\d+)$/i.exec(locator);
-    if (chapter) {
-      return {
-        text: m.library_progress_locator_chapter({ chapter: number.format(Number(chapter[1])) }, options),
-        percent: null,
-      };
-    }
-    return { text: locator, percent: null };
+    return progress.locator ? { text: progress.locator, percent: null } : inProgress;
   }
 
   const amount =
@@ -60,9 +41,28 @@ export function progressView(progress: ProgressLabelInput | null, locale: string
       ? amountOf(progress.completedUnitCount)
       : amountOf(progress.mode === 'cursor_position' ? (progress.position ?? null) : progress.amount);
   if (amount === null) return inProgress;
+  // Keep accepted decimal text exact; Number is used only for the visual share and plural category.
+  const exact = (value: string | number): string => {
+    const text = String(value);
+    if (!/^[0-9]+(?:\.[0-9]+)?$/.test(text)) return number.format(Number(value));
+    const [integer = '0', fraction] = text.split('.');
+    const whole = number.format(BigInt(integer));
+    if (!fraction) return whole;
+    const separator = number.formatToParts(1.1).find((part) => part.type === 'decimal')?.value ?? '.';
+    const digits = new Intl.NumberFormat(locale, { useGrouping: false });
+    return `${whole}${separator}${[...fraction].map((digit) => digits.format(Number(digit))).join('')}`;
+  };
+  const amountText = exact(
+    progress.mode === 'completed_units'
+      ? progress.completedUnitCount
+      : progress.mode === 'cursor_position'
+        ? progress.position!
+        : progress.amount!,
+  );
   const total = amountOf(progress.total);
+  const totalText = total === null ? '' : exact(progress.total!);
   const percent = progress.dimension === 'percent';
-  const withTotal = total !== null && !percent ? `${number.format(amount)} / ${number.format(total)}` : null;
+  const withTotal = total !== null && !percent ? `${amountText} / ${totalText}` : null;
   const unitCount = withTotal === null ? amount : total!;
   const countCategory =
     progress.unitLabelLanguage && progress.unitCountForms
@@ -75,12 +75,9 @@ export function progressView(progress: ProgressLabelInput | null, locale: string
     ? new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 6 }).format(amount / 100)
     : unitLabel
       ? withTotal === null
-        ? m.home_continue_amount({ amount: number.format(amount), unit: unitLabel }, options)
-        : m.home_continue_amount_of_total(
-            { amount: number.format(amount), total: number.format(total!), unit: unitLabel },
-            options,
-          )
-      : (withTotal ?? number.format(amount));
+        ? m.home_continue_amount({ amount: amountText, unit: unitLabel }, options)
+        : m.home_continue_amount_of_total({ amount: amountText, total: totalText, unit: unitLabel }, options)
+      : (withTotal ?? amountText);
   const share = percent ? amount : total !== null && total > 0 ? (amount / total) * 100 : null;
   return {
     text: valueText,

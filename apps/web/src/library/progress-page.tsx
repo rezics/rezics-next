@@ -116,7 +116,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
         {sessions.length ? (
           <ol className="space-y-3">
             {sessions.map((session) => (
-              <SessionRow key={session.id} session={session} ratio={ratio} />
+              <SessionRow key={`${session.id}:${session.revision}`} session={session} ratio={ratio} />
             ))}
           </ol>
         ) : (
@@ -177,7 +177,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                 <input type="hidden" name="idempotencyKey" value={key} />
                 <input type="hidden" name="subjectId" value={subject} />
                 <fieldset className="space-y-3">
-                  <FieldLegend variant="label">{m.library_progress_mode()}</FieldLegend>
+                  <FieldLegend variant="label">{m.library_current_choices()}</FieldLegend>
                   <RadioGroup
                     name="progress-mode"
                     value={mode}
@@ -361,8 +361,13 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
             </Exposure>
           }
         />
-        {!session.inputRules ? (
-          <p className="text-sm text-muted-foreground">{m.library_progress_no_longer_offered()}</p>
+        {!session.unitLabel ? (
+          <p className="text-sm text-muted-foreground">
+            {m.library_history_unavailable()}{' '}
+            <code>
+              {session.mode} / {session.unit}
+            </code>
+          </p>
         ) : null}
         {confirming ? (
           <Exposure operation="progress_session.complete">

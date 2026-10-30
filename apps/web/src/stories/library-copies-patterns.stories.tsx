@@ -11,6 +11,7 @@ import { PatternStory, pagePaths } from './page';
 
 const meta = {
   title: 'Patterns/Library/Copies forms',
+  tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
     viewport: {
@@ -111,5 +112,28 @@ export const MultipleCopyTypes: Story = {
     await copiesReady(canvasElement);
     await userEvent.click(within(canvasElement).getByRole('button', { name: m.library_copy_add() }));
     await within(document.body).findByRole('combobox', { name: m.library_copy_kind() });
+  },
+};
+
+export const HistoricalMeaningUnavailable: Story = {
+  render: () => renderCopies('one'),
+  async play({ canvasElement }) {
+    await copiesReady(canvasElement);
+    await within(canvasElement).findByText(m.library_history_unavailable());
+  },
+};
+export const StaleDelete: Story = {
+  render: () => renderCopies('stale-delete'),
+  async play({ canvasElement }) {
+    await copiesReady(canvasElement);
+    await userEvent.click(within(canvasElement).getByRole('button', { name: m.library_copy_more_actions() }));
+    await userEvent.click(within(document.body).getAllByRole('menuitem')[0]!);
+    const dialog = within(document.body);
+    await userEvent.click(await dialog.findByRole('button', { name: m.library_copy_delete(), exact: true }));
+    await userEvent.click(await dialog.findByRole('button', { name: m.library_copy_delete_confirm() }));
+    await expect(dialog.findByText(m.library_copy_conflict())).resolves.toBeVisible();
+    await expect(
+      within(canvasElement).findByRole('button', { name: m.library_copy_more_actions() }),
+    ).resolves.toBeVisible();
   },
 };

@@ -2,8 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
-import { progressFormChoices, progressSessionProfile, type ProgressChoices } from './progress-profile';
+import { progressFormChoices, type ProgressChoices } from './progress-profile';
 import { readRelease } from '../subject/definitions';
 import { requestLocale } from '../kernel/client';
 import { kernelClient } from '../kernel/client';
@@ -108,66 +107,20 @@ function validateFinish(input: unknown): ProgressFinishInput {
   };
 }
 
-const READ_SHARE_MS = 5_000;
-const readCache = new Map<string, { at: number; value: unknown }>();
-const readInflight = new Map<string, Promise<unknown>>();
-
-function viewerReadKey(request: Request, kind: string, data: unknown): string {
-  assertPublicCacheReadAllowed(request, 'session or cookie');
-  return `${kind}\n${request.headers.get('cookie') ?? ''}\n${JSON.stringify(data)}`;
-}
-
-/** SSR and the following hydration share one kernel read. A failed read is not reused. */
-function shareRead<T>(key: string, load: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const hit = readCache.get(key);
-  if (hit && now - hit.at < READ_SHARE_MS) return Promise.resolve(hit.value as T);
-  const pending = readInflight.get(key);
-  if (pending) return pending as Promise<T>;
-  const promise = load().then(
-    (value) => {
-      readCache.set(key, { at: Date.now(), value });
-      readInflight.delete(key);
-      if (readCache.size > 32) {
-        for (const [cachedKey, entry] of readCache) {
-          if (Date.now() - entry.at >= READ_SHARE_MS) readCache.delete(cachedKey);
-        }
-      }
-      return value;
-    },
-    (error: unknown) => {
-      readInflight.delete(key);
-      throw error;
-    },
-  );
-  readInflight.set(key, promise);
-  return promise;
-}
-
-function withFreshKey<T extends { idempotencyKey: string }>(page: T): T {
-  return { ...page, idempotencyKey: crypto.randomUUID() };
-}
-
 export const readProgressIndex = createServerFn({ method: 'GET' })
   .validator(validateIndexInput)
   .handler(async ({ data }): Promise<ProgressIndex> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await shareRead(viewerReadKey(request, 'index', data), () =>
-      loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data),
-    );
+    const page = await loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data);
     await nameSubjectTypes([page.selectedSubject, ...page.sessions.map((session) => session.subject)]);
     if (page.signedIn) {
       const release = await readRelease();
       const locale = requestLocale(request) ?? 'en';
       const subject = page.selectedSubject;
       page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
-      page.sessions = page.sessions.map((session) => ({
-        ...session,
-        ...progressSessionProfile(release, session.subject?.type ?? '', session.mode, session.unit, locale),
-      }));
     }
-    return withFreshKey(page);
+    return page;
   });
 
 export const readProgressSession = createServerFn({ method: 'GET' })
@@ -175,24 +128,9 @@ export const readProgressSession = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<ProgressSessionPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await shareRead(viewerReadKey(request, 'session', data), () =>
-      loadProgressSession(kernelClient(), request, env as Partial<SessionEnv>, data),
-    );
+    const page = await loadProgressSession(kernelClient(), request, env as Partial<SessionEnv>, data);
     if (page.signedIn) await nameSubjectTypes([page.session.subject, page.session.versionSubject]);
-    if (page.signedIn) {
-      const release = await readRelease();
-      page.session = {
-        ...page.session,
-        ...progressSessionProfile(
-          release,
-          page.session.subject?.type ?? '',
-          page.session.mode,
-          page.session.unit,
-          requestLocale(request) ?? 'en',
-        ),
-      };
-    }
-    return withFreshKey(page);
+    return page;
   });
 
 export const startProgressSession = createServerFn({ method: 'POST' })
@@ -219,6 +157,7 @@ export const finishProgressSession = createServerFn({ method: 'POST' })
 /** Picker results already identify the accepting type; resolving its choices needs no subject request. */
 export const readProgressChoices = createServerFn({ method: 'GET' })
   .validator((type: string) => requiredString(type, 256))
-  .handler(async ({ data }): Promise<ProgressChoices> =>
-    progressFormChoices(await readRelease(), data, requestLocale() ?? 'en'),
-  );
+  .handler(async ({ data }): Promise<ProgressChoices> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return progressFormChoices(await readRelease(), data, requestLocale() ?? 'en');
+  });

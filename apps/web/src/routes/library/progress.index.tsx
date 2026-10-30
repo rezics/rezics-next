@@ -18,7 +18,7 @@ export const Route = createFileRoute('/library/progress/')({
   }),
   loaderDeps: ({ search }) => ({ subjectId: search.subjectId, cursor: search.cursor }),
   loader: ({ deps }) => readProgressIndex({ data: deps }),
-  staleTime: 60_000,
+  staleTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.library_progress_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function ProgressIndexRoute() {

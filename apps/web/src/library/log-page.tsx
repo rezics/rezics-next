@@ -1,10 +1,12 @@
 import { Exposure } from '../kernel/exposure';
 import { RelativeTime } from './logs-progress';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import { removePublishedLog } from './logs-server';
+import { removePublishedLog, restorePublishedLog } from './logs-server';
+import { UndoNotice } from './copies-undo';
+import type { DeletionEvidence } from './copies-receipt';
 import type { PublishedLog } from './logs-read';
 import { AccountRef } from './account-ref';
 import { rowRatio, SubjectIdentity } from './subject-row';
@@ -27,7 +29,19 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOwner: boolean }) {
+export function PublishedLogPageView({
+  log,
+  isOwner,
+  revision: loadedRevision,
+}: {
+  log: PublishedLog;
+  isOwner: boolean;
+  revision?: number;
+}) {
+  const [revision, setRevision] = useState(loadedRevision);
+  const [undo, setUndo] = useState<DeletionEvidence | undefined>();
+  const deleteStarted = useRef<number | null>(null);
+  const busy = useRef(false);
   const [confirming, setConfirming] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [pending, setPending] = useState(false);
@@ -35,12 +49,14 @@ export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOw
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   async function remove() {
-    if (pending) return;
+    if (busy.current || revision === undefined) return;
+    busy.current = true;
+    deleteStarted.current ??= Date.now();
     setPending(true);
     setError(null);
     try {
       const result = await removePublishedLog({
-        data: { id: log.id, idempotencyKey },
+        data: { id: log.id, revision, idempotencyKey },
         headers: csrfHeaders(),
       });
       if (!result.ok) {
@@ -49,10 +65,12 @@ export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOw
       }
       setIdempotencyKey(crypto.randomUUID());
       setConfirming(false);
+      setUndo(result.undo);
       setDeleted(true);
     } catch {
       setError(m.library_logs_write_failed());
     } finally {
+      busy.current = false;
       setPending(false);
     }
   }
@@ -60,7 +78,26 @@ export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOw
   if (deleted) {
     return (
       <article className="max-w-4xl space-y-4 text-foreground">
-        <p role="status">{m.library_logs_deleted()}</p>
+        <UndoNotice
+          message={m.library_logs_deleted()}
+          deadline={(deleteStarted.current ?? 0) + 30_000}
+          available={Boolean(undo)}
+          operation="published_log.create"
+          failure={m.library_logs_write_failed()}
+          restore={async (idempotencyKey) => {
+            if (!undo) return false;
+            const result = await restorePublishedLog({
+              data: { id: log.id, ...undo, idempotencyKey },
+              headers: csrfHeaders(),
+            });
+            if (!result.ok) return false;
+            setRevision(result.revision);
+            setDeleted(false);
+            setUndo(undefined);
+            deleteStarted.current = null;
+            return true;
+          }}
+        />
       </article>
     );
   }
@@ -105,7 +142,7 @@ export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOw
           {error}
         </p>
       ) : null}
-      {isOwner ? (
+      {isOwner && revision !== undefined ? (
         <Exposure operation="published_log.delete">
           <div className="flex flex-wrap gap-3">
             {!confirming ? (

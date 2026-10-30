@@ -39,6 +39,7 @@ export const Route = createFileRoute('/library/copies')({
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => readCopiesPage({ data: deps }),
+  staleTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.library_copy_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: CopiesRoute,

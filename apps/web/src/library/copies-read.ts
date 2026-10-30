@@ -1,8 +1,9 @@
-import type { CopyProfile } from './copies-profiles';
 import { libraryCopyStatusLabel } from './profiles';
 import definitions from '../kernel/recorded/definitions-release.json';
 import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
+import type { CopyProfile } from './copies-profiles';
+import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
@@ -67,7 +68,7 @@ export type CopyWriteFailure = {
   reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' | 'unsupported';
 };
 export type CopySaved = { ok: true; copy: SavedCopy };
-export type CopyRemoved = { ok: true };
+export type CopyRemoved = { ok: true; undo?: DeletionEvidence };
 export type CopyWriteResult = CopySaved | CopyWriteFailure;
 export type CopyRemoveResult = CopyRemoved | CopyWriteFailure;
 
@@ -259,7 +260,7 @@ function problemBody(error: unknown): unknown {
 export function writeFailure(status: number | undefined, error: unknown): CopyWriteFailure {
   const body = problemBody(error);
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
-  if (status === 409 && isRecord(body) && body.code === 'conflict') return { ok: false, reason: 'conflict' };
+  if (status === 409) return { ok: false, reason: 'conflict' };
   if (status === 422 && isRecord(body) && body.code === 'unsupported_library_profile')
     return { ok: false, reason: 'unsupported' };
   if (status === 400 || status === 422) return { ok: false, reason: 'invalid' };
@@ -398,9 +399,36 @@ export async function removeCopy(
       headers: writeHeaders(authorization, draft.idempotencyKey),
     });
     if (result.error) return writeFailure(result.status, result.error);
-    return { ok: true };
+    const undo = deletionEvidence(result.response.headers, 'Copy');
+    return { ok: true, ...(undo ? { undo } : {}) };
   } catch (error) {
     if (isPlatformClosedError(error) || error instanceof PlatformClosedError) return { ok: false, reason: 'closed' };
     throw error;
+  }
+}
+
+/** Restore one retained native copy; no recreation, profile substitution or follow-up read. */
+export async function restoreCopy(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: unknown,
+): Promise<CopyWriteResult> {
+  if (!isRecord(input) || !uuid.test(String(input.deletionId))) return { ok: false, reason: 'invalid' };
+  const draft = parseRemove(input);
+  if (!draft) return { ok: false, reason: 'invalid' };
+  try {
+    const authorization = await bearer(request, sessionEnv);
+    if (typeof authorization !== 'string') return authorization;
+    const result = await client
+      .copies({ copyId: draft.id })
+      .$restore.post(
+        { deletionId: String(input.deletionId), revision: draft.revision },
+        { headers: writeHeaders(authorization, draft.idempotencyKey) },
+      );
+    if (result.error || !result.data?.copy) return writeFailure(result.status, result.error);
+    return { ok: true, copy: saved(result.data.copy) };
+  } catch (error) {
+    return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
 }

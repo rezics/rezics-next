@@ -1000,5 +1000,7 @@
   "discovery_loading": "Ergebnisse werden geladen…",
   "discovery_not_ready": "Die Suche wird vorbereitet. Versuche es gleich noch einmal.",
   "discovery_unnamed_account": "Unbenanntes Konto",
-  "discovery_verified_as": "Verifiziert als {name}"
+  "discovery_verified_as": "Verifiziert als {name}",
+  "library_history_unavailable": "Die historische Bedeutung ist nicht verfügbar. Gespeicherte Werte werden unverändert angezeigt.",
+  "library_current_choices": "Aktuelle Auswahl"
 }

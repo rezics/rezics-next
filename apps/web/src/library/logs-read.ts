@@ -1,3 +1,5 @@
+import { notFound } from '@tanstack/react-router';
+import { deletionEvidence, nativeRevision, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
@@ -69,15 +71,18 @@ export async function loadPublishedLog(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { id: string },
-): Promise<{ log: PublishedLog; isOwner: boolean }> {
+): Promise<{ log: PublishedLog; isOwner: boolean; revision?: number }> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   const result = await client.publishedLogs({ logId: input.id }).get({
     query: libraryFullQuery(),
     ...(authorization ? { headers: { authorization } } : {}),
   });
-  const log = readLibraryResult(result).publishedLog as RawPublishedLog;
-  return { log: present(log), isOwner: Boolean(sessionSubject(request) && sessionSubject(request) === log.accountId) };
+  const log = readLibraryResult(result).publishedLog;
+  if ('deleted' in log) throw notFound();
+  const isOwner = Boolean(sessionSubject(request) && sessionSubject(request) === log.accountId);
+  const revision = isOwner ? nativeRevision(result.response.headers.get('Library-Published-Log-Revision')) : undefined;
+  return { log: present(log), isOwner, ...(revision === undefined ? {} : { revision }) };
 }
 
 async function readLogPage(client: KernelClient, accountId: string, authorization: string, cursor?: string) {
@@ -85,8 +90,6 @@ async function readLogPage(client: KernelClient, accountId: string, authorizatio
     query: { ...libraryListQuery(cursor, LIBRARY_PAGE_LIMIT), accountId },
     headers: { authorization },
   });
-  // Keep an owner's progress page usable while published-log listing is unavailable.
-  if (statusOf(result) === 404) return { publishedLogs: [], next: null };
   return readLibraryResult(result) as { publishedLogs: RawPublishedLog[]; next: string | null };
 }
 
@@ -113,7 +116,7 @@ export async function loadMyPublishedLogs(
 }
 
 export type PublishedLogWriteResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; undo?: DeletionEvidence; revision?: number }
   | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
 
 type WriteResult<T> = { data?: T | null; error?: unknown; status?: number };
@@ -191,24 +194,65 @@ export async function deletePublishedLog(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { id: string; idempotencyKey: string },
+  input: { id: string; revision?: number; idempotencyKey: string },
 ): Promise<PublishedLogWriteResult> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
-  if (!routeIdPattern.test(input.id) || !idempotencyKeyPattern.test(input.idempotencyKey))
+  if (
+    !routeIdPattern.test(input.id) ||
+    !idempotencyKeyPattern.test(input.idempotencyKey) ||
+    (input.revision !== undefined &&
+      (!Number.isSafeInteger(input.revision) || input.revision < 1 || input.revision > 2147483644))
+  )
     return { ok: false, reason: 'invalid' };
 
   try {
     const result = await client.publishedLogs({ logId: input.id }).delete(undefined, {
+      ...(input.revision === undefined ? {} : { query: { revision: input.revision } }),
       headers: writeHeaders(authorization, input.idempotencyKey),
     });
     const status = statusOf(result);
     const id = result.data?.publishedLog?.id;
     if (status >= 400 || result.error || !id) return writeFailure(result);
-    return { ok: true, id };
+    const undo = deletionEvidence(result.response.headers, 'Published-Log');
+    return { ok: true, id, ...(undo ? { undo } : {}) };
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
     return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** Reinstates the original public snapshot with its exact retained episode, never the current session. */
+export async function restorePublishedLog(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { id: string; deletionId: string; revision: number; idempotencyKey: string },
+): Promise<PublishedLogWriteResult> {
+  if (
+    !routeIdPattern.test(input.id) ||
+    !idempotencyKeyPattern.test(input.idempotencyKey) ||
+    !idempotencyKeyPattern.test(input.deletionId) ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision < 1 ||
+    input.revision > 2147483646
+  )
+    return { ok: false, reason: 'invalid' };
+  await prepareSession(request, sessionEnv);
+  const authorization = viewerCredential(request);
+  if (!authorization) return { ok: false, reason: 'forbidden' };
+  try {
+    const result = await client
+      .publishedLogs({ logId: input.id })
+      .$restore.post(
+        { deletionId: input.deletionId, revision: input.revision },
+        { headers: writeHeaders(authorization, input.idempotencyKey) },
+      );
+    if (result.error || !result.data?.publishedLog) return writeFailure(result);
+    const revision = nativeRevision(result.response.headers.get('Library-Published-Log-Revision'));
+    return { ok: true, id: result.data.publishedLog.id, ...(revision === undefined ? {} : { revision }) };
+  } catch (error) {
+    return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
 }

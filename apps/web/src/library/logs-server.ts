@@ -6,6 +6,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
   deletePublishedLog as deleteLog,
+  restorePublishedLog as restoreLog,
   loadMyPublishedLogs,
   loadPublishedLog,
   publishProgressLog as publishLog,
@@ -59,7 +60,7 @@ function validatePublish(input: unknown): { sessionId: string; note?: string; id
   };
 }
 
-function validateDelete(input: unknown): { id: string; idempotencyKey: string } {
+function validateDelete(input: unknown): { id: string; revision?: number; idempotencyKey: string } {
   if (!input || typeof input !== 'object') throw new Error('Invalid delete request');
   const value = input as Record<string, unknown>;
   if (
@@ -70,7 +71,19 @@ function validateDelete(input: unknown): { id: string; idempotencyKey: string } 
     !idempotencyKeyPattern.test(value.idempotencyKey)
   )
     throw new Error('Invalid delete request');
-  return { id: value.id, idempotencyKey: value.idempotencyKey };
+  if (
+    value.revision !== undefined &&
+    (typeof value.revision !== 'number' ||
+      !Number.isSafeInteger(value.revision) ||
+      value.revision < 1 ||
+      value.revision > 2147483646)
+  )
+    throw new Error('Invalid log revision');
+  return {
+    id: value.id,
+    idempotencyKey: value.idempotencyKey,
+    ...(typeof value.revision === 'number' ? { revision: value.revision } : {}),
+  };
 }
 
 export const readPublishedLog = createServerFn({ method: 'GET' })
@@ -103,4 +116,23 @@ export const removePublishedLog = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<PublishedLogWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return deleteLog(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const restorePublishedLog = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    const value = validateDelete(input);
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('deletionId' in input) ||
+      typeof input.deletionId !== 'string' ||
+      !idempotencyKeyPattern.test(input.deletionId) ||
+      value.revision === undefined
+    )
+      throw new Error('Invalid restore request');
+    return { ...value, revision: value.revision, deletionId: input.deletionId };
+  })
+  .handler(async ({ data }): Promise<PublishedLogWriteResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return restoreLog(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });

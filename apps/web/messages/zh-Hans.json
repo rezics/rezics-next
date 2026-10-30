@@ -1001,5 +1001,7 @@
   "discovery_loading": "正在加载结果…",
   "discovery_not_ready": "搜索正在准备中。请稍后重试。",
   "discovery_unnamed_account": "未命名帐号",
-  "discovery_verified_as": "已认证为 {name}"
+  "discovery_verified_as": "已认证为 {name}",
+  "library_history_unavailable": "历史含义暂不可用。以下为未作修改的原始记录。",
+  "library_current_choices": "当前可选项"
 }

@@ -1000,5 +1000,7 @@
   "discovery_loading": "Chargement des résultats…",
   "discovery_not_ready": "La recherche se prépare. Réessayez dans un instant.",
   "discovery_unnamed_account": "Compte sans nom",
-  "discovery_verified_as": "Identité vérifiée : {name}"
+  "discovery_verified_as": "Identité vérifiée : {name}",
+  "library_history_unavailable": "La signification historique est indisponible. Les valeurs enregistrées sont affichées sans modification.",
+  "library_current_choices": "Choix actuels"
 }

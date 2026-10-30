@@ -5,9 +5,10 @@ import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/logs/$id')({
   loader: ({ params }) => readPublishedLog({ data: { id: params.id } }),
-  staleTime: 60_000,
+  staleTime: 0,
   head: () => ({ meta: [{ title: m.library_logs_page_heading() }] }),
   component: function PublishedLogRoute() {
-    return <PublishedLogPageView {...Route.useLoaderData()} />;
+    const page = Route.useLoaderData();
+    return <PublishedLogPageView key={`${page.log.id}:${page.revision ?? 'public'}`} {...page} />;
   },
 });

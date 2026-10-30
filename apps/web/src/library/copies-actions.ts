@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes, readRelease } from '../subject/definitions';
-import { copyLabels, resolveCopyProfile } from './copies-profiles';
+import { resolveCopyProfile } from './copies-profiles';
 import { readSessionIdentity } from '../session/state';
 import { getLocale } from '../paraglide/runtime.js';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -13,6 +13,7 @@ import {
   loadCopiesPage,
   removeCopy,
   saveCopy,
+  restoreCopy,
   submitCopy,
   type CopiesPageData,
   type CopyRemoveResult,
@@ -61,7 +62,7 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
         profile = resolveCopyProfile(release, type, locale);
         profiles.set(type, profile);
       }
-      Object.assign(copy, { profile, ...copyLabels(release, type, copy.kind, copy.status, locale) });
+      Object.assign(copy, { profile });
     }
     if (page.subjectId) {
       // The same selected-subject read provides released choices even when the filtered list is empty.
@@ -92,6 +93,13 @@ export const deleteCopy = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<CopyRemoveResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return removeCopy(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const undoCopy = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => input)
+  .handler(async ({ data }): Promise<CopyWriteResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return restoreCopy(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
 async function readCopySubjectSummary(id: string): Promise<LibrarySubject | null> {

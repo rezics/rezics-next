@@ -17,6 +17,7 @@ const viewports = {
 
 const meta = {
   title: 'Patterns/Library/Progress controls',
+  tags: ['autodocs'],
   parameters: { layout: 'fullscreen', viewport: { options: viewports } },
 } satisfies Meta;
 export default meta;
@@ -82,4 +83,22 @@ export const UpdateFormOpen: Story = {
       </Suspense>
     </PatternStory>
   ),
+};
+
+export const HistoricalMeaningUnavailable: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path={pagePaths['library-progress-session']}>
+      <Suspense fallback={null}>
+        <div className="p-4">
+          <ProgressSessionPattern />
+        </div>
+      </Suspense>
+    </PatternStory>
+  ),
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText(m.library_history_unavailable(), { exact: false });
+    await userEvent.click(await view.findByRole('button', { name: m.library_progress_update() }));
+    await within(document.body).findByRole('textbox', { name: m.library_progress_locator() });
+  },
 };

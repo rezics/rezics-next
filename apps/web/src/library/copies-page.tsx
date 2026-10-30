@@ -27,6 +27,9 @@ import { EllipsisIcon } from 'lucide-react';
 
 import type { CopyProfile } from './copies-profiles';
 import { CopiesFallback } from './copies-fallback';
+import { UndoNotice } from './copies-undo';
+import type { CopyRemoved } from './copies-read';
+import { undoCopy } from './copies-actions';
 export { CopiesFallback } from './copies-fallback';
 const inputClass =
   'min-h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -173,7 +176,7 @@ export function CopyForm({
   onClose: () => void;
   onCreated: (copy: CopyItem) => void;
   onSaved: (copy: CopyItem) => void;
-  onRemoved: (id: string) => void;
+  onRemoved: (id: string, result: CopyRemoved, deadline: number) => void;
   onKey: (key: string) => void;
 }) {
   const mobile = useIsMobile();
@@ -191,6 +194,8 @@ export function CopyForm({
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const deleteStarted = useRef<number | null>(null);
+  const deleting = useRef(false);
   const title = copy ? m.library_copy_edit() : m.library_copy_add();
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -273,10 +278,12 @@ export function CopyForm({
   }
 
   async function remove() {
-    if (!copy || pending) return;
+    if (!copy || pending || deleting.current) return;
+    deleting.current = true;
     setPending(true);
     setFailure(null);
     try {
+      deleteStarted.current ??= Date.now();
       const result = await deleteCopy({
         data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey },
         headers: csrfHeaders(),
@@ -286,12 +293,13 @@ export function CopyForm({
         setConfirming(false);
         return;
       }
-      onRemoved(copy.id);
+      onRemoved(copy.id, result, deleteStarted.current + 30_000);
       onClose();
     } catch {
       setFailure(m.library_copy_failure());
       setConfirming(false);
     } finally {
+      deleting.current = false;
       setPending(false);
     }
   }
@@ -347,12 +355,16 @@ export function CopyForm({
           <input type="hidden" name="kind" value={kind} />
         )
       ) : null}
+      {copy ? <p className="text-sm text-muted-foreground">{m.library_current_choices()}</p> : null}
       {editable ? (
         <ChoiceField
           name="status"
           label={m.library_copy_status()}
           value={draft.status}
-          choices={selected!.statuses}
+          choices={[
+            ...(copy ? [{ id: copy.status, label: `${copy.status} · ${m.library_history_unavailable()}` }] : []),
+            ...selected!.statuses.filter((status) => !copy || status.id !== copy.status),
+          ]}
           onChange={(value) => change('status', value)}
         />
       ) : copy ? (
@@ -481,8 +493,11 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
           {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
         </p>
         <p className="text-sm text-muted-foreground">
-          <MetaLine items={[kind, copy.kindLabel ?? m.library_other(), copy.statusLabel ?? m.library_other()]} />
+          <MetaLine items={[kind, copy.kindLabel ?? copy.kind, copy.statusLabel ?? copy.status]} />
         </p>
+        {!copy.kindLabel || !copy.statusLabel ? (
+          <p className="text-sm text-muted-foreground">{m.library_history_unavailable()}</p>
+        ) : null}
         {copy.acquiredOn ? (
           <p className="text-sm text-muted-foreground">
             <span>{m.library_copy_acquired()}: </span>
@@ -527,6 +542,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
 export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: string | undefined }) {
   const [copies, setCopies] = useState(page.copies);
   const [addKey, setAddKey] = useState(page.addKey);
+  const [removed, setRemoved] = useState<{ copy: CopyItem; result: CopyRemoved; deadline: number } | null>(null);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
   useEffect(() => {
     setCopies(page.copies);
@@ -594,11 +610,35 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
           </nav>
         </Exposure>
       ) : null}
+      {removed ? (
+        <UndoNotice
+          key={`${removed.copy.id}:${removed.deadline}`}
+          message={m.library_removed()}
+          deadline={removed.deadline}
+          available={Boolean(removed.result.undo)}
+          operation="copy.update"
+          failure={m.library_copy_failure()}
+          restore={async (idempotencyKey) => {
+            if (!removed.result.undo) return false;
+            const result = await undoCopy({
+              data: { id: removed.copy.id, ...removed.result.undo, idempotencyKey },
+              headers: csrfHeaders(),
+            });
+            if (!result.ok) return false;
+            setCopies((current) => [
+              { ...removed.copy, ...result.copy, idempotencyKey: crypto.randomUUID() },
+              ...current,
+            ]);
+            setRemoved(null);
+            return true;
+          }}
+        />
+      ) : null}
       {editing !== undefined ? (
         <CopyForm
           key={editing?.id ?? 'add'}
           {...(editing ? { copy: editing } : {})}
-          profile={editing?.profile ?? page.profile}
+          profile={editing ? editing.profile : page.profile}
           sendKind={page.sendKind}
           subjectId={page.subjectId}
           addKey={addKey}
@@ -615,7 +655,11 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
             ])
           }
           onSaved={(next) => setCopies((current) => current.map((item) => (item.id === next.id ? next : item)))}
-          onRemoved={(id) => setCopies((current) => current.filter((item) => item.id !== id))}
+          onRemoved={(id, result, deadline) => {
+            const copy = copies.find((item) => item.id === id);
+            if (copy) setRemoved({ copy, result, deadline });
+            setCopies((current) => current.filter((item) => item.id !== id));
+          }}
         />
       ) : null}
     </div>

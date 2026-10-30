@@ -1000,5 +1000,7 @@
   "discovery_loading": "正在載入結果…",
   "discovery_not_ready": "搜尋正在準備中，請稍後再試。",
   "discovery_unnamed_account": "未命名帳號",
-  "discovery_verified_as": "已認證為 {name}"
+  "discovery_verified_as": "已認證為 {name}",
+  "library_history_unavailable": "歷史含義暫不可用。以下為未作修改的原始紀錄。",
+  "library_current_choices": "目前可選項"
 }

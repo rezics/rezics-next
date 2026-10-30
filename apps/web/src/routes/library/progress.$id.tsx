@@ -42,14 +42,14 @@ export const Route = createFileRoute('/library/progress/$id')({
       },
     };
   },
-  staleTime: 60_000,
+  staleTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.library_progress_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function ProgressSessionRoute() {
     const loaded = Route.useLoaderData();
     const page = { ...loaded, ...progressSubjects(loaded.progress, loaded.logs) };
     return (
-      <ProgressSessionPage page={page.progress}>
+      <ProgressSessionPage page={page.progress} logsCursor={page.search.logs}>
         <ProgressLogs progress={page.progress} logs={page.logs} search={page.search} />
       </ProgressSessionPage>
     );

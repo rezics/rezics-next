@@ -16,8 +16,8 @@ import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import { parseUnitBatch, type ProgressChange, type ProgressSessionPage, type ProgressState } from './progress-reads';
-import { finishProgressSession, recordProgressSession } from './progress-server';
+import { parseUnitBatch, type ProgressSessionPage, type ProgressState } from './progress-reads';
+import { finishProgressSession, recordProgressSession, readProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressView } from './progress-label';
@@ -31,19 +31,34 @@ function stateLabel(state: ProgressState): string {
   return m.library_progress_state_active();
 }
 
-export function ProgressSessionPage({ page, children }: { page: ProgressSessionPage; children?: ReactNode }) {
-  return <SessionEditor page={page as Extract<ProgressSessionPage, { signedIn: true }>}>{children}</SessionEditor>;
+export function ProgressSessionPage({
+  page,
+  children,
+  logsCursor,
+}: {
+  page: ProgressSessionPage;
+  children?: ReactNode;
+  logsCursor?: string | undefined;
+}) {
+  if (!page.signedIn) return null;
+  return (
+    <SessionEditor page={page} logsCursor={logsCursor}>
+      {children}
+    </SessionEditor>
+  );
 }
 
 function SessionEditor({
   page,
   children,
+  logsCursor,
 }: {
   page: Extract<ProgressSessionPage, { signedIn: true }>;
   children?: ReactNode;
+  logsCursor?: string | undefined;
 }) {
   const [session, setSession] = useState(page.session);
-  const [seenId, setSeenId] = useState(page.session.id);
+  const [seenPage, setSeenPage] = useState(page);
   const [key, setKey] = useState(page.idempotencyKey);
   const [amount, setAmount] = useState('');
   const [locator, setLocator] = useState('');
@@ -54,7 +69,7 @@ function SessionEditor({
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
   const [editing, setEditing] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
-  const offered = Boolean(session.inputRules) && !unsupported;
+  const offered = !unsupported;
   const [phone, setPhone] = useState(false);
   const pending = useRef(false);
   const addId = useId();
@@ -79,8 +94,8 @@ function SessionEditor({
     setEditing(true);
   }
 
-  if (page.session.id !== seenId) {
-    setSeenId(page.session.id);
+  if (page !== seenPage) {
+    setSeenPage(page);
     setUnsupported(false);
     setSession(page.session);
     setKey(page.idempotencyKey);
@@ -104,6 +119,22 @@ function SessionEditor({
     if (reason === 'unsupported_library_profile') setUnsupported(true);
   }
 
+  async function refreshHistory() {
+    try {
+      const fresh = await readProgressSession({
+        data: {
+          id: session.id,
+          ...(page.changesCursor ? { changes: page.changesCursor } : {}),
+          ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
+        },
+      });
+      if (fresh.signedIn) setSession(fresh.session);
+      else setAlert(m.library_history_unavailable());
+    } catch {
+      setAlert(m.library_history_unavailable());
+    }
+  }
+
   async function onRecord() {
     if (pending.current || session.state !== 'active' || !offered) return;
     setAlert(null);
@@ -121,33 +152,12 @@ function SessionEditor({
         explain(result.reason);
         return;
       }
-      const change: ProgressChange = {
-        id: `${session.id}:${result.session.revision}`,
-        revision: result.session.revision,
-        createdAt: new Date().toISOString(),
-        action: null,
-        amount: 'amount' in intent ? intent.amount : null,
-        locator: 'locator' in intent ? intent.locator : null,
-        position: 'position' in intent ? intent.position : null,
-        add: [],
-        remove: [],
-      };
       setKey(crypto.randomUUID());
       setAmount('');
       setLocator('');
       setPosition('');
-      setSession((current) => ({
-        ...current,
-        revision: result.session.revision,
-        amount: result.session.amount,
-        locator: result.session.locator,
-        position: result.session.position,
-        completedUnitCount: result.session.completedUnitCount,
-        state: result.session.state,
-        completedAt: result.session.completedAt,
-        total: result.session.total,
-        changes: [...current.changes, change],
-      }));
+      setSession((current) => ({ ...current, ...result.session }));
+      await refreshHistory();
       setEditing(false);
     } catch {
       setAlert(m.library_progress_invalid());
@@ -179,34 +189,11 @@ function SessionEditor({
         explain(result.reason);
         return;
       }
-      const change: ProgressChange = {
-        id: `${session.id}:${result.session.revision}`,
-        revision: result.session.revision,
-        createdAt: new Date().toISOString(),
-        action: null,
-        amount: null,
-        locator: null,
-        position: null,
-        add: kind === 'add' ? parsed.ids : [],
-        remove: kind === 'remove' ? parsed.ids : [],
-      };
       setKey(crypto.randomUUID());
       if (kind === 'add') setAddText('');
       else setRemoveText('');
-      setSession((current) => {
-        const next = new Set(current.units);
-        if (kind === 'add') for (const id of parsed.ids) next.add(id);
-        else for (const id of parsed.ids) next.delete(id);
-        return {
-          ...current,
-          revision: result.session.revision,
-          completedUnitCount: result.session.completedUnitCount,
-          state: result.session.state,
-          completedAt: result.session.completedAt,
-          units: [...next].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0)),
-          changes: [...current.changes, change],
-        };
-      });
+      setSession((current) => ({ ...current, ...result.session }));
+      await refreshHistory();
       setEditing(false);
     } catch {
       setAlert(m.library_progress_invalid());
@@ -230,25 +217,8 @@ function SessionEditor({
       }
       setKey(crypto.randomUUID());
       setConfirming(null);
-      const change: ProgressChange = {
-        id: `${session.id}:${result.session.revision}`,
-        revision: result.session.revision,
-        createdAt: new Date().toISOString(),
-        action,
-        amount: null,
-        locator: null,
-        position: null,
-        add: [],
-        remove: [],
-      };
-      setSession((current) => ({
-        ...current,
-        revision: result.session.revision,
-        amount: result.session.amount,
-        state: result.session.state,
-        completedAt: result.session.completedAt,
-        changes: [...current.changes, change],
-      }));
+      setSession((current) => ({ ...current, ...result.session }));
+      await refreshHistory();
     } catch {
       setAlert(m.library_progress_invalid());
     } finally {
@@ -257,15 +227,9 @@ function SessionEditor({
   }
 
   const { min, max, step } = session.inputRules ?? {};
-  const inputBounds = { min, max, step };
+  const inputBounds = { min, max, step: step ?? 'any' };
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
-  const progress = progressView(
-    {
-      ...session,
-      total: session.mode === 'scalar_amount' && session.inputRules?.total !== 'forbidden' ? session.total : null,
-    },
-    getLocale(),
-  );
+  const progress = progressView(session, getLocale());
   const progressLabel =
     session.mode === 'cursor_position' && session.position !== null && progress
       ? `${m.library_progress_position()}: ${progress.text}`
@@ -441,9 +405,16 @@ function SessionEditor({
         </div>
         {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
-      {!session.inputRules ? (
-        <p className="text-sm text-muted-foreground">{m.library_progress_no_longer_offered()}</p>
+      {!session.unitLabel ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.library_history_unavailable()}{' '}
+          <code>
+            {session.mode} / {session.unit}
+          </code>
+        </p>
       ) : null}
+      {unsupported ? <p role="status">{m.library_progress_no_longer_offered()}</p> : null}
+      {alert && !editing ? <p role="alert">{alert}</p> : null}
       {session.state === 'active' ? (
         <div className="flex items-center gap-2">
           {offered ? <Button onClick={openUpdate}>{m.library_progress_update()}</Button> : null}
@@ -543,6 +514,7 @@ function SessionEditor({
               params={{ id: session.id }}
               search={{
                 changes: session.changesNext,
+                ...(logsCursor ? { logs: logsCursor } : {}),
                 ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
               }}
               className={buttonClass}
@@ -574,6 +546,7 @@ function SessionEditor({
               params={{ id: session.id }}
               search={{
                 units: session.unitsNext,
+                ...(logsCursor ? { logs: logsCursor } : {}),
                 ...(page.changesCursor ? { changes: page.changesCursor } : {}),
               }}
               className={buttonClass}

@@ -2,7 +2,7 @@ import { resetCopyKindsStory } from './copies-kinds';
 import type { FakeRoute } from '../fake-modules.ts';
 import recording from '../recorded/library-copies.json';
 
-export type CopiesStoryMode = 'none' | 'one' | 'many' | 'long' | 'unavailable' | 'error' | 'refusal';
+export type CopiesStoryMode = 'none' | 'one' | 'many' | 'long' | 'unavailable' | 'error' | 'refusal' | 'stale-delete';
 let mode: CopiesStoryMode = 'many';
 
 /** Set the copies fixture before mounting a page story. */
@@ -30,6 +30,14 @@ const many = [
 
 export const routes: FakeRoute[] = [
   {
+    method: 'DELETE',
+    path: /^\/v1\/copies\/[^/]+$/,
+    story: () =>
+      mode === 'stale-delete'
+        ? { status: 409, code: 'conflict', type: 'https://rezics.com/problems/conflict' }
+        : undefined,
+  },
+  {
     method: 'GET',
     path: '/v1/copies',
     story: () => {
@@ -46,7 +54,11 @@ export const routes: FakeRoute[] = [
         }));
         return { status: 200, copies, next: null };
       }
-      return { status: 200, copies: mode === 'none' ? [] : mode === 'one' ? base.slice(0, 1) : many, next: null };
+      return {
+        status: 200,
+        copies: mode === 'none' ? [] : mode === 'one' || mode === 'stale-delete' ? base.slice(0, 1) : many,
+        next: null,
+      };
     },
   },
   {
