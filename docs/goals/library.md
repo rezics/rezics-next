@@ -80,6 +80,13 @@ Use the owning kernel runner and [verification](../development/verification.md) 
 Pages need real APIs, recorded-response stories, Web visual review and representative locale/theme/device states.
 Documentation separation claims no runtime, native, interface or promotion proof.
 
+The existing native outcome wrappers for labels, profiles, dynamic Collections and shelves are not complete bindings:
+their referenced native drivers are absent. Do not treat a wrapper or an unavailable provider as a passing outcome.
+Complete these bindings only against the delivered production APIs and work contracts. Current implementation
+evidence identifies unresolved runtime seams: Collection source and canonical-source factories throw
+`dependency_unavailable`, and the shelf maintenance derived guard is unimplemented. The production providers must
+land before these whole outcome specifications can be bound and run.
+
 ## External conditions
 
 Applicable retention schedules and external source licensing follow their owners. No live payment setup is needed
