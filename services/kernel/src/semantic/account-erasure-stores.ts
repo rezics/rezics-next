@@ -17,6 +17,8 @@ export const SEMANTIC_ERASURE_STORES = [
   'definition_activation',
   'external_claim',
   'source_candidate',
+  'provider_review_queue_key',
+  'provider_review_queue_entry',
   'statement_disclosure',
   'subject',
   'redirect',

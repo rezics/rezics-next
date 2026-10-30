@@ -63,6 +63,7 @@ import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
+import { providerReviewQueueRoutes } from '../semantic/http/provider-review-queue.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue } from './request.ts';
@@ -336,6 +337,13 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
+    access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+  });
+  providerReviewQueueRoutes(subjects, {
+    pool: dependencies.pool,
+    tokens,
+    routeKey: dependencies.routeKey,
+    workClient,
     access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
   });
   const batched = bulkRoutes(subjects, {
@@ -612,7 +620,8 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof payoutRoutes> &
   ReturnType<typeof commerceRoutes> &
   ReturnType<typeof progressRoutes> &
-  ReturnType<typeof contextRoutes>;
+  ReturnType<typeof contextRoutes> &
+  ReturnType<typeof providerReviewQueueRoutes>;
 export type Kernel = KernelComposition;
 
 // Every route module inherits the same definition routes. Reuse their method types

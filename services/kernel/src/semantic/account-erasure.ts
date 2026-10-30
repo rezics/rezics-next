@@ -397,6 +397,10 @@ async function minimize(
       `UPDATE semantic.statement_disclosure SET account_id=NULL,disclosed=false,target_order_key='',source_order_key='' WHERE ${where}`,
       values,
     );
+  } else if (store === 'provider_review_queue_key') {
+    await tx.query(`DELETE FROM semantic.provider_review_queue_key WHERE ${where}`, values);
+  } else if (store === 'provider_review_queue_entry') {
+    await tx.query(`DELETE FROM semantic.provider_review_queue_entry WHERE ${where}`, values);
   } else if (store === 'source_candidate' || store === 'external_claim') {
     await tx.query(`DELETE FROM semantic.${store} WHERE ${where}`, values);
   } else if (['context_extension_activation', 'release_composite', 'context_extension'].includes(store)) {

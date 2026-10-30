@@ -719,6 +719,53 @@ END; $$;
 
 
 --
+-- Name: capture_provider_review_queue_key(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_provider_review_queue_key() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid; k bigint; p bigint;
+BEGIN
+  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+  SELECT r.recorded_transaction_id INTO native_tx FROM semantic.candidate c
+    JOIN semantic.revision r USING(route,subject_id,revision)
+    WHERE c.route=NEW.route AND c.subject_id=NEW.subject_id AND c.candidate_id=NEW.candidate_id;
+  IF native_tx IS NULL THEN RAISE EXCEPTION 'Provider candidate has no native provenance'; END IF;
+  SELECT position INTO p FROM core.partition WHERE partition_no=NEW.route/16;
+  INSERT INTO semantic.provider_review_queue_key(route,source,subject_id,candidate_id,recorded_transaction_id,captured_position)
+    VALUES(NEW.route,NEW.source,NEW.subject_id,NEW.candidate_id,native_tx,p)
+    ON CONFLICT(route,source,subject_id,candidate_id) DO NOTHING;
+  SELECT erasure_key INTO k FROM semantic.provider_review_queue_key
+    WHERE route=NEW.route AND source=NEW.source AND subject_id=NEW.subject_id AND candidate_id=NEW.candidate_id;
+  PERFORM semantic.capture_provider_review_queue_roles(NEW.route,k,NEW.subject_id,NEW.candidate_id,native_tx);
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_provider_review_queue_roles(integer, bigint, uuid, uuid, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_provider_review_queue_roles(p_route integer, p_key bigint, p_subject uuid, p_candidate uuid, p_tx uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; n integer:=0;
+BEGIN
+  FOR r IN SELECT l.account_id,l.role FROM semantic.candidate c
+    JOIN semantic.erasure_locator l ON l.partition_no=p_route/16 AND l.store='candidate' AND l.record_key=c.erasure_key
+    WHERE c.route=p_route AND c.subject_id=p_subject AND c.candidate_id=p_candidate
+    ORDER BY l.account_id,l.role LIMIT 9 LOOP
+    n:=n+1;
+    IF n>8 THEN RAISE EXCEPTION 'Provider candidate role bound exceeded'; END IF;
+    INSERT INTO semantic.erasure_copy_role(partition_no,store,record_key,transaction_id,account_id,role)
+      VALUES(p_route/16,'provider_review_queue_key',p_key,p_tx,r.account_id,r.role) ON CONFLICT DO NOTHING;
+  END LOOP;
+  PERFORM semantic.capture_erasure_roles(p_route/16,'provider_review_queue_key',p_key,p_tx);
+END; $$;
+
+
+--
 -- Name: capture_redirect_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2595,6 +2642,72 @@ CREATE TABLE semantic.partition_subjects (
 
 
 --
+-- Name: provider_review_queue_bootstrap; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.provider_review_queue_bootstrap (
+    partition_no integer NOT NULL,
+    source text NOT NULL,
+    after_route integer NOT NULL,
+    after_key bigint DEFAULT 0 NOT NULL,
+    source_epoch integer NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT provider_review_queue_bootstrap_check CHECK (((after_route >= (partition_no * 16)) AND (after_route <= ((partition_no * 16) + 16)))),
+    CONSTRAINT provider_review_queue_bootstrap_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT provider_review_queue_bootstrap_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text))
+);
+
+
+--
+-- Name: provider_review_queue_entry; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.provider_review_queue_entry (
+    route integer NOT NULL,
+    source text NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT provider_review_queue_entry_route_check CHECK ((route = 0)),
+    CONSTRAINT provider_review_queue_entry_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text))
+);
+
+
+--
+-- Name: provider_review_queue_key; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.provider_review_queue_key (
+    route integer NOT NULL,
+    source text NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    captured_position bigint NOT NULL,
+    published boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT provider_review_queue_key_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT provider_review_queue_key_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT provider_review_queue_key_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text))
+);
+
+
+--
+-- Name: provider_review_queue_ready; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.provider_review_queue_ready (
+    route integer NOT NULL,
+    source text NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    CONSTRAINT provider_review_queue_ready_route_check CHECK ((route = 0)),
+    CONSTRAINT provider_review_queue_ready_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
+);
+
+
+--
 -- Name: redirect; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -3346,6 +3459,38 @@ ALTER TABLE ONLY semantic.partition_subjects
 
 
 --
+-- Name: provider_review_queue_bootstrap provider_review_queue_bootstrap_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.provider_review_queue_bootstrap
+    ADD CONSTRAINT provider_review_queue_bootstrap_pkey PRIMARY KEY (partition_no, source);
+
+
+--
+-- Name: provider_review_queue_entry provider_review_queue_entry_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.provider_review_queue_entry
+    ADD CONSTRAINT provider_review_queue_entry_pkey PRIMARY KEY (route, source, subject_id, candidate_id);
+
+
+--
+-- Name: provider_review_queue_key provider_review_queue_key_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.provider_review_queue_key
+    ADD CONSTRAINT provider_review_queue_key_pkey PRIMARY KEY (route, source, subject_id, candidate_id);
+
+
+--
+-- Name: provider_review_queue_ready provider_review_queue_ready_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.provider_review_queue_ready
+    ADD CONSTRAINT provider_review_queue_ready_pkey PRIMARY KEY (route, source, source_partition);
+
+
+--
 -- Name: redirect redirect_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -3915,6 +4060,27 @@ CREATE INDEX outbound_link_statement ON semantic.outbound_link USING btree (rout
 
 
 --
+-- Name: provider_review_queue_entry_erasure; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX provider_review_queue_entry_erasure ON semantic.provider_review_queue_entry USING btree (route, erasure_key);
+
+
+--
+-- Name: provider_review_queue_key_erasure; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX provider_review_queue_key_erasure ON semantic.provider_review_queue_key USING btree (route, erasure_key);
+
+
+--
+-- Name: provider_review_queue_key_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX provider_review_queue_key_pending ON semantic.provider_review_queue_key USING btree (route, captured_position, erasure_key) WHERE (NOT published);
+
+
+--
 -- Name: redirect_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -3968,6 +4134,13 @@ CREATE INDEX revision_transaction ON semantic.revision USING btree (recorded_tra
 --
 
 CREATE UNIQUE INDEX source_candidate_erasure_key ON semantic.source_candidate USING btree (erasure_key, route);
+
+
+--
+-- Name: source_candidate_provider_review; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX source_candidate_provider_review ON semantic.source_candidate USING btree (route, source, erasure_key);
 
 
 --
@@ -4474,6 +4647,13 @@ CREATE TRIGGER outbound_copy_erasure BEFORE INSERT OR UPDATE ON semantic.outboun
 --
 
 CREATE CONSTRAINT TRIGGER outbound_link_erasure_capture AFTER INSERT OR UPDATE ON semantic.outbound_link DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_outbound_link_erasure();
+
+
+--
+-- Name: source_candidate provider_review_queue_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER provider_review_queue_capture AFTER INSERT OR UPDATE ON semantic.source_candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_provider_review_queue_key();
 
 
 --

@@ -1,173 +1,81 @@
+import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { Button } from '@rezics/ui/shadcn/button';
-import { ProviderQueueView } from '../features/import-review/provider-queue-view';
-import type { ProviderQueueRead } from '../features/import-review/provider-queue';
-import { providerReviewFixture, type ProviderReviewScenario } from '../kernel/fake/provider-review-actions';
-import { AppShell } from '../shell/shell';
-import { PatternStory } from './page';
+import { ProviderQueue } from '../features/import-review/provider-queue-view';
+import { providerQueueFixture, type ProviderQueueScenario } from '../kernel/fake/provider-review-queue';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { AppShell } from '../shell/shell';
+import { PatternStory } from './page';
 
-function QueueStory({ scenario = 'ready' }: { scenario?: ProviderReviewScenario }) {
+function QueueStory({ scenario = 'loaded' }: { scenario?: ProviderQueueScenario }) {
   const locale = getLocale();
-  const fixture = useMemo(() => providerReviewFixture(scenario, locale), [scenario, locale]);
+  const fixture = useMemo(() => providerQueueFixture(scenario), [scenario, locale]);
   return (
     <PatternStory path="/imports/review" visitor="Signed In">
       <AppShell>
-        <StoryQueue key={`${scenario}:${locale}`} fixture={fixture} scenario={scenario} locale={locale} />
+        <ProviderQueue
+          key={`${scenario}:${locale}`}
+          transport={fixture.transport}
+          initial={fixture.initial}
+          initialScope={fixture.scope}
+        />
       </AppShell>
     </PatternStory>
   );
 }
-function StoryQueue({
-  fixture,
-  scenario,
-  locale,
-}: {
-  fixture: ReturnType<typeof providerReviewFixture>;
-  scenario: ProviderReviewScenario;
-  locale: string;
-}) {
-  const [changed, setChanged] = useState<ProviderQueueRead>();
-  return (
-    <>
-      {scenario === 'scope-change' && (
-        <div className="px-4 pt-4">
-          <Button
-            onClick={() =>
-              setChanged({
-                ok: true,
-                page: {
-                  ...fixture.page,
-                  scope: { ...fixture.page.scope, status: 'accepted' },
-                  statusLabel: m.candidate_accepted(),
-                },
-              })
-            }
-          >
-            {m.candidate_reload()}
-          </Button>
-        </div>
-      )}
-      <ProviderQueueView
-        result={changed ?? fixture.result}
-        locale={locale}
-        transport={fixture.transport}
-        onRead={setChanged}
-        onRetry={async () => ({ ok: true, page: fixture.page })}
-      />
-    </>
-  );
-}
 const meta = {
-  title: 'Pages/Imports/Review',
+  title: 'Pages/Imports/Review queue',
   component: QueueStory,
-  tags: ['autodocs'],
-  parameters: {
-    layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
-    docs: {
-      description: {
-        component:
-          'Declared queue view samples and generated per-candidate decision transport. Native queue integration and Web/Root visual review remain pending. Use locale, theme and viewport globals.',
-      },
-    },
-  },
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof QueueStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-async function select(canvasElement: HTMLElement) {
-  const canvas = within(canvasElement);
-  for (const checkbox of await canvas.findAllByRole('checkbox')) await userEvent.click(checkbox);
-  return canvas;
-}
-async function confirm(canvasElement: HTMLElement, reject = false) {
-  const canvas = await select(canvasElement);
-  await userEvent.click(canvas.getByRole('button', { name: reject ? m.candidate_reject() : m.candidate_accept() }));
-  const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
-  await userEvent.click(
-    within(dialog).getByRole('button', { name: reject ? m.provider_confirm_reject() : m.provider_confirm_accept() }),
-  );
-  return canvas;
-}
-export const Ready: Story = {};
-export const Selection: Story = {
+export const Loaded: Story = {
   play: async ({ canvasElement }) => {
-    const canvas = await select(canvasElement);
-    expect(canvas.getByText(m.provider_selected_count({ count: 2 }))).toBeVisible();
+    const canvas = within(canvasElement);
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.prq_status() }), 'accepted_unselected');
+    await userEvent.click(canvas.getByRole('button', { name: m.prq_load() }));
+    expect(await canvas.findAllByText(m.prq_accepted())).toHaveLength(2);
+    expect(canvas.getByRole('button', { name: m.candidate_accept() }).hasAttribute('disabled')).toBe(true);
   },
 };
-export const Confirmation: Story = {
+export const Preparing: Story = {
+  args: { scenario: 'preparing' },
   play: async ({ canvasElement }) => {
-    const canvas = await select(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
-    expect(await within(canvasElement.ownerDocument.body).findByRole('alertdialog')).toBeVisible();
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.prq_retry() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.prq_continue() }));
+    expect(await canvas.findByRole('link', { name: m.prq_subject() })).toBeTruthy();
   },
 };
-export const PartialResults: Story = {
-  args: { scenario: 'partial' },
+export const Empty: Story = {
+  args: { scenario: 'empty' },
   play: async ({ canvasElement }) => {
-    const canvas = await confirm(canvasElement);
-    for (const text of [
-      m.provider_accepted(),
-      m.provider_stale(),
-      m.provider_denied(),
-      m.provider_rate_limited(),
-      m.provider_unavailable(),
-    ])
-      expect(await canvas.findByText(text)).toBeVisible();
+    expect(within(canvasElement).getByText(m.prq_empty())).toBeTruthy();
   },
 };
-export const RetryPartialResults: Story = {
-  args: { scenario: 'partial' },
+export const Denied: Story = {
+  args: { scenario: 'denied' },
   play: async ({ canvasElement }) => {
-    const canvas = await confirm(canvasElement);
-    const retry = await canvas.findByRole('button', { name: m.provider_retry_failed() });
-    await expect(retry).toBeEnabled();
-    await userEvent.click(retry);
-    expect(await canvas.findAllByText(m.provider_accepted())).toHaveLength(3);
+    expect(within(canvasElement).queryByRole('button', { name: m.prq_prepare() })).toBeNull();
   },
 };
-export const ScopeChange: Story = {
-  args: { scenario: 'scope-change' },
-  play: async ({ canvasElement }) => {
-    const canvas = await select(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
-    expect(canvas.getByText(m.provider_selected_count({ count: 0 }))).toBeVisible();
-    for (const checkbox of canvas.getAllByRole('checkbox')) expect(checkbox).not.toBeChecked();
-  },
-};
-export const Accepted: Story = {
-  args: { scenario: 'success' },
-  play: async ({ canvasElement }) => {
-    const canvas = await confirm(canvasElement);
-    expect(await canvas.findAllByText(m.provider_accepted())).toHaveLength(2);
-    expect(canvas.queryByRole('button', { name: m.provider_retry_failed() })).toBeNull();
-  },
-};
-export const Rejected: Story = {
-  args: { scenario: 'success' },
-  play: async ({ canvasElement }) => {
-    const canvas = await confirm(canvasElement, true);
-    expect(await canvas.findAllByText(m.provider_rejected())).toHaveLength(2);
-  },
-};
-export const Loading: Story = { args: { scenario: 'loading' } };
-export const Empty: Story = { args: { scenario: 'empty' } };
-export const Denied: Story = { args: { scenario: 'denied' } };
-export const Invalid: Story = { args: { scenario: 'invalid' } };
-export const UnavailableRetry: Story = {
+export const Unavailable: Story = {
   args: { scenario: 'unavailable' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.provider_refresh() }));
-    expect(await canvas.findAllByRole('checkbox')).toHaveLength(2);
+    await userEvent.click(canvas.getByRole('button', { name: m.prq_prepare() }));
+    expect(await canvas.findByText(m.prq_preparing())).toBeTruthy();
+  },
+};
+export const Invalid: Story = { args: { scenario: 'invalid' } };
+export const Loading: Story = { args: { scenario: 'loading' } };
+export const Decision: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.prq_confirm() }));
+    expect(await canvas.findByText(m.prq_decided())).toBeTruthy();
   },
 };

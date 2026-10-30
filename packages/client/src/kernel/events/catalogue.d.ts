@@ -1,6 +1,7 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly 'com.rezics.semantic.provider-review.projected.v1': Type.TObject<{}>;
     readonly 'com.rezics.semantic.composite.registered.v1': Type.TObject<{
         context: Type.TString;
         digest: Type.TString;

@@ -2,6 +2,9 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
+the shared worker and exact queue-association minimization for its asynchronous discovery index.
+
 ## Public exposure boundary
 
 Existing active/released definitions, common editor/profile data, subject creation, proposal, acceptance,

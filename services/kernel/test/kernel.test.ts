@@ -147,6 +147,8 @@ const typed = [
   'POST /v1/subjects/:id/candidates/:candidate/$restore',
   'POST /v1/subjects/:id/$adopt',
   'GET /v1/subjects/:id/candidates',
+  'GET /v1/review-candidates',
+  'POST /v1/review-candidates/$prepare',
   'GET /v1/subjects/:id/revisions',
   'GET /v1/subjects/:id/links',
   'GET /v1/subjects/:id/counts',

@@ -53,6 +53,7 @@ const contextLifecycle = Type.Object(
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
+  'com.rezics.semantic.provider-review.projected.v1': Type.Object({}, { additionalProperties: false }),
   'com.rezics.semantic.composite.registered.v1': Type.Object(
     { context: UUID, digest: Type.String() },
     { additionalProperties: false },
