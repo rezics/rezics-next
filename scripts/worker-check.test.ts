@@ -793,10 +793,14 @@ test('stack-free placement: a real managed local check completes while every fak
   writeFileSync(hosts, JSON.stringify({ hosts: [{ name: 'unavailable', slots: 0 }] }));
   const command = ['bun', 'test', file];
   const commandClass = checkClass(command, fixture.root);
-  const holder = await acquireStackSlot('held local memory slot', {
-    REZICS_STACK_SLOTS: '4',
-    REZICS_STACK_LEASE_DIR: fixture.memory,
-  }, 4);
+  const holder = await acquireStackSlot(
+    'held local memory slot',
+    {
+      REZICS_STACK_SLOTS: '4',
+      REZICS_STACK_LEASE_DIR: fixture.memory,
+    },
+    4,
+  );
   let id: string | undefined;
   let waiting: Promise<number> | undefined;
   try {
