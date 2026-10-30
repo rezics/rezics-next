@@ -630,7 +630,7 @@ test('hot page and membership check have derived constant row and statement boun
   // seeks one Realm head and one account's interval (plus the bounded Access
   // temporal proof). Both are O(1) rows/statements, O(log R) index blocks, with no
   // member enumeration, global thread scan, COUNT or OFFSET as R grows.
-  const { checkGrowth } = await import('../services/kernel/test/support/growth');
+  const { assertGrowthAccessPaths, checkGrowth } = await import('../services/kernel/test/support/growth');
   for (const operation of ['hot', 'membership'] as const) {
     const growth = await driver.growthFixture();
     try {
@@ -661,12 +661,19 @@ test('hot page and membership check have derived constant row and statement boun
         },
       });
       expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
+      const relations = [
+        ...new Set(report.samples.flatMap((sample) => sample.repetitions.flatMap((run) => Object.keys(run.relations)))),
+      ];
+      for (const sample of report.samples) {
+        expect(sample.repetitions).toHaveLength(3);
+        for (const run of sample.repetitions) expect(Object.keys(run.relations).length).toBeGreaterThan(0);
+      }
+      assertGrowthAccessPaths(`community ${operation}`, report.samples, relations);
       for (const { cost } of report.samples) {
         expect(cost.rows).toBeGreaterThan(0);
         expect(cost.statements).toBeGreaterThan(0);
         expect(cost.blocks).toBeGreaterThan(0);
         expect(Object.keys(cost.relations!).length).toBeGreaterThan(0);
-        for (const relation of Object.values(cost.relations!)) expect(relation.sequentialScans).toBe(0);
       }
     } finally {
       await growth.close();
