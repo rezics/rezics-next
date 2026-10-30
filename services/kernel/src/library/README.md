@@ -292,8 +292,8 @@ below describes today's implementation, including physical deletes. The
 retained-entry command and HTTP Undo preserve exact original meaning with current authorization. Collection deletion
 DAOs exist, while automatic due-purge runtime, terminal account full-graph cleanup, public contribution provider
 and a complete native deletion-outcome driver remain incomplete. Legal-hold support is deferred for first-public Library deletion: this slice specifies no hold authority,
-route, destructive guard or release path and does not depend on one. User-saved dynamic queries remain deferred by
-[scope](../../../../docs/scope.md); only built-in dynamic Collections are in scope.
+route, destructive guard or release path and does not depend on one. The adopted saved dynamic Collection editor
+uses the same terminal minimization policy; its unavailable execution boundary is described above.
 
 Delete commits a tombstone at kernel command time `deletedAt`; `restoreUntil = deletedAt + 30 * 24 hours` in UTC.
 An authorized undo is allowed only while kernel time is strictly less than `restoreUntil`: day 29 succeeds, the
@@ -458,7 +458,8 @@ Everything and Continue, Search, ItemList exports, sitemap discovery/output, pub
 existing feed. Personal facts have no independent public projection. Everything keeps a subject only while another
 live state, label, session or holding fact supports it; entry removal is not full erasure. Collection deletion hides
 all descendants through the parent even while cleanup is queued. Export/search/web adapters must recheck source
-liveness rather than trust cached positives. Deferred feeds and saved queries are not new launch surfaces.
+liveness rather than trust cached positives. Deferred feeds are not new launch surfaces. Saved Collection rules
+require the shared Source's current live-fact authority before their execution boundary can become available.
 
 Only the currently authorized owner or an explicitly authorized deletion-state reader can read retained payload
 for undo; ordinary owner reads also conceal it. References return at most `{id, kind, state: 'deleted'}` where the

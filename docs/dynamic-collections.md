@@ -119,9 +119,10 @@ Never expose successful short/empty raw-candidate windows as pages. Dynamic resu
 The common members HTTP filter is URL-encoded `JSON.stringify` of an admitted shared `@rezics/filter`
 `FilterDocument` in the `filter` query parameter. Source, filter and sort are admitted together under the existing
 `collection_member.list` operation, with shared release/datatype/unit and same-statement qualifier semantics.
-This approved pending input contract is not today's paging-only route, which cannot yet accept `filter`.
-Clients require advertised filter input support before enabling controls; the visible operation name alone is
-insufficient. No second grammar/property whitelist or browser-side membership filtering. Unknown stays unknown under NOT.
+The route now validates this shared input, but returns explicit unavailability until the common Source supplies
+execution admission; accepting the syntax does not advertise working filter execution. Clients require advertised
+execution support before enabling controls. No second grammar/property whitelist or browser-side membership
+filtering. Unknown stays unknown under NOT.
 Commerce owns direct owner index and prepared owner result plans; Search owns catalogue compilation, preparation
 and freshness. These prose plan names introduce no executable discriminants. A direct plan needs a page-derived
 bound including engine work; otherwise prepare an indexed result in bounded steps retaining settled work, or reject
