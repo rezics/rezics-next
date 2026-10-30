@@ -1348,7 +1348,7 @@ export class MergeTrain {
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
             if (conflicts.length) {
-              const context = makeRebaseConflictContext(previous, tip, conflicts);
+              const context = makeRebaseConflictContext(previous, request.workerCommit ?? tip, conflicts);
               if (context) result.rebaseConflict = context;
             }
             if (error instanceof WorkerConflictError) {
@@ -2007,7 +2007,9 @@ export class MergeTrain {
         throw new Error('The main checkout must already have main checked out');
       if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
-      workerCommit = tip;
+      workerCommit = request.workerCommit
+        ? git(o.mainCheckout, ['rev-parse', '--verify', `${request.workerCommit}^{commit}`])
+        : tip;
       if (workspace && sharedStore) {
         sharedSource = tip;
         const task = sharedStore.task(request.taskId);

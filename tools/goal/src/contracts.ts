@@ -29,6 +29,8 @@ export interface AttemptFence {
 export type LandingRequest = AttemptRef & {
   branch: string;
   worktree: string;
+  /** Source branch HEAD before controller-only retry rebases, frozen when the worker settles. */
+  workerCommit?: string;
   /** Path patterns the brief declared: where the work is expected. A worker may change files outside them. */
   declaredPaths: readonly string[];
   /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */

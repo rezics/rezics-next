@@ -593,8 +593,10 @@ exhaustion chooses another allowed pool. Repeating the same first assertion afte
 the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
 two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
 Generated files marked `linguist-generated=true` are excluded from estimate totals, while every changed file remains subject to declared-path checks.
-Rebase-stage conflicts with the integration branch receive one same-profile resolution attempt after the control plane starts that rebase in
-the task worktree; a second conflict goes to the manager as a specification conflict.
+Rebase-stage conflicts with the integration branch receive same-profile resolution attempts after the control plane
+starts that rebase in the task worktree. Controller-only rebase commits do not count as worker progress. The bounded
+guard sends one specification-conflict notice only after the same source worker commit, effective target commit and
+sorted conflict paths recur without progress; a newer target, changed paths or a new worker commit remains retryable.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
 

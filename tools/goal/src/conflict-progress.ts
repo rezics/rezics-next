@@ -5,6 +5,26 @@ export const REBASE_CONFLICT_PRIOR_MATCHES_TO_STOP = 2;
 
 const objectIdPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 
+export type WorkerSourceBaseline = {
+  /** Last source HEAD that represented worker-authored progress. */
+  workerCommit: string;
+  /** Branch HEAD after controller setup, used to identify later worker commits. */
+  controllerHead: string;
+};
+
+export function completeWorkerSourceBaseline(value: unknown): WorkerSourceBaseline | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as { workerCommit?: unknown; controllerHead?: unknown };
+  if (
+    typeof candidate.workerCommit !== 'string' ||
+    typeof candidate.controllerHead !== 'string' ||
+    !objectIdPattern.test(candidate.workerCommit) ||
+    !objectIdPattern.test(candidate.controllerHead)
+  )
+    return undefined;
+  return { workerCommit: candidate.workerCommit.toLowerCase(), controllerHead: candidate.controllerHead.toLowerCase() };
+}
+
 export function canonicalConflictPaths(paths: readonly string[]): string[] {
   return [...new Set(paths.map((path) => path.trim().replaceAll('\\', '/')).filter(Boolean))].sort((left, right) =>
     left < right ? -1 : left > right ? 1 : 0,
