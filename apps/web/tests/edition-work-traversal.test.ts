@@ -278,3 +278,145 @@ test('embedded qualified previews retain disclosed canonical type, cover and nat
   expect(incoming.count).toBeUndefined();
   expect(incoming.more).toBe(true);
 });
+
+test('the editions-over-twelve story transport reaches its canonical frame, preview and continued actual page', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { loadSubject } = await import('../src/subject/load-subject');
+  const { loadSubjectPage } = await import('../src/features/pages/subject');
+  const { subjectFrame } = await import('../src/features/pages/subject-frame');
+  const client = createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
+  const canonical = await loadSubject(client, traversalSubjects.work.id, 'en');
+  expect(canonical.kind).toBe('subject');
+  if (canonical.kind !== 'subject') throw new Error('Expected canonical Work');
+  expect(canonical.value.href).toBe(`/en/subjects/${traversalSubjects.work.id}/the-harbour`);
+
+  const loaded = await loadViewPages(client, canonical.value.id, 'editions', 'en', undefined, {
+    realm: traversalRealm,
+  });
+  if (loaded.kind !== 'page') throw new Error('Expected editions story page');
+  expect(subjectFrame(loaded.overview, 'en')?.title.text).toBe(traversalSubjects.work.label);
+  expect(loaded.page.context).toEqual(loaded.overview.context);
+  expect(loaded.page.context?.population).toEqual({ kind: 'realm', id: traversalRealm, title: 'Harbour readers' });
+  expect(subjectTabs(loaded.overview).find((tab) => tab.view === 'editions')?.count).toEqual({
+    value: 15,
+    relation: 'exact',
+  });
+  expect(render(loaded.overview, 'work')).toContain('data-slot="see-all"');
+  const initial = render(loaded.page, 'work', 'editions');
+  expect(initial).toContain('Edition 12');
+  expect(initial).not.toContain('Edition 15');
+  expect(initial).toContain(`node=editions&amp;cursor=fixture-editions-next&amp;realm=${traversalRealm}`);
+  expect(initial).toContain(`/subjects/${traversalSubjects.edition.id}/the-harbour-first-edition?realm=${traversalRealm}`);
+
+  const continued = await loadSubjectPage(client, canonical.value.id, 'editions', 'en', {
+    realm: traversalRealm,
+    continuation: { node: 'editions', cursor: 'fixture-editions-next' },
+  });
+  if (continued.kind !== 'page') throw new Error('Expected continued editions');
+  const html = render(continued.page, 'work', 'editions');
+  expect(html).toContain('Edition 15');
+  expect(html).not.toContain('data-slot="continue-group"');
+});
+
+test('the independent-role story transport loads both native groups and continues each without requesting its sibling', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { loadSubject } = await import('../src/subject/load-subject');
+  const { loadSubjectPage } = await import('../src/features/pages/subject');
+  const client = createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
+  expect((await loadSubject(client, traversalSubjects.creator.id, 'en')).kind).toBe('subject');
+  const loaded = await loadViewPages(client, traversalSubjects.creator.id, 'works', 'en', undefined, {
+    realm: traversalRealm,
+  });
+  if (loaded.kind !== 'page') throw new Error('Expected independent-role story page');
+  const before = structuredClone(loaded.page);
+  const initial = render(loaded.page, 'creator', 'works');
+  expect(initial).toContain('author 12');
+  expect(initial).toContain('illustrator 12');
+  expect(group(loaded.page, 'author').result.body).toMatchObject({ count: { value: 15, exact: true } });
+  expect(group(loaded.page, 'illustrator').result.body).not.toHaveProperty('count');
+  for (const [node, sibling, last] of [
+    ['author', 'illustrator', 'author 15'],
+    ['illustrator', 'author', 'illustrator 14'],
+  ] as const) {
+    const continued = await loadSubjectPage(client, traversalSubjects.creator.id, 'works', 'en', {
+      realm: traversalRealm,
+      continuation: { node, cursor: `fixture-${node}-next` },
+    });
+    if (continued.kind !== 'page') throw new Error('Expected continued role');
+    expect(group(continued.page, sibling).result.status).toBe(204);
+    expect(group(continued.page, node).result.body).toMatchObject({ next: null });
+    const html = render(continued.page, 'creator', 'works');
+    expect(html).toContain(last);
+    expect(html).toContain('Start again');
+    const plan = planReads(platformRegistry, continued.page.document as CompositionDocument, pageContext(continued.page));
+    expect(Object.keys(plan.reads).length).toBeLessThanOrEqual(16);
+    expect(Object.values(plan.reads).reduce((sum, read) => sum + readCost(read), 0)).toBeLessThanOrEqual(128);
+  }
+  expect(loaded.page).toEqual(before);
+});
+
+test('the role-conflict story transport keeps the page ready and scopes native cursor refusal to the author stream', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { loadSubject } = await import('../src/subject/load-subject');
+  const { loadSubjectPage } = await import('../src/features/pages/subject');
+  const { m } = await import('../src/paraglide/messages.js');
+  const client = createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
+  expect((await loadSubject(client, traversalSubjects.conflict.id, 'en')).kind).toBe('subject');
+  const loaded = await loadViewPages(client, traversalSubjects.conflict.id, 'works', 'en', undefined, {
+    realm: traversalRealm,
+  });
+  if (loaded.kind !== 'page') throw new Error('Expected ready role-conflict page');
+  const initial = render(loaded.page, 'conflict', 'works');
+  expect(initial).toContain('author 12');
+  expect(initial).toContain('illustrator 12');
+  const request = {
+    subject: traversalSubjects.conflict.id,
+    locale: 'en',
+    view: 'works' as const,
+    realm: traversalRealm,
+    node: 'author',
+    cursor: 'fixture-author-next',
+  };
+  expect(await readRelationGroup(client, request)).toEqual({ ok: false, status: 400 });
+  const continued = await loadSubjectPage(client, request.subject, request.view, request.locale, {
+    realm: request.realm,
+    continuation: { node: request.node, cursor: request.cursor },
+  });
+  if (continued.kind !== 'page') throw new Error('Expected a refused leaf within the actual page');
+  expect(group(continued.page, 'author').result).toEqual({ status: 400, body: { code: 'invalid_request' } });
+  expect(group(continued.page, 'illustrator').result.status).toBe(204);
+  expect(render(continued.page, 'conflict', 'works')).toContain(m.subject_relation_invalid());
+  const illustrator = await readRelationGroup(client, {
+    ...request,
+    node: 'illustrator',
+    cursor: 'fixture-illustrator-next',
+  });
+  if (!illustrator.ok) throw new Error('Expected independent illustrator continuation');
+  expect(illustrator.body.links).toHaveLength(2);
+  expect(illustrator.body.next).toBeNull();
+});
+
+test('the remaining edition story transports retain ready, hidden-target and genuinely unavailable relation states', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { loadSubject } = await import('../src/subject/load-subject');
+  const { loadSubjectPage } = await import('../src/features/pages/subject');
+  const client = createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
+  for (const scenario of ['edition', 'hidden', 'unavailable'] as const) {
+    expect((await loadSubject(client, traversalSubjects[scenario].id, 'en')).kind).toBe('subject');
+    const loaded = await loadSubjectPage(client, traversalSubjects[scenario].id, undefined, 'en', {
+      realm: traversalRealm,
+    });
+    if (loaded.kind !== 'page') throw new Error('Expected the actual edition story page');
+    const html = render(loaded.page, scenario);
+    const relation = group(loaded.page, 'edition-work').result;
+    expect(relation.status).toBe(scenario === 'unavailable' ? 503 : 200);
+    if (scenario === 'edition') {
+      expect(html).toContain(`/subjects/${traversalSubjects.work.id}/the-harbour?realm=${traversalRealm}`);
+    } else {
+      expect(html).not.toContain(`/subjects/${traversalSubjects.work.id}`);
+      const section = html.match(/<section\b[^>]*aria-labelledby="edition-work-title"[^>]*>/)?.[0];
+      expect(section).toBeDefined();
+      expect(section?.includes('data-state="failed"')).toBe(scenario === 'unavailable');
+    }
+  }
+});

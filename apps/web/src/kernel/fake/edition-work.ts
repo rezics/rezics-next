@@ -115,12 +115,13 @@ export function traversalPage(
       reads[key] = { status: 204, body: null };
       continue;
     }
-    if (
-      options.failure ||
-      (scenario === 'unavailable' && node === 'edition-work') ||
-      (scenario === 'conflict' && options.continuation?.node === 'author')
-    ) {
-      reads[key] = { status: options.failure ?? (scenario === 'conflict' ? 409 : 503), body: {} };
+    if (options.failure || (scenario === 'unavailable' && node === 'edition-work')) {
+      reads[key] = { status: options.failure ?? 503, body: options.failure ? {} : { code: 'dependency_unavailable' } };
+      continue;
+    }
+    if (scenario === 'conflict' && options.continuation?.node === 'author') {
+      // Semantic maps a refused/stale property cursor to invalid_request, at this leaf only.
+      reads[key] = { status: 400, body: { code: 'invalid_request' } };
       continue;
     }
     const total =
@@ -174,6 +175,7 @@ export function traversalPage(
       body: {
         [read.kind === 'links' ? 'links' : 'relations']: rows,
         ...(count === 'unavailable' ? {} : { count: { value: total, exact: count === 'exact' } }),
+        freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
         next: offset + rows.length < total ? `fixture-${node}-next` : null,
       },
     };
@@ -205,7 +207,7 @@ export const routes: FakeRoute[] = [
       if (!scenario) return;
       return {
         status: 200,
-        body: traversalPage(scenario, input.target?.view, {
+        ...traversalPage(scenario, input.target?.view, {
           realm: input.target?.realm,
           continuation: input.continuation,
         }),
@@ -222,7 +224,7 @@ export const routes: FakeRoute[] = [
       if (!scenario) return;
       const page = traversalPage(scenario);
       const read = Object.values(page.reads).find((r) => (r.body as { subject?: unknown })?.subject);
-      return { status: 200, body: read!.body };
+      return { status: 200, __responseBody: read!.body };
     },
   },
 ];

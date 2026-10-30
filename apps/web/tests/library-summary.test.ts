@@ -51,3 +51,26 @@ test('a collection presents localized subject summary labels while hidden subjec
   ]);
   expect(paths.sort()).toEqual(['/v1/collections/collection', '/v1/collections/collection/members']);
 });
+
+test('the curated collection reader rejects preparing membership instead of presenting an empty page', async () => {
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      if (new URL(new Request(input, init).url).pathname.endsWith('/members'))
+        return Response.json({ preparing: true }, { status: 202 });
+      return Response.json({
+        collection: {
+          id: 'collection',
+          curatorAccountId: 'owner',
+          title: 'Shelf',
+          description: null,
+          visibility: 'public',
+          memberCount: 1,
+          updatedAt: '2026-04-02T15:04:05Z',
+        },
+      });
+    },
+  });
+  await expect(
+    loadCollectionPage(client, new Request('https://web.test/collection'), {}, { id: 'collection' }),
+  ).rejects.toThrow('Collection members are preparing');
+});
