@@ -566,6 +566,26 @@ CREATE TABLE access.agent_verification_request (
 
 
 --
+-- Name: auth_history_proof; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_history_proof (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    phase text NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    continuation_id uuid,
+    receipt_id uuid,
+    CONSTRAINT auth_history_proof_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT auth_history_proof_check1 CHECK ((((phase = 'native-consumed'::text) AND (continuation_id IS NOT NULL) AND (receipt_id IS NOT NULL)) OR ((phase = 'copies-erased'::text) AND (continuation_id IS NULL) AND (receipt_id IS NULL)))),
+    CONSTRAINT auth_history_proof_phase_check CHECK ((phase = ANY (ARRAY['native-consumed'::text, 'copies-erased'::text]))),
+    CONSTRAINT auth_history_proof_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT auth_history_proof_version_check CHECK ((version > 0))
+);
+
+
+--
 -- Name: committed_continuation; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -1386,6 +1406,14 @@ ALTER TABLE ONLY access.agent_verification_request
 
 
 --
+-- Name: auth_history_proof auth_history_proof_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_history_proof
+    ADD CONSTRAINT auth_history_proof_pkey PRIMARY KEY (route, account_id, phase);
+
+
+--
 -- Name: committed_continuation_completion committed_continuation_completion_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1746,6 +1774,13 @@ CREATE UNIQUE INDEX agent_verification_active_account_idx ON access.agent_verifi
 --
 
 CREATE INDEX agent_verification_pending_page_idx ON access.agent_verification_request USING btree (route, created_at, request_id) WHERE (state = 'pending'::text);
+
+
+--
+-- Name: committed_continuation_auth_source; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX committed_continuation_auth_source ON access.committed_continuation USING btree (route, account_id, barrier_receipt_id) WHERE (allowlist @> '[{"step": "erase-auth-owner"}]'::jsonb);
 
 
 --
@@ -2309,6 +2344,13 @@ CREATE TRIGGER assignment_identity BEFORE INSERT OR UPDATE ON access.principal_a
 
 
 --
+-- Name: auth_history_proof auth_history_proof_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_history_proof_immutable BEFORE DELETE OR UPDATE ON access.auth_history_proof FOR EACH ROW EXECUTE FUNCTION access.committed_continuation_completion_immutable();
+
+
+--
 -- Name: committed_continuation_completion committed_continuation_completion_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -2404,6 +2446,14 @@ CREATE CONSTRAINT TRIGGER semantic_resource_role_erasure AFTER INSERT OR UPDATE 
 --
 
 CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
+
+
+--
+-- Name: auth_history_proof auth_history_proof_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_history_proof
+    ADD CONSTRAINT auth_history_proof_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
 
 
 --

@@ -52,6 +52,7 @@ export function registerAuthMaintenance(
   });
   const sweepExpiredVerifications = step('sweepExpiredVerifications', () => auth.internal.pruneExpiredVerifications());
   const nativeErasure = step('nativeErasure', redrive);
+  const sharedCopies = step('sharedCopies', () => auth.internal.redriveErasureHistory());
   const eraseDueConsents = step('eraseDueConsents', () => auth.internal.eraseDueConsents(CONSENT_ERASURE_BATCH));
   const tick = DBOS.registerWorkflow(
     async (_scheduledAt: Date, _context: unknown): Promise<void> => {
@@ -60,6 +61,7 @@ export function registerAuthMaintenance(
       await sweepExpiredVerifications();
       await nativeErasure();
       if (await auth.internal.hasDueConsentErasure()) await eraseDueConsents();
+      await sharedCopies();
     },
     { name: 'auth.maintenance.tick' },
   );

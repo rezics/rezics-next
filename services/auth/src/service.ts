@@ -1,3 +1,4 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { betterAuth } from 'better-auth';
@@ -18,6 +19,13 @@ import { issuerOrigin } from './issuer.ts';
 import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
+import {
+  bindErasureBarrier,
+  acceptErasureSource,
+  dischargeErasureSource,
+  publishErasureProofs,
+  redriveErasureHistory,
+} from './erasure-history.ts';
 import { startNativeErasure, nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
 import { recordRecoveryCompletion } from './erasure-consumers.ts';
 import { chargeAccountAttempt } from './rate-limit.ts';
@@ -1109,8 +1117,36 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           : await trustedAccess.readAccount(accountId);
         if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
           throw new Denied();
-        return startNativeErasure(database, accountId, account.authnEpoch);
+        const identity = await trustedAccess.readAuthErasureBarrier?.(accountId);
+        if (!identity) {
+          const expiry = await database.query(
+            'SELECT 1 FROM auth_registration_stage WHERE account_id=$1 AND expired_at IS NOT NULL AND completed_at IS NULL AND erasure_release_at IS NOT NULL LIMIT 1',
+            [accountId],
+          );
+          if (!expiry.rowCount) throw new Denied(503);
+        }
+        // Pending registration expiry has no active-account erasure barrier.
+        // It retains its separate native cleanup semantics and emits no proof.
+        const id = await startNativeErasure(database, accountId, account.authnEpoch, identity ?? undefined);
+        if (identity) await bindErasureBarrier(database, id, identity);
+        return id;
       },
+      async consumeAccountErasure(accountId, receiptId, workflowId) {
+        if (DBOS.workflowID !== workflowId) throw new Denied();
+        if (!trustedAccess.readAuthErasureSource) throw new Denied(503);
+        const source = await trustedAccess.readAuthErasureSource({ accountId, receiptId });
+        if (!source || source.accountId !== accountId || source.receiptId !== receiptId) throw new Denied();
+        const id = await service.internal.startAccountErasure(accountId);
+        await acceptErasureSource(database, id, source, workflowId);
+        // No consumer resumes against Kernel evidence after this transfer. The
+        // local obligation has everything required by its fixed native pages.
+        const verified = await trustedAccess.readAuthErasureSource({ accountId, receiptId });
+        if (!verified || JSON.stringify(verified) !== JSON.stringify(source)) throw new Denied();
+        await dischargeErasureSource(database, id, source);
+        await publishErasureProofs(database, trustedAccess, id);
+        return id;
+      },
+      redriveErasureHistory: () => redriveErasureHistory(database, trustedAccess),
       nativeErasurePage: (id) => nativeErasurePage(database, id),
       redriveNativeErasure: () => redriveNativeErasure(database),
       async eraseAccount(accountId) {
@@ -1119,7 +1155,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           : await trustedAccess.readAccount(accountId);
         if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
           throw new Denied();
-        const id = await startNativeErasure(database, accountId, account.authnEpoch);
+        const id = await service.internal.startAccountErasure(accountId);
         // Direct native callers share the exact obligation with host recovery.
         // Every page commits/releases before continuing; no owner/client list is retained.
         for (;;) {

@@ -1590,12 +1590,9 @@ backdates source state or removes a responsibility hold to make deletion eligibl
 This composition has **no terminal Auth erasure acknowledgement**. Its final state
 remains pending, including after native work and the original consent cutoff:
 
-- Auth's DBOS command/workflow input, step, result, event, notification and queue
-  producers have no actual atomic shared-history copy recorder/minimizer or
-  supported native handoff verifier. Native request locators and completed
-  retention sweeps do not supply that custody. No shared global ACK is awaited.
-- There is no trusted fixed-Auth erasure acknowledgement port in
-  `TrustedAccessPorts`/`createAuthHost`. No noop or synthetic receipt fills it.
+- Kernel shared-history still needs its own producer/minimizer closure after
+  consuming the separate Auth-local completion fact described below. No shared
+  global ACK is awaited by either Auth phase.
 - Historical opaque protocol rows and historical role fields lack a deployment
   coverage proof. Null attribution remains unknown; it cannot establish genuine
   all-role emptiness. The ordinal v2 proof covers cursors, not this missing proof.
@@ -1606,6 +1603,18 @@ remains pending, including after native work and the original consent cutoff:
   context projection, contact-subject approval and shared-copy recorder interfaces are explicitly missing;
   no shared type/export or personal writer is claimed delivered. Ownership is never inferred from JSON,
   addresses, handles or ciphertext.
+- Client contacts, arbitrary resource/client metadata and legacy request or
+  encrypted creation bindings do not have complete typed person attribution.
+  Ownership is never inferred by searching JSON, handles, email or network address.
+  Shared workflow delegated-principal roles now come from the resolved native
+  assignment through `copyActors`, before enqueue.
+- A stalled registration on a surviving subject can still require its native
+  release consumer's stage witness. That lifecycle must supply a terminal proof
+  before the witness can be removed; history deletion is not such a proof.
+- An unfinished credential-effect witness for a surviving subject remains pending
+  when an associated account or client is erased. Its native consumer must supply
+  a terminal-refusal proof; a missing user or shared-history deletion cannot
+  substitute for that proof.
 - Unknown historical registration bindings, lost operator-reservation identities,
   unresolved delivered reduction owners and unknown native requests remain pending.
   Their surviving release witnesses are not discarded or called complete.
@@ -1629,3 +1638,51 @@ The native marker deliberately has no `erased`, `none` or acknowledged outcome.
 A missing native user cannot change persisted applicability to `none`. These gaps
 are implementation/integration findings, not a new specification or a claim that
 elapsed credential lifetime completes erasure.
+
+### Native shared-copy custody and proof publication
+
+`erasure-copy.ts` installs an Auth-owned recorder on the pinned SDK's real
+`auth_dbos` tables after native schema compatibility probes. Transactional
+`DBOSClient.enqueueInTransaction`/`sendInTransaction` commit exact work, complete
+typed account roles and actual copies together. Registration and account workflows
+include operating-human, initiator, operator, member, previous operator, delegate
+and client-owner roles supplied by native inputs/approval context. Client-reduction
+pages keep transient owner IDs inside their native step and carry independent
+ordinal boundaries; child creation records its exact parent and native progress
+locator. SDK result consumers settle before `ready` is recorded. Failed/live or
+unconsumed results remain pending; terminal status alone does not establish it.
+
+An execution has at most 139 native rows and 10 MiB: three status/input/output
+rows, 60 operation rows, eight event keys, 64 event-history rows and four messages.
+A status is at most 4 KiB; another artifact is at most 64 KiB including SDK
+bookkeeping. The recorder refuses undeclared streams, incomplete roles and budget
+overflow before the native write. Erasure uses eight exact locator keys per page
+and one execution per minimization unit, SDK cancel/delete without descendants,
+then indexed native absence probes. Retired markers survive history deletion and
+close stale enqueue, child, message, step/event and result writes. The digest is
+zeroed after physical absence. Unknown old copies or native rows preceding the
+creation cut remain pending; no scan attempts to infer their account roles.
+
+`AuthService.internal.consumeAccountErasure(accountId, receiptId, workflowId)` is
+called by the actual `erase-auth-owner` step, in its SDK context, after the real
+committed continuation authorization. It commits source acceptance separately
+from the final validated native transfer. Acceptance alone emits no witness and
+blocks native cleanup. The native transfer preserves the original kernel
+version/T and continuation/receipt identity in the existing `auth_erasure` root;
+exact replays do not reopen the discharged source dependency.
+
+The default maintenance host independently redrives the early native-consumed
+witness and later local-copy completion through `TrustedAccessPorts`:
+`readAuthErasureBarrier`, `readAuthErasureSource`,
+`recordAuthNativeConsumption`, `recordAuthHistoryCompletion`. A missing capability
+is unavailable/pending. Pending-registration expiry retains separate native
+cleanup semantics and emits no active-account barrier proof. Explicit older
+separate-store workflow hosts retain their SDK behavior but have no Auth-local
+coverage cut or completion proof.
+
+The kernel sees only the immutable technical tuples through the fixed Auth-only
+binding. Auth imports shared types from `@rezics/auth-contract`, never kernel
+runtime modules or a kernel pool. Local completion and submission progress live
+outside DBOS, so final purge, executor loss and lost replies cannot erase them.
+Neither proof phase is an Auth/shared-history participant ACK. Kernel's own
+producer/minimizer closure remains necessary; Search cleanup remains undelivered.

@@ -1,3 +1,4 @@
+import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
 import { accessClock, installAccessClock } from './access-clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type {
@@ -247,6 +248,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
   const trustedAccess: TrustedAccessPorts = {
     ...createAuthBindings({
+      ...createAuthHistoryProofBindings(pool),
       pool,
       access,
       ...createRecoveryCompletion({
@@ -361,6 +363,23 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       throw new WorkflowApprovalUnavailableError();
     },
     actorAccountId: (context) => context.actor.accountId,
+    async copyActors(context) {
+      const roles: { accountId: string; role: 'human' | 'initiator' | 'delegate' }[] = [
+        { accountId: context.actor.accountId, role: 'human' },
+        { accountId: context.actor.accountId, role: 'initiator' },
+      ];
+      if (context.actor.requestedBy) {
+        const assignment = await readAssignment(
+          pool,
+          context.actor.requestedBy,
+          context.actor.accountId,
+          accessClock(access),
+        );
+        if (assignment.kind !== 'resolved') throw new WorkflowApprovalUnavailableError();
+        roles.push({ accountId: assignment.principalId, role: 'delegate' });
+      }
+      return roles;
+    },
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,
     approvalBinding: (context) => workflowApprovalBinding(context),
     readContinuation: (operationKey, accountId) => continuations.read(operationKey, accountId),

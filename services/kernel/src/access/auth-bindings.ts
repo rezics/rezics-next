@@ -3,6 +3,7 @@ import { systemClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type {
+  AuthErasureProofPorts,
   AccessAccount,
   ProvisioningReceiptMetadata,
   EffectAuthorization,
@@ -38,7 +39,7 @@ export type AuthAuthorizationReceipt<Purpose extends CredentialFloorPurpose = Cr
  * epoch checks. These callbacks are capabilities, never request JSON or authorization flags.
  * Workflow/provider implementations can bind here without another account or policy authority.
  */
-export type AuthBindingCapabilities = {
+export type AuthBindingCapabilities = AuthErasureProofPorts & {
   /** Native pending reader, including verified original receipt metadata. The
    * composition must also verify current workflow approval for automated chains. */
   verifyPendingIdentity?: (reference: string) => Promise<
@@ -310,6 +311,22 @@ export function createAuthBindings(
   }
   return {
     passkeys: true,
+    async readAuthErasureBarrier(id) {
+      if (!config.readAuthErasureBarrier) throw new AuthBindingUnavailableError('readAuthErasureBarrier');
+      return config.readAuthErasureBarrier(id);
+    },
+    async readAuthErasureSource(input) {
+      if (!config.readAuthErasureSource) throw new AuthBindingUnavailableError('readAuthErasureSource');
+      return config.readAuthErasureSource(input);
+    },
+    async recordAuthNativeConsumption(source) {
+      if (!config.recordAuthNativeConsumption) throw new AuthBindingUnavailableError('recordAuthNativeConsumption');
+      return config.recordAuthNativeConsumption(source);
+    },
+    async recordAuthHistoryCompletion(barrier) {
+      if (!config.recordAuthHistoryCompletion) throw new AuthBindingUnavailableError('recordAuthHistoryCompletion');
+      return config.recordAuthHistoryCompletion(barrier);
+    },
     ...(config.completeRecovery ? { completeRecovery: config.completeRecovery } : {}),
     async confirmBarrier(input) {
       if (!config.confirmBarrier) throw new AuthBindingUnavailableError('confirmBarrier');

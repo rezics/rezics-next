@@ -49,12 +49,12 @@ export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean) {
 
 /** Real Access composition is test-only. Production Auth receives ports and an
  * Auth-only pool, never a kernel module, pool, key or credential. */
-export async function nativeFixture() {
+export async function nativeFixture(options: { openPool?: (url: string) => Promise<Pool> } = {}) {
   const fixture = testDatabase();
   const kernelFixture = testDatabase();
   migrateKernel(kernelFixture.url);
   const kernel = new Pool({ connectionString: kernelFixture.url });
-  const pool = new Pool({ connectionString: fixture.url });
+  const pool = options.openPool ? await options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
   const previous = process.env.DATABASE_URL;
   process.env.DATABASE_URL = kernelFixture.url;
   let modules;
@@ -215,8 +215,9 @@ export async function nativeFixture() {
       const { reference } = (await approval.json()) as { reference: string };
       return call('/account-operations/execute', { operationKey: key, operation, reference }, person.cookie);
     },
-    async close() {
-      await host.stop();
+    async close(options: { keepPool?: boolean } = {}) {
+      if (options.keepPool) await host.workflows.close();
+      else await host.stop();
       await kernel.end();
       kernelFixture.close();
       fixture.close();

@@ -37,7 +37,8 @@ export type AccountOperation = (
 ) & { operationKey?: string };
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
-import { DBOS } from '@dbos-inc/dbos-sdk';
+import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
+import { installCopyRecorder, createCopyWriter, completeCopy, type CopyRole } from './erasure-copy.ts';
 import { AUTH_WORKFLOW_APPLICATION, installWorkflowRequestRetention } from './retention.ts';
 import { coordinateMembership } from './membership-workflows.ts';
 import { completeDeletedClientReductionOwner } from './account-workflows.ts';
@@ -45,7 +46,7 @@ import { answerRevocation, REVOKE_SESSIONS_STEP, sessionRevocation, stepFailureM
 import { sanitizedClientIp, verifyTurnstile, type TurnstileConfiguration } from './turnstile.ts';
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
-import { nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
+import { redriveNativeErasure } from './erasure-native.ts';
 import { recordRegistrationActivation, type NativeConsumerRuntime } from './erasure-consumers.ts';
 
 type Command = { accountId: string; key: string };
@@ -226,6 +227,59 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return at;
   };
   const bindingDigest = (data: unknown) => createHmac('sha256', digestKey).update(JSON.stringify(data)).digest();
+  let copyClient: DBOSClient | undefined;
+  let copyWriter: ReturnType<typeof createCopyWriter> | undefined;
+  const writer = () => required(copyWriter);
+  async function requestScope(id: string, input: AccountOperation, context?: Context): Promise<CopyRole[]> {
+    const row = (
+      await database.query<Record<string, string | null>>(
+        'SELECT erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_member_id,erasure_previous_operator_id,erasure_client_id FROM auth_workflow_request WHERE workflow_id=$1',
+        [id],
+      )
+    ).rows[0];
+    const roles: CopyRole[] = [];
+    const add = (accountId: string | null | undefined, role: CopyRole['role']) => {
+      if (accountId && !roles.some((r) => r.accountId === accountId && r.role === role))
+        roles.push({ accountId, role });
+    };
+    for (const [key, role] of [
+      ['erasure_subject_id', 'subject'],
+      ['erasure_human_id', 'human'],
+      ['erasure_operator_id', 'operator'],
+      ['erasure_member_id', 'member'],
+      ['erasure_previous_operator_id', 'previous-operator'],
+    ] as const)
+      add(row?.[key], role);
+    if (context && access.copyActors)
+      for (const role of await access.copyActors(context)) add(role.accountId, role.role);
+    if (row?.erasure_subject_id) add((await access.readAccount(row.erasure_subject_id))?.operatorAccountId, 'operator');
+    if (input.kind === 'automated') {
+      const stage = await database.query<{
+        account_id: string;
+        erasure_creator_id: string | null;
+        erasure_operator_id: string | null;
+      }>(
+        'SELECT account_id,erasure_creator_id,erasure_operator_id FROM auth_registration_stage WHERE registration_id=$1',
+        [input.registrationId],
+      );
+      add(stage.rows[0]?.account_id, 'subject');
+      add(stage.rows[0]?.erasure_creator_id, 'initiator');
+      add(stage.rows[0]?.erasure_operator_id, 'operator');
+    }
+    if (input.kind === 'organization' && context)
+      add(access.registrationTarget(required(access.stableCommandKey)(context, 'organization-id')), 'subject');
+    if (row?.erasure_client_id)
+      add(
+        (
+          await database.query<{ owner: string | null }>(
+            'SELECT "userId" AS owner FROM auth_client WHERE client_id=$1',
+            [row.erasure_client_id],
+          )
+        ).rows[0]?.owner,
+        'client-owner',
+      );
+    return roles;
+  }
   let started = false;
   let starting: Promise<void> | undefined;
   let registered = false;
@@ -540,10 +594,21 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       'erase-auth-owner',
       async (accountId: string, request?: AccountOperation, operationKey?: string) => {
         if (operationKey) {
+          // A transferred consumer never reopens its former Kernel dependency,
+          // even if its DBOS step output was lost. Only this exact source work
+          // can use the permanent native transfer.
+          const transferred = (
+            await database.query<{ id: string }>(
+              'SELECT id FROM auth_erasure WHERE account_id=$1 AND source_workflow_id=$2 AND source_discharged_at IS NOT NULL',
+              [accountId, required(DBOS.workflowID)],
+            )
+          ).rows[0];
+          if (transferred) return transferred.id;
           const row = required(await required(access.readContinuation)(operationKey, accountId));
           const entry = row.allowlist.find((item) => item.step === 'erase-auth-owner' && item.target === accountId);
           if (!entry) denied();
           await required(access.authorizeContinuation)(row.reference, entry);
+          return auth.internal.consumeAccountErasure(accountId, row.barrierReceiptId, required(DBOS.workflowID));
         } else if (request) await approved(request);
         return auth.internal.startAccountErasure(accountId);
       },
@@ -551,19 +616,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const recoverErasure = step('native-erasure-obligation', (accountId: string) =>
       auth.internal.startAccountErasure(accountId),
     );
-    const erasurePage = step('native-erasure-page', (id: string) => nativeErasurePage(database, id, nativeConsumers));
-    const drainErasure = async (id: string) => {
-      for (;;) {
-        const page = await erasurePage(id);
-        if (page.state === 'consent') return;
-        if (page.state === 'pending') await DBOS.sleep(60_000);
-      }
-    };
     const erase = async (accountId: string, request?: AccountOperation, operationKey?: string) => {
-      // Old histories stored void at erase-auth-owner. Recover the same native
-      // obligation rather than replaying the former user cascade.
-      const id = (await acceptErasure(accountId, request, operationKey)) ?? (await recoverErasure(accountId));
-      await drainErasure(id);
+      // The permanent native obligation owns independent bounded pages. Personal
+      // workflows never accumulate an unbounded erasure step/sleep tail.
+      return (await acceptErasure(accountId, request, operationKey)) ?? (await recoverErasure(accountId));
     };
     const expired = step('registration-terminal', async (id: string) => {
       await database.query(
@@ -571,58 +627,62 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         [id, now()],
       );
     });
-    registration = DBOS.registerWorkflow(
-      async (input: RegistrationInput) => {
-        const row = await read(input.registrationId);
-        const reserved = await reservePublicRegistration(row);
-        if ('error' in reserved) {
+    const executeRegistration = async (input: RegistrationInput) => {
+      const row = await read(input.registrationId);
+      const reserved = await reservePublicRegistration(row);
+      if ('error' in reserved) {
+        await expired(input.registrationId);
+        await DBOS.setEvent('pending', reserved);
+        return { accountId: row.account_id, error: reserved.error };
+      }
+      const claim = reserved.claim;
+      await pending(claim, input.registrationId);
+      const ref = {
+        registrationId: input.registrationId,
+        workflowId: required(DBOS.workflowID),
+        accountId: row.account_id,
+        expiresAt: claim.expiresAt,
+      };
+      await DBOS.setEvent('pending', ref);
+      const first = await DBOS.recv<string>('credential', { deadlineEpochMS: Date.parse(claim.expiresAt) });
+      if (first !== 'expire' && !(await isExpired(input.registrationId))) {
+        const installed = await provision(input.registrationId, undefined, true);
+        if ('conflict' in installed) {
+          await expire(claim);
+          await release(claim);
+          await erase(row.account_id);
           await expired(input.registrationId);
-          await DBOS.setEvent('pending', reserved);
-          return { accountId: row.account_id, error: reserved.error };
+          const deniedEvent = { error: 'registration_denied' as const };
+          await DBOS.setEvent('credential', deniedEvent);
+          return { accountId: row.account_id, error: deniedEvent.error };
         }
-        const claim = reserved.claim;
-        await pending(claim, input.registrationId);
-        const ref = {
-          registrationId: input.registrationId,
-          workflowId: required(DBOS.workflowID),
-          accountId: row.account_id,
-          expiresAt: claim.expiresAt,
-        };
-        await DBOS.setEvent('pending', ref);
-        const first = await DBOS.recv<string>('credential', { deadlineEpochMS: Date.parse(claim.expiresAt) });
-        if (first !== 'expire' && !(await isExpired(input.registrationId))) {
-          const installed = await provision(input.registrationId, undefined, true);
-          if ('conflict' in installed) {
-            await expire(claim);
-            await release(claim);
-            await erase(row.account_id);
-            await expired(input.registrationId);
-            const deniedEvent = { error: 'registration_denied' as const };
-            await DBOS.setEvent('credential', deniedEvent);
-            return { accountId: row.account_id, error: deniedEvent.error };
-          }
-          if (!('expired' in installed)) {
-            const proof = await evidence(claim);
-            const claimed = await claimHandle(claim, proof, input.registrationId);
-            if (!('expired' in claimed)) {
-              await DBOS.setEvent('credential', { accountId: row.account_id });
-              const next = await DBOS.recv<string>('activation', { deadlineEpochMS: Date.parse(claim.expiresAt) });
-              if (next !== 'expire' && !(await isExpired(input.registrationId))) {
-                const result = await activate(row.account_id, proof, input.registrationId);
-                if (!('expired' in result)) {
-                  await defaults(row.account_id);
-                  await complete(input.registrationId);
-                  return result;
-                }
+        if (!('expired' in installed)) {
+          const proof = await evidence(claim);
+          const claimed = await claimHandle(claim, proof, input.registrationId);
+          if (!('expired' in claimed)) {
+            await DBOS.setEvent('credential', { accountId: row.account_id });
+            const next = await DBOS.recv<string>('activation', { deadlineEpochMS: Date.parse(claim.expiresAt) });
+            if (next !== 'expire' && !(await isExpired(input.registrationId))) {
+              const result = await activate(row.account_id, proof, input.registrationId);
+              if (!('expired' in result)) {
+                await defaults(row.account_id);
+                await complete(input.registrationId);
+                return result;
               }
             }
           }
         }
-        await expire(claim);
-        await release(claim);
-        await erase(row.account_id);
-        await expired(input.registrationId);
-        return { accountId: row.account_id, expired: true as const };
+      }
+      await expire(claim);
+      await release(claim);
+      await erase(row.account_id);
+      await expired(input.registrationId);
+      return { accountId: row.account_id, expired: true as const };
+    };
+    registration = DBOS.registerWorkflow(
+      async (input: RegistrationInput) => {
+        const result = await executeRegistration(input);
+        return result;
       },
       { name: 'accounts.registration' },
     );
@@ -961,46 +1021,42 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       async (input: Extract<AccountOperation, { kind: 'client-reduction' }>) => {
         await approved(input);
         await auth.internal.beginClientReduction({ ...input, operationId: required(DBOS.workflowID) });
+        await database.query(
+          'UPDATE auth_client_reduction_progress SET current_workflow_id=$1 WHERE operation_id=$1 AND current_workflow_id IS NULL',
+          [required(DBOS.workflowID)],
+        );
       },
     );
-    const reductionPage = step('client-reduction-page', async (clientId: string, operationId: string, after: string) =>
-      auth.internal.clientReductionPage({ clientId, operationId, after, limit: 64 }),
-    );
-    const reductionOwnerFence = step(
-      'client-reduction-owner-fence',
-      async (clientId: string, operationId: string, accountId: string) => {
-        const completeDeleted = () =>
-          completeDeletedClientReductionOwner(database, access.readAccount, {
+    // All account-bearing intermediate values stay in this native bounded page;
+    // only its independent ordinal boundary is serialized into DBOS.
+    const reductionPage = step(
+      'client-reduction-page',
+      async (clientId: string, operationId: string, after: string) => {
+        const batch = await auth.internal.clientReductionPage({ clientId, operationId, after, limit: 8 });
+        for (const accountId of batch.items) {
+          const completeDeleted = () =>
+            completeDeletedClientReductionOwner(database, access.readAccount, { clientId, operationId, accountId });
+          if (await completeDeleted()) continue;
+          let barrier: WorkflowFence;
+          try {
+            barrier = (await access.raiseFence({ accountId, key: commandKey(`fence:${accountId}`) })).value;
+          } catch (error) {
+            if (isRefusal(error) && (await completeDeleted())) continue;
+            throw error;
+          }
+          await auth.internal.revokeSessions(accountId, {
+            boundedCleanup: true,
+            barrier: { ...barrier, minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch) },
+          });
+          await auth.internal.completeClientReductionOwner({
             clientId,
             operationId,
             accountId,
+            barrier: { ...barrier, minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch) },
           });
-        if (await completeDeleted()) return null;
-        try {
-          return (await access.raiseFence({ accountId, key: commandKey(`fence:${accountId}`) })).value;
-        } catch (error) {
-          // Deletion may commit after the read and before the native fence.
-          // Only its terminal state can discharge that lifecycle refusal.
-          if (!isRefusal(error) || !(await completeDeleted())) throw error;
-          return null;
         }
+        return { next: batch.next };
       },
-    );
-    const revokeReduction = step('revoke-client-reduction-sessions', async (barrier: WorkflowFence) =>
-      auth.internal.revokeSessions(barrier.accountId, {
-        boundedCleanup: true,
-        barrier: { ...barrier, minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch) },
-      }),
-    );
-    const completedOwner = step(
-      'complete-client-reduction-owner',
-      async (clientId: string, operationId: string, barrier: WorkflowFence) =>
-        auth.internal.completeClientReductionOwner({
-          clientId,
-          operationId,
-          accountId: barrier.accountId,
-          barrier: { ...barrier, minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch) },
-        }),
     );
     const finishReduction = step('finish-client-reduction', async (input: ReductionInput, operationId: string) => {
       await auth.internal.finishClientReduction({ ...input, operationId });
@@ -1017,21 +1073,23 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         const operationId = input.operationId ?? required(DBOS.workflowID);
         if (!input.operationId) await beginReduction(request);
         const batch = await reductionPage(input.clientId, operationId, input.after ?? '');
-        for (const id of batch.items) {
-          const barrier = await reductionOwnerFence(input.clientId, operationId, id);
-          if (!barrier) continue;
-          await revokeReduction(barrier);
-          await completedOwner(input.clientId, operationId, barrier);
-        }
         if (batch.next !== null) {
           // Each durable workflow has one bounded page. It schedules, but does
           // not await, its continuation, so history and recovery stay bounded.
           const nextWorkflowId = `${operationId}:page:${hash(batch.next).toString('hex')}`;
-          await DBOS.startWorkflow(clientReduction, { workflowID: nextWorkflowId })({
-            ...input,
-            operationId,
-            after: batch.next,
-          });
+          const roles = (
+            await database.query<{ account_id: string; role: CopyRole['role'] }>(
+              'SELECT account_id,role FROM auth_copy_role WHERE workflow_id=$1 ORDER BY account_id,role',
+              [required(DBOS.workflowID)],
+            )
+          ).rows.map((r) => ({ accountId: r.account_id, role: r.role }));
+          await writer().enqueue(
+            'accounts.client-reduction',
+            nextWorkflowId,
+            { ...input, operationId, after: batch.next },
+            roles,
+            required(DBOS.workflowID),
+          );
           return { clientId: input.clientId, nextWorkflowId };
         }
         await finishReduction(input, operationId);
@@ -1108,7 +1166,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             await releaseOperator(input.responsibility, undefined, operationKey);
           }
           if (account.handle) await redirectDeleted(account.accountId, account.handle, undefined, operationKey);
-          if (id) await drainErasure(id);
+
           return { accountId: input.accountId };
         }
         await erase(input.accountId, input);
@@ -1225,9 +1283,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   async function begin(input: { key: string; handle: string }, credential?: { email: string; password: string }) {
     active();
     const row = await createStage(input, credential);
-    await DBOS.startWorkflow(registration, { workflowID: workflowId(`registration:${row.request_key}`) })({
-      registrationId: row.registration_id,
-    });
+    await writer().enqueue(
+      'accounts.registration',
+      workflowId(`registration:${row.request_key}`),
+      {
+        registrationId: row.registration_id,
+      },
+      [{ accountId: row.account_id, role: 'subject' }],
+    );
     const result = required(
       await DBOS.getEvent<RegistrationStartEvent>(workflowId(`registration:${row.request_key}`), 'pending', 30),
     );
@@ -1245,7 +1308,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     );
     if (!changed.rowCount) throw new RegistrationFailure('registration_denied');
     const ref = reference(row);
-    await DBOS.send(ref.workflowId, 'install', 'credential', `${ref.workflowId}:install`);
+    await writer().send(ref.workflowId, 'install', 'credential', `${ref.workflowId}:install`);
     const result = required(await DBOS.getEvent<RegistrationCredentialEvent>(ref.workflowId, 'credential', 30));
     if ('error' in result) throw new RegistrationFailure(result.error);
     return result;
@@ -1255,9 +1318,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const row = await stage(id);
     if (row.expired_at || (!row.completed_at && required(row.expires_at).getTime() <= now().getTime())) denied();
     const ref = reference(row);
-    await DBOS.send(ref.workflowId, 'activate', 'activation', `${ref.workflowId}:activate`);
+    await writer().send(ref.workflowId, 'activate', 'activation', `${ref.workflowId}:activate`);
     const result = await DBOS.retrieveWorkflow<{ accountId: string; expired?: true }>(ref.workflowId).getResult();
     if (result.expired) denied();
+    await completeCopy(database, ref.workflowId);
     return { accountId: result.accountId };
   }
   async function runOperation(key: string, input: AccountOperation) {
@@ -1306,17 +1370,26 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     ).rows[0]!;
     if (!row.digest.equals(digest)) denied();
     const result = await answerOperation(input, async () =>
-      (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult(),
+      (
+        await writer().enqueue<Awaited<ReturnType<typeof operation>>>(
+          'accounts.operation',
+          id,
+          input,
+          await requestScope(id, input, context),
+        )
+      ).getResult(),
     );
     await database.query(
       'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
       [id],
     );
+    if (input.kind === 'delete') await auth.internal.eraseAccount(input.accountId);
     // The approval above was resolved once, before any effect. An operation that
     // removes the actor's own standing answers with the workflow's outcome: the
     // actor is not re-authorized against state the operation itself changed.
     // Every other result is disclosed only under current authority.
     if (!(context && removesOwnStanding(input, context))) await discloseUnderCurrentAuthority(input);
+    await completeCopy(database, id);
     return result;
   }
   /** Auth's failure to delete the sessions of a committed revocation is its own answer. */
@@ -1344,8 +1417,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   }
   async function waitClientReduction(id: string): Promise<{ clientId: string }> {
     const progress = (
-      await database.query<{ client_id: string; completed: boolean; page_after: string; cutover_after: string | null }>(
-        'SELECT client_id,completed,page_after,cutover_after FROM auth_client_reduction_progress WHERE operation_id=$1',
+      await database.query<{
+        client_id: string;
+        completed: boolean;
+        page_after: string;
+        cutover_after: string | null;
+        current_workflow_id: string | null;
+      }>(
+        'SELECT client_id,completed,page_after,cutover_after,current_workflow_id FROM auth_client_reduction_progress WHERE operation_id=$1',
         [id],
       )
     ).rows[0];
@@ -1363,14 +1442,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       // a replacement from the deployment snapshot, not the moving page boundary.
       const operationId = id;
       id = `${id}:cursor-v2`;
-      await DBOS.startWorkflow(clientReduction, { workflowID: id })({
-        ...request,
-        operationId,
-        after: progress.cutover_after,
-        cursorVersion: 2,
-      });
-    } else if (progress?.page_after && progress.page_after !== '0')
-      id = `${id}:page:${hash(progress.page_after).toString('hex')}`;
+      await writer().enqueue(
+        'accounts.client-reduction',
+        id,
+        { ...request, operationId, after: progress.cutover_after, cursorVersion: 2 },
+        await requestScope(operationId, request),
+      );
+    } else if (progress?.current_workflow_id) id = progress.current_workflow_id;
+    else if (progress?.page_after && progress.page_after !== '0') throw new Error('Auth native child locator missing');
     while (true) {
       const status = await DBOS.getWorkflowStatus(id);
       let result: ReductionResult;
@@ -1380,6 +1459,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         );
         result = await (await DBOS.rewindWorkflow<ReductionResult>(id, { startStep: failed.functionID })).getResult();
       } else result = await DBOS.retrieveWorkflow<ReductionResult>(id).getResult();
+      await completeCopy(database, id);
       if (!result.nextWorkflowId) return { clientId: result.clientId };
       id = result.nextWorkflowId;
     }
@@ -1413,10 +1493,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult(),
       );
       await disclose();
+      await completeCopy(database, id);
       return result;
     }
     const result = await answerOperation(input, async () => (await DBOS.resumeWorkflow(id)).getResult());
     await disclose();
+    await completeCopy(database, id);
     return result;
   }
   const close = async () => {
@@ -1426,6 +1508,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     process.off('SIGINT', interrupt);
     process.off('SIGTERM', interrupt);
     try {
+      await copyClient?.destroy();
+      copyClient = undefined;
+      copyWriter = undefined;
       await DBOS.shutdown({ deregister: true });
     } finally {
       owner = undefined;
@@ -1454,13 +1539,44 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         logLevel: 'warn',
       });
       await DBOS.launch();
-      if (sameDatabase) await installWorkflowRequestRetention(database);
+      if (sameDatabase) {
+        await installCopyRecorder(database);
+        await installWorkflowRequestRetention(database);
+        copyClient = await DBOSClient.create({
+          systemDatabaseUrl: options.systemDatabaseUrl,
+          systemDatabaseSchemaName: systemSchema,
+          systemDatabasePool: options.systemDatabasePool ?? database,
+          applicationName: AUTH_WORKFLOW_APPLICATION,
+        });
+        await copyClient.registerQueue('auth.account-copies');
+        copyWriter = createCopyWriter(database, copyClient);
+      } else {
+        // Older explicit isolated-store hosts retain their original SDK API.
+        // They have no Auth-local custody cut and can never publish this proof.
+        copyWriter = {
+          async enqueue<R>(name, id, input) {
+            const definition =
+              name === 'accounts.registration'
+                ? registration
+                : name === 'accounts.operation'
+                  ? operation
+                  : clientReduction;
+            return DBOS.startWorkflow(definition as unknown as (...args: unknown[]) => Promise<R>, { workflowID: id })(
+              input,
+            );
+          },
+          send: (id, message, topic, key) => DBOS.send(id, message, topic, key),
+        };
+      }
       started = true;
       if (options.handleSignals !== false) {
         process.once('SIGINT', interrupt);
         process.once('SIGTERM', interrupt);
       }
     } catch (error) {
+      await copyClient?.destroy();
+      copyClient = undefined;
+      copyWriter = undefined;
       await DBOS.shutdown({ deregister: true });
       owner = undefined;
       registered = false;
@@ -1533,8 +1649,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             continue;
           }
           const ref = reference(row);
-          await DBOS.send(ref.workflowId, 'expire', 'credential', `${ref.workflowId}:expire-credential`);
-          await DBOS.send(ref.workflowId, 'expire', 'activation', `${ref.workflowId}:expire-activation`);
+          await writer().send(ref.workflowId, 'expire', 'credential', `${ref.workflowId}:expire-credential`);
+          await writer().send(ref.workflowId, 'expire', 'activation', `${ref.workflowId}:expire-activation`);
           const status = await DBOS.getWorkflowStatus(ref.workflowId);
           if (status?.status === 'ERROR') {
             const failed = required(
@@ -1542,6 +1658,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             );
             await (await DBOS.rewindWorkflow(ref.workflowId, { startStep: failed.functionID })).getResult();
           } else await DBOS.retrieveWorkflow(ref.workflowId).getResult();
+          await completeCopy(database, ref.workflowId);
+          await auth.internal.eraseAccount(row.account_id);
         }
         if (rows.length < 64) return;
         afterExpiry = rows.at(-1)!.due_expires_at;
@@ -1682,7 +1800,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         )
       ).rows[0]!;
       if (!row.digest.equals(digest)) denied();
-      await DBOS.startWorkflow(clientReduction, { workflowID: id })({ ...operation, cursorVersion: 2 });
+      await writer().enqueue(
+        'accounts.client-reduction',
+        id,
+        { ...operation, cursorVersion: 2 },
+        await requestScope(id, operation, context),
+      );
       const result = await waitClientReduction(id);
       await database.query(
         'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',

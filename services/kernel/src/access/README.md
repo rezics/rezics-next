@@ -2045,3 +2045,33 @@ not claim that existing payloads are already minimized or that shared-history ha
   Outbox history is never read. Statements and rows are constant with unrelated data and history; blocks are
   logarithmic for fixed frontier cardinality.
 - Growth evidence: `test/access/growth-erasure-coordinator.test.ts`, three scales with the account and frontier fixed.
+
+### Auth-only erasure evidence
+
+`createNativeAccountBindings` composes `createAuthHistoryProofBindings(pool)` into
+the optional-capability/fail-closed `createAuthBindings` boundary. Shared types are
+`AuthErasureBarrier` (`accountId`, immutable erasure `version`, exact `at`) and
+`AuthErasureSource` (that tuple plus original `continuationId`/`receiptId`) in
+`@rezics/auth-contract`. The trusted readers are `readAuthErasureBarrier(accountId)`
+and `readAuthErasureSource({accountId,receiptId})`. Each read is anchored to the
+account partition and the permanent committed kernel obligation; Auth wall time
+or an authentication floor never supplies the barrier.
+
+The fixed methods `recordAuthNativeConsumption(source)` and
+`recordAuthHistoryCompletion(barrier)` write separate immutable phases in
+`access.auth_history_proof`. The closure fixes the source to Auth and accepts no
+principal, participant, phase selector, locator, payload or authorization flag.
+Missing capability, original continuation, target, barrier or terminal/fenced
+account fails closed. The same immutable proof is idempotent after a lost reply;
+a different tuple is refused. Kernel keeps no Auth database handle or credential
+and makes no maintenance call into Auth.
+
+`readAuthNativeConsumption(pool, source)` lets Access consume only the exact
+native fence/release dependency transferred by Auth's actual consumer. Mere
+acceptance/enqueue/progress or terminal DBOS status supplies no witness. This
+phase can precede Auth copy cleanup and cannot discharge other native consumers.
+`readAuthHistoryCompletion(pool, barrier)` separately reads later local-copy
+completion. Shared-history acknowledgement requires that fact and kernel's own
+producer/minimizer closure; this implementation emits no participant ACK and
+introduces no final-ACK dependency cycle. The global participant inventory and
+Search's explicitly undelivered cleanup are preserved.

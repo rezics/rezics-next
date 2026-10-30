@@ -225,6 +225,9 @@ export interface AuthService {
     eraseAccount(accountId: string): Promise<void>;
     /** Accept the terminal obligation; each subsequent page is independently durable. */
     startAccountErasure(accountId: string): Promise<string>;
+    /** Actual fixed erase-auth-owner consumer; original committed source only. */
+    consumeAccountErasure(accountId: string, receiptId: string, workflowId: string): Promise<string>;
+    redriveErasureHistory(): Promise<number>;
     nativeErasurePage(id: string): Promise<import('./erasure-native.ts').ErasurePage>;
     redriveNativeErasure(): Promise<number>;
     openAutomatedSession(input: {

@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { AuthErasureBarrier } from '@rezics/auth-contract';
 import { requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import {
   closeCredentialConsumer,
@@ -19,6 +20,8 @@ type Obligation = {
   account_id: string;
   barrier: number;
   applicable: boolean;
+  kernel_at: string | null;
+  source_discharged_at: Date | null;
   phase: number;
   after_key: string;
   client_id: string | null;
@@ -155,6 +158,7 @@ const initialRoles = [
   { table: 'auth_key_assertion', role: 'account_id' },
   { table: 'auth_attempt_account', role: 'account_id' },
   { table: 'auth_consent', role: 'account_id' },
+  { table: 'auth_copy_role', role: 'account_id' },
   ...[
     'erasure_subject_id',
     'erasure_human_id',
@@ -183,18 +187,23 @@ async function transaction<T>(pool: Pool, action: (connection: PoolClient) => Pr
   }
 }
 
-/** Called only after the existing trusted deleted/fenced read. The accepted floor
- * is the barrier identity available on that port; replay cannot replace it.
+/** Called only after the existing trusted deleted/fenced read. The native floor
+ * and actual immutable kernel version/T are distinct; replay cannot replace either.
  * The account lock also fences every native producer transaction.
  */
-export async function startNativeErasure(pool: Pool, accountId: string, barrier: number): Promise<string> {
+export async function startNativeErasure(
+  pool: Pool,
+  accountId: string,
+  barrier: number,
+  identity?: AuthErasureBarrier,
+): Promise<string> {
   return transaction(pool, async (connection) => {
     await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${accountId}`]);
     const row = (
       await connection.query<{ id: string }>(
-        `INSERT INTO auth_erasure (account_id,barrier,version,applicable) VALUES ($1,$2,$3,${initialApplicability})
+        `INSERT INTO auth_erasure (account_id,barrier,version,applicable,kernel_version,kernel_at) VALUES ($1,$2,$3,${initialApplicability},$4,$5)
        ON CONFLICT (account_id) DO UPDATE SET account_id=EXCLUDED.account_id RETURNING id`,
-        [accountId, barrier, ERASURE_VERSION],
+        [accountId, barrier, ERASURE_VERSION, identity?.version ?? null, identity?.at ?? null],
       )
     ).rows[0]!;
     return row.id;
@@ -335,6 +344,7 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
       state: row.user_deleted_at ? 'consent' : state,
       code,
     });
+    if (row.kernel_at && !row.source_discharged_at) return answer('pending', 'native-source');
     await connection.query("SELECT set_config('auth.erasure_obligation',$1,true)", [id]);
     if (row.phase === 0) {
       // Discover one owned client, retaining neither an owner list nor a connection
@@ -506,9 +516,8 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
       await checkpoint(connection, row, { phase: row.phase + (requests.length ? 0 : 1) });
       return answer('more', 'native-request');
     }
-    // No supported shared-history copy recorder/closure or trusted fixed-Auth
-    // acknowledgement is composed. Keep the native obligation, never fabricate
-    // handoff or translate absence of the user into NoData.
+    // Native closure is independent of local-copy closure and its trusted proof.
+    // The permanent obligation remains the shared-copy continuation anchor.
     await connection.query(
       'UPDATE auth_erasure SET native_completed_at=COALESCE(native_completed_at,clock_timestamp()) WHERE id=$1',
       [id],

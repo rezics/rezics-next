@@ -161,10 +161,10 @@ acknowledgement.
 Auth must drain owned-client and operating-session children before user deletion, then finish post-user residue and
 delayed consent. [The current deletion transaction](../services/auth/src/service.ts) schedules a 310-second marker;
 [minute maintenance](../services/auth/src/maintenance.ts) calls [the purge](../services/auth/src/consent-erasure.ts),
-whose inner client loop is unbounded and which emits no acknowledgement. Retain at least that delay, verify the
+whose native bounded client pages persist completion without acknowledging a participant. Retain at least that delay, verify the
 last possible issuance fence against token lifetime/verifier leeway: [kernel token checks](../services/kernel/src/access/authenticate.ts)
 allow at most 300 seconds, leaving ten seconds of margin. Increase the delay if the composed lifetime/leeway exceeds
-that margin. Persist the original due time and sleep without a connection. Bounded client pages must durably signal completion before Auth's final trusted acknowledgement port
+that margin. Persist the original due time and sleep without a connection. Bounded client pages must durably signal completion before Auth's local-copy completion proof
 can run; missing composition fails closed. The delay is a safety minimum, never an overall completion deadline.
 
 Logs, delivery diagnostics, backups and replicas follow Auth's adopted
@@ -201,3 +201,47 @@ Implement capabilities in this dependency order:
   native purger, bounded consent and both workflow recorders; fixed-host enqueue accepts an obligation only.
 - Each participant's terminal acknowledgement, last: Access needs all Access phases/recorders and specific Auth
   native-release evidence; Auth needs every Auth phase, consent completion and fixed trusted service-port wiring.
+
+### Auth-local copies and the fixed proof boundary
+
+Auth owns its database and `auth_dbos`; kernel `dbos` is a different store. Auth
+records account roles and exact workflow/artifact keys in the same transaction as
+SDK enqueue/message writes. App-owned native-table triggers cover subsequent
+status, input, output/error, operation, event/history and message writes. Unknown
+schema/artifact coverage, missing roles and unresolved result consumers stay
+pending. An old registration/request intent is not native copy custody.
+
+The private `AuthErasureProofPorts` boundary carries only
+`{accountId, version, at}` and, for the specific native source dependency,
+`{continuationId, receiptId}`. `readAuthErasureBarrier(accountId)` obtains the
+committed kernel identity before local cleanup. `readAuthErasureSource` verifies
+the original committed erase-auth-owner continuation and its authorized target.
+`recordAuthNativeConsumption(source)` and `recordAuthHistoryCompletion(barrier)`
+are distinct fixed Auth-only capabilities. No caller chooses a participant,
+principal, locator, phase, payload or authorization flag.
+
+Acceptance of the native obligation does **not** discharge its source. The real
+Auth deletion step validates the exact source again, then commits transfer of its
+complete remaining erase-auth-owner need to the existing native obligation under
+the producer fence. This records the original source workflow, continuation,
+receipt and immutable kernel barrier outside DBOS. Replayed exact work uses that
+native transfer without rereading the former evidence. Only then can Auth publish
+`native-consumed`; Access can read this specific dependency using
+`readAuthNativeConsumption(pool, source)`. Other releases, approvals, openings,
+children and identity evidence have their own consumers and receive no permission
+from this witness.
+
+The later `copies-erased` fact requires native/consent closure, known creation
+coverage, completed actual result consumers, retired exact work, supported SDK
+cancellation/deletion and raw-key absence probes. Completion survives DBOS history
+loss in `auth_erasure` and publication redrives idempotently after a lost reply.
+Auth releases its connection before every kernel call. Kernel verifies its own
+permanent erasure and terminal/fenced account, stores each immutable fact in that
+account partition, and never accesses Auth's database.
+
+Kernel shared-history acknowledgement still requires this completion fact **and**
+its own producer/minimizer closure. Neither phase acknowledges the participant.
+There is no kernel-to-Auth maintenance RPC, kernel Auth credential or final-ACK
+dependency cycle. Enqueue, local cleanup alone, storage, missing configuration and
+an undelivered specification are not shared-history proof. The global participant
+set and Search's undelivered cleanup remain unchanged.

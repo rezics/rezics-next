@@ -212,8 +212,20 @@ export type BarrierReceipt = {
   minimumAuthnEpoch: number;
 };
 
+/** Exact immutable committed erasure. T is read from Access, never an Auth clock. */
+export type AuthErasureBarrier = { accountId: string; version: number; at: string };
+/** The original, fixed erase-auth-owner dependency, not a general continuation. */
+export type AuthErasureSource = AuthErasureBarrier & { continuationId: string; receiptId: string };
+/** Auth-only service capabilities. Neither method acknowledges a participant. */
+export type AuthErasureProofPorts = {
+  readAuthErasureBarrier?(accountId: string): Promise<AuthErasureBarrier | null>;
+  readAuthErasureSource?(input: { accountId: string; receiptId: string }): Promise<AuthErasureSource | null>;
+  recordAuthNativeConsumption?(source: AuthErasureSource): Promise<void>;
+  recordAuthHistoryCompletion?(barrier: AuthErasureBarrier): Promise<void>;
+};
+
 /** Internal application ports. Never construct these results from HTTP fields. */
-interface SharedAccessPorts {
+interface SharedAccessPorts extends AuthErasureProofPorts {
   /** Sign-in may expose a suspended human's state privately for a refusal after credential verification. */
   readAccount(accountId: string, purpose?: 'signin'): Promise<AccessAccount | null>;
   /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
@@ -425,6 +437,7 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
    * Callback-only historical hosts may omit this adapter. */
   authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
   actorAccountId?(context: Context): string;
+  copyActors?(context: Context): Promise<readonly { accountId: string; role: 'human' | 'initiator' | 'delegate' }[]>;
   stableCommandKey?(context: Context, phase: string): string;
   /** Durable approval metadata for the resolved context. Absent on historical hosts. */
   approvalBinding?(context: Context): { operationKey: string; digest: string; commandKeyPrefix: string } | undefined;

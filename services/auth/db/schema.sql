@@ -66,6 +66,81 @@ END $$;
 
 
 --
+-- Name: auth_copy_record(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_copy_record() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE work text; locator text; size integer; old_size integer; existed boolean; current_work auth_copy_work; cap integer;
+BEGIN
+  IF TG_TABLE_NAME='notifications' THEN
+    work:=NEW.destination_uuid; locator:=NEW.message_uuid;
+  ELSE
+    work:=NEW.workflow_uuid;
+    IF TG_TABLE_NAME='operation_outputs' THEN locator:=NEW.function_id::text;
+    ELSIF TG_TABLE_NAME='workflow_events' THEN locator:=NEW.key;
+    ELSIF TG_TABLE_NAME='workflow_events_history' THEN locator:=NEW.function_id::text||':'||NEW.key;
+    ELSIF TG_TABLE_NAME='streams' THEN RAISE EXCEPTION 'Auth stream copy is undeclared' USING ERRCODE='55000';
+    ELSE locator:=''; END IF;
+  END IF;
+  SELECT * INTO current_work FROM auth_copy_work WHERE workflow_id=work FOR UPDATE;
+  IF NOT FOUND THEN
+    -- The two maintenance workflows have a closed counts-only contract. Every
+    -- personal workflow (including a child) must already have complete scope.
+    IF TG_TABLE_NAME='workflow_status' THEN
+      IF NEW.name IN ('auth.maintenance.tick','auth.workflowRetention') THEN RETURN NEW; END IF;
+    END IF;
+    IF EXISTS (SELECT 1 FROM auth_dbos.workflow_status WHERE workflow_uuid=work AND name IN ('auth.maintenance.tick','auth.workflowRetention')) THEN RETURN NEW; END IF;
+    RAISE EXCEPTION 'Auth copy custody missing' USING ERRCODE='55000';
+  END IF;
+  IF current_work.retired THEN
+    IF TG_OP='UPDATE' AND TG_TABLE_NAME='workflow_status' THEN
+      IF NEW.status='CANCELLED' AND NEW.owner_xid IS NULL AND
+        (to_jsonb(NEW)-ARRAY['status','owner_xid','queue_name','deduplication_id','started_at_epoch_ms','updated_at','completed_at']) =
+        (to_jsonb(OLD)-ARRAY['status','owner_xid','queue_name','deduplication_id','started_at_epoch_ms','updated_at','completed_at']) THEN RETURN NEW; END IF;
+    END IF;
+    RAISE EXCEPTION 'Auth copy work retired' USING ERRCODE='55000';
+  END IF;
+  IF (SELECT count(*) FROM auth_copy_role WHERE workflow_id=work)<>current_work.scope_count THEN
+    RAISE EXCEPTION 'Auth copy role coverage missing' USING ERRCODE='55000';
+  END IF;
+  size:=octet_length(row_to_json(NEW)::text);
+  IF size>CASE WHEN TG_TABLE_NAME='workflow_status' THEN 4096 ELSE 65536 END THEN
+    RAISE EXCEPTION 'Auth copy byte cap' USING ERRCODE='54000';
+  END IF;
+  IF TG_TABLE_NAME='streams' THEN RAISE EXCEPTION 'Auth stream copy is undeclared' USING ERRCODE='55000'; END IF;
+  SELECT true,bytes INTO existed,old_size FROM auth_copy_artifact WHERE workflow_id=work AND kind=TG_TABLE_NAME AND key=locator;
+  IF existed IS DISTINCT FROM true THEN
+    cap:=CASE TG_TABLE_NAME WHEN 'operation_outputs' THEN 60 WHEN 'workflow_events' THEN 8 WHEN 'workflow_events_history' THEN 64 WHEN 'notifications' THEN 4 ELSE 1 END;
+    IF (SELECT count(*) FROM auth_copy_artifact WHERE workflow_id=work AND kind=TG_TABLE_NAME)>=cap THEN
+      RAISE EXCEPTION 'Auth copy row cap' USING ERRCODE='54000';
+    END IF;
+    UPDATE auth_copy_work SET rows=rows+1,bytes=bytes+size WHERE workflow_id=work;
+  END IF;
+  IF existed AND size>old_size THEN UPDATE auth_copy_work SET bytes=bytes+size-old_size WHERE workflow_id=work; END IF;
+  INSERT INTO auth_copy_artifact(workflow_id,kind,key,bytes) VALUES(work,TG_TABLE_NAME,locator,size)
+    ON CONFLICT(workflow_id,kind,key) DO UPDATE SET bytes=GREATEST(auth_copy_artifact.bytes,EXCLUDED.bytes);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_copy_role_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_copy_role_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' OR NOT EXISTS(SELECT 1 FROM auth_copy_work WHERE workflow_id=OLD.workflow_id AND retired AND absent) THEN
+    RAISE EXCEPTION 'Auth copy role custody is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN OLD;
+END $$;
+
+
+--
 -- Name: auth_credential_stage_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -94,7 +169,7 @@ CREATE FUNCTION public.auth_delete_workflow_request() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  DELETE FROM public.auth_workflow_request WHERE workflow_id=OLD.workflow_uuid;
+  DELETE FROM public.auth_workflow_request WHERE workflow_id=OLD.workflow_uuid AND terminal_at IS NOT NULL;
   RETURN OLD;
 END $$;
 
@@ -760,6 +835,25 @@ END $$;
 
 
 --
+-- Name: auth_erasure_proof_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_proof_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' OR NEW.account_id IS DISTINCT FROM OLD.account_id OR NEW.barrier IS DISTINCT FROM OLD.barrier
+    OR (OLD.kernel_at IS NOT NULL AND (NEW.kernel_at IS DISTINCT FROM OLD.kernel_at OR NEW.kernel_version IS DISTINCT FROM OLD.kernel_version))
+    OR (OLD.source_accepted_at IS NOT NULL AND (NEW.source_continuation_id IS DISTINCT FROM OLD.source_continuation_id OR NEW.source_receipt_id IS DISTINCT FROM OLD.source_receipt_id OR NEW.source_accepted_at IS DISTINCT FROM OLD.source_accepted_at OR NEW.source_workflow_id IS DISTINCT FROM OLD.source_workflow_id))
+    OR (OLD.source_discharged_at IS NOT NULL AND NEW.source_discharged_at IS DISTINCT FROM OLD.source_discharged_at)
+    OR (OLD.copies_completed_at IS NOT NULL AND NEW.copies_completed_at IS DISTINCT FROM OLD.copies_completed_at) THEN
+    RAISE EXCEPTION 'Auth erasure proof is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_erasure_proof_roles(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1253,7 +1347,9 @@ CREATE TABLE public.auth_client_reduction_progress (
     cutover_after bigint,
     consumer_version smallint DEFAULT 0 NOT NULL,
     page_count integer,
-    completed_count integer DEFAULT 0 NOT NULL
+    completed_count integer DEFAULT 0 NOT NULL,
+    current_workflow_id text,
+    CONSTRAINT auth_client_reduction_progress_current_workflow_id_check CHECK ((octet_length(current_workflow_id) <= 256))
 );
 
 
@@ -1288,6 +1384,75 @@ CREATE TABLE public.auth_consent_erasure (
     account_id text NOT NULL,
     due_at timestamp with time zone NOT NULL,
     after_client text DEFAULT ''::text NOT NULL
+);
+
+
+--
+-- Name: auth_copy_artifact; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_copy_artifact (
+    workflow_id text NOT NULL,
+    kind text NOT NULL,
+    key text NOT NULL,
+    bytes integer NOT NULL,
+    CONSTRAINT auth_copy_artifact_bytes_check CHECK (((bytes >= 0) AND (bytes <= 65536))),
+    CONSTRAINT auth_copy_artifact_key_check CHECK ((octet_length(key) <= 384)),
+    CONSTRAINT auth_copy_artifact_kind_check CHECK ((kind = ANY (ARRAY['workflow_status'::text, 'workflow_input'::text, 'workflow_output'::text, 'operation_outputs'::text, 'workflow_events'::text, 'workflow_events_history'::text, 'notifications'::text])))
+);
+
+
+--
+-- Name: auth_copy_coverage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_copy_coverage (
+    singleton boolean DEFAULT true NOT NULL,
+    version integer NOT NULL,
+    covered boolean DEFAULT false NOT NULL,
+    native_covered boolean DEFAULT false NOT NULL,
+    CONSTRAINT auth_copy_coverage_singleton_check CHECK (singleton),
+    CONSTRAINT auth_copy_coverage_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: auth_copy_role; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_copy_role (
+    account_id text NOT NULL,
+    workflow_id text NOT NULL,
+    role text NOT NULL,
+    CONSTRAINT auth_copy_role_account_id_check CHECK ((octet_length(account_id) <= 128)),
+    CONSTRAINT auth_copy_role_role_check CHECK ((role = ANY (ARRAY['subject'::text, 'human'::text, 'operator'::text, 'member'::text, 'previous-operator'::text, 'initiator'::text, 'delegate'::text, 'client-owner'::text])))
+);
+
+
+--
+-- Name: auth_copy_work; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_copy_work (
+    workflow_id text NOT NULL,
+    name text NOT NULL,
+    digest bytea NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    scope_count integer NOT NULL,
+    ready boolean DEFAULT false NOT NULL,
+    retired boolean DEFAULT false NOT NULL,
+    absent boolean DEFAULT false NOT NULL,
+    rows integer DEFAULT 0 NOT NULL,
+    bytes integer DEFAULT 0 NOT NULL,
+    parent_workflow_id text,
+    CONSTRAINT auth_copy_work_bytes_check CHECK (((bytes >= 0) AND (bytes <= 10485760))),
+    CONSTRAINT auth_copy_work_check CHECK (((NOT absent) OR retired)),
+    CONSTRAINT auth_copy_work_digest_check CHECK ((octet_length(digest) = 32)),
+    CONSTRAINT auth_copy_work_name_check CHECK ((name = ANY (ARRAY['accounts.registration'::text, 'accounts.operation'::text, 'accounts.client-reduction'::text]))),
+    CONSTRAINT auth_copy_work_rows_check CHECK (((rows >= 0) AND (rows <= 139))),
+    CONSTRAINT auth_copy_work_scope_count_check CHECK (((scope_count >= 1) AND (scope_count <= 16))),
+    CONSTRAINT auth_copy_work_version_check CHECK ((version = 1)),
+    CONSTRAINT auth_copy_work_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
 );
 
 
@@ -1353,10 +1518,24 @@ CREATE TABLE public.auth_erasure (
     consent_due_at timestamp with time zone,
     consent_completed_at timestamp with time zone,
     pending_code text DEFAULT 'native'::text NOT NULL,
+    kernel_version integer,
+    kernel_at text,
+    source_continuation_id uuid,
+    source_receipt_id uuid,
+    source_workflow_id text,
+    source_accepted_at timestamp with time zone,
+    source_discharged_at timestamp with time zone,
+    source_published_at timestamp with time zone,
+    copies_completed_at timestamp with time zone,
+    copies_published_at timestamp with time zone,
     CONSTRAINT auth_erasure_after_key_check CHECK ((octet_length(after_key) <= 1024)),
     CONSTRAINT auth_erasure_barrier_check CHECK ((barrier >= 0)),
     CONSTRAINT auth_erasure_client_id_check CHECK ((octet_length(client_id) <= 1024)),
     CONSTRAINT auth_erasure_inventory_coverage_check CHECK ((inventory_coverage = ANY (ARRAY['unknown'::text, 'covered'::text]))),
+    CONSTRAINT auth_erasure_kernel_at_check CHECK ((octet_length(kernel_at) <= 64)),
+    CONSTRAINT auth_erasure_kernel_identity CHECK ((((kernel_version IS NULL) AND (kernel_at IS NULL)) OR ((kernel_version > 0) AND (kernel_at IS NOT NULL)))),
+    CONSTRAINT auth_erasure_source CHECK ((((source_continuation_id IS NULL) AND (source_receipt_id IS NULL) AND (source_accepted_at IS NULL) AND (source_discharged_at IS NULL) AND (source_published_at IS NULL)) OR ((kernel_at IS NOT NULL) AND (source_continuation_id IS NOT NULL) AND (source_receipt_id IS NOT NULL) AND (source_accepted_at IS NOT NULL) AND ((source_published_at IS NULL) OR (source_discharged_at IS NOT NULL))))),
+    CONSTRAINT auth_erasure_source_workflow_id_check CHECK ((octet_length(source_workflow_id) <= 256)),
     CONSTRAINT auth_erasure_version_check CHECK ((version = 1))
 );
 
@@ -1982,6 +2161,38 @@ ALTER TABLE ONLY public.auth_consent
 
 
 --
+-- Name: auth_copy_artifact auth_copy_artifact_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_copy_artifact
+    ADD CONSTRAINT auth_copy_artifact_pkey PRIMARY KEY (workflow_id, kind, key);
+
+
+--
+-- Name: auth_copy_coverage auth_copy_coverage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_copy_coverage
+    ADD CONSTRAINT auth_copy_coverage_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: auth_copy_role auth_copy_role_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_copy_role
+    ADD CONSTRAINT auth_copy_role_pkey PRIMARY KEY (account_id, workflow_id, role);
+
+
+--
+-- Name: auth_copy_work auth_copy_work_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_copy_work
+    ADD CONSTRAINT auth_copy_work_pkey PRIMARY KEY (workflow_id);
+
+
+--
 -- Name: auth_effect_receipt auth_effect_receipt_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2383,6 +2594,13 @@ CREATE INDEX auth_consent_erasure_due ON public.auth_consent_erasure USING btree
 
 
 --
+-- Name: auth_copy_role_work; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_copy_role_work ON public.auth_copy_role USING btree (workflow_id, account_id, role);
+
+
+--
 -- Name: auth_credential_operation; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2394,6 +2612,13 @@ CREATE UNIQUE INDEX auth_credential_operation ON public.auth_effect_receipt USIN
 --
 
 CREATE UNIQUE INDEX auth_credential_reference ON public.auth_effect_receipt USING btree (effect_reference) WHERE (effect_reference IS NOT NULL);
+
+
+--
+-- Name: auth_erasure_copy_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_erasure_copy_pending ON public.auth_erasure USING btree (revision, id) WHERE (copies_published_at IS NULL);
 
 
 --
@@ -3174,6 +3399,13 @@ CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EA
 
 
 --
+-- Name: auth_copy_role auth_copy_role_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_copy_role_guard BEFORE DELETE OR UPDATE ON public.auth_copy_role FOR EACH ROW EXECUTE FUNCTION public.auth_copy_role_guard();
+
+
+--
 -- Name: auth_client_coverage auth_coverage_cursor_version; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3213,6 +3445,13 @@ CREATE TRIGGER auth_native_credential_terminal_immutable BEFORE DELETE OR UPDATE
 --
 
 CREATE TRIGGER auth_native_registration_identity BEFORE UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_identity();
+
+
+--
+-- Name: auth_erasure auth_erasure_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_erasure FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_proof_immutable();
 
 
 --
@@ -3584,6 +3823,30 @@ ALTER TABLE ONLY public.auth_client
 
 ALTER TABLE ONLY public.auth_consent
     ADD CONSTRAINT auth_consent_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.auth_client(client_id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_copy_artifact auth_copy_artifact_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_copy_artifact
+    ADD CONSTRAINT auth_copy_artifact_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.auth_copy_work(workflow_id);
+
+
+--
+-- Name: auth_copy_role auth_copy_role_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_copy_role
+    ADD CONSTRAINT auth_copy_role_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.auth_copy_work(workflow_id);
+
+
+--
+-- Name: auth_copy_work auth_copy_work_parent_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_copy_work
+    ADD CONSTRAINT auth_copy_work_parent_workflow_id_fkey FOREIGN KEY (parent_workflow_id) REFERENCES public.auth_copy_work(workflow_id);
 
 
 --
