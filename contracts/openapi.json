@@ -138411,6 +138411,64 @@
                                     "maxItems": 8,
                                     "type": "array"
                                   },
+                                  "scope": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "realm",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "id"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "collection",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "id"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "kind": {
+                                            "const": "route",
+                                            "type": "string"
+                                          },
+                                          "route": {
+                                            "const": "library",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "route"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
                                   "text": {
                                     "maxLength": 256,
                                     "minLength": 1,
@@ -139328,6 +139386,64 @@
                             },
                             "maxItems": 8,
                             "type": "array"
+                          },
+                          "scope": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "realm",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "collection",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "route",
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "const": "library",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "route"
+                                ],
+                                "type": "object"
+                              }
+                            ]
                           },
                           "text": {
                             "maxLength": 256,
