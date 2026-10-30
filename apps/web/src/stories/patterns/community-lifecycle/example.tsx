@@ -25,6 +25,7 @@ export function lifecycleExampleAdapter(scenario: Scenario): ContainerLifecycleA
   let snapshot: LifecycleSnapshot = {
     target: exampleTarget,
     head: realm.realm.headRevisionId,
+    version: '0',
     contextId: realm.realm.contextId,
     state: scenario === 'orphaned' ? 'orphaned' : scenario === 'removed' ? 'removed' : 'active',
     actions:
@@ -45,12 +46,12 @@ export function lifecycleExampleAdapter(scenario: Scenario): ContainerLifecycleA
       if (scenario === 'uncertain' && attempts === 1) throw new Error('Lost response');
       if (scenario === 'denied') return { kind: 'refused', status: 404, code: 'not_found' };
       if (scenario === 'conflict') {
-        snapshot = { ...snapshot, head: '01a17a3b-70ea-712a-9ff7-81fc6a9381c0' };
+        snapshot = { ...snapshot, version: String(BigInt(snapshot.version!) + 1n) };
         return { kind: 'refused', status: 412, code: 'precondition_failed' };
       }
       snapshot = {
         ...snapshot,
-        head: crypto.randomUUID(),
+        version: String(BigInt(snapshot.version!) + 1n),
         state: intent.action === 'remove' ? 'removed' : 'active',
         actions: intent.action === 'remove' ? ['restore'] : ['remove'],
       };

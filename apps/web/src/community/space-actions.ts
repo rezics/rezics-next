@@ -35,6 +35,12 @@ import {
   realmAppearanceChoiceSchema,
 } from './realm-presentation';
 import { readRealmAppearance, changeRealmAppearance, selectRealmAppearance } from './realm-presentation-native';
+import {
+  nativeContainerLifecycleAdapter,
+  lifecycleReadSchema,
+  lifecycleCommandSchema,
+  lifecycleDestinationSchema,
+} from './container-lifecycle-native';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -146,6 +152,23 @@ async function setupCredential() {
   if (!authorization) throw new Error('Sign in to set up a community');
   return authorization;
 }
+
+async function lifecycleAdapter() {
+  const authorization = await setupCredential();
+  return nativeContainerLifecycleAdapter(kernelClient(), authorization, requestLocale() ?? 'en');
+}
+
+export const readContainerLifecycle = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(lifecycleReadSchema, input))
+  .handler(async ({ data }) => (await lifecycleAdapter()).read(data.target, data.contextId));
+
+export const changeContainerLifecycle = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => v.parse(lifecycleCommandSchema, input))
+  .handler(async ({ data }) => (await lifecycleAdapter()).change(data));
+
+export const readContainerLifecycleDestination = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(lifecycleDestinationSchema, input))
+  .handler(async ({ data }) => (await lifecycleAdapter()).destination(data.target, data.contextId));
 
 export const readSpaceSetup = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(setupReadSchema, input))

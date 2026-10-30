@@ -1048,25 +1048,43 @@ language through the client's `accept-language`.
 ### Space and Realm lifecycle controls
 
 `community/container-lifecycle-controls.tsx` composes one lifecycle region per container on the existing Space page.
-The isolated presentation adapter in `community/container-lifecycle.ts` consumes current native admission; it defines
-no native endpoint or role authority. Its served default is unavailable and offers no commands. Integration must map
-the producer's actual closed-state read, head, removal/restore results and exact refusal status/code, using the
-existing session/CSRF and request-deadline boundary. Presentation fixtures do not establish native authority.
+The default adapter uses `community/container-lifecycle-native.ts` through the existing first-party server functions,
+session preparation and CSRF header. It calls the generated `/lifecycle`, `/removal` and `/restoration` methods on
+Spaces and Realms. Active commands intersect the native `mayRemove` verdict with the exact installed viewer action
+and catalogue operation (`space:manage` / `space.remove`, `moderation:takedown` / `realm.remove`). Removed resources
+use the private lifecycle reader's `mayRestore`: ordinary viewer-action discovery deliberately withholds them.
+No custom-method alias, client role policy or browser clock substitutes for native admission. Presentation fixtures
+remain examples, with no claim to native authority.
 
 Removal records the entered reason and confirms the named target. The native producer decides moderator removal and
-the 30-day restore window, including current remover/higher-role/platform and author self-deletion eligibility.
+the 30-day restore window, including current remover/higher-role/platform eligibility. Spaces have direct owners;
+Realm moderator authority never becomes Space management authority.
 Membership, creator identity and browser time never substitute for that decision. Each intent retains its target,
-Context pointer, reason, exact expected head and request key across uncertain retries. A conflict retains the draft;
-a fresh read and explicit review are required before a new request accepts a different head. Native refusals stay
+Context pointer, reason, exact expected head, decimal lifecycle version and request key across uncertain retries.
+The command body carries `expectedVersion`; `If-Match` and `Idempotency-Key` carry quoted strings. Lifecycle versions
+are compared as integers without conversion to JavaScript numbers. A conflict retains the draft; a fresh read and
+explicit review are required before a new request accepts different CAS values. Native refusal status/code stay
 visible. No platform claim action is offered without its actual endpoint. Orphaned Realms keep ordinary reading while
 publication, setup and management controls are frozen.
 
 Confirmed removal hides the old container content without changing routes or selecting Global. A restored link
-requires a fresh current container read and the adapter's independently authorized live Context destination, including
-current publication where applicable. Failure keeps the link unavailable and the entered work intact. Navigation
+requires fresh ordinary container reads and an independent native `contexts({id}).get` authorization for that exact
+live Context. The pointer comes from the ordinary Realm read, including the authorized carried Realm on
+a Space; the lifecycle response supplies no pointer. Removed reads retain the observed pointer as data only.
+Destination preparation compares both current Realm/Space heads, lifecycle versions and their exact binding before
+and after the independent Context read. A changed host version, missing permission, changed pointer or hidden
+container withholds the link. The destination is the existing Realm page, with no subject/publication disclosure.
+Failure keeps the link unavailable and the entered work intact. Navigation
 reloads the page rather than redisplaying the previous payload. Context identity and independent Global identity stay
-separate. Work is constant per container: one lifecycle read, one command per intent and, after restore, one bounded
-destination preparation. There is no per-card authority fanout or scan.
+separate. Work is constant per container: an active refresh uses at most seven point/admission requests, a removed
+refresh uses one private lifecycle request, and a command uses one POST. After restoration, destination preparation
+uses at most thirteen requests, independent of list size. There is no per-card authority fanout, refill or scan.
+The delivered `readContainerBinding` / `revalidateContainerBinding` data port takes an `AccessClient` and native
+`AuthoritativeTime`; it is not an HTTP client or a Context grant. This Web consumer compares generated authorized
+reads instead of importing database authority. Both private lifecycle readers must be accessible for a destination;
+a Realm moderator without Space lifecycle access can still remove/restore the Realm, while its destination stays
+unavailable. Broader destination availability needs an authorized HTTP exposure of the native binding read/revalidate
+port carrying both versions; the existing independent Context GET is already available.
 
 The complete pattern folder is `stories/patterns/community-lifecycle/`; its `Patterns/Community/Container lifecycle`
 states include confirmation, removed, uncertain retry, native refusal, conflict, orphaned, read-only, loading and

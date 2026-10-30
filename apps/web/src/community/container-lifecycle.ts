@@ -1,12 +1,11 @@
-/** Presentation boundary only. The native lifecycle client has not landed in this checkout.
- * An integration adapter must map its actual closed reads, command results and current admission;
- * these types declare no HTTP routes, role policy, authority tokens or native DTOs.
- */
+/** Presentation boundary. Native admission and lifecycle policy belong to the kernel. */
 export type ContainerTarget = Readonly<{ kind: 'space' | 'realm'; id: string }>;
 export type LifecycleAction = 'remove' | 'restore';
 export type LifecycleSnapshot = Readonly<{
   target: ContainerTarget;
   head: string;
+  /** Native CAS, independent of the editorial head. Older presentation fixtures may omit it. */
+  version?: string;
   state: 'active' | 'removed' | 'orphaned';
   contextId: string | null;
   /** Only commands admitted by the current native read; never inferred from roles or provenance. */
@@ -23,6 +22,7 @@ export type LifecycleIntent = Readonly<{
   target: ContainerTarget;
   action: LifecycleAction;
   expectedHead: string;
+  expectedVersion?: string;
   idempotencyKey: string;
   reason: string;
   /** The pointer observed with this intent, retained for response and destination validation. */
@@ -36,13 +36,13 @@ export type LifecycleDestination =
   | { kind: 'available'; target: ContainerTarget; contextId: string | null; href: string }
   | { kind: 'unavailable' };
 export type ContainerLifecycleAdapter = Readonly<{
-  read: (target: ContainerTarget) => Promise<LifecycleRead>;
+  read: (target: ContainerTarget, observedContextId?: string | null) => Promise<LifecycleRead>;
   change: (intent: LifecycleIntent) => Promise<LifecycleResult>;
   /** Independently rechecks current container read and live Context read, including publication where needed. */
   destination: (target: ContainerTarget, contextId: string | null) => Promise<LifecycleDestination>;
 }>;
 
-/** Fail closed until the producer's actual client and authority mapping are integrated. No demo runtime. */
+/** Explicit unavailable fixture; production controls compose the native adapter. */
 export const unavailableLifecycleAdapter: ContainerLifecycleAdapter = {
   read: async () => ({ kind: 'unavailable' }),
   change: async () => ({ kind: 'unavailable' }),
@@ -108,7 +108,9 @@ export function createContainerLifecycle(
   }
   async function read(): Promise<LifecycleRead> {
     try {
-      const result = await adapter.read(anchor);
+      const observedContextId =
+        state.intent?.contextId ?? (state.read.kind === 'ready' ? state.read.snapshot.contextId : null);
+      const result = await adapter.read(anchor, observedContextId);
       if (result.kind === 'ready' && (!sameTarget(anchor, result.snapshot.target) || !result.snapshot.head))
         return { kind: 'unavailable' };
       return result;
@@ -203,6 +205,7 @@ export function createContainerLifecycle(
         target: anchor,
         action,
         expectedHead: snapshot.head,
+        ...(snapshot.version === undefined ? {} : { expectedVersion: snapshot.version }),
         idempotencyKey: key(),
         reason: state.reason,
         contextId: snapshot.contextId,

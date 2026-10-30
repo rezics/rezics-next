@@ -2,18 +2,33 @@ import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { safeParse } from 'valibot';
 import { m } from '../paraglide/messages.js';
-import { useSession } from '../session/query';
+import { sessionCsrfToken, useSession } from '../session/query';
 import {
   createContainerLifecycle,
   mayRetryLifecycle,
   offeredActions,
-  unavailableLifecycleAdapter,
   type ContainerLifecycleAdapter,
   type ContainerTarget,
   type LifecycleAction,
   type LifecycleState,
 } from './container-lifecycle';
+import { readContainerLifecycle, changeContainerLifecycle, readContainerLifecycleDestination } from './space-actions';
+import { lifecycleCommandSchema } from './container-lifecycle-native';
+
+const liveLifecycleAdapter: ContainerLifecycleAdapter = {
+  read: (target, contextId) => readContainerLifecycle({ data: { target, contextId } }),
+  change: (intent) => {
+    const command = safeParse(lifecycleCommandSchema, intent);
+    if (!command.success) return Promise.resolve({ kind: 'refused', status: 400, code: 'invalid_request' });
+    return changeContainerLifecycle({
+      data: command.output,
+      headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' },
+    });
+  },
+  destination: (target, contextId) => readContainerLifecycleDestination({ data: { target, contextId } }),
+};
 
 function readMessage(state: LifecycleState) {
   if (state.read.kind === 'loading') return m.container_lifecycle_loading();
@@ -32,7 +47,7 @@ function readMessage(state: LifecycleState) {
 export function ContainerLifecycleControls({
   target,
   title,
-  adapter = unavailableLifecycleAdapter,
+  adapter = liveLifecycleAdapter,
   onRestriction,
 }: {
   target: ContainerTarget;
