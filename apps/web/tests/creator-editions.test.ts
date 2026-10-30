@@ -68,10 +68,10 @@ test('Creator editions return journey with real native draft and publication des
 });
 
 test('one exact native page carries current credential, no-store and the unchanged continuation', async () => {
-  const calls: Request[] = [];
+  const calls: { request: Request; cache: RequestCache | undefined; redirect: RequestRedirect | undefined }[] = [];
   const fetcher = Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit) => {
-      calls.push(new Request(input, init));
+      calls.push({ request: new Request(input, init), cache: init?.cache, redirect: init?.redirect });
       return Response.json({ editions: [], next: 'opaque-next/+=' });
     },
     { preconnect() {} },
@@ -80,14 +80,14 @@ test('one exact native page carries current credential, no-store and the unchang
   expect(await load(native, 'opaque-current/+=')).toEqual({ kind: 'ready', editions: [], next: 'opaque-next/+=' });
   expect(calls).toHaveLength(1);
   const call = calls[0]!;
-  const url = new URL(call.url);
+  const url = new URL(call.request.url);
   expect(url.pathname).toBe(`/v1/accounts/${draft.creatorAccountId}/editions`);
   expect([...url.searchParams]).toEqual([
     ['limit', '20'],
     ['cursor', 'opaque-current/+='],
   ]);
-  expect(call.headers.get('authorization')).toBe('Bearer current-creator');
-  expect(call.method).toBe('GET');
+  expect(call.request.headers.get('authorization')).toBe('Bearer current-creator');
+  expect(call.request.method).toBe('GET');
   expect(call.cache).toBe('no-store');
   expect(call.redirect).toBe('manual');
   const html = renderToStaticMarkup(

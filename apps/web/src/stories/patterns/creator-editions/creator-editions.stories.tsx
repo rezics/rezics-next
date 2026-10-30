@@ -34,8 +34,9 @@ export const Editions: Story = {
 export const Sparse: Story = {
   args: { state: 'sparse' },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await expect(canvas.getByRole('status')).toHaveTextContent(m.creator_editions_sparse());
+    const region = await within(canvasElement).findByRole('region', { name: m.creator_editions_heading() });
+    const canvas = within(region);
+    await expect(await canvas.findByRole('status')).toHaveTextContent(m.creator_editions_sparse());
     await expect(canvas.getByRole('link', { name: m.creator_editions_next() })).toHaveAttribute(
       'href',
       localizeHref('/editions?cursor=constructed-next-page'),
