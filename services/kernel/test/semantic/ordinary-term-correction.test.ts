@@ -198,7 +198,11 @@ async function termSourceMembers(subject: string, revision: number) {
       [set.partition_no, set.transaction_id],
     )
   ).rows;
-  expect(set.digest).toBe(createHash('sha256').update(members.map((row) => row.source_key).join('\n')).digest('hex'));
+  expect(set.digest).toBe(
+    createHash('sha256')
+      .update(members.map((row) => row.source_key).join('\n'))
+      .digest('hex'),
+  );
   for (const row of members) {
     expect(row).toMatchObject({ kind: 'terms', subject_id: subject, candidate_id: null, document_id: null });
     expect(row.source_key).toBe(JSON.stringify(['terms', subject, row.source_revision, row.field, row.language]));
@@ -239,7 +243,7 @@ test('The mounted native terms write enrolls exact old and current field-languag
   expect((await patch(subject, 1, body, key)).body).toEqual({ subject, revision: 2 });
   expect((await patch(subject, 2, body)).body).toEqual({ subject, revision: 2 });
   expect((await patch(subject, 1, { labels: { en: 'Stale' } })).status).toBe(412);
-  expect((await termSourceSets(subject))).toEqual(before);
+  expect(await termSourceSets(subject)).toEqual(before);
   expect(await termSourceMembers(subject, 2)).toEqual(enrolled);
   await expect(
     f.admin.query('UPDATE semantic.record_source_set SET digest=$3 WHERE partition_no=$1 AND transaction_id=$2', [
@@ -260,42 +264,74 @@ test('The mounted native terms write enrolls exact old and current field-languag
 test('native terms deletion and restoration retain the real original imported field support without inventing a deleted payload', async () => {
   await f.real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:batch_write');
   const source = {
-    source: 'openlibrary', external_id: `OL${randomUUID()}W`, record_revision: '1',
-    digest: 'c'.repeat(64), converter_revision: 'openlibrary@1', field_group: 'facts',
+    source: 'openlibrary',
+    external_id: `OL${randomUUID()}W`,
+    record_revision: '1',
+    digest: 'c'.repeat(64),
+    converter_revision: 'openlibrary@1',
+    field_group: 'facts',
   };
-  const response = await f.kernel.handle(new Request('http://kernel.test/v1/subjects:batchWrite', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${await f.bearer(f.accounts.owner, [...f.actions, 'subject:batch_write'])}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ commands: [{ op: 'create', key: randomUUID(), source, subject: {
-      type: 'schema:Book', labels: { en: 'Imported' }, aliases: { fr: ['Import alias', 'Other alias'] },
-    } }] }),
-  }));
+  const response = await f.kernel.handle(
+    new Request('http://kernel.test/v1/subjects:batchWrite', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await f.bearer(f.accounts.owner, [...f.actions, 'subject:batch_write'])}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: [
+          {
+            op: 'create',
+            key: randomUUID(),
+            source,
+            subject: {
+              type: 'schema:Book',
+              labels: { en: 'Imported' },
+              aliases: { fr: ['Import alias', 'Other alias'] },
+            },
+          },
+        ],
+      }),
+    }),
+  );
   const result = await response.json();
   expect(response.status, JSON.stringify(result)).toBe(200);
   expect(result.results[0].status, JSON.stringify(result)).toBe(201);
   const subject = result.results[0].value.id as string;
   expect((await patch(subject, 1, { aliases: { fr: ['Correction'] } })).status).toBe(200);
-  expect((await termSourceMembers(subject, 2)).members).toEqual([[1, 'aliases', 'fr'], [2, 'aliases', 'fr']]);
+  expect((await termSourceMembers(subject, 2)).members).toEqual([
+    [1, 'aliases', 'fr'],
+    [2, 'aliases', 'fr'],
+  ]);
   expect((await patch(subject, 2, { aliases: { fr: null } })).status).toBe(200);
   expect((await termSourceMembers(subject, 3)).members).toEqual([[1, 'aliases', 'fr']]);
   expect((await patch(subject, 3, { aliases: { fr: ['Restored'] } })).status).toBe(200);
-  expect((await termSourceMembers(subject, 4)).members).toEqual([[1, 'aliases', 'fr'], [4, 'aliases', 'fr']]);
-  expect((await f.admin.query(
-    'SELECT term_support FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=4',
-    [routeOf(subject), subject],
-  )).rows).toEqual([{ term_support: [1] }]);
+  expect((await termSourceMembers(subject, 4)).members).toEqual([
+    [1, 'aliases', 'fr'],
+    [4, 'aliases', 'fr'],
+  ]);
+  expect(
+    (
+      await f.admin.query(
+        'SELECT term_support FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=4',
+        [routeOf(subject), subject],
+      )
+    ).rows,
+  ).toEqual([{ term_support: [1] }]);
 });
 
 test('a native term fact-bound failure rolls back the command SourceSet allocation with its revision and publication', async () => {
   const languages = ['en', 'fr', 'de', 'es', 'it', 'ja', 'ko', 'zh', 'pt', 'ru', 'ar', 'nl', 'sv', 'pl', 'fi', 'da'];
-  const aliases = Object.fromEntries(languages.map((language, index) => [
-    language, Array.from({ length: index === 15 ? 30 : 32 }, (_, n) => `Alias ${language} ${n}`),
-  ]));
+  const aliases = Object.fromEntries(
+    languages.map((language, index) => [
+      language,
+      Array.from({ length: index === 15 ? 30 : 32 }, (_, n) => `Alias ${language} ${n}`),
+    ]),
+  );
   const created = await f.call('POST', '/v1/subjects', 'owner', {
-    type: 'schema:Book', labels: { en: 'Full' }, aliases,
+    type: 'schema:Book',
+    labels: { en: 'Full' },
+    aliases,
     statements: { 'schema:url': [f.cited('schema:url', 'https://example.test/full')] },
   });
   f.status(created, 201);
@@ -304,10 +340,14 @@ test('a native term fact-bound failure rolls back the command SourceSet allocati
   expect((await patch(subject, 1, { descriptions: { en: 'Exceeds the native fact cap' } })).status).toBe(400);
   expect(await termSourceSets(subject)).toEqual(before);
   expect(await f.revisions(subject)).toEqual([{ revision: 1, kind: 'create' }]);
-  expect((await f.admin.query(
-    `SELECT count(*)::int n FROM semantic.record_source_set s
+  expect(
+    (
+      await f.admin.query(
+        `SELECT count(*)::int n FROM semantic.record_source_set s
      WHERE s.partition_no=$1 AND NOT EXISTS (
        SELECT 1 FROM editorial.write_basis b WHERE b.partition_no=s.partition_no AND b.transaction_id=s.transaction_id)`,
-    [Math.floor(routeOf(subject)! / 16)],
-  )).rows).toEqual([{ n: 0 }]);
+        [Math.floor(routeOf(subject)! / 16)],
+      )
+    ).rows,
+  ).toEqual([{ n: 0 }]);
 });
