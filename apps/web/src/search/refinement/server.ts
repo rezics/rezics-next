@@ -7,12 +7,19 @@ import { requestLanguages } from '../../kernel/languages';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { readRelease } from '../../subject/definitions';
 import { compileRefinement } from './model';
+import { discoveryRequest } from '../search-request';
 import { facetRequest, readFacetPage, facetProblem, type FacetState } from './request';
 
 const input = v.strictObject({
-  query: v.pipe(v.string(), v.maxLength(256)),
+  query: v.pipe(
+    v.string(),
+    v.check((text) => new TextEncoder().encode(text).length <= 512),
+  ),
   locale: v.pipe(v.string(), v.maxLength(35)),
   conditions: v.strictObject({
+    kinds: v.exactOptional(v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))),
+    languages: v.exactOptional(v.pipe(v.array(v.string()), v.maxLength(8))),
+    filter: v.exactOptional(v.pipe(v.string(), v.maxLength(16384))),
     type: v.exactOptional(v.string()),
     facetValues: v.record(v.string(), v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))),
     ranges: v.exactOptional(
@@ -47,17 +54,31 @@ export const readRefinement = createServerFn({ method: 'POST' })
     const signal = getRequest().signal;
     const release = await readRelease();
     const filter = compileRefinement(release, data.conditions);
+    const discovery = discoveryRequest(
+      {
+        ...data.conditions,
+        query: data.query,
+        type: data.conditions.type,
+        facets: data.conditions.facetValues,
+        cursor: undefined,
+        sort: undefined,
+      },
+      requestLanguages(data.locale),
+    );
     const request = facetRequest(
       {
         ...(data.query ? { text: data.query } : {}),
         ...(filter ? { filter } : {}),
-        languages: requestLanguages(data.locale),
+        languages: discovery.languages,
       },
       data.facets,
     );
     try {
       return await readFacetPage(request, (body) =>
-        kernelClient(data.locale).subjects.$facets.post(body, { fetch: { signal } }),
+        kernelClient(data.locale).subjects.$facets.post(
+          { ...body, ...(discovery.filter ? { filter: discovery.filter } : {}) },
+          { fetch: { signal } },
+        ),
       );
     } catch (error) {
       if (signal.aborted) throw error;

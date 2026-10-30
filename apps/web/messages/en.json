@@ -1545,5 +1545,14 @@
   "library_labels_prefix": "Label name starts with",
   "library_labels_filter": "Filter labels",
   "library_labels_preparing": "Your labels are being prepared. Try again shortly.",
-  "library_labels_denied": "These labels are not available to this viewer."
+  "library_labels_denied": "These labels are not available to this viewer.",
+  "discovery_more_kinds": "More kinds",
+  "discovery_count_unavailable": "Count unavailable",
+  "discovery_preparing": "This search is being prepared. Try again in a moment.",
+  "discovery_closed": "Search is currently closed.",
+  "discovery_restart": "These results have changed. Restart this search to continue.",
+  "discovery_restart_action": "Restart search",
+  "discovery_invalid": "Check the search text, filters or continuation and try again.",
+  "discovery_unsupported": "This combination of search conditions or sort is not supported.",
+  "discovery_denied": "This search is unavailable with the current sign-in."
 }

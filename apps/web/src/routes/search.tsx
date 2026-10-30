@@ -23,23 +23,18 @@ export const Route = createFileRoute('/search')({
   validateSearch: searchParams,
   loaderDeps: ({ search }) => searchLoaderDeps(search),
   loader: ({ deps, context }) => {
-    const params = {
-      ...deps,
-      query: deps.query,
-      type: deps.type,
-      facets: deps.facets,
-      cursor: deps.cursor,
-      sort: deps.sort,
-    };
+    const params = deps;
     if (
       params.query ||
       params.type ||
       params.condition ||
+      params.filter ||
+      params.kinds?.length ||
       Object.keys(params.facets).length ||
       Object.keys(params.ranges ?? {}).length
     )
       return context.queryClient
-        .ensureQueryData(searchQueryOptions(getLocale(), params))
+        .fetchQuery(searchQueryOptions(getLocale(), params))
         .then(() => ({ query: params.query }));
     return { query: params.query };
   },
@@ -76,6 +71,8 @@ function SearchRoute() {
     !deps.query &&
     !deps.type &&
     !deps.condition &&
+    !deps.filter &&
+    !deps.kinds?.length &&
     !Object.keys(deps.facets).length &&
     !Object.keys(deps.ranges ?? {}).length
   )

@@ -1544,5 +1544,14 @@
   "library_labels_prefix": "標籤名稱前綴",
   "library_labels_filter": "篩選標籤",
   "library_labels_preparing": "正在準備你的標籤，請稍後再試。",
-  "library_labels_denied": "目前使用者無法查看這些標籤。"
+  "library_labels_denied": "目前使用者無法查看這些標籤。",
+  "discovery_more_kinds": "更多種類",
+  "discovery_count_unavailable": "數量無法取得",
+  "discovery_preparing": "正在準備此搜尋，請稍後重試。",
+  "discovery_closed": "搜尋目前已關閉。",
+  "discovery_restart": "搜尋結果已變更，請重新搜尋以繼續。",
+  "discovery_restart_action": "重新搜尋",
+  "discovery_invalid": "請檢查搜尋文字、篩選條件或續頁資訊後重試。",
+  "discovery_unsupported": "不支援此搜尋條件或排序組合。",
+  "discovery_denied": "目前登入狀態無法使用此搜尋。"
 }

@@ -1544,5 +1544,14 @@
   "library_labels_prefix": "Le nom de l’étiquette commence par",
   "library_labels_filter": "Filtrer les étiquettes",
   "library_labels_preparing": "Vos étiquettes sont en cours de préparation. Réessayez dans un instant.",
-  "library_labels_denied": "Ces étiquettes ne sont pas accessibles à cette personne."
+  "library_labels_denied": "Ces étiquettes ne sont pas accessibles à cette personne.",
+  "discovery_more_kinds": "Plus de catégories",
+  "discovery_count_unavailable": "Nombre indisponible",
+  "discovery_preparing": "Cette recherche est en préparation. Réessayez dans un instant.",
+  "discovery_closed": "La recherche est actuellement fermée.",
+  "discovery_restart": "Ces résultats ont changé. Relancez la recherche pour continuer.",
+  "discovery_restart_action": "Relancer la recherche",
+  "discovery_invalid": "Vérifiez le texte, les filtres ou la continuation, puis réessayez.",
+  "discovery_unsupported": "Cette combinaison de conditions ou de tri n’est pas prise en charge.",
+  "discovery_denied": "Cette recherche est indisponible avec la connexion actuelle."
 }

@@ -1544,5 +1544,14 @@
   "library_labels_prefix": "El nombre de la etiqueta empieza por",
   "library_labels_filter": "Filtrar etiquetas",
   "library_labels_preparing": "Tus etiquetas se están preparando. Vuelve a intentarlo en breve.",
-  "library_labels_denied": "Estas etiquetas no están disponibles para esta persona."
+  "library_labels_denied": "Estas etiquetas no están disponibles para esta persona.",
+  "discovery_more_kinds": "Más tipos",
+  "discovery_count_unavailable": "Cantidad no disponible",
+  "discovery_preparing": "Esta búsqueda se está preparando. Inténtalo de nuevo en un momento.",
+  "discovery_closed": "La búsqueda está cerrada actualmente.",
+  "discovery_restart": "Estos resultados han cambiado. Reinicia la búsqueda para continuar.",
+  "discovery_restart_action": "Reiniciar búsqueda",
+  "discovery_invalid": "Revisa el texto, los filtros o la continuación e inténtalo de nuevo.",
+  "discovery_unsupported": "Esta combinación de condiciones u orden de búsqueda no es compatible.",
+  "discovery_denied": "Esta búsqueda no está disponible con la sesión actual."
 }

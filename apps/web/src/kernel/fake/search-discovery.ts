@@ -96,6 +96,52 @@ export function currentLinkRefusal(): DiscoveryPage {
   return result;
 }
 
+/** Presentation-only examples, explicitly separate from native readiness evidence. */
+export function factualDiscoveryExample(): DiscoveryPage {
+  const result = structuredClone(discoveryExample);
+  result.hits.push({
+    key: { owner: 'semantic', kind: 'catalogue:Atlas', route: 0, id: '00000000-0000-4000-8000-000000000814' },
+    summary: {
+      kind: 'subject',
+      value: {
+        id: '00000000-0000-4000-8000-000000000814',
+        type: 'catalogue:Atlas',
+        types: ['catalogue:Atlas'],
+        label: { value: 'Mira Star Atlas', language: 'en' },
+        creativeWork: true,
+        cover: null,
+      },
+    },
+    labels: { en: 'Mira Star Atlas' },
+    aliases: { en: ['Maps of Mira'] },
+    descriptions: { en: 'An atlas of nearby stars.' },
+    facts: {
+      'schema:author': [{ kind: 'item', id: sameId, labels: { en: 'Mira' } }],
+      'schema:datePublished': [{ kind: 'time', year: 2026 }],
+    },
+    figure: {
+      questionId: '00000000-0000-7000-8000-000000000001',
+      populationId: '00000000-0000-8000-8000-000000000000',
+      scale: { min: 0, max: 100, displayStep: 1 },
+      count: 12,
+      state: 'ready',
+      mean: 8,
+      score: 7.8,
+    },
+    listPresentation: { imageAspect: 'landscape', keyFacts: ['schema:author', 'schema:datePublished'] },
+  });
+  result.kinds.values[0]!.count = { kind: 'schema:Person', value: 1, exact: false };
+  result.kinds.values[1]!.count = { kind: 'account', value: 2, exact: true };
+  result.kinds.values.push({
+    id: 'schema:Event',
+    labels: { en: 'Event' },
+    icon: 'calendar',
+    count: { kind: 'schema:Event', value: 0, exact: true },
+  });
+  result.kinds.next = 'opaque-kind-page+/=';
+  return result;
+}
+
 export const routes: FakeRoute[] = [
   {
     method: 'POST',
@@ -106,6 +152,22 @@ export const routes: FakeRoute[] = [
         .json()
         .catch(() => undefined);
       if (!isRecord(body) || body.representation !== 'discovery-v1') return;
+      if (isRecord(body.kindPage) && body.kindPage.cursor === 'opaque-kind-page+/=')
+        return {
+          status: 200,
+          kinds: { values: [{ id: 'catalogue:Atlas', labels: { en: 'Atlas' }, icon: 'map' }], next: null },
+          as_of: discoveryExample.as_of,
+        };
+      if (body.text === 'Mira facts') return { status: 200, ...factualDiscoveryExample() };
+      if (body.text === 'Mira continued') {
+        const result = structuredClone(discoveryExample);
+        result.hits = body.cursor ? result.hits.slice(1) : result.hits.slice(0, 1);
+        result.next = body.cursor ? null : 'opaque-hits-page+/=';
+        return { status: 200, ...result };
+      }
+      if (body.text === 'Mira restart' && body.cursor) return { status: 409, code: 'search_restart_required' };
+      if (body.text === 'Mira restart') return { status: 200, ...structuredClone(discoveryExample) };
+      if (body.text === 'Mira closed') return { status: 403, code: 'platform_closed' };
       if (body.text === 'Mira') return { status: 200, ...structuredClone(discoveryExample) };
       if (body.text === 'Mira empty') return { status: 200, ...structuredClone(discoveryExample), hits: [] };
       if (body.text === 'Mira unavailable') return { status: 503, code: 'unavailable' };

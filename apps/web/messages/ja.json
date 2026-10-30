@@ -1544,5 +1544,14 @@
   "library_labels_prefix": "ラベル名の先頭",
   "library_labels_filter": "ラベルを絞り込む",
   "library_labels_preparing": "ラベルを準備しています。しばらくしてからもう一度お試しください。",
-  "library_labels_denied": "この閲覧者はラベルを利用できません。"
+  "library_labels_denied": "この閲覧者はラベルを利用できません。",
+  "discovery_more_kinds": "ほかの種類",
+  "discovery_count_unavailable": "件数を取得できません",
+  "discovery_preparing": "検索を準備しています。少し待ってから再試行してください。",
+  "discovery_closed": "検索は現在利用できません。",
+  "discovery_restart": "検索結果が変わりました。検索をやり直してください。",
+  "discovery_restart_action": "検索をやり直す",
+  "discovery_invalid": "検索語、絞り込み、続きの指定を確認して再試行してください。",
+  "discovery_unsupported": "この検索条件や並び順の組み合わせは利用できません。",
+  "discovery_denied": "現在のログイン状態ではこの検索を利用できません。"
 }

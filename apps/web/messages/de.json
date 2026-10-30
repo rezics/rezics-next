@@ -1544,5 +1544,14 @@
   "library_labels_prefix": "Labelname beginnt mit",
   "library_labels_filter": "Labels filtern",
   "library_labels_preparing": "Deine Labels werden vorbereitet. Versuche es gleich erneut.",
-  "library_labels_denied": "Diese Labels sind für diese Person nicht verfügbar."
+  "library_labels_denied": "Diese Labels sind für diese Person nicht verfügbar.",
+  "discovery_more_kinds": "Weitere Arten",
+  "discovery_count_unavailable": "Anzahl nicht verfügbar",
+  "discovery_preparing": "Diese Suche wird vorbereitet. Versuche es gleich noch einmal.",
+  "discovery_closed": "Die Suche ist derzeit geschlossen.",
+  "discovery_restart": "Diese Ergebnisse haben sich geändert. Starte die Suche erneut.",
+  "discovery_restart_action": "Suche neu starten",
+  "discovery_invalid": "Prüfe Suchtext, Filter oder Fortsetzung und versuche es erneut.",
+  "discovery_unsupported": "Diese Kombination aus Suchbedingungen oder Sortierung wird nicht unterstützt.",
+  "discovery_denied": "Diese Suche ist mit der aktuellen Anmeldung nicht verfügbar."
 }

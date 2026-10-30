@@ -18,6 +18,9 @@ export type RefinementProperty = {
   units: readonly string[];
 };
 export type RefinementConditions = {
+  kinds?: string[];
+  languages?: string[];
+  filter?: string;
   type?: string;
   facetValues: Record<string, string[]>;
   ranges?: Record<string, FilterRange>;
@@ -86,6 +89,9 @@ export function refinementHref(
   if (query) params.set('q', query);
   if (conditions.type) params.set('type', conditions.type);
   if (sort) params.set('sort', sort);
+  for (const kind of conditions.kinds ?? []) params.append('kinds', kind);
+  for (const language of conditions.languages ?? []) params.append('language', language);
+  if (conditions.filter) params.set('filter', conditions.filter);
   if (conditions.condition) params.set('condition', JSON.stringify(conditions.condition));
   for (const [property, values] of Object.entries(conditions.facetValues))
     for (const value of values) params.append(`f.${property}`, value);

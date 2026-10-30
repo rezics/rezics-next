@@ -1,3 +1,5 @@
+import type { SearchLoaderDeps } from './search-params';
+import { searchFormFields } from './search-params';
 import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -9,12 +11,14 @@ export function SearchSort({
   query,
   type,
   facets,
+  state,
 }: {
   sort: 'relevance' | 'rating';
   locale: string;
   query: string;
   type?: string | undefined;
   facets: Record<string, string[]>;
+  state?: SearchLoaderDeps | undefined;
 }) {
   return (
     <form method="get" action={`/${locale}/search`} className="flex items-center justify-end gap-2">
@@ -38,6 +42,16 @@ export function SearchSort({
           <NativeSelectOption value="rating">{m.search_sort_rating()}</NativeSelectOption>
         </NativeSelect>
       </Field>
+      {state &&
+        searchFormFields({
+          kinds: state.kinds,
+          language: state.languages,
+          filter: state.filter,
+          condition: state.condition ? JSON.stringify(state.condition) : undefined,
+          ...Object.fromEntries(
+            Object.entries(state.ranges ?? {}).map(([property, range]) => [`r.${property}`, JSON.stringify(range)]),
+          ),
+        }).map(([name, value]) => <input key={`${name}:${value}`} type="hidden" name={name} value={value} />)}
       {query && <input type="hidden" name="q" value={query} />}
       {type && <input type="hidden" name="type" value={type} />}
       {Object.entries(facets).flatMap(([property, values]) =>

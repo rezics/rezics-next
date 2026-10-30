@@ -1,3 +1,4 @@
+import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import {
   fallbackListFactProperties,
@@ -11,17 +12,15 @@ import { MemberListRow } from '@rezics/ui/list-presentation';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { ItemDescription } from '@rezics/ui/shadcn/item';
 import { PublicRatingFigure } from '../features/pages/public-rating-figure';
-import type { PublicFigure } from '../features/pages/subject-ratings';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
 import { listKeyFacts } from '../media/type-presentation';
 import { subjectHref } from '../subject/subject-href';
 
-export type Fact =
-  | { kind: 'item'; id: string; labels: Record<string, string> }
-  | { kind: 'time'; year: number }
-  | { kind: 'quantity'; amount: number; unit: string }
-  | { kind: 'code'; value: string };
+type NativeHit = NonNullable<
+  Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']
+>['subjects'][number];
+export type Fact = NonNullable<NativeHit['facts']>[string][number];
 
 export type SubjectHit = {
   id: string;
@@ -34,7 +33,8 @@ export type SubjectHit = {
 };
 export type ResultHit = SubjectHit & {
   descriptions?: Record<string, string>;
-  figure?: PublicFigure;
+  aliases?: Record<string, string[]>;
+  figure?: NativeHit['figure'];
   storyOverlay?: boolean;
 };
 
@@ -109,8 +109,22 @@ export function ResultRow({
     parseListPresentation(hit.listPresentation) ?? parseListPresentation(listPresentationFor?.(subject.types));
   const listPresentation = releasedPresentation ?? fallbackListPresentation(subject.types);
   const factProperties = releasedPresentation?.keyFacts ?? fallbackListFactProperties(subject.types);
-  const facts = listKeyFacts(hit.facts, factProperties, yearProperties, locale);
+  // Keep each native item target attached while reusing the shared formatter and its four-value cap.
+  const facts = (factProperties ?? Object.keys(hit.facts ?? {}))
+    .slice(0, 4)
+    .flatMap((property) =>
+      (hit.facts?.[property] ?? []).slice(0, 3).flatMap((value) =>
+        listKeyFacts({ [property]: [value] }, [property], yearProperties, locale).map((formatted) => ({
+          ...formatted,
+          ...(value.kind === 'item' ? { id: value.id } : {}),
+        })),
+      ),
+    )
+    .slice(0, 4);
   const badgeProperties = fallbackListFactProperties(subject.types) ?? [];
+  const aliasLanguage =
+    Object.keys(hit.aliases ?? {}).find((language) => language === locale) ?? Object.keys(hit.aliases ?? {})[0];
+  const aliases = aliasLanguage ? hit.aliases?.[aliasLanguage]?.slice(0, 3) : undefined;
   return (
     <MemberListRow
       href={subjectLink.href}
@@ -130,6 +144,11 @@ export function ResultRow({
       }
     >
       <SubjectMeta type={typeName} year={year} locale={locale} className="text-sm text-muted-foreground" />
+      {aliases?.length ? (
+        <p lang={aliasLanguage} className="text-sm text-muted-foreground">
+          {aliases.join(' · ')}
+        </p>
+      ) : null}
       {facts.length > 0 && (
         <p data-slot="member-list-row-facts" className="text-sm">
           <MetaLine
@@ -144,7 +163,16 @@ export function ResultRow({
                     : undefined
                 }
               >
-                {fact.text}
+                {fact.id ? (
+                  <a
+                    className="relative z-10 underline underline-offset-4"
+                    href={subjectHref({ id: fact.id, label: fact.text }, locale).href}
+                  >
+                    {fact.text}
+                  </a>
+                ) : (
+                  fact.text
+                )}
               </span>
             ))}
           />

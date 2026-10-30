@@ -161,7 +161,13 @@ export function Refinement({
           </ul>
           <a
             className={buttonVariants({ variant: 'link', size: 'sm' })}
-            href={href({ ...(conditions.type ? { type: conditions.type } : {}), facetValues: {} })}
+            href={href({
+              ...(conditions.type ? { type: conditions.type } : {}),
+              ...(conditions.kinds ? { kinds: conditions.kinds } : {}),
+              ...(conditions.languages ? { languages: conditions.languages } : {}),
+              ...(conditions.filter ? { filter: conditions.filter } : {}),
+              facetValues: {},
+            })}
           >
             {m.refinement_clear()}
           </a>

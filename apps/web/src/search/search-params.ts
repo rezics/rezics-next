@@ -3,14 +3,35 @@ import * as v from 'valibot';
 
 const facetValue = v.optional(v.union([v.string(), v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))]));
 
+const strings = (maximum: number) =>
+  v.pipe(
+    v.union([v.string(), v.array(v.string())]),
+    v.transform((value) => (typeof value === 'string' ? [value] : value)),
+    v.maxLength(maximum),
+  );
+
 /** Validated URL search params. Unknown keys are kept only as facet-shaped values and selected below. */
 export const searchParams = v.objectWithRest(
   {
-    q: v.fallback(v.pipe(v.string(), v.maxLength(256)), ''),
-    type: v.fallback(v.optional(v.pipe(v.string(), v.maxLength(128))), undefined),
-    cursor: v.fallback(v.optional(v.pipe(v.string(), v.maxLength(2048))), undefined),
+    q: v.optional(
+      v.pipe(
+        v.string(),
+        v.check((text) => new TextEncoder().encode(text).length <= 512),
+      ),
+      '',
+    ),
+    type: v.optional(v.pipe(v.string(), v.maxLength(128))),
+    cursor: v.optional(v.pipe(v.string(), v.maxLength(4864))),
+    kinds: v.optional(strings(FILTER_LIMITS.in)),
+    language: v.optional(
+      v.pipe(
+        strings(8),
+        v.check((tags) => tags.every((tag) => /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(tag) && tag.length <= 35)),
+      ),
+    ),
     condition: v.optional(v.pipe(v.string(), v.maxLength(32768))),
-    sort: v.fallback(v.optional(v.picklist(['rating'])), undefined),
+    filter: v.optional(v.pipe(v.string(), v.maxLength(16384))),
+    sort: v.optional(v.picklist(['rating'])),
   },
   facetValue,
 );
@@ -26,6 +47,9 @@ export type SearchLoaderDeps = {
   condition?: FilterDocument;
   cursor: string | undefined;
   sort: 'rating' | undefined;
+  kinds?: string[] | undefined;
+  languages?: string[] | undefined;
+  filter?: string | undefined;
 };
 
 export function facetValuesFromSearch(search: Record<string, unknown>): SearchFacetValues {
@@ -63,22 +87,68 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
     ...(typeof search.condition === 'string' ? { condition: parseFilter(JSON.parse(search.condition)) } : {}),
     cursor: typeof search.cursor === 'string' ? search.cursor : undefined,
     sort: search.sort === 'rating' ? 'rating' : undefined,
+    ...(typeof search.filter === 'string' ? { filter: search.filter } : {}),
+    ...(search.kinds
+      ? {
+          kinds:
+            typeof search.kinds === 'string'
+              ? [search.kinds]
+              : Array.isArray(search.kinds)
+                ? search.kinds.filter((kind): kind is string => typeof kind === 'string')
+                : [],
+        }
+      : {}),
+    ...(search.language
+      ? {
+          languages:
+            typeof search.language === 'string'
+              ? [search.language]
+              : Array.isArray(search.language)
+                ? search.language.filter((tag): tag is string => typeof tag === 'string')
+                : [],
+        }
+      : {}),
   };
 }
 
 /** Carry the route's supported conditions through the header's ordinary GET form; a new query drops its cursor. */
 export function searchFormFields(search: Record<string, unknown>): [string, string][] {
-  const { type, facets, ranges, condition, sort } = searchLoaderDeps(search);
+  const { type, facets, ranges, condition, sort, kinds, languages, filter } = searchLoaderDeps(search);
   return [
     ...(type ? [['type', type] as [string, string]] : []),
     ...(sort ? [['sort', sort] as [string, string]] : []),
+    ...(filter ? [['filter', filter] as [string, string]] : []),
     ...(condition ? [['condition', JSON.stringify(condition)] as [string, string]] : []),
     ...Object.entries(ranges ?? {}).map(([property, range]): [string, string] => [
       `r.${property}`,
       JSON.stringify(range),
     ]),
+    ...(kinds ?? []).map((kind): [string, string] => ['kinds', kind]),
+    ...(languages ?? []).map((language): [string, string] => ['language', language]),
     ...Object.entries(facets).flatMap(([property, values]) =>
       values.map((value): [string, string] => [`f.${property}`, value]),
     ),
   ];
+}
+
+/** Native opaque tokens are only encoded for transport, never decoded, trimmed or regenerated. */
+export function discoverySearchHref(locale: string, state: SearchLoaderDeps): string {
+  const params = new URLSearchParams(
+    searchFormFields({
+      q: state.query,
+      type: state.type,
+      sort: state.sort,
+      filter: state.filter,
+      condition: state.condition ? JSON.stringify(state.condition) : undefined,
+      ...Object.fromEntries(
+        Object.entries(state.ranges ?? {}).map(([key, range]) => [`r.${key}`, JSON.stringify(range)]),
+      ),
+      kinds: state.kinds,
+      language: state.languages,
+      ...Object.fromEntries(Object.entries(state.facets).map(([key, values]) => [`f.${key}`, values])),
+    }),
+  );
+  if (state.query) params.set('q', state.query);
+  if (state.cursor) params.set('cursor', state.cursor);
+  return `/${encodeURIComponent(locale)}/search${params.size ? `?${params}` : ''}`;
 }
