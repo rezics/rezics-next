@@ -2180,5 +2180,20 @@
   "changes_accepted_detail": "Se aceptó un candidato en un contexto. La aceptación por sí sola no determina la selección.",
   "changes_rejected_detail": "Se rechazó un candidato en un contexto.",
   "changes_adopted_detail": "Se registró una selección de contexto. Abre la lectura actual para ver lo disponible ahora.",
-  "changes_empty_page": "No hay revisiones visibles en esta página. Continúa a la siguiente."
+  "changes_empty_page": "No hay revisiones visibles en esta página. Continúa a la siguiente.",
+  "board_community_about": "Acerca de este foro",
+  "board_community_global": "Este foro pertenece al contexto global. Las publicaciones usan los permisos actuales de la cuenta; no hay membresía de Realm.",
+  "board_community_source_unavailable": "La información de la comunidad no está disponible.",
+  "board_community_protected": "Foro protegido",
+  "board_community_protected_help": "Poder leer este foro no concede permiso para publicar.",
+  "board_community_joined": "Miembro",
+  "board_community_loading": "Cargando foro…",
+  "board_community_retry": "Reintentar",
+  "board_feed_open_thread": "Abrir hilo",
+  "board_feed_opening_unavailable": "La primera publicación no está disponible.",
+  "board_feed_reactions": "{count} reacciones",
+  "board_feed_replies": "{count} respuestas",
+  "board_feed_link_copied": "Enlace copiado",
+  "board_feed_copy_failed": "No se pudo copiar el enlace. Abre el hilo para usar su dirección.",
+  "board_feed_order_help": "Acerca de este orden"
 }

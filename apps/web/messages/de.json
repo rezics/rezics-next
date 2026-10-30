@@ -2180,5 +2180,20 @@
   "changes_accepted_detail": "Ein Kandidat wurde in einem Kontext angenommen. Die Annahme allein belegt keine Auswahl.",
   "changes_rejected_detail": "Ein Kandidat wurde in einem Kontext abgelehnt.",
   "changes_adopted_detail": "Eine Kontextauswahl wurde aufgezeichnet. Öffne die aktuelle Ansicht, um die jetzt verfügbaren Daten zu sehen.",
-  "changes_empty_page": "Auf dieser Seite sind keine Revisionen sichtbar. Prüfe die nächste Seite."
+  "changes_empty_page": "Auf dieser Seite sind keine Revisionen sichtbar. Prüfe die nächste Seite.",
+  "board_community_about": "Über dieses Board",
+  "board_community_global": "Dieses Board gehört zum globalen Kontext. Beiträge verwenden die aktuellen Kontorechte; es gibt keine Realm-Mitgliedschaft.",
+  "board_community_source_unavailable": "Community-Informationen sind nicht verfügbar.",
+  "board_community_protected": "Geschütztes Board",
+  "board_community_protected_help": "Lesezugriff auf dieses Board erteilt keine Schreibrechte.",
+  "board_community_joined": "Beigetreten",
+  "board_community_loading": "Board wird geladen…",
+  "board_community_retry": "Erneut versuchen",
+  "board_feed_open_thread": "Thread öffnen",
+  "board_feed_opening_unavailable": "Der erste Beitrag ist nicht verfügbar.",
+  "board_feed_reactions": "{count} Reaktionen",
+  "board_feed_replies": "{count} Antworten",
+  "board_feed_link_copied": "Link kopiert",
+  "board_feed_copy_failed": "Der Link konnte nicht kopiert werden. Öffne den Thread, um seine Adresse zu verwenden.",
+  "board_feed_order_help": "Über diese Reihenfolge"
 }

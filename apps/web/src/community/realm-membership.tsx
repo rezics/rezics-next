@@ -15,10 +15,12 @@ export function RealmMembership({
   realm,
   returnTo,
   spaceId,
+  memberLabel,
 }: {
-  realm: RealmHome;
+  realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
   returnTo: string;
   spaceId?: string;
+  memberLabel?: string;
 }) {
   const { state: session, csrfToken } = useSession();
   if (session !== 'signed-in') {
@@ -48,17 +50,27 @@ export function RealmMembership({
       </section>
     );
   }
-  return <PersonalMembership key={realm.id} realm={realm} csrfToken={csrfToken} {...(spaceId ? { spaceId } : {})} />;
+  return (
+    <PersonalMembership
+      key={realm.id}
+      realm={realm}
+      csrfToken={csrfToken}
+      memberLabel={memberLabel}
+      {...(spaceId ? { spaceId } : {})}
+    />
+  );
 }
 
 function PersonalMembership({
   realm,
   csrfToken,
   spaceId,
+  memberLabel,
 }: {
-  realm: RealmHome;
+  realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
   csrfToken: string | null;
   spaceId?: string;
+  memberLabel?: string | undefined;
 }) {
   const client = useQueryClient();
   const router = useRouter();
@@ -130,6 +142,7 @@ function PersonalMembership({
 
   return (
     <RealmParticipationView
+      memberLabel={memberLabel}
       state={
         pending ? 'pending' : query.isPending ? 'loading' : query.isError || !viewer ? 'unavailable' : viewer.state
       }

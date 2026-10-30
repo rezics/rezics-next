@@ -2180,5 +2180,20 @@
   "changes_accepted_detail": "コンテキストで候補が承認されました。承認だけでは選択されたことにはなりません。",
   "changes_rejected_detail": "コンテキストで候補が却下されました。",
   "changes_adopted_detail": "コンテキストの選択が記録されました。現在の表示で閲覧可能な内容を確認してください。",
-  "changes_empty_page": "このページには閲覧できる版がありません。次のページを確認できます。"
+  "changes_empty_page": "このページには閲覧できる版がありません。次のページを確認できます。",
+  "board_community_about": "このボードについて",
+  "board_community_global": "このボードはグローバルコンテキストにあります。投稿には現在のアカウントの権限が使われ、Realmへの参加はありません。",
+  "board_community_source_unavailable": "コミュニティ情報を取得できません。",
+  "board_community_protected": "保護されたボード",
+  "board_community_protected_help": "このボードを閲覧できても、投稿の権限があるとは限りません。",
+  "board_community_joined": "参加済み",
+  "board_community_loading": "ボードを読み込み中…",
+  "board_community_retry": "再試行",
+  "board_feed_open_thread": "スレッドを開く",
+  "board_feed_opening_unavailable": "最初の投稿を表示できません。",
+  "board_feed_reactions": "リアクション {count} 件",
+  "board_feed_replies": "返信 {count} 件",
+  "board_feed_link_copied": "リンクをコピーしました",
+  "board_feed_copy_failed": "リンクをコピーできません。スレッドを開いてアドレスを取得してください。",
+  "board_feed_order_help": "この並び順について"
 }

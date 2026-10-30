@@ -773,6 +773,45 @@ method is guessed. Navigation/review owners can link to `/boards?purpose=reviews
   work and buffered JSON are O(s)
 - **Growth check:** `tests/request-cost.test.ts`: `board page stays within its bound as s grows`
 
+#### Community presentation
+
+`BoardCommunity` is the actual route region and the reusable Community Feed pattern. Its token-surface banner and
+initials are explicit image fallbacks. The header uses the board title and, when available, the containing Realm's
+summary. The About column sits beside the feed on desktop and follows it on phones. Cards use the existing byline,
+adaptive Menu and ListRow, with a two-line preview drawn only from the returned, available opening document's text
+nodes (at most 128 nodes and 280 characters). Erased or withheld openings retain their returned slot without a body
+preview. Reactions and reply counts appear only when supplied; omitted aggregates make no zero claim. Optional rank
+freshness now lives in the expandable order help, retaining the exact supplied timestamp.
+
+`GET /v1/boards/:id` (`BoardView` in `services/kernel/src/content/model.ts`) supplies no community member count,
+description, banner, avatar or rules. `GET /v1/realms/:realmId` supplies the optional summary, state and visibility,
+but no member count, images or rules either. These are producer seams; the page does not substitute an owner's image,
+invent rules or query for a count. The existing `threadActivity` adapter accepts supplied reply counts, while the
+current native `ThreadView` has no reply-count field. The feed never derives a count by reading replies. Opening
+`mediaIds` are references without safe preview summaries, so they do not become thumbnail URLs or extra media reads.
+
+`readPageAuthors` keeps one `GET /v1/accounts?ids=...` for the page. `Byline` uses only an avatar summary included in
+that response, with published variants through the site's `/media` route and initials on failure. The current ids
+producer, `services/kernel/src/access/account-data.ts::readPublicIdentities`, returns basic identities without
+avatars. Native `services/kernel/src/content/avatar.ts::readAvatarSummaries` is the bounded existing enrichment port
+for a real batch producer; the page never requests individual profiles to fill this gap.
+
+Join/Joined reuses `RealmMembership` and its native command/standing-refresh behavior. The creation entry shares its
+existing browser-only membership and participation query: a refused, pending or unavailable current read offers no
+Start action. A successful public participation read can allow a nonmember to enter the existing composer; the
+native command still authorizes submission. A Global board has no Join and retains the existing signed-in composer
+entry. Missing Realm metadata never converts a Realm board into Global Context. The public read cost remains the
+existing board, page and batched identities, plus one optional Realm read; current personal participation uses the
+existing two native point reads, shared by both actions. No per-card request is added.
+
+The owned folder `src/stories/patterns/board-community/` documents the actual component and interaction states.
+Review `patterns-community-community-feed--feed`, `--realm`, `--overflow`, `--sort`, `--open-thread`, `--start-thread`,
+`--continue-hot`, `--empty`, `--protected`, `--source-unavailable`, `--loading`, `--error` and `--closed` through the
+same phone390/desktop1280, locale and theme globals. Actual Pages are `pages-community-community-board--global`,
+`--realm` and `--continue-hot`; `pages-community-board-continuation--continue-hot` also uses this component.
+The two focused cases in `tests/board-community.test.ts` cover disclosed previews/counts, sort/cursor continuation,
+removed slots and primary/optional source failures. Recorded responses do not prove native authority or signing.
+
 ### New-thread page (`/<locale>/boards/<id>/new`)
 
 - **Touches:** Root preferences/D and one public board K read; no thread list is loaded

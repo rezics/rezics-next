@@ -2180,5 +2180,20 @@
   "changes_accepted_detail": "컨텍스트에서 후보가 승인되었습니다. 승인만으로는 선택된 것이 아닙니다.",
   "changes_rejected_detail": "컨텍스트에서 후보가 거절되었습니다.",
   "changes_adopted_detail": "컨텍스트 선택이 기록되었습니다. 현재 내용에서 지금 볼 수 있는 정보를 확인하세요.",
-  "changes_empty_page": "이 페이지에는 볼 수 있는 버전이 없습니다. 다음 페이지를 확인하세요."
+  "changes_empty_page": "이 페이지에는 볼 수 있는 버전이 없습니다. 다음 페이지를 확인하세요.",
+  "board_community_about": "게시판 소개",
+  "board_community_global": "이 게시판은 전역 컨텍스트에 있습니다. 게시에는 현재 계정의 권한이 사용되며 가입할 Realm이 없습니다.",
+  "board_community_source_unavailable": "커뮤니티 정보를 사용할 수 없습니다.",
+  "board_community_protected": "보호된 게시판",
+  "board_community_protected_help": "게시판을 읽을 수 있어도 글을 쓸 권한이 있는 것은 아닙니다.",
+  "board_community_joined": "가입됨",
+  "board_community_loading": "게시판 불러오는 중…",
+  "board_community_retry": "다시 시도",
+  "board_feed_open_thread": "스레드 열기",
+  "board_feed_opening_unavailable": "첫 게시물을 사용할 수 없습니다.",
+  "board_feed_reactions": "반응 {count}개",
+  "board_feed_replies": "답글 {count}개",
+  "board_feed_link_copied": "링크 복사됨",
+  "board_feed_copy_failed": "링크를 복사할 수 없습니다. 스레드를 열어 주소를 확인하세요.",
+  "board_feed_order_help": "이 정렬에 관하여"
 }

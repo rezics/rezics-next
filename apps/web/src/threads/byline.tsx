@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { initials } from './initials';
 import { cn } from '@rezics/ui/utils';
@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { PageAuthor } from '../identity/read';
+import { coverSrc } from '../media/cover-src';
 
 const minute = 60_000;
 const hour = 60 * minute;
@@ -60,11 +61,17 @@ export function Byline({
   const deleted = author?.state === 'deleted';
   const unknown = showAuthor && !deleted && (!author || (!author.displayName && !author.handle));
   const person = deleted || !author?.handle ? null : `/${locale}/@${encodeURIComponent(author.handle)}`;
+  // Only a summary supplied by the existing identity batch can supply an image. Never read a profile per row.
+  const avatar = !deleted && !unknown && author && 'avatar' in author ? author.avatar : null;
+  const variant = avatar?.variants.find((item) => item.format === 'webp' && item.width >= 48) ?? avatar?.variants[0];
 
   return (
     <div className={cn('flex min-w-0 items-center gap-2.5 text-sm text-muted-foreground', className)}>
       {showAuthor ? (
         <Avatar aria-hidden="true" size={size === 'sm' ? 'sm' : 'default'}>
+          {avatar && variant ? (
+            <AvatarImage src={coverSrc(avatar.media, variant.format, variant.width)} alt="" loading="lazy" />
+          ) : null}
           <AvatarFallback>
             {deleted || unknown ? '?' : initials(author?.displayName ?? author?.handle ?? '')}
           </AvatarFallback>

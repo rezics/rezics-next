@@ -1,0 +1,102 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, screen, userEvent, within } from 'storybook/test';
+import { BoardCommunity, BoardCommunityStatus } from '../../../threads/board-community';
+import { m } from '../../../paraglide/messages.js';
+import threads from '../../../kernel/recorded/board-threads.json';
+import realmBoard from '../../../kernel/recorded/board-realm.json';
+import { ContinueHot as continuation } from '../../board-continuation.stories';
+import { PageStory, pagePaths } from '../../page';
+import { CommunityFixture } from './board-community-fixtures';
+
+const meta = {
+  title: 'Patterns/Community/Community Feed',
+  component: BoardCommunity,
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
+} satisfies Meta<typeof BoardCommunity>;
+export default meta;
+type Story = StoryObj;
+const renderFeed = () => <CommunityFixture />;
+const renderBoard = () => <PageStory visitor="Signed Out" path={pagePaths.board} />;
+
+export const Feed: Story = {
+  render: renderFeed,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByRole('heading', { level: 1 });
+    await expect(view.getByText('Flight notes Watch the baobabs')).toBeVisible();
+    await expect(view.queryByRole('button', { name: m.realm_join() })).toBeNull();
+  },
+};
+
+export const Realm: Story = {
+  render: () => <PageStory visitor="Signed In" path={`/boards/${realmBoard.board.id}`} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByRole('heading', { level: 1, name: realmBoard.board.title });
+    await view.findByRole('region', { name: m.realm_membership_label() });
+  },
+};
+
+export const Overflow: Story = {
+  render: renderFeed,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByRole('link', { name: threads.threads[0]!.title });
+    const trigger = view.getAllByRole('button', { name: m.thread_content_more_actions() })[0]!;
+    await userEvent.click(trigger);
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    await expect(
+      await screen.findByRole(sheet ? 'button' : 'menuitem', { name: m.thread_content_copy_link() }),
+    ).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await expect(trigger).toHaveFocus();
+  },
+};
+
+export const Sort: Story = {
+  render: renderBoard,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const nav = await view.findByRole('navigation', { name: m.board_sort_label() });
+    await userEvent.click(within(nav).getByRole('link', { name: m.board_sort_new() }));
+    await expect(await within(nav).findByRole('link', { name: m.board_sort_new(), current: 'page' })).toBeVisible();
+    await userEvent.click(within(nav).getByRole('link', { name: m.board_sort_hot() }));
+    await expect(await within(nav).findByRole('link', { name: m.board_sort_hot(), current: 'page' })).toBeVisible();
+  },
+};
+
+export const OpenThread: Story = {
+  render: renderBoard,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('link', { name: threads.threads[0]!.title }));
+    await expect(await view.findByRole('heading', { level: 1, name: threads.threads[0]!.title })).toBeVisible();
+    await expect(await view.findByText('Watch the baobabs')).toBeVisible();
+  },
+};
+
+export const StartThread: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.board} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('link', { name: m.board_start_thread() }));
+    await expect(await view.findByRole('heading', { level: 1, name: m.thread_new_heading() })).toBeVisible();
+    await expect(await view.findByRole('textbox', { name: m.thread_title_label() })).toBeVisible();
+  },
+};
+
+export const ContinueHot: Story = { ...continuation };
+export const Empty: Story = { render: () => <CommunityFixture state="empty" /> };
+export const Protected: Story = { render: () => <CommunityFixture state="protected" /> };
+export const SourceUnavailable: Story = { render: () => <CommunityFixture state="source-unavailable" /> };
+export const Loading: Story = { render: () => <BoardCommunityStatus state="loading" /> };
+export const Error: Story = { render: () => <BoardCommunityStatus state="error" /> };
+export const Closed: Story = { render: () => <BoardCommunityStatus state="closed" /> };

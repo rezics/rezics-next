@@ -1,0 +1,141 @@
+import type { ReactNode } from 'react';
+import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
+import { Badge } from '@rezics/ui/shadcn/badge';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Menu } from '@rezics/ui/menu';
+import { EllipsisIcon } from 'lucide-react';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { PageHeading } from '../shell/page-heading';
+import { BoardContext } from './thread-context';
+import { BoardFeed } from './board-feed';
+import type { CommunityBoardPage } from './board-feed-data';
+import type { BoardSort } from './board-sort';
+import { initials } from './initials';
+
+/** One owned community region, reused by the actual route and Patterns. The shell owns surrounding navigation. */
+export function BoardCommunity({
+  page,
+  sort,
+  participation,
+  start,
+  overflow,
+}: {
+  page: CommunityBoardPage;
+  sort: BoardSort;
+  participation?: ReactNode;
+  start?: ReactNode;
+  overflow?: ReactNode;
+}) {
+  const { board, realm, threads, authors, now } = page;
+  const title = board.title ?? m.threads_untitled();
+  const summary = realm?.summary?.trim();
+  return (
+    <article className="w-full min-w-0 max-w-6xl space-y-6 text-foreground" data-slot="board-community">
+      <header className="overflow-hidden rounded-3xl bg-card">
+        <div aria-hidden="true" data-slot="board-banner-fallback" className="aura-surface h-24 sm:h-36" />
+        <div className="space-y-4 px-4 pb-5 sm:px-6 sm:pb-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <Avatar className="-mt-9 size-20 border-4 border-card text-2xl sm:size-24">
+              <AvatarFallback className="text-2xl sm:text-3xl">{initials(title)}</AvatarFallback>
+            </Avatar>
+            <div className="flex max-w-full flex-wrap items-center gap-2 pt-3">
+              {participation}
+              {overflow ?? <BoardCommunityMenu boardId={board.id} />}
+            </div>
+          </div>
+          <BoardContext realm={realm} />
+          <PageHeading className="break-words text-2xl sm:text-3xl">{title}</PageHeading>
+          {summary ? <p className="line-clamp-1 max-w-3xl text-muted-foreground">{summary}</p> : null}
+          {board.visibility === 'protected' ? <Badge variant="secondary">{m.board_community_protected()}</Badge> : null}
+        </div>
+      </header>
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        <BoardFeed boardId={board.id} sort={sort} page={threads} authors={authors} now={now} actions={start} />
+        <aside className="space-y-4 rounded-2xl bg-card p-5" aria-labelledby="board-about-heading">
+          <h2 id="board-about-heading" className="font-semibold">
+            {m.board_community_about()}
+          </h2>
+          {summary ? <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p> : null}
+          {board.realmId === null ? (
+            <p className="text-sm leading-relaxed text-muted-foreground">{m.board_community_global()}</p>
+          ) : null}
+          {board.realmId !== null && !realm ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.board_community_source_unavailable()}
+            </p>
+          ) : null}
+          {realm ? (
+            <a
+              href={`/${getLocale()}/realms/${realm.id}`}
+              className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
+            >
+              {realm.title}
+            </a>
+          ) : null}
+          {board.visibility === 'protected' ? (
+            <p className="text-sm text-muted-foreground">{m.board_community_protected_help()}</p>
+          ) : null}
+        </aside>
+      </div>
+    </article>
+  );
+}
+
+export function BoardCommunityMenu({ boardId, signedIn = false }: { boardId: string; signedIn?: boolean }) {
+  return (
+    <Menu
+      title={m.board_more_actions()}
+      trigger={
+        <Button variant="ghost" size="icon" aria-label={m.board_more_actions()}>
+          <EllipsisIcon />
+        </Button>
+      }
+      entries={[
+        { type: 'link', label: m.board_threads_heading(), href: `/${getLocale()}/boards/${boardId}` },
+        ...(signedIn
+          ? [
+              {
+                type: 'link' as const,
+                label: m.moderation_reports_heading(),
+                href: `/${getLocale()}/boards/${boardId}/moderation`,
+              },
+            ]
+          : []),
+      ]}
+    />
+  );
+}
+
+/** Route preparation and failures share the same content width; they never render fabricated feed rows. */
+export function BoardCommunityStatus({
+  state,
+  onRetry,
+}: {
+  state: 'loading' | 'error' | 'closed';
+  onRetry?: () => void;
+}) {
+  return (
+    <section className="w-full max-w-6xl rounded-3xl bg-card p-6 sm:p-10" aria-busy={state === 'loading'}>
+      <PageHeading>
+        {state === 'closed'
+          ? m.platform_closed_heading()
+          : state === 'loading'
+            ? m.board_threads_heading()
+            : m.error_heading()}
+      </PageHeading>
+      <p role="status" className="mt-4 text-muted-foreground">
+        {state === 'closed'
+          ? m.platform_closed_message()
+          : state === 'loading'
+            ? m.board_community_loading()
+            : m.error_message()}
+      </p>
+      {state === 'error' && onRetry ? (
+        <Button variant="outline" className="mt-4" onClick={onRetry}>
+          {m.board_community_retry()}
+        </Button>
+      ) : null}
+    </section>
+  );
+}

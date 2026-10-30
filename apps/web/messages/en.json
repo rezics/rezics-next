@@ -2181,5 +2181,20 @@
   "changes_accepted_detail": "A candidate was accepted in a Context. Acceptance alone does not establish selection.",
   "changes_rejected_detail": "A candidate was rejected in a Context.",
   "changes_adopted_detail": "A Context selection was recorded. Open the current reading to see what is available now.",
-  "changes_empty_page": "No visible revisions on this page. Continue to check the next page."
+  "changes_empty_page": "No visible revisions on this page. Continue to check the next page.",
+  "board_community_about": "About this board",
+  "board_community_global": "This board is in Global Context. Posting uses the current account’s authority; there is no Realm membership to join.",
+  "board_community_source_unavailable": "Community information is unavailable.",
+  "board_community_protected": "Protected board",
+  "board_community_protected_help": "Reading this board does not grant permission to post.",
+  "board_community_joined": "Joined",
+  "board_community_loading": "Loading this board…",
+  "board_community_retry": "Try again",
+  "board_feed_open_thread": "Open thread",
+  "board_feed_opening_unavailable": "The opening post is unavailable.",
+  "board_feed_reactions": "{count} reactions",
+  "board_feed_replies": "{count} replies",
+  "board_feed_link_copied": "Link copied",
+  "board_feed_copy_failed": "Could not copy the link. Open the thread to use its address.",
+  "board_feed_order_help": "About this order"
 }

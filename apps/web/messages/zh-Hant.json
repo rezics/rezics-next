@@ -2180,5 +2180,20 @@
   "changes_accepted_detail": "某個上下文接受了候選值。接受本身並不代表選用。",
   "changes_rejected_detail": "某個上下文拒絕了候選值。",
   "changes_adopted_detail": "已記錄上下文的選用。請開啟目前內容，查看現在可讀的資訊。",
-  "changes_empty_page": "本頁沒有可讀的修訂版本，可以繼續查看下一頁。"
+  "changes_empty_page": "本頁沒有可讀的修訂版本，可以繼續查看下一頁。",
+  "board_community_about": "關於此討論板",
+  "board_community_global": "此討論板位於全域上下文中。發文使用目前帳戶的權限，無需加入領域。",
+  "board_community_source_unavailable": "社群資訊暫時無法使用。",
+  "board_community_protected": "受保護的討論板",
+  "board_community_protected_help": "能夠閱讀此討論板並不代表有權發文。",
+  "board_community_joined": "已加入",
+  "board_community_loading": "正在載入討論板…",
+  "board_community_retry": "重試",
+  "board_feed_open_thread": "開啟討論串",
+  "board_feed_opening_unavailable": "首篇貼文無法使用。",
+  "board_feed_reactions": "{count} 次回應",
+  "board_feed_replies": "{count} 則回覆",
+  "board_feed_link_copied": "連結已複製",
+  "board_feed_copy_failed": "無法複製連結。請開啟討論串以取得其網址。",
+  "board_feed_order_help": "關於此排序"
 }

@@ -1,5 +1,5 @@
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { Link } from '@tanstack/react-router';
 
 export type BoardSort = 'active' | 'hot' | 'new';
 export const boardSorts: readonly BoardSort[] = ['active', 'hot', 'new'];
@@ -19,18 +19,19 @@ const currentClass = 'bg-muted text-foreground';
 
 // Plain links, one address per sort, so the control works without JavaScript. Changing the sort drops the cursor.
 export function BoardSortNav({ boardId, sort }: { boardId: string; sort: BoardSort }) {
-  const base = `/${getLocale()}/boards/${boardId}`;
   return (
     <nav aria-label={m.board_sort_label()} className="flex flex-wrap gap-1">
       {boardSorts.map((option) => (
-        <a
+        <Link
           key={option}
-          href={option === 'active' ? base : `${base}?sort=${option}`}
+          to="/boards/$id"
+          params={{ id: boardId }}
+          search={option === 'active' ? {} : { sort: option }}
           aria-current={option === sort ? 'page' : undefined}
           className={option === sort ? `${linkClass} ${currentClass}` : linkClass}
         >
           {label(option)}
-        </a>
+        </Link>
       ))}
     </nav>
   );

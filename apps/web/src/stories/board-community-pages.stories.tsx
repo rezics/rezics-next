@@ -1,0 +1,10 @@
+import type { Meta } from '@storybook/react-vite';
+import { PageStory, boardReady, pagePaths } from './page';
+import { ContinueHot as continuation } from './board-continuation.stories';
+import realmBoard from '../kernel/recorded/board-realm.json';
+
+const meta = { title: 'Pages/Community/Community Board', parameters: { layout: 'fullscreen' } } satisfies Meta;
+export default meta;
+export const Global = { render: () => <PageStory visitor="Signed In" path={pagePaths.board} />, play: boardReady };
+export const Realm = { render: () => <PageStory visitor="Signed In" path={`/boards/${realmBoard.board.id}`} /> };
+export const ContinueHot = { ...continuation };

@@ -2181,5 +2181,20 @@
   "changes_accepted_detail": "某个上下文接受了候选值。接受本身并不代表选用。",
   "changes_rejected_detail": "某个上下文拒绝了候选值。",
   "changes_adopted_detail": "已记录上下文的选用。请打开当前内容，查看目前可读的信息。",
-  "changes_empty_page": "本页没有可读的修订版本，可以继续查看下一页。"
+  "changes_empty_page": "本页没有可读的修订版本，可以继续查看下一页。",
+  "board_community_about": "关于此讨论板",
+  "board_community_global": "此讨论板位于全局上下文中。发帖使用当前账户的权限，无需加入领域。",
+  "board_community_source_unavailable": "社区信息暂不可用。",
+  "board_community_protected": "受保护的讨论板",
+  "board_community_protected_help": "能够阅读此讨论板并不代表有权发帖。",
+  "board_community_joined": "已加入",
+  "board_community_loading": "正在加载讨论板…",
+  "board_community_retry": "重试",
+  "board_feed_open_thread": "打开讨论串",
+  "board_feed_opening_unavailable": "首帖不可用。",
+  "board_feed_reactions": "{count} 次回应",
+  "board_feed_replies": "{count} 条回复",
+  "board_feed_link_copied": "链接已复制",
+  "board_feed_copy_failed": "无法复制链接。请打开讨论串以获取其地址。",
+  "board_feed_order_help": "关于此排序"
 }

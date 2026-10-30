@@ -16,6 +16,7 @@ export function RealmParticipationView({
   problem = null,
   onChange,
   onRetry,
+  memberLabel,
 }: {
   state: MemberState | 'loading' | 'unavailable';
   visibility: RealmHome['visibility'];
@@ -25,6 +26,7 @@ export function RealmParticipationView({
   problem?: MembershipProblem;
   onChange: (action: 'join' | 'leave') => void;
   onRetry: () => void;
+  memberLabel?: string | undefined;
 }) {
   const pending = state === 'pending';
   return (
@@ -36,7 +38,7 @@ export function RealmParticipationView({
       <div className="flex flex-wrap items-center gap-3">
         {state === 'member' ? (
           <>
-            <Badge>{m.realm_state_member()}</Badge>
+            <Badge>{memberLabel ?? m.realm_state_member()}</Badge>
             <Button
               size="lg"
               type="button"
