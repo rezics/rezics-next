@@ -139,6 +139,7 @@ test('anonymous reads an offer but cannot create orders list entitlements or dis
   expect(await body<{ offer: OfferView }>(await get('anonymous', `/v1/offers/${fixture.offer.id}`))).toEqual({
     offer: {
       id: fixture.offer.id,
+      revision: fixture.offer.revision,
       targetSubjectId: fixture.offer.targetSubjectId,
       title: fixture.offer.title,
       currency: fixture.offer.currency,
