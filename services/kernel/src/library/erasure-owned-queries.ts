@@ -2,7 +2,6 @@ import purgeOwnerIndexState from './erasure-owned-owner-index-state.sql';
 import purgeOwnerMemberSupport from './erasure-owned-owner-member-support.sql';
 import purgeOwnerMemberIndex from './erasure-owned-owner-member-index.sql';
 import purgeOwnerIndexPin from './erasure-owned-owner-index-pin.sql';
-import purgeOwnerIndexBuiltinReference from './erasure-owned-owner-index-builtin-reference.sql';
 import purgeOwnerIndexControl from './erasure-owned-owner-index-control.sql';
 import purgeEntryDeleted from './erasure-owned-entry-deleted.sql';
 import purgeLabelAssignment from './erasure-owned-label-assignment.sql';
@@ -30,7 +29,6 @@ export const ownedQueries = {
   owner_member_support: purgeOwnerMemberSupport,
   owner_member_index: purgeOwnerMemberIndex,
   owner_index_pin: purgeOwnerIndexPin,
-  owner_index_builtin_reference: purgeOwnerIndexBuiltinReference,
   owner_index_control: purgeOwnerIndexControl,
 
   entry_deleted: purgeEntryDeleted,

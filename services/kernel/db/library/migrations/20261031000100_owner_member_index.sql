@@ -49,17 +49,6 @@ CREATE TABLE library.owner_index_pin (
   PRIMARY KEY (route,account_id,pin)
 );
 CREATE INDEX owner_index_pending_pin ON library.owner_index_pin(route,account_id,pin) WHERE NOT meaning_ready;
-CREATE TABLE library.owner_index_builtin_reference (
-  route integer NOT NULL,
-  account_id uuid NOT NULL,
-  collection_id uuid NOT NULL,
-  profile_id text NOT NULL,
-  state_set_id text NOT NULL,
-  state_id text NOT NULL,
-  PRIMARY KEY (route,collection_id),
-  UNIQUE (route,account_id,profile_id,state_set_id,state_id)
-);
-CREATE INDEX owner_index_reference_owner ON library.owner_index_builtin_reference(route,account_id,collection_id);
 CREATE TABLE library.owner_index_state (
   route integer NOT NULL,
   account_id uuid NOT NULL,
@@ -67,8 +56,7 @@ CREATE TABLE library.owner_index_state (
   collection_id uuid NOT NULL,
   labels jsonb NOT NULL,
   PRIMARY KEY (route,account_id,pin,collection_id),
-  FOREIGN KEY (route,account_id,pin) REFERENCES library.owner_index_pin ON DELETE CASCADE,
-  FOREIGN KEY (route,collection_id) REFERENCES library.owner_index_builtin_reference
+  FOREIGN KEY (route,account_id,pin) REFERENCES library.owner_index_pin ON DELETE CASCADE
 );
 CREATE INDEX owner_index_state_collection ON library.owner_index_state(route,account_id,collection_id,pin);
 CREATE FUNCTION library.refresh_owner_member_scope(r integer, a uuid, s uuid, f text, p jsonb)

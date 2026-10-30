@@ -47,7 +47,7 @@ export async function applyOwnerPinMeaning(tx: OperationalTransaction, accountId
   [...key, JSON.stringify(meaning.pin)]);
   if (!found.rows.length) return;
   for (const state of meaning.states) {
-    await tx.query(`INSERT INTO library.owner_index_builtin_reference
+    await tx.query(`INSERT INTO library.builtin_collection_reference
       (route,account_id,collection_id,profile_id,state_set_id,state_id) VALUES($1,$2,$3,$4,$5,$6)
       ON CONFLICT DO NOTHING`, [...key, state.collectionId, state.profileId, state.stateSetId, state.stateId]);
     await tx.query(`INSERT INTO library.owner_index_state(route,account_id,pin,collection_id,labels)

@@ -42,7 +42,6 @@ export const OWNED_PHASES = [
   'owner_member_support',
   'owner_member_index',
   'owner_index_pin',
-  'owner_index_builtin_reference',
   'owner_index_control',
   'fact_source_head',
 ] as const;

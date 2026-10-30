@@ -789,7 +789,7 @@ The owner directory adds private structural records, erased after native family 
 `fact_source_head`: `owner_index_state` at `(route, account_id, pin, collection_id)`,
 `owner_member_support` at `(route, account_id, subject_id, family, pin)`, `owner_member_index` at
 `(route, account_id, subject_id)`, `owner_index_pin` at `(route, account_id, pin)`,
-`owner_index_builtin_reference` at `(route, collection_id)` (owner-prefix cleanup), and
+the existing `builtin_collection_reference` at `(route, collection_id)` (owner-prefix cleanup), and
 `owner_index_control` at `(route, account_id)`. The existing A5 owned graph deletes these in that order,
 at most 100 exact keys per page. State labels are immutable released presentation metadata; supports retain
 structural original/pin scopes without session/copy/assignment IDs, revisions, notes, timestamps or fact bodies.
