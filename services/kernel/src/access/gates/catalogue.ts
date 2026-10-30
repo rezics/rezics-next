@@ -7,7 +7,10 @@ import {
   authoritativeTimeValue,
   type CommandAuthorization,
   type CommandOutcome,
+  type AuthoritativeTime,
 } from '../../command/command.ts';
+import { CommandUnavailableError } from '../unavailable.ts';
+import { readPartition } from '../../partition/partition.ts';
 import { withConnection } from '../../database/pool.ts';
 import { deadlineClient, within } from '../authenticate.ts';
 import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
@@ -31,22 +34,34 @@ export function isExposureGroup(value: string): boolean {
 export type ExposureState = { open: boolean; at: string };
 
 /** The exposure read is a single temporal primary-key probe at the kernel's request T. */
-export async function readExposure(pool: Pool, group: string, at: Date, deadline: number): Promise<ExposureState> {
-  if (!isExposureGroup(group) || !(at instanceof Date) || !Number.isFinite(at.getTime()))
-    throw new TypeError('Invalid exposure lookup');
+export async function readExposure(
+  pool: Pool,
+  group: string,
+  at: Date | AuthoritativeTime,
+  deadline: number,
+): Promise<ExposureState> {
+  if (!isExposureGroup(group)) throw new TypeError('Invalid exposure lookup');
+  const native = !(at instanceof Date);
+  const instant = native ? authoritativeTimeValue(at) : at.toISOString();
   requireAccessDeadline(deadline);
   return within(deadline, () =>
     withConnection(pool, async (client) => {
       const bounded = deadlineClient(client, deadline);
-      await bounded.query('BEGIN READ ONLY');
+      await bounded.query(native ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN READ ONLY');
       try {
-        const row = await openingRead.run(bounded, { group, at: at.toISOString() });
+        if (native) {
+          const partition = await readPartition(bounded, partitionOf(GLOBAL_CONTEXT.route));
+          if (!partition) throw new CommandUnavailableError('overloaded', 0);
+          if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', 0, partition.movedTo);
+        }
+        const row = await openingRead.run(bounded, { group, at: instant });
         if (!row || typeof row.open !== 'boolean' || typeof row.at !== 'string')
           throw new Error('Exposure catalogue read failed');
         await bounded.query('COMMIT');
-        const instant = new Date(row.at);
-        if (!Number.isFinite(instant.getTime())) throw new Error('Exposure catalogue time was invalid');
-        return { open: row.open, at: instant.toISOString() };
+        const readAt = new Date(row.at);
+        if (!Number.isFinite(readAt.getTime()) || (native && row.at !== instant))
+          throw new Error('Exposure catalogue time was invalid');
+        return { open: row.open, at: native ? row.at : readAt.toISOString() };
       } catch (error) {
         try {
           await client.query('ROLLBACK');

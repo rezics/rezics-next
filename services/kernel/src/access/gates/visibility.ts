@@ -30,7 +30,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Mounted contract operations. Hidden routes are omitted, matching the generated document. */
-function classify(routes: readonly MountedRoute[]): Classified[] {
+export function classifyExposureRoutes(routes: readonly MountedRoute[]): Classified[] {
   const operations: Classified[] = [];
   for (const route of routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : undefined;
@@ -60,7 +60,7 @@ type DiscoveryInput = {
 
 /** Read openings and ask admission's formula once per closed group with an in-scope operation. */
 async function discover(input: DiscoveryInput): Promise<Classified[]> {
-  const operations = classify(input.routes);
+  const operations = classifyExposureRoutes(input.routes);
   const groups = new Set<string>();
   const scopedActions = new Map<string, string>();
   for (const operation of operations) {

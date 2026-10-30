@@ -12,6 +12,8 @@ import { PLATFORM_RESOURCE } from '../bootstrap-governance.ts';
 import { createExposureCommands } from './catalogue.ts';
 import { openApiRoutes } from './openapi-route.ts';
 import { admittedGroupsRoutes } from './admitted-groups-route.ts';
+import { exposureManagementRoutes } from './management-route.ts';
+import type { KeyRing } from '../../tokens/seal.ts';
 
 const closed = { additionalProperties: false } as const;
 const paramsSchema = t.Object({ group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_-]{0,62}$' }) }, closed);
@@ -60,7 +62,7 @@ const detail = (operation: 'open' | 'close') => ({
 
 export function exposureRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: Pool; clock: () => Date; access: () => Access },
+  dependencies: { pool: Pool; clock: () => Date; access: () => Access; cursorKeys: KeyRing },
 ) {
   let resolved: ReturnType<typeof createExposureCommands> | undefined;
   const commands = () => (resolved ??= createExposureCommands({ pool: dependencies.pool, clock: dependencies.clock }));
@@ -72,7 +74,8 @@ export function exposureRoutes(
     detail: detail(operation),
   });
   const discovered = admittedGroupsRoutes(app, dependencies);
-  const routed = discovered
+  const managed = exposureManagementRoutes(discovered as unknown as ReturnType<typeof definitionRoutes>, dependencies);
+  const routed = managed
     .post(
       customMethod('/v1/platform/exposure/:group', 'close'),
       options('close'),
@@ -113,5 +116,5 @@ export function exposureRoutes(
   // composition root type, so the cast keeps that helper callable and the intersection keeps
   // both the exposure commands and the document route on the returned contract.
   const documented = openApiRoutes(routed as unknown as ReturnType<typeof definitionRoutes>, dependencies);
-  return documented as typeof documented & typeof routed;
+  return documented as typeof documented & typeof routed & typeof discovered;
 }
