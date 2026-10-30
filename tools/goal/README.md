@@ -399,7 +399,14 @@ component tests; it does not include the Web host or native check routes.
 
 ```yaml
 acceptance:
-  command: [bun, test, apps/web/tests/shell-menus.test.ts, -t, "the signed-out account action opens a sheet on phones and a dropdown on desktop"]
+  command:
+    [
+      bun,
+      test,
+      apps/web/tests/shell-menus.test.ts,
+      -t,
+      'the signed-out account action opens a sheet on phones and a dropdown on desktop',
+    ]
   tests: [the signed-out account action opens a sheet on phones and a dropdown on desktop]
   failing: true
   placement: local

@@ -71,9 +71,7 @@ function checkHasTerminalExit(worktree: string, id: string): boolean {
   try {
     const document = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
     return (
-      document.status === 'finished' &&
-      typeof document.exitCode === 'number' &&
-      Number.isSafeInteger(document.exitCode)
+      document.status === 'finished' && typeof document.exitCode === 'number' && Number.isSafeInteger(document.exitCode)
     );
   } catch {
     return false;

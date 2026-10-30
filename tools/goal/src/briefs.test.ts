@@ -23,10 +23,7 @@ test('acceptance placement is optional, typed, and restricts local checks to the
 
   for (const invalid of [
     markdown.replace('  command: [bun, test]', '  command: [bun, test]\n  placement: remote'),
-    markdown.replace(
-      '  command: [bun, test]',
-      '  command: [bun, test]\n  placement: local',
-    ),
+    markdown.replace('  command: [bun, test]', '  command: [bun, test]\n  placement: local'),
     markdown.replace(
       '  command: [bun, test]',
       '  command: [bun, test, services/kernel/scripts/check.ts]\n  placement: local',

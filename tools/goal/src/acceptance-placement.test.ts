@@ -98,7 +98,12 @@ function localCheckEnvironment(root: string, remoteMarker?: string): NodeJS.Proc
 }
 
 function commandStatus(result: ReturnType<typeof spawnSync>): string {
-  return result.stderr?.toString().trim() || result.stdout?.toString().trim() || result.error?.message || `status ${result.status}`;
+  return (
+    result.stderr?.toString().trim() ||
+    result.stdout?.toString().trim() ||
+    result.error?.message ||
+    `status ${result.status}`
+  );
 }
 
 test('registered local placement survives dispatch, retry, held reshape, and task publication', async () => {
@@ -110,10 +115,15 @@ test('registered local placement survives dispatch, retry, held reshape, and tas
     git(h.root, ['commit', '-m', 'Seed wrapper for placement fixture']);
 
     const prompts: string[] = [];
-    const tasks = new WorkerTasks(h.settings, h.store, (pool) => reading(pool), async (_store, _task, attempt, _pool, prompt) => {
-      prompts.push(prompt);
-      return { exited: Promise.resolve({ code: 0, signal: null }), attempt };
-    });
+    const tasks = new WorkerTasks(
+      h.settings,
+      h.store,
+      (pool) => reading(pool),
+      async (_store, _task, attempt, _pool, prompt) => {
+        prompts.push(prompt);
+        return { exited: Promise.resolve({ code: 0, signal: null }), attempt };
+      },
+    );
     const firstBrief = join(h.settings.stateDirectory, 'placement-local.md');
     const freshCommand = [
       'bun',
@@ -171,7 +181,9 @@ test('registered local placement survives dispatch, retry, held reshape, and tas
     writeFileSync(invalidBrief, briefText(freshCommand, { placement: 'remote' }));
     const beforeTask = h.store.task(task.id);
     const beforeIntent = h.store.retryIntent({ taskId: task.id, attempt: second.attempt.attempt });
-    expect(() => tasks.queueRetry(task.id, { brief: invalidBrief })).toThrow('acceptance.placement must be local or default');
+    expect(() => tasks.queueRetry(task.id, { brief: invalidBrief })).toThrow(
+      'acceptance.placement must be local or default',
+    );
     expect(h.store.task(task.id)).toEqual(beforeTask);
     expect(h.store.retryIntent({ taskId: task.id, attempt: second.attempt.attempt })).toEqual(beforeIntent);
   } finally {
@@ -254,10 +266,15 @@ test('an unresolved old check prevents local policy adoption without cancelling 
     git(h.root, ['add', 'scripts']);
     git(h.root, ['commit', '-m', 'Seed worker-check custody fixture']);
     const prompts: string[] = [];
-    const tasks = new WorkerTasks(h.settings, h.store, (pool) => reading(pool), async (_store, _task, attempt, _pool, prompt) => {
-      prompts.push(prompt);
-      return { exited: Promise.resolve({ code: 0, signal: null }), attempt };
-    });
+    const tasks = new WorkerTasks(
+      h.settings,
+      h.store,
+      (pool) => reading(pool),
+      async (_store, _task, attempt, _pool, prompt) => {
+        prompts.push(prompt);
+        return { exited: Promise.resolve({ code: 0, signal: null }), attempt };
+      },
+    );
     const task = tasks.dispatch(h.briefFile);
     const releaseMarker = join(h.settings.stateDirectory, 'release-old-check');
     const checkStart = spawnSync(

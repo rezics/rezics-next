@@ -67,9 +67,10 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 function namedWorkerCheck(contractText: string): string | undefined {
-  const match = /(?:^|\s)`?bun\s+("(?:\\.|[^"\\])*"|'(?:[^'\\]|\\.)+'|\/[^\s`]+\/scripts\/worker-check\.ts)(?=[\s`]|$)/m.exec(
-    contractText,
-  );
+  const match =
+    /(?:^|\s)`?bun\s+("(?:\\.|[^"\\])*"|'(?:[^'\\]|\\.)+'|\/[^\s`]+\/scripts\/worker-check\.ts)(?=[\s`]|$)/m.exec(
+      contractText,
+    );
   if (!match) return undefined;
   const token = match[1]!;
   let path: string;
@@ -86,10 +87,7 @@ function namedWorkerCheck(contractText: string): string | undefined {
 }
 type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'>;
 /** Current acceptance-check and controller wake instructions, repeated at every prompt boundary. */
-export function workerCheckProtocol(
-  worktree: string,
-  briefOrContract: CheckProtocolBrief | string = '',
-): string {
+export function workerCheckProtocol(worktree: string, briefOrContract: CheckProtocolBrief | string = ''): string {
   const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
   const placement: AcceptancePlacement =
     typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');

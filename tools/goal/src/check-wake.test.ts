@@ -114,7 +114,10 @@ test('a waiting session uses the registered local command on wake even when its 
   const h = harness(waitingCli);
   try {
     const localMarkdown = markdown
-      .replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local')
+      .replace(
+        '  command: [bun, test]',
+        '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
+      )
       .concat('\nA saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.\n');
     writeFileSync(h.briefFile, localMarkdown);
     const { task, ref } = await startWaitingAttempt(h);
@@ -148,7 +151,10 @@ test('an adopted waiting attempt without a resumable session gets the current lo
   try {
     writeFileSync(
       h.briefFile,
-      markdown.replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local'),
+      markdown.replace(
+        '  command: [bun, test]',
+        '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
+      ),
     );
     const { task, ref } = await startWaitingAttempt(h);
     h.store.updateAttempt(ref, (attempt) => {

@@ -97,9 +97,16 @@ function localTestFile(path: string): boolean {
 }
 function localBunCommand(argv: readonly string[]): boolean {
   if (
-    (argv.length === 5 && argv[0] === 'bun' && argv[1] === 'run' && argv[2] === '--cwd' &&
-      argv[3] === 'apps/web' && argv[4] === 'typecheck') ||
-    (argv.length === 4 && argv[0] === 'bun' && argv[1] === 'run' && argv[2] === '--cwd=apps/web' &&
+    (argv.length === 5 &&
+      argv[0] === 'bun' &&
+      argv[1] === 'run' &&
+      argv[2] === '--cwd' &&
+      argv[3] === 'apps/web' &&
+      argv[4] === 'typecheck') ||
+    (argv.length === 4 &&
+      argv[0] === 'bun' &&
+      argv[1] === 'run' &&
+      argv[2] === '--cwd=apps/web' &&
       argv[3] === 'typecheck')
   )
     return true;
@@ -175,7 +182,11 @@ export function validateLocalAcceptanceCommand(command: readonly string[]): void
       : [Array.from(command)];
   if (commands?.length && commands.every(localBunCommand)) return;
   const text = command.join(' ');
-  if (/\b(?:services\/|DATABASE_URL|postgres|psql|docker|podman|compose|playwright|vitest|jest)\b|(?:^|[/.])(?:native|e2e|integration|host|database|db)(?:[/.]|$)/i.test(text))
+  if (
+    /\b(?:services\/|DATABASE_URL|postgres|psql|docker|podman|compose|playwright|vitest|jest)\b|(?:^|[/.])(?:native|e2e|integration|host|database|db)(?:[/.]|$)/i.test(
+      text,
+    )
+  )
     throw new Error('acceptance.placement local rejects native, database, host, and broad-suite check routes');
   throw new Error(
     'acceptance.placement local supports only `bun run --cwd apps/web typecheck` and explicit unit/component test files under `apps/web/tests/`',

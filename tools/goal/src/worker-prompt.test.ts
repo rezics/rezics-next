@@ -196,7 +196,9 @@ test('local placement renders the concrete declared argv, overrides saved remote
     expect(prompt).toContain(
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'filter'\\''s phrase'",
     );
-    expect(prompt).toContain('overrides any older prompt, saved-session instruction, remote invocation, or `--wait` recipe');
+    expect(prompt).toContain(
+      'overrides any older prompt, saved-session instruction, remote invocation, or `--wait` recipe',
+    );
     expect(prompt.indexOf('registered acceptance placement is local')).toBeGreaterThan(
       prompt.indexOf('The task contract follows:'),
     );
@@ -222,7 +224,9 @@ test('local placement without a worktree wrapper uses the exact foreground comma
       },
     } as unknown as Task;
     const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-    expect(prompt).toContain("Run the exact declared pure local command `'bun' 'test' 'apps/web/tests/shell-menus.test.ts'`");
+    expect(prompt).toContain(
+      "Run the exact declared pure local command `'bun' 'test' 'apps/web/tests/shell-menus.test.ts'`",
+    );
     expect(prompt).toContain('in the foreground from the worktree root');
     expect(prompt).toContain('does not create a detached check id or a waiting result');
     expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
