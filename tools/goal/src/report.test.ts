@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeRecord, readMeasurement } from './records.ts';
-import { formatUsageReport, report } from './report.ts';
+import { formatLifecycleMetrics, formatUsageReport, report } from './report.ts';
+import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { Attempt, AttemptRecord, Task } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { harness } from './test-support.ts';
@@ -272,6 +273,28 @@ test('goal report prints the landed usage rows and nonlanding share', async () =
     });
     expect(output[0]).toContain('implementation / gpt-6.1-sol: 1,650 raw');
     expect(output[0]).toContain('Spend on attempts that did not land: 33.3% (550 / 1,650 raw tokens).');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('flow text separates observed conflict figures from unavailable producer capabilities and truncated totals', () => {
+  const h = harness();
+  try {
+    const metrics = lifecycleMetrics(h.store.db, Date.UTC(2026, 9, 30, 12));
+    const text = formatLifecycleMetrics(metrics).join('\n');
+    expect(text).toContain('Owner-landing capability: unavailable');
+    expect(text).toContain('Conflicts in trailing hour: 0 observed; 0 unclassified rebase outcomes; total unknown');
+    expect(text).toContain('Conflict-to-landed duration: unknown; open conflict count/oldest age: unknown');
+    expect(text).toContain('resolution owner/rerere/replay: unknown');
+    expect(text).toContain('Conflict-created attempts in trailing hour: 0 observed; 0 unknown causes; total unknown');
+    metrics.conflicts.recordedOutcomes.complete = false;
+    expect(formatLifecycleMetrics(metrics).join('\n')).toContain('truncated recorded window (lower bounds)');
+    // Older snapshots can also reach the formatter directly, without the persisted-snapshot reader.
+    const { conflicts, ...oldSnapshot } = metrics;
+    const historical = formatLifecycleMetrics(oldSnapshot as typeof metrics).join('\n');
+    expect(historical).toContain('Conflicts in trailing hour: unknown observed');
+    expect(historical).toContain('Conflict-created attempts in trailing hour: unknown observed');
   } finally {
     h.dispose();
   }
