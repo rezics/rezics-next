@@ -211,6 +211,7 @@ export async function createBanPrecedenceDriver(): Promise<BanPrecedenceDriver> 
       KERNEL_ROUTE_KEY: Buffer.from(testRouteKey()).toString('base64url'),
       KERNEL_SESSION_KEYS: `1:${Buffer.from(testTokens().keys.get(1)!).toString('base64url')}`,
       KERNEL_EXECUTOR_ID: name,
+      KERNEL_WORKER_POOL_SIZE: '6',
       AUTH_ISSUER: service.verifier.issuer,
       AUTH_AUDIENCE: service.verifier.audience,
       AUTH_JWKS_URL: service.verifier.jwksUrl,
