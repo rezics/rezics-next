@@ -106,7 +106,7 @@ BEGIN
     RAISE EXCEPTION 'Auth copy role coverage missing' USING ERRCODE='55000';
   END IF;
   size:=octet_length(row_to_json(NEW)::text);
-  IF size>CASE WHEN TG_TABLE_NAME='workflow_status' THEN 4096 ELSE 65536 END THEN
+  IF size>(CASE WHEN TG_TABLE_NAME='workflow_status' THEN 4096 ELSE 65536 END) THEN
     RAISE EXCEPTION 'Auth copy byte cap' USING ERRCODE='54000';
   END IF;
   IF TG_TABLE_NAME='streams' THEN RAISE EXCEPTION 'Auth stream copy is undeclared' USING ERRCODE='55000'; END IF;
