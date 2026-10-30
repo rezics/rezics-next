@@ -862,6 +862,8 @@ and `collection_retention_due` index. Each seek returns at most eight exact owne
 original-deadline identifiers, with PostgreSQL timestamp precision preserved. Each durable input/result is capped
 at 4,096 bytes. Segments contain at most 32 discovery or cleanup steps; continuations retain only those exact
 identifiers and the indexed cursor. Inactive partitions are explicit pending observations and retried by fresh sweeps.
+The cursor is a direct index tuple lower bound, including on prepared generic plans; the initial seek starts at
+negative infinity rather than filtering already-examined predecessors through a nullable-cursor disjunction.
 No payload, permission claim, source readiness or foreign disposition enters a checkpoint.
 
 Every ordinary physical page holds the native active-account share fence before locking the owning Collection.

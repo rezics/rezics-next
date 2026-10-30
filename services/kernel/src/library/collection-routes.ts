@@ -505,6 +505,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           mapped(() => write().deleteCollection(actor, params.collectionId, query.revision, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        set.headers['cache-control'] = 'private, no-store';
         set.headers['Library-Collection-Deletion-Id'] = result.value.deletionId;
         set.headers['Library-Collection-Deletion-Revision'] = String(result.value.revision);
         set.status = 204;
@@ -523,14 +524,15 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         },
         detail: detail('collection.restore', 'collection:update'),
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => write().restoreCollection(actor, params.collectionId, body, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { collection: collectionView(result.value) };
+        return { collection: await written(result.value, actor) };
       },
     )
     .get(
