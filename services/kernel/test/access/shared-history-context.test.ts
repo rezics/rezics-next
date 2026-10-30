@@ -118,19 +118,20 @@ test('Actual native Context OLD NEW creator occurrence delivery leaves missing r
 test('native pending partial index redrive examines eight exact inputs, wraps after restart and preserves skipped locks', async () => {
   const route = 0x6d20;
   const resource = { route, id: newId(route) };
-  const sourceTransaction = Bun.randomUUIDv7();
+  let sourceTransaction = '';
   // Small native producer fixture: actual initialization and role grant rows drive ORIGINAL triggers.
   await f.admin.query(
     `INSERT INTO access.resource_initialization(route,resource_id,resource_type,creator_id,initialized_at)
      VALUES($1,$2,'semantic.context',$3,now())`, [route, resource.id, f.accounts.owner],
   );
-  await runCommand(f.pool, { partition: partitionOf(route) }, async (tx) => {
+  await runCommand(f.pool, { partition: partitionOf(route) }, async (tx, command) => {
+    sourceTransaction = command.transactionId;
     await tx.query("SELECT set_config('access.role_native_transaction',$1,true)", [sourceTransaction]);
     for (let n = 0; n < 10; n++)
       await tx.query(
         `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
          VALUES($1,$2,$3,$4,'(,)',$5)`,
-        [route, resource.id, f.accounts.owner, `unconverted.role${n}`, Bun.randomUUIDv7()],
+        [route, resource.id, f.accounts.owner, `unconverted.role${n}`, command.transactionId],
       );
     return { value: null, events: [] };
   });
@@ -155,9 +156,15 @@ test('native pending partial index redrive examines eight exact inputs, wraps af
   const restarted = await drive(partitionOf(route));
   expect(restarted).toEqual({ attempted: 8, pending: 8, after: before[7] });
   expect(await drive(partitionOf(route), restarted.after!)).toEqual({ attempted: 2, pending: 2, after: null });
-  for (const row of await rows(resource)) {
+  const firstPage = await rows(resource);
+  const lastPage = await readContextRoleProvenance(f.admin, {
+    resource, accountId: f.accounts.owner, after: firstPage.at(-1)!.occurrence,
+  });
+  expect(firstPage).toHaveLength(8);
+  expect(lastPage).toHaveLength(2);
+  for (const row of [...firstPage, ...lastPage]) {
     expect(row.sourceTransaction).toBe(sourceTransaction);
-    expect(row.grantTransaction).not.toBe(sourceTransaction);
+    expect(row.grantTransaction).toBe(sourceTransaction);
     expect(row.delivery).toBe('pending');
     expect(row.contextKey).toBeNull();
   }
