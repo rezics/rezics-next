@@ -63,6 +63,11 @@ test('absence does not satisfy a required body or admit a present body to an opt
 
 test('trusted own-account declarations retain credential refusals before domain-state refusals', async () => {
   let scopes: string[] = [];
+  const personalDetail = {
+    ...detail,
+    security: [{ bearerAuth: [] }],
+    'x-authority-anchor': 'own-account',
+  };
   const app = createApp({
     pool,
     access: {
@@ -83,11 +88,7 @@ test('trusted own-account declarations retain credential refusals before domain-
   }).delete(
     '/personal',
     {
-      detail: {
-        ...detail,
-        security: [{ bearerAuth: [] }],
-        'x-authority-anchor': 'own-account',
-      },
+      detail: personalDetail,
     },
     () => {
       throw new ProblemError('conflict');

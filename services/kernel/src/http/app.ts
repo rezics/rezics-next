@@ -383,7 +383,7 @@ export function createApp({
       if (schemas.length) {
         let check: ReturnType<typeof Compile> | undefined;
         jsonBodyChecks.set(`${method} ${path}`, {
-          optional: schemas.every((schema) => schema['~optional'] === true),
+          optional: schemas.every((schema) => '~optional' in schema && schema['~optional'] === true),
           compile: () => (check ??= Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas))),
         });
       }
