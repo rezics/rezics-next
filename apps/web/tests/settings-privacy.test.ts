@@ -3,8 +3,17 @@ import { createKernelClient } from '@rezics/client';
 import {
   changeCollectionVisibility,
   readOwnedCollections,
+  reloadOwnedCollection,
+  type OwnedCollection,
   type OwnedCollectionsPage,
+  type CollectionVisibilityWrite,
 } from '../src/settings/preferences';
+import { collectionPrivacyRead, type CollectionPrivacyRead } from '../src/settings/collection-privacy-data';
+import {
+  CollectionPrivacyEditor,
+  CollectionPrivacyPager,
+  type VisibilityAttempt,
+} from '../src/settings/collection-privacy-recovery';
 
 const sessionId = 'a'.repeat(43);
 const csrfToken = 'A'.repeat(22);
@@ -157,4 +166,211 @@ test('stale and failed writes report a refusal without inventing a new collectio
 test('settings collection rows have a stable privacy-page contract', () => {
   const page: OwnedCollectionsPage = { collections: [collection('c1', 'Reading list', 'private')], next: null };
   expect(page.collections[0]).toMatchObject({ id: 'c1', title: 'Reading list', visibility: 'private', revision: 7 });
+});
+
+test('A current native read refusal removes retained private Collection row details and controls, while transient next-page failures preserve same-actor readable pages and retry the same cursor', async () => {
+  const original = collection('private-old', 'Private reading plans', 'private');
+  const refreshed = collection('private-current', 'Current native page', 'unlisted', 12);
+  for (const [status, code, reason] of [
+    [401, 'authentication_required', 'forbidden'],
+    [403, 'forbidden', 'forbidden'],
+    [403, 'not_visible', 'forbidden'],
+    [403, 'platform_closed', 'closed'],
+    [404, 'not_found', 'unavailable'],
+    [404, 'not_visible', 'unavailable'],
+    [503, 'dependency_unavailable', 'unavailable'],
+    [503, 'platform_closed', 'unavailable'],
+  ] as const) {
+    const calls: Request[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        const native = new Request(input, init);
+        calls.push(native);
+        expect(native.headers.get('authorization')).toBe('Bearer page-token');
+        expect(new URL(native.url).searchParams.get('limit')).toBe('20');
+        if (calls.length === 1) return Response.json({ collections: [original], next: 'opaque+/cursor==' });
+        if (calls.length === 2) return Response.json({ code }, { status });
+        return Response.json({ collections: [refreshed], next: null });
+      }) as typeof fetch,
+    });
+    const pager = new CollectionPrivacyPager((cursor) =>
+      collectionPrivacyRead(() => readOwnedCollections(client, request(), env, cursor)),
+    );
+    await pager.load();
+    await pager.load();
+    const denied = reason !== 'unavailable';
+    expect(pager.snapshot()).toMatchObject({
+      failure: reason,
+      loaded: !denied,
+      loading: false,
+      next: denied ? null : 'opaque+/cursor==',
+    });
+    expect(pager.snapshot().collections.map((row) => row.id)).toEqual(denied ? [] : [original.id]);
+    expect(calls).toHaveLength(2); // No automatic retry, including native forbidden.
+    await pager.load();
+    expect(calls.map((call) => new URL(call.url).searchParams.get('cursor'))).toEqual([
+      null,
+      'opaque+/cursor==',
+      denied ? null : 'opaque+/cursor==',
+    ]);
+    expect(pager.snapshot().collections.map((row) => row.id)).toEqual(
+      denied ? [refreshed.id] : [original.id, refreshed.id],
+    );
+    expect(pager.snapshot()).toMatchObject({ loaded: true, next: null, failure: null });
+  }
+  let nativeReads = 0;
+  const signedOutClient = createKernelClient('https://kernel.example.test', {
+    fetch: (async () => {
+      nativeReads++;
+      throw new Error('A signed-out request must not use the old viewer credential');
+    }) as typeof fetch,
+  });
+  const signedOutRequest = () => new Request('https://site.example.test/en/settings');
+  expect(
+    await collectionPrivacyRead(() => readOwnedCollections(signedOutClient, signedOutRequest(), env, null)),
+  ).toEqual({ ok: false, reason: 'forbidden' });
+  expect(
+    await collectionPrivacyRead(() => reloadOwnedCollection(signedOutClient, signedOutRequest(), env, original.id)),
+  ).toEqual({ ok: false, reason: 'forbidden' });
+  expect(nativeReads).toBe(0);
+});
+
+test('native row read refusal withholds presentation without resolving or replacing the original uncertain visibility command', async () => {
+  const original = collection('private-row', 'Private reading plans', 'private');
+  for (const recovery of ['reload', 'replay'] as const) {
+    for (const [status, code, reason] of [
+      [401, 'authentication_required', 'forbidden'],
+      [403, 'not_visible', 'forbidden'],
+      [403, 'platform_closed', 'closed'],
+    ] as const) {
+      const commands: VisibilityAttempt[] = [];
+      const reads: Request[] = [];
+      let response = () => Response.json({ code }, { status });
+      const client = createKernelClient('https://kernel.example.test', {
+        fetch: (async (input, init) => {
+          const native = new Request(input, init);
+          reads.push(native);
+          expect(new URL(native.url).pathname).toBe(`/v1/collections/${original.id}`);
+          expect(new URL(native.url).searchParams.get('view')).toBe('FULL');
+          return response();
+        }) as typeof fetch,
+      });
+      const editor = new CollectionPrivacyEditor(original, {
+        save: async (attempt) => {
+          commands.push(attempt);
+          return commands.length === 1
+            ? { ok: false, reason: 'unavailable' }
+            : { ok: true, collection: { ...original, visibility: 'public', revision: 8 } };
+        },
+        read: (id) => collectionPrivacyRead(() => reloadOwnedCollection(client, request(), env, id)),
+      });
+      await editor.edit('public');
+      const attempt = editor.snapshot().attempt!;
+      await editor.edit('unlisted');
+      if (recovery === 'reload') await editor.reload();
+      else await editor.retry();
+      expect(editor.snapshot()).toMatchObject({
+        current: original,
+        desired: 'unlisted',
+        phase: 'uncertain',
+        failure: reason,
+        readRefusal: reason,
+      });
+      expect(editor.snapshot().attempt).toBe(attempt);
+      expect(Object.isFrozen(attempt)).toBe(true);
+      await editor.edit('private');
+      await editor.submit();
+      await editor.retry();
+      expect(commands).toHaveLength(recovery === 'reload' ? 1 : 2);
+      expect(commands.every((command) => command === attempt)).toBe(true);
+      expect(reads).toHaveLength(1);
+
+      response = () => Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+      await editor.reload();
+      expect(editor.snapshot()).toMatchObject({ readRefusal: reason, phase: 'uncertain', failure: 'unavailable' });
+      expect(editor.snapshot().attempt).toBe(attempt);
+      // Neither a different row nor an impossible same-version observation can reopen presentation.
+      for (const value of [
+        { ...original, id: 'other-row', revision: 9 },
+        { ...original, visibility: 'public' },
+        { ...original, revision: 6 },
+      ]) {
+        response = () => Response.json({ collection: value });
+        await editor.reload();
+        expect(editor.snapshot()).toMatchObject({ readRefusal: reason, phase: 'uncertain', desired: 'unlisted' });
+        expect(editor.snapshot().attempt).toBe(attempt);
+      }
+      const current = { ...original, title: 'Fresh native title', visibility: 'public' as const, revision: 10 };
+      response = () => Response.json({ collection: current });
+      await editor.reload();
+      expect(editor.snapshot()).toMatchObject({
+        current,
+        desired: 'public',
+        phase: 'idle',
+        readRefusal: null,
+        attempt: null,
+        failure: undefined,
+      });
+    }
+  }
+});
+
+test('actor teardown rejects late pages and row reads, and a successful explicit reload preserves edits made in flight', async () => {
+  const original = collection('private-row', 'Private reading plans', 'private');
+  const page = Promise.withResolvers<CollectionPrivacyRead<OwnedCollectionsPage>>();
+  const row = Promise.withResolvers<CollectionPrivacyRead<OwnedCollection>>();
+  const previousPager = new CollectionPrivacyPager(() => page.promise);
+  const previousEditor = new CollectionPrivacyEditor(original, {
+    save: async () => ({ ok: false, reason: 'unavailable' }),
+    read: () => row.promise,
+  });
+  const loading = previousPager.load();
+  await previousEditor.edit('public');
+  const reloading = previousEditor.reload();
+  const before = previousEditor.snapshot();
+  previousPager.dispose();
+  previousEditor.dispose();
+  const nextPager = new CollectionPrivacyPager(async () => ({ ok: true, value: { collections: [], next: null } }));
+  await nextPager.load();
+  page.resolve({ ok: true, value: { collections: [original], next: 'previous-viewer' } });
+  row.resolve({ ok: true, value: { ...original, title: 'Late private title', revision: 9 } });
+  await Promise.all([loading, reloading]);
+  expect(previousPager.snapshot()).toMatchObject({ collections: [], loading: false, next: null });
+  expect(previousEditor.snapshot()).toBe(before);
+  expect(nextPager.snapshot()).toMatchObject({ collections: [], loaded: true });
+
+  const replay = Promise.withResolvers<CollectionVisibilityWrite>();
+  let saves = 0;
+  let readbacks = 0;
+  const departing = new CollectionPrivacyEditor(original, {
+    save: async () => (++saves === 1 ? { ok: false, reason: 'unavailable' } : replay.promise),
+    read: async () => {
+      readbacks++;
+      return { ok: true, value: original };
+    },
+  });
+  await departing.edit('public');
+  const retry = departing.retry();
+  departing.dispose();
+  replay.resolve({ ok: true, collection: { ...original, visibility: 'public', revision: 8 } });
+  await retry;
+  expect(readbacks).toBe(0); // A late old-viewer receipt must not trigger a read under new credentials.
+
+  const fresh = Promise.withResolvers<CollectionPrivacyRead<OwnedCollection>>();
+  const editor = new CollectionPrivacyEditor(original, {
+    save: async () => ({ ok: false, reason: 'conflict' }),
+    read: () => fresh.promise,
+  });
+  await editor.edit('public');
+  const refresh = editor.reload();
+  await editor.edit('unlisted');
+  fresh.resolve({ ok: true, value: { ...original, visibility: 'public', revision: 9 } });
+  await refresh;
+  expect(editor.snapshot()).toMatchObject({
+    current: { visibility: 'public', revision: 9 },
+    desired: 'unlisted',
+    phase: 'review',
+    readRefusal: null,
+    attempt: null,
+  });
 });

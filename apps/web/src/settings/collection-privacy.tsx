@@ -68,6 +68,25 @@ export function CollectionRow({
   const id = useId();
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const { current, desired, phase } = state;
+  if (state.readRefusal) {
+    return (
+      <ListRow className="py-3">
+        <ListRowControl>
+          <Alert variant="destructive" aria-live="polite">
+            <AlertTitle>{state.attempt ? m.settings_privacy_uncertain_title() : m.settings_failed_title()}</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>{failureText(state.failure ?? state.readRefusal)}</p>
+              <p>{m.settings_privacy_reload_after_refusal()}</p>
+              {busy ? <p role="status">{m.settings_privacy_reading()}</p> : null}
+              <Button type="button" variant="outline" disabled={!canRead || busy} onClick={() => void editor.reload()}>
+                {m.settings_privacy_reload_row()}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </ListRowControl>
+      </ListRow>
+    );
+  }
   const href = `/${getLocale()}/collections/${encodeURIComponent(current.id)}`;
   return (
     <ListRow className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)] sm:items-center">
@@ -196,6 +215,7 @@ export function CollectionPrivacyView({
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);
   useEffect(() => {
     void pager.load();
+    return () => pager.dispose();
   }, [pager]);
   return (
     <section id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">

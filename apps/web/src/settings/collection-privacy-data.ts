@@ -5,6 +5,11 @@ import { MediaProblem } from '../media/kernel';
 export type CollectionPrivacyFailure = 'closed' | 'forbidden' | 'unavailable';
 export type CollectionPrivacyRead<T> = { ok: true; value: T } | { ok: false; reason: CollectionPrivacyFailure };
 
+/** Only the existing native admission refusals withdraw the last readable presentation. */
+export function isCollectionPrivacyReadRefusal(reason: CollectionPrivacyFailure): reason is 'closed' | 'forbidden' {
+  return reason === 'closed' || reason === 'forbidden';
+}
+
 /** Preserve native admission failures across the private server-function boundary. */
 export function readCollectionPrivacyResult<T>(result: { data?: T | null; error?: unknown; status?: number }): T {
   const error = result.error;

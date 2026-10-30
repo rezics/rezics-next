@@ -1,6 +1,10 @@
 import type { CollectionVisibility } from '../library/reads';
 import type { CollectionVisibilityWrite, OwnedCollection, OwnedCollectionsPage } from './preferences';
-import type { CollectionPrivacyFailure, CollectionPrivacyRead } from './collection-privacy-data';
+import {
+  isCollectionPrivacyReadRefusal,
+  type CollectionPrivacyFailure,
+  type CollectionPrivacyRead,
+} from './collection-privacy-data';
 
 export type VisibilityAttempt = Readonly<{
   collectionId: string;
@@ -16,6 +20,7 @@ type EditorState = {
   current: OwnedCollection;
   desired: CollectionVisibility;
   attempt: VisibilityAttempt | null;
+  readRefusal: 'closed' | 'forbidden' | null;
   phase: 'idle' | 'saving' | 'uncertain' | 'conflict' | 'refused' | 'review' | 'reloading' | 'saved';
   failure?: CollectionPrivacyFailure | 'invalid' | undefined;
 };
@@ -47,15 +52,16 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     current: OwnedCollection,
     private io: CollectionPrivacyIO,
   ) {
-    super({ current, desired: current.visibility, attempt: null, phase: 'idle' });
+    super({ current, desired: current.visibility, attempt: null, readRefusal: null, phase: 'idle' });
   }
   async edit(desired: CollectionVisibility) {
+    if (this.state.readRefusal) return;
     this.edits++;
     this.update({ desired });
     if (this.state.phase === 'idle' || this.state.phase === 'saved') await this.submit();
   }
   async submit() {
-    if (this.state.attempt || !['idle', 'saved', 'review'].includes(this.state.phase)) return;
+    if (this.state.readRefusal || this.state.attempt || !['idle', 'saved', 'review'].includes(this.state.phase)) return;
     if (this.state.desired === this.state.current.visibility) return;
     const attempt = Object.freeze({
       collectionId: this.state.current.id,
@@ -67,7 +73,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     await this.send(false);
   }
   async retry() {
-    if (this.state.attempt && this.state.phase === 'uncertain') await this.send(true);
+    if (!this.state.readRefusal && this.state.attempt && this.state.phase === 'uncertain') await this.send(true);
   }
   private async send(recovering: boolean) {
     const attempt = this.state.attempt;
@@ -112,7 +118,11 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       const read = await this.io.read(attempt.collectionId);
       if (generation !== this.generation) return;
       if (!read.ok) {
-        this.update({ phase: 'uncertain', failure: read.reason });
+        this.update({
+          phase: 'uncertain',
+          failure: read.reason,
+          readRefusal: isCollectionPrivacyReadRefusal(read.reason) ? read.reason : this.state.readRefusal,
+        });
         return;
       }
       const current = read.value;
@@ -124,7 +134,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         this.update({ phase: 'uncertain', failure: 'unavailable' });
         return;
       }
-      this.update({ current, attempt: null, phase: 'review' });
+      this.update({ current, attempt: null, phase: 'review', readRefusal: null });
     } catch {
       if (generation === this.generation) this.update({ phase: 'uncertain', failure: 'unavailable' });
     }
@@ -139,16 +149,25 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       const read = await this.io.read(this.state.current.id);
       if (generation !== this.generation) return;
       if (!read.ok) {
-        this.update({ phase: previous, failure: read.reason });
+        this.update({
+          phase: previous,
+          failure: read.reason,
+          readRefusal: isCollectionPrivacyReadRefusal(read.reason) ? read.reason : this.state.readRefusal,
+        });
         return;
       }
-      if (read.value.id !== this.state.current.id || read.value.revision < this.state.current.revision)
+      if (
+        read.value.id !== this.state.current.id ||
+        read.value.revision < this.state.current.revision ||
+        (read.value.revision === this.state.current.revision && read.value.visibility !== this.state.current.visibility)
+      )
         throw new Error('Stale Collection read');
       const desired = edits === this.edits ? read.value.visibility : this.state.desired;
       this.update({
         current: read.value,
         desired,
         attempt: null,
+        readRefusal: null,
         phase: desired === read.value.visibility ? 'idle' : 'review',
         failure: undefined,
       });
@@ -184,7 +203,12 @@ export class CollectionPrivacyPager extends Observable<PageState> {
       const read = await this.read(cursor);
       if (generation !== this.generation) return;
       if (!read.ok) {
-        this.update({ failure: read.reason });
+        this.update(
+          isCollectionPrivacyReadRefusal(read.reason)
+            ? // An explicit refresh starts at the first native page; denied pages cannot revive cached rows.
+              { failure: read.reason, collections: [], next: null, loaded: false }
+            : { failure: read.reason },
+        );
         return;
       }
       const rows = new Map(this.state.collections.map((row) => [row.id, row]));
