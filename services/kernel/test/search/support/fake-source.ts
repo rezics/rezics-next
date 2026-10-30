@@ -6,6 +6,9 @@ import {
   type SubjectSource,
 } from '../../../src/search/source.ts';
 
+// Sources isolate their subjects but observe the same partition clock as the file's shared native outbox.
+const positions = new Map<number, bigint>();
+
 export function createFakeSource(): SubjectSource & {
   matchRelationFacets: NonNullable<SubjectSource['matchRelationFacets']>;
   put(subject: IndexedSubject): void;
@@ -13,7 +16,6 @@ export function createFakeSource(): SubjectSource & {
   advance(partition: number): void;
 } {
   const subjects = new Map<string, IndexedSubject>();
-  const positions = new Map<number, bigint>();
   const currentPosition = (partition: number) => positions.get(partition) ?? 0n;
   const advance = (partition: number) => positions.set(partition, currentPosition(partition) + 1n);
 
