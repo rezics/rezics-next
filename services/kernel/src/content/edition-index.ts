@@ -175,7 +175,7 @@ export function createCreatorEditionIndexEffect(pool: Pool): Effect {
         const parameters = { route: home, creator_account_id: creator, edition_id: data.editionId };
         const added = await tx.query(
           insert.sql,
-          insert.params.map((name) => parameters[name]),
+          insert.params.map((name) => parameters[name as keyof typeof parameters]),
         );
         if (added.rowCount === 0) return noEffect(null);
         return {
