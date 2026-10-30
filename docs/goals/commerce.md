@@ -129,9 +129,13 @@ These are production prerequisites for their existing outcomes. Supplying succes
 maintenance pages in a test-side migration engine, or skipping the broader suites would violate native binding.
 Runtime owner integration, complete adapters, native acceptance, regression evidence and promotion remain outstanding.
 
-Current verification is limited to foreground local kernel typing with remote placement disabled. No acceptance,
-native, browser or regression checks are run in this attempt. Typing does not establish native outcome evidence;
-whole-suite acceptance remains required after integration.
+Foreground local kernel typing passed (exit `0`), including the command's construction check. The first invocation
+of `env -u KERNEL_CHECK_REMOTE bun run --cwd services/kernel typecheck` unexpectedly selected the shared remote queue;
+that owned invocation was cancelled before compilation. To keep compilation local, the existing
+`withThrowawayDatabase` compiler lifecycle supplied `DATABASE_URL` to the same foreground command from a temporary
+worktree script. No compiler substitutions or SQL typing changes were used. No acceptance, native, browser or
+regression checks ran. Typing does not establish native outcome evidence; whole-suite acceptance remains required
+after integration.
 
 ## External conditions
 
