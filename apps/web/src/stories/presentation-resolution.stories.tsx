@@ -133,14 +133,14 @@ export const DraftDistinction: Story = {
   render: () => <ConnectedCuration state="draft" />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'generic: Generic page' }));
-    const editor = await canvas.findByRole('region', { name: 'Template editor' });
+    await userEvent.click(canvas.getByRole('button', { name: `generic: ${m.curation_generic()}` }));
+    const editor = await canvas.findByRole('region', { name: m.curation_editor() });
     const preview = canvas.getByRole('region', { name: m.presentation_preview_title() });
     await userEvent.click(within(preview).getByRole('button', { name: m.presentation_preview_inspect() }));
     await within(preview).findByRole('heading', { name: m.presentation_preview_active() });
-    await expect(canvas.getByRole('region', { name: 'Template editor' })).toBe(editor);
+    await expect(canvas.getByRole('region', { name: m.curation_editor() })).toBe(editor);
     await expect(within(preview).queryByText('Unpublished draft heading')).toBeNull();
     await userEvent.click(within(preview).getByRole('button', { name: m.presentation_preview_close() }));
-    await expect(canvas.getByRole('region', { name: 'Template editor' })).toBe(editor);
+    await expect(canvas.getByRole('region', { name: m.curation_editor() })).toBe(editor);
   },
 };
