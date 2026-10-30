@@ -2008,7 +2008,7 @@ export class MergeTrain {
       if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
       workerCommit = request.workerCommit
-        ? git(o.mainCheckout, ['rev-parse', '--verify', `${request.workerCommit}^{commit}`])
+        ? git(o.mainCheckout, 'rev-parse', '--verify', `${request.workerCommit}^{commit}`)
         : tip;
       if (workspace && sharedStore) {
         sharedSource = tip;
