@@ -1,5 +1,7 @@
 import {
-  beginSemanticRecordSourceSet, collectSemanticRecordFacts, sealSemanticRecordSourceSet,
+  beginSemanticRecordSourceSet,
+  collectSemanticRecordFacts,
+  sealSemanticRecordSourceSet,
 } from './record-source-set.ts';
 import { collectSemanticCandidateSource } from './record-source-set.ts';
 import { retainSubjectPageSource } from './subject-page-publication-store.ts';
@@ -320,7 +322,12 @@ export async function writeProposal(
     }
     throw error;
   }
-  await collectSemanticRecordFacts(tx, options.subject, [{ ...input.fact, statement_id: candidate, body: factBody }], revision);
+  await collectSemanticRecordFacts(
+    tx,
+    options.subject,
+    [{ ...input.fact, statement_id: candidate, body: factBody }],
+    revision,
+  );
   if (options.source && 'source' in options.source && options.routeKey)
     await retainSubjectPageSource(tx, {
       subject: { route, id: options.subject },
@@ -698,8 +705,7 @@ export async function adoptCandidates(
         if (routeOf(entry.candidate) !== route || !supported || hiddenCandidates.has(entry.candidate))
           throw new SubjectInputError([{ pointer: `/selection/${index}/candidate`, code: 'unsupported' }]);
       }
-      for (const entry of options.selection)
-        await collectSemanticCandidateSource(tx, options.subject, entry.candidate);
+      for (const entry of options.selection) await collectSemanticCandidateSource(tx, options.subject, entry.candidate);
       const seen = new Set<string>();
       for (const [index, entry] of options.selection.entries()) {
         if (seen.has(entry.candidate))

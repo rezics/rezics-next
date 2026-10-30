@@ -1,6 +1,4 @@
-import {
-  beginSemanticRecordSourceSet, sealSemanticRecordSourceSet,
-} from './record-source-set.ts';
+import { beginSemanticRecordSourceSet, sealSemanticRecordSourceSet } from './record-source-set.ts';
 import { collectSemanticCandidateSource, recordSemanticDocumentSource } from './record-source-set.ts';
 import locatePublicationCandidate from './moderation-read-live-candidate.sql';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
@@ -260,8 +258,13 @@ export async function batchCommand(
                             attribution: command.rights.attribution,
                           },
                         });
-                        await recordSemanticDocumentSource(tx, { kind: 'contribution', subjectId: command.subject,
-                          candidateId: candidate, revision, documentId: stored.id });
+                        await recordSemanticDocumentSource(tx, {
+                          kind: 'contribution',
+                          subjectId: command.subject,
+                          candidateId: candidate,
+                          revision,
+                          documentId: stored.id,
+                        });
                         return {
                           language: content.language,
                           document: stored.id,

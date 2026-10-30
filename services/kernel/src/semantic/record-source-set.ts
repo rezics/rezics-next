@@ -1,8 +1,6 @@
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
-import {
-  currentCommand, registerCommandCallback, type CommandTransaction,
-} from '../command/command.ts';
+import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { declareCommandRecordSourceSet, recordHistorySourceKey } from '../history/record-source.ts';
 import { readAuthoredFieldHistorySource } from '../content/authored-fields-history.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
@@ -60,15 +58,26 @@ const commands = new WeakMap<CommandTransaction, SemanticRecordSourceSet>();
 function building(tx: CommandTransaction, set: SemanticRecordSourceSet): Building {
   const command = currentCommand(tx);
   const state = issued.get(set);
-  if (!state || state.tx !== tx || commands.get(tx) !== set ||
-      state.locator.partition !== command.partition || state.locator.transactionId !== command.transactionId)
+  if (
+    !state ||
+    state.tx !== tx ||
+    commands.get(tx) !== set ||
+    state.locator.partition !== command.partition ||
+    state.locator.transactionId !== command.transactionId
+  )
     throw new TypeError('Semantic source set is not from this live native command');
   return state;
 }
 function locatorInput(locator: SemanticRecordSourceSetLocator) {
-  if (!Number.isInteger(locator.partition) || locator.partition < 0 || locator.partition > 4095 ||
-      routeOf(locator.transactionId) === null || !Number.isInteger(locator.revision) ||
-      locator.revision < 1 || locator.revision > 2147483647)
+  if (
+    !Number.isInteger(locator.partition) ||
+    locator.partition < 0 ||
+    locator.partition > 4095 ||
+    routeOf(locator.transactionId) === null ||
+    !Number.isInteger(locator.revision) ||
+    locator.revision < 1 ||
+    locator.revision > 2147483647
+  )
     throw new TypeError('Invalid Semantic source set locator');
   return { partition: locator.partition, transaction: locator.transactionId, revision: locator.revision };
 }
@@ -79,9 +88,14 @@ function sourceHome(subject: string): number {
 }
 function termKey(reference: TermReference): string {
   sourceHome(reference.subjectId);
-  if (!Number.isInteger(reference.revision) || reference.revision < 1 || reference.revision > 2147483647 ||
-      !['labels', 'descriptions', 'aliases'].includes(reference.field) ||
-      typeof reference.language !== 'string' || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(reference.language))
+  if (
+    !Number.isInteger(reference.revision) ||
+    reference.revision < 1 ||
+    reference.revision > 2147483647 ||
+    !['labels', 'descriptions', 'aliases'].includes(reference.field) ||
+    typeof reference.language !== 'string' ||
+    !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(reference.language)
+  )
     throw new TypeError('Invalid native Semantic term source');
   return JSON.stringify(['terms', reference.subjectId, reference.revision, reference.field, reference.language]);
 }
@@ -94,8 +108,14 @@ export async function beginSemanticRecordSourceSet(tx: CommandTransaction): Prom
   if (!row) throw new Error('Native Semantic source set allocation unavailable');
   const set = Object.freeze({}) as SemanticRecordSourceSet;
   const state: Building = {
-    tx, locator: Object.freeze({ partition: command.partition, transactionId: command.transactionId,
-      revision: row.revision }), sealed: false, documents: new Set(),
+    tx,
+    locator: Object.freeze({
+      partition: command.partition,
+      transactionId: command.transactionId,
+      revision: row.revision,
+    }),
+    sealed: false,
+    documents: new Set(),
   };
   issued.set(set, state);
   commands.set(tx, set);
@@ -104,8 +124,11 @@ export async function beginSemanticRecordSourceSet(tx: CommandTransaction): Prom
   // The deferred database constraint independently checks the actual native fence at COMMIT.
   registerCommandCallback(tx, async (transactionId) => {
     building(tx, set);
-    if (!state.sealed || transactionId !== state.locator.transactionId ||
-        !(await guard.run(tx, locatorInput(state.locator))))
+    if (
+      !state.sealed ||
+      transactionId !== state.locator.transactionId ||
+      !(await guard.run(tx, locatorInput(state.locator)))
+    )
       throw new TypeError('Unsealed or mismatched native Semantic source set');
   });
   return set;
@@ -125,20 +148,37 @@ export async function appendSemanticRecordSourceSet(
     if (source.kind !== 'contribution' || sourceHome(source.subjectId) !== state.locator.partition)
       throw new TypeError('Semantic sets accept native contribution and term sources only');
     const key = recordHistorySourceKey(source);
-    members.push({ unit: JSON.stringify(['contribution', source.subjectId, source.candidateId, source.documentId]), key,
-      kind: source.kind, subject: source.subjectId, candidate: source.candidateId,
-      revision: source.revision, document: source.documentId });
+    members.push({
+      unit: JSON.stringify(['contribution', source.subjectId, source.candidateId, source.documentId]),
+      key,
+      kind: source.kind,
+      subject: source.subjectId,
+      candidate: source.candidateId,
+      revision: source.revision,
+      document: source.documentId,
+    });
   }
   for (const source of input.terms) {
     if (sourceHome(source.subjectId) !== state.locator.partition)
       throw new TypeError('Semantic term source is outside the native command home');
     for (const revision of new Set([source.originalRevision, source.currentRevision])) {
       if (revision === null) continue;
-      const reference: TermReference = { kind: 'terms', subjectId: source.subjectId, revision,
-        field: source.field, language: source.language };
-      members.push({ unit: JSON.stringify(['terms', source.subjectId, source.field, source.language]),
-        key: termKey(reference), kind: 'terms', subject: source.subjectId, revision,
-        field: source.field, language: source.language });
+      const reference: TermReference = {
+        kind: 'terms',
+        subjectId: source.subjectId,
+        revision,
+        field: source.field,
+        language: source.language,
+      };
+      members.push({
+        unit: JSON.stringify(['terms', source.subjectId, source.field, source.language]),
+        key: termKey(reference),
+        kind: 'terms',
+        subject: source.subjectId,
+        revision,
+        field: source.field,
+        language: source.language,
+      });
     }
   }
   // An old/current term pair is two indexed versions of one native unit, never two declarations.
@@ -155,11 +195,19 @@ export async function sealSemanticRecordSourceSet(tx: CommandTransaction, set: S
 }
 
 /** A building locator is transaction-local data. Only sealed native rows are externally readable. */
-export function semanticRecordSourceSetLocator(tx: CommandTransaction, set: SemanticRecordSourceSet): SemanticRecordSourceSetLocator {
+export function semanticRecordSourceSetLocator(
+  tx: CommandTransaction,
+  set: SemanticRecordSourceSet,
+): SemanticRecordSourceSetLocator {
   return building(tx, set).locator;
 }
 
-async function readAt<T>(deps: Dependencies, partition: number, deadline: number, work: (tx: CommandTransaction) => Promise<T>): Promise<T> {
+async function readAt<T>(
+  deps: Dependencies,
+  partition: number,
+  deadline: number,
+  work: (tx: CommandTransaction) => Promise<T>,
+): Promise<T> {
   const now = () => deps.clock?.().getTime() ?? Date.now();
   if (!Number.isFinite(deadline) || now() >= deadline) throw new AccessUnavailableError('deadline');
   return withConnection(deps.pool, async (client) => {
@@ -169,48 +217,66 @@ async function readAt<T>(deps: Dependencies, partition: number, deadline: number
       if (remaining <= 0) throw new AccessUnavailableError('deadline');
       await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
       const home = await client.query<{ write_state: string }>(
-        'SELECT write_state FROM core.partition WHERE partition_no=$1', [partition]);
+        'SELECT write_state FROM core.partition WHERE partition_no=$1',
+        [partition],
+      );
       if (home.rows[0]?.write_state !== 'active') throw new AccessUnavailableError('contention');
       const value = await work(client);
       if (now() >= deadline) throw new AccessUnavailableError('deadline');
       await client.query('COMMIT');
       return value;
     } catch (error) {
-      try { await client.query('ROLLBACK'); } catch (rollbackError) { discardConnection(client, rollbackError as Error); }
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        discardConnection(client, rollbackError as Error);
+      }
       throw error;
     }
   });
 }
 
 export async function readSemanticRecordSourceSet(
-  deps: Dependencies, locator: SemanticRecordSourceSetLocator, context: Readonly<{ deadline: number }>,
+  deps: Dependencies,
+  locator: SemanticRecordSourceSetLocator,
+  context: Readonly<{ deadline: number }>,
 ): Promise<SemanticRecordSourceSetSnapshot | null> {
   const input = locatorInput(locator);
   return readAt(deps, locator.partition, context.deadline, async (tx) => {
     const row = await read.run(tx, input);
-    return row?.digest ? Object.freeze({ locator: Object.freeze({ ...locator }), digest: row.digest, members: row.members }) : null;
+    return row?.digest
+      ? Object.freeze({ locator: Object.freeze({ ...locator }), digest: row.digest, members: row.members })
+      : null;
   });
 }
 
 /** Same-home verification uses the actual live native transaction; never check out history's pool here. */
 export async function verifySemanticRecordSourceSet(
-  tx: CommandTransaction, locator: SemanticRecordSourceSetLocator, digest: string,
+  tx: CommandTransaction,
+  locator: SemanticRecordSourceSetLocator,
+  digest: string,
 ): Promise<boolean> {
   const command = currentCommand(tx);
   const input = locatorInput(locator);
-  if (command.partition !== locator.partition) throw new TypeError('Semantic source set verification requires its native home');
+  if (command.partition !== locator.partition)
+    throw new TypeError('Semantic source set verification requires its native home');
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new TypeError('Invalid Semantic source set digest');
   const row = await read.run(tx, input);
   return row?.digest === digest;
 }
 
 export async function pageSemanticRecordSourceSets(
-  deps: Dependencies, reference: RecordHistorySourceReference | TermReference,
+  deps: Dependencies,
+  reference: RecordHistorySourceReference | TermReference,
   options: Readonly<{ frontier: string | null; limit: number; deadline: number }>,
-): Promise<Readonly<{
-  state: 'progress' | 'complete'; sets: readonly SemanticRecordSourceSetSnapshot[];
-  frontier: string | null; examined: number;
-}>> {
+): Promise<
+  Readonly<{
+    state: 'progress' | 'complete';
+    sets: readonly SemanticRecordSourceSetSnapshot[];
+    frontier: string | null;
+    examined: number;
+  }>
+> {
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Semantic source set page limit must be 1..100');
   if (reference.kind !== 'contribution' && reference.kind !== 'terms')
@@ -222,20 +288,36 @@ export async function pageSemanticRecordSourceSets(
   if (options.frontier !== null) {
     if (options.frontier.length > 2048) throw new TypeError('Invalid Semantic source set frontier');
     const decoded: unknown = JSON.parse(Buffer.from(options.frontier, 'base64url').toString());
-    if (!Array.isArray(decoded) || decoded.length !== 3 || decoded[0] !== 1 || decoded[1] !== binding ||
-        typeof decoded[2] !== 'string' || routeOf(decoded[2]) === null)
+    if (
+      !Array.isArray(decoded) ||
+      decoded.length !== 3 ||
+      decoded[0] !== 1 ||
+      decoded[1] !== binding ||
+      typeof decoded[2] !== 'string' ||
+      routeOf(decoded[2]) === null
+    )
       throw new TypeError('Semantic source set frontier does not match this source');
     after = decoded[2];
   }
   return readAt(deps, partition, options.deadline, async (tx) => {
     // Exactly limit indexed members are examined. A full final page completes on its next empty probe.
     const rows = await page.run(tx, { partition, key, after, limit: options.limit });
-    const sets = rows.map((row) => Object.freeze({ locator: Object.freeze({ partition,
-      transactionId: row.transaction_id, revision: row.revision }), digest: row.digest!, members: row.members }));
+    const sets = rows.map((row) =>
+      Object.freeze({
+        locator: Object.freeze({ partition, transactionId: row.transaction_id, revision: row.revision }),
+        digest: row.digest!,
+        members: row.members,
+      }),
+    );
     const complete = rows.length < options.limit;
-    return Object.freeze({ state: complete ? 'complete' : 'progress', sets: Object.freeze(sets),
-      frontier: complete ? null : Buffer.from(JSON.stringify([1, binding, rows.at(-1)!.transaction_id])).toString('base64url'),
-      examined: rows.length });
+    return Object.freeze({
+      state: complete ? 'complete' : 'progress',
+      sets: Object.freeze(sets),
+      frontier: complete
+        ? null
+        : Buffer.from(JSON.stringify([1, binding, rows.at(-1)!.transaction_id])).toString('base64url'),
+      examined: rows.length,
+    });
   });
 }
 
@@ -259,7 +341,10 @@ export async function recordSemanticDocumentSource(
 
 /** Enroll exact native snapshots, including original document provenance, without copying bodies into metadata. */
 export async function collectSemanticRecordFacts(
-  tx: CommandTransaction, subject: string, facts: readonly FactRow[], revision?: number,
+  tx: CommandTransaction,
+  subject: string,
+  facts: readonly FactRow[],
+  revision?: number,
 ): Promise<void> {
   const set = currentSemanticRecordSourceSet(tx);
   if (!set) return;
@@ -275,7 +360,10 @@ export async function collectSemanticRecordFacts(
   }
   const sources: RecordHistorySourceReference[] = [];
   const terms: Terms[] = [];
-  const documents: { source: Extract<RecordHistorySourceReference, { kind: 'contribution' }>; body: FactRow['body'] }[] = [];
+  const documents: {
+    source: Extract<RecordHistorySourceReference, { kind: 'contribution' }>;
+    body: FactRow['body'];
+  }[] = [];
   for (const fact of facts) {
     if (fact.kind !== 'statement' && latestTerms.get(`${fact.kind}\n${fact.language}`) !== fact) continue;
     if (fact.kind === 'statement' && fact.statement_id) {
@@ -285,8 +373,13 @@ export async function collectSemanticRecordFacts(
         if (!row) throw new Error('Native Semantic snapshot provenance unavailable');
         sourceRevision = row.revision;
       }
-      const source = { kind: 'contribution' as const, subjectId: subject,
-        candidateId: fact.statement_id, revision: sourceRevision, documentId: null };
+      const source = {
+        kind: 'contribution' as const,
+        subjectId: subject,
+        candidateId: fact.statement_id,
+        revision: sourceRevision,
+        documentId: null,
+      };
       sources.push(source);
       documents.push({ source, body: fact.body });
     } else if (fact.kind !== 'statement' && fact.language) {
@@ -297,40 +390,71 @@ export async function collectSemanticRecordFacts(
         if (!row) throw new Error('Native Semantic term provenance unavailable');
         sourceRevision = row.revision;
       }
-      terms.push({ subjectId: subject, originalRevision: null, currentRevision: sourceRevision,
-        field, language: fact.language });
+      terms.push({
+        subjectId: subject,
+        originalRevision: null,
+        currentRevision: sourceRevision,
+        field,
+        language: fact.language,
+      });
     }
   }
   // The existing bound applies to actual snapshot units, after folding term history.
   // Alias values in a language share the native term key, without manufacturing candidates.
   await appendSemanticRecordSourceSet(tx, set, { sources, terms });
   for (const { source, body: rawBody } of documents) {
-    const body = rawBody as { value?: { content?: unknown }; qualifiers?: { value?: { content?: unknown } }[];
-      references?: { parts: { value?: { content?: unknown } }[] }[] };
+    const body = rawBody as {
+      value?: { content?: unknown };
+      qualifiers?: { value?: { content?: unknown } }[];
+      references?: { parts: { value?: { content?: unknown } }[] }[];
+    };
     const snaks = [body, ...(body.qualifiers ?? []), ...(body.references ?? []).flatMap((ref) => ref.parts)];
-    if (snaks.length > 1+16+16*16) throw new RangeError('Semantic statement exceeds existing snak bounds');
+    if (snaks.length > 1 + 16 + 16 * 16) throw new RangeError('Semantic statement exceeds existing snak bounds');
     for (const snak of snaks) {
       const content = snak.value?.content;
-      if (typeof content !== 'object' || content === null || !('document' in content) ||
-          typeof content.document !== 'string' || routeOf(content.document) === null) continue;
+      if (
+        typeof content !== 'object' ||
+        content === null ||
+        !('document' in content) ||
+        typeof content.document !== 'string' ||
+        routeOf(content.document) === null
+      )
+        continue;
       if (!building(tx, set).documents.has(content.document)) {
         const original = await readAuthoredFieldHistorySource(tx, content.document);
         // Missing native metadata is unknown prior coverage, never evidence of source absence.
-        if (!original) throw Object.assign(new AccessUnavailableError('contention'), {
-          message: 'Native authored field history source unavailable',
-        });
+        if (!original)
+          throw Object.assign(new AccessUnavailableError('contention'), {
+            message: 'Native authored field history source unavailable',
+          });
         await appendSemanticRecordSourceSet(tx, set, { sources: [original], terms: [] });
       }
-      await appendSemanticRecordSourceSet(tx, set, { sources: [{ ...source, documentId: content.document }], terms: [] });
+      await appendSemanticRecordSourceSet(tx, set, {
+        sources: [{ ...source, documentId: content.document }],
+        terms: [],
+      });
     }
   }
 }
 
 /** Point resolution of the original immutable candidate, including virtual compact candidates. */
-export async function collectSemanticCandidateSource(tx: CommandTransaction, subject: string, id: string): Promise<void> {
+export async function collectSemanticCandidateSource(
+  tx: CommandTransaction,
+  subject: string,
+  id: string,
+): Promise<void> {
   if (!currentSemanticRecordSourceSet(tx)) return;
   const row = await candidate.run(tx, { route: routeOf(subject)!, subject, candidate: id });
   if (!row) throw new Error('Native Semantic candidate provenance unavailable');
-  await collectSemanticRecordFacts(tx, subject, [{ kind: 'statement', language: null, property: null,
-    statement_id: id, operation: 'assert', body: row.body, fact_revision: row.revision }]);
+  await collectSemanticRecordFacts(tx, subject, [
+    {
+      kind: 'statement',
+      language: null,
+      property: null,
+      statement_id: id,
+      operation: 'assert',
+      body: row.body,
+      fact_revision: row.revision,
+    },
+  ]);
 }

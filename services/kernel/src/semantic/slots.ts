@@ -319,7 +319,11 @@ export async function expandSlot(
 ): Promise<void> {
   const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   if (state.expanded) return;
-  await collectSemanticRecordFacts(tx, subject, state.compact.map((row) => candidateFact(property, row)));
+  await collectSemanticRecordFacts(
+    tx,
+    subject,
+    state.compact.map((row) => candidateFact(property, row)),
+  );
   for (const row of state.compact) {
     await insertCandidate.run(tx, {
       route: routeOf(subject)!,

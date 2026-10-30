@@ -1,5 +1,7 @@
 import {
-  beginSemanticRecordSourceSet, collectSemanticRecordFacts, sealSemanticRecordSourceSet,
+  beginSemanticRecordSourceSet,
+  collectSemanticRecordFacts,
+  sealSemanticRecordSourceSet,
 } from './record-source-set.ts';
 import { initializeSubjectPagePublication, retainSubjectPageSource } from './subject-page-publication-store.ts';
 import { subjectPageFacts, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';

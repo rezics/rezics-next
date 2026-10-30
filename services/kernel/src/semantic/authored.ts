@@ -33,8 +33,13 @@ function authoredInstall(tx: CommandTransaction, subject: string, events: Author
       revision,
       ...content,
     });
-    await recordSemanticDocumentSource(tx, { kind: 'contribution', subjectId: subject,
-      candidateId: candidate, revision, documentId: stored.id });
+    await recordSemanticDocumentSource(tx, {
+      kind: 'contribution',
+      subjectId: subject,
+      candidateId: candidate,
+      revision,
+      documentId: stored.id,
+    });
     events.push({
       type: 'com.rezics.content.authored-field.created.v1',
       subject,
