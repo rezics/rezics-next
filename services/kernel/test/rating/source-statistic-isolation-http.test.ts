@@ -7,6 +7,8 @@ import { createSourceStatisticIsolationFixture, type IsolationActor } from './so
 
 const fixtureOptions = { withRatingWorker: true };
 let fixture: Awaited<ReturnType<typeof createSourceStatisticIsolationFixture>>;
+let importedTargetId: string | undefined;
+let expectedImportedEnvelope: SourceStatistic | undefined;
 
 type SourceStatistic = {
   source: 'vndb';
@@ -136,6 +138,7 @@ afterAll(async () => {
 
 test('Ratings and reviews: imported statistics stay labelled, independently authorized and separate from native figures.', async () => {
   const subjectId = await fixture.createSubject('Imported and native rating isolation target');
+  importedTargetId = subjectId;
   const otherSubjectId = await fixture.createSubject('Independent imported statistic target');
   const hiddenSubjectId = await fixture.createSubject('Hidden source statistic target');
   await fixture.grantImporter(fixture.actors.importer);
@@ -200,6 +203,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     key: refreshKey,
   });
   const refreshedEnvelope = envelope(refreshedValue);
+  expectedImportedEnvelope = refreshedEnvelope;
   expect(await readJson(refresh)).toEqual(refreshedEnvelope);
   expect(await sourceStatistics(subjectId, fixture.actors.importer)).toEqual([refreshedEnvelope]);
   expect(await sourceStatistics(otherSubjectId, fixture.actors.secondImporter)).toEqual([otherEnvelope]);
@@ -278,6 +282,14 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel licence');
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel attribution.');
 
+});
+
+test('A large imported count does not seed a native mean, prior, or score.', async () => {
+  if (!importedTargetId || !expectedImportedEnvelope)
+    throw new Error('The source-statistic isolation HTTP case did not produce its imported target');
+  const subjectId = importedTargetId;
+  const refreshedEnvelope = expectedImportedEnvelope;
+
   const standardQuestionResponse = await fixture.request('GET', `/v1/rating-questions/${STANDARD_QUESTION_ID}`, {
     actor: null,
   });
@@ -337,14 +349,14 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   ]);
 
   // Native prior epochs require 50 counted votes; imported counts remain source-local.
-  for (const voter of fixture.actors.voters) await castVote(subjectId, voter, 20);
+  await Promise.all(fixture.actors.voters.map((voter) => castVote(subjectId, voter, 20)));
   const publishedFigure = await until(
     () => figure(subjectId),
     (value) =>
       value.figure.count === 5 &&
       value.figure.state === 'ready' &&
       value.figure.mean === 10 &&
-      value.figure.score === 6,
+      value.figure.score === null,
     'Native figure after five actual votes',
   );
   expect(publishedFigure.figure).toEqual({
@@ -354,7 +366,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     count: 5,
     state: 'ready',
     mean: 10,
-    score: 6,
+    score: null,
   });
 
   const nativeAggregate = await until(
@@ -420,9 +432,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   ]);
   expect((await sourceStatistics(subjectId, fixture.actors.author))[0]).toEqual(refreshedEnvelope);
 
-  // The target projection above proves the joined score uses the native prior. Full
-  // sibling republish paging is covered by prior-epoch.test.ts; it is unrelated here.
-  // Standalone write/refresh/denial is covered by source-statistics.test.ts.
+  // Full prior epoch and sibling republish behavior is covered by prior-epoch.test.ts.
 });
 
 test('invalid strict source-statistic JSON and provenance domains reject without native or command mutations', async () => {
