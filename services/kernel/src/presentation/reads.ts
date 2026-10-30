@@ -501,7 +501,6 @@ export async function readPage(options: {
       (snapshot.context !== undefined &&
         (typeof snapshot.context !== 'string' || !UUID_PATTERN.test(snapshot.context))) ||
       !Array.isArray(snapshot.properties) ||
-      snapshot.properties.length > 64 ||
       !snapshot.properties.every((property) => typeof property === 'string' && CURIE_PATTERN.test(property))
     )
       throw new PageReadError([{ pointer: '/documents', code: 'invalid_format' }]);
