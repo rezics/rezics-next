@@ -1,3 +1,4 @@
+import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/money.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
 import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
@@ -105,6 +106,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
 }
 
 export type ServerConfig = {
+  moneyPolicy?: CommerceMoneyPolicy;
   databaseUrl: string;
   poolAcquireTimeoutMillis: number;
   /** Test override for verifying that the server pool survives its idle eviction interval. */
@@ -165,6 +167,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     rateAttribution: defaults.rateAttribution,
     ...(defaults.auth === undefined ? {} : { auth: defaults.auth }),
     commerce,
+    moneyPolicy: readCommerceMoneyPolicy(env),
     content: readContentConfig(env),
     ...(search === undefined ? {} : { search }),
   };
@@ -207,6 +210,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const peers = new WeakMap<Request, string>();
   const searchConfig = config.search;
   const commerce = config.commerce;
+  const moneyPolicy = config.moneyPolicy ?? readCommerceMoneyPolicy(process.env);
   // One client for the process. The server enqueues no index work and runs no relay.
   const openSearch = searchConfig === undefined ? undefined : createOpenSearch(searchConfig.url);
   let app: ReturnType<typeof createKernel> | undefined;
@@ -241,6 +245,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     await client;
     const rated = searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey);
     app = createKernel({
+      moneyPolicy,
       pool,
       routeKey: config.routeKey,
       tokens: defaults.tokens,

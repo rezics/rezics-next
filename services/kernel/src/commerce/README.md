@@ -241,14 +241,12 @@ independently enforce current edition/source/licence and complete parent/Realm/S
 byte disclosure. The fact cannot change scope, public floor, history, Library facts or source availability.
 No cache, mirror, grant SQL or client fact/selector endpoint is introduced.
 
-Source composition is present. The focused native acceptance is retained in
-`test/commerce/content-edition-buyer-fact.test.ts`; execution, current Content use, full journey/native evidence and
-promotion on main are deferred to controller integration. No supplied fact alone establishes delivered paid use.
+The focused native acceptance is retained in `test/commerce/content-edition-buyer-fact.test.ts`.
+Current Content use, full journey/native evidence and promoted-main proof remain required;
+no supplied fact alone establishes delivered paid use.
 
 Unpublish/erasure makes delivery unavailable without inventing a refund; no alternate revision is substituted and
-no Library record is created. The local kernel compiler check passes for this binding source delivery.
-No acceptance, native or browser check was run; generated OpenAPI/client artifacts and native/interface gates
-remain controller work.
+no Library record is created. Current Content use, native/interface gates and promoted-main proof remain required.
 
 ### Private buyer history
 
@@ -295,6 +293,42 @@ Success/cancel URLs are absolute HTTPS, allow `{ORDER_ID}` substitution and pass
 through; other brace placeholders fail startup. Provider bank payout (`po_`), account transfer (`tr_`) and an external
 creator payment reference remain separate identities. Neither a Stripe payout status nor a statement row proves
 an outside-Stripe creator payment.
+
+## Native money policy and captured prices
+
+[money.ts](money.ts) owns `StripeMoneyUnit` (`system:'stripe-api'`, `exponent:0|2`,
+`factsVersion:'stripe-money-v1'`), contextual immutable evidence rows and sale admission. Evidence lookup returns
+null for an unadopted currency/context; it never enables selling. USD/EUR have exponent 2 in integration price,
+Checkout integration/presentment and balance contexts. CAD presentment has separately adopted exponent 2. The
+documented zero-decimal charge group and ISK/UGX/HUF/TWD charge facts establish no exceptional balance unit.
+No ISO/Intl/default exponent or historical tax inference is permitted.
+
+Trusted `COMMERCE_SALE_CURRENCIES` and `COMMERCE_SETTLEMENT_CURRENCIES` are unique comma-separated lowercase
+subsets of `usd,eur`, each defaulting to `usd`. Every sale currency requires its declared settlement currency.
+Enabling EUR also requires explicit boolean `STRIPE_LIVEMODE` and `STRIPE_MANAGED_PAYMENTS` declarations.
+These declarations describe deployment setup; they prove no live account qualification, Managed Payments approval,
+product eligibility or actual settlement capability. External provider setup remains external.
+
+Fresh base prices are positive safe integers, minimum 50, maximum 99_999_999 raw Stripe units, multiple 1.
+Native create/reprice bodies derive `moneyUnit` and `taxBehavior:'exclusive'` after ordinary authorization and
+receipt replay. Currency, benefit and non-price terms remain immutable. Explicit repricing of an old UNKNOWN offer
+captures the adopted metadata and increments its revision even at the same numeric price. Unsupported old currencies
+remain readable but unavailable for fresh sale. Fresh orders require the captured known tuple and the displayed
+`expectedOfferRevision`; old orders and receipt results are never rewritten. Native offer and buyer DTOs expose
+nullable `moneyUnit`/`taxBehavior`; absent historical metadata always reads as null, never today's interpretation.
+
+`GET /v1/commerceMoney`, operation `commerce.money_schema`, uses normal `gate:selling` exposure and the existing
+anonymous `offer:read` route label, without a second Access evaluator or new scope. Its closed response is
+`{factsVersion:'stripe-money-v1',taxBehavior:'exclusive',configuredSaleCurrencies:[{currency:'usd'|'eur',unit:StripeMoneyUnit,minAmountMinor:50,maxAmountMinor:99999999,chargeMultiple:1}]}`.
+It contains only static/trusted money configuration, no provider identity, credentials, approval or permissions;
+it cannot authorize a sale.
+
+New immutable physical creation intents capture the complete request, money tuple and separate API baseline
+`2026-09-30.endive`. New inline `price_data` explicitly sends `tax_behavior:'exclusive'`. A retained first physical
+attempt retries its original request/key/URLs/expiry/mode, including historical omission of tax and unit metadata.
+Old uncertainty without first-call evidence or captured unit provenance cannot start a fresh charge. Price adoption
+never backfills history or rescales raw amounts. The base-price ceiling does not cap genuinely observed paid totals
+when actual tax raises them above it; payment evidence retains its existing safe-integer and association validation.
 
 ## Commands and creation uncertainty
 
@@ -529,8 +563,7 @@ local allocation/reserve assumptions, **not provider facts**. Preserve actual pr
 unknown classifications/FX/tax evidence cannot justify payment. A full customer refund need not zero net receipts
 or earnings because tax/fees may remain. Do not fabricate tax credits, zero fees or full reversal evidence.
 
-Further commercial/shared adoption is required before runtime bodies: explicit tax-exclusive captured/displayed
-prices and Stripe-supported currency/unit mapping; separate integration/presentment/settlement amounts; provider
+Further commercial/shared adoption is required for separate integration/presentment/settlement amounts; provider
 allocation versus reserves, release conditions, same-currency negative carry and positive evidence-complete payable
 rules; and richer external attestation with actual date/method/amount/currency/reference. These are the provider
 report's recommendations, not hidden adopted economics. Reserve duration, clawback, thresholds, partial external
@@ -580,12 +613,10 @@ fanout and full erasure bounds remain unproved. Do not raise allowances or subtr
 
 ## Delivery and acceptance
 
-The four current product-fix directions are creation uncertainty, evidence completeness, immutable movement economics,
-and bounded signature/secret input. Source in [creation attempt](creation-attempt.ts), [Stripe adapter](stripe.ts),
-[settlement](settlement.ts), [payouts](payouts.ts), [webhook](webhook.ts) and [configuration](config.ts) contains work
-in these areas; this adoption is not their owner delivery receipt or implementation/native/main proof. Keep their
-focused outcome evidence with the owning deliveries. Offer concealment/revise HTTP and buyer-history navigation
-are present in source; old research descriptions of their absence are superseded, not reasons to rewrite them.
+Creation uncertainty, complete evidence, immutable movement economics and bounded signed ingress require
+focused outcome evidence from [creation attempt](creation-attempt.ts), [Stripe adapter](stripe.ts),
+[settlement](settlement.ts), [payouts](payouts.ts), [webhook](webhook.ts) and [configuration](config.ts).
+Offer concealment/revise HTTP and buyer-history navigation remain part of the native journey.
 
 Retain [frozen Commerce outcomes](../../../../specs/commerce-outcomes.test.ts) and
 [native entry/driver](../../test/commerce/outcomes.test.ts). Signed loopback provider fixtures substitute only for
@@ -599,4 +630,4 @@ replay/restart, enqueue failure, lost creation/cutoff, complete adverse associat
 partial/full refund and dispute changes, terminal no-restoration, receipt reauthorization, native revision/queue
 recovery races and three-scale physical cost. Subject discovery, benefit capture, owned navigation, actual protected
 use and creator views also require API-to-storage-to-page evidence under the adopted shared target. Final native,
-reviewed interface and promoted-main completion remain obligations; this docs-only adoption runs no check campaign.
+reviewed interface and promoted-main completion require the combined native and interface evidence.

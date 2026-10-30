@@ -1,3 +1,4 @@
+import { readCommerceMoneyPolicy, validateOfferAmount, type CommerceMoneyPolicy } from './money.ts';
 import {
   captureCurrentContentEdition,
   isContentEditionUnavailable,
@@ -190,8 +191,9 @@ function withSalePreparation<T>(
 /** Actor arguments are verified Access identities. Checkout methods are trusted
  * internal ports, not client operations: their receipts are attributed to the buyer.
  */
-export function createCommerceCommands(config: { pool: Pool; access: Access; royaltyBasisPoints?: number }) {
+export function createCommerceCommands(config: { pool: Pool; access: Access; royaltyBasisPoints?: number; moneyPolicy?: CommerceMoneyPolicy }) {
   const { pool, access } = config;
+  const moneyPolicy = config.moneyPolicy ?? readCommerceMoneyPolicy(process.env);
   const royaltyBasisPoints = config.royaltyBasisPoints ?? 9000;
   // Never written to a receipt or workflow result. Only this physical invocation's
   // committed admission may reach a provider call, once and inside its sale lifetime.
@@ -302,6 +304,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           r,
           {
             ...input,
+            ...validateOfferAmount({ currency: input.currency, amountMinor: input.unitAmountMinor }, moneyPolicy),
             targetSubjectId: contentEdition.targetSubjectId,
             contentEdition,
             id,
@@ -370,10 +373,12 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         authorization,
       },
       async (tx, command) => {
-        const offer = await store.readOffer(tx, r, id);
-        if (!offer) throw new GrantDeniedError();
-        await declareCommerceCommandHistory(tx, 'commerce.offer.revise', offer);
-        const value = await store.reviseOfferPrice(tx, r, id, input.unitAmountMinor, {
+        const current = await store.lockOffer(tx, r, id);
+        if (!current) throw new GrantDeniedError();
+        if (current.state !== 'active') throw new OfferUnavailableError();
+        const money = validateOfferAmount({ currency: current.currency, amountMinor: input.unitAmountMinor }, moneyPolicy);
+        await declareCommerceCommandHistory(tx, 'commerce.offer.revise', current);
+        const value = await store.reviseOfferPrice(tx, r, id, input.unitAmountMinor, money, {
           transactionId: command.transactionId,
           time: authoritativeTimeValue(command.time),
         });
@@ -424,6 +429,16 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         if (!parent.availableAt(command.time) || offer.state !== 'active') throw new OfferUnavailableError();
         // The command body runs only after current authorization and exact receipt replay.
         if (offer.revision !== expectedOfferRevision) throw new OfferRevisionConflictError();
+        let money;
+        try {
+          money = validateOfferAmount({ currency: offer.currency, amountMinor: offer.unitAmountMinor }, moneyPolicy);
+        } catch (error) {
+          if (error instanceof RangeError) throw new OfferUnavailableError();
+          throw error;
+        }
+        if (offer.taxBehavior !== money.taxBehavior || !offer.moneyUnit ||
+            offer.moneyUnit.system !== money.moneyUnit.system || offer.moneyUnit.exponent !== money.moneyUnit.exponent ||
+            offer.moneyUnit.factsVersion !== money.moneyUnit.factsVersion) throw new OfferUnavailableError();
         const contentEdition = sale.at(tx, command.time);
         if (
           !sameCapturedContentEdition(offer.contentEdition, contentEdition) ||
@@ -503,6 +518,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         const stored = await creationRead.run(tx, { route: r, id });
         // Pre-migration uncertainty has no trustworthy request/first-call evidence. Never guess it.
         if (!stored && current.settlement === 'unknown') return done({ kind: 'unknown' });
+        if (!stored && (!current.moneyUnit || current.taxBehavior !== 'exclusive')) return done({ kind: 'unknown' });
         // Released current native target authority is indispensable before any fresh provider call.
         const prepared = sale.at(tx, command.time);
         if (
@@ -513,7 +529,9 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           !sameCapturedContentEdition(current.contentEdition, prepared.contentEdition)
         )
           throw new CommandUnavailableError('contention', partitionOf(r));
-        const request: CheckoutRequest = {
+        // An existing first call always retains its original parameters, even after configuration changes.
+        const request: CheckoutRequest = stored?.request ? JSON.parse(stored.request) : {
+          ...(!stored ? { moneyUnit: current.moneyUnit, taxBehavior: current.taxBehavior, apiVersion: '2026-09-30.endive' as const } : {}),
           orderId: id,
           buyerAccountId: current.buyerAccountId,
           title: current.title,
@@ -545,6 +563,10 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
             cancel_url: request.cancelUrl,
             expires_at: request.expiresAt,
             managed_payments: request.managedPayments ?? false,
+            request: JSON.stringify(request),
+            money_unit: JSON.stringify(request.moneyUnit),
+            tax_behavior: request.taxBehavior!,
+            api_version: request.apiVersion!,
           });
         } else if (!stored.retried) await creationRetry.run(tx, { route: r, id });
         const changed = await checkoutCreate.run(tx, {

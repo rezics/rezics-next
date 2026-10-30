@@ -1,3 +1,5 @@
+import type { StripeMoneyUnit } from './money.ts';
+import offerLock from './store-offer-lock.sql';
 import { routeOf } from '../route/route.ts';
 import { decodeCapturedContentEdition, encodeCapturedContentEdition } from './benefit.ts';
 import type { PoolClient } from 'pg';
@@ -59,6 +61,8 @@ function asOffer(row: OfferRow): Offer {
   return {
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    moneyUnit: row.moneyUnit === null ? null : JSON.parse(row.moneyUnit) as StripeMoneyUnit,
+    taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
   };
 }
@@ -66,6 +70,8 @@ function asOrder(row: OrderRow): Order {
   return {
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    moneyUnit: row.moneyUnit === null ? null : JSON.parse(row.moneyUnit) as StripeMoneyUnit,
+    taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
     amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
     createdAt: iso(row.createdAt),
@@ -103,6 +109,8 @@ export async function insertOffer(
         currency: offer.currency,
         unit_amount_minor: offer.unitAmountMinor,
         tax_code: offer.taxCode,
+        money_unit: offer.moneyUnit ? JSON.stringify(offer.moneyUnit) : '',
+        tax_behavior: offer.taxBehavior ?? '',
         royalty_basis_points: offer.royaltyBasisPoints,
         updated_at: context.time,
         ...write(context),
@@ -112,6 +120,11 @@ export async function insertOffer(
 }
 export async function readOffer(client: Client, route: number, id: string): Promise<Offer | null> {
   const row = await offerRead.run(queryClient(client), { route, id });
+  return row ? asOffer(row) : null;
+}
+/** Serialize repricing with delisting and other revisions on the creator home. */
+export async function lockOffer(client: Client, route: number, id: string): Promise<Offer | null> {
+  const row = await offerLock.run(queryClient(client), { route, id });
   return row ? asOffer(row) : null;
 }
 export async function setOfferState(
@@ -128,12 +141,15 @@ export async function reviseOfferPrice(
   route: number,
   id: string,
   unitAmountMinor: number,
+  money: Readonly<{ moneyUnit: StripeMoneyUnit; taxBehavior: 'exclusive' }>,
   context: WriteContext,
 ): Promise<Offer | null> {
   const row = await offerPrice.run(queryClient(client), {
     route,
     id,
     unit_amount_minor: unitAmountMinor,
+    money_unit: JSON.stringify(money.moneyUnit),
+    tax_behavior: money.taxBehavior,
     ...write(context),
   });
   return row ? asOffer(row) : null;
@@ -160,6 +176,8 @@ export async function insertOrder(
         currency: offer.currency,
         unit_amount_minor: offer.unitAmountMinor,
         tax_code: offer.taxCode,
+        money_unit: offer.moneyUnit ? JSON.stringify(offer.moneyUnit) : '',
+        tax_behavior: offer.taxBehavior ?? '',
         royalty_basis_points: offer.royaltyBasisPoints,
         updated_at: context.time,
         ...write(context),
@@ -185,6 +203,8 @@ export async function listBuyerOrders(
   return rows.map((row) => ({
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    moneyUnit: row.moneyUnit === null ? null : JSON.parse(row.moneyUnit) as StripeMoneyUnit,
+    taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
     amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
     createdAt: iso(row.createdAt),

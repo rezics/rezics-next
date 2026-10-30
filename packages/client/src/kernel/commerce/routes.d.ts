@@ -1,3 +1,4 @@
+import type { CommerceMoneyPolicy, ConfiguredSaleCurrencyRule, StripeMoneyUnit } from './money.ts';
 import { type SubjectSummary } from '../semantic/summaries.ts';
 import type { Pool } from 'pg';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -18,6 +19,7 @@ type Dependencies = {
     tokens: KeyRing;
     access: () => Access;
     commerce?: CommerceDependencies;
+    moneyPolicy?: CommerceMoneyPolicy;
 };
 /** Mounted even for contract generation; provider operations require explicit dependencies. */
 export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -3969,6 +3971,18 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     };
 } & {
     v1: {
+        commerceMoney: {
+            get: {
+                body: unknown; params: {}; query: unknown; headers: unknown;
+                response: {
+                    200: { factsVersion: 'stripe-money-v1'; taxBehavior: 'exclusive'; configuredSaleCurrencies: ConfiguredSaleCurrencyRule[] };
+                    401: MoneySchemaProblem;
+                    503: MoneySchemaProblem;
+                    422: Response | { type: 'validation'; code: 'validation'; title: 'Validation Error'; status: 422; detail?: string; on: string; found?: unknown; property?: string; expected?: string };
+                };
+                error: never;
+            };
+        };
         offers: {
             get: {
                 body: unknown;
@@ -4119,6 +4133,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             offer: {
+                                moneyUnit: StripeMoneyUnit | null;
+                                taxBehavior: "exclusive" | null;
                                 contentEdition: {
                                     benefit: {
                                         kind: "content-edition";
@@ -4293,6 +4309,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             unitAmountMinor: number;
                             state: "active" | "delisted";
                             summary: SubjectSummary | null;
+                            moneyUnit: StripeMoneyUnit | null;
+                            taxBehavior: "exclusive" | null;
                             contentEdition: {
                                 benefit: import("./model.ts").ContentEditionBenefit;
                                 creatorAccountId: string;
@@ -4309,6 +4327,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     };
                     201: {
                         offer: {
+                            moneyUnit: StripeMoneyUnit | null;
+                            taxBehavior: "exclusive" | null;
                             contentEdition: {
                                 benefit: {
                                     kind: "content-edition";
@@ -4470,6 +4490,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             offer: {
+                                moneyUnit: StripeMoneyUnit | null;
+                                taxBehavior: "exclusive" | null;
                                 contentEdition: {
                                     benefit: {
                                         kind: "content-edition";
@@ -4659,6 +4681,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         response: {
                             200: {
                                 offer: {
+                                    moneyUnit: StripeMoneyUnit | null;
+                                    taxBehavior: "exclusive" | null;
                                     contentEdition: {
                                         benefit: {
                                             kind: "content-edition";
@@ -4826,6 +4850,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             checkoutUrl: string | null;
                             checkoutExpiresAt: string | null;
                             entitlementId: string | null;
+                            moneyUnit: StripeMoneyUnit | null;
+                            taxBehavior: "exclusive" | null;
                             contentEdition: {
                                 benefit: import("./model.ts").ContentEditionBenefit;
                                 creatorAccountId: string;
@@ -4843,6 +4869,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     };
                     201: {
                         order: {
+                            moneyUnit: StripeMoneyUnit | null;
+                            taxBehavior: "exclusive" | null;
                             contentEdition: {
                                 benefit: {
                                     kind: "content-edition";
@@ -4979,6 +5007,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 response: {
                     200: {
                         orders: {
+                            moneyUnit: StripeMoneyUnit | null;
+                            taxBehavior: "exclusive" | null;
                             contentEdition: {
                                 benefit: {
                                     kind: "content-edition";
@@ -5122,6 +5152,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             order: {
+                                moneyUnit: StripeMoneyUnit | null;
+                                taxBehavior: "exclusive" | null;
                                 contentEdition: {
                                     benefit: {
                                         kind: "content-edition";
@@ -6548,4 +6580,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         }>;
     };
 }>;
+type MoneySchemaProblem = {
+    type: unknown; title: unknown; status: number; code: unknown; retryable: unknown;
+    effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string;
+    errors?: { pointer: string; code: never }[];
+};
 export {};

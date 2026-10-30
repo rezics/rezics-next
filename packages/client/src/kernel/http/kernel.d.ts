@@ -1,3 +1,4 @@
+import type { CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';
@@ -49,6 +50,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     /** Trusted domain time only; authentication and request budgets retain real time. */
     clock?: () => Date;
     commerce?: CommerceDependencies;
+    moneyPolicy?: CommerceMoneyPolicy;
     content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'> & {
         readConsent?: CurrentConsentReader;
     };

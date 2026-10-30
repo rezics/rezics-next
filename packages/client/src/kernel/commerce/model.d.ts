@@ -1,3 +1,4 @@
+import type { StripeMoneyUnit } from './money.ts';
 /**
  * Shared commerce types. Offers live in the creator account's partition; orders, their Stripe transactions and
  * entitlements live in the buyer account's partition. Amounts are integers in the currency's minor unit.
@@ -28,6 +29,8 @@ export type CapturedContentEdition = Readonly<{
     quantity: 1;
 }>;
 export type Offer = {
+    moneyUnit?: StripeMoneyUnit | null;
+    taxBehavior?: 'exclusive' | null;
     /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
     contentEdition?: CapturedContentEdition | null;
     id: string;
@@ -45,6 +48,8 @@ export type Offer = {
     revision: number;
 };
 export type Order = {
+    moneyUnit?: StripeMoneyUnit | null;
+    taxBehavior?: 'exclusive' | null;
     /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
     contentEdition?: CapturedContentEdition | null;
     id: string;
@@ -188,6 +193,9 @@ export type CheckoutDecision = {
     newTransactions: StripeTransaction[];
 };
 export type CheckoutRequest = {
+    apiVersion?: '2026-09-30.endive' | null;
+    moneyUnit?: StripeMoneyUnit | null;
+    taxBehavior?: 'exclusive' | null;
     orderId: string;
     buyerAccountId: string;
     title: string;

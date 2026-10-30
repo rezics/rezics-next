@@ -158,6 +158,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
         transport.inspectInput({ input, apiKey: config.apiKey, host: config.host });
         // One SDK instance binds the supported fetch hook to this physical operation, including retries/pages.
         const stripe = new Stripe(config.apiKey, {
+          apiVersion: '2026-09-30.endive',
           ...(config.host === undefined ? {} : { host: config.host }),
           ...(config.port === undefined ? {} : { port: config.port }),
           ...(config.protocol === undefined ? {} : { protocol: config.protocol }),
@@ -193,6 +194,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
             {
               quantity: 1,
               price_data: {
+                ...(request.taxBehavior === 'exclusive' ? { tax_behavior: request.taxBehavior } : {}),
                 currency: request.currency,
                 unit_amount: request.unitAmountMinor,
                 product_data: { name: request.title, tax_code: request.taxCode },
@@ -216,7 +218,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
             : { automatic_tax: { enabled: true } }),
         };
         // https://docs.stripe.com/api/idempotent_requests: Stripe retains the first result for this exact request key.
-        const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
+        const session = await stripe.checkout.sessions.create(params, { idempotencyKey, ...(request.apiVersion ? { apiVersion: request.apiVersion } : {}) });
         if (!session.url) throw new StripeUnavailableError('Stripe returned no Checkout URL');
         return { id: session.id, url: session.url, expiresAt: new Date(session.expires_at * 1000).toISOString() };
       });

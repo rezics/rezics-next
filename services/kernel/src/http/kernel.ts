@@ -1,3 +1,4 @@
+import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
 import { mountContentEditionConsent } from '../content/edition-sale.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
@@ -91,6 +92,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   /** Trusted domain time only; authentication and request budgets retain real time. */
   clock?: () => Date;
   commerce?: CommerceDependencies;
+  moneyPolicy?: CommerceMoneyPolicy;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'> & { readConsent?: CurrentConsentReader };
   search?: SearchService;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
@@ -394,6 +396,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
   const commercial = commerceRoutes(app, {
+    moneyPolicy: dependencies.moneyPolicy ?? readCommerceMoneyPolicy(process.env),
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,

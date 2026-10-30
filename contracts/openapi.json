@@ -44367,6 +44367,314 @@
         ]
       }
     },
+    "/v1/commerceMoney": {
+      "get": {
+        "operationId": "commerce.money_schema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "configuredSaleCurrencies": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "chargeMultiple": {
+                            "const": 1,
+                            "type": "number"
+                          },
+                          "currency": {
+                            "enum": [
+                              "usd",
+                              "eur"
+                            ],
+                            "type": "string"
+                          },
+                          "maxAmountMinor": {
+                            "const": 99999999,
+                            "type": "number"
+                          },
+                          "minAmountMinor": {
+                            "const": 50,
+                            "type": "number"
+                          },
+                          "unit": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "exponent": {
+                                "enum": [
+                                  0,
+                                  2
+                                ],
+                                "type": "number"
+                              },
+                              "factsVersion": {
+                                "const": "stripe-money-v1",
+                                "type": "string"
+                              },
+                              "system": {
+                                "const": "stripe-api",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "system",
+                              "exponent",
+                              "factsVersion"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "currency",
+                          "unit",
+                          "minAmountMinor",
+                          "maxAmountMinor",
+                          "chargeMultiple"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "factsVersion": {
+                      "const": "stripe-money-v1",
+                      "type": "string"
+                    },
+                    "taxBehavior": {
+                      "const": "exclusive",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "factsVersion",
+                    "taxBehavior",
+                    "configuredSaleCurrencies"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "authentication_required",
+                        "invalid_credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Authentication Required",
+                        "Invalid Credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/authentication_required",
+                        "https://rezics.com/problems/invalid_credentials"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication required; Invalid credentials"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "dependency_unavailable",
+                        "overloaded",
+                        "partition_unavailable",
+                        "transaction_retry_exhausted",
+                        "deadline_exceeded"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        true,
+                        true,
+                        true,
+                        true,
+                        true
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Dependency Unavailable",
+                        "Service Overloaded",
+                        "Partition Unavailable",
+                        "Transaction Retry Exhausted",
+                        "Deadline Exceeded"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/dependency_unavailable",
+                        "https://rezics.com/problems/overloaded",
+                        "https://rezics.com/problems/partition_unavailable",
+                        "https://rezics.com/problems/transaction_retry_exhausted",
+                        "https://rezics.com/problems/deadline_exceeded"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {}
+        ],
+        "x-action": "offer:read",
+        "x-exposure": "gate:selling"
+      }
+    },
     "/v1/contentEditions": {
       "post": {
         "operationId": "content_edition.create",
@@ -102228,6 +102536,35 @@
                         "id": {
                           "type": "string"
                         },
+                        "moneyUnit": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exponent": {
+                              "enum": [
+                                0,
+                                2
+                              ],
+                              "type": "number"
+                            },
+                            "factsVersion": {
+                              "const": "stripe-money-v1",
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "stripe-api",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "system",
+                            "exponent",
+                            "factsVersion"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "state": {
                           "enum": [
                             "active",
@@ -102419,6 +102756,13 @@
                         "targetSubjectId": {
                           "type": "string"
                         },
+                        "taxBehavior": {
+                          "const": "exclusive",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         },
@@ -102427,6 +102771,8 @@
                         }
                       },
                       "required": [
+                        "moneyUnit",
+                        "taxBehavior",
                         "contentEdition",
                         "id",
                         "targetSubjectId",
@@ -103079,6 +103425,35 @@
                         "id": {
                           "type": "string"
                         },
+                        "moneyUnit": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exponent": {
+                              "enum": [
+                                0,
+                                2
+                              ],
+                              "type": "number"
+                            },
+                            "factsVersion": {
+                              "const": "stripe-money-v1",
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "stripe-api",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "system",
+                            "exponent",
+                            "factsVersion"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "revision": {
                           "minimum": 1,
                           "type": "integer"
@@ -103274,6 +103649,13 @@
                         "targetSubjectId": {
                           "type": "string"
                         },
+                        "taxBehavior": {
+                          "const": "exclusive",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         },
@@ -103282,6 +103664,8 @@
                         }
                       },
                       "required": [
+                        "moneyUnit",
+                        "taxBehavior",
                         "contentEdition",
                         "id",
                         "revision",
@@ -103865,6 +104249,35 @@
                         "id": {
                           "type": "string"
                         },
+                        "moneyUnit": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exponent": {
+                              "enum": [
+                                0,
+                                2
+                              ],
+                              "type": "number"
+                            },
+                            "factsVersion": {
+                              "const": "stripe-money-v1",
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "stripe-api",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "system",
+                            "exponent",
+                            "factsVersion"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "state": {
                           "enum": [
                             "active",
@@ -104056,6 +104469,13 @@
                         "targetSubjectId": {
                           "type": "string"
                         },
+                        "taxBehavior": {
+                          "const": "exclusive",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         },
@@ -104064,6 +104484,8 @@
                         }
                       },
                       "required": [
+                        "moneyUnit",
+                        "taxBehavior",
                         "contentEdition",
                         "id",
                         "targetSubjectId",
@@ -104897,6 +105319,35 @@
                         "id": {
                           "type": "string"
                         },
+                        "moneyUnit": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exponent": {
+                              "enum": [
+                                0,
+                                2
+                              ],
+                              "type": "number"
+                            },
+                            "factsVersion": {
+                              "const": "stripe-money-v1",
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "stripe-api",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "system",
+                            "exponent",
+                            "factsVersion"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "state": {
                           "enum": [
                             "active",
@@ -105088,6 +105539,13 @@
                         "targetSubjectId": {
                           "type": "string"
                         },
+                        "taxBehavior": {
+                          "const": "exclusive",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         },
@@ -105096,6 +105554,8 @@
                         }
                       },
                       "required": [
+                        "moneyUnit",
+                        "taxBehavior",
                         "contentEdition",
                         "id",
                         "targetSubjectId",
@@ -106792,6 +107252,35 @@
                           "id": {
                             "type": "string"
                           },
+                          "moneyUnit": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "exponent": {
+                                "enum": [
+                                  0,
+                                  2
+                                ],
+                                "type": "number"
+                              },
+                              "factsVersion": {
+                                "const": "stripe-money-v1",
+                                "type": "string"
+                              },
+                              "system": {
+                                "const": "stripe-api",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "system",
+                              "exponent",
+                              "factsVersion"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "offerId": {
                             "type": "string"
                           },
@@ -106810,6 +107299,13 @@
                           "targetSubjectId": {
                             "type": "string"
                           },
+                          "taxBehavior": {
+                            "const": "exclusive",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "taxCode": {
                             "type": "string"
                           },
@@ -106821,6 +107317,8 @@
                           }
                         },
                         "required": [
+                          "moneyUnit",
+                          "taxBehavior",
                           "contentEdition",
                           "id",
                           "offerId",
@@ -107523,6 +108021,35 @@
                         "id": {
                           "type": "string"
                         },
+                        "moneyUnit": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exponent": {
+                              "enum": [
+                                0,
+                                2
+                              ],
+                              "type": "number"
+                            },
+                            "factsVersion": {
+                              "const": "stripe-money-v1",
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "stripe-api",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "system",
+                            "exponent",
+                            "factsVersion"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "offerId": {
                           "type": "string"
                         },
@@ -107534,9 +108061,18 @@
                             "unknown"
                           ],
                           "type": "string"
+                        },
+                        "taxBehavior": {
+                          "const": "exclusive",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
+                        "moneyUnit",
+                        "taxBehavior",
                         "contentEdition",
                         "id",
                         "offerId",
@@ -108309,6 +108845,35 @@
                         "id": {
                           "type": "string"
                         },
+                        "moneyUnit": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exponent": {
+                              "enum": [
+                                0,
+                                2
+                              ],
+                              "type": "number"
+                            },
+                            "factsVersion": {
+                              "const": "stripe-money-v1",
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "stripe-api",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "system",
+                            "exponent",
+                            "factsVersion"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "offerId": {
                           "type": "string"
                         },
@@ -108505,11 +109070,20 @@
                         "targetSubjectId": {
                           "type": "string"
                         },
+                        "taxBehavior": {
+                          "const": "exclusive",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "title": {
                           "type": "string"
                         }
                       },
                       "required": [
+                        "moneyUnit",
+                        "taxBehavior",
                         "contentEdition",
                         "id",
                         "offerId",

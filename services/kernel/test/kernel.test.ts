@@ -37,6 +37,7 @@ type Routes = TypedRoutes<Kernel['~Routes']>;
 // response keeps its schema's type. An error names the offending routes.
 const typed = [
   'GET /health',
+  'GET /v1/commerceMoney',
   'POST /v1/viewerActions',
   'POST /v1/webhooks/stripe',
   'GET /v1/offers/:offerId',
@@ -464,4 +465,19 @@ test('creator offer listing declares exact own-account authority', () => {
     security: [{ bearerAuth: [] }],
   });
   expect(actionCatalogue(kernel).get('offer:list')).toMatchObject({ anonymous: false, authority: 'own-account' });
+});
+
+test('commerce money schema publishes only closed static configured money facts through the existing selling exposure', () => {
+  const document = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const operation = document.paths['/v1/commerceMoney']!.get!;
+  expect(operation.operationId).toBe('commerce.money_schema');
+  expect(operation['x-exposure']).toBe('gate:selling');
+  expect(operation['x-action']).toBe('offer:read');
+  expect(operation.security).toEqual([{ bearerAuth: [] }, {}]);
+  const schema = operation.responses!['200']!.content!['application/json']!.schema as {
+    additionalProperties: boolean; properties: Record<string, unknown>; required: string[];
+  };
+  expect(schema.additionalProperties).toBe(false);
+  expect(Object.keys(schema.properties).sort()).toEqual(['configuredSaleCurrencies', 'factsVersion', 'taxBehavior']);
+  expect(schema.required).toEqual(['factsVersion', 'taxBehavior', 'configuredSaleCurrencies']);
 });

@@ -1,3 +1,4 @@
+import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
 import { ContentEditionUnavailableError, contentEditionTermsView, decodeCapturedContentEdition } from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
@@ -40,6 +41,7 @@ type Dependencies = {
   tokens: KeyRing;
   access: () => Access;
   commerce?: CommerceDependencies;
+  moneyPolicy?: CommerceMoneyPolicy;
 };
 const object = { additionalProperties: false } as const;
 const id = t.String();
@@ -70,8 +72,23 @@ const contentEditionSchema = t.Union([
     object,
   ),
 ]);
+const moneyUnitSchema = t.Object({
+  system: t.Literal('stripe-api'), exponent: t.Union([t.Literal(0), t.Literal(2)]), factsVersion: t.Literal('stripe-money-v1'),
+}, object);
+const capturedMoneySchemas = {
+  moneyUnit: t.Union([moneyUnitSchema, t.Null()]),
+  taxBehavior: t.Union([t.Literal('exclusive'), t.Null()]),
+};
+const moneySchema = t.Object({
+  factsVersion: t.Literal('stripe-money-v1'), taxBehavior: t.Literal('exclusive'),
+  configuredSaleCurrencies: t.Array(t.Object({
+    currency: t.Union([t.Literal('usd'), t.Literal('eur')]), unit: moneyUnitSchema,
+    minAmountMinor: t.Literal(50), maxAmountMinor: t.Literal(99999999), chargeMultiple: t.Literal(1),
+  }, object)),
+}, object);
 const offerSchema = t.Object(
   {
+    ...capturedMoneySchemas,
     contentEdition: contentEditionSchema,
     id,
     targetSubjectId: id,
@@ -85,6 +102,7 @@ const offerSchema = t.Object(
 );
 const offerReadSchema = t.Object(
   {
+    ...capturedMoneySchemas,
     contentEdition: contentEditionSchema,
     id,
     revision: t.Integer({ minimum: 1 }),
@@ -114,6 +132,7 @@ const sellerOfferSchema = t.Object(
 );
 const orderSchema = t.Object(
   {
+    ...capturedMoneySchemas,
     contentEdition: contentEditionSchema,
     id,
     offerId: id,
@@ -127,6 +146,7 @@ const orderSchema = t.Object(
 );
 const orderReadSchema = t.Object(
   {
+    ...capturedMoneySchemas,
     contentEdition: contentEditionSchema,
     id,
     offerId: id,
@@ -200,6 +220,8 @@ function offerView(offer: Offer, summary: SubjectSummary | null) {
     unitAmountMinor,
     state,
     summary,
+    moneyUnit: offer.moneyUnit ?? null,
+    taxBehavior: offer.taxBehavior ?? null,
     contentEdition: contentEditionTermsView(offer.contentEdition),
   };
 }
@@ -214,6 +236,8 @@ function offerReadView(offer: Offer, subject: SubjectSummary | null) {
     currency,
     unitAmountMinor,
     state,
+    moneyUnit: offer.moneyUnit ?? null,
+    taxBehavior: offer.taxBehavior ?? null,
     contentEdition: contentEditionTermsView(offer.contentEdition),
   };
 }
@@ -242,6 +266,8 @@ async function orderView(pool: Pool, order: Order) {
     checkoutUrl,
     checkoutExpiresAt,
     entitlementId: entitlement?.id ?? null,
+    moneyUnit: order.moneyUnit ?? null,
+    taxBehavior: order.taxBehavior ?? null,
     contentEdition: contentEditionTermsView(order.contentEdition),
     createdAt,
   };
@@ -273,6 +299,8 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
     return await run();
   } catch (error) {
     if (error instanceof GrantDeniedError) throw new ProblemError(denied);
+    if (error instanceof RangeError && error.message === 'Invalid configured sale amount')
+      throw new ProblemError('invalid_request');
     if (error instanceof OfferUnavailableError) throw new ProblemError('offer_unavailable');
     if (error instanceof ContentEditionUnavailableError) throw new ProblemError('dependency_unavailable');
     if (error instanceof OfferRevisionConflictError) throw new ProblemError('offer_revision_conflict');
@@ -284,6 +312,7 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
 /** Mounted even for contract generation; provider operations require explicit dependencies. */
 export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: Dependencies) {
   const { pool, tokens } = deps;
+  const moneyPolicy = deps.moneyPolicy ?? readCommerceMoneyPolicy(process.env);
   // The webhook composer accepts the base app. Both composers mutate this
   // instance; retain their route declarations together for the generated client.
   const webhook = stripeWebhookRoutes(app as unknown as ReturnType<typeof createApp>, {
@@ -295,6 +324,12 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
     },
   });
   const routes = app
+    .get('/v1/commerceMoney', {
+      response: { 200: moneySchema, 401: unauthorized, 503: unavailable },
+      // Reuse the existing anonymous offer-read label; static configuration is no grant or selling permission.
+      detail: detail('commerce.money_schema', 'offer:read', 'gate:selling', true),
+    }, () => ({ factsVersion: 'stripe-money-v1' as const, taxBehavior: moneyPolicy.taxBehavior,
+      configuredSaleCurrencies: moneyPolicy.configuredSaleCurrencies.map((rule) => ({ ...rule })) }))
     .get(
       '/v1/offers',
       {
@@ -413,7 +448,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
-            () => createCommerceCommands({ pool, access: deps.access() }).createOffer(actor, body, key),
+            () => createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).createOffer(actor, body, key),
             'forbidden',
           ),
         );
@@ -457,7 +492,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
-            () => createCommerceCommands({ pool, access: deps.access() }).reviseOffer(actor, params.offerId, body, key),
+            () => createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).reviseOffer(actor, params.offerId, body, key),
             'not_found',
           ),
         );
@@ -496,7 +531,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
-            () => createCommerceCommands({ pool, access: deps.access() }).delistOffer(actor, params.offerId, key),
+            () => createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).delistOffer(actor, params.offerId, key),
             'not_found',
           ),
         );
@@ -551,7 +586,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           command(
             () =>
               checkout(
-                { pool, commands: createCommerceCommands({ pool, access: deps.access() }), ...commerce },
+                { pool, commands: createCommerceCommands({ pool, access: deps.access(), moneyPolicy }), ...commerce },
                 actor,
                 body.offerId,
                 body.expectedOfferRevision,
@@ -623,7 +658,9 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               return {
                 orders: orders.map((order) => ({
                   ...order,
-                  contentEdition: contentEditionTermsView(order.contentEdition),
+                  moneyUnit: order.moneyUnit ?? null,
+    taxBehavior: order.taxBehavior ?? null,
+    contentEdition: contentEditionTermsView(order.contentEdition),
                 })),
                 next:
                   rows.length > size && last && partition

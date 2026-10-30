@@ -1,3 +1,4 @@
+import { readCommerceMoneyPolicy } from './money.ts';
 import type { StripePortConfig } from './stripe.ts';
 
 export const MAX_WEBHOOK_SECRETS = 4;
@@ -121,18 +122,28 @@ function readCheckoutConfig(env: Environment): Pick<CommerceWorkerConfig, 'succe
 
 /** Configuration shared by the worker's durable commerce workflows and the HTTP server. */
 export function readCommerceWorkerConfig(env: Environment): CommerceWorkerConfig | null {
-  if (!isCommerceConfigured(env)) return null;
-  return { stripe: readStripeConfig(env), ...readCheckoutConfig(env) };
+  if (!isCommerceConfigured(env)) {
+    readCommerceMoneyPolicy(env);
+    return null;
+  }
+  const config = { stripe: readStripeConfig(env), ...readCheckoutConfig(env) };
+  readCommerceMoneyPolicy(env);
+  return config;
 }
 
 /** HTTP-only configuration adds webhook verification secrets to the worker's shared settings. */
 export function readCommerceConfig(env: Environment): CommerceConfig | null {
-  if (!isCommerceConfigured(env)) return null;
+  if (!isCommerceConfigured(env)) {
+    readCommerceMoneyPolicy(env);
+    return null;
+  }
   const apiKey = readStripeApiKey(env);
   const webhookSecrets = readWebhookSecrets(env);
-  return {
+  const config = {
     stripe: readStripeConfig(env, apiKey),
     ...readCheckoutConfig(env),
     webhookSecrets,
   };
+  readCommerceMoneyPolicy(env);
+  return config;
 }
