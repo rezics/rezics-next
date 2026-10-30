@@ -53,7 +53,7 @@ export const Unavailable: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
-    await view.findByText(m.settings_preparing_title());
+    await view.findByText(m.settings_unavailable_title());
     await expect(view.queryByRole('radio')).toBeNull();
   },
 };

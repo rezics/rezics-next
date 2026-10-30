@@ -14,6 +14,7 @@ export type NotificationEditorState = {
   draft: NotificationPreferences;
   pending: Attempt | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'reloading' | 'failed';
+  reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;
 };
 export type NotificationEditorIO = {
@@ -86,12 +87,12 @@ export class NotificationEditor {
   private async send(recovering: boolean) {
     const attempt = this.state.pending;
     if (!attempt) return;
-    this.update({ phase: 'saving', failure: undefined });
+    this.update({ phase: 'saving', reason: undefined, failure: undefined });
     let result: NotificationWriteResult;
     try {
       result = await this.io.save(attempt.input);
     } catch {
-      this.update({ phase: 'uncertain' });
+      this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;
     }
     if (!result.ok) {
@@ -100,24 +101,28 @@ export class NotificationEditor {
         result.reason === 'preparing' ||
         (recovering && result.reason !== 'conflict')
       ) {
-        this.update({ phase: 'uncertain', failure: result.failure });
+        this.update({ phase: 'uncertain', reason: result.reason, failure: result.failure });
       } else {
         this.update({
           pending: null,
           phase: result.reason === 'conflict' ? 'conflict' : 'failed',
+          reason: result.reason,
           draft: result.reason === 'conflict' ? this.state.draft : { ...this.state.known.notifications },
           failure: result.failure,
         });
       }
       return;
     }
-    if (!Number.isSafeInteger(result.version) || result.version < attempt.input.expectedVersion) {
-      this.update({ phase: 'uncertain' });
+    if (
+      !Number.isSafeInteger(result.version) ||
+      result.version < Math.max(attempt.input.expectedVersion, this.state.known.version)
+    ) {
+      this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;
     }
     const receipt = { notifications: result.notifications, version: result.version };
-    const edited = !sameNotifications(this.state.draft, attempt.draft);
     if (!recovering) {
+      const edited = !sameNotifications(this.state.draft, attempt.draft);
       this.confirm(receipt);
       this.update({
         pending: null,
@@ -137,16 +142,18 @@ export class NotificationEditor {
       current.version < receipt.version ||
       (current.version === receipt.version && !sameNotifications(current.notifications, receipt.notifications))
     ) {
-      this.update({ phase: 'uncertain' });
+      this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;
     }
     this.confirm(current);
+    const edited = !sameNotifications(this.state.draft, attempt.draft);
     const matches =
       current.version === receipt.version && sameNotifications(current.notifications, receipt.notifications);
     this.update({
       pending: null,
       draft: edited ? this.state.draft : { ...receipt.notifications },
       phase: matches && !edited ? 'saved' : 'review',
+      reason: undefined,
       failure: undefined,
     });
   }
@@ -158,14 +165,17 @@ export class NotificationEditor {
         !('preferences' in page) ||
         !page.notifications ||
         !Number.isSafeInteger(page.preferences.version) ||
-        page.preferences.version < 0
+        page.preferences.version < this.state.known.version
       ) {
-        this.update({ failure: page.signedIn && 'failure' in page ? page.failure : undefined });
+        this.update({
+          reason: !page.signedIn ? 'forbidden' : 'state' in page ? page.state : 'unavailable',
+          failure: page.signedIn && 'failure' in page ? page.failure : undefined,
+        });
         return null;
       }
       return { notifications: { ...page.notifications }, version: page.preferences.version };
     } catch {
-      this.update({ failure: undefined });
+      this.update({ reason: 'unavailable', failure: undefined });
       return null;
     }
   }
@@ -183,10 +193,11 @@ export class NotificationEditor {
     this.update({
       draft: preserve ? this.state.draft : { ...current.notifications },
       phase: preserve ? 'review' : 'idle',
+      reason: undefined,
     });
   }
   useCurrent() {
     if (this.state.pending || this.state.phase === 'reloading') return;
-    this.update({ draft: { ...this.state.known.notifications }, phase: 'idle', failure: undefined });
+    this.update({ draft: { ...this.state.known.notifications }, phase: 'idle', reason: undefined, failure: undefined });
   }
 }

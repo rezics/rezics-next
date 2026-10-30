@@ -71,9 +71,12 @@ test('an unavailable or closed readback never turns an original retry into succe
   const fixture = readingFixture('unavailable');
   const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
   expect(await sendReading(fixture.io, input, false, latest)).toMatchObject({ kind: 'uncertain' });
-  expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({ kind: 'uncertain', reason: 'preparing' });
+  expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({
+    kind: 'uncertain',
+    reason: 'unavailable',
+  });
   expect(fixture.calls[1]).toBe(input);
-  expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'preparing' });
+  expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
   const closed = readingFixture('closed');
   expect(await readReading(closed.io, 0)).toMatchObject({ ok: false, reason: 'closed' });
 });

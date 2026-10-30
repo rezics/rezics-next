@@ -13,6 +13,7 @@ import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
 import type { NativePreferenceFailure, SettingsPage } from './preferences';
+import { usePreferenceRetry } from './preference-failure-retry';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
@@ -28,6 +29,7 @@ function SettingsFailure({
   failure: NativePreferenceFailure;
   onRetry: () => void;
 }) {
+  const waiting = usePreferenceRetry(failure);
   return (
     <Card>
       <CardHeader>
@@ -41,6 +43,7 @@ function SettingsFailure({
           variant={state === 'preparing' ? 'default' : 'destructive'}
           data-response-status={failure.status ?? ''}
           data-response-code={failure.code ?? ''}
+          data-retry-after={failure.retryAfter}
         >
           <AlertTitle>
             {state === 'closed'
@@ -57,7 +60,8 @@ function SettingsFailure({
                   ? m.settings_preparing_text()
                   : m.settings_unavailable_text()}
             </p>
-            <Button type="button" variant="outline" onClick={onRetry}>
+            {waiting ? <p>{m.settings_retry_wait()}</p> : null}
+            <Button type="button" variant="outline" disabled={waiting} onClick={onRetry}>
               {m.settings_retry()}
             </Button>
           </AlertDescription>
@@ -126,7 +130,7 @@ function SettingsSections({
                 csrfToken={formCsrfToken}
                 action={location.publicHref.split(/[?#]/, 1)[0]!}
                 initialFailed={notificationError}
-                onVersionChange={setVersion}
+                onVersionChange={(next) => setVersion((current) => Math.max(current, next))}
               />
             ) : (
               <Card>

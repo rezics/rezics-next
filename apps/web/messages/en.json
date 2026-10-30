@@ -737,6 +737,7 @@
   "settings_unavailable_title": "Settings are unavailable",
   "settings_unavailable_text": "The settings service could not return your preferences. Try again.",
   "settings_retry": "Try again",
+  "settings_retry_wait": "Wait before trying again.",
   "settings_reading_heading": "Reading",
   "settings_reading_text": "How the site treats spoilers and covers while you read.",
   "settings_reload": "Reload",

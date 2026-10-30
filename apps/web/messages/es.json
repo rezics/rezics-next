@@ -736,6 +736,7 @@
   "settings_unavailable_title": "Configuración no disponible",
   "settings_unavailable_text": "El servicio de configuración no pudo obtener tus preferencias. Inténtalo de nuevo.",
   "settings_retry": "Intentar de nuevo",
+  "settings_retry_wait": "Espera antes de volver a intentarlo.",
   "settings_reading_heading": "Lectura",
   "settings_reading_text": "Cómo trata el sitio los spoilers y las portadas mientras lees.",
   "settings_reload": "Recargar",

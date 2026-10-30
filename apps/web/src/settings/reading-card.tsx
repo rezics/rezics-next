@@ -18,6 +18,7 @@ import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, savePreferences } from './actions';
 import type { NativePreferenceFailure, PreferenceChange, ReadingPreferences, SpoilerLevel } from './preferences';
+import { usePreferenceRetry } from './preference-failure-retry';
 import {
   readingMutation,
   readReading,
@@ -65,6 +66,7 @@ export function ReadingCard({
     phase: 'idle',
   }));
   const current = useRef(state);
+  const waiting = usePreferenceRetry(state.failure);
   const draftRevision = useRef(0);
   const sharedVersion = useRef(version);
   sharedVersion.current = Math.max(sharedVersion.current, version, initial.version);
@@ -119,7 +121,7 @@ export function ReadingCard({
     if (autosave && !current.current.pending) await submit();
   }
   async function reload(keepDraft = false) {
-    if (current.current.phase === 'saving' || current.current.phase === 'reloading') return;
+    if (waiting || current.current.phase === 'saving' || current.current.phase === 'reloading') return;
     const revision = draftRevision.current;
     update({ phase: 'reloading', failure: undefined });
     const result = await readReading(transport, () => Math.max(current.current.known.version, sharedVersion.current));
@@ -144,7 +146,7 @@ export function ReadingCard({
     onVersionChange(Math.max(sharedVersion.current, result.preferences.version));
   }
   async function retry() {
-    if (!hydrated || !csrfToken || current.current.phase !== 'uncertain') return;
+    if (waiting || !hydrated || !csrfToken || current.current.phase !== 'uncertain') return;
     await send(true);
   }
   const uncertain = state.pending !== null && state.phase !== 'saving';
@@ -221,7 +223,11 @@ export function ReadingCard({
           {state.phase === 'saved' ? m.settings_saved() : null}
         </div>
         {recovery ? (
-          <Alert data-response-status={state.failure?.status ?? ''} data-response-code={state.failure?.code ?? ''}>
+          <Alert
+            data-response-status={state.failure?.status ?? ''}
+            data-response-code={state.failure?.code ?? ''}
+            data-retry-after={state.failure?.retryAfter}
+          >
             <AlertTitle>{title}</AlertTitle>
             <AlertDescription className="flex flex-col gap-3">
               <p>
@@ -242,6 +248,7 @@ export function ReadingCard({
               {uncertain && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
               {uncertain && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
               {uncertain && state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
+              {waiting ? <p>{m.settings_retry_wait()}</p> : null}
               <p>
                 {m.settings_reading_current({
                   spoilers: levels[state.known.spoilerLevel]!.title(),
@@ -250,15 +257,20 @@ export function ReadingCard({
               </p>
               <div className="flex flex-wrap gap-2">
                 {uncertain ? (
-                  <Button type="button" variant="outline" disabled={busy || !csrfToken} onClick={() => void retry()}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={waiting || busy || !csrfToken}
+                    onClick={() => void retry()}
+                  >
                     {m.settings_reading_retry_original()}
                   </Button>
                 ) : null}
-                <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
+                <Button type="button" variant="outline" disabled={waiting || busy} onClick={() => void reload()}>
                   {m.settings_reload()}
                 </Button>
                 {!state.pending && (state.phase === 'conflict' || state.phase === 'failed') ? (
-                  <Button type="button" variant="outline" disabled={busy} onClick={() => void reload(true)}>
+                  <Button type="button" variant="outline" disabled={waiting || busy} onClick={() => void reload(true)}>
                     {m.settings_reading_review_changes()}
                   </Button>
                 ) : null}

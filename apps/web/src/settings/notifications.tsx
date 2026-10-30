@@ -8,6 +8,7 @@ import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, saveNotifications } from './actions';
 import { NotificationEditor, type NotificationEditorIO } from './notification-recovery';
 import type { NotificationPreferences } from './preferences';
+import { usePreferenceRetry } from './preference-failure-retry';
 
 export function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
@@ -51,6 +52,7 @@ export function NotificationsCard({
       ),
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  const waiting = usePreferenceRetry(state.failure);
   useLayoutEffect(() => setHydrated(true), []);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const disabled = busy || !csrfToken;
@@ -145,11 +147,24 @@ export function NotificationsCard({
             {busy ? m.settings_saving() : state.phase === 'saved' ? m.settings_saved() : null}
           </div>
           {uncertain ? (
-            <Alert data-response-status={state.failure?.status ?? ''} data-response-code={state.failure?.code ?? ''}>
+            <Alert
+              data-response-status={state.failure?.status ?? ''}
+              data-response-code={state.failure?.code ?? ''}
+              data-retry-after={state.failure?.retryAfter}
+            >
               <AlertTitle>{m.settings_notifications_uncertain_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>{m.settings_notifications_uncertain_text()}</p>
-                <Button type="button" variant="outline" disabled={disabled} onClick={() => void editor.retry()}>
+                {state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
+                {state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
+                {state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
+                {waiting ? <p>{m.settings_retry_wait()}</p> : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={waiting || disabled}
+                  onClick={() => void editor.retry()}
+                >
                   {m.settings_notifications_retry_original()}
                 </Button>
               </AlertDescription>
@@ -159,15 +174,18 @@ export function NotificationsCard({
               variant={state.phase === 'failed' ? 'destructive' : 'default'}
               data-response-status={state.failure?.status ?? ''}
               data-response-code={state.failure?.code ?? ''}
+              data-retry-after={state.failure?.retryAfter}
             >
               <AlertTitle>
                 {state.phase === 'conflict'
                   ? m.settings_conflict_title()
                   : state.failure?.code === 'platform_closed'
                     ? m.settings_closed_title()
-                    : state.failure?.status === 503
+                    : state.reason === 'preparing'
                       ? m.settings_preparing_title()
-                      : m.settings_failed_title()}
+                      : state.reason === 'unavailable'
+                        ? m.settings_unavailable_title()
+                        : m.settings_failed_title()}
               </AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>
@@ -175,11 +193,14 @@ export function NotificationsCard({
                     ? m.settings_conflict_text()
                     : state.failure?.code === 'platform_closed'
                       ? m.settings_closed_text()
-                      : state.failure?.status === 503
+                      : state.reason === 'preparing'
                         ? m.settings_preparing_text()
-                        : m.settings_failed_text()}
+                        : state.reason === 'unavailable'
+                          ? m.settings_unavailable_text()
+                          : m.settings_failed_text()}
                 </p>
-                <Button type="button" variant="outline" disabled={busy} onClick={() => void editor.reload()}>
+                {waiting ? <p>{m.settings_retry_wait()}</p> : null}
+                <Button type="button" variant="outline" disabled={waiting || busy} onClick={() => void editor.reload()}>
                   {m.settings_reload()}
                 </Button>
               </AlertDescription>

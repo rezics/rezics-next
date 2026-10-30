@@ -62,7 +62,7 @@ function Example({ scenario = 'saved' }: { scenario?: 'saved' | 'lost' | 'stale'
         scenario === 'unavailable'
           ? {
               signedIn: true,
-              state: 'preparing',
+              state: 'unavailable',
               failure: { status: 503, code: 'dependency_unavailable' },
               securityHref: null,
             }

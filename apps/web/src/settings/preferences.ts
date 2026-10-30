@@ -149,10 +149,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function failureDetails(value: unknown, status?: number): NativePreferenceFailure {
+function failureDetails(value: unknown, status?: number, headers?: Headers): NativePreferenceFailure {
   const root = isRecord(value) ? value : undefined;
   const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
-  const nativeStatus = status ?? (root && typeof root.status === 'number' ? root.status : null);
+  const nativeStatus =
+    status ??
+    (root && typeof root.status === 'number'
+      ? root.status
+      : problem && typeof problem.status === 'number'
+        ? problem.status
+        : null);
+  const retryAfter =
+    headers?.get('retry-after') ??
+    (value instanceof MediaProblem ? new Headers(value.headers).get('retry-after') : undefined) ??
+    (root && typeof root.retryAfter === 'string' ? root.retryAfter : undefined);
   return {
     status: nativeStatus,
     ...(problem && typeof problem.code === 'string' ? { code: problem.code } : {}),
@@ -162,14 +172,22 @@ function failureDetails(value: unknown, status?: number): NativePreferenceFailur
       : problem && typeof problem.requestId === 'string'
         ? { requestId: problem.requestId }
         : {}),
-    ...(root && typeof root.retryAfter === 'string' ? { retryAfter: root.retryAfter } : {}),
+    ...(retryAfter ? { retryAfter } : {}),
   };
 }
 
 function failureState(failure: NativePreferenceFailure): 'closed' | 'preparing' | 'unavailable' {
   if (failure.code === 'platform_closed') return 'closed';
-  if (failure.status === 503) return 'preparing';
+  // The account preference endpoint has no adopted preparation response. A 503 is a service failure.
   return 'unavailable';
+}
+
+function writeFailure(failure: NativePreferenceFailure): PreferenceWriteResult & { ok: false } {
+  if (failure.code === 'platform_closed') return { ok: false, reason: 'closed', failure };
+  if (failure.status === 401 || failure.status === 403) return { ok: false, reason: 'forbidden', failure };
+  if (failure.status === 409 && failure.code === 'conflict') return { ok: false, reason: 'conflict', failure };
+  if (failure.status === 400 || failure.status === 422) return { ok: false, reason: 'invalid', failure };
+  return { ok: false, reason: failureState(failure), failure };
 }
 
 function statusOf(result: { status?: number; error?: unknown }): number | undefined {
@@ -216,16 +234,30 @@ export function parseNotificationChange(input: unknown): NotificationChange | un
   };
 }
 
-function present(preferences: ReadingPreferences): ReadingPreferences {
+function present(preferences: unknown): ReadingPreferences | undefined {
+  if (
+    !isRecord(preferences) ||
+    !Number.isSafeInteger(preferences.version) ||
+    (preferences.version as number) < 0 ||
+    (preferences.spoilerLevel !== 0 && preferences.spoilerLevel !== 1 && preferences.spoilerLevel !== 2) ||
+    (preferences.suitability !== 'blur' && preferences.suitability !== 'show')
+  )
+    return undefined;
   return {
     spoilerLevel: preferences.spoilerLevel,
     suitability: preferences.suitability,
-    version: preferences.version,
+    version: preferences.version as number,
   };
 }
 
 function presentNotifications(value: unknown): NotificationPreferences | undefined {
-  if (!isRecord(value) || Object.values(value).some((enabled) => typeof enabled !== 'boolean')) return undefined;
+  if (
+    !isRecord(value) ||
+    typeof value.reply !== 'boolean' ||
+    typeof value.mention !== 'boolean' ||
+    Object.values(value).some((enabled) => typeof enabled !== 'boolean')
+  )
+    return undefined;
   return { ...value } as NotificationPreferences;
 }
 
@@ -246,8 +278,9 @@ export async function loadSettingsPage(
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { signedIn: false };
     const result = await client.accounts({ accountId }).preferences.get({ headers: { authorization } });
-    if (result.error || !result.data) {
-      const failure = failureDetails(result.error, statusOf(result));
+    const preferences = !result.error ? present(result.data) : undefined;
+    if (!preferences) {
+      const failure = failureDetails(result.error ?? result.data, statusOf(result), result.headers);
       return {
         signedIn: true,
         state: failureState(failure),
@@ -259,7 +292,7 @@ export async function loadSettingsPage(
     const notifications = presentNotifications(data.notifications);
     return {
       signedIn: true,
-      preferences: present(data),
+      preferences,
       ...(notifications ? { notifications } : {}),
       securityHref: securityHref(sessionEnv),
     };
@@ -272,10 +305,6 @@ export async function loadSettingsPage(
       securityHref: securityHref(sessionEnv),
     };
   }
-}
-
-function problemCode(error: unknown): unknown {
-  return isRecord(error) && isRecord(error.value) ? error.value.code : undefined;
 }
 
 /** One session read and one `PATCH` carrying the version the person read. A stale version changes nothing. */
@@ -294,19 +323,14 @@ export async function changePreferences(
     const result = await client.accounts({ accountId }).preferences.patch(body, {
       headers: { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string },
     });
-    if (!result.error && result.data) return { ok: true, preferences: present(result.data) };
-    const status = statusOf(result);
-    const failure = failureDetails(result.error, status);
-    if (status === 409 && problemCode(result.error) === 'conflict') return { ok: false, reason: 'conflict', failure };
-    if (status === 400 || status === 422) return { ok: false, reason: 'invalid', failure };
-    if (failure.code === 'platform_closed') return { ok: false, reason: 'closed', failure };
-    if (status === 401 || status === 403) return { ok: false, reason: 'forbidden', failure };
-    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
+    const preferences = !result.error ? present(result.data) : undefined;
+    if (preferences) return { ok: true, preferences };
+    return writeFailure(failureDetails(result.error ?? result.data, statusOf(result), result.headers));
   } catch (error) {
     const failure = failureDetails(error);
     if (isPlatformClosedError(error) || failure.code === 'platform_closed')
       return { ok: false, reason: 'closed', failure };
-    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
+    return writeFailure(failure);
   }
 }
 
@@ -334,23 +358,22 @@ export async function changeNotifications(
     if (!result.error && result.data) {
       const data = result.data as ReadingPreferences & { notifications?: unknown };
       const notifications = presentNotifications(data.notifications);
-      if (!notifications)
-        return { ok: false, reason: 'unavailable', failure: failureDetails(undefined, result.status) };
-      return { ok: true, notifications, version: data.version };
+      const preferences = present(data);
+      if (!notifications || !preferences)
+        return {
+          ok: false,
+          reason: 'unavailable',
+          failure: failureDetails(result.data, result.status, result.headers),
+        };
+      return { ok: true, notifications, version: preferences.version };
     }
-    const status = statusOf(result);
-    const failure = failureDetails(result.error, status);
-    if (status === 409 && problemCode(result.error) === 'conflict') return { ok: false, reason: 'conflict', failure };
-    if (status === 400 || status === 422) return { ok: false, reason: 'invalid', failure };
-    if (failure.code === 'platform_closed') return { ok: false, reason: 'closed', failure };
-    if (status === 401 || status === 403) return { ok: false, reason: 'forbidden', failure };
-    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
+    return writeFailure(failureDetails(result.error ?? result.data, statusOf(result), result.headers));
   } catch (error) {
     const failure = failureDetails(error);
     if (error instanceof MediaProblem && error.problem.code === 'forbidden')
       return { ok: false, reason: 'forbidden', failure };
     if (isPlatformClosedError(error) || failure.code === 'platform_closed')
       return { ok: false, reason: 'closed', failure };
-    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
+    return writeFailure(failure);
   }
 }

@@ -736,6 +736,7 @@
   "settings_unavailable_title": "Paramètres indisponibles",
   "settings_unavailable_text": "Le service des paramètres n’a pas pu récupérer vos préférences. Réessayez.",
   "settings_retry": "Réessayer",
+  "settings_retry_wait": "Patientez avant de réessayer.",
   "settings_reading_heading": "Lecture",
   "settings_reading_text": "La façon dont le site traite les spoilers et les couvertures pendant votre lecture.",
   "settings_reload": "Recharger",

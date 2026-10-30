@@ -102,7 +102,7 @@ test('missing and malformed preference maps never become enabled controls or a c
 
 test('Settings preserves preparing, closed and unavailable native read and write failures', async () => {
   for (const [status, code, state] of [
-    [503, 'dependency_unavailable', 'preparing'],
+    [503, 'dependency_unavailable', 'unavailable'],
     [403, 'platform_closed', 'closed'],
     [500, 'internal_error', 'unavailable'],
   ] as const) {

@@ -6,7 +6,18 @@ function notificationState(): string | null {
 }
 
 const failures = {
-  preparing: {
+  generic: {
+    status: 503,
+  },
+  deadline: {
+    status: 503,
+    type: 'https://rezics.com/problems/deadline_exceeded',
+    code: 'deadline_exceeded',
+    retryable: true,
+    request_id: 'story-settings-deadline',
+    headers: { 'retry-after': '30' },
+  },
+  dependency: {
     status: 503,
     type: 'https://rezics.com/problems/dependency_unavailable',
     code: 'dependency_unavailable',
@@ -35,7 +46,13 @@ export const routes: FakeRoute[] = [
     path: /^\/v1\/accounts\/[^/]+\/preferences$/,
     story: () => {
       const state = notificationState();
-      return state === 'preparing' || state === 'closed' || state === 'unavailable' ? failures[state] : undefined;
+      return state === 'generic' ||
+        state === 'deadline' ||
+        state === 'dependency' ||
+        state === 'closed' ||
+        state === 'unavailable'
+        ? failures[state]
+        : undefined;
     },
   },
 ];

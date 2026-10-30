@@ -215,10 +215,10 @@ async function settingsFailureReady(context: { canvasElement: HTMLElement }, sta
   await view.findByRole('button', { name: m.settings_retry() });
 }
 
-export const NotificationSettingsPreparing: Story = {
-  name: 'Notification settings preparing',
-  play: (context) => settingsFailureReady(context, '503', m.settings_preparing_text),
-  render: () => <PageStory visitor="Signed In" path="/settings?notification-state=preparing" />,
+export const NotificationSettingsDependencyUnavailable: Story = {
+  name: 'Notification settings dependency unavailable',
+  play: (context) => settingsFailureReady(context, '503', m.settings_unavailable_text),
+  render: () => <PageStory visitor="Signed In" path="/settings?notification-state=dependency" />,
 };
 
 export const NotificationSettingsClosed: Story = {

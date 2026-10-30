@@ -736,6 +736,7 @@
   "settings_unavailable_title": "설정을 불러올 수 없습니다",
   "settings_unavailable_text": "설정 서비스에서 환경설정을 가져오지 못했습니다. 다시 시도하세요.",
   "settings_retry": "다시 시도",
+  "settings_retry_wait": "잠시 기다린 후 다시 시도해 주세요.",
   "settings_reading_heading": "읽기",
   "settings_reading_text": "작품을 읽을 때 스포일러와 표지를 어떻게 다룰지 정합니다.",
   "settings_reload": "새로 고침",
