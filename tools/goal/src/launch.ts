@@ -9,6 +9,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  watch,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -252,7 +253,7 @@ export function capacityAvailable(store: WorkerStore, stateDirectory: string): b
   const running = store.runningAttemptsCount() + admittedStarts(stateDirectory);
   return hasCapacity(running, availableMiB(), capacity);
 }
-/** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
+/** Stabilize and critical-path starts receive a bounded queue head start while respecting host capacity. */
 export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
   return task.taskClass === 'critical-path' || task.brief.criticalPath === true || task.brief.target === 'stabilize';
 }
@@ -268,6 +269,7 @@ export async function awaitHostCapacity(
   first = false,
   taskId?: string,
   targetAttempt?: number,
+  options: { pollIntervalMs?: number; now?: () => number } = {},
 ): Promise<CapacityRelease> {
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
@@ -278,14 +280,26 @@ export async function awaitHostCapacity(
   // the cap and the queue; with most backend tasks critical path the running count stayed above the cap and ordinary
   // starts (most web tasks) waited for days (2026-10-29). Every start now respects the cap; critical path only dates
   // its ticket half an hour earlier, so it goes ahead of recent waiters without starving older ones.
-  const ticket = `${String(Date.now() - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
+  const ticket = `${String((options.now?.() ?? Date.now()) - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
   mkdirSync(queue, { recursive: true });
   const owner = processIdentity();
   if (!owner) throw new Error('Cannot identify capacity ticket owner');
   writeFileSync(join(queue, ticket), JSON.stringify(owner));
   let reported = false;
+  let watcher: ReturnType<typeof watch> | undefined;
+  let pollTimer: ReturnType<typeof setTimeout> | undefined;
+  let capacityChanged: (() => void) | undefined;
   try {
+    // Watch the directory so atomic replacements and removal wake waiters too. Subscribe before checking capacity
+    // so a policy change between the check and the wait cannot be lost. Worker/memory changes still use polling.
+    watcher = watch(stateDirectory, (_event, name) => {
+      if (name === null || String(name) === 'capacity.json') capacityChanged?.();
+    });
+    watcher.on('error', () => watcher?.close());
     for (;;) {
+      const changed = new Promise<void>((resolve) => {
+        capacityChanged = resolve;
+      });
       let admissionLease: ReturnType<typeof acquireDirectoryLease>;
       try {
         admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'));
@@ -318,9 +332,18 @@ export async function awaitHostCapacity(
       } finally {
         admissionLease.release();
       }
-      await new Promise((resolve) => setTimeout(resolve, 15_000));
+      await Promise.race([
+        changed,
+        new Promise<void>((resolve) => {
+          pollTimer = setTimeout(resolve, Math.max(1, options.pollIntervalMs ?? 15_000));
+        }),
+      ]);
+      clearTimeout(pollTimer);
+      pollTimer = undefined;
     }
   } finally {
+    watcher?.close();
+    clearTimeout(pollTimer);
     rmSync(join(queue, ticket), { force: true });
   }
 }

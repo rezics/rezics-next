@@ -292,7 +292,8 @@ attempts through the `worker_attempts_state` expression index. An admitted start
 state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is recorded
 running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting check-wake
 attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path half-hour
-head start are unchanged.
+head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately, without
+waiting for the periodic worker/memory poll.
 
 #### Cost: running-attempt count
 
@@ -331,7 +332,16 @@ The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `so
 `background_terminal_max_timeout`, the maximum empty `write_stdin` wait; its default is 7,200,000 ms, matching the
 two-hour limit of the longest worker class. Workers run checks with `bun scripts/worker-check.ts -- <command...>`.
 Goal writes the current priority to `.temp/goal/task-priority` in the task worktree at attempt start and whenever
-`goal priority <task> critical|normal` changes it. Performance's `worker-check` reads this file and passes
+`goal priority <task> critical|normal` changes it. Critical priority requires a task-bound grant from the task manager's
+configured supermanager. Dispatch tasks with normal priority first; a brief with `criticalPath: true` or a derived
+`critical-path` task class is refused at dispatch. The supermanager grants with
+`bun tools/goal/src/cli.ts priority grant <task>`. The owning manager consumes the one-use grant with
+`bun tools/goal/src/cli.ts priority <task> critical`, or by retrying with a critical brief after a grant exists.
+`bun tools/goal/src/cli.ts priority revoke <task> <grant-id>` revokes an unused grant by its grantor. The owner may
+demote with `bun tools/goal/src/cli.ts priority <task> normal` without a grant. Priority history records setter,
+grantor, timestamp and manager-session provenance; older tasks without history remain unknown rather than receiving a
+fabricated setter. Priority commands require the caller's Codex or Claude session ID to match a running persisted
+manager session; `GOAL_MANAGER` alone is not authorization. Performance's `worker-check` reads this file and passes
 `REMOTE_CHECK_PRIORITY=critical` for remaining checks when its contents are `critical`.
 It writes command output to `.temp/goal/checks/`, records the check duration for the worker deadline and silence monitor,
 then prints the check UUID and, when available, the exit status, a short failure summary and the log path. Goal uses
@@ -696,7 +706,9 @@ tasks are merged and the main gate passes in an isolated checkout. The gate chec
 starts; its result remains valid while that commit is an ancestor of main, since the landing train gates every later
 commit. When the check finishes, the manager and its supermanager receive a waking `goal-met` or `goal-unmet` event.
 An unmet event includes the first gate failure in its summary and links to the completion evidence. A met event is
-delivered after the manager stops. Manager commands are attributed through `GOAL_MANAGER` or a registered Codex thread; workers get fresh session identities.
+delivered after the manager stops. Manager events are attributed through `GOAL_MANAGER` or a registered Codex thread;
+priority authorization requires the persisted provider session identity described above, so a worker-supplied
+`GOAL_MANAGER` cannot grant or consume critical priority. Workers get fresh session identities.
 Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has integrated or merged;
 unknown task ids are refused, and already integrated or merged dependencies are ready immediately. For a Goal that uses
 `after`, once an integration leaves no ready, running, landing, held or integrated tasks, the control plane delivers one

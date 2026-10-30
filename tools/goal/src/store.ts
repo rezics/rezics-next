@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite';
+import { isDeepStrictEqual } from 'node:util';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
 import { groupMembers } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
@@ -720,6 +721,41 @@ export class WorkerStore implements AttemptFence {
         });
       return task;
     });
+  }
+  /** Change task-level priority metadata for the exact current generation, even when its attempt is stopped. */
+  updatePriorityMetadata(ref: AttemptRef, update: (task: Task) => void): Task {
+    const task = this.db
+      .transaction(() => {
+        const current = this.task(ref.taskId);
+        if (current.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, current.currentAttempt);
+        if (current.state === 'cancelled') throw new StaleAttemptError(ref, current.currentAttempt);
+        if (ref.attempt > 0) {
+          const attempt = this.attempt(ref);
+          if (
+            ['superseded', 'cancelled'].includes(attempt.state) ||
+            (attempt.state === 'stopped' && !['held', 'stopped'].includes(current.state))
+          )
+            throw new StaleAttemptError(ref, current.currentAttempt);
+        }
+        const before = structuredClone(current);
+        update(current);
+        if (current.id !== ref.taskId || current.currentAttempt !== ref.attempt)
+          throw new Error('task identity cannot be updated');
+        const expected = structuredClone(before);
+        expected.brief.criticalPath = current.brief.criticalPath;
+        expected.taskClass = current.taskClass;
+        if (current.priorityHistory !== undefined) expected.priorityHistory = structuredClone(current.priorityHistory);
+        else delete expected.priorityHistory;
+        if (current.priorityGrants !== undefined) expected.priorityGrants = structuredClone(current.priorityGrants);
+        else delete expected.priorityGrants;
+        if (!isDeepStrictEqual(expected, current))
+          throw new Error('priority metadata update changed non-priority task fields');
+        this.saveTask(current);
+        return current;
+      })
+      .immediate();
+    this.invalidateSnapshot();
+    return task;
   }
   /** Update a ready or stopped task; abandoning pending is valid only while the caller holds the task lease. */
   updateHeldRetryTask(ref: AttemptRef, update: (task: Task) => void, options: { abandonPending?: boolean } = {}): Task {
