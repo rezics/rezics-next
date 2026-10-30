@@ -93,16 +93,24 @@ export async function readRevisionDetail(pool: Pool, input: {
     for (const row of candidateRows) {
       if (!(await readCandidateDisclosure(client, { subject: input.subject, candidate: row.candidate }))?.disclosed)
         throw new SubjectNotFoundError();
-      statements.push({ ...(row.statement as Record<string, unknown>), property: row.property });
+      statements.push({
+        body: { ...(row.statement as Record<string, unknown>), property: row.property },
+        release: row.release,
+      });
     }
     return { revision, change, candidates, statements };
   });
   const context = first.change?.context ?? GLOBAL_CONTEXT;
   // Prepare foreign authority only after releasing the Subject checkout (including pool max 1).
   const contextCheck = first.change ? await input.authorizeContext(context) : null;
-  const release = await readRelease(pool, first.revision.release);
-  if (!release) throw new SubjectNotFoundError();
-  const targets = [...new Set(first.statements.flatMap((body) => relatedIds(body, release)))];
+  // A later decision's release is not the proposing candidate's datatype authority.
+  const releases = new Map<string, Release>();
+  for (const digest of new Set(first.statements.map((statement) => statement.release))) {
+    const release = await readRelease(pool, digest);
+    if (!release) throw new SubjectNotFoundError();
+    releases.set(digest, release);
+  }
+  const targets = [...new Set(first.statements.flatMap((statement) => relatedIds(statement.body, releases.get(statement.release)!)))];
   if (targets.length > 256) throw new SubjectNotFoundError();
   const redirects = await withReadTransaction(pool, async (client) => {
     const states = await loadRelated({ query: client.query.bind(client) }, targets);
