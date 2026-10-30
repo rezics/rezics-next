@@ -318,6 +318,35 @@ slot at an admitted selected rank confirms public selection. A committed adoptio
 stays pending. The canonical reader is refreshed and linked after confirmation; private proposal JSON never replaces
 its data. The editor's page stories use the shared shell and locale/theme/viewport globals.
 
+## Statement consent
+
+The relation editor uses the released `disclosure: sourceOrConsent` annotation. For an unsourced assertion,
+contributors explicitly declare that its target is the agent linked to their current account before submitting
+through the ordinary candidate proposal. The native command validates this declaration; no ownership is inferred
+from labels, Source provenance, subject creation or proposal authorship. The returned candidate identity opens
+`/{locale}/subjects/{id}/{slug}/statement-consent` with its exact property and relation-slot address. Existing
+unsourced candidates in that slot offer the same conditional entry without claiming ownership.
+
+The consent page prepares its private candidate only after session hydration and an explicit opening. A bounded
+candidate page and the anonymous public subject read start together. Candidate continuation is explicit; absence
+from one page establishes neither ownership nor consent. Labels come from the candidate's immutable definition
+release. Cited assertions follow ordinary sourced review and do not offer consent controls. The native candidate
+response supplies no eligibility or disclosed flag: the page says so, separating unsourced/private review from
+presence or absence in the current public result.
+
+Sharing and retraction require separate explicit confirmations through the generated native
+`POST /v1/statements/{id}/disclose` and `POST /v1/statements/{id}/retract` methods. The existing session BFF retains
+CSRF protection, current credentials, native idempotency keys and session-token continuity. Only the current native
+target-account check grants the action. An uncertain response retains the exact operation, identity and key;
+denial or concealment clears prepared values. Invalid/conflicting requests require fresh review and confirmation.
+
+A confirmed write triggers an anonymous public reread of the same subject with the native session token. Consent
+sharing is separate from current public selection and availability. Retraction is terminal for this assertion,
+not contribution deletion or Account preferences: there is no undo or 30-day restore. Confirmed retraction clears
+the assertion payload; a lagging public result reports pending removal without returning that value. Public-read
+retry never repeats a confirmed mutation. Private reads and values use no-store responses and component state,
+never public SSR, dehydrated query caches or local-success previews.
+
 ## Principles
 
 - **Readers first.** A page shows covers, titles, people, scores, what people say and what to do next, in words

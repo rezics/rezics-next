@@ -1,0 +1,315 @@
+import { useRef, useState } from 'react';
+import { pickText } from '@rezics/composition';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { CandidateValue } from '../pages/data';
+import { subjectHref } from '../../subject/subject-href';
+import { m } from '../../paraglide/messages.js';
+import {
+  consentAfterChange,
+  type ConsentAddress,
+  type ConsentCommand,
+  type ConsentFailure,
+  type ConsentPublic,
+  type ConsentRead,
+  type ConsentResult,
+  type ConsentTransport,
+} from './statement-consent';
+
+export function StatementConsentLink({
+  address,
+  label,
+  locale,
+}: {
+  address: ConsentAddress;
+  label?: string;
+  locale: string;
+}) {
+  const query = new URLSearchParams({ property: address.property, candidate: address.candidate, ...address.slot });
+  return (
+    <a
+      className="underline underline-offset-4"
+      href={`${subjectHref({ id: address.id, label: label ?? '' }, locale).href}/statement-consent?${query}`}
+    >
+      {m.statement_consent_entry({}, { locale: locale as never })}
+    </a>
+  );
+}
+export function ConsentError({ reason, locale }: { reason: ConsentFailure['reason']; locale: string }) {
+  const options = { locale: locale as never };
+  return (
+    <p role="alert">
+      {reason === 'denied'
+        ? m.statement_consent_denied({}, options)
+        : reason === 'missing'
+          ? m.statement_consent_missing({}, options)
+          : reason === 'conflict'
+            ? m.statement_consent_conflict({}, options)
+            : reason === 'invalid'
+              ? m.candidate_invalid({}, options)
+              : m.statement_consent_unavailable({}, options)}
+    </p>
+  );
+}
+function PublicResult({ value, locale }: { value: ConsentPublic; locale: string }) {
+  const options = { locale: locale as never };
+  return (
+    <section aria-label={m.candidate_current({}, options)} className="space-y-2 rounded-lg bg-muted/40 p-4">
+      <h2 className="font-semibold">{m.candidate_current({}, options)}</h2>
+      {value.state === 'present' ? (
+        <>
+          <p>{m.statement_consent_public({}, options)}</p>
+          <CandidateValue snak={value.statement} related={value.related} locale={locale} />
+        </>
+      ) : value.state === 'absent' ? (
+        <p>{m.statement_consent_absent({}, options)}</p>
+      ) : value.state === 'pending' ? (
+        <p>{m.statement_consent_pending({}, options)}</p>
+      ) : (
+        <p role="status">{m.candidate_public_unconfirmed({}, options)}</p>
+      )}
+    </section>
+  );
+}
+
+/** Private, event-owned preparation and commands; no assertion body is placed in a shared query cache. */
+export function StatementConsentPage({
+  address,
+  locale,
+  transport,
+  initial,
+}: {
+  address: ConsentAddress;
+  locale: string;
+  transport: ConsentTransport;
+  initial?: ConsentRead;
+}) {
+  const options = { locale: locale as never };
+  const [read, setRead] = useState(initial);
+  const [result, setResult] = useState<Extract<ConsentResult, { ok: true }>>();
+  const [failure, setFailure] = useState<ConsentFailure>();
+  const [confirmation, setConfirmation] = useState<ConsentCommand['operation']>();
+  const [own, setOwn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [reload, setReload] = useState(false);
+  const request = useRef<ConsentCommand | null>(null);
+  const running = useRef(false);
+  const session = useRef<string | undefined>(initial?.ok ? initial.session : undefined);
+  const current = read?.ok ? read : undefined;
+  const terminal = current?.terminal || result?.kind === 'retracted';
+  const publicRead = result?.public ?? current?.public;
+  const candidate = current?.candidate;
+  const attempt = candidate && current?.disclosure && !candidate.statement.references.length && !terminal;
+  const uncertain = !!request.current;
+
+  async function load(cursor?: string) {
+    if (running.current || request.current || terminal) return;
+    running.current = true;
+    setBusy(true);
+    setFailure(undefined);
+    setRead(undefined);
+    setResult(undefined);
+    setConfirmation(undefined);
+    setOwn(false);
+    try {
+      const next = await transport.read(cursor, session.current);
+      setRead(next);
+      setReload(false);
+      if (next.ok) session.current = next.session ?? session.current;
+    } catch {
+      setFailure({ ok: false, reason: 'unavailable' });
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  }
+  async function change() {
+    if (running.current || !current || (!request.current && (!confirmation || !own || !attempt || reload))) return;
+    request.current ??= {
+      ...address,
+      operation: confirmation!,
+      key: crypto.randomUUID(),
+      ...(session.current ? { session: session.current } : {}),
+    };
+    running.current = true;
+    setBusy(true);
+    setFailure(undefined);
+    try {
+      const next = await transport.change(request.current);
+      if (!next.ok) {
+        setFailure(next);
+        if (next.reason !== 'unavailable') {
+          request.current = null;
+          setConfirmation(undefined);
+          setOwn(false);
+          setReload(true);
+          // A current denial/concealment clears all previously prepared private values.
+          if (next.reason === 'denied' || next.reason === 'missing') {
+            setRead(undefined);
+            setResult(undefined);
+          }
+        }
+        return;
+      }
+      session.current = next.session ?? session.current;
+      setRead(consentAfterChange(current, next));
+      setResult(next);
+      request.current = null;
+      setConfirmation(undefined);
+      setOwn(false);
+    } catch {
+      setFailure({ ok: false, reason: 'unavailable' });
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  }
+  async function refreshPublic() {
+    if (running.current || request.current) return;
+    running.current = true;
+    setBusy(true);
+    try {
+      const next = await transport.public(session.current, !!terminal);
+      setResult((previous) => (previous ? { ...previous, public: next } : previous));
+      setRead((previous) => (previous?.ok ? { ...previous, public: next } : previous));
+    } catch {
+      setResult((previous) => (previous ? { ...previous, public: { state: 'unavailable' } } : previous));
+      setRead((previous) => (previous?.ok ? { ...previous, public: { state: 'unavailable' } } : previous));
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  }
+  return (
+    <article className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold">{m.statement_consent_title({}, options)}</h1>
+        <p className="text-muted-foreground">{m.statement_consent_intro({}, options)}</p>
+        <a className="underline underline-offset-4" href={subjectHref({ id: address.id, label: '' }, locale).href}>
+          {m.sources_back({}, options)}
+        </a>
+      </header>
+      {busy && <p role="status">{m.candidate_loading({}, options)}</p>}
+      {!read && !failure && !busy && (
+        <Button onClick={() => void load()}>{m.statement_consent_open({}, options)}</Button>
+      )}
+      {(failure || (read && !read.ok)) && (
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <ConsentError reason={(failure ?? (read && !read.ok ? read : undefined))!.reason} locale={locale} />
+          {uncertain && <p>{m.statement_consent_uncertain({}, options)}</p>}
+          <Button variant="outline" disabled={busy} onClick={() => void (uncertain ? change() : load())}>
+            {uncertain ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}
+          </Button>
+        </div>
+      )}
+      {terminal ? (
+        <p role="status" className="rounded-lg border border-border p-4">
+          {m.statement_consent_terminal({}, options)}
+        </p>
+      ) : (
+        <>
+          {current && !candidate && (
+            <div className="space-y-3">
+              <p>{m.statement_consent_empty({}, options)}</p>
+              {current.next && (
+                <Button variant="outline" disabled={busy} onClick={() => void load(current.next!)}>
+                  {m.candidate_more({}, options)}
+                </Button>
+              )}
+            </div>
+          )}
+          {candidate && current && (
+            <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
+              <h2 className="text-lg font-semibold">
+                {pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}
+              </h2>
+              <CandidateValue
+                snak={candidate.statement}
+                related={publicRead?.state === 'present' ? publicRead.related : {}}
+                locale={locale}
+              />
+              <p>
+                {candidate.statement.references.length
+                  ? m.statement_consent_sourced({}, options)
+                  : m.statement_consent_unsourced({}, options)}
+              </p>
+              {!current.disclosure && <p>{m.statement_consent_not_applicable({}, options)}</p>}
+              {attempt && (
+                <>
+                  <p className="text-sm text-muted-foreground">{m.statement_consent_authority({}, options)}</p>
+                  {!confirmation && !uncertain && (
+                    <div className="flex flex-wrap gap-2">
+                      {result?.kind !== 'disclosed' && (
+                        <Button disabled={busy || reload} onClick={() => setConfirmation('disclose')}>
+                          {m.statement_consent_share({}, options)}
+                        </Button>
+                      )}
+                      <Button variant="outline" disabled={busy || reload} onClick={() => setConfirmation('retract')}>
+                        {m.statement_consent_retract({}, options)}
+                      </Button>
+                    </div>
+                  )}
+                  {confirmation && (
+                    <div className="space-y-4 rounded-lg bg-muted/40 p-4">
+                      <h3 className="font-semibold">
+                        {confirmation === 'disclose'
+                          ? m.statement_consent_share({}, options)
+                          : m.statement_consent_retract({}, options)}
+                      </h3>
+                      <p>
+                        {confirmation === 'disclose'
+                          ? m.statement_consent_share_help({}, options)
+                          : m.statement_consent_retract_help({}, options)}
+                      </p>
+                      <Field orientation="horizontal">
+                        <Checkbox
+                          id="consent-own"
+                          checked={own}
+                          disabled={busy || uncertain}
+                          onCheckedChange={(checked) => setOwn(checked === true)}
+                        />
+                        <FieldLabel htmlFor="consent-own">{m.statement_consent_own({}, options)}</FieldLabel>
+                      </Field>
+                      {!uncertain && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button disabled={busy || !own} onClick={() => void change()}>
+                            {m.statement_consent_confirm({}, options)}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => {
+                              setConfirmation(undefined);
+                              setOwn(false);
+                            }}
+                          >
+                            {m.candidate_cancel({}, options)}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {reload && (
+                    <Button variant="outline" disabled={busy} onClick={() => void load()}>
+                      {m.candidate_reload({}, options)}
+                    </Button>
+                  )}
+                </>
+              )}
+            </section>
+          )}
+        </>
+      )}
+      {result?.kind === 'disclosed' && <p role="status">{m.statement_consent_shared({}, options)}</p>}
+      {publicRead && (
+        <>
+          <PublicResult value={publicRead} locale={locale} />
+          <Button variant="outline" disabled={busy || uncertain} onClick={() => void refreshPublic()}>
+            {m.statement_consent_refresh_public({}, options)}
+          </Button>
+        </>
+      )}
+    </article>
+  );
+}

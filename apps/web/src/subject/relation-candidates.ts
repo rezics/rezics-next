@@ -24,6 +24,7 @@ export type RelationQualifier = {
 };
 export type RelationField = RelationQualifier & {
   group: string;
+  disclosure?: 'sourceOrConsent';
   slotKey?: string;
   qualifiers: RelationQualifier[];
 };
@@ -35,6 +36,7 @@ export type RelationRead =
       fields: RelationField[];
       names: Record<string, Record<string, string>>;
       page: CandidatePage | null;
+      session?: string;
     };
 export type RelationDraft = Pick<Candidate['statement'], 'property' | 'value' | 'qualifiers'> & {
   references: { parts: Candidate['statement']['qualifiers'] }[];
@@ -51,9 +53,9 @@ export type RelationConfirmation = Omit<CandidateCommand, 'property' | 'slot' | 
   cursor?: string;
 };
 export type RelationResult = CandidateResult | { ok: true; kind: 'rejected'; public: SubjectRead | null };
-export type RelationProposalResult = CandidateFailure | { ok: true; candidate: string };
+export type RelationProposalResult = CandidateFailure | { ok: true; candidate: string; session?: string };
 export type RelationTransport = {
-  read: (slot?: RelationSlot, cursor?: string) => Promise<RelationRead>;
+  read: (slot?: RelationSlot, cursor?: string, session?: string) => Promise<RelationRead>;
   propose: (input: RelationProposal) => Promise<RelationProposalResult>;
   confirm: (input: RelationConfirmation) => Promise<RelationResult>;
 };
@@ -94,6 +96,7 @@ export function relationFields(release: Release, type: string, locale: string): 
         {
           ...field,
           group: property.relation.group,
+          ...(property.disclosure ? { disclosure: property.disclosure } : {}),
           ...(property.relation.slotKey ? { slotKey: property.relation.slotKey } : {}),
           qualifiers: property.qualifiers.flatMap((id) => {
             const value = named(id);
@@ -155,10 +158,11 @@ export async function readRelationEditor(
   locale: string,
   slot?: RelationSlot,
   cursor?: string,
+  session?: string,
 ): Promise<RelationRead> {
   if (slot && !validRelationSlot(slot)) return candidateFailure(400);
   const [result, definitions] = await Promise.all([
-    readCandidates(client, authorization, id, slot?.property, cursor, slot),
+    readCandidates(client, authorization, id, slot?.property, cursor, slot, session),
     release,
   ]);
   if (!result.ok) return result;
@@ -200,8 +204,9 @@ export async function proposeRelation(
         headers: { authorization, 'idempotency-key': input.key } as { 'idempotency-key': string },
       },
     );
+    const session = new Headers(result.headers).get('rezics-session-token');
     return result.status === 201 && result.data
-      ? { ok: true, candidate: result.data.candidate }
+      ? { ok: true, candidate: result.data.candidate, ...(session ? { session } : {}) }
       : candidateFailure(result.status);
   } catch {
     return candidateFailure(503);

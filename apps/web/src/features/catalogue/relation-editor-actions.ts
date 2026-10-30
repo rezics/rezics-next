@@ -39,8 +39,11 @@ function address(input: unknown) {
   }
   if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 8192))
     throw new Error('Invalid continuation');
+  if (value.session !== undefined && (typeof value.session !== 'string' || value.session.length > 16384))
+    throw new Error('Invalid session token');
   return {
     id: value.id,
+    ...(typeof value.session === 'string' ? { session: value.session } : {}),
     ...(slot ? { slot } : {}),
     ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
   };
@@ -71,6 +74,7 @@ export const readSubjectRelationEditor = createServerFn({ method: 'POST', strict
         requestLocale() ?? 'en',
         data.slot,
         data.cursor,
+        data.session,
       );
     } catch {
       return { ok: false, reason: 'unavailable' };

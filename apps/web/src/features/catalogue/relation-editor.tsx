@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
+import { StatementConsentLink } from './statement-consent-view';
+import { consentAddress, type ConsentAddress } from './statement-consent';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -61,6 +64,9 @@ export function RelationEditor({
   const [confirmation, setConfirmation] = useState<'propose' | 'accept' | 'reject' | 'adopt'>();
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
+  const [ownConsent, setOwnConsent] = useState(false);
+  const [consentEntry, setConsentEntry] = useState<ConsentAddress>();
+  const nativeSession = useRef<string | undefined>(undefined);
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
   const pageCursor = useRef<string | undefined>(undefined);
   const running = useRef(false);
@@ -120,6 +126,8 @@ export function RelationEditor({
   }
   function edit(next: RelationDraft) {
     setDraft(next);
+    setOwnConsent(false);
+    setConsentEntry(undefined);
     setRead((previous) => (previous?.ok ? { ...previous, page: null } : previous));
     setSlot(undefined);
     setCandidate(undefined);
@@ -138,11 +146,12 @@ export function RelationEditor({
     setConfirmation(undefined);
     request.current = undefined;
     try {
-      const next = await transport.read(address, cursor);
+      const next = await transport.read(address, cursor, nativeSession.current);
       if (!next.ok) {
         setFailure(next);
         return;
       }
+      nativeSession.current = next.session ?? nativeSession.current;
       setRead(next);
       pageCursor.current = cursor;
       setSlot(address);
@@ -184,10 +193,20 @@ export function RelationEditor({
           return;
         }
         setProposed(true);
+        nativeSession.current = next.session ?? nativeSession.current;
+        if (field.disclosure === 'sourceOrConsent' && !pending.statement.references.length)
+          setConsentEntry(
+            consentAddress({
+              id,
+              candidate: next.candidate,
+              property: address.property,
+              slot: { target: address.target, sameAs: address.sameAs, key: address.key },
+            }),
+          );
         setSlot(address);
         setConfirmation(undefined);
         request.current = undefined;
-        const refreshed = await transport.read(address);
+        const refreshed = await transport.read(address, undefined, nativeSession.current);
         if (refreshed.ok) {
           pageCursor.current = undefined;
           setRead(refreshed);
@@ -233,6 +252,13 @@ export function RelationEditor({
         <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>
         <p className="text-sm text-muted-foreground">{m.relation_intro({}, options)}</p>
       </header>
+      {consentEntry && (
+        <StatementConsentLink
+          address={consentEntry}
+          label={pickText(current?.public.subject.labels ?? {}, locale).text}
+          locale={locale}
+        />
+      )}
       {busy && <p role="status">{m.candidate_loading({}, options)}</p>}
       {failureText && <p role="alert">{failureText}</p>}
       {!current && !busy && <Button onClick={() => load()}>{m.relation_open({}, options)}</Button>}
@@ -397,6 +423,21 @@ export function RelationEditor({
                           onChange={(event) => setCitation(event.target.value)}
                         />
                       </Field>
+                      {field.disclosure === 'sourceOrConsent' && !draft.references.length && (
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">{m.statement_consent_unsourced({}, options)}</p>
+                          <Field orientation="horizontal">
+                            <Checkbox
+                              id="relation-own-consent"
+                              checked={ownConsent}
+                              onCheckedChange={(checked) => setOwnConsent(checked === true)}
+                            />
+                            <FieldLabel htmlFor="relation-own-consent">
+                              {m.statement_consent_own({}, options)}
+                            </FieldLabel>
+                          </Field>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         <Button
                           variant="outline"
@@ -425,7 +466,11 @@ export function RelationEditor({
                           {m.relation_review_slot({}, options)}
                         </Button>
                         <Button
-                          disabled={!draftSlot() || !draft.references.length || proposed}
+                          disabled={
+                            !draftSlot() ||
+                            (!draft.references.length && !(field.disclosure === 'sourceOrConsent' && ownConsent)) ||
+                            proposed
+                          }
                           onClick={() => setConfirmation('propose')}
                         >
                           {m.relation_propose({}, options)}
@@ -504,6 +549,16 @@ export function RelationEditor({
                         {m.candidate_more({}, options)}
                       </Button>
                     )}
+                    {candidate &&
+                      field.disclosure === 'sourceOrConsent' &&
+                      !candidate.statement.references.length &&
+                      candidate.retracted === null && (
+                        <StatementConsentLink
+                          address={{ id, property: field.id, candidate: candidate.id, ...(slot ? { slot } : {}) }}
+                          label={pickText(current.public.subject.labels, locale).text}
+                          locale={locale}
+                        />
+                      )}
                     {candidate && (
                       <div className="space-y-4">
                         <div className="grid gap-4 sm:grid-cols-2">

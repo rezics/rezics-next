@@ -22,7 +22,8 @@ export function RelationEditorSession({ id, locale }: { id: string; locale: stri
       search={search}
       onSelected={() => router.invalidate()}
       transport={{
-        read: (slot, cursor) => readSubjectRelationEditor({ data: { id, slot, cursor }, headers: csrfHeaders() }),
+        read: (slot, cursor, session) =>
+          readSubjectRelationEditor({ data: { id, slot, cursor, session }, headers: csrfHeaders() }),
         propose: (data) => proposeSubjectRelation({ data, headers: csrfHeaders() }),
         confirm: (data) => confirmSubjectRelation({ data, headers: csrfHeaders() }),
       }}
