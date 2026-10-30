@@ -1249,6 +1249,7 @@ function placementEnvironment(
   mode = 'success',
 ): Record<string, string | undefined> {
   const env = cleanTestEnvironment(process.env);
+  env.REZICS_CHECK_LEDGER_DIR = join(fixture.root, '.temp/check-ledger');
   for (const key of ['GOAL_TASK_ID', 'REMOTE_CHECK_PRIORITY', 'GOAL_CHECK_WAIT_FILE']) delete env[key];
   env.REZICS_CHECK_MEMORY = 'on';
   env.REZICS_CHECK_MEMORY_DIR = fixture.memory;
