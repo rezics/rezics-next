@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { Suspense, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { AppShell } from '../../shell/shell';
+import { useRegisterPhoneCreationActions, type PhoneCreationAction } from '../../shell/phone-navigation';
+import { useOperation } from '../../kernel/exposure';
 import { HeaderSearch } from '../../search/header-search/header-search';
 import { rememberRecent, type RecentHistory } from '../../search/recent-history';
 import type { SearchRealmDiscoveryLoader } from '../../search/realm-discovery-section';
@@ -13,7 +15,8 @@ import { searchFacetStoryPaths } from '../../kernel/fake/search-facets';
 import type { UnreadCount } from '../../inbox/inbox-read';
 import { unreadCountQueryFor } from '../../inbox/inbox-query';
 import { currentInboxViewer } from '../../inbox/inbox-viewer';
-import { sessionQuery } from '../../session/query';
+import { sessionQuery, useSession } from '../../session/query';
+import type { SessionState } from '../../session/state';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -40,7 +43,86 @@ type State =
   | 'typing'
   | 'filters'
   | 'creation'
+  | 'creation-owners'
+  | 'creation-session'
   | 'settings';
+
+function CreationOwner({ actions }: { actions: readonly PhoneCreationAction[] }) {
+  useRegisterPhoneCreationActions(actions);
+  return null;
+}
+function CreationOwners({ transitions }: { transitions: boolean }) {
+  const client = useQueryClient();
+  const { state } = useSession();
+  const collection = useOperation('collection.create');
+  const offered = state === 'signed-in' && collection;
+  const locale = getLocale();
+  const [first, setFirst] = useState(true);
+  const [second, setSecond] = useState(true);
+  const [updated, setUpdated] = useState(false);
+  // Interface-only owners reuse the offered Collection route; fragments distinguish their local destinations.
+  const firstActions = useMemo(
+    () =>
+      offered
+        ? [
+            {
+              id: 'first',
+              label: updated ? 'Updated first creation' : 'First creation',
+              href: `/${locale}/collections/new#first${updated ? '-updated' : ''}`,
+            },
+            { id: 'shared', label: 'First shared creation', href: `/${locale}/collections/new#shared` },
+          ]
+        : [],
+    [offered, locale, updated],
+  );
+  const secondActions = useMemo(
+    () =>
+      offered
+        ? [
+            { id: 'second', label: 'Unsafe creation', href: '//example.invalid/new' },
+            { id: 'second', label: 'Second creation', href: `/${locale}/collections/new#second` },
+            { id: 'shared', label: 'Second shared creation', href: `/${locale}/collections/new#shared` },
+            { id: 'collection', label: 'Duplicate Collection', href: `/${locale}/collections/new` },
+          ]
+        : [],
+    [offered, locale],
+  );
+  function session(state: SessionState) {
+    client.setQueryData(sessionQuery.queryKey, {
+      state,
+      csrfToken: null,
+      subject: state === 'signed-in' ? 'phone-pattern-account' : null,
+    });
+  }
+  return (
+    <div className="flex flex-wrap gap-3 py-4 [&>button]:rounded-xl [&>button]:border [&>button]:p-3">
+      {first ? <CreationOwner actions={firstActions} /> : null}
+      {second ? <CreationOwner actions={secondActions} /> : null}
+      <button type="button" onClick={() => setUpdated(true)}>
+        Update first owner
+      </button>
+      <button type="button" onClick={() => setFirst((value) => !value)}>
+        {first ? 'Unmount first owner' : 'Mount first owner'}
+      </button>
+      <button type="button" onClick={() => setSecond((value) => !value)}>
+        {second ? 'Unmount second owner' : 'Mount second owner'}
+      </button>
+      {transitions ? (
+        <>
+          <button type="button" onClick={() => session('signed-out')}>
+            Sign out
+          </button>
+          <button type="button" onClick={() => session('unavailable')}>
+            Session unavailable
+          </button>
+          <button type="button" onClick={() => session('signed-in')}>
+            Sign in
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
 // Interface fakes for the single Content section. These are not native discovery recordings.
 const emptyRealms = fn<SearchRealmDiscoveryLoader>(async () => ({ kind: 'ready', realms: [], next: null }));
 const loadingRealms = fn<SearchRealmDiscoveryLoader>(() => new Promise(() => {}));
@@ -104,6 +186,9 @@ function Connected({ state, loadRealms = emptyRealms }: { state: State; loadReal
       }
     >
       <PageHeading>{m.home_heading()}</PageHeading>
+      {state === 'creation-owners' || state === 'creation-session' ? (
+        <CreationOwners transitions={state === 'creation-session'} />
+      ) : null}
       {state === 'filters' ? (
         <Suspense fallback={null}>
           <Filters />
@@ -336,6 +421,60 @@ export const CreationSheet: Story = {
       await userEvent.click(within(context.canvasElement).getByRole('button', { name: m.shell_create() }));
       await expect(await within(document.body).findByRole('link', { name: m.library_collection_new() })).toBeVisible();
     }
+  },
+};
+async function creationSheet({ canvasElement }: { canvasElement: HTMLElement }) {
+  await userEvent.click(within(canvasElement).getByRole('button', { name: m.shell_create() }));
+  return within(await within(document.body).findByRole('dialog', { name: m.shell_create() }));
+}
+async function creationOrder(sheet: ReturnType<typeof within>, fragments: string[]) {
+  await waitFor(() =>
+    expect(sheet.queryAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(
+      ['', ...fragments].map((fragment) => `/${getLocale()}/collections/new${fragment}`),
+    ),
+  );
+}
+export const CreationOwnersLifecycle: Story = {
+  render: () => <Example state="creation-owners" />,
+  play: async (context) => {
+    await pageReady(context);
+    if (!phone()) return;
+    const canvas = within(context.canvasElement);
+    await creationOrder(await creationSheet(context), ['#first', '#shared', '#second']);
+    await userEvent.keyboard('{Escape}');
+    await expect(canvas.getByRole('button', { name: m.shell_create() })).toHaveFocus();
+    await userEvent.click(canvas.getByRole('button', { name: 'Update first owner' }));
+    await creationOrder(await creationSheet(context), ['#first-updated', '#shared', '#second']);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(canvas.getByRole('button', { name: 'Unmount second owner' }));
+    await creationOrder(await creationSheet(context), ['#first-updated', '#shared']);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(canvas.getByRole('button', { name: 'Mount second owner' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Unmount first owner' }));
+    const sheet = await creationSheet(context);
+    await creationOrder(sheet, ['#second', '#shared']);
+    await expect(sheet.getByRole('link', { name: 'Second shared creation' })).toBeVisible();
+  },
+};
+export const CreationSessionTransition: Story = {
+  render: () => <Example state="creation-session" />,
+  play: async (context) => {
+    await pageReady(context);
+    if (!phone()) return;
+    const canvas = within(context.canvasElement);
+    await creationOrder(await creationSheet(context), ['#first', '#shared', '#second']);
+    await userEvent.keyboard('{Escape}');
+    for (const state of ['Sign out', 'Session unavailable']) {
+      await userEvent.click(canvas.getByRole('button', { name: state, exact: true }));
+      const sheet = await creationSheet(context);
+      await waitFor(() => expect(sheet.queryAllByRole('link')).toHaveLength(0));
+      await expect(sheet.getByText(m.shell_creation_unavailable())).toBeVisible();
+      await userEvent.keyboard('{Escape}');
+    }
+    await userEvent.click(canvas.getByRole('button', { name: 'Update first owner' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Unmount second owner' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Sign in', exact: true }));
+    await creationOrder(await creationSheet(context), ['#first-updated', '#shared']);
   },
 };
 export const YouSettings: Story = {

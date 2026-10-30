@@ -18,12 +18,26 @@ const CreationContext = createContext<{
   register(registration: CreationRegistration): () => void;
 } | null>(null);
 export function PhoneCreationProvider({ children }: { children: ReactNode }) {
-  const [current, setCurrent] = useState<CreationRegistration | null>(null);
-  const [register] = useState(() => (registration: CreationRegistration) => {
-    setCurrent(registration);
-    return () => setCurrent((value) => (value?.owner === registration.owner ? null : value));
+  const [owners, setOwners] = useState(() => new Map<object, CreationRegistration & { order: number }>());
+  const [register] = useState(() => {
+    // Effect cleanup precedes an action update. Keep that owner's original position across both steps.
+    const order = new WeakMap<object, number>();
+    let nextOrder = 0;
+    return (registration: CreationRegistration) => {
+      if (!order.has(registration.owner)) order.set(registration.owner, nextOrder++);
+      const current = { ...registration, order: order.get(registration.owner)! };
+      setOwners((previous) => new Map(previous).set(current.owner, current));
+      return () =>
+        setOwners((previous) => {
+          if (previous.get(current.owner) !== current) return previous;
+          const remaining = new Map(previous);
+          remaining.delete(current.owner);
+          return remaining;
+        });
+    };
   });
-  return <CreationContext value={{ actions: current?.actions ?? [], register }}>{children}</CreationContext>;
+  const actions = [...owners.values()].sort((a, b) => a.order - b.order).flatMap((owner) => owner.actions);
+  return <CreationContext value={{ actions, register }}>{children}</CreationContext>;
 }
 export function useRegisterPhoneCreationActions(actions: readonly PhoneCreationAction[]) {
   const register = useContext(CreationContext)?.register;
@@ -179,17 +193,24 @@ export function PhoneNavigation({
   const collection = useOperation('collection.create');
   const context = useContext(CreationContext);
   const unread = usePhoneUnread(session);
-  const actions =
-    session === 'signed-in'
-      ? [
-          ...(collection
-            ? [{ id: 'collection', label: m.library_collection_new(), href: `/${getLocale()}/collections/new` }]
-            : []),
-          ...(context?.actions ?? []).filter(
-            (action) => action.href.startsWith('/') && !action.href.startsWith('//') && !/[\\\r\n]/.test(action.href),
-          ),
-        ]
-      : [];
+  const actions: PhoneCreationAction[] = [];
+  if (session === 'signed-in') {
+    const ids = new Set<string>();
+    const destinations = new Set<string>();
+    // The built-in Collection entry wins, then the first mounted owner and its action order.
+    for (const action of [
+      ...(collection
+        ? [{ id: 'collection', label: m.library_collection_new(), href: `/${getLocale()}/collections/new` }]
+        : []),
+      ...(context?.actions ?? []),
+    ]) {
+      if (!action.href.startsWith('/') || action.href.startsWith('//') || /[\\\r\n]/.test(action.href)) continue;
+      if (ids.has(action.id) || destinations.has(action.href)) continue;
+      ids.add(action.id);
+      destinations.add(action.href);
+      actions.push(action);
+    }
+  }
   return (
     <PhoneNavigationView
       pathname={pathname}

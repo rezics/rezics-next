@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
@@ -491,6 +492,126 @@ test.serial(
       }
     } finally {
       unreadFixture = { count: 0, capped: false };
+    }
+  },
+  timeout,
+);
+
+test.serial(
+  'unmounting one creation owner preserves other currently mounted authorized actions',
+  async () => {
+    const directory = join(app, '../..', '.temp/phone-creation');
+    await mkdir(directory, { recursive: true });
+    const entry = join(directory, 'owners.tsx');
+    await writeFile(
+      entry,
+      `
+        import React, { StrictMode, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+        import {
+          PhoneCreationProvider, PhoneNavigation, useRegisterPhoneCreationActions,
+        } from ${JSON.stringify(join(app, 'src/shell/phone-navigation.tsx'))};
+        import { getLocale } from ${JSON.stringify(join(app, 'src/paraglide/runtime.js'))};
+
+        function Owner({ actions }) {
+          useRegisterPhoneCreationActions(actions);
+          return null;
+        }
+        function Owners({ first = true, second = true, updated = false, session = 'signed-in' }) {
+          const base = '/' + getLocale() + '/collections/new';
+          const firstActions = useMemo(() => [
+            { id: 'first', label: updated ? 'Updated first creation' : 'First creation', href: base + (updated ? '#updated' : '#first') },
+            { id: 'shared', label: 'First shared creation', href: base + '#shared' },
+          ], [base, updated]);
+          const secondActions = useMemo(() => [
+            { id: 'second', label: 'External creation', href: '//example.invalid/new' },
+            { id: 'second', label: 'Backslash creation', href: '/\\\\example.invalid/new' },
+            { id: 'second', label: 'Line break creation', href: '/\\nnew' },
+            { id: 'second', label: 'Second creation', href: base + '#second' },
+            { id: 'shared', label: 'Duplicate identity', href: base + '#other' },
+            { id: 'same-destination', label: 'Duplicate destination', href: base + '#shared' },
+            { id: 'collection', label: 'Duplicate built-in identity', href: base + '#collection' },
+            { id: 'same-collection', label: 'Duplicate built-in destination', href: base },
+          ], [base]);
+          return <PhoneCreationProvider>
+            {first ? <Owner actions={firstActions} /> : null}
+            {second ? <Owner actions={secondActions} /> : null}
+            <PhoneNavigation session={session} pathname="/" csrfToken={null} account={null} />
+          </PhoneCreationProvider>;
+        }
+        const client = new QueryClient();
+        const host = document.createElement('div');
+        host.id = 'phone-creation-owners';
+        document.body.append(host);
+        const root = createRoot(host);
+        window.renderPhoneOwners = (props) => root.render(
+          <StrictMode><QueryClientProvider client={client}><Owners {...props} /></QueryClientProvider></StrictMode>
+        );
+        window.renderPhoneOwners({});
+      `,
+    );
+    for (const locale of ['en', 'ja']) {
+      const own = await messages(locale);
+      const page = await open(`/${locale}`, {
+        viewport: phone,
+        storageState: await signedInState(),
+        bypassCSP: true,
+      });
+      try {
+        // Vite transforms the fixture with the application's actual client modules and native session/exposure reads.
+        await page.evaluate(async (path) => {
+          await import(path);
+        }, `/@fs${entry}`);
+        const trigger = page
+          .locator('#phone-creation-owners')
+          .getByRole('button', { name: own.shell_create!, exact: true });
+        await trigger.click();
+        const sheet = page.getByRole('dialog', { name: own.shell_create!, exact: true });
+        await sheet.waitFor();
+        const order = async (fragments: string[] | null) => {
+          const expected =
+            fragments === null ? [] : ['', ...fragments].map((fragment) => `/${locale}/collections/new${fragment}`);
+          await page.waitForFunction(
+            (expected) =>
+              JSON.stringify(
+                [...document.querySelectorAll('[role="dialog"] a')].map((link) => link.getAttribute('href')),
+              ) === JSON.stringify(expected),
+            expected,
+          );
+          expect(
+            await sheet.locator('a').evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
+          ).toEqual(expected);
+        };
+        const render = (props: { first?: boolean; second?: boolean; updated?: boolean; session?: string }) =>
+          page.evaluate(
+            (props) => (window as Window & { renderPhoneOwners: (props: object) => void }).renderPhoneOwners(props),
+            props,
+          );
+        await order(['#first', '#shared', '#second']);
+        await render({ updated: true });
+        await order(['#updated', '#shared', '#second']);
+        await render({ updated: true, second: false });
+        await order(['#updated', '#shared']);
+        await render({ updated: true });
+        await order(['#updated', '#shared', '#second']);
+        await render({ first: false });
+        await order(['#second', '#other', '#shared']);
+        for (const session of ['signed-out', 'unknown', 'unavailable']) {
+          await render({ first: false, session });
+          await order(null);
+          expect(await sheet.getByText(own.shell_creation_unavailable!, { exact: true }).isVisible()).toBe(true);
+        }
+        await render({ first: false });
+        await order(['#second', '#other', '#shared']);
+        await render({ first: false, second: false });
+        await order([]);
+        await page.keyboard.press('Escape');
+        await sheet.waitFor({ state: 'hidden' });
+        expect(await trigger.evaluate((node) => document.activeElement === node)).toBe(true);
+      } finally {
+        await page.context().close();
+      }
     }
   },
   timeout,
