@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { noEffect, runCommand } from '../../src/command/command.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { resolveSubject } from '../../src/library/subject-anchor.ts';
 import {
@@ -269,14 +270,30 @@ test('first-absence close and delayed acquire serialize at every distinct planne
   expect(await store.readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: redirected });
 });
 
-test('the existing receipt-only ABI still rejects changed intent at a different native command home', async () => {
+test('the explicit native receipt bridge rejects changed intent at a different job home', async () => {
   const first = [await create(0x7d10), await create(0x7d10)];
   const second = [await create(0x7d20), await create(0x7d20)];
   const original = await input(first[0]!, first[1]!);
-  const admitted = await runCommand(f.pool, { ...(await authority()), partition: home(first[0]!) }, (tx) =>
-    store.admit(tx, original),
+  const auth = await authority();
+  const bindingHome = home(f.accounts.editor);
+  expect(bindingHome).not.toBe(home(first[0]!));
+  expect(bindingHome).not.toBe(home(second[0]!));
+  const binding = await isolated(/semantic.identity_epoch_receipt_(?:binding|claim)/, bindingHome, () =>
+    store.bindReceipt(f.pool, auth, original),
   );
-  expect((await store.findJob(f.pool, original.receipt))?.ref).toEqual(admitted.value);
+  const admitted = await isolated(receivingSQL, home(first[0]!), () =>
+    runCommand(f.pool, { ...auth, partition: home(first[0]!) }, (tx) => store.admit(tx, { ...original, binding })),
+  );
+  const accepted = await isolated(/UPDATE semantic.identity_epoch_receipt_binding/, bindingHome, () =>
+    store.bindReceipt(f.pool, auth, original),
+  );
+  expect(
+    (
+      await runCommand(f.pool, { ...auth, partition: home(first[0]!) }, async (tx) =>
+        noEffect(await store.findJob(tx, original.receipt, accepted)),
+      )
+    ).value?.ref,
+  ).toEqual(admitted.value);
   // Receipt identity has no home field. Its public contract rejects conflicting
   // intent before any new job, even when the changed groups are in another home.
   // A per-job-home UNIQUE key plus this local command is insufficient for that.
@@ -285,9 +302,7 @@ test('the existing receipt-only ABI still rejects changed intent at a different 
     intent: { kind: 'merge' as const, survivor: second[0]!, redirected: second[1]!, release: release.digest },
   };
   await expect(
-    isolated(/WHERE receipt_key=/, home(second[0]!), async () =>
-      runCommand(f.pool, { ...(await authority()), partition: home(second[0]!) }, (tx) => store.admit(tx, changed)),
-    ),
+    isolated(/semantic.identity_epoch_receipt_binding/, bindingHome, () => store.bindReceipt(f.pool, auth, changed)),
   ).rejects.toMatchObject({ name: 'IdempotencyConflictError' });
   expect(
     (await f.admin.query('SELECT job_id FROM semantic.identity_epoch_job WHERE partition_no=$1', [home(second[0]!)]))
@@ -342,4 +357,200 @@ test('source head h+1 survives ACK of a retained h and a native owner move canno
   }
   for (let step = 0; step < 3; step++) await stepIdentityEpochAdmission(f.pool, job);
   expect((await store.readJob(f.pool, job))?.state).toBe('cancelled');
+});
+
+/** Lose only the response after PostgreSQL has committed the selected native command. */
+async function loseCommittedReply<T>(selected: RegExp, operation: () => Promise<T>) {
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  let reached = false,
+    lost = false;
+  const acquired = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const query = client.query;
+    originals.set(client, query);
+    let selectedCommand = false;
+    client.query = async function (...args: unknown[]) {
+      const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text;
+      if (text && selected.test(text)) {
+        selectedCommand = true;
+        reached = true;
+      }
+      const result = await Reflect.apply(query, client, args);
+      if (text === 'COMMIT' && selectedCommand && !lost) {
+        lost = true;
+        throw new Error('lost committed binding reply');
+      }
+      return result;
+    } as PoolClient['query'];
+  };
+  f.pool.on('acquire', acquired);
+  try {
+    await expect(operation()).rejects.toThrow('lost committed binding reply');
+  } finally {
+    f.pool.off('acquire', acquired);
+    for (const [client, query] of originals) client.query = query;
+  }
+  expect(reached).toBe(true);
+  expect(lost).toBe(true);
+}
+
+async function bindingRows(request: IdentityAdmissionInput) {
+  const key =
+    request.receipt.kind === 'subject.merge'
+      ? JSON.stringify([
+          request.receipt.kind,
+          request.receipt.command.actorAccountId,
+          request.receipt.command.kind,
+          request.receipt.command.key,
+        ])
+      : JSON.stringify([request.receipt.kind, request.receipt.account, request.receipt.receipt]);
+  return (
+    await f.admin.query(
+      `SELECT b.state,b.accepted_job,c.*,k.transaction_id AS binding_commit
+ FROM semantic.identity_epoch_receipt_binding b JOIN semantic.identity_epoch_receipt_claim c USING(partition_no,receipt_key)
+ JOIN semantic.identity_epoch_receipt_claim_commit k USING(partition_no,receipt_key,generation)
+ WHERE b.partition_no=$1 AND b.receipt_key=$2 ORDER BY c.generation`,
+      [home(f.accounts.editor), key],
+    )
+  ).rows;
+}
+
+for (const lost of ['pending', 'accepted'] as const)
+  test(`native ${lost} claim/publication lost reply replays the retained single job`, async () => {
+    const survivor = await create(lost === 'pending' ? 0x7f10 : 0x7f20),
+      redirected = await create(lost === 'pending' ? 0x7f10 : 0x7f20);
+    const request = await input(survivor, redirected),
+      auth = await authority();
+    if (lost === 'pending')
+      await loseCommittedReply(/INSERT INTO semantic.identity_epoch_receipt_binding/, () =>
+        store.bindReceipt(f.pool, auth, request),
+      );
+    let binding = await store.bindReceipt(f.pool, auth, request);
+    const claims = await bindingRows(request);
+    expect(claims).toHaveLength(1);
+    expect(claims[0].state).toBe('pending');
+    expect(
+      (await f.admin.query('SELECT job_id FROM semantic.identity_epoch_job WHERE partition_no=$1', [home(survivor)]))
+        .rows,
+    ).toEqual([]);
+    const changed = {
+      ...request,
+      intent: {
+        ...request.intent,
+        kind: 'merge' as const,
+        survivor: redirected,
+        redirected: survivor,
+        release: release.digest,
+      },
+    };
+    await expect(store.bindReceipt(f.pool, auth, changed)).rejects.toMatchObject({ name: 'IdempotencyConflictError' });
+    const admitted = await isolated(receivingSQL, home(survivor), () =>
+      runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) => store.admit(tx, { ...request, binding })),
+    );
+    // First reservation/job is already durable while the binding still says pending.
+    expect((await bindingRows(request))[0].state).toBe('pending');
+    expect(admitted.value.jobId).toBe(claims[0].job_id);
+    if (lost === 'accepted')
+      await loseCommittedReply(/UPDATE semantic.identity_epoch_receipt_binding/, () =>
+        store.bindReceipt(f.pool, auth, request),
+      );
+    binding = await store.bindReceipt(f.pool, auth, request);
+    const replay = await runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) =>
+      store.admit(tx, { ...request, binding }),
+    );
+    expect(replay.value).toEqual(admitted.value);
+    const retained = await bindingRows(request);
+    expect(retained).toHaveLength(1);
+    expect(retained[0].state).toBe('accepted');
+    expect(retained[0].accepted_job).toBe(admitted.value.jobId);
+    expect(retained[0].binding_commit).toBe(claims[0].binding_commit);
+    expect(
+      (await f.admin.query('SELECT job_id FROM semantic.identity_epoch_job WHERE partition_no=$1', [home(survivor)]))
+        .rows,
+    ).toEqual([{ job_id: admitted.value.jobId }]);
+    await expect(store.bindReceipt(f.pool, auth, changed)).rejects.toMatchObject({ name: 'IdempotencyConflictError' });
+  });
+
+test('equal concurrent native claims and reservations choose one job and denied authority sees no replay or conflict', async () => {
+  const survivor = await create(0x7f30),
+    redirected = await create(0x7f30),
+    request = await input(survivor, redirected),
+    auth = await authority();
+  const claims = await Promise.all([
+    store.bindReceipt(f.pool, auth, request),
+    store.bindReceipt(f.pool, auth, request),
+  ]);
+  const results = await Promise.all(
+    claims.map((binding) =>
+      runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) => store.admit(tx, { ...request, binding })),
+    ),
+  );
+  expect(results[0]!.value).toEqual(results[1]!.value);
+  const accepted = await store.bindReceipt(f.pool, auth, request);
+  expect(await bindingRows(request)).toHaveLength(1);
+  const changed = {
+    ...request,
+    intent: { kind: 'merge' as const, survivor: redirected, redirected: survivor, release: release.digest },
+  };
+  await f.real.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:merge');
+  try {
+    await expect(store.bindReceipt(f.pool, await authority(), request)).rejects.toThrow('Denied subject:merge');
+    await expect(store.bindReceipt(f.pool, await authority(), changed)).rejects.toThrow('Denied subject:merge');
+    await expect(
+      runCommand(f.pool, { ...(await authority()), partition: home(survivor) }, async (tx) =>
+        noEffect(await store.findJob(tx, request.receipt, accepted)),
+      ),
+    ).rejects.toThrow('Denied subject:merge');
+  } finally {
+    await f.real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:merge');
+  }
+  expect((await bindingRows(request))[0].accepted_job).toBe(results[0]!.value.jobId);
+});
+
+test('a failed provisional basis closes every planned home before a same-intent later generation and rejects delayed acquisition', async () => {
+  const original = await create(0x7f40),
+    peer = await create(0x7f50),
+    terminal = await create(0x7f60);
+  const request = await input(peer, original),
+    auth = await authority();
+  const first = await store.bindReceipt(f.pool, auth, request),
+    before = (await bindingRows(request))[0];
+  await f.merge(original, terminal);
+  await bootstrap(home(original));
+  await expect(
+    runCommand(f.pool, { ...auth, partition: before.job_home }, (tx) =>
+      store.admit(tx, { ...request, binding: first }),
+    ),
+  ).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  const next = await store.bindReceipt(f.pool, auth, request),
+    history = await bindingRows(request);
+  expect(history).toHaveLength(2);
+  expect(history.map((r) => r.generation)).toEqual(['1', '2']);
+  expect(history[0].intent_digest).toBe(history[1].intent_digest);
+  expect(history[0].job_id).not.toBe(history[1].job_id);
+  const closed = (
+    await f.admin.query(
+      `SELECT c.resource_home,c.transaction_id FROM semantic.identity_epoch_receipt_closure c WHERE c.partition_no=$1 AND c.receipt_key=$2 AND c.generation=1 ORDER BY resource_home`,
+      [home(f.accounts.editor), before.receipt_key],
+    )
+  ).rows;
+  expect(closed.map((r) => r.resource_home)).toEqual([home(original), home(peer)]);
+  for (const q of [home(original), home(peer)])
+    await expect(
+      isolated(receivingSQL, q, () =>
+        runCommand(f.pool, { partition: q }, async (tx) => {
+          await tx.query(acquire.sql, [q, before.job_id, before.job_epoch, before.scope_digest]);
+          return noEffect(null);
+        }),
+      ),
+    ).rejects.toMatchObject({ message: 'identity_effect_stale' });
+  const result = await runCommand(f.pool, { ...auth, partition: history[1].job_home }, (tx) =>
+    store.admit(tx, { ...request, binding: next }),
+  );
+  await store.bindReceipt(f.pool, auth, request);
+  expect(result.value.jobId).toBe(history[1].job_id);
+  expect((await bindingRows(request))[0].accepted_job).toBe(result.value.jobId);
+  expect(
+    (await f.admin.query('SELECT job_id FROM semantic.identity_epoch_job WHERE job_id=$1', [before.job_id])).rows,
+  ).toEqual([]);
 });

@@ -1,5 +1,7 @@
 /** Native identity storage and fixed participant protocol. Mapping conveys no permission. */
 import type { Pool } from 'pg';
+import type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
+export type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
 import type {
   CommandBasis,
   CommandAuthorization,
@@ -117,7 +119,17 @@ export type IdentityEpochStore = Readonly<{
   controlPartition: number;
   readEpoch(client: CommandTransaction, partition?: number): Promise<IdentityEpochState>;
   readJob(client: CommandTransaction, job: IdentityJobRef): Promise<IdentityJob | null>;
-  findJob(client: CommandTransaction, receipt: IdentityReceipt): Promise<IdentityJob | null>;
+  findJob(
+    client: CommandTransaction,
+    receipt: IdentityReceipt,
+    binding?: IdentityReceiptBinding,
+  ): Promise<IdentityJob | null>;
+  /** Released current authorization, cap proof and native actor/account-home claim. */
+  bindReceipt(
+    pool: Pool,
+    authority: IdentityAdmissionAuthority,
+    input: IdentityAdmissionInput,
+  ): Promise<IdentityReceiptBinding>;
   /** Source and explicit current control use one native backend RR snapshot when colocated.
    * Observes only the affected group; no list/publication wait.
    * Missing/unready/moved source OR control is unavailable, never guessed self.
@@ -144,6 +156,7 @@ export type IdentityEpochStore = Readonly<{
     input: Readonly<{
       intent: IdentityIntent;
       receipt: IdentityReceipt;
+      binding?: IdentityReceiptBinding;
     }>,
   ): Promise<CommandResult<IdentityJobRef>>;
   /** Exact self mapping atomically with actual fresh revision-1 creation; never lazy or bootstrap. */

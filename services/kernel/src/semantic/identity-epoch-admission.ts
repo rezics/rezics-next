@@ -1,5 +1,20 @@
+import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
+import {
+  claimIdentityBinding,
+  lookupIdentityBinding,
+  identityBindingData,
+  identityBindingDigest,
+  identityBindingJob,
+  acceptIdentityBinding,
+  identityReceiptPartition,
+  type IdentityReceiptBinding,
+  type IdentityAdmissionSource,
+} from './identity-epoch-binding.ts';
+import sourcePoints from './identity-epoch-read-sources.sql';
+import handoff from './identity-epoch-admission-handoff.sql';
+import inputs from './identity-epoch-admission-inputs.sql';
+import holdSource from './identity-epoch-admission-hold-source.sql';
 import waiters from './identity-epoch-admission-waiters.sql';
-import collect from './identity-epoch-admission-collect.sql';
 import insertJob from './identity-epoch-admission-insert-job.sql';
 import insertBases from './identity-epoch-admission-insert-bases.sql';
 import acquire from './identity-epoch-admission-acquire.sql';
@@ -91,35 +106,67 @@ function idsOf(intent: IdentityIntent) {
     ),
   ];
 }
-function sameReceipt(saved: { intent: unknown; receipt: unknown }, input: IdentityAdmissionInput) {
-  return (
-    canonicalize(saved.intent) === canonicalize(JSON.parse(json(input.intent))) &&
-    canonicalize(saved.receipt) === canonicalize(identityReceiptValue(input.receipt))
-  );
-}
-async function replay(tx: CommandTransaction, input: IdentityAdmissionInput): Promise<IdentityJobRef | null> {
-  const prior = (await tx.query(priorJob.sql, [identityReceiptKey(input.receipt)])).rows[0];
-  if (!prior) return null;
-  if (!sameReceipt(prior, input)) throw new IdempotencyConflictError(currentCommand(tx).partition);
-  return { jobId: prior.job_id, epoch: BigInt(prior.epoch) };
-}
-async function capture(pool: Pool, input: IdentityAdmissionInput) {
+async function capture(pool: Pool, input: IdentityAdmissionInput): Promise<IdentityAdmissionSource[]> {
   const ids = idsOf(input.intent);
-  return withReadTransaction(pool, async (tx) => {
-    const rows = (await tx.query(collect.sql, [ids, ids.map(routed)])).rows;
-    if (rows.length !== ids.length) throw unavailable();
-    for (const row of rows) {
-      if (row.pending_job)
+  const points = [];
+  for (const home of [...new Set(ids.map((id) => partitionOf(routed(id))))]) {
+    const local = ids.filter((id) => partitionOf(routed(id)) === home);
+    const rows = await withReadTransaction(pool, async (tx) => {
+      const owner = await readPartition(tx, home);
+      if (!owner || owner.writeState !== 'active') throw unavailable();
+      const rows = (await tx.query(sourcePoints.sql, [local, local.map(routed)])).rows;
+      if (rows.length !== local.length) throw unavailable();
+      return rows.map((row) => {
+        if (
+          !row.original ||
+          row.owner_epoch !== owner.epoch ||
+          BigInt(row.dirty_revision) !== BigInt(row.captured_revision) ||
+          (row.current_target ?? row.original) !== row.control_group
+        )
+          throw unavailable();
+        return { ...row, source_owner_epoch: owner.epoch };
+      });
+    });
+    points.push(...rows);
+  }
+  const result: IdentityAdmissionSource[] = [];
+  for (const home of [...new Set(points.map((p) => p.control_partition))]) {
+    const local = points.filter((p) => p.control_partition === home);
+    const rows = await withReadTransaction(pool, async (tx) => {
+      const owner = await readPartition(tx, home);
+      if (!owner || owner.writeState !== 'active') throw unavailable();
+      return (
+        await tx.query(
+          `SELECT * FROM semantic.identity_epoch_group WHERE partition_no=$1 AND terminal=ANY($2::uuid[])`,
+          [home, local.map((p) => p.control_group)],
+        )
+      ).rows.filter((g) => g.owner_epoch === owner.epoch);
+    });
+    for (const point of local) {
+      const group = rows.find((g) => g.terminal === point.control_group);
+      if (!group) throw unavailable();
+      if (group.pending_job)
         throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
-      if (
-        !row.ready &&
-        ((await readIdentityEpochCutover(tx)).state !== 'ready' ||
-          !(await tx.query(bootstrapHome.sql, [row.source_route >> 4])).rows[0]?.sealed_generation)
-      )
-        throw unavailable();
+      if (!group.ready) {
+        const ready = await withReadTransaction(
+          pool,
+          async (tx) =>
+            (await readIdentityEpochCutover(tx)).state === 'ready' &&
+            !!(await tx.query(bootstrapHome.sql, [point.route >> 4])).rows[0]?.sealed_generation,
+        );
+        if (!ready) throw unavailable();
+      }
+      result.push({
+        ...group,
+        input_original: point.original,
+        source_route: point.route,
+        source_revision: point.source_revision,
+        source_transaction_id: point.recorded_transaction_id,
+        source_owner_epoch: point.source_owner_epoch,
+      });
     }
-    return rows.sort((a, b) => a.input_original.localeCompare(b.input_original));
-  });
+  }
+  return result.sort((a, b) => a.input_original.localeCompare(b.input_original));
 }
 function fingerprint(rows: Awaited<ReturnType<typeof capture>>) {
   return canonicalize(
@@ -139,21 +186,23 @@ function fingerprint(rows: Awaited<ReturnType<typeof capture>>) {
   );
 }
 
-/** Effects-free coherent cap collection, then an atomic first native reservation. Never a public success DTO. */
-export async function prepareIdentityEpochAdmission(
+/** Bind is a released native actor/account-home command, preceding any group-home transaction. */
+export async function bindIdentityEpochReceipt(
   pool: Pool,
   authority: IdentityAdmissionAuthority,
   input: IdentityAdmissionInput,
-): Promise<IdentityJobRef> {
-  const ids = idsOf(input.intent);
-  const authorizationHome = Math.min(...ids.map((id) => partitionOf(routed(id))));
-  const prior = await runCommand(pool, { ...authority, partition: authorizationHome }, async (tx) => {
-    authorizeIdentityAdmission(tx, input.receipt);
-    return noEffect(await replay(tx, input));
-  });
-  if (prior.value) return prior.value;
-  const first = await capture(pool, input);
-  const second = await capture(pool, input);
+): Promise<IdentityReceiptBinding> {
+  const existing = await lookupIdentityBinding(pool, authority, input);
+  if (existing) {
+    const data = identityBindingData(existing);
+    if (data.state === 'accepted') return existing;
+    if (data.state === 'pending' && (await identityBindingJob(pool, data))) {
+      await acceptIdentityBinding(pool, authority, input, existing);
+      return (await lookupIdentityBinding(pool, authority, input))!;
+    }
+  }
+  const first = await capture(pool, input),
+    second = await capture(pool, input);
   if (fingerprint(first) !== fingerprint(second)) throw unavailable();
   const groups = [...new Map(second.map((r) => [r.terminal, r])).values()];
   const intent = input.intent;
@@ -164,49 +213,245 @@ export async function prepareIdentityEpochAdmission(
         ? BigInt(second.find((r) => r.input_original === intent.terminal)!.observed_count) +
           (groups.length === 1 ? 0n : 1n)
         : 1n;
+  if (resulting > 4096n)
+    throw new IdentityEpochStoreError(
+      'identity_group_overflow',
+      'Resulting identity group exceeds 4096 complete originals',
+    );
   const home = Math.min(...groups.map((r) => r.partition_no));
-  const admitted = await runCommand(pool, { ...authority, partition: home }, async (tx) => {
-    authorizeIdentityAdmission(tx, input.receipt);
-    const prior = await replay(tx, input);
-    if (prior) return noEffect(prior);
-    if (resulting > 4096n)
-      throw new IdentityEpochStoreError(
-        'identity_group_overflow',
-        'Resulting identity group exceeds 4096 complete originals',
-      );
-    const state = (await tx.query(selectControl.sql, [home])).rows[0];
-    const locked = (
-      await tx.query(selectGroups.sql, [home, groups.filter((r) => r.partition_no === home).map((r) => r.terminal)])
-    ).rows;
-    if (locked.some((r) => r.pending_job))
-      throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
-    if (!state || state.pending_job || state.retained_preparation) throw unavailable();
-    if (
-      locked.some((r) => !groups.some((g) => g.generation === r.generation && BigInt(g.version) === BigInt(r.version)))
-    )
-      throw stale();
-    const ref = { jobId: newId(home * 16), epoch: BigInt(state.allocated_epoch) + 1n };
-    const scope = createHash('sha256')
-      .update(json([input.intent, fingerprint(second)]))
-      .digest('hex');
-    recordIdentityEpochNativeCommit(tx, 'admission');
-    registerCommandCallback(tx, async (transactionId) => {
-      await tx.query(insertJob.sql, [
-        home,
-        ref.jobId,
-        ref.epoch.toString(),
-        json(input.intent),
-        identityReceiptKey(input.receipt),
-        json(identityReceiptValue(input.receipt)),
-        scope,
-        transactionId,
-      ]);
-      await tx.query(insertBases.sql, [home, ref.jobId, json(second)]);
-      await tx.query(acquire.sql, [home, ref.jobId, ref.epoch.toString(), scope]);
-      await tx.query(record.sql, [home, transactionId, ref.jobId, 'acquired']);
-    });
-    return { value: ref, events: [wake(ref)] };
+  const state = await withReadTransaction(
+    pool,
+    async (tx) =>
+      (
+        await tx.query(
+          `SELECT c.*,EXISTS(SELECT 1 FROM semantic.identity_epoch_job j WHERE j.partition_no=c.partition_no AND j.state='cancelling') retained_preparation FROM semantic.identity_epoch_control c WHERE c.partition_no=$1`,
+          [home],
+        )
+      ).rows[0],
+  );
+  if (!state || state.pending_job || state.retained_preparation) throw unavailable();
+  const scope = createHash('sha256')
+    .update(json([input.intent, fingerprint(second)]))
+    .digest('hex');
+  if (existing && identityBindingData(existing).state === 'pending') {
+    const prior = identityBindingData(existing);
+    if (prior.scope === scope && prior.job.epoch === BigInt(state.allocated_epoch) + 1n) return existing;
+    if (!(await closeUnreservedBinding(pool, authority, input, existing))) {
+      await acceptIdentityBinding(pool, authority, input, existing);
+      return (await lookupIdentityBinding(pool, authority, input))!;
+    }
+  }
+  return claimIdentityBinding(pool, authority, input, {
+    home,
+    epoch: BigInt(state.allocated_epoch) + 1n,
+    scope,
+    sources: second,
   });
+}
+
+/** Exact first-absence proof precedes retirement; every uncertain/planned home is irreversibly closed. */
+async function closeUnreservedBinding(
+  pool: Pool,
+  authority: IdentityAdmissionAuthority,
+  input: IdentityAdmissionInput,
+  binding: IdentityReceiptBinding,
+) {
+  const data = identityBindingData(binding);
+  const first = await runCommand(pool, { partition: data.home }, async (tx) => {
+    await tx.query(selectControl.sql, [data.home]);
+    const job = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
+    if (job) return noEffect(false);
+    await tx.query(close.sql, [data.home, data.job.jobId, data.job.epoch.toString(), data.scope]);
+    const duplicate = (await tx.query(receipt.sql, [data.home, data.job.jobId, data.job.epoch.toString(), 'closed']))
+      .rows[0];
+    if (duplicate) return noEffect(true);
+    recordIdentityEpochNativeCommit(tx, 'admission');
+    registerCommandCallback(tx, async (id) => {
+      await tx.query(record.sql, [data.home, id, data.job.jobId, 'closed']);
+    });
+    return {
+      value: true,
+      events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+    };
+  });
+  if (!first.value) return false;
+  const receipts = [];
+  for (const home of [...new Set(data.sources.map((s) => s.partition_no))].sort((a, b) => a - b)) {
+    await deliverHome(pool, data.job, data.scope, home, 'closed');
+    const received = await receivingReceipt(pool, data.job, home, 'closed');
+    if (!received) throw unavailable();
+    receipts.push(received);
+  }
+  await runCommand(pool, { ...authority, partition: data.partition }, async (tx) => {
+    const current = await lookupLocalBinding(tx, input, binding);
+    if (current.state !== 'pending') return noEffect(null);
+    for (const r of receipts)
+      await tx.query(
+        `INSERT INTO semantic.identity_epoch_receipt_closure VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+        [
+          data.partition,
+          data.key,
+          data.generation,
+          r.partition_no,
+          r.transaction_id,
+          r.native_epoch,
+          r.native_position,
+        ],
+      );
+    await tx.query(
+      `UPDATE semantic.identity_epoch_receipt_binding SET state='not-applied' WHERE partition_no=$1 AND receipt_key=$2 AND generation=$3 AND state='pending'`,
+      [data.partition, data.key, data.generation],
+    );
+    return {
+      value: null,
+      events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+    };
+  });
+  return true;
+}
+async function lookupLocalBinding(
+  tx: CommandTransaction,
+  input: IdentityAdmissionInput,
+  binding: IdentityReceiptBinding,
+) {
+  authorizeIdentityAdmission(tx, input.receipt);
+  const data = identityBindingData(binding);
+  if (currentCommand(tx).partition !== data.partition || data.digest !== identityBindingDigest(input))
+    throw new IdempotencyConflictError(currentCommand(tx).partition);
+  return data;
+}
+
+/** The supplied proof was committed and verified before this command acquired its connection. */
+export async function admitBoundIdentityEpoch(
+  tx: CommandTransaction,
+  input: IdentityAdmissionInput & { binding: IdentityReceiptBinding },
+  immediate = false,
+) {
+  authorizeIdentityAdmission(tx, input.receipt);
+  const data = identityBindingData(input.binding),
+    home = currentCommand(tx).partition;
+  if (data.digest !== identityBindingDigest(input)) throw new IdempotencyConflictError(home);
+  if (data.home !== home || data.state === 'not-applied') throw stale();
+  if (data.state === 'accepted') return noEffect(data.job);
+  const state = (await tx.query(selectControl.sql, [home])).rows[0];
+  const prior = (await tx.query(job.sql, [home, data.job.jobId, data.job.epoch.toString()])).rows[0];
+  if (prior) return noEffect(data.job);
+  const closed = (
+    await tx.query(`SELECT state FROM semantic.identity_epoch_admission_attempt WHERE partition_no=$1 AND job_id=$2`, [
+      home,
+      data.job.jobId,
+    ])
+  ).rows[0];
+  if (closed?.state === 'closed') throw stale();
+  const groups = [...new Map(data.sources.map((s) => [s.terminal, s])).values()];
+  const localSources = data.sources
+    .filter((s) => s.source_route >> 4 === home)
+    .map((s) => ({
+      original: s.input_original,
+      route: s.source_route,
+      control_partition: s.partition_no,
+      terminal: s.terminal,
+      source_revision: s.source_revision,
+      source_transaction_id: s.source_transaction_id,
+      source_owner_epoch: s.source_owner_epoch,
+    }));
+  for (const source of localSources)
+    await tx.query(`SELECT original FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2 FOR UPDATE`, [
+      source.route,
+      source.original,
+    ]);
+  if (
+    localSources.length &&
+    (await tx.query(holdSource.sql, [json(localSources), home])).rows.length !== localSources.length
+  )
+    throw stale();
+  const locked = (
+    await tx.query(selectGroups.sql, [home, groups.filter((g) => g.partition_no === home).map((g) => g.terminal)])
+  ).rows;
+  if (locked.some((g) => g.pending_job))
+    throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
+  if (!state || state.pending_job || state.retained_preparation) throw unavailable();
+  if (
+    BigInt(state.allocated_epoch) + 1n !== data.job.epoch ||
+    locked.length !== groups.filter((g) => g.partition_no === home).length ||
+    locked.some(
+      (g) =>
+        !groups.some(
+          (b) =>
+            b.terminal === g.terminal &&
+            b.generation === g.generation &&
+            BigInt(b.version) === BigInt(g.version) &&
+            b.owner_epoch === g.owner_epoch,
+        ),
+    )
+  )
+    throw stale();
+  recordIdentityEpochNativeCommit(tx, 'admission');
+  registerCommandCallback(tx, async (transactionId) => {
+    await tx.query(insertJob.sql, [
+      home,
+      data.job.jobId,
+      data.job.epoch.toString(),
+      json(input.intent),
+      identityReceiptKey(input.receipt),
+      json(identityReceiptValue(input.receipt)),
+      data.scope,
+      transactionId,
+    ]);
+    await tx.query(insertBases.sql, [home, data.job.jobId, json(data.sources)]);
+    await tx.query(handoff.sql, [
+      home,
+      data.job.jobId,
+      data.job.epoch.toString(),
+      data.scope,
+      home,
+      transactionId,
+      json(
+        groups
+          .filter((g) => g.partition_no === home)
+          .map((g) => ({
+            terminal: g.terminal,
+            generation: g.generation,
+            basis_version: g.version,
+            owner_epoch: g.owner_epoch,
+          })),
+      ),
+    ]);
+    await tx.query(acquire.sql, [home, data.job.jobId, data.job.epoch.toString(), data.scope]);
+    await tx.query(record.sql, [home, transactionId, data.job.jobId, 'acquired']);
+    if (
+      immediate &&
+      groups.every((g) => g.partition_no === home) &&
+      data.sources.every((s) => s.source_route >> 4 === home)
+    ) {
+      const r = (await tx.query(receipt.sql, [home, data.job.jobId, data.job.epoch.toString(), 'acquired'])).rows[0];
+      await tx.query(custodyAcquire.sql, [
+        data.job.jobId,
+        home,
+        r.transaction_id,
+        r.native_epoch,
+        r.native_position,
+        home,
+      ]);
+      await tx.query(promote.sql, [data.job.jobId, data.job.epoch.toString(), home]);
+    }
+  });
+  return { value: data.job, events: [wake(data.job)] };
+}
+
+/** Coherent cap proof, binding-home claim, first ordered reservation, separate accepted publication. */
+export async function prepareIdentityEpochAdmission(
+  pool: Pool,
+  authority: IdentityAdmissionAuthority,
+  input: IdentityAdmissionInput,
+): Promise<IdentityJobRef> {
+  const binding = await bindIdentityEpochReceipt(pool, authority, input),
+    data = identityBindingData(binding);
+  if (data.state === 'accepted') return data.job;
+  const admitted = await runCommand(pool, { ...authority, partition: data.home }, (tx) =>
+    admitBoundIdentityEpoch(tx, { ...input, binding }),
+  );
+  await acceptIdentityBinding(pool, authority, input, binding);
   return admitted.value;
 }
 
@@ -222,7 +467,8 @@ async function load(pool: Pool, ref: IdentityJobRef, measured?: Work) {
     if (!saved || !owner || owner.writeState !== 'active') throw unavailable();
     const planned = (await measuredQuery(tx, plans.sql, [home, ref.jobId], measured)).rows;
     const bases = (await measuredQuery(tx, sources.sql, [home, ref.jobId], measured)).rows;
-    return { saved, planned, bases };
+    const retainedInputs = (await measuredQuery(tx, inputs.sql, [home, ref.jobId], measured)).rows;
+    return { saved, planned, bases, inputs: retainedInputs };
   });
 }
 function translate(error: unknown): never {
@@ -263,6 +509,44 @@ async function deliverHome(
   measured?: Work,
 ) {
   try {
+    if (stage === 'acquired') {
+      const retained = await load(pool, ref, measured);
+      if (retained.saved.scope_digest !== scope || !retained.planned.some((p) => p.resource_home === home))
+        throw stale();
+      const source = await withReadTransaction(
+        pool,
+        async (tx) =>
+          (
+            await tx.query(
+              `SELECT c.transaction_id FROM semantic.identity_epoch_job j JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(j.partition_no,j.recorded_transaction_id) AND c.purpose='admission' JOIN core.partition p ON p.partition_no=j.partition_no AND p.epoch=c.epoch AND p.position>=c.position AND p.write_state='active' WHERE j.partition_no=$1 AND j.job_id=$2 AND j.epoch=$3`,
+              [identityJobPartition(ref), ref.jobId, ref.epoch.toString()],
+            )
+          ).rows[0],
+      );
+      if (!source) throw unavailable();
+      await runCommand(pool, { partition: home }, async (tx) => {
+        const duplicate = (
+          await tx.query(
+            `SELECT job_id FROM semantic.identity_epoch_admission_handoff WHERE partition_no=$1 AND job_id=$2`,
+            [home, ref.jobId],
+          )
+        ).rows[0];
+        if (duplicate) return noEffect(null);
+        await tx.query(handoff.sql, [
+          home,
+          ref.jobId,
+          ref.epoch.toString(),
+          scope,
+          identityJobPartition(ref),
+          source.transaction_id,
+          json(retained.inputs.filter((i) => i.control_partition === home)),
+        ]);
+        return {
+          value: null,
+          events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+        };
+      });
+    }
     await runCommand(pool, { partition: home }, async (tx) => {
       await measuredQuery(tx, selectControl.sql, [home], measured);
       // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
@@ -301,9 +585,139 @@ export async function cancelIdentityEpochAdmission(pool: Pool, ref: IdentityJobR
     if (!saved) throw unavailable();
     if (saved.state === 'cancelling' || saved.state === 'cancelled') return noEffect(null);
     if (saved.state !== 'preparing') throw stale();
-    await tx.query(cancel.sql, [ref.jobId, ref.epoch.toString()]);
+    await tx.query(cancel.sql, [ref.jobId, ref.epoch.toString(), identityJobPartition(ref)]);
     return { value: null, events: [wake(ref)] };
   });
+}
+
+/** Released source validation installs native local writer obligations before job-home custody. */
+async function validateSources(
+  pool: Pool,
+  ref: IdentityJobRef,
+  saved: { scope_digest: string },
+  bases: readonly Record<string, unknown>[],
+  measured: Work,
+) {
+  const home = identityJobPartition(ref);
+  for (const base of bases) {
+    const sourceHome = Number(base.route) >> 4;
+    const active = await withReadTransaction(pool, async (tx) => await readPartition(tx, sourceHome));
+    if (!active || active.writeState !== 'active' || active.epoch !== base.source_owner_epoch) return false;
+    const held = await runCommand(pool, { partition: sourceHome }, async (tx) => {
+      await measuredQuery(
+        tx,
+        `SELECT original FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2 FOR UPDATE`,
+        [base.route, base.original],
+        measured,
+      );
+      const valid = (await measuredQuery(tx, holdSource.sql, [json([base]), sourceHome], measured)).rows;
+      if (valid.length !== 1) return noEffect(false);
+      const prior = (
+        await measuredQuery(
+          tx,
+          `SELECT scope_digest,closed FROM semantic.identity_epoch_admission_source_hold WHERE partition_no=$1 AND job_id=$2 AND original=$3`,
+          [sourceHome, ref.jobId, base.original],
+          measured,
+        )
+      ).rows[0];
+      if (prior) return noEffect(!prior.closed && prior.scope_digest === saved.scope_digest);
+      recordIdentityEpochNativeCommit(tx, 'admission');
+      registerCommandCallback(tx, async (id) => {
+        await measuredQuery(
+          tx,
+          `INSERT INTO semantic.identity_epoch_admission_source_hold(partition_no,job_id,job_epoch,original,route,scope_digest,basis,transaction_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [sourceHome, ref.jobId, ref.epoch.toString(), base.original, base.route, saved.scope_digest, json(base), id],
+          measured,
+        );
+      });
+      return {
+        value: true,
+        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+      };
+    });
+    if (!held.value) return false;
+    const received = await withReadTransaction(
+      pool,
+      async (tx) =>
+        (
+          await measuredQuery(
+            tx,
+            `SELECT h.transaction_id,c.epoch,c.position FROM semantic.identity_epoch_admission_source_hold h JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(h.partition_no,h.transaction_id) AND c.purpose='admission' AND c.xmin=h.xmin JOIN core.partition p ON p.partition_no=h.partition_no AND p.epoch=c.epoch AND p.position>=c.position AND p.write_state='active' WHERE h.partition_no=$1 AND h.job_id=$2 AND h.original=$3 AND NOT h.closed AND h.scope_digest=$4`,
+            [sourceHome, ref.jobId, base.original, saved.scope_digest],
+            measured,
+          )
+        ).rows[0],
+    );
+    if (!received) return false;
+    await runCommand(pool, { partition: home }, async (tx) => {
+      const prior = (
+        await measuredQuery(
+          tx,
+          `SELECT original FROM semantic.identity_epoch_admission_validation WHERE partition_no=$1 AND job_id=$2 AND original=$3`,
+          [home, ref.jobId, base.original],
+          measured,
+        )
+      ).rows[0];
+      if (prior) return noEffect(null);
+      await measuredQuery(
+        tx,
+        `INSERT INTO semantic.identity_epoch_admission_validation VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [home, ref.jobId, base.original, sourceHome, received.transaction_id, received.epoch, received.position],
+        measured,
+      );
+      return {
+        value: null,
+        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+      };
+    });
+  }
+  // Receiving owner/generation evidence is independently anchored at each actual group home.
+  for (const controlHome of [...new Set(bases.map((b) => Number(b.control_partition)))]) {
+    const valid = await withReadTransaction(pool, async (tx) => {
+      const owner = await readPartition(tx, controlHome);
+      if (!owner || owner.writeState !== 'active') return false;
+      const groups = (
+        await measuredQuery(
+          tx,
+          `SELECT * FROM semantic.identity_epoch_group WHERE partition_no=$1 AND terminal=ANY($2::uuid[])`,
+          [controlHome, bases.filter((b) => b.control_partition === controlHome).map((b) => b.terminal)],
+          measured,
+        )
+      ).rows;
+      return bases
+        .filter((b) => b.control_partition === controlHome)
+        .every((b) =>
+          groups.some(
+            (g) =>
+              g.terminal === b.terminal &&
+              g.generation === b.generation &&
+              BigInt(g.version) === BigInt(String(b.basis_version)) &&
+              g.owner_epoch === owner.epoch &&
+              g.owner_epoch === b.owner_epoch &&
+              g.pending_job === ref.jobId &&
+              BigInt(g.pending_epoch) === ref.epoch,
+          ),
+        );
+    });
+    if (!valid) return false;
+  }
+  return true;
+}
+async function releaseSourceHolds(pool: Pool, ref: IdentityJobRef, bases: readonly Record<string, unknown>[]) {
+  for (const home of [...new Set(bases.map((b) => Number(b.route) >> 4))]) {
+    await runCommand(pool, { partition: home }, async (tx) => {
+      const changed = await tx.query(
+        `UPDATE semantic.identity_epoch_admission_source_hold SET closed=true WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND NOT closed RETURNING original`,
+        [home, ref.jobId, ref.epoch.toString()],
+      );
+      return changed.rowCount
+        ? {
+            value: null,
+            events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+          }
+        : noEffect(null);
+    });
+  }
 }
 
 /** One planned home per call. Uncertain delivery is reconciled from its immutable real native receipt. */
@@ -332,12 +746,15 @@ export async function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef
         received.transaction_id,
         received.native_epoch,
         received.native_position,
+        identityJobPartition(ref),
       ]);
       if (recorded.rowCount !== 1) throw stale();
       return { value: null, events: [wake(ref)] };
     });
     return { job: ref, state: saved.state, work: { ...measured, rows: 1 } };
   }
+  const valid = closing || (await validateSources(pool, ref, saved, bases, measured));
+  if (closing) await releaseSourceHolds(pool, ref, bases);
   const finalized = await runCommand<IdentityAdmissionProgress['state']>(
     pool,
     { partition: identityJobPartition(ref) },
@@ -346,11 +763,18 @@ export async function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef
         .rows[0];
       if (!current) throw unavailable();
       if (current.state !== saved.state) return noEffect(current.state);
-      if (!closing && (await query(tx, validBases.sql, [ref.jobId])).rows.length !== bases.length) {
-        await query(tx, cancel.sql, [ref.jobId, ref.epoch.toString()]);
+      const retainedValid = closing
+        ? bases.length
+        : (await query(tx, validBases.sql, [ref.jobId, identityJobPartition(ref)])).rows.length;
+      if (!closing && (!valid || retainedValid !== bases.length)) {
+        await query(tx, cancel.sql, [ref.jobId, ref.epoch.toString(), identityJobPartition(ref)]);
         return { value: 'cancelling', events: [wake(ref)] };
       }
-      const changed = await query(tx, (closing ? finishClose : promote).sql, [ref.jobId, ref.epoch.toString()]);
+      const changed = await query(tx, (closing ? finishClose : promote).sql, [
+        ref.jobId,
+        ref.epoch.toString(),
+        identityJobPartition(ref),
+      ]);
       if (changed.rowCount !== 1) throw stale();
       return { value: closing ? 'cancelled' : 'pending', events: [wake(ref)] };
     },

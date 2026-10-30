@@ -422,7 +422,17 @@ Required `semantic/identity-epoch-store.ts` export `identityEpochStore: Identity
 1. Ordered native control resources and a first-resource job home; a durable routed job ID, native bigint target
    epoch, immutable intent and existing receipt reference; partition-local published basis and reservations; exact group cardinality and affected-original index.
    Durable JSON serializes bigint as canonical decimal strings, never Number. A job contains no client result vector.
-2. `admit(tx, {intent, receipt}) -> CommandResult<IdentityJobRef>` under a live native control command. It verifies
+2. `bindReceipt(pool, authority, {intent, receipt}) -> Promise<IdentityReceiptBinding>` performs current native
+   authorization before any indexed receipt lookup. Fresh coherent cap collection precedes claim/history writes.
+   The binding home is the actual actor/account route, with the unchanged `identityReceiptKey` tuple. It commits
+   pending intent digest, generation and exact proposed job/home/epoch, releases, and returns committed custody.
+   `admit(tx, {intent, receipt, binding}) -> CommandResult<IdentityJobRef>` runs at that first ordered group home.
+   Calling `bindReceipt` again after reservation independently verifies the committed native job and publishes the
+   immutable accepted pointer at the binding home. `prepareAdmission` composes those three released stages.
+   A pending replay recovers that same reservation before collecting a fresh basis. A failed provisional basis
+   can advance generation only after real irreversible first-absence/close receipts at every planned home;
+   all generations and closure custody remain retained under the same receipt/digest. No elapsed-time expiry.
+   The old transaction-only signature requires genuinely colocated receipt and group homes. It verifies
    real ordinary authorization (or the exact persisted platform decision), receipt/intent equality, complete group
    membership and the cap before writes. Pending plus wakeup are atomic. The final user DTO receipt cannot be
    manufactured as successful by this internal admission result. Typed failure codes are `identity_group_overflow`,
@@ -430,7 +440,10 @@ Required `semantic/identity-epoch-store.ts` export `identityEpochStore: Identity
 3. `initializeSubject(tx, original)` in the real revision-1 creation transaction. It records an exact initial-self
    mapping from actual creation; it does not infer self from a missing row, touch Search or advance a structural epoch.
    All creation paths, including account-agent and imports, must bind it. No per-read lazy write.
-4. `readEpoch`, `readJob`, `findJob` and `readMapping` are native observation, not permission. `absent` is established
+4. `findJob(tx, receipt, binding?)` requires current native authorization before replay/conflict disclosure,
+   an explicit released binding proof for a foreign binding home, and the exact native job-home transaction.
+   A locator or reconstructed JSON object grants neither custody nor Access. `readEpoch`, `readJob`, and
+   `readMapping` remain native observation, not permission. `absent` is established
    native absence, `unavailable` names bootstrap/missing/moved owner, and `pending` names the affected job. Unaffected
    point reads inspect their indexed local mapping; they do not enumerate the affected group or all homes.
 5. `pageChanges(client, job, after)` uses the immutable affected-original keyset and returns at most 100 changes with
@@ -1342,3 +1355,47 @@ producers, owner-transfer bounds, account source intent/delivery, minimizers/loc
 remain explicit native obligations. The implemented STORE/bootstrap producers do not replace those records.
 Formatter success checks bytes only. Integration alone does not attest native performance, complete publication
 or satisfy a main/root runtime gate.
+
+### Native home-binding inventory and recovery cost
+
+Every authoritative identity primary/unique key starts with `partition_no` or `route`. Job children reference
+`(partition_no,job_id)` locally; receipt uniqueness belongs solely to
+`identity_epoch_receipt_binding(partition_no,receipt_key)` at the routed actor/account home. The forward migration
+preserves old job IDs, receipts, intents, epochs and transaction IDs, imports accepted pointers, and requires a
+released original native job/write-basis verification before actor-home confirmation. It creates no guessed ACK.
+
+The physical additions are counted as retained history/custody, including indexes and native framework rows:
+
+| Relation                               | Physical home and retained contents                                                                                                                                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `identity_epoch_receipt_binding`       | Actor/account home; one exact key/digest, account role index, current generation and immutable accepted job pointer.                                                                                 |
+| `identity_epoch_receipt_claim`         | Same home; one immutable intent, receipt, proposed job/home/epoch, scope and at most two exact input/source bases per generation.                                                                    |
+| `identity_epoch_receipt_claim_commit`  | Same home; one actual native confirmation per generation, including migrated confirmations.                                                                                                          |
+| `identity_epoch_receipt_closure`       | Same home; one actual native close receipt per planned home per retired generation, at most two.                                                                                                     |
+| `identity_epoch_admission_handoff`     | Each receiving home; one immutable job/scope/source-transaction locator plus at most two local immutable input bases. No membership vector.                                                          |
+| `identity_epoch_admission_source_hold` | Actual original source home; at most two source bases per attempt, native transaction and irreversible closed disposition. Active holds serialize with local dirty-key capture.                      |
+| `identity_epoch_admission_validation`  | Job home; one source hold receipt per admitted original source basis, at most two.                                                                                                                   |
+| `identity_epoch_bootstrap_basis`       | Receiving home; one native receiving receipt header per export. Mapping basis is read from the already required local home gates written by that transaction; no retained duplicate original vector. |
+
+All head/history/receipt/proof/native commit/outbox/write-basis copies spend the existing R/H storage and command
+budgets. Constant keyed hops add no allowance. Input/group references and handoffs spend existing G/A/P retention;
+no extra full generation or member list is allocated by binding. Accepted history survives job minimization.
+Account-bearing receipt/claim copies and `identity_epoch_receipt_account(partition_no,account_id,receipt_key)` are
+native discovery surfaces for the sole local erasure owner. Actual Ad1 minimization/shared-copy ACK binding remains
+named pending coverage; this producer supplies neither another erasure engine nor a fabricated completion.
+
+Source finalization takes released actual native source holds, then separately revalidates current receiving
+owner/generation/claim evidence and takes source receipt custody locally. Its SQL joins only job-home source and
+validation records. Source ACK reads a released exact receiving native receipt and local gate mapping basis before
+its source command, whose SQL revalidates source owner, subject and captured heads without a foreign group join.
+Receiving acquire joins only its retained local handoff, local group, owner, attempt and slot; close remains atomic
+with first absence and takes no capacity. Receiving waiters are discovered from local handoff/attempt records.
+
+Default bootstrap effects execute at most 100 existing bounded native steps with four released home pipelines.
+Cursor selection/advance is one topology-home command; completion decrements only validated native closure custody
+and never rewinds the scheduling cursor. The first step retains the next wake before source contact. Individual
+source export/receiving/source ACK commands, raw100 bound, all4096 closure and every registered queue remain intact.
+This changes scheduling overhead, not closure meaning or Community's default 30s settle deadline. Native growth
+64/512/4096, nested-function RLS/crash schedules and the actual default Community worker are the focused witnesses;
+full participant/output-generation, all-nine Cost, Content consumer acceptance and main/root promotion remain
+separate obligations.

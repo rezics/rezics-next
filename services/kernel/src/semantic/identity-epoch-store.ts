@@ -1,3 +1,11 @@
+import {
+  identityBindingData,
+  identityBindingDigest,
+  identityReceiptPartition,
+  readIdentityBinding,
+} from './identity-epoch-binding.ts';
+import bindingInsert from './identity-epoch-binding-insert.sql';
+import bindingAccept from './identity-epoch-binding-accept.sql';
 import storeInsertNativeCommit from './identity-epoch-store-insert-native-commit.sql';
 import storeSelectJob from './identity-epoch-store-select-job.sql';
 import storeSelectAck from './identity-epoch-store-select-ack.sql';
@@ -44,7 +52,12 @@ import {
   IdempotencyConflictError,
   type CommandTransaction,
 } from '../command/command.ts';
-import { identityHomeAvailable, prepareIdentityEpochAdmission } from './identity-epoch-admission.ts';
+import {
+  identityHomeAvailable,
+  prepareIdentityEpochAdmission,
+  bindIdentityEpochReceipt,
+  admitBoundIdentityEpoch,
+} from './identity-epoch-admission.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readIdentityMappings } from './identity-epoch-read.ts';
@@ -176,7 +189,7 @@ async function readJob(tx: CommandTransaction, job: IdentityJobRef): Promise<Ide
   if (!owner || owner.writeState !== 'active') return null;
   const row = (await tx.query(storeSelectJob.sql, [job.jobId, job.epoch.toString(), partition])).rows[0];
   if (!row) return null;
-  const acks = (await tx.query(storeSelectAck.sql, [job.jobId])).rows;
+  const acks = (await tx.query(storeSelectAck.sql, [job.jobId, partition])).rows;
   const progress = (step: string) => {
     const ack = acks.find((ack) => ack.step === step);
     return ack ? decodeProgress(ack.progress) : null;
@@ -203,6 +216,7 @@ export const identityEpochStore: IdentityEpochStore = {
   // Compatibility for topology observations only; actual job homes are encoded by their native routed IDs.
   controlPartition: IDENTITY_EPOCH_CONTROL_PARTITION,
   prepareAdmission: prepareIdentityEpochAdmission,
+  bindReceipt: bindIdentityEpochReceipt,
   async readEpoch(tx, partition = 0) {
     const owner = await readPartition(tx, partition);
     if (!owner) return { state: 'unavailable', reason: 'missing-owner' };
@@ -220,18 +234,38 @@ export const identityEpochStore: IdentityEpochStore = {
       : { state: 'published', epoch: BigInt(row.published_epoch) };
   },
   readJob,
-  async findJob(tx, receipt) {
-    const row = (await tx.query(storeSelectJob2.sql, [receiptKey(receipt), json(receiptValue(receipt))])).rows[0];
+  async findJob(tx, receipt, binding) {
+    const command = currentCommand(tx);
+    authorizeIdentityAdmission(tx, receipt);
+    if (binding) {
+      const data = identityBindingData(binding);
+      if (data.key !== receiptKey(receipt) || canonicalize(data.receipt) !== canonicalize(receiptValue(receipt)))
+        throw new IdempotencyConflictError(command.partition);
+      if (command.partition !== data.home) throw new TypeError('Job lookup requires the explicit native job home');
+      return readJob(tx, data.job);
+    }
+    if (command.partition !== identityReceiptPartition(receipt))
+      throw new TypeError('Cross-home receipt lookup requires a released native binding proof');
+    const row = (
+      await tx.query(storeSelectJob2.sql, [receiptKey(receipt), json(receiptValue(receipt)), command.partition])
+    ).rows[0];
     return row ? readJob(tx, { jobId: row.job_id, epoch: BigInt(row.epoch) }) : null;
   },
   readMappings: readIdentityMappings,
   async readMapping(pool, original) {
     return (await readIdentityMappings(pool, [original]))[0]!;
   },
-  async admit(tx, { intent, receipt }) {
+  async admit(tx, { intent, receipt, binding }) {
+    if (binding) return admitBoundIdentityEpoch(tx, { intent, receipt, binding }, true);
+    if (currentCommand(tx).partition !== identityReceiptPartition(receipt)) {
+      authorizeIdentityAdmission(tx, receipt);
+      throw new TypeError('Cross-home receipt admission requires a released native binding proof');
+    }
     const command = control(tx);
     authorizeIdentityAdmission(tx, receipt);
-    const prior = (await tx.query(storeSelectJob3.sql, [receiptKey(receipt)])).rows[0];
+    const claimed = await readIdentityBinding(tx, { intent, receipt });
+    if (claimed) return admitBoundIdentityEpoch(tx, { intent, receipt, binding: claimed }, true);
+    const prior = (await tx.query(storeSelectJob3.sql, [receiptKey(receipt), command.partition])).rows[0];
     if (prior) {
       if (
         canonicalize(prior.intent) !== canonicalize(JSON.parse(json(intent))) ||
@@ -297,7 +331,23 @@ export const identityEpochStore: IdentityEpochStore = {
     const scope = createHash('sha256')
       .update(json([intent, inputs.map((g) => [g.terminal, g.generation, g.version, g.observed_count])]))
       .digest('hex');
+    recordIdentityEpochNativeCommit(tx, 'admission');
     registerCommandCallback(tx, async (transactionId) => {
+      await tx.query(bindingInsert.sql, [
+        command.partition,
+        receiptKey(receipt),
+        identityBindingDigest({ intent, receipt }),
+        json(receiptValue(receipt)),
+        json(intent),
+        job.jobId,
+        command.partition,
+        job.epoch.toString(),
+        scope,
+        json(sources),
+        transactionId,
+        receipt.kind === 'subject.merge' ? receipt.command.actorAccountId : receipt.account,
+      ]);
+      await tx.query(bindingAccept.sql, [command.partition, receiptKey(receipt), '1', job.jobId, job.epoch.toString()]);
       await tx.query(storeInsertJob.sql, [
         command.partition,
         job.jobId,
@@ -392,7 +442,17 @@ export const identityEpochStore: IdentityEpochStore = {
     const pages: Array<{ original: string; terminal: string }[]> = [];
     const allowance = inputs.length === 1 ? 100 : 50;
     for (const input of inputs)
-      pages.push((await tx.query(storeSelectOriginal.sql, [input.generation, after, allowance, input.terminal])).rows);
+      pages.push(
+        (
+          await tx.query(storeSelectOriginal.sql, [
+            input.generation,
+            after,
+            allowance,
+            input.terminal,
+            input.control_partition,
+          ])
+        ).rows,
+      );
     const fences = pages
       .filter((p) => p.length === allowance)
       .map((p) => p.at(-1)!.original)
@@ -477,10 +537,22 @@ export const identityEpochStore: IdentityEpochStore = {
       { partition: identityJobPartition(receipt.job) },
       async (tx) => {
         control(tx, true);
-        const job = (await tx.query(storeSelectJob5.sql, [receipt.job.jobId, receipt.job.epoch.toString()])).rows[0];
+        const job = (
+          await tx.query(storeSelectJob5.sql, [
+            receipt.job.jobId,
+            receipt.job.epoch.toString(),
+            identityJobPartition(receipt.job),
+          ])
+        ).rows[0];
         if (!job || saved.scope_digest !== job.scope_digest) throw invalidReceipt();
         // Custody of every prior withdrawal, addition and fence must already exist. A locator is insufficient.
-        const missing = (await tx.query(storeSelectEffectReceipt.sql, [receipt.job.jobId, receipt.step])).rowCount;
+        const missing = (
+          await tx.query(storeSelectEffectReceipt.sql, [
+            receipt.job.jobId,
+            receipt.step,
+            identityJobPartition(receipt.job),
+          ])
+        ).rowCount;
         if (missing || saved.state !== 'complete') throw invalidReceipt();
         const progress: IdentityStepProgress = {
           job: receipt.job,
@@ -489,7 +561,9 @@ export const identityEpochStore: IdentityEpochStore = {
           work: saved.work,
           receipt,
         };
-        const previous = (await tx.query(storeSelectAck2.sql, [receipt.job.jobId, receipt.step])).rows[0];
+        const previous = (
+          await tx.query(storeSelectAck2.sql, [receipt.job.jobId, receipt.step, identityJobPartition(receipt.job)])
+        ).rows[0];
         if (previous) {
           if (canonicalize(previous.progress) !== canonicalize(JSON.parse(json(progress)))) throw invalidReceipt();
           return noEffect(decodeProgress(previous.progress));

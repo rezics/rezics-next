@@ -282,22 +282,22 @@ test('native capped admission includes current authorization, immutable inputs a
   };
   const operation = async (database: GrowthDatabase) => {
     const { actor, authorization } = await authorize('subject:merge');
-    const admitted = await runCommand(
-      database.pool,
-      {
-        partition: home(survivor),
-        authorization,
-        basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+    const authority = {
+      authorization,
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+    };
+    const input = {
+      intent: { kind: 'merge' as const, survivor, redirected, release: release.digest },
+      receipt: {
+        kind: 'subject.merge' as const,
+        command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
       },
-      (tx) =>
-        identityEpochStore.admit(tx, {
-          intent: { kind: 'merge', survivor, redirected, release: release.digest },
-          receipt: {
-            kind: 'subject.merge',
-            command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
-          },
-        }),
+    };
+    const binding = await identityEpochStore.bindReceipt(database.pool, authority, input);
+    const admitted = await runCommand(database.pool, { ...authority, partition: home(survivor) }, (tx) =>
+      identityEpochStore.admit(tx, { ...input, binding }),
     );
+    await identityEpochStore.bindReceipt(database.pool, authority, input);
     expect(await identityEpochStore.readMapping(database.pool, redirected)).toEqual({
       state: 'pending',
       original: redirected,

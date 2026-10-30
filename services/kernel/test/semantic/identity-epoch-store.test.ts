@@ -45,15 +45,21 @@ async function admission(intent: IdentityIntent, key = randomUUID(), receiptDige
   };
   const execute = async (next = intent, persona: 'editor' | 'outsider' = 'editor') => {
     const current = await f.actor(persona);
-    return runCommand(
+    const authority = {
+      basis: { actorAccountId: current.accountId, clientId: current.clientId, requestedBy: current.requestedBy },
+      authorization: await f.authorization('subject:merge', persona),
+    };
+    const binding = await store.bindReceipt(f.pool, authority, { intent: next, receipt });
+    const result = await runCommand(
       f.pool,
       {
+        ...authority,
         partition: home(next.kind === 'merge' ? next.survivor : next.original),
-        basis: { actorAccountId: current.accountId, clientId: current.clientId, requestedBy: current.requestedBy },
-        authorization: await f.authorization('subject:merge', persona),
       },
-      (tx) => store.admit(tx, { intent: next, receipt }),
+      (tx) => store.admit(tx, { intent: next, receipt, binding }),
     );
+    await store.bindReceipt(f.pool, authority, { intent: next, receipt });
+    return result;
   };
   return { execute, receipt };
 }
@@ -271,7 +277,23 @@ test('native identity store admits one capped durable job with no early publicat
     job,
   });
   expect((await execute()).value).toEqual(job);
-  expect((await store.findJob(f.pool, receipt))?.ref).toEqual(job);
+  const lookupActor = await f.actor();
+  const lookupAuthority = {
+    basis: {
+      actorAccountId: lookupActor.accountId,
+      clientId: lookupActor.clientId,
+      requestedBy: lookupActor.requestedBy,
+    },
+    authorization: await f.authorization('subject:merge'),
+  };
+  const lookupBinding = await store.bindReceipt(f.pool, lookupAuthority, { intent, receipt });
+  expect(
+    (
+      await runCommand(f.pool, { ...lookupAuthority, partition: home(job.jobId) }, async (tx) =>
+        noEffect(await store.findJob(tx, receipt, lookupBinding)),
+      )
+    ).value?.ref,
+  ).toEqual(job);
   await expect(execute({ ...intent, survivor: redirected })).rejects.toMatchObject({
     name: 'IdempotencyConflictError',
   });

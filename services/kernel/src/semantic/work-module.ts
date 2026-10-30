@@ -1,6 +1,6 @@
 import { startRelays } from '../events/relays.ts';
 import type { WorkModule } from '../work/registry.ts';
-import { stepIdentityEpochBootstrapWork, identityBootstrapWake } from './identity-epoch-bootstrap.ts';
+import { runIdentityEpochBootstrapBatch, identityBootstrapWake } from './identity-epoch-bootstrap.ts';
 import {
   IDENTITY_EPOCH_BOOTSTRAP,
   IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
@@ -46,7 +46,7 @@ export const semanticWorkModule: WorkModule = {
           'com.rezics.subject.created.v1',
         ],
         run: async () => {
-          await stepIdentityEpochBootstrapWork(context.pool);
+          await runIdentityEpochBootstrapBatch(context.pool);
         },
       },
     ]);
@@ -55,8 +55,7 @@ export const semanticWorkModule: WorkModule = {
         value: null,
         events: [identityBootstrapWake(0, 1n)],
       }));
-      return { stop: async () => {} };
+      return startRelays(context.pool, [linkProjection(context.pool)]);
     });
-    context.addService(() => startRelays(context.pool, [linkProjection(context.pool)]));
   },
 };

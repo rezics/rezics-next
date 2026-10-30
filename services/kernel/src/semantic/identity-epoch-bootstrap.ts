@@ -1,3 +1,5 @@
+import receivingBasis from './identity-epoch-bootstrap-basis.sql';
+import saveBasis from './identity-epoch-bootstrap-save-basis.sql';
 import bootstrapSelectBootstrapTopology from './identity-epoch-bootstrap-select-bootstrap-topology.sql';
 import bootstrapSelectBootstrapPage from './identity-epoch-bootstrap-select-bootstrap-page.sql';
 import bootstrapSelectBootstrapRow from './identity-epoch-bootstrap-select-bootstrap-row.sql';
@@ -207,6 +209,7 @@ export async function stepIdentityEpochBootstrap(
     work.bytes = Buffer.byteLength(JSON.stringify(page.rows));
   }
   const retained = page;
+  const mappingEpochs = new Map<string, string>();
   const withdrawals = new Map<number, Row[]>();
   for (const row of retained.rows) {
     if (
@@ -237,8 +240,8 @@ export async function stepIdentityEpochBootstrap(
         const previous = (await query(tx, bootstrapSelectOriginal.sql, [destination, row.original])).rows[0];
         if (!previous) continue;
         if (previous.pending_job || previous.terminal !== row.previous_terminal) throw fail();
-        await query(tx, bootstrapUpdateOriginal.sql, [previous.generation, row.original]);
-        await query(tx, bootstrapUpdateGroup.sql, [previous.terminal]);
+        await query(tx, bootstrapUpdateOriginal.sql, [previous.generation, row.original, destination]);
+        await query(tx, bootstrapUpdateGroup.sql, [previous.terminal, destination]);
       }
       await query(tx, bootstrapInsertBootstrapCustody.sql, [
         destination,
@@ -273,10 +276,18 @@ export async function stepIdentityEpochBootstrap(
           'add',
         ])
       ).rows[0];
-      if (duplicate) {
-        if (duplicate.native_transaction_id !== retained.native.transactionId) throw fail();
-        return noEffect(null);
-      }
+      if (duplicate && duplicate.native_transaction_id !== retained.native.transactionId) throw fail();
+      const existingBasis = (
+        await query(tx, receivingBasis.sql, [
+          destination,
+          partition,
+          retained.generation.toString(),
+          retained.native.transactionId,
+          JSON.stringify(rows),
+        ])
+      ).rows[0];
+      if (existingBasis) return noEffect(null);
+
       // Serialize receiving first absence under the actual native home fence.
       await query(tx, bootstrapSelectControl.sql, [destination]);
       const owner = await readPartition(tx, destination);
@@ -289,8 +300,8 @@ export async function stepIdentityEpochBootstrap(
           const previous = (await query(tx, bootstrapSelectOriginal.sql, [destination, row.original])).rows[0];
           if (previous?.pending_job) throw fail();
           if (previous && previous.terminal !== row.terminal) {
-            await query(tx, bootstrapUpdateOriginal.sql, [previous.generation, row.original]);
-            await query(tx, bootstrapUpdateGroup.sql, [previous.terminal]);
+            await query(tx, bootstrapUpdateOriginal.sql, [previous.generation, row.original, destination]);
+            await query(tx, bootstrapUpdateGroup.sql, [previous.terminal, destination]);
           }
           const changed = !previous || previous.terminal !== row.terminal || !row.present;
           await query(tx, bootstrapInsertOriginal.sql, [
@@ -302,7 +313,12 @@ export async function stepIdentityEpochBootstrap(
             retained.generation.toString(),
             row.present,
           ]);
-          if (changed) await query(tx, bootstrapUpdateGroup2.sql, [row.terminal, row.present ? 1 : previous ? -1 : 0]);
+          if (changed)
+            await query(tx, bootstrapUpdateGroup2.sql, [
+              row.terminal,
+              row.present ? 1 : previous ? -1 : 0,
+              destination,
+            ]);
           if (
             (await query(tx, installGate.sql, [destination, row.terminal, row.original, transactionId])).rowCount !== 1
           )
@@ -325,11 +341,41 @@ export async function stepIdentityEpochBootstrap(
         retained.native.position.toString(),
         'add',
       ]);
+      recordIdentityEpochNativeCommit(tx, 'bootstrap');
+      registerCommandCallback(tx, async (transactionId) => {
+        if (
+          (
+            await query(tx, saveBasis.sql, [
+              destination,
+              partition,
+              retained.generation.toString(),
+              retained.native.transactionId,
+              transactionId,
+            ])
+          ).rowCount !== 1
+        )
+          throw fail();
+      });
       return {
         value: null,
         events: [{ ...identityBootstrapWake(partition, retained.generation), type: IDENTITY_EPOCH_PROGRESS }],
       };
     });
+    const basis = await withReadTransaction(
+      pool,
+      async (tx) =>
+        (
+          await query(tx, receivingBasis.sql, [
+            destination,
+            partition,
+            retained.generation.toString(),
+            retained.native.transactionId,
+            JSON.stringify(rows),
+          ])
+        ).rows[0],
+    );
+    if (!basis) throw fail();
+    for (const entry of basis.mapping) mappingEpochs.set(entry.original, entry.epoch);
   }
   // Receiving custody committed before this source transaction. Only captured h is acknowledged; h+1 survives.
   const acknowledged = await runCommand(pool, { partition }, async (tx) => {
@@ -341,7 +387,14 @@ export async function stepIdentityEpochBootstrap(
     }
     const owner = await readPartition(tx, partition);
     if (!owner || owner.writeState !== 'active' || owner.epoch !== retained.native.epoch) throw fail();
-    const data = JSON.stringify(retained.rows);
+    const data = JSON.stringify(
+      retained.rows.map((row) => {
+        const mapping_epoch = mappingEpochs.get(row.original);
+        if (row.present && (retained.phase === 'subjects' || retained.phase === 'dirty') && !mapping_epoch)
+          throw fail();
+        return { ...row, mapping_epoch };
+      }),
+    );
     if (retained.phase === 'subjects' || retained.phase === 'dirty') {
       await query(tx, bootstrapInsertMapping.sql, [data, retained.native.epoch, retained.native.transactionId]);
       await query(tx, bootstrapUpdateDirty.sql, [data]);
@@ -381,27 +434,33 @@ export async function stepIdentityEpochBootstrap(
 }
 
 /** The default worker and native fixtures call this same bounded topology scheduler. */
-export async function stepIdentityEpochBootstrapWork(pool: Pool): Promise<IdentityEpochBootstrapProgress | null> {
-  const next = await withConnection(
-    pool,
-    async (tx) => (await tx.query(bootstrapSelectBootstrapTopology2.sql)).rows[0],
-  );
-  if (!next) return null;
-  const repair =
-    next.remaining === 0
-      ? await withConnection(
-          pool,
-          async (tx) => (await tx.query(bootstrapSelectBootstrapHome3.sql, [next.repair_partition])).rows[0],
-        )
-      : null;
-  if (next.remaining === 0 && repair?.partition_no == null) return null;
-  const partition = repair?.partition_no ?? next.next_partition;
-  // Retain the next scheduling position before contacting this source. A missing owner or
-  // pending group can pause its own work without pinning every unrelated source behind it.
-  await runCommand(pool, { partition: 0 }, async (tx) => {
-    await tx.query(advanceCursor.sql, [(partition + 1) % 4096]);
-    return { value: null, events: [{ type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition } }] };
+export async function stepIdentityEpochBootstrapWork(
+  pool: Pool,
+  schedule = true,
+): Promise<IdentityEpochBootstrapProgress | null> {
+  // Select and advance under one native topology-home lock, before releasing it for source work.
+  // Parallel bounded workers therefore visit distinct frontier slots without foreign SQL or owner guesses.
+  const repairPoint = await withReadTransaction(pool, async (tx) => {
+    const next = (await tx.query(bootstrapSelectBootstrapTopology2.sql)).rows[0];
+    if (next?.remaining !== 0) return null;
+    return (await tx.query(bootstrapSelectBootstrapHome3.sql, [next.repair_partition])).rows[0]?.partition_no ?? null;
   });
+  const selected = await runCommand<number | null>(pool, { partition: 0 }, async (tx) => {
+    await tx.query(bootstrapSelectBootstrapTopology3.sql);
+    const next = (await tx.query(bootstrapSelectBootstrapTopology2.sql)).rows[0];
+    if (!next) return noEffect(null);
+    if (next.remaining === 0 && repairPoint === null) return noEffect(null);
+    const partition = next.remaining === 0 ? repairPoint! : next.next_partition;
+    await tx.query(advanceCursor.sql, [(partition + 1) % 4096]);
+    return {
+      value: partition,
+      events: schedule
+        ? [{ type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition } }]
+        : [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition } }],
+    };
+  });
+  const partition = selected.value;
+  if (partition === null) return null;
   const progress = await stepIdentityEpochBootstrap(pool, partition);
   const evidence = await withConnection(pool, async (tx) => {
     const owner = await readPartition(tx, partition);
@@ -439,4 +498,22 @@ export async function stepIdentityEpochBootstrapWork(pool: Pool): Promise<Identi
     };
   });
   return progress;
+}
+
+/** One durable effect performs at most 100 existing bounded native steps. The first step commits
+ * the next wake before source contact; DBOS retry and that wake both recover a lost batch reply.
+ * Four independent home pipelines overlap released I/O without changing pool or native command limits.
+ */
+export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> {
+  let issued = 0,
+    done = false;
+  await Promise.all(
+    Array.from({ length: 4 }, async () => {
+      while (!done && issued < 100) {
+        const index = issued++;
+        const progress = await stepIdentityEpochBootstrapWork(pool, index === 0);
+        if (!progress) done = true;
+      }
+    }),
+  );
 }

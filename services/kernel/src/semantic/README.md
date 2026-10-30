@@ -143,8 +143,10 @@ their source command, including unnamed account-agent births. `stepIdentityEpoch
 bounded native source pages and installs mappings only when their source transaction receipt is taken into control
 custody. The resolver rechecks original and terminal visibility independently; mappings do not grant Access.
 
-The default Semantic WorkModule and native fixtures call `stepIdentityEpochBootstrapWork(pool)` for bounded work
-across all 4096 homes, including empty homes. Native source changes retain dirty heads and wake the same scheduler.
+Native fixtures call `stepIdentityEpochBootstrapWork(pool)`; the default Semantic WorkModule batches at most
+100 of those same bounded steps with four released native-home pipelines. Cursor claim/advance is atomic at the
+topology home and the first step commits the next wake before source contact. All 4096 homes, including empty
+homes, retain their actual source export, receiving custody, source ACK and native closure. Native source changes retain dirty heads and wake the same scheduler.
 `readIdentityEpochCutover(client)` observes retained topology custody; point mappings do not wait for that sweep.
 
 Admission captures exact native input generations before effects, checks the 4096-original cap, and reserves P=1
@@ -152,7 +154,13 @@ at the local control home. Overlapping input claims are busy; a different job oc
 unavailable. Disjoint homes retain independent progress. `identityJobPartition(job)` resolves routed job custody.
 Search and Library participant completion is never inferred from a receipt locator or bootstrap exhaustion.
 `prepareIdentityEpochAdmission(pool, authority, {intent, receipt})` double-collects released current input bases,
-then reserves the first ordered native control home. `stepIdentityEpochAdmission(pool, job)` acquires one planned
+then commits the exact receipt/digest and pending job locator at the routed actor/account binding home, releases,
+reserves the first ordered native control home, releases, and publishes the immutable accepted pointer at the
+binding home. Explicit callers use `bindReceipt(pool, authority, input)`, `admit(tx, {...input, binding})`, then
+`bindReceipt` to reconcile the first committed reservation. `findJob(tx, receipt, binding)` requires current
+native authorization and an actual released proof; old signatures require genuine binding/job co-location.
+Same-key changed intent conflicts across job homes. Failed provisional generations retain exact all-home close
+custody before a later current-basis generation under the same public receipt/digest. `stepIdentityEpochAdmission(pool, job)` acquires one planned
 home and reconciles its actual committed receipt into job custody. The default WorkModule runs that same step.
 `cancelIdentityEpochAdmission(pool, job)` selects cancellation before admission; bounded steps close every planned
 home, including uncertain or never-acquired homes, before releasing immutable input references. Delayed acquisition
@@ -408,7 +416,11 @@ copies block new local admission; other partitions progress. R/L/H obligations r
 not hidden full groups. General physical owner transfer is a named missing bounded native custody/storage proof.
 
 Ordered capacity begins at the FIRST ordered resource INCLUDING actual job home. Compact receipt-to-job binding
-is indexed history with retention/erasure accounting, not a free full job/claim/input. Native attempt locks close
+is indexed actor/account-home history with retention/erasure accounting. Every claim generation, native confirmation,
+accepted pointer, planned-home close proof, receiving handoff and source hold/validation copy is included in the
+[owning inventory](identity-epoch-contract.md#native-home-binding-inventory-and-recovery-cost). No extra P slot,
+full membership vector or resource allowance is added. Sole-owner Ad1 ledger minimization/shared-copy custody is
+named pending coverage. Native attempt locks close
 EVERY planned home against delayed/uncertain acquire; job-home CAS selects admitted versus cancelling. P=1 progress
 follows strictly ordered waits, not leases or try/unwind timing. See the contract for costs and required schedules.
 
