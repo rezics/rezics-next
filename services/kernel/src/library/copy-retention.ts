@@ -117,7 +117,7 @@ export async function registerCopyRetention({ pool, client, clock }: WorkContext
     { name: 'library.copyRetention.continue', ...COMMAND_STEP_RETRIES },
   );
   DBOS.registerWorkflow(
-    async (start = 0, until?: string, checkpoint: Cursor | null = null, root = DBOS.workflowID!) => {
+    async (start: number = 0, until?: string, checkpoint: Cursor | null = null, root: string = DBOS.workflowID!) => {
       const originalCutoff = until ?? (await cutoff());
       let partition = start;
       let after = checkpoint;

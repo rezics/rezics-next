@@ -16,11 +16,11 @@ import {
   openGrowthDatabase,
   seed,
   settle,
-  statementOccurrences,
   type Capture,
   type GrowthDatabase,
   type GrowthSample,
 } from '../support/growth.ts';
+import { statementOccurrences } from '../support/growth-report.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { copyRetentionRuntime } from './support/copy-retention-runtime.ts';
 

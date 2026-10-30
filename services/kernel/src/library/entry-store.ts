@@ -286,14 +286,16 @@ export async function deleteCopy(
   copyId: string,
   revision: number,
   context: WriteContext,
-): Promise<{ deletionId: string; revision: number } | null> {
-  return copyDelete.run(queryClient(client), {
+): Promise<Copy | null> {
+  const rows = await copyDelete.run(queryClient(client), {
     route,
     copy_id: copyId,
     revision,
     deletion_id: context.transactionId,
     time: context.time,
   });
+  const row = rows[0];
+  return row ? asCopy({ ...row, revision }) : null;
 }
 
 export async function pageCopies(

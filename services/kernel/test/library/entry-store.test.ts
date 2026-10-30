@@ -179,7 +179,7 @@ test('copies of one edition keep separate ids and ignore a stale revision', asyn
     expect(
       await store.updateCopy(client, route, first.id, 1, { ...changes, status: 'disposed' }, context(45)),
     ).toBeNull();
-    expect(await store.deleteCopy(client, route, first.id, 1)).toBeNull();
+    expect(await store.deleteCopy(client, route, first.id, 1, context(49, later))).toBeNull();
     expect(await store.readCopy(client, route, first.id)).toEqual(changed);
     expect(await store.readCopy(client, route, second.id)).toEqual(second);
 
@@ -205,7 +205,7 @@ test('copies of one edition keep separate ids and ignore a stale revision', asyn
     await expectSqlState(client, '23514', () =>
       store.insertCopy(client, route, { ...draft(id(48), 'y'.repeat(1001)) }, context(48)),
     );
-    expect(await store.deleteCopy(client, route, first.id, 2)).toEqual(changed);
+    expect(await store.deleteCopy(client, route, first.id, 2, context(50, later))).toEqual(changed);
     expect(await store.readCopy(client, route, first.id)).toBeNull();
     expect(await store.readCopy(client, route, second.id)).toEqual(gone);
   });
