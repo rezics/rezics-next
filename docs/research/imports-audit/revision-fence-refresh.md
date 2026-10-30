@@ -71,6 +71,10 @@ product assertion failure. An explicit scratch Bun configuration still inherited
 direct ledger invocation; it was allowed to finish. The local ledger proof instead imports the unchanged
 specification in-process through a scratch test entry, retaining the existing driver and test-environment
 isolation without requesting a native stack. The named native acceptance uses its unmodified managed command.
+The queued direct invocation ultimately exited 1 before business assertions: remote placement omitted its
+caller-supplied driver environment, yielding `IMPORT_LEDGER_DRIVER is required: bind production import state
+reconciliation` in all 28 cases. It is setup failure evidence only, not a product regression or acceptance result;
+the subsequent in-process local proof below supplies the required driver and passes every case.
 
 The first actual local ledger run reached all 28 cases: 27 passed, with 7,842 assertions. The first failure was
 `fence keys do not suppress another source record or field group`: after a fenced transition to the second
@@ -100,3 +104,35 @@ counter was substituted for these local outcomes.
 The independent review continued on the final production revision and found no blocking issue in the
 acknowledged-revision/current-run signature rule. It specifically checked that rollback cannot retain a
 matching older candidate while acknowledged current-run work remains eligible for retention.
+
+## Managed native acceptance
+
+The single named submission tested `53493af0507a7b9f3d4ec90158cd36763cd895c4`, containing final production
+revision `5f6ee518a1` and the final local proof. Its command was:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/revision-fence-refresh.test.ts
+```
+
+It waited for admission and completed with exit status 0, without a load rerun. Both frozen wrapper tests passed
+(11 wrapper assertions); their unchanged count, zero-failure and zero-skip assertions establish these child results:
+
+| Child suite or native case                                                                 | Result                            |
+| ------------------------------------------------------------------------------------------ | --------------------------------- |
+| All unchanged ledger cases                                                                 | 28 passed, zero failed or skipped |
+| changed records and converter revisions append proposals while community adoption survives | Passed                            |
+| takedown fences survive unchanged refresh payload changes restart and reconversion         | Passed                            |
+| cover fences prevent reimport on unchanged and changed refresh and hide later disclosures  | Passed                            |
+
+There was no final child failure. The public API reconversion case retrieved actual `conversion-v2` proposals
+for the already-bound subject, retained native revision `2` and the changed input's original digest, preserved
+all earlier proposals/revisions and the independently adopted `Community title`, and observed no extra subjects.
+The two fence cases exercised the existing ordinary API fixture, including unchanged, changed and reconverted
+inputs and later disclosure. Local exact-byte assertions separately preserve original bootstrap/proposal
+requests, operation keys and receipt attachments; refreshed same-value candidates have new keys/IDs and
+unchanged source revisions/digests. No fabricated effect counter or generic empty completion was used.
+
+The managed check also passed its compiler and quality phases, writing 909 Reylo analyses. Its two wrapper
+tests took 42.75 seconds; the managed command took 123.226 seconds after admission. Child stdout is intentionally
+captured by the unchanged wrapper, so the log reports wrapper totals rather than standalone child assertion counts.
+The check receipt and exact log path accompany the delivery result; operational identifiers are not copied here.
