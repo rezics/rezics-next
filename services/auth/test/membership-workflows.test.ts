@@ -82,7 +82,7 @@ test('registered steps reject bearer and raw contexts before resolving or effect
   }
 });
 
-test('a failing step logs its original cause and workflow ID while DBOS stores only the step failure', async () => {
+test('a failing step logs only nonpersonal diagnostics while DBOS preserves native failure custody', async () => {
   const { input } = await fixture();
   const database = testDatabase();
   const original = new Error('private SQL failure with secret-reference-7c93');
@@ -118,10 +118,13 @@ test('a failing step logs its original cause and workflow ID while DBOS stores o
     expect((thrown as Error).stack).not.toContain(original.message);
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0]).toHaveLength(1);
-    const logged = log.mock.calls[0]![0] as Error;
-    expect(logged).toBeInstanceOf(Error);
-    expect(logged.message).toBe(`Membership workflow step failed: publish (workflow ${workflowId})`);
-    expect(logged.cause).toBe(original);
+    expect(log.mock.calls[0]![0]).toEqual({
+      code: 'membership_publish_failed',
+      operation: 'membership.publish',
+      severity: 'error',
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(workflowId);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(original.message);
     const steps = await DBOS.listWorkflowSteps(workflowId);
     const stored = steps?.find((step) => step.name === 'accounts.membership.publish')?.error;
     expect(stored).toBeInstanceOf(Error);
