@@ -99,7 +99,7 @@ export const UncertainRetry: Story = {
     await expect(view.getByText(m.decision_status_taken_down())).toBeVisible();
     await userEvent.click(view.getByRole('button', { name: m.decision_retry_same() }));
     await expect(await view.findByText(m.decision_appeal_pending())).toBeVisible();
-    const calls = mocked(args.onAppeal).mock.calls;
+    const calls = mocked(args.onAppeal!).mock.calls;
     await expect(calls).toHaveLength(2);
     await expect(calls[1]![0]).toEqual(calls[0]![0]);
   },

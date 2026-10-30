@@ -67,6 +67,7 @@ export function DecisionPageView({
   onRefresh = refreshDecision,
 }: DecisionPageProps) {
   const [current, setCurrent] = useState(page);
+  const currentSource = useRef(page);
   const [text, setText] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,6 +78,7 @@ export function DecisionPageView({
   source.current = page;
   useEffect(() => {
     source.current = page;
+    currentSource.current = page;
     setCurrent(page);
     setText('');
     setFeedback(null);
@@ -88,8 +90,9 @@ export function DecisionPageView({
       source.current = null;
     };
   }, [page, commandIntent]);
-  const displayed = current.decision.id === page.decision.id ? current : page;
-  const { decision, target } = displayed;
+  const displayed = currentSource.current === page ? current : page;
+  const { decision } = displayed;
+  const target = displayed.target?.id === decision.targetId ? displayed.target : null;
   const locale = getLocale();
   // This hint controls presentation only; an unavailable target cannot establish authorship.
   const allowed = target
