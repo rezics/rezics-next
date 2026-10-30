@@ -429,6 +429,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
               authorization,
               ...credential,
               idempotencyKey: `registration:${id}`,
+              sourceRegistrationId: id,
             });
           } catch (error) {
             if (publicRegistration && isUniqueViolation(error))
@@ -828,7 +829,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         ...claim,
         ...(request ? { operation: await currentOperation(request) } : {}),
       });
-      return auth.internal.provisionCredentialless({ authorization });
+      return auth.internal.provisionCredentialless({
+        authorization,
+        sourceRegistrationId: request?.kind === 'automated' ? request.registrationId : undefined,
+      });
     });
     const hasCredential = step('has-staged-credential', async (id: string, request?: AccountOperation) => {
       if (request) await approved(request);

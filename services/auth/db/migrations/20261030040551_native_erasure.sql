@@ -468,13 +468,22 @@ BEGIN
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_effect_receipt" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_auth_effect_receipt();
 CREATE FUNCTION auth_erasure_guard_auth_provisioning_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE source_stage text;
 BEGIN
   IF TG_OP='INSERT' THEN
     -- The stage's unique native account binding establishes these roles in the
     -- credential/receipt transaction. No encrypted payload or request JSON walk.
-    SELECT registration_id,erasure_creator_id,erasure_operator_id
-    INTO NEW.erasure_stage_id,NEW.erasure_creator_id,NEW.erasure_operator_id
-    FROM auth_registration_stage WHERE account_id=NEW.account_id;
+    source_stage:=NEW.erasure_stage_id;
+    IF source_stage IS NOT NULL THEN
+      SELECT registration_id,erasure_creator_id,erasure_operator_id
+      INTO NEW.erasure_stage_id,NEW.erasure_creator_id,NEW.erasure_operator_id
+      FROM auth_registration_stage WHERE registration_id=source_stage AND account_id=NEW.account_id FOR KEY SHARE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Auth source registration missing' USING ERRCODE='55000'; END IF;
+    ELSE
+      SELECT registration_id,erasure_creator_id,erasure_operator_id
+      INTO NEW.erasure_stage_id,NEW.erasure_creator_id,NEW.erasure_operator_id
+      FROM auth_registration_stage WHERE account_id=NEW.account_id FOR KEY SHARE;
+    END IF;
   END IF;
   IF TG_OP='UPDATE' THEN
   PERFORM auth_erasure_admit(OLD."account_id");

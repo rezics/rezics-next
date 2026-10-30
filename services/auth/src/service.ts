@@ -830,6 +830,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function commitProvisioning(input: {
     authorization: string;
     receiptKey: string;
+    sourceRegistrationId?: string;
     account: AccessAccount;
     receipt: ProvisioningReceiptMetadata | undefined;
     email: string | null;
@@ -876,8 +877,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         );
         await connection.query(
           `INSERT INTO auth_provisioning_receipt
-            (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,owner_id,credential_id,provisioning_kind)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,owner_id,credential_id,provisioning_kind,erasure_stage_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [
             receiptKey,
             account.accountId,
@@ -889,6 +890,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             receipt ? account.accountId : null,
             receipt ? credentialId : null,
             receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
+            input.sourceRegistrationId ?? null,
           ],
         );
       }
@@ -1015,6 +1017,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           return commitProvisioning({
             authorization: input.authorization,
             receiptKey: input.idempotencyKey ?? `password:${account.accountId}`,
+            sourceRegistrationId: input.sourceRegistrationId,
             account,
             receipt,
             email: input.email.toLowerCase(),
@@ -1079,6 +1082,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return commitProvisioning({
           authorization: input.authorization,
           receiptKey: input.idempotencyKey ?? `credentialless:${account.accountId}`,
+          sourceRegistrationId: input.sourceRegistrationId,
           account,
           receipt,
           email: null,

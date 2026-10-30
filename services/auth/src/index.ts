@@ -212,8 +212,13 @@ export interface AuthService {
       email: string;
       password: string;
       idempotencyKey?: string;
+      sourceRegistrationId?: string;
     }): Promise<ProvisioningResult>;
-    provisionCredentialless(input: { authorization: string; idempotencyKey?: string }): Promise<ProvisioningResult>;
+    provisionCredentialless(input: {
+      authorization: string;
+      idempotencyKey?: string;
+      sourceRegistrationId?: string;
+    }): Promise<ProvisioningResult>;
     /** The coordinator must commit Access tombstone/fence before erasure. */
     eraseAccount(accountId: string): Promise<void>;
     /** Accept the terminal obligation; each subsequent page is independently durable. */

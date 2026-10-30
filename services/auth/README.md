@@ -1486,7 +1486,9 @@ families, website client assertions, operating sessions/tokens and native stages
 These are written in the artifact's native transaction.
 Provisioning receipts inherit creator/operator roles from their uniquely bound
 native registration stage in the credential transaction, and retain that stage's
-release witness until activation or release is terminal. Native account and client
+release witness until activation or release is terminal. Native workflow producers
+pass the actual stage key; a locked point read refuses provisioning if erasure has
+already removed that stage. Native account and client
 fences reject late issuance, recovery and reduction writes; minimal client replay
 fences survive metadata deletion. Verified-account recovery counters keep exact
 native HMAC-key associations, including retired secret generations. Anonymous
