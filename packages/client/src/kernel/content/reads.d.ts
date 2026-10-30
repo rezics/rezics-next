@@ -6,7 +6,7 @@ import { type DurableOperationAnchor, type InitiatorRestorer } from '../access/d
 import { type Partition } from '../partition/partition.ts';
 import { type Access, type AccessClient, type Actor, type ReadDecisions, type Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Anchored, AnchoredPosition, BoardId, BoardRecord as BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
+import type { Anchored, AnchoredPosition, BoardId, BoardRecord as BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ReviewVoteCitation, ThreadId, ThreadView as StoredThreadView, Visibility } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
 declare const subjectReactionKinds: readonly ['like', 'love', 'laugh', 'insightful', 'sad'];
 export type RealmDisclosureScope = {
@@ -61,6 +61,36 @@ export type ContentReadDependencies = Readonly<{
     clock?: () => Date;
 }>;
 export type { Actor };
+type Kind = 'board' | 'thread' | 'post' | 'revision';
+type Row = {
+    kind: Kind;
+    id: string;
+    thread_id: string | null;
+    board_id: string | null;
+    parent_id: string | null;
+    author_id: string | null;
+    head_id: string | null;
+    first_post_id: string | null;
+    thread_kind: 'discussion' | 'review' | null;
+    board_purpose: 'discussion' | 'reviews' | null;
+    vote_citation: ReviewVoteCitation | null;
+    title: string | null;
+    visibility: Visibility;
+    security_revision: string;
+    availability: 'available' | 'erased';
+    created_at: Date;
+    revised_at: Date | null;
+    licence: string;
+    subject_ids: string[];
+    media_ids: string[];
+    body: Buffer | null;
+    sha256: Buffer | null;
+    realm_id: string | null;
+    deleted_at: Date | null;
+    restorable: boolean;
+    decision_id: string | null;
+    matches?: boolean | null;
+};
 export declare class ContentNotFoundError extends Error {
     constructor();
 }
@@ -78,6 +108,8 @@ type BoardDisclosureHint = Readonly<{
 }>;
 export declare function withBoardDisclosure<T>(boardId: BoardId, board: BoardView, work: () => Promise<T>, decisions?: ReadDecisions, options?: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'>): Promise<T>;
 export declare function prepareBoardPageDecisions(dependencies: ContentReadDependencies, context: ReadContext): Promise<ReadDecisions>;
+/** @internal Shared post-read resources: every domain operand uses the evaluator's principal. */
+export declare function readResource(row: Row, evidence: object, tombstone?: boolean, placeholder?: boolean, withheldReference?: boolean): Resource;
 export declare function readBoard(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext): Promise<Anchored<import('./model.ts').BoardView | null>>;
 export declare function readBoardPageCandidateSnapshot<T>(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext, decisions: ReadDecisions, candidatePage: (client: AccessClient, partition: Partition) => Promise<T>): Promise<Readonly<{
     board: BoardView;

@@ -8619,6 +8619,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly existingThreadId?: string;
                             };
                             413: {
                                 type: unknown;
