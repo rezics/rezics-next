@@ -366,22 +366,34 @@ export async function verifyHistoryOwnerCoverage(
   )
     return false;
   const current = await lockNativeFamilyCoverage(tx, barrier, family);
-  return current.state === 'complete' && current.binding.proofId === binding.native.proofId &&
-    current.binding.domain === binding.native.domain && current.binding.revision === binding.native.revision &&
-    current.binding.definition === binding.native.definition;
+  return (
+    current.state === 'complete' &&
+    current.binding.proofId === binding.native.proofId &&
+    current.binding.domain === binding.native.domain &&
+    current.binding.revision === binding.native.revision &&
+    current.binding.definition === binding.native.definition
+  );
 }
 
 /** Operational use only. Reuses the exact artifact receiving proof and source locks. */
 export async function recordHistoryFamilyArtifactWatch(
-  tx: CommandTransaction, barrier: HistoryBarrier, artifact: HistoryArtifact,
+  tx: CommandTransaction,
+  barrier: HistoryBarrier,
+  artifact: HistoryArtifact,
 ): Promise<boolean> {
   if (!(await nativeReceipt(tx, barrier, artifact))) return false;
   const locator = artifact.locator;
-  const sourceKey = locator.artifactType === 'command-receipt/v1'
-    ? [locator.principalKind, locator.principalId, commandHistoryKind(locator.commandKindId),
-      `rk1.${locator.keyVersion}.${Buffer.from(locator.keyToken, 'hex').toString('base64url')}`]
-    : locator.artifactType === 'outbox-event/v1'
-      ? [locator.position.toString(), locator.eventSeq] : [locator.workId];
+  const sourceKey =
+    locator.artifactType === 'command-receipt/v1'
+      ? [
+          locator.principalKind,
+          locator.principalId,
+          commandHistoryKind(locator.commandKindId),
+          `rk1.${locator.keyVersion}.${Buffer.from(locator.keyToken, 'hex').toString('base64url')}`,
+        ]
+      : locator.artifactType === 'outbox-event/v1'
+        ? [locator.position.toString(), locator.eventSeq]
+        : [locator.workId];
   await tx.query(
     `INSERT INTO core.history_family_watch(partition_no,artifact_type,locator,source_key)
      VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,

@@ -81,23 +81,44 @@ export class HistoryRegistry {
   }
 
   registerFamilySources(family: HistoryProducerFamily, version: number, sources: readonly HistoryFamilySource[]): void {
-    if (this.closed || !HISTORY_PRODUCER_FAMILIES.includes(family) || this.families.has(family) ||
-      !Number.isSafeInteger(version) || version < 1 || version > 2147483647 || sources.length === 0 || sources.length > 100)
+    if (
+      this.closed ||
+      !HISTORY_PRODUCER_FAMILIES.includes(family) ||
+      this.families.has(family) ||
+      !Number.isSafeInteger(version) ||
+      version < 1 ||
+      version > 2147483647 ||
+      sources.length === 0 ||
+      sources.length > 100
+    )
       throw new TypeError('Invalid native history family definition');
     const keys = new Set<string>();
-    const fixed = sources.map((source) => {
-      historyArtifact(source.artifactType);
-      const key = `${source.artifactType}:${source.producer}`;
-      if (!/^[a-z][a-z0-9_.-]{0,95}$/.test(source.producer) || keys.has(key) ||
-        !Number.isSafeInteger(source.version) || source.version < 1 || source.version > 2147483647 ||
-        (nativeHistoryProducerFamily(source.producer) !== undefined && nativeHistoryProducerFamily(source.producer) !== family) ||
-        [...this.families.values()].some((definition) => definition.sources.some(
-          (other) => other.artifactType === source.artifactType && other.producer === source.producer)))
-        throw new TypeError('Invalid native history family producer');
-      keys.add(key);
-      return Object.freeze({ artifactType: source.artifactType, producer: source.producer, version: source.version });
-    }).sort((a, b) => a.artifactType.localeCompare(b.artifactType) || a.producer.localeCompare(b.producer));
-    const digest = createHash('sha256').update(JSON.stringify([family, version, fixed])).digest('hex');
+    const fixed = sources
+      .map((source) => {
+        historyArtifact(source.artifactType);
+        const key = `${source.artifactType}:${source.producer}`;
+        if (
+          !/^[a-z][a-z0-9_.-]{0,95}$/.test(source.producer) ||
+          keys.has(key) ||
+          !Number.isSafeInteger(source.version) ||
+          source.version < 1 ||
+          source.version > 2147483647 ||
+          (nativeHistoryProducerFamily(source.producer) !== undefined &&
+            nativeHistoryProducerFamily(source.producer) !== family) ||
+          [...this.families.values()].some((definition) =>
+            definition.sources.some(
+              (other) => other.artifactType === source.artifactType && other.producer === source.producer,
+            ),
+          )
+        )
+          throw new TypeError('Invalid native history family producer');
+        keys.add(key);
+        return Object.freeze({ artifactType: source.artifactType, producer: source.producer, version: source.version });
+      })
+      .sort((a, b) => a.artifactType.localeCompare(b.artifactType) || a.producer.localeCompare(b.producer));
+    const digest = createHash('sha256')
+      .update(JSON.stringify([family, version, fixed]))
+      .digest('hex');
     this.families.set(family, Object.freeze({ family, version, sources: Object.freeze(fixed), digest }));
   }
 
