@@ -159,7 +159,7 @@ async function minimizeReceiving(
   if (!hold) return { state: 'pending', examined: 0, minimized: 0 };
   // All source checkouts have ended. The target lock must validate durable accepted Source
   // custody/current receiver epoch, not use the released source transaction or authority.
-  const receiving = await runCommand(
+  const receiving = await runCommand<RecordHistoryPurgeResult>(
     deps.pool,
     { partition: copy.partition_no, deadline: context.deadline, clock: deps.clock },
     async (tx) => {
