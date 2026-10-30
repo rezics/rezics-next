@@ -44,10 +44,7 @@ export async function readDocumentMentions(
     if (result.error || !result.data) return {};
     return Object.fromEntries(
       result.data.accounts.flatMap((account) =>
-        'handle' in account &&
-        ids.has(account.id) &&
-        account.state === 'active' &&
-        typeof account.handle === 'string'
+        'handle' in account && ids.has(account.id) && account.state === 'active' && typeof account.handle === 'string'
           ? [[account.id, { handle: account.handle }]]
           : [],
       ),
