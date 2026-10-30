@@ -8,7 +8,7 @@ export function createIntegrationRuntime(): IntegrationRuntime {
   const stateDirectory = process.env.FAKE_GOAL_STATE!;
   const mainCheckout = process.env.FAKE_GOAL_MAIN!;
   return {
-    db: openDb(join(stateDirectory, 'state.sqlite')),
+    db: openDb(join(stateDirectory, process.env.FAKE_GOAL_DATABASE ?? 'state.sqlite')),
     mainCheckout,
     stateDirectory,
     worktreeRoot: join(stateDirectory, 'trees'),

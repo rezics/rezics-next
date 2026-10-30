@@ -60,11 +60,21 @@ export type IntegrationRuntime = {
   managerServices: ManagerServices;
 };
 export type HostRequest = {
-  command: 'start' | 'renew' | 'stop' | 'complete' | 'decision' | 'turn-start' | 'turn-end' | 'outgoing-message';
+  command:
+    | 'start'
+    | 'renew'
+    | 'stop'
+    | 'complete'
+    | 'decision'
+    | 'turn-start'
+    | 'turn-end'
+    | 'outgoing-message'
+    | 'register-supermanager';
   manager?: string;
   spec?: ManagerSpec;
   recipient?: string;
   summary?: string;
+  sessionId?: string;
 };
 
 export function startOrphanRecoveryTimer(
@@ -351,6 +361,11 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         const request = JSON.parse(line) as HostRequest;
         let result: unknown;
         switch (request.command) {
+          case 'register-supermanager':
+            if (!request.sessionId) throw new Error('Missing resident Claude session ID');
+            if (!runtime.supermanager) throw new Error('Configured supermanager identity is missing');
+            result = await managers.registerResidentSupermanager(runtime.supermanager, request.sessionId);
+            break;
           case 'start':
             if (!request.spec) throw new Error('Missing manager spec');
             result = await managers.start(request.spec);
@@ -635,6 +650,44 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     await serveManagers(runtime);
     return 0;
   }
+  if (command === 'manager' && subcommand === 'register-supermanager') {
+    if (id || flags.length) throw new Error('usage: manager register-supermanager');
+    const manager = runtime.supermanager?.trim();
+    if (!manager || manager !== runtime.supermanager)
+      throw new Error('Configured supermanager identity is missing or malformed');
+    const env = process.env;
+    if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT)
+      throw new Error('Workers cannot register a resident supermanager session');
+    const claudeSession = env.CLAUDE_CODE_SESSION_ID;
+    const codexSession = env.CODEX_THREAD_ID;
+    if (claudeSession && codexSession) throw new Error('Provider session identity is ambiguous');
+    if (
+      !claudeSession ||
+      claudeSession.trim() !== claudeSession ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claudeSession)
+    )
+      throw new Error('Run this command from the resident Claude session with a valid CLAUDE_CODE_SESSION_ID');
+    const authenticated = authenticatedManager(runtime.db, env);
+    if (authenticated && authenticated.id !== manager)
+      throw new Error(`Authenticated manager ${authenticated.id} cannot register the configured supermanager`);
+    if (env.GOAL_MANAGER && env.GOAL_MANAGER !== manager)
+      throw new Error('GOAL_MANAGER does not match the configured supermanager identity');
+
+    await ensureHost(runtime);
+    let result: unknown;
+    try {
+      result = await hostRequest(runtime.managerSocket, {
+        command: 'register-supermanager',
+        sessionId: claudeSession,
+      });
+    } catch (error) {
+      if (String(error).includes('Unknown manager host command'))
+        throw new Error('The running manager host does not support resident registration; retry after it restarts');
+      throw error;
+    }
+    console.log(JSON.stringify(result));
+    return 0;
+  }
   if (command === 'inbox' && id) {
     if (subcommand === 'send') {
       const [kind, summary, ...options] = flags;
@@ -744,6 +797,8 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         budget <= 0
       )
         throw new Error('usage: manager start <goal> --engine <codex|claude> --budget <positive integer>');
+      if (isResidentSupermanagerRecord(runtime, id))
+        throw new Error(`Resident supermanager ${id} is an external session and cannot be started`);
       await ensureHost(runtime);
       await recordManagerCommand(runtime);
       console.log(
@@ -767,7 +822,15 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         ? (runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null)
         : null;
       if (!row) throw new Error(`Unknown manager: ${id}`);
-      const current = JSON.parse(row.state) as { engine: 'codex' | 'claude'; budget: number };
+      const current = JSON.parse(row.state) as {
+        kind?: string;
+        engine?: 'codex' | 'claude';
+        budget?: number;
+      };
+      if (current.kind === 'resident-supermanager')
+        throw new Error(`Resident supermanager ${id} is an external session and cannot be renewed`);
+      if (!current.engine || !current.budget)
+        throw new Error(`Manager ${id} does not have a renewable managed session`);
       await ensureHost(runtime);
       await recordManagerCommand(runtime);
       console.log(
@@ -816,6 +879,20 @@ function callingManager(runtime: IntegrationRuntime): string | undefined {
     return undefined;
   const rows = runtime.db.query('SELECT state FROM manager_sessions').all() as { state: string }[];
   return rows.map((row) => JSON.parse(row.state)).find((state) => state.threadId === process.env.CODEX_THREAD_ID)?.id;
+}
+
+function isResidentSupermanagerRecord(runtime: IntegrationRuntime, id: string): boolean {
+  if (
+    !runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()
+  )
+    return false;
+  const row = runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
+  if (!row) return false;
+  try {
+    return (JSON.parse(row.state) as { kind?: unknown }).kind === 'resident-supermanager';
+  } catch {
+    return false;
+  }
 }
 
 /** Priority authorization uses the same persisted manager-session identity, never GOAL_MANAGER by itself. */
