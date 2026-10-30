@@ -94,10 +94,14 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
         ),
         tableHeader: ({ children }: any) => <th scope="col">{children}</th>,
         extensionBlock: ({ node }: any) => (
-          <div data-document-component={node.attrs?.definition}>{node.attrs?.fallback ?? resolved.embeddedComponent}</div>
+          <div data-document-component={node.attrs?.definition}>
+            {node.attrs?.fallback ?? resolved.embeddedComponent}
+          </div>
         ),
         extensionInline: ({ node }: any) => (
-          <span data-document-component={node.attrs?.definition}>{node.attrs?.fallback ?? resolved.embeddedComponent}</span>
+          <span data-document-component={node.attrs?.definition}>
+            {node.attrs?.fallback ?? resolved.embeddedComponent}
+          </span>
         ),
       },
       markMapping: {
