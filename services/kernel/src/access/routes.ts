@@ -937,7 +937,7 @@ export function accessRoutes(
         response: { 200: preferences, ...failures },
         detail: {
           operationId: 'account.read_preferences',
-          'x-resource-types': ['access.account'],
+          'x-authority-resource-types': ['access.account'],
           'x-account-authority': 'self',
           'x-exposure': 'public',
           'x-action': 'account:read',
@@ -983,7 +983,7 @@ export function accessRoutes(
         detail: {
           ...detail('account.set_preferences'),
           'x-action': 'account:update',
-          'x-resource-types': ['access.account'],
+          'x-authority-resource-types': ['access.account'],
           'x-account-authority': 'self',
         },
       },
