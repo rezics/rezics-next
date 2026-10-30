@@ -1080,5 +1080,8 @@
   "sources_licence_unknown": "授權資訊無法取得",
   "sources_attribution_unknown": "署名資訊無法取得",
   "sources_cover_unknown": "封面權利未知，以另外提供的封面署名為準。",
-  "sources_open_detail": "查看已選事實及其來源說明"
+  "sources_open_detail": "查看已選事實及其來源說明",
+  "library_collection_share": "分享",
+  "library_collection_social_unavailable": "暫不支援對合集按讚、儲存或檢舉。",
+  "library_collection_actions_unavailable": "無法載入合集操作，請重新載入後再試。"
 }

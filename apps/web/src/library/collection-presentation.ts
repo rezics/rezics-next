@@ -57,6 +57,22 @@ export type CollectionPresentationData = Partial<
 export type CollectionTypeOption = { id: string; label: string };
 export type CollectionListPresentations = Record<string, NonNullable<TypeDefinition['listPresentation']>>;
 
+/** Keep the one shell filter protocol intact when following a native signed page cursor. */
+export function collectionPageAddress(
+  locale: string,
+  id: string,
+  cursor: string,
+  search: Record<string, string | string[]> = {},
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    if (key !== 'type' && !/^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key)) continue;
+    for (const item of Array.isArray(value) ? value : [value]) params.append(key, item);
+  }
+  params.set('cursor', cursor);
+  return `/${locale}/collections/${encodeURIComponent(id)}?${params}`;
+}
+
 /** Copy only public presentation, never configured media identity or private editor data. */
 export function collectionPresentationOf(collection: CollectionPresentationData): CollectionPresentationData {
   return {

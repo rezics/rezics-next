@@ -1080,5 +1080,8 @@
   "sources_licence_unknown": "ライセンス情報なし",
   "sources_attribution_unknown": "帰属情報なし",
   "sources_cover_unknown": "表紙の権利は、個別のクレジットに明記されていなければ不明です。",
-  "sources_open_detail": "選択済み情報と出典の説明を見る"
+  "sources_open_detail": "選択済み情報と出典の説明を見る",
+  "library_collection_share": "共有",
+  "library_collection_social_unavailable": "コレクションへの「いいね」、保存、報告はまだ利用できません。",
+  "library_collection_actions_unavailable": "コレクションの操作を読み込めませんでした。再読み込みしてお試しください。"
 }

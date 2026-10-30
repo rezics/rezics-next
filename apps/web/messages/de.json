@@ -1080,5 +1080,8 @@
   "sources_licence_unknown": "Lizenz nicht verfügbar",
   "sources_attribution_unknown": "Namensnennung nicht verfügbar",
   "sources_cover_unknown": "Bildrechte sind unbekannt, sofern kein gesonderter Bildnachweis sie nennt.",
-  "sources_open_detail": "Ausgewählte Angaben und Quellen erläutern"
+  "sources_open_detail": "Ausgewählte Angaben und Quellen erläutern",
+  "library_collection_share": "Teilen",
+  "library_collection_social_unavailable": "Gefällt mir, Speichern und Melden sind für Sammlungen noch nicht verfügbar.",
+  "library_collection_actions_unavailable": "Die Aktionen für diese Sammlung konnten nicht geladen werden. Bitte lade die Seite neu."
 }

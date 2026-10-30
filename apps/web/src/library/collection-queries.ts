@@ -145,6 +145,7 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
     return {
       ...page,
       typeRatios,
+      listPresentations,
       ...(!('preparing' in page)
         ? {
             listPresentations,

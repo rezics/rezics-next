@@ -122,6 +122,7 @@ function CollectionRoute() {
   return 'preparing' in page ? (
     <DynamicCollectionPage
       page={page}
+      {...(search.filters ? { search: search.filters } : {})}
       readMembers={(id, cursor) =>
         readDynamicCollectionMembers({
           data: {

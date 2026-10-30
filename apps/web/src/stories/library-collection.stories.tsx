@@ -6,7 +6,15 @@ import { m } from '../paraglide/messages.js';
 
 const meta = {
   title: 'Pages/Library/Collection',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Read page states. Review these same IDs at phone390 and desktop1280, all launch locale globals and light/dark theme globals. Web story review and Root screenshot review PENDING. Social actions and FULL facts await their native producers.',
+      },
+    },
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -118,3 +126,83 @@ export const ReaderPublicMany: Story = {
 export const CuratorPrivateEmpty = variantStory(variants.CuratorPrivateEmpty);
 export const ReaderPrivate = variantStory(variants.ReaderPrivate);
 export const CuratorPublicOnePage = variantStory(variants.CuratorPublicOnePage);
+
+export const OwnerMenu: Story = {
+  render: () => <PageStory visitor="Signed In" path={`/collections/${variants.CuratorPublicMany.id}`} />,
+  play: async (context) => {
+    await variantReady(context, variants.CuratorPublicMany.title);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull();
+    await expect(canvas.getByRole('button', { name: m.reaction_like(), exact: true })).toBeDisabled();
+    const menu = canvas.getByRole('button', { name: m.library_collection_actions(), exact: true });
+    await userEvent.click(menu);
+    const body = within(context.canvasElement.ownerDocument.body);
+    await expect(await body.findByText(m.library_collection_edit(), { exact: true })).toBeVisible();
+    await expect(body.getByText(m.report_action(), { exact: true })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(menu).toHaveFocus());
+  },
+};
+
+export const MixedTypes: Story = {
+  render: () => <PageStory visitor="Signed In" path="/collections/collection-read-mixed" />,
+  play: async (context) => {
+    await variantReady(context, 'A collection across many kinds of work');
+    await waitFor(() =>
+      expect(context.canvasElement.querySelectorAll('[data-slot="member-list-row-title"]')).toHaveLength(4),
+    );
+    await expect(within(context.canvasElement).queryByText(/Type:/)).toBeNull();
+    const rowMenu = within(context.canvasElement).getAllByRole('button', {
+      name: new RegExp(`${m.library_collection_actions()}:`),
+    })[0]!;
+    await userEvent.click(rowMenu);
+    await expect(
+      await within(context.canvasElement.ownerDocument.body).findByText(m.library_collection_copy(), { exact: true }),
+    ).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+  },
+};
+
+export const Preparing: Story = {
+  render: () => <PageStory visitor="Signed In" path="/collections/collection-read-preparing" />,
+  play: async (context) => {
+    await variantReady(context, 'A collection across many kinds of work');
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(m.library_dynamic_preparing())).toBeVisible();
+    await expect(canvas.queryByText(m.library_collection_empty())).toBeNull();
+  },
+};
+
+export const Unavailable: Story = {
+  render: () => <PageStory visitor="Signed In" path="/collections/collection-read-unavailable" />,
+  play: async (context) => {
+    await variantReady(context, 'A collection across many kinds of work');
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(m.library_dynamic_unavailable())).toBeVisible();
+    await expect(canvas.queryByText(m.library_collection_empty())).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_reload() }));
+    await expect(await canvas.findByText(m.library_dynamic_unavailable())).toBeVisible();
+  },
+};
+
+export const Error: Story = {
+  render: () => <PageStory visitor="Signed Out" path="/collections/collection-read-error" />,
+  play: async (context) => {
+    await pageReady(context);
+    await expect(await within(context.canvasElement).findByText(m.error_message())).toBeVisible();
+    await expect(within(context.canvasElement).queryByText(m.library_collection_empty())).toBeNull();
+  },
+};
+
+export const AnotherReader: Story = {
+  render: () => <PageStory visitor="Signed In" path={`/collections/${variants.ReaderPublicMany.id}`} />,
+  play: async (context) => {
+    await variantReady(context, variants.ReaderPublicMany.title);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_actions(), exact: true }));
+    const body = within(context.canvasElement.ownerDocument.body);
+    await expect(await body.findByText(m.report_action(), { exact: true })).toBeVisible();
+    await expect(body.queryByText(m.library_collection_edit(), { exact: true })).toBeNull();
+    await userEvent.keyboard('{Escape}');
+  },
+};

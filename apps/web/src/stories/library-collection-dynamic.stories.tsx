@@ -1,10 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageStory } from './page';
 import { pageReady } from './page';
+import { expect, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 
 const meta = {
   title: 'Pages/Library/Dynamic Collection',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Settled dynamic read states; phone390/desktop1280 and locale/theme globals. Web story review and Root screenshot review PENDING.',
+      },
+    },
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -53,12 +63,22 @@ export const Paged: Story = {
 
 export const Preparing: Story = {
   name: 'Signed out, preparing',
-  play: pageReady,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(m.library_dynamic_preparing())).toBeVisible();
+    await expect(canvas.queryByText(m.library_dynamic_empty_everything())).toBeNull();
+  },
   render: () => <PageStory visitor="Signed Out" path={`/collections/dynamic-preparing`} />,
 };
 
 export const Unavailable: Story = {
   name: 'Signed out, unavailable',
-  play: pageReady,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(m.library_dynamic_unavailable())).toBeVisible();
+    await expect(canvas.queryByText(m.library_dynamic_empty_everything())).toBeNull();
+  },
   render: () => <PageStory visitor="Signed Out" path={`/collections/dynamic-unavailable`} />,
 };

@@ -1081,5 +1081,8 @@
   "sources_licence_unknown": "Licence unavailable",
   "sources_attribution_unknown": "Attribution unavailable",
   "sources_cover_unknown": "Cover rights are unknown unless a separate cover credit states them.",
-  "sources_open_detail": "Explain selected facts and sources"
+  "sources_open_detail": "Explain selected facts and sources",
+  "library_collection_share": "Share",
+  "library_collection_social_unavailable": "Like, Save and Report are not available for Collections yet.",
+  "library_collection_actions_unavailable": "Collection actions could not be loaded. Reload to try again."
 }

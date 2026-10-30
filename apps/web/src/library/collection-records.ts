@@ -25,6 +25,41 @@ export type CollectionWriteResult =
 export type CollectionMemberUndo = { collectionId: string; memberId: string; deletionId: string; revision: number };
 export type CollectionPresentationSelection = { presentationKind?: string | null; coverMediaId?: string | null };
 
+type ViewerAction = { action: string; operations: string[] };
+export type CollectionViewerActions = { state: 'ready'; actions: ViewerAction[] } | { state: 'unavailable' };
+
+/** One exact-resource native action read, using the same credential as the Collection read. */
+export async function readCollectionViewerActions(
+  client: KernelClient,
+  id: string,
+  authorization: string | null,
+): Promise<CollectionViewerActions> {
+  try {
+    const result = await client.viewerActions.post(
+      { resources: [{ type: 'library.collection', id }] },
+      authorization ? { headers: { authorization } } : {},
+    );
+    if (result.error || result.status !== 200) return { state: 'unavailable' };
+    const resource = result.data?.resources.find((value) => value.type === 'library.collection' && value.id === id);
+    return resource && 'viewerActions' in resource
+      ? { state: 'ready', actions: resource.viewerActions }
+      : { state: 'unavailable' };
+  } catch {
+    return { state: 'unavailable' };
+  }
+}
+
+export function admitsCollectionOperation(
+  viewerActions: CollectionViewerActions | undefined,
+  action: string,
+  operation: string,
+): boolean {
+  return (
+    viewerActions?.state === 'ready' &&
+    viewerActions.actions.some((entry) => entry.action === action && entry.operations.includes(operation))
+  );
+}
+
 type LibraryFailure = {
   data?: unknown;
   error?: { status?: number; value?: unknown } | null;

@@ -1081,5 +1081,8 @@
   "sources_licence_unknown": "许可信息不可用",
   "sources_attribution_unknown": "署名信息不可用",
   "sources_cover_unknown": "封面权利未知，以单独提供的封面署名为准。",
-  "sources_open_detail": "查看已选事实及其来源说明"
+  "sources_open_detail": "查看已选事实及其来源说明",
+  "library_collection_share": "分享",
+  "library_collection_social_unavailable": "暂不支持对合集点赞、保存或举报。",
+  "library_collection_actions_unavailable": "无法加载合集操作，请重新加载后再试。"
 }

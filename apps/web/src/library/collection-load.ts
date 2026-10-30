@@ -13,7 +13,7 @@ import type { CollectionFilterParams } from './collection-filter-params';
 import { collectionFilterQuery } from './collection-filter-params';
 import { getLocale } from '../paraglide/runtime.js';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { readCollectionFollow } from './collection-records';
+import { readCollectionFollow, readCollectionViewerActions, type CollectionViewerActions } from './collection-records';
 import {
   libraryFullQuery,
   libraryListQuery,
@@ -166,6 +166,8 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     coverMediaId?: string | null;
     presentationTypes?: CollectionTypeOption[] | null;
     listPresentations?: CollectionListPresentations;
+    viewerActions?: CollectionViewerActions;
+    memberState?: 'ready' | 'preparing' | 'unavailable';
     /** The count is withheld when the authorized member page cannot prove the complete public set. */
     memberCount: number | null;
     /** The requested page, retained for its indexing policy. */
@@ -252,7 +254,7 @@ export async function loadEditableCollectionPage(
     if (filter && status === 202) filterState.status = 'preparing';
     return result;
   };
-  const [collectionResult, first] = await Promise.all([
+  const [collectionResult, first, viewerActions] = await Promise.all([
     client.collections({ collectionId: input.id }).get({ query: libraryFullQuery(), ...headers }),
     readMembers(input.cursor).then(
       (page) => (isStaleCursorResult(page) ? { stale: true as const } : { stale: false as const, page }),
@@ -262,6 +264,7 @@ export async function loadEditableCollectionPage(
         throw error;
       },
     ),
+    readCollectionViewerActions(client, input.id, authorization),
   ]);
   const membersResult = first.stale ? await readMembers() : first.page;
   const collectionEnvelope = readLibraryResult(collectionResult);
@@ -335,20 +338,28 @@ export async function loadEditableCollectionPage(
     };
   }
   const curatedCollection = collection as CuratedCollectionRead;
-  const members = generatedClientDTO<CuratedMemberPage>(
-    readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]),
-  );
+  const memberStatus = resultStatus(membersResult);
+  const memberState = memberStatus === 202 ? 'preparing' : memberStatus === 503 ? 'unavailable' : 'ready';
+  const members =
+    memberState === 'ready'
+      ? generatedClientDTO<CuratedMemberPage>(
+          readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]),
+        )
+      : { members: [], next: null };
   const owner = viewer !== undefined && viewer === curatedCollection.curatorAccountId;
   const following =
     authorization && !owner && curatedCollection.visibility !== 'private'
       ? await readCollectionFollow(client, input.id, authorization)
       : null;
   const visibleMembers = owner ? members.members : members.members.filter((member) => member.subject != null);
-  const memberCount = owner
-    ? curatedCollection.memberCount
-    : !input.filter && !filterStatus && (first.stale || input.cursor === undefined) && members.next === null
-      ? visibleMembers.length
-      : null;
+  const memberCount =
+    memberState !== 'ready' || filterStatus
+      ? null
+      : owner
+        ? curatedCollection.memberCount
+        : !input.filter && !filterStatus && (first.stale || input.cursor === undefined) && members.next === null
+          ? visibleMembers.length
+          : null;
   return {
     ...collectionPresentationOf(collectionEnvelope.collection),
     ...(owner && collectionEnvelope.collection.coverMediaId !== undefined
@@ -374,6 +385,8 @@ export async function loadEditableCollectionPage(
     revision: collection.revision,
     firstPage: first.stale || input.cursor === undefined,
     following,
+    viewerActions,
+    memberState,
     ...(input.filter ? { filter: input.filter } : {}),
     ...(input.filterIgnored ? { filterIgnored: input.filterIgnored } : {}),
     ...(input.filterType ? { filterType: input.filterType } : {}),
@@ -381,6 +394,6 @@ export async function loadEditableCollectionPage(
     ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
     ...(input.filterParams ? { filterParams: input.filterParams } : {}),
     ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-    publicExport: curatedCollection.visibility === 'public',
+    publicExport: curatedCollection.visibility === 'public' && memberState === 'ready' && !filterStatus,
   };
 }

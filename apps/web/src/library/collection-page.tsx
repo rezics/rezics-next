@@ -1,7 +1,17 @@
 import { Cover } from '@rezics/ui/cover';
-import { Exposure, useOperation } from '../kernel/exposure';
-import { ContentActions } from '@rezics/ui/content-actions';
-import { Menu } from '@rezics/ui/menu';
+import { Menu, type MenuEntry } from '@rezics/ui/menu';
+import { MemberListRow } from '@rezics/ui/list-presentation';
+import { ListRow } from '@rezics/ui/list-row';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
@@ -29,19 +39,24 @@ import {
   type CollectionWriteResult,
 } from './collection-edit';
 import type { EditableCollectionPage } from './collection-load';
-import type { CollectionMemberUndo } from './collection-records';
+import { admitsCollectionOperation, type CollectionMemberUndo } from './collection-records';
 import type { CollectionMember, CollectionVisibility } from './reads';
 import { pageHead, type HeadContext } from '../shell/head';
 import { LibraryNavigation } from './library-nav';
 import { libraryNavigationQuery } from './pins-read';
-import { PinControl, PinControlNotice, usePinControlActions } from './pin-control';
+import { PinControlNotice, usePinControlActions } from './pin-control';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { validatePublicOrigin } from '../shell/origin';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
-import { EllipsisIcon, Share2Icon } from 'lucide-react';
-import { collectionMemberRatio, reorderCollectionMembers } from './collection-presentation';
+import { BookmarkIcon, EllipsisIcon, HeartIcon, Share2Icon } from 'lucide-react';
+import {
+  collectionMemberRatio,
+  collectionPageAddress,
+  reorderCollectionMembers,
+  type CollectionListPresentations,
+} from './collection-presentation';
 import { FollowTargetControl } from './follow-target-control';
 import {
   CollectionMemberList,
@@ -221,6 +236,7 @@ export function CollectionPage({
   queryKey,
   refreshPage,
   cursor,
+  search,
 }: {
   page: EditableCollectionPage;
   queryKey: readonly unknown[];
@@ -231,8 +247,10 @@ export function CollectionPage({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const updateAdmitted = useOperation('collection.update');
-  const owner = page.visibility !== null && updateAdmitted;
+  const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
+  // The editor also needs the loaded private metadata, independently of native action admission.
+  const owner = updateAdmitted && page.visibility !== null;
+  const deleteAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:delete', 'collection.delete');
   const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   const pins = navigation.data?.pins ?? { state: 'closed' as const };
   const navigationCollections = navigation.data?.collections ?? [];
@@ -252,6 +270,11 @@ export function CollectionPage({
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState('');
   const [pending, setPending] = useState(false);
+  const [deletion, setDeletion] = useState<{ collectionId: string; revision: number; idempotencyKey: string } | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
+  const [deleteFailure, setDeleteFailure] = useState('');
   const snapshot = [
     page.id,
     page.revision,
@@ -262,6 +285,7 @@ export function CollectionPage({
     page.presentationKindSource,
     page.coverMediaId,
     page.visibility,
+    page.memberState,
     page.members.map((member) => `${member.id}:${member.note ?? ''}`).join('\n'),
   ].join('\n');
 
@@ -447,19 +471,21 @@ export function CollectionPage({
   }
 
   async function removeCollection() {
-    const result = await deleteCollection({
-      data: {
-        collectionId: page.id,
-        revision: page.revision,
-        idempotencyKey: crypto.randomUUID(),
-      },
-      headers: csrfHeaders(),
-    });
-    if (!result.ok) {
-      setFailure(writeMessage(result));
-      throw new Error(writeMessage(result));
+    if (!deletion || deleting || !deleteAdmitted) return;
+    setDeleting(true);
+    setDeleteFailure('');
+    try {
+      const result = await deleteCollection({ data: deletion, headers: csrfHeaders() });
+      if (!result.ok) {
+        setDeleteFailure(result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result));
+        return;
+      }
+      window.location.assign(`/${getLocale()}/library/collections`);
+    } catch {
+      setDeleteFailure(m.error_message());
+    } finally {
+      setDeleting(false);
     }
-    window.location.assign(`/${getLocale()}/library/collections`);
   }
 
   function setMemberOrder(memberId: string, after: string | null) {
@@ -498,23 +524,18 @@ export function CollectionPage({
               </div>
             ) : null}
             <PageHeading>{page.title}</PageHeading>
-            {page.presentationKind ? (
-              <p className="text-sm text-muted-foreground" data-collection-kind-source={page.presentationKindSource}>
-                {m.library_collection_kind()}:{' '}
-                {page.presentationTypes?.find((type) => type.id === page.presentationKind)?.label ??
-                  page.presentationKind}
-              </p>
-            ) : null}
-            {page.curator ? (
-              <a
-                href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle ?? '')}`}
-                className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-              >
+            <div className="flex min-w-0" data-collection-owner>
+              {page.curator?.handle ? (
+                <a
+                  href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle)}`}
+                  className="min-w-0 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <AccountRef account={page.curator} avatar />
+                </a>
+              ) : (
                 <AccountRef account={page.curator} avatar />
-              </a>
-            ) : (
-              <AccountRef account={null} avatar />
-            )}
+              )}
+            </div>
             <MetaLine
               items={[
                 page.memberCount === null ? null : m.library_member_count({ count: page.memberCount }),
@@ -529,55 +550,84 @@ export function CollectionPage({
             ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap items-start gap-2">
-            {owner && !pending && !editing ? (
-              <ContentActions
-                ownsContent
-                labels={{
-                  moreActions: m.library_collection_actions(),
-                  copyLink: m.library_collection_copy(),
-                  edit: m.library_collection_edit(),
-                  delete: m.library_collection_delete(),
-                  confirmDelete: m.library_collection_delete_confirm(),
-                  deleteTitle: m.library_collection_delete_title(),
-                  deleteDescription: m.library_collection_delete_description(),
-                  cancel: m.library_collection_cancel(),
-                }}
-                extraEntries={pinActions.entries}
-                onCopyLink={() => copyLink(collectionHref(page.id))}
-                onEdit={beginEditing}
-                onDelete={removeCollection}
-              />
-            ) : (
-              <>
-                <Menu
-                  title={m.library_collection_actions()}
-                  trigger={
-                    <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
-                      <EllipsisIcon aria-hidden="true" />
-                    </Button>
-                  }
-                  entries={[
-                    {
-                      type: 'item',
-                      label: m.library_collection_copy(),
-                      onSelect: () => copyLink(collectionHref(page.id)),
-                    },
-                  ]}
-                />
-                {!owner ? <PinControl collectionId={page.id} pins={pins} mode="collection" /> : null}
-              </>
-            )}
-            <Button type="button" variant="outline" onClick={() => copyLink(collectionHref(page.id))}>
-              <Share2Icon aria-hidden="true" />
-              {m.library_collection_copy()}
-            </Button>
-            {owner ? <PinControlNotice notice={pinActions.notice} /> : null}
+            <CollectionReadActions
+              onShare={() => copyLink(collectionHref(page.id))}
+              entries={[
+                ...(owner
+                  ? [
+                      {
+                        type: 'item' as const,
+                        label: m.library_collection_edit(),
+                        onSelect: beginEditing,
+                        disabled: !hydrated || pending || editing,
+                      },
+                    ]
+                  : []),
+                ...pinActions.entries,
+                ...(deleteAdmitted
+                  ? [
+                      {
+                        type: 'destructive' as const,
+                        label: m.library_collection_delete(),
+                        disabled: !hydrated || pending || editing,
+                        onSelect: () => {
+                          setDeleteFailure('');
+                          setDeletion({
+                            collectionId: page.id,
+                            revision: page.revision,
+                            idempotencyKey: crypto.randomUUID(),
+                          });
+                        },
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+            <PinControlNotice notice={pinActions.notice} />
             <FollowTargetControl
               targetId={page.id}
               {...(page.visibility === null ? { following: page.following } : {})}
             />
           </div>
         </header>
+        <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>
+        {page.viewerActions?.state === 'unavailable' ? (
+          <p role="status">{m.library_collection_actions_unavailable()}</p>
+        ) : null}
+        {page.presentationKindSource === 'pending' || page.coverSource === 'pending' ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.library_collection_kind_pending()}
+          </p>
+        ) : null}
+        <AlertDialog
+          open={deletion !== null}
+          onOpenChange={(open, details) => {
+            if (!open && deleting) {
+              details.cancel();
+              return;
+            }
+            if (!open) setDeletion(null);
+          }}
+        >
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>{m.library_collection_delete_title()}</AlertDialogTitle>
+              <AlertDialogDescription>{m.library_collection_delete_description()}</AlertDialogDescription>
+            </AlertDialogHeader>
+            {deleteFailure ? <p role="alert">{deleteFailure}</p> : null}
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>{m.library_collection_cancel()}</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={deleting || !deleteAdmitted}
+                aria-busy={deleting}
+                onClick={() => void removeCollection()}
+              >
+                {m.library_collection_delete_confirm()}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {owner && undo.length ? (
           <div
@@ -686,7 +736,8 @@ export function CollectionPage({
           {...(page.filterIgnored === undefined ? {} : { ignored: page.filterIgnored })}
           {...(page.filterStatus === undefined ? {} : { status: page.filterStatus })}
           {...(page.filterType === undefined ? {} : { filterType: page.filterType })}
-          empty={members.length === 0}
+          empty={(editing ? members : page.members).length === 0 && (page.memberState ?? 'ready') === 'ready'}
+          unavailable={page.memberState === 'unavailable'}
           emptyLabel={m.library_collection_empty()}
         />
         <section aria-label={m.library_collection_members()}>
@@ -705,52 +756,203 @@ export function CollectionPage({
               <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_unavailable()}</p>
             </div>
           ) : null}
-          <CollectionMemberList
-            members={members}
-            typeRatios={page.typeRatios}
-            listPresentations={page.listPresentations}
-            editing={editing && owner}
-            firstPage={page.firstPage}
-            busy={pending}
-            selectedIds={selectedIds}
-            onSelectionChange={(memberId, selected) =>
-              setSelectedIds((current) => {
-                const next = new Set(current);
-                if (selected && next.size < 100 && members.some((member) => member.id === memberId)) next.add(memberId);
-                else next.delete(memberId);
-                return next;
-              })
-            }
-            onMove={setMemberOrder}
-            onNoteChange={(memberId, note) =>
-              setMembers((current) =>
-                current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
-              )
-            }
-            onRemove={(memberId) => {
-              setMembers((current) => current.filter((member) => member.id !== memberId));
-              setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
-            }}
-            onCopy={(memberId) => {
-              const subject = members.find((member) => member.id === memberId)?.subject;
-              if (subject)
-                copyLink(
-                  subjectHref(
-                    { id: subject.id, label: pageText(libraryTitleValue(subject.label), getLocale()).text },
-                    getLocale(),
-                  ).href,
-                );
-            }}
-          />
+          {page.memberState === 'preparing' ? (
+            <div className="space-y-3">
+              <p role="status">{m.library_dynamic_preparing()}</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void reloadCollection().catch(() => setFailure(m.error_message()))}
+              >
+                {m.library_collection_reload()}
+              </Button>
+            </div>
+          ) : null}
+          {page.memberState === 'unavailable' ? (
+            <div className="space-y-3">
+              <p role="alert">{m.library_dynamic_unavailable()}</p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => void reloadCollection().catch(() => setFailure(m.error_message()))}
+              >
+                {m.library_collection_reload()}
+              </Button>
+            </div>
+          ) : null}
+          {!editing ? (
+            <CollectionReadMembers
+              members={page.memberState === 'preparing' || page.memberState === 'unavailable' ? [] : page.members}
+              typeRatios={page.typeRatios}
+              listPresentations={page.listPresentations}
+              onCopy={(member) => {
+                if (member.subject)
+                  void copyLink(
+                    subjectHref(
+                      {
+                        id: member.subject.id,
+                        label: pageText(libraryTitleValue(member.subject.label), getLocale()).text,
+                      },
+                      getLocale(),
+                    ).href,
+                  );
+              }}
+            />
+          ) : (
+            <CollectionMemberList
+              members={members}
+              typeRatios={page.typeRatios}
+              listPresentations={page.listPresentations}
+              editing={editing && owner}
+              firstPage={page.firstPage}
+              busy={pending}
+              selectedIds={selectedIds}
+              onSelectionChange={(memberId, selected) =>
+                setSelectedIds((current) => {
+                  const next = new Set(current);
+                  if (selected && next.size < 100 && members.some((member) => member.id === memberId))
+                    next.add(memberId);
+                  else next.delete(memberId);
+                  return next;
+                })
+              }
+              onMove={setMemberOrder}
+              onNoteChange={(memberId, note) =>
+                setMembers((current) =>
+                  current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
+                )
+              }
+              onRemove={(memberId) => {
+                setMembers((current) => current.filter((member) => member.id !== memberId));
+                setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
+              }}
+              onCopy={(memberId) => {
+                const subject = members.find((member) => member.id === memberId)?.subject;
+                if (subject)
+                  copyLink(
+                    subjectHref(
+                      { id: subject.id, label: pageText(libraryTitleValue(subject.label), getLocale()).text },
+                      getLocale(),
+                    ).href,
+                  );
+              }}
+            />
+          )}
         </section>
         {page.next && !editing ? (
           <nav aria-label={m.library_collection_members()}>
-            <a href={`${collectionHref(page.id)}?cursor=${encodeURIComponent(page.next)}`} className={buttonClass}>
+            <a href={collectionPageAddress(getLocale(), page.id, page.next, search)} className={buttonClass}>
               {m.library_collection_more()}
             </a>
           </nav>
         ) : null}
       </article>
     </div>
+  );
+}
+
+/** Current product actions only; missing Collection social producers never become pin/follow writes. */
+export function CollectionReadActions({
+  onShare,
+  entries = [],
+}: {
+  onShare: () => void | Promise<void>;
+  entries?: MenuEntry[];
+}) {
+  return (
+    <>
+      <Button type="button" variant="outline" disabled title={m.library_collection_social_unavailable()}>
+        <HeartIcon aria-hidden="true" />
+        {m.reaction_like()}
+      </Button>
+      <Button type="button" variant="outline" disabled title={m.library_collection_social_unavailable()}>
+        <BookmarkIcon aria-hidden="true" />
+        {m.library_subject_save()}
+      </Button>
+      <Button type="button" variant="outline" onClick={onShare}>
+        <Share2Icon aria-hidden="true" />
+        {m.library_collection_share()}
+      </Button>
+      <Menu
+        title={m.library_collection_actions()}
+        backLabel={m.library_collection_cancel()}
+        trigger={
+          <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+            <EllipsisIcon aria-hidden="true" />
+          </Button>
+        }
+        entries={[...entries, { type: 'item', label: m.report_action(), disabled: true, onSelect: () => {} }]}
+      />
+    </>
+  );
+}
+
+type ReadMember = { id?: string; subject: CollectionMember['subject']; note?: string | null };
+
+/** Read presentation is separate from the existing occurrence editor; it performs no enrichment reads. */
+export function CollectionReadMembers<Member extends ReadMember>({
+  members,
+  typeRatios,
+  listPresentations,
+  onCopy,
+}: {
+  members: readonly Member[];
+  typeRatios?: Readonly<Record<string, string>> | undefined;
+  listPresentations?: CollectionListPresentations | undefined;
+  onCopy: (member: Member) => void | Promise<void>;
+}) {
+  const locale = getLocale();
+  return (
+    <ul className="min-w-0 space-y-3" data-collection-members>
+      {members.map((member, index) => {
+        const subject = member.subject;
+        const key = member.id ?? `${subject?.id ?? 'unavailable'}:${index}`;
+        if (!subject)
+          return (
+            <ListRow key={key} className="py-4 text-muted-foreground">
+              {m.library_subject_unavailable()}
+            </ListRow>
+          );
+        const title = pageText(libraryTitleValue(subject.label), locale);
+        const presentation = listPresentations?.[subject.type];
+        return (
+          <MemberListRow
+            key={key}
+            href={subjectHref({ id: subject.id, label: title.text }, locale).href}
+            subject={{ id: subject.id, title: title.text, types: [subject.type] }}
+            cover={subject.cover}
+            src={coverSrc}
+            title={title.text}
+            {...(title.lang ? { titleLang: title.lang } : {})}
+            ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
+            {...(presentation ? { listPresentation: presentation } : {})}
+            trailing={
+              <Menu
+                title={m.library_collection_actions()}
+                backLabel={m.library_collection_cancel()}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`${m.library_collection_actions()}: ${title.text}`}
+                  >
+                    <EllipsisIcon aria-hidden="true" />
+                  </Button>
+                }
+                entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => void onCopy(member) }]}
+              />
+            }
+          >
+            {member.note ? (
+              <p data-slot="collection-member-note" className="whitespace-pre-wrap text-sm text-muted-foreground">
+                {member.note}
+              </p>
+            ) : null}
+          </MemberListRow>
+        );
+      })}
+    </ul>
   );
 }

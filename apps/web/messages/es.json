@@ -1080,5 +1080,8 @@
   "sources_licence_unknown": "Licencia no disponible",
   "sources_attribution_unknown": "Atribución no disponible",
   "sources_cover_unknown": "Se desconocen los derechos de la portada salvo que consten en un crédito independiente.",
-  "sources_open_detail": "Consultar los datos seleccionados y sus fuentes"
+  "sources_open_detail": "Consultar los datos seleccionados y sus fuentes",
+  "library_collection_share": "Compartir",
+  "library_collection_social_unavailable": "Las funciones Me gusta, Guardar y Denunciar aún no están disponibles para las colecciones.",
+  "library_collection_actions_unavailable": "No se pudieron cargar las acciones de esta colección. Recarga la página para volver a intentarlo."
 }

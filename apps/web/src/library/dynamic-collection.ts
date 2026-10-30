@@ -1,5 +1,6 @@
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
+import type { CollectionListPresentations } from './collection-presentation';
 import type { FilterDocument } from '@rezics/filter';
 import type { CollectionFilterProperty } from './collection-filters';
 import type { CollectionFilterParams } from './collection-filter-params';
@@ -54,6 +55,7 @@ export type DynamicCollectionPage = {
   navigationCollections?: MineCollection[];
   following?: boolean | null;
   typeRatios?: Record<string, string>;
+  listPresentations?: CollectionListPresentations;
 };
 
 export function dynamicCollectionTitle(
