@@ -69,8 +69,7 @@ export function currentOwnerClauseKey(leaf: CurrentNativeLeaf): string {
       sortedValues(owner.state.in),
     ]);
   if ('label' in owner) return JSON.stringify(['owner', 'label', owner.label.id]);
-  if ('session' in owner)
-    return JSON.stringify(['owner', 'session', owner.session.profileId, owner.session.lifecycle]);
+  if ('session' in owner) return JSON.stringify(['owner', 'session', owner.session.profileId, owner.session.lifecycle]);
   return JSON.stringify(['owner', 'holding', owner.holding.profileId, owner.holding.kind, owner.holding.status]);
 }
 
