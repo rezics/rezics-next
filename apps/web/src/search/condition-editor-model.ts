@@ -9,28 +9,52 @@ import { discoveryRequest } from './search-request';
 import type { SearchLoaderDeps } from './search-params';
 import { facetProblem } from './refinement/request';
 
-export type ConditionMetadata = FilterRelease & {
+export type ConditionMetadata = Omit<FilterRelease, 'filters'> & {
   types: Record<string, FilterRelease['types'][string] & { labels?: Record<string, string> }>;
   properties: Record<string, FilterRelease['properties'][string] & { labels?: Record<string, string> }>;
+  filters?: Record<string, { filter: FilterDocument }>;
 };
 export type ConditionIssue = { pointer: string; code: string };
 export type SearchProblem = NonNullable<ReturnType<typeof facetProblem>>;
 export const CONDITION_POINTER = '/filter/and/0';
 
 /** Only released public grammar metadata crosses the BFF; no Library profiles or owner fields. */
-export function conditionMetadata(release: ConditionMetadata): ConditionMetadata {
+export function conditionMetadata(
+  release: FilterRelease & Pick<ConditionMetadata, 'types' | 'properties'>,
+): ConditionMetadata {
+  const filters: NonNullable<ConditionMetadata['filters']> = {};
+  for (const [id, definition] of Object.entries(release.filters ?? {})) {
+    try {
+      filters[id] = { filter: parseFilter(definition.filter) };
+    } catch {
+      // A malformed released reference stays unsupported; it never becomes an empty filter.
+    }
+  }
   return {
-    types: Object.fromEntries(Object.entries(release.types).map(([id, definition]) => [id, {
-      labels: definition.labels ?? {}, bases: definition.bases ?? [], facets: definition.facets ?? [],
-    }])),
-    properties: Object.fromEntries(Object.entries(release.properties).map(([id, definition]) => [id, {
-      labels: definition.labels ?? {}, datatype: definition.datatype,
-      ...(definition.relation ? { relation: { group: definition.relation.group } } : {}),
-      ...(definition.qualifiers ? { qualifiers: definition.qualifiers } : {}),
-      ...(definition.units ? { units: definition.units } : {}),
-      ...(definition.value ? { value: definition.value } : {}),
-    }])),
-    ...(release.filters ? { filters: release.filters } : {}),
+    types: Object.fromEntries(
+      Object.entries(release.types).map(([id, definition]) => [
+        id,
+        {
+          labels: definition.labels ?? {},
+          bases: definition.bases ?? [],
+          facets: definition.facets ?? [],
+        },
+      ]),
+    ),
+    properties: Object.fromEntries(
+      Object.entries(release.properties).map(([id, definition]) => [
+        id,
+        {
+          labels: definition.labels ?? {},
+          datatype: definition.datatype,
+          ...(definition.relation ? { relation: { group: definition.relation.group } } : {}),
+          ...(definition.qualifiers ? { qualifiers: definition.qualifiers } : {}),
+          ...(definition.units ? { units: definition.units } : {}),
+          ...(definition.value ? { value: definition.value } : {}),
+        },
+      ]),
+    ),
+    ...(release.filters ? { filters } : {}),
   };
 }
 
@@ -69,5 +93,8 @@ export function conditionSearchState(
 
 /** JSON Pointer ancestry, including a root group error, without matching sibling indices by prefix. */
 export function conditionFieldIssues(issues: readonly ConditionIssue[], pointer: string): ConditionIssue[] {
-  return issues.filter((issue) => issue.pointer === pointer || issue.pointer.startsWith(`${pointer}/`) || pointer.startsWith(`${issue.pointer}/`));
+  return issues.filter(
+    (issue) =>
+      issue.pointer === pointer || issue.pointer.startsWith(`${pointer}/`) || pointer.startsWith(`${issue.pointer}/`),
+  );
 }

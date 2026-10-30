@@ -37,7 +37,13 @@ import { DiscoveryKinds } from './discovery-kinds';
 import { DiscoveryResults } from './discovery-results';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
-import { conditionAdmission, conditionMetadata, conditionSearchState, type ConditionMetadata, type SearchProblem } from './condition-editor-model';
+import {
+  conditionAdmission,
+  conditionMetadata,
+  conditionSearchState,
+  type ConditionMetadata,
+  type SearchProblem,
+} from './condition-editor-model';
 type SearchResult = LegacySearchPage;
 type SearchParams = {
   query: string;
@@ -52,7 +58,7 @@ type SearchParams = {
   kindCursor?: string;
   facetValues: Record<string, string[]>;
   ranges?: Record<string, FilterRange>;
-  condition?: FilterDocument;
+  condition?: FilterDocument | undefined;
 };
 type SearchPageData = {
   conditionMetadata?: ConditionMetadata;
@@ -60,7 +66,7 @@ type SearchPageData = {
   queryState?: SearchLoaderDeps;
   refinement?: RefinementData;
   ranges?: Record<string, FilterRange>;
-  condition?: FilterDocument;
+  condition?: FilterDocument | undefined;
   result?: SearchResult;
   discovery?: DiscoveryState;
   type?: string | undefined;
@@ -251,7 +257,9 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       : [];
     let staleCursorRestarted = false;
     let problem: SearchProblem | undefined;
-    const sendSearch = async (request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0]) => {
+    const sendSearch = async (
+      request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0],
+    ) => {
       const response = await kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } });
       problem = response.status !== 200 ? facetProblem(response.error ?? response.data) : undefined;
       return response;
@@ -389,16 +397,27 @@ export function SearchPage({
   const discovery = data?.discovery;
   const selectedFacets = data?.selectedFacets ?? {};
   const committedState: SearchLoaderDeps = data?.queryState ?? {
-    query, type, facets: selectedFacets, cursor, sort: data?.sort === 'rating' ? 'rating' : undefined,
+    query,
+    type,
+    facets: selectedFacets,
+    cursor,
+    sort: data?.sort === 'rating' ? 'rating' : undefined,
   };
   const stateKey = JSON.stringify(committedState);
-  const [draft, setDraft] = useState({ key: stateKey, condition: data?.condition, languages: committedState.languages });
+  const [draft, setDraft] = useState({
+    key: stateKey,
+    condition: data?.condition,
+    languages: committedState.languages,
+  });
   const [attempted, setAttempted] = useState(false);
   if (draft.key !== stateKey) {
     setDraft({ key: stateKey, condition: data?.condition, languages: committedState.languages });
     setAttempted(false);
   }
-  const admit = useMemo(() => data?.conditionMetadata ? conditionAdmission(data.conditionMetadata) : undefined, [data?.conditionMetadata]);
+  const admit = useMemo(
+    () => (data?.conditionMetadata ? conditionAdmission(data.conditionMetadata) : undefined),
+    [data?.conditionMetadata],
+  );
   const localIssues = admit?.(draft.condition, committedState) ?? [];
   const issues = [...(data?.problem?.errors ?? []), ...(attempted ? localIssues : [])];
   const editedState = conditionSearchState(committedState, draft.condition, draft.languages);
@@ -435,7 +454,12 @@ export function SearchPage({
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
     : undefined;
   const hasFilterPanel = Boolean(
-    data?.conditionMetadata || data?.refinement?.properties.length || data?.typeChoices.length || type || data?.queryState?.kinds?.length || data?.problem,
+    data?.conditionMetadata ||
+    data?.refinement?.properties.length ||
+    data?.typeChoices.length ||
+    type ||
+    data?.queryState?.kinds?.length ||
+    data?.problem,
   );
   const filterRegion = useMemo(
     () => ({ activeCount: activeFilterCount, open: openFilters }),
@@ -553,12 +577,20 @@ export function SearchPage({
         metadata={data?.conditionMetadata}
         locale={locale}
         issues={issues}
-        values={Object.fromEntries(data?.refinement?.initial?.status === 'ready' ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values]) : [])}
+        values={Object.fromEntries(
+          data?.refinement?.initial?.status === 'ready'
+            ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values])
+            : [],
+        )}
         disabled={discovery?.status === 'closed' || discovery?.status === 'denied'}
         languages={draft.languages}
         onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
       />
-      {!data?.conditionMetadata && <a className={linkClass} href={discoverySearchHref(locale, committedState)}>{m.search_facet_retry()}</a>}
+      {!data?.conditionMetadata && (
+        <a className={linkClass} href={discoverySearchHref(locale, committedState)}>
+          {m.search_facet_retry()}
+        </a>
+      )}
       {data?.queryState?.filter && <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>}
       {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
         <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />

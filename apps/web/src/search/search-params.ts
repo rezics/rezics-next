@@ -44,7 +44,7 @@ export type SearchLoaderDeps = {
   type: string | undefined;
   facets: SearchFacetValues;
   ranges?: Record<string, FilterRange>;
-  condition?: FilterDocument;
+  condition?: FilterDocument | undefined;
   cursor: string | undefined;
   sort: 'rating' | undefined;
   kinds?: string[] | undefined;

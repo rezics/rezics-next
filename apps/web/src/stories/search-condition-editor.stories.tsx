@@ -13,10 +13,12 @@ import { PageStory, PatternStory, pageReady } from './page';
 const tree: FilterDocument = {
   and: [
     { type: { in: ['schema:Book'] } },
-    { or: [
-      { statement: { property: 'schema:wordCount', range: { gte: 1000001, unit: '1' } } },
-      { not: { type: { in: ['schema:Movie'] } } },
-    ] },
+    {
+      or: [
+        { statement: { property: 'schema:wordCount', range: { gte: 1000001, unit: '1' } } },
+        { not: { type: { in: ['schema:Movie'] } } },
+      ],
+    },
   ],
 };
 const state = searchLoaderDeps({ q: 'Mira', condition: JSON.stringify(tree), language: ['ja'], cursor: 'old+/=' });
@@ -24,13 +26,18 @@ const meta = {
   title: 'Patterns/Discovery/Search Condition Editor',
   parameters: {
     layout: 'fullscreen',
-    viewport: { options: {
-      phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-      desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-    } },
-    docs: { description: { component:
-      'The existing Search route, shell and Filters surface. Typed presentation fixtures exercise the public caller; native proof and Web visual approval remain pending. Review phone390/desktop1280 in all locales and both themes.',
-    } },
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+    docs: {
+      description: {
+        component:
+          'The existing Search route, shell and Filters surface. Typed presentation fixtures exercise the public caller; native proof and Web visual approval remain pending. Review phone390/desktop1280 in all locales and both themes.',
+      },
+    },
   },
 } satisfies Meta;
 export default meta;
@@ -43,7 +50,8 @@ function NestedPage() {
 async function editAndSubmit(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const canvas = within(context.canvasElement);
-  const trigger = canvas.getAllByRole('button', { name: new RegExp(m.search_filters()) })
+  const trigger = canvas
+    .getAllByRole('button', { name: new RegExp(m.search_filters()) })
     .find((button) => button.getClientRects().length > 0 && !button.hasAttribute('disabled'));
   if (trigger) await userEvent.click(trigger);
   const document = context.canvasElement.ownerDocument;
@@ -56,11 +64,19 @@ async function editAndSubmit(context: { canvasElement: HTMLElement }) {
   const expected = JSON.parse(JSON.stringify(tree));
   expected.and[1].or[0].statement.range.gte = 2000001;
   let submitted: FormData | undefined;
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
-    submitted = new FormData(form);
-  }, { once: true });
-  await userEvent.click(within(form).getAllByRole('button', { name: m.search_apply() }).find((button) => button.getClientRects().length > 0)!);
+  form.addEventListener(
+    'submit',
+    (event) => {
+      event.preventDefault();
+      submitted = new FormData(form);
+    },
+    { once: true },
+  );
+  await userEvent.click(
+    within(form)
+      .getAllByRole('button', { name: m.search_apply() })
+      .find((button) => button.getClientRects().length > 0)!,
+  );
   await expect(submitted?.get('q')).toBe('Mira');
   await expect(submitted?.get('cursor')).toBeNull();
   await expect(JSON.parse(String(submitted?.get('condition')))).toEqual(expected);
@@ -68,30 +84,59 @@ async function editAndSubmit(context: { canvasElement: HTMLElement }) {
 }
 
 export const NestedDesktop1280: Story = {
-  globals: { viewport: { value: 'desktop1280' } }, render: () => <NestedPage />, play: editAndSubmit,
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <NestedPage />,
+  play: editAndSubmit,
 };
 export const NestedPhone390: Story = {
-  globals: { viewport: { value: 'phone390' } }, render: () => <NestedPage />, play: editAndSubmit,
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <NestedPage />,
+  play: editAndSubmit,
 };
 
 function Failure({ restart = false, metadata = true }: { restart?: boolean; metadata?: boolean }) {
-  return <PatternStory path={discoverySearchHref(getLocale(), state)}>
-    <HeaderSearchFilterProvider>
-      <div className="p-4">
-        <SearchPage query={state.query} initiallyOpen data={{
-          queryState: state, condition: tree,
-          ...(metadata ? { conditionMetadata: conditionMetadata(releaseRecording.release) } : {}),
-          discovery: { status: restart ? 'restart' : 'unsupported' },
-          ...(restart ? {} : { problem: { code: 'unsupported_query', errors: [{
-            pointer: `${CONDITION_POINTER}/and/1/or/0/statement/range/unit`, code: 'unsupported',
-          }] } }),
-          hitTypes: {}, yearProperties: [], typeChoices: [], groups: [], selectedFacets: {}, selectedFacetLabels: {},
-          facetsAvailable: metadata, facetRetry: false, facetIndexNotReady: false, staleCursorRestarted: false,
-          sort: 'relevance',
-        }} />
-      </div>
-    </HeaderSearchFilterProvider>
-  </PatternStory>;
+  return (
+    <PatternStory path={discoverySearchHref(getLocale(), state)}>
+      <HeaderSearchFilterProvider>
+        <div className="p-4">
+          <SearchPage
+            query={state.query}
+            initiallyOpen
+            data={{
+              queryState: state,
+              condition: tree,
+              ...(metadata ? { conditionMetadata: conditionMetadata(releaseRecording.release) } : {}),
+              discovery: { status: restart ? 'restart' : 'unsupported' },
+              ...(restart
+                ? {}
+                : {
+                    problem: {
+                      code: 'unsupported_query',
+                      errors: [
+                        {
+                          pointer: `${CONDITION_POINTER}/and/1/or/0/statement/range/unit`,
+                          code: 'unsupported',
+                        },
+                      ],
+                    },
+                  }),
+              hitTypes: {},
+              yearProperties: [],
+              typeChoices: [],
+              groups: [],
+              selectedFacets: {},
+              selectedFacetLabels: {},
+              facetsAvailable: metadata,
+              facetRetry: false,
+              facetIndexNotReady: false,
+              staleCursorRestarted: false,
+              sort: 'relevance',
+            }}
+          />
+        </div>
+      </HeaderSearchFilterProvider>
+    </PatternStory>
+  );
 }
 
 export const NativePointerRetention: Story = {
