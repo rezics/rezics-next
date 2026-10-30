@@ -1,7 +1,7 @@
 import { createKernelClient, type SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { releaseDigest, type Release } from '@rezics/definitions';
-import emitted from '../../../../../../packages/definitions/release/rezics.json';
+import emitted from '../../../../../packages/definitions/release/rezics.json';
 import { readStatementEditor, validateStatement, type StatementInput } from '../../features/catalogue/statement-editor';
 import { proposeFact, type FactsTransport } from '../../features/catalogue/subject-facts';
 import { identifierProperties } from '../../features/catalogue/identifiers-profile';
@@ -197,7 +197,8 @@ export function identifiersProfileFixture(scenario: IdentifiersScenario = 'ready
             ...structuredClone(candidates.find((item) => item.id === entry.candidate)!.statement),
             rank: entry.rank,
           }));
-          for (const item of candidates) item.rank = selection.find((entry) => item.id === entry.id)?.rank ?? null;
+          for (const item of candidates)
+            item.rank = selection.find((entry) => item.id === entry.candidate)?.rank ?? null;
         }
         return json({
           adoption: { context: candidateContext, property: body?.property, mode: 'replace', head: adoptionHead },
@@ -239,7 +240,10 @@ export function identifiersProfileFixture(scenario: IdentifiersScenario = 'ready
         };
       },
       confirm: async (command) => {
-        const result = await selectCandidate(client, 'Bearer synthetic', { ...command, session });
+        const result = await selectCandidate(client, 'Bearer synthetic', {
+          ...command,
+          ...(session ? { session } : {}),
+        });
         if (result.ok) session = result.session ?? session;
         return result;
       },
