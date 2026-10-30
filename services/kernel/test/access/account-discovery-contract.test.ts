@@ -22,6 +22,7 @@ export type AccountDiscoveryNative = {
   close(): Promise<void>;
   settle(): Promise<void>;
   source: {
+    count(partition: number): Promise<{ partition: number; position: bigint; count: number }>;
     read(partition: number, ids: readonly string[]): Promise<{
       partition: number;
       position: bigint;
@@ -242,6 +243,9 @@ for (const kind of ['recovery', 'credential-reset', 'consent-reduction', 'sessio
     const d = await native();
     try {
       await d.settle();
+      const partition = partitionOf(routeOf(a.accountId)!);
+      const census = await d.source.count(partition);
+      expect(census.count).toBeGreaterThan(0);
       exact(await d.query({ text: label, limit: 3 }), 'account', 1);
       const old = await d.retain({ text: label, limit: 3 });
       const zero = await d.retain({ text: `-${a.spelling} ${label}`, limit: 3 });
@@ -250,6 +254,9 @@ for (const kind of ['recovery', 'credential-reset', 'consent-reduction', 'sessio
       expect(Number.isFinite(Date.parse(receipt.at))).toBe(true);
       expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId), accountId: a.accountId });
       expect((await d.source.read(partitionOf(routeOf(a.accountId)!), [a.accountId])).accounts).toEqual([]);
+      const reduced = await d.source.count(partition);
+      expect(reduced.count).toBe(census.count - 1);
+      expect(reduced.position).toBeGreaterThanOrEqual(census.position);
       const current = await d.query({ text: label, limit: 3 });
       expect(ids(current)).not.toContain(a.accountId);
       expect([200, 409, 503]).toContain(current.status);
@@ -269,6 +276,7 @@ for (const kind of ['recovery', 'credential-reset', 'consent-reduction', 'sessio
         const restored = await d.query({ text: label, limit: 3 });
         expect(ids(restored)).toEqual([a.accountId]);
         exact(restored, 'account', 1);
+        expect((await d.source.count(partition)).count).toBe(census.count);
       }
     } finally { await d.close(); }
   });

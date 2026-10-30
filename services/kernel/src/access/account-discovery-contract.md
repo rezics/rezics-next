@@ -76,9 +76,10 @@ tombstones remain a separate contract; discovery never obtains membership from `
 | Attribution | account full key; requested-ID `public-identity-page.sql` | independent allowlist; no discovery/count authority |
 | Source progress | `core.partition(partition_no)` position; command/event position and account anchor | same-snapshot position and rows; transaction UUID and wall time cannot order deliveries |
 | Proposed Account row version | account full key plus new Accounts-owned monotone `discovery_revision` | advance on every relevant mutation, including both sides of handle publication and restoration; never reuse after purge/restore |
+| Proposed native generation census | `access.account_discovery_population(partition_no)` on the same native partition | exact active/unfenced count; delta and Account mutation commit together, read with partition position; not a text-query counter |
 | Proposed dependent work | owner source key `(owner, partition, route, id)` plus physical generation/incarnation and revision | durable indexed frontier/locator; bounded resumable work, not scanning receipts or account history |
 
-The new row revision and dependency custody are **required native additions**, not columns supplied by this SPEC.
+The new row revision, generation census and dependency custody are **required native additions**, not columns supplied by this SPEC.
 `account_active_pages(route,account_id)` admits active/unfenced enumeration at limit 100; `account_agent_pages`
 also requires non-null handle but does not prove claim validity. Neither is a text index or an exact query counter.
 Source must validate route/partition and owner before I/O. Unknown owner/kind is an admission error, never routed
@@ -110,6 +111,7 @@ type AccountSnapshot = {
 };
 interface AccountDiscoverySource {
   read(partition: number, ids: readonly string[]): Promise<AccountSnapshot>;
+  count(partition: number): Promise<{ partition: number; position: bigint; count: number }>;
   page(partition: number, after: { route: number; id: string } | null,
        limit: number): Promise<AccountSnapshot & { next: { route: number; id: string } | null }>;
 }
@@ -159,7 +161,12 @@ whole-query observation must cover claim and Account authority together and reva
 per-database snapshot alone is insufficient across a rename. `page` is worker bootstrap, not a text result API:
 partition-bounded partial-index keyset, limit 1..100, lookahead charged, next proves remaining eligible input.
 If a candidate's claim is invalid it still contributes an eligible handleless row; do not lose the page frontier.
-No discovery count is `page.length`, `count(*)` over arbitrary text matches or `SubjectSource.count`.
+The new `count(partition)` is exclusively the Account generation census required by today's `generations.ts`
+consumer, read from the proposed fixed native population row with `core.partition.position` in the same snapshot.
+Native writers maintain +1/-1 only when active/unfenced membership changes; replay and rollback cannot double-apply.
+Bootstrap initializes this finite census and catches up deltas before activation. It is not a general query count:
+handle/displayName predicates require Search's separately certified population evidence. No discovery kind count
+is `page.length`, `count(*)` over arbitrary text matches or `SubjectSource.count`.
 
 Keep the existing SubjectSource methods unchanged for catalogue-only callers. Introduce a discriminated source
 registry with an explicit `accounts` entry supplying this source and current summary hydration. Adapt at the
@@ -213,7 +220,7 @@ handoff assembly described below; Web owns real recorded API stories after that 
 
 ## Atomicity, late writers, rollback and restore
 
-On each Account anchor, revision, native public mutation, durable event and reduction/dependency intent commit
+On each Account partition, revision, native public mutation, population-census delta, durable event and reduction/dependency intent commit
 or roll back together. Cross-anchor handle lifecycle already has reserved/held/publication phases: only exact
 active claims can supply handle text. Each phase which changes either native side dirties the affected source
 key before it can become public. No distributed SQL transaction or duplicated claim authority is introduced.
