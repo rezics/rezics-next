@@ -196,8 +196,9 @@ Source composition is present. The focused native acceptance is retained in
 promotion on main are deferred to controller integration. No supplied fact alone establishes delivered paid use.
 
 Unpublish/erasure makes delivery unavailable without inventing a refund; no alternate revision is substituted and
-no Library record is created. Verification for this binding delivery is limited to the local kernel compiler
-check; generated OpenAPI/client artifacts and native/interface gates remain controller work.
+no Library record is created. The local kernel compiler check passes for this binding source delivery.
+No acceptance, native or browser check was run; generated OpenAPI/client artifacts and native/interface gates
+remain controller work.
 
 ### Private buyer history
 
