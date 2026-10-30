@@ -11,7 +11,6 @@ import { displayLibraryTitle } from './title';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import type { DynamicMembersResult } from './collection-load';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
-import { displayLibraryTitle } from './title';
 
 export function DynamicCollectionPage({
   page,
