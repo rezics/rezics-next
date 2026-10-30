@@ -221,6 +221,8 @@ Collection/members reader, retaining the actual header revision, original source
 and supplied catalogue facts. Only the displayed page is selectable; canonical duplicates select one subject, while
 curated occurrences and notes retain their separate meaning. There is no all-matching-IDs read, hidden-page selection,
 query editor or snapshot-all promise. The maximum explicit selection is 100; zero requires deliberate empty intent.
+Source IDs and facts are forwarded only for disclosed members in the private owner editor read; ordinary dynamic
+pages retain their existing summary-only boundary, including omission of withheld original IDs.
 The owner-menu integration exports typed `PublicationLink` without conferring authority.
 The route uses the existing `$id_` filename convention to avoid inheriting the public Collection loader or renderer.
 

@@ -15,7 +15,9 @@ import {
 } from '../src/library/collection-publication';
 import { CollectionPublicationPageView } from '../src/library/collection-publication-page';
 import { PublicationLink } from '../src/library/collection-publication-link';
-import { loadEditableCollectionPage } from '../src/library/collection-load';
+import { loadDynamicMembers, loadEditableCollectionPage } from '../src/library/collection-load';
+import type { SessionEnv } from '../src/session/client';
+import type { SessionStore } from '../src/session/store';
 import { publicationExample } from '../src/kernel/fake/collection-publication';
 import { isSignedInPath } from '../src/session/guard';
 import { m } from '../src/paraglide/messages.js';
@@ -82,19 +84,38 @@ test('the current dynamic reader preserves header revision and original IDs; sel
       return Response.json({ code: 'not_found' }, { status: 404 });
     },
   });
+  const sessionEnv: Partial<SessionEnv> = {
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'publication-test',
+    WEBSITE_CLIENT_KEY: 'unused',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject: 'owner',
+          csrfToken: 'A'.repeat(22),
+          accessToken: 'owner-token',
+        }),
+      }),
+    } as unknown as DurableObjectNamespace<SessionStore>,
+  };
   const page = await loadEditableCollectionPage(
     client,
     new Request('https://site.test', {
-      headers: { authorization: 'Bearer owner-token' },
+      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
     }),
-    {},
-    { id: input.collectionId },
+    sessionEnv,
+    { id: input.collectionId, editor: true },
   );
   const source = publicationSource(page, 'owner');
   expect(source.state).toBe('ready');
   if (source.state !== 'ready') throw new Error('Expected consumer source context');
   expect(source.revision).toBe(7);
-  expect(source.page.members.map((member) => member.subjectId)).toEqual(['alias-a', 'original-a', 'private-b']);
+  expect(source.page.members.map((member) => member.subjectId)).toEqual(['alias-a', 'original-a', undefined]);
+  expect(JSON.stringify(source.page)).not.toContain('private-b');
   expect(publicationCandidates(source.page).map((member) => member.subject?.id)).toEqual(['canonical-a']);
   expect(source.page.next).toBe('hidden-page');
   expect(requests.filter((request) => request.url.includes('/members'))).toHaveLength(1);
@@ -105,7 +126,12 @@ test('the current dynamic reader preserves header revision and original IDs; sel
   expect(publicationSource(source.page, 'someone-else').state).toBe('denied');
   expect(publicationSource({ ...source.page, unavailable: true, members: [] }, 'owner').state).toBe('unavailable');
   expect(publicationSource({ ...source.page, preparing: true, members: [] }, 'owner').state).toBe('preparing');
-  expect(publicationSource({ ...source.page, revision: undefined }, 'owner').state).toBe('unavailable');
+  const { revision: _revision, ...withoutRevision } = source.page;
+  expect(publicationSource(withoutRevision, 'owner').state).toBe('unavailable');
+  const ordinary = await loadDynamicMembers(client, input.collectionId);
+  expect(ordinary.members.every((member) => member.subjectId === undefined && member.facts === undefined)).toBe(true);
+  expect(JSON.stringify(ordinary)).not.toContain('private-b');
+  expect(JSON.stringify(ordinary)).not.toContain('alias-a');
 });
 
 test('one guarded POST uses the exact selected native route and payload; unknown retries preserve the request and key', async () => {
