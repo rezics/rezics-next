@@ -90,6 +90,23 @@ test('writes through a connection to another database settle there, not by relat
   expect(stats.rows[0]!.visible).toBe(stats.rows[0]!.pages);
 });
 
+test('seed settles an admin pool handed out by openPool', async () => {
+  const admin = db.openPool({ max: 2 });
+  await seed({ pool: admin, admin }, {
+    name: 'open pool seed',
+    hotPartition: 4,
+    rows: ({ ordinal }) => ({ [table]: [{ id: 40_000 + ordinal, payload: 'seeded' }] }),
+  }, { from: 0, to: 8 });
+  const result = await db.admin.query<{ count: string; pages: number; visible: number }>(
+    `SELECT (SELECT count(*)::text FROM ${table} WHERE id >= 40000) AS count,
+            c.relpages AS pages,c.relallvisible AS visible FROM pg_class c WHERE c.oid=$1::regclass`,
+    [table],
+  );
+  expect(result.rows[0]!.count).toBe('8');
+  expect(result.rows[0]!.pages).toBeGreaterThan(0);
+  expect(result.rows[0]!.visible).toBe(result.rows[0]!.pages);
+});
+
 test('seed settles a redirected database handed out by openPool', async () => {
   const population: Population = {
     name: 'external pool seed',
@@ -135,23 +152,27 @@ test('a measured backend holding its transaction across repetitions fails immedi
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    await expect(
-      checkGrowth(db, {
-        name: 'operation transaction spans repetitions',
-        scales: [1, 4, 16],
-        repetitions: 2,
-        bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
-        grow: async () => {},
-        async operation() {
-          await client.query(
-            `INSERT INTO ${table} VALUES (900001, 'held') ON CONFLICT (id) DO UPDATE SET payload=EXCLUDED.payload`,
-          );
-        },
-      }),
-    ).rejects.toMatchObject({
-      name: 'GrowthSettleInfrastructureError',
-      message: expect.stringContaining('each repetition must commit'),
+    const backend = (await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+    const report = await checkGrowth(db, {
+      name: 'operation transaction spans repetitions',
+      scales: [1, 4, 16],
+      repetitions: 2,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      grow: async () => {},
+      async operation() {
+        await client.query(
+          `INSERT INTO ${table} VALUES (900001, 'held') ON CONFLICT (id) DO UPDATE SET payload=EXCLUDED.payload`,
+        );
+      },
     });
+    const failures = report.samples.flatMap(({ settleFailures }) => settleFailures ?? []);
+    expect(failures.length).toBeGreaterThan(0);
+    expect(
+      failures.some(
+        (failure) => failure.includes(`Backend ${backend} from the measured operation`)
+          && failure.includes('each repetition must commit'),
+      ),
+    ).toBe(true);
   } finally {
     await client.query('ROLLBACK');
     client.release();

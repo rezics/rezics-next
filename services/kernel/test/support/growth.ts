@@ -771,7 +771,6 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           ...new Set(
             (measured.capture.statementBackends ?? []).filter((backend): backend is number => backend !== undefined),
           ),
-
         ];
         const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
         if (coldBackends.length > 0 && coldBackendDiscards < 4) {

@@ -124,11 +124,10 @@ revision and is never rewritten when the vote changes; a later post revision may
 The review thread, its posts and its revisions live at the author's route, in the author's partition. This keeps
 the vote primary-key read and the one-live-review index probe in the same partition as the write, and distributes
 a popular board's reviews across authors instead of accumulating them in the board's partition. At most one live
-review exists per author, subject and board. Removing it releases that slot permanently for that thread.
-A review creation conflict returns 409 `conflict` with optional `existingThreadId` identifying the author's live
-review on that board, omitted if the review disappears before the point read after rollback.
 review exists per author, subject and board. Deleting its opening post releases that slot; restoring it reclaims the
 slot only if no other live review holds it.
+A review creation conflict returns 409 `conflict` with optional `existingThreadId` identifying the author's live
+review on that board, omitted if the review disappears before the point read after rollback.
 
 `createThread` checks the board purpose during its existing board validation: reviews require a reviews board,
 and discussion threads require a discussion board. The `board_identity` trigger makes purpose immutable, so this
@@ -445,6 +444,8 @@ writing only the tuple's partition. The first takedown stores that command time 
 route-local UUID in `takedown_id`. Takedown never reverts; repeats increase `security_revision` and preserve both
 original values. While a takedown remains active, the database guard rejects partial pairs and any change to its
 provenance. A reset can end the period only while clearing both provenance fields; no command does this in this scope.
+Importing from a taken-down source answers HTTP 409 `conflict` to a caller holding both `source_fence:read` on the
+Global Context and the creation permission; permission denial comes first.
 
 Every `com.rezics.content.source_fence.taken_down.v1` event reads the original pair back from the row as optional
 `takenDownAt` and `takedownId`. The time uses the kernel's authoritative PostgreSQL timestamp text, preserving

@@ -20,7 +20,7 @@ const route = 0xc120;
 const subject = newId(route);
 const actorId = newId(0xc230);
 const action = 'subject:update';
-let actor: AccountActor = {
+const actor: AccountActor = {
   kind: 'account',
   accountId: actorId,
   clientId: 'web',
@@ -66,13 +66,15 @@ function input(): ImportedFieldInput {
   };
 }
 async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target = subject) {
+  const context = { pool: db.pool, deadline: Date.now() + 5000 };
+  const freshActor = await authenticateAccount(access, context, actor);
   const resource = { route: routeOf(target)!, id: target };
   const authorization = await accessCommandAuthorization(
     access,
-    actor,
+    freshActor,
     action,
     resource,
-    { pool: db.pool, deadline: Date.now() + 5000 },
+    context,
     () => new Denied(),
   );
   return runCommand(
@@ -81,7 +83,7 @@ async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target =
       partition: partitionOf(resource.route),
       deadline: Date.now() + 120_000,
       authorization,
-      basis: { actorAccountId: actorId, clientId: actor.clientId, requestedBy: null },
+      basis: { actorAccountId: freshActor.accountId, clientId: freshActor.clientId, requestedBy: freshActor.requestedBy },
     },
     async (tx) => ({ value: await work(tx), events: [{ type: 'com.rezics.test.imported.v1', data: {} }] }),
   );
@@ -101,10 +103,32 @@ beforeAll(async () => {
     [route, subject, actorId, action],
   );
   access = admittedAccess({ actions: new Map([[action, { anonymous: false }]]) });
-  actor = await authenticateAccount(access, { pool: db.pool, deadline: Date.now() + 10_000 }, actor);
 });
 afterAll(async () => {
   await db?.close();
+});
+
+test('new commands reauthenticate after an earlier observation expires and expired contexts stay refused', async () => {
+  const earlierContext = { pool: db.pool, deadline: Date.now() + 1000 };
+  const earlier = await authenticateAccount(access, earlierContext, actor);
+  await new Promise((resolve) => setTimeout(resolve, Math.max(1, earlierContext.deadline - Date.now() + 1)));
+  const authorization = await accessCommandAuthorization(
+    access, earlier, action, { route, id: subject },
+    { pool: db.pool, deadline: Date.now() + 5000 }, () => new Denied(),
+  );
+  let executed = false;
+  await expect(runCommand(db.pool, {
+    partition: partitionOf(route),
+    authorization,
+    basis: { actorAccountId: earlier.accountId, clientId: earlier.clientId, requestedBy: earlier.requestedBy },
+  }, async () => {
+    executed = true;
+    return { value: null, events: [] };
+  })).rejects.toThrow();
+  expect(executed).toBe(false);
+  await expect(authenticateAccount(access, earlierContext, actor)).rejects.toThrow();
+  const result = await command((tx) => appendImportedField(tx, input()));
+  expect(await readImportedField(db.pool, route, result.value.id)).not.toBeNull();
 });
 
 test('append uses the real authorized command and exact canonical document bytes with immutable per-field evidence', async () => {

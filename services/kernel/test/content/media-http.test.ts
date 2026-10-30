@@ -959,13 +959,13 @@ test('cover download inherits its readable subject and current source fence thro
     observed.capture.statements.some((statement) => /content.media_reference|semantic.candidate/.test(statement)),
   ).toBe(false);
   await db.admin.query(
-    "UPDATE content.source_fences SET taken_down=true,security_revision=2 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group='cover'",
+    "UPDATE content.source_fences SET taken_down=true,taken_down_at=now(),takedown_id=gen_random_uuid(),security_revision=2 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group='cover'",
     [home, source, externalId],
   );
   const fenced = await request();
   absent(fenced);
   await db.admin.query(
-    "UPDATE content.source_fences SET taken_down=false,security_revision=3 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group='cover'",
+    "UPDATE content.source_fences SET taken_down=false,taken_down_at=NULL,takedown_id=NULL,security_revision=3 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group='cover'",
     [home, source, externalId],
   );
   await db.admin.query('UPDATE content.media SET taken_down=true,security_revision=1 WHERE route=$1 AND media_id=$2', [

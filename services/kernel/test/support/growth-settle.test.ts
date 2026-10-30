@@ -37,7 +37,7 @@ async function relationState() {
     .then(({ rows }) => rows[0]!);
 }
 
-test('settle waits for an older snapshot and removes the first index-probe excess after bare VACUUM', async () => {
+test('settle waits for an older snapshot and establishes all-visible stable index probes after bare VACUUM', async () => {
   const holder = new pg.Client({ connectionString: db.url });
   await holder.connect();
   // This mechanism concerns an index scan; an unselective sequential scan cannot expose dead index entries.
@@ -65,14 +65,11 @@ test('settle waits for an older snapshot and removes the first index-probe exces
   }
   try {
     await dirtyWithSnapshot();
-    // Once the old snapshot ends, the first scan can mark the dead entries left by bare VACUUM.
-    await holder.query('COMMIT');
-    const dirtyFirst = await probe();
-    const dirtyNext = await probe();
-    expect(dirtyFirst).toBeGreaterThan(dirtyNext);
-
-    // Recreate the dirty state so settle, rather than a preceding probe, must remove the excess.
-    await dirtyWithSnapshot();
+    expect((await holder.query(`SELECT count(*)::integer AS count FROM ${table}`)).rows).toEqual([{ count: 3000 }]);
+    expect((await db.admin.query(`SELECT count(*)::integer AS count FROM ${table}`)).rows).toEqual([{ count: 200 }]);
+    const dirty = await relationState();
+    expect(dirty.pages).toBeGreaterThan(0);
+    expect(dirty.visible).toBeLessThan(dirty.pages);
     let completed = false;
     waiting = settle(db, { relations: [table], timeoutMs: 5000, pollMs: 20 }).then((elapsed) => {
       completed = true;
@@ -82,6 +79,7 @@ test('settle waits for an older snapshot and removes the first index-probe exces
     expect(completed).toBe(false);
     await holder.query('COMMIT');
     await waiting;
+    expect((await holder.query(`SELECT count(*)::integer AS count FROM ${table}`)).rows).toEqual([{ count: 200 }]);
     const first = await probe();
     const next = await probe();
     expect(first).toBe(next);
