@@ -425,35 +425,25 @@ function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDr
     };
     for (const id of pending) await result(id);
     pending.clear();
-    // The native bootstrap continuously schedules its next bounded page. Drain
-    // the command frontier, then every workflow enqueued through that frontier;
-    // waiting for global quiescence would also wait for unrelated future pages.
-    const frontier = (await system.database.pool.query('SELECT partition_no, position::text FROM core.partition')).rows;
     const deadline = Date.now() + settleTimeoutMs;
     for (;;) {
       if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
-      const behind = await system.database.pool.query(
-        `
-        SELECT frontier.partition_no, frontier.position, consumers.name, checkpoint.position AS checkpoint
-          FROM jsonb_to_recordset($1::jsonb) AS frontier(partition_no integer, position bigint)
+      const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
+        (row) => row.status !== 'SUCCESS' && row.status !== 'DELAYED',
+      );
+      for (const workflow of workflows) await result(workflow.workflowID);
+      const behind = await system.database.pool.query(`
+        SELECT partition.partition_no, partition.position, consumers.name, checkpoint.position AS checkpoint
+          FROM core.partition AS partition
           CROSS JOIN (VALUES ('effects'::text), ('semantic_links'::text)) AS consumers(name)
           LEFT JOIN core.consumer_checkpoint AS checkpoint
-            ON checkpoint.partition_no = frontier.partition_no AND checkpoint.consumer = consumers.name
-         WHERE frontier.position > COALESCE(checkpoint.position, 0)
-         LIMIT 1`,
-        [JSON.stringify(frontier)],
-      );
-      if (!behind.rowCount) {
-        const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
-          (row) => row.status !== 'SUCCESS' && row.status !== 'DELAYED',
-        );
-        for (const workflow of workflows) await result(workflow.workflowID);
-        if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
-        return;
-      }
+            ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = consumers.name
+         WHERE partition.position > COALESCE(checkpoint.position, 0)
+         LIMIT 1`);
+      if (!behind.rowCount && workflows.length === 0) return;
       if (Date.now() >= deadline)
         throw new Error(
-          `Production community worker did not settle: ${JSON.stringify({ behind: behind.rows, exitCode: worker.child.exitCode })}`,
+          `Production community worker did not settle: ${JSON.stringify({ behind: behind.rows, workflows, exitCode: worker.child.exitCode })}`,
         );
       await Bun.sleep(10);
     }

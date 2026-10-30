@@ -551,12 +551,18 @@ Cost:
   finish before the next owner command. Proof and reconciliation evidence remain owned retention obligations.
 - Bound: constant rows, statements, connections and output for one transition; logarithmic index blocks in unrelated
   holds, proofs, receipts and historical generations. Legacy rows/output are linear in its fixed page and its
-  admission probe is capped at 1,001; temporal interval index work is measured in rows and blocks independently of
-  SQL-call counts.
+  admission probe is capped at 1,001. Its old source-transaction receipt lookup still requires a bounded Core-owned
+  access path before deployment; a page limit does not bound that lookup. Temporal interval index work is measured
+  in rows and blocks independently of SQL-call counts.
 - Growth check: `test/access/growth-realm-membership-transition.test.ts` grows same-home holds, proofs, receipts and
   historical generations at 64/512/4096 around a real public join/leave and one selected unresolved legacy item.
   The shared harness includes nested Access, proof, DBOS and transaction-control work and measured backend counts.
   Plan assertions use its measured-layout helper.
+
+Native acceptance remains pending: the default Semantic startup schedules work across all 4,096 homes, and the
+Community fixture requires complete projection and work settlement. An enqueue checkpoint or a single workflow
+list cannot prove downstream events and child work complete. The Semantic owner must supply the actual bounded
+source/result boundary; the fixture retains its full settlement condition and original deadline.
 
 The native deletion-entry acceptance in `test/access/realm-membership-transition.test.ts` requires real Auth
 approval and execution while membership and inverse rows remain. This entry does not establish Access, Community

@@ -13,7 +13,5 @@ CREATE TABLE community.realm_membership_proof (
 CREATE TRIGGER realm_membership_proof_immutable BEFORE UPDATE OR DELETE ON community.realm_membership_proof
  FOR EACH ROW EXECUTE FUNCTION community.guard_realm_member_terminal();
 
-CREATE INDEX receipt_source_transaction ON core.receipt (partition_no, transaction_id);
-
 -- migrate:down
 -- Forward-only: immutable transition evidence must survive rollback of a writer.

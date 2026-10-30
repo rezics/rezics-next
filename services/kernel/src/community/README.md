@@ -145,9 +145,11 @@ the source checkout before consuming proof on the account anchor. Publication re
 The deployment-only `certifyLegacy(transition, key)` requires adopted stable provenance under the stopped-old-writer
 barrier. It certifies an exact native live or terminal source receipt, not a missing source. The normal Accounts host
 registers its bounded, persisted coordinator; see [Access's transition protocol](../access/README.md#realm-transition-coordination-and-deletion-entry).
-Both migrations are required before new writers start. Source proofs and their receipt transaction index support
-exact probes, without scanning membership or receipt history. They remain physical-custody obligations pending real
-erasure producers; this protocol supplies deletion entry, not participant completion.
+Both migrations are required before new writers start. New-generation source proofs name the full native receipt
+primary key. Legacy certification instead has only its old source transaction identity; Core currently lacks a
+bounded lookup for that identity. Legacy reconciliation must not be deployed until the Core owner supplies that
+lookup. Transition migrations do not alter Core receipt machinery. Source proofs remain physical-custody obligations
+pending real erasure producers; this protocol supplies deletion entry, not participant completion.
 
 Cost: one active Realm lock, current membership/ban/authorization probes, one generation proof and exact receipt
 binding per publication/cancellation; constant rows/statements/output with logarithmic index blocks. The native
