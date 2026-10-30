@@ -73,6 +73,7 @@ export function communityBoard(kind: CommunityKind): Board {
   return {
     id: id(kind === 'review' ? '80' : '90'),
     realmId: null,
+    community: null,
     route: 1,
     title: kind === 'review' ? 'Public book reviews' : 'Public book discussions',
     purpose: kind === 'review' ? 'reviews' : 'discussion',

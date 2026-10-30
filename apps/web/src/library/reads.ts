@@ -36,7 +36,7 @@ type NativeMembers = NonNullable<
 >;
 
 export type CollectionMember = {
-  facts?: NativeMembers['members'][number]['facts'];
+  facts?: Extract<NativeMembers['members'][number], { id: string }>['facts'];
   id: string;
   note: string | null;
   addedAt: string;
@@ -159,7 +159,12 @@ async function readCollection(client: KernelClient, id: string): Promise<RawColl
 
 async function readMembers(client: KernelClient, id: string, cursor?: string): Promise<RawMemberPage> {
   const result = await client.collections({ collectionId: id }).members.get({ query: libraryListQuery(cursor) });
-  return readLibraryResult(result);
+  const page = readLibraryResult(result);
+  const members = page.members.map((member) => {
+    if (!('id' in member)) throw new Error('Dynamic collection requires dynamic membership reads');
+    return member;
+  });
+  return { ...page, members };
 }
 
 function present(identity: SessionIdentity, collection: RawCollection, members: RawMemberPage): CollectionPageData {

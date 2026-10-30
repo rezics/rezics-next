@@ -425,7 +425,9 @@ export async function loadEditableCollectionPage(
           : null;
   return {
     ...collectionPresentationOf(collectionEnvelope.collection),
-    ...(owner && collectionEnvelope.collection.coverMediaId !== undefined
+    ...(owner &&
+    'coverMediaId' in collectionEnvelope.collection &&
+    collectionEnvelope.collection.coverMediaId !== undefined
       ? { coverMediaId: collectionEnvelope.collection.coverMediaId }
       : {}),
     id: curatedCollection.id,

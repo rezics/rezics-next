@@ -2,6 +2,8 @@ import type { KernelClient } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { CollectionVisibility } from '../library/reads';
+import { dynamicCollectionTitle } from '../library/dynamic-collection';
+import { getLocale } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { securityHrefFromIssuer } from './account-safety-links';
@@ -58,13 +60,17 @@ export type CollectionVisibilityWrite =
   | { ok: true; collection: OwnedCollection }
   | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
 
-function ownedCollection(value: {
-  id: string;
-  title: string;
-  visibility: CollectionVisibility;
-  revision: number;
-}): OwnedCollection {
-  return { id: value.id, title: value.title, visibility: value.visibility, revision: value.revision };
+type NativeOwnedCollection = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['collections']>['get']>>['data']
+>['collection'];
+
+function ownedCollection(value: NativeOwnedCollection): OwnedCollection {
+  return {
+    id: value.id,
+    title: 'builtinKind' in value ? dynamicCollectionTitle(value, getLocale()) : value.title,
+    visibility: value.visibility,
+    revision: value.revision,
+  };
 }
 
 /** One bounded owner read for the requested page. */
