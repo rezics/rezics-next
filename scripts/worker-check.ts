@@ -724,6 +724,11 @@ function isNativeStackPath(path: string): boolean {
   );
 }
 
+/** The compiler database is needed only by SQL-mapped Kernel and Auth service projects. */
+function isCompilerDatabasePath(path: string): boolean {
+  return hasPathPair(path, 'services', 'kernel') || hasPathPair(path, 'services', 'auth');
+}
+
 function isNativeScript(path: string): boolean {
   const segments = pathSegments(path);
   const entries = [
@@ -745,8 +750,8 @@ function executableName(value: string): string {
   return value.split(/[\\/]/).at(-1) ?? value;
 }
 
-function projectNeedsNativeStack(args: readonly string[], cwd: string): boolean {
-  if (isNativeStackPath(cwd)) return true;
+function projectNeedsCompilerDatabase(args: readonly string[], cwd: string): boolean {
+  const projects: string[] = [];
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
     const project =
@@ -755,20 +760,28 @@ function projectNeedsNativeStack(args: readonly string[], cwd: string): boolean 
         : argument.startsWith('--project=')
           ? argument.slice('--project='.length)
           : undefined;
-    if (project && isNativeStackPath(resolve(cwd, project))) return true;
+    if (argument === '-p' || argument === '--project') {
+      if (!project || project.startsWith('-')) return true;
+      projects.push(project);
+      index += 1;
+    } else if (argument.startsWith('--project=')) {
+      if (!project) return true;
+      projects.push(project);
+    }
   }
-  return false;
+  if (projects.length > 1) return true;
+  return isCompilerDatabasePath(resolve(cwd, projects[0] ?? '.'));
 }
 
 function pureCompilerOrTool(command: string, args: readonly string[], cwd: string): boolean {
   const name = executableName(command);
   if (name === 'oxlint' || name === 'oxfmt') return true;
-  if (name === 'tsc') return args.includes('--noEmit') && !projectNeedsNativeStack(args, cwd);
+  if (name === 'tsc') return args.includes('--noEmit') && !projectNeedsCompilerDatabase(args, cwd);
   if (name === 'check') {
     const hasProject = args.some(
       (argument, index) => argument === '-p' || argument === '--project' || argument.startsWith('--project='),
     );
-    return args.includes('--no-script') && hasProject && !projectNeedsNativeStack(args, cwd);
+    return args.includes('--no-script') && hasProject && !projectNeedsCompilerDatabase(args, cwd);
   }
   if (name === 'lint') return args.includes('--no-script');
   return false;
@@ -791,6 +804,16 @@ function packageScript(cwd: string, script: string): string | undefined {
     if (parent === directory) return undefined;
     directory = parent;
   }
+}
+
+function isPureWebTypecheck(directory: string, script: string, source: string | undefined): boolean {
+  const segments = pathSegments(directory);
+  return (
+    script === 'typecheck' &&
+    segments.at(-2) === 'apps' &&
+    segments.at(-1) === 'web' &&
+    source?.trim() === 'bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json'
+  );
 }
 
 function testFilesNeedStack(args: readonly string[], cwd: string): boolean {
@@ -889,11 +912,14 @@ function classifyWorkerCommand(argv: readonly string[], cwd: string, depth = 0):
         } else break;
       }
       const script = argv[scriptIndex];
-      if (!script || isNativeStackPath(directory)) return true;
-      const scriptPath = resolve(directory, script);
-      if (isNativeStackPath(scriptPath) || isNativeScript(scriptPath)) return true;
-      if (script.includes('/') || script.includes('\\') || /\.(?:[cm]?[jt]sx?)$/.test(script)) return true;
+      if (!script) return true;
       const source = packageScript(directory, script);
+      const webTypecheckPipeline = isPureWebTypecheck(directory, script, source);
+      if (!webTypecheckPipeline && isNativeStackPath(directory)) return true;
+      const scriptPath = resolve(directory, script);
+      if (!webTypecheckPipeline && (isNativeStackPath(scriptPath) || isNativeScript(scriptPath))) return true;
+      if (script.includes('/') || script.includes('\\') || /\.(?:[cm]?[jt]sx?)$/.test(script)) return true;
+      if (webTypecheckPipeline) return false;
       if (!source || /[;&|<>`$]/.test(source)) return true;
       const tokens = source.trim().split(/\s+/).filter(Boolean);
       return tokens.length === 0 || classifyWorkerCommand(tokens, directory, depth + 1);

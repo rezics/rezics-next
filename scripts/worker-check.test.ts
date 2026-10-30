@@ -921,6 +921,10 @@ test('stack-free placement: explicit pure file tests lint and pure type commands
   expect(await needsStack(['bun', 'run', 'format:check'])).toBe(false);
   expect(await needsStack(['bun', 'run', '--cwd', 'services/importer', 'typecheck'])).toBe(false);
   expect(await needsStack(['bun', 'run', '--cwd', 'packages/filter', 'typecheck'])).toBe(false);
+  expect(await needsStack(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])).toBe(false);
+  expect(
+    await needsStack(['bun', 'check', '--no-script', '-p', 'tsconfig.json'], join(repository, 'apps/web')),
+  ).toBe(false);
   expect(await needsStack(['bun', 'check', '--no-script', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
   expect(await needsStack(['tsc', '--noEmit', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
 });
@@ -929,6 +933,12 @@ test('stack-free placement: native kernel Auth Web isolated and real compiler-da
   expect(await needsStack(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/http/body-limit.test.ts'])).toBe(
     true,
   );
+  expect(
+    await needsStack(['bun', 'check', '--no-script', '-p', 'tsconfig.json'], join(repository, 'services/kernel')),
+  ).toBe(true);
+  expect(
+    await needsStack(['bun', 'check', '--no-script', '-p', 'tsconfig.json'], join(repository, 'services/auth')),
+  ).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd=services/auth', 'check'])).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd', 'apps/auth', 'test'])).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd', 'apps/web', 'check'])).toBe(true);
@@ -1303,6 +1313,39 @@ function latestLedgerEntries(root: string): any[] {
       .map((file) => JSON.parse(readFileSync(join(directory, day, file), 'utf8'))),
   );
 }
+
+test('stack-free placement: the actual Web compiler invocation runs locally with memory admission and its native result', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const hosts = writeHosts(fixture);
+  const web = join(fixture.root, 'apps/web');
+  const priorLedger = process.env.REZICS_CHECK_LEDGER_DIR;
+  mkdirSync(web, { recursive: true });
+  writeFileSync(
+    join(web, 'tsconfig.json'),
+    JSON.stringify({ compilerOptions: { noEmit: true, strict: true }, files: ['source.ts'] }),
+  );
+  writeFileSync(join(web, 'source.ts'), "export const compilerResult: string = 'checked locally';\n");
+  try {
+    workerEnv(fixture, hosts);
+    process.env.REZICS_CHECK_LEDGER_DIR = join(fixture.root, '.temp/check-ledger');
+    const status = await runWorkerCheck(
+      ['bun', 'check', '--no-script', '-p', 'tsconfig.json'],
+      web,
+      false,
+      join(fixture.root, 'web-compiler.log'),
+    );
+    expect(status).toBe(0);
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+    expect(latestLedgerEntries(fixture.root)).toMatchObject([
+      { host: hostname(), terminalStatus: 'passed', exitStatus: 0 },
+    ]);
+  } finally {
+    restoreWorkerEnvironment(old);
+    if (priorLedger === undefined) delete process.env.REZICS_CHECK_LEDGER_DIR;
+    else process.env.REZICS_CHECK_LEDGER_DIR = priorLedger;
+  }
+});
 
 test('bounded artifact returns: the real outer wrapper restores inner stack-run bytes before fake remote cleanup', async () => {
   const fixture = workerFixture();
