@@ -1,0 +1,258 @@
+{
+  "profile": "sha256:87bffa44c5daff94f3e3609cb63384a3f1a9480ce507a9da47a24a2320ed29a1",
+  "template": { "scope": "route", "key": "/" },
+  "document": {
+    "root": { "props": {} },
+    "content": [
+      {
+        "type": "Heading",
+        "props": {
+          "id": "heading",
+          "text": {
+            "de": "Klarer sehen, was zählt",
+            "en": "A clearer view of what matters",
+            "es": "Una visión más clara de lo importante",
+            "fr": "Voir plus clairement l’essentiel",
+            "ja": "大切なことを、もっと明確に",
+            "ko": "중요한 것을 더 선명하게",
+            "zh-Hans": "看清真正重要的事",
+            "zh-Hant": "看清真正重要的事"
+          },
+          "level": 1
+        }
+      },
+      { "type": "Slot", "props": { "id": "personal", "name": "personal", "children": [] } },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "books",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Bücher",
+            "en": "Books",
+            "es": "Libros",
+            "fr": "Livres",
+            "ja": "書籍",
+            "ko": "도서",
+            "zh-Hans": "图书",
+            "zh-Hant": "書籍"
+          },
+          "types": ["schema:Book"]
+        }
+      },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "anime",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Anime",
+            "en": "Anime",
+            "es": "Anime",
+            "fr": "Anime",
+            "ja": "アニメ",
+            "ko": "애니메이션",
+            "zh-Hans": "动画",
+            "zh-Hant": "動畫"
+          },
+          "types": ["schema:TVSeries", "schema:Movie"]
+        }
+      },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "visual-novels",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Visual Novels",
+            "en": "Visual novels",
+            "es": "Novelas visuales",
+            "fr": "Visual novels",
+            "ja": "ビジュアルノベル",
+            "ko": "비주얼 노벨",
+            "zh-Hans": "视觉小说",
+            "zh-Hant": "視覺小說"
+          },
+          "types": ["wd:Q689445"]
+        }
+      },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "recipes",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Rezepte",
+            "en": "Recipes",
+            "es": "Recetas",
+            "fr": "Recettes",
+            "ja": "レシピ",
+            "ko": "레시피",
+            "zh-Hans": "食谱",
+            "zh-Hant": "食譜"
+          },
+          "types": ["schema:Recipe"]
+        }
+      }
+    ]
+  },
+  "reads": {
+    "r0": {
+      "status": 200,
+      "body": {
+        "subjects": [
+          {
+            "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
+            "type": "schema:Book",
+            "labels": {
+              "en": "The Little Prince",
+              "zh-Hans": "小王子",
+              "zh-Hant": "小王子",
+              "ja": "星の王子さま",
+              "ko": "어린 왕자",
+              "de": "Der kleine Prinz",
+              "fr": "Le Petit Prince",
+              "es": "El Principito"
+            },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
+            "type": "schema:Book",
+            "labels": {
+              "en": "The Little Prince",
+              "zh-Hans": "小王子",
+              "zh-Hant": "小王子",
+              "ja": "星の王子さま",
+              "ko": "어린 왕자",
+              "de": "Der kleine Prinz",
+              "fr": "Le Petit Prince",
+              "es": "El Principito"
+            },
+            "summary": {
+              "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
+              "type": "schema:Book",
+              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "어린 왕자", "language": "ko" },
+              "creativeWork": true,
+              "cover": null
+            },
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
+            "type": "schema:Book",
+            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である", "zh-Hans": "我是猫" },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
+            "type": "schema:Book",
+            "labels": { "en": "Kokoro", "ja": "こころ", "zh-Hans": "心" },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f700-7078-8000-000000000003",
+            "type": "schema:Book",
+            "labels": { "en": "Norwegian Wood", "ja": "ノルウェイの森", "zh-Hans": "挪威的森林" },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a17a3b-6c01-77c8-94fd-810a3ae73369",
+            "type": "schema:Book",
+            "labels": { "en": "Snow Country", "ja": "雪国", "zh-Hans": "雪国" },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f700-7078-8000-000000000001",
+            "type": "schema:Book",
+            "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
+            "summary": null,
+            "cover": null
+          }
+        ],
+        "next": null,
+        "as_of": "2026-10-30T03:02:50.076Z"
+      }
+    },
+    "r1": {
+      "status": 200,
+      "body": {
+        "subjects": [
+          {
+            "id": "01a1773a-f700-7073-bcc1-4d04f35ff67a",
+            "type": "schema:TVSeries",
+            "labels": { "en": "Frieren: Beyond Journey's End", "ja": "葬送のフリーレン", "zh-Hans": "葬送的芙莉莲" },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f700-7072-b9eb-3c03e51c0440",
+            "type": "schema:TVSeries",
+            "labels": { "en": "Mushishi", "ja": "蟲師", "zh-Hans": "虫师" },
+            "summary": null,
+            "cover": null
+          }
+        ],
+        "next": null,
+        "as_of": "2026-10-30T03:02:50.076Z"
+      }
+    },
+    "r2": {
+      "status": 200,
+      "body": {
+        "subjects": [
+          {
+            "id": "01a1773a-f700-7074-b1ee-5e05671d3be3",
+            "type": "wd:Q689445",
+            "labels": { "en": "Clannad", "ja": "クラナド", "zh-Hans": "CLANNAD" },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f700-7075-8008-6f06740bee6d",
+            "type": "wd:Q689445",
+            "labels": { "en": "Steins Gate", "ja": "シュタインズ・ゲート", "zh-Hans": "命运石之门" },
+            "summary": null,
+            "cover": null
+          }
+        ],
+        "next": null,
+        "as_of": "2026-10-30T03:02:50.076Z"
+      }
+    },
+    "r3": {
+      "status": 200,
+      "body": {
+        "subjects": [
+          {
+            "id": "01a1773a-f700-7076-b2d2-7a07a9d7104f",
+            "type": "schema:Recipe",
+            "labels": { "en": "Nikujaga", "ja": "肉じゃが", "zh-Hans": "土豆炖肉" },
+            "summary": null,
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f700-7077-883e-8b0879393d7d",
+            "type": "schema:Recipe",
+            "labels": { "en": "Shakshuka", "ja": "シャクシュカ", "zh-Hans": "沙克舒卡" },
+            "summary": null,
+            "cover": null
+          }
+        ],
+        "next": null,
+        "as_of": "2026-10-30T03:02:50.076Z"
+      }
+    }
+  },
+  "status": 200
+}

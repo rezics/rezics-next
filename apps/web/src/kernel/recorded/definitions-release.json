@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:943ceadcf70fe1bd71382c2f88ca782cbf946a2c1c1097d748d273482eb7b318",
+  "digest": "sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -5086,6 +5086,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -5264,6 +5274,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -5442,6 +5462,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Folge", "other": "Folgen" },
+                    "en": { "one": "episode", "other": "episodes" },
+                    "es": { "one": "episodio", "many": "episodios", "other": "episodios" },
+                    "fr": { "one": "épisode", "many": "épisodes", "other": "épisodes" },
+                    "ja": { "other": "エピソード" },
+                    "ko": { "other": "에피소드" },
+                    "zh-Hans": { "other": "集" },
+                    "zh-Hant": { "other": "集" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -5620,6 +5650,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Folge", "other": "Folgen" },
+                    "en": { "one": "episode", "other": "episodes" },
+                    "es": { "one": "episodio", "many": "episodios", "other": "episodios" },
+                    "fr": { "one": "épisode", "many": "épisodes", "other": "épisodes" },
+                    "ja": { "other": "エピソード" },
+                    "ko": { "other": "에피소드" },
+                    "zh-Hans": { "other": "集" },
+                    "zh-Hant": { "other": "集" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -5798,6 +5838,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Seite", "other": "Seiten" },
+                    "en": { "one": "page", "other": "pages" },
+                    "es": { "one": "página", "many": "páginas", "other": "páginas" },
+                    "fr": { "one": "page", "many": "pages", "other": "pages" },
+                    "ja": { "other": "ページ" },
+                    "ko": { "other": "쪽" },
+                    "zh-Hans": { "other": "页" },
+                    "zh-Hant": { "other": "頁" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -5976,6 +6026,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Seite", "other": "Seiten" },
+                    "en": { "one": "page", "other": "pages" },
+                    "es": { "one": "página", "many": "páginas", "other": "páginas" },
+                    "fr": { "one": "page", "many": "pages", "other": "pages" },
+                    "ja": { "other": "ページ" },
+                    "ko": { "other": "쪽" },
+                    "zh-Hans": { "other": "页" },
+                    "zh-Hant": { "other": "頁" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -6154,6 +6214,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -6332,6 +6402,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -6510,6 +6590,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -6688,6 +6778,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "optional"
                 }
               ]
@@ -6864,6 +6964,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Seite", "other": "Seiten" },
+                    "en": { "one": "page", "other": "pages" },
+                    "es": { "one": "página", "many": "páginas", "other": "páginas" },
+                    "fr": { "one": "page", "many": "pages", "other": "pages" },
+                    "ja": { "other": "ページ" },
+                    "ko": { "other": "쪽" },
+                    "zh-Hans": { "other": "页" },
+                    "zh-Hant": { "other": "頁" }
+                  },
                   "totalPolicy": "optional"
                 },
                 {
@@ -6881,6 +6991,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Kapitel", "other": "Kapitel" },
+                    "en": { "one": "chapter", "other": "chapters" },
+                    "es": { "one": "capítulo", "many": "capítulos", "other": "capítulos" },
+                    "fr": { "one": "chapitre", "many": "chapitres", "other": "chapitres" },
+                    "ja": { "other": "章" },
+                    "ko": { "other": "장" },
+                    "zh-Hans": { "other": "章" },
+                    "zh-Hant": { "other": "章" }
+                  },
                   "totalPolicy": "optional"
                 },
                 {
@@ -6898,6 +7018,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Folge", "other": "Folgen" },
+                    "en": { "one": "episode", "other": "episodes" },
+                    "es": { "one": "episodio", "many": "episodios", "other": "episodios" },
+                    "fr": { "one": "épisode", "many": "épisodes", "other": "épisodes" },
+                    "ja": { "other": "エピソード" },
+                    "ko": { "other": "에피소드" },
+                    "zh-Hans": { "other": "集" },
+                    "zh-Hant": { "other": "集" }
+                  },
                   "totalPolicy": "optional"
                 },
                 {
@@ -6915,6 +7045,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Band", "other": "Bände" },
+                    "en": { "one": "volume", "other": "volumes" },
+                    "es": { "one": "tomo", "many": "tomos", "other": "tomos" },
+                    "fr": { "one": "volume", "many": "volumes", "other": "volumes" },
+                    "ja": { "other": "巻" },
+                    "ko": { "other": "권" },
+                    "zh-Hans": { "other": "卷" },
+                    "zh-Hant": { "other": "卷" }
+                  },
                   "totalPolicy": "optional"
                 },
                 {
@@ -6932,6 +7072,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "optional"
                 },
                 {
@@ -6973,6 +7123,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Seite", "other": "Seiten" },
+                    "en": { "one": "page", "other": "pages" },
+                    "es": { "one": "página", "many": "páginas", "other": "páginas" },
+                    "fr": { "one": "page", "many": "pages", "other": "pages" },
+                    "ja": { "other": "ページ" },
+                    "ko": { "other": "쪽" },
+                    "zh-Hans": { "other": "页" },
+                    "zh-Hant": { "other": "頁" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -6990,6 +7150,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Kapitel", "other": "Kapitel" },
+                    "en": { "one": "chapter", "other": "chapters" },
+                    "es": { "one": "capítulo", "many": "capítulos", "other": "capítulos" },
+                    "fr": { "one": "chapitre", "many": "chapitres", "other": "chapitres" },
+                    "ja": { "other": "章" },
+                    "ko": { "other": "장" },
+                    "zh-Hans": { "other": "章" },
+                    "zh-Hant": { "other": "章" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7007,6 +7177,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Folge", "other": "Folgen" },
+                    "en": { "one": "episode", "other": "episodes" },
+                    "es": { "one": "episodio", "many": "episodios", "other": "episodios" },
+                    "fr": { "one": "épisode", "many": "épisodes", "other": "épisodes" },
+                    "ja": { "other": "エピソード" },
+                    "ko": { "other": "에피소드" },
+                    "zh-Hans": { "other": "集" },
+                    "zh-Hant": { "other": "集" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7024,6 +7204,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Band", "other": "Bände" },
+                    "en": { "one": "volume", "other": "volumes" },
+                    "es": { "one": "tomo", "many": "tomos", "other": "tomos" },
+                    "fr": { "one": "volume", "many": "volumes", "other": "volumes" },
+                    "ja": { "other": "巻" },
+                    "ko": { "other": "권" },
+                    "zh-Hans": { "other": "卷" },
+                    "zh-Hant": { "other": "卷" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7041,6 +7231,16 @@
                   "minimum": "0",
                   "identity": { "kind": "none" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7081,6 +7281,16 @@
                   "minimum": "0",
                   "identity": { "kind": "session_local" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Seite", "other": "Seiten" },
+                    "en": { "one": "page", "other": "pages" },
+                    "es": { "one": "página", "many": "páginas", "other": "páginas" },
+                    "fr": { "one": "page", "many": "pages", "other": "pages" },
+                    "ja": { "other": "ページ" },
+                    "ko": { "other": "쪽" },
+                    "zh-Hans": { "other": "页" },
+                    "zh-Hant": { "other": "頁" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7098,6 +7308,16 @@
                   "minimum": "0",
                   "identity": { "kind": "session_local" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Kapitel", "other": "Kapitel" },
+                    "en": { "one": "chapter", "other": "chapters" },
+                    "es": { "one": "capítulo", "many": "capítulos", "other": "capítulos" },
+                    "fr": { "one": "chapitre", "many": "chapitres", "other": "chapitres" },
+                    "ja": { "other": "章" },
+                    "ko": { "other": "장" },
+                    "zh-Hans": { "other": "章" },
+                    "zh-Hant": { "other": "章" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7115,6 +7335,16 @@
                   "minimum": "0",
                   "identity": { "kind": "session_local" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Folge", "other": "Folgen" },
+                    "en": { "one": "episode", "other": "episodes" },
+                    "es": { "one": "episodio", "many": "episodios", "other": "episodios" },
+                    "fr": { "one": "épisode", "many": "épisodes", "other": "épisodes" },
+                    "ja": { "other": "エピソード" },
+                    "ko": { "other": "에피소드" },
+                    "zh-Hans": { "other": "集" },
+                    "zh-Hant": { "other": "集" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7132,6 +7362,16 @@
                   "minimum": "0",
                   "identity": { "kind": "session_local" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Band", "other": "Bände" },
+                    "en": { "one": "volume", "other": "volumes" },
+                    "es": { "one": "tomo", "many": "tomos", "other": "tomos" },
+                    "fr": { "one": "volume", "many": "volumes", "other": "volumes" },
+                    "ja": { "other": "巻" },
+                    "ko": { "other": "권" },
+                    "zh-Hans": { "other": "卷" },
+                    "zh-Hant": { "other": "卷" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
@@ -7149,6 +7389,16 @@
                   "minimum": "0",
                   "identity": { "kind": "session_local" },
                   "structure": { "kind": "none" },
+                  "countForms": {
+                    "de": { "one": "Minute", "other": "Minuten" },
+                    "en": { "one": "minute", "other": "minutes" },
+                    "es": { "one": "minuto", "many": "minutos", "other": "minutos" },
+                    "fr": { "one": "minute", "many": "minutes", "other": "minutes" },
+                    "ja": { "other": "分" },
+                    "ko": { "other": "분" },
+                    "zh-Hans": { "other": "分钟" },
+                    "zh-Hant": { "other": "分鐘" }
+                  },
                   "totalPolicy": "forbidden"
                 },
                 {
