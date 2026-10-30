@@ -38,14 +38,22 @@ ALTER TABLE auth_consent_erasure ADD COLUMN after_client text NOT NULL DEFAULT '
 -- queries during erasure. Nullable columns preserve unknown historical custody.
 ALTER TABLE "session" ADD COLUMN erasure_human_id text;
 ALTER TABLE "session" ADD COLUMN erasure_operator_id text;
+ALTER TABLE "oauthAccessToken" ADD COLUMN erasure_source_client_id text;
+CREATE INDEX erasure_oauthaccesstoken_source_client ON "oauthAccessToken" (erasure_source_client_id,id);
 ALTER TABLE "oauthAccessToken" ADD COLUMN erasure_human_id text;
 ALTER TABLE "oauthAccessToken" ADD COLUMN erasure_operator_id text;
+ALTER TABLE "oauthRefreshToken" ADD COLUMN erasure_source_client_id text;
+CREATE INDEX erasure_oauthrefreshtoken_source_client ON "oauthRefreshToken" (erasure_source_client_id,id);
 ALTER TABLE "oauthRefreshToken" ADD COLUMN erasure_human_id text;
 ALTER TABLE "oauthRefreshToken" ADD COLUMN erasure_operator_id text;
+ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_source_client_id text;
+CREATE INDEX erasure_oauthrefreshfamily_source_client ON "oauthRefreshFamily" (erasure_source_client_id,id);
 ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_account_id text;
 ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_human_id text;
 ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_operator_id text;
 ALTER TABLE "oauthClientAssertion" ADD COLUMN erasure_client_id text;
+ALTER TABLE "verification" ADD COLUMN erasure_source_client_id text;
+CREATE INDEX erasure_verification_source_client ON "verification" (erasure_source_client_id,id);
 ALTER TABLE "verification" ADD COLUMN erasure_account_id text;
 ALTER TABLE "verification" ADD COLUMN erasure_client_id text;
 ALTER TABLE "verification" ADD COLUMN erasure_session_id text;
@@ -55,10 +63,14 @@ ALTER TABLE "auth_recent_oidc_session" ADD COLUMN erasure_client_id text;
 ALTER TABLE "auth_recent_oidc_session" ADD COLUMN erasure_human_id text;
 ALTER TABLE "auth_recent_oidc_session" ADD COLUMN erasure_operator_id text;
 ALTER TABLE "auth_session_opening" ADD COLUMN erasure_client_id text;
+ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_source_client_id text;
+CREATE INDEX erasure_auth_barrier_proof_source_client ON "auth_barrier_proof" (erasure_source_client_id,reference);
 ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_client_id text;
 ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_session_id text;
 ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_human_id text;
 ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_operator_id text;
+ALTER TABLE "auth_recovery_establishment" ADD COLUMN erasure_source_client_id text;
+CREATE INDEX erasure_auth_recovery_establishment_source_client ON "auth_recovery_establishment" (erasure_source_client_id,reference);
 ALTER TABLE "auth_recovery_establishment" ADD COLUMN erasure_client_id text;
 ALTER TABLE auth_recovery_establishment ADD COLUMN erasure_human_id text;
 ALTER TABLE auth_recovery_establishment ADD COLUMN erasure_operator_id text;
@@ -162,8 +174,12 @@ END $$;
 CREATE TRIGGER erasure_opening_session AFTER INSERT ON auth_session_opening FOR EACH ROW EXECUTE FUNCTION auth_erasure_opening_session();
 CREATE FUNCTION auth_erasure_token_roles() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  SELECT erasure_human_id,erasure_operator_id INTO NEW.erasure_human_id,NEW.erasure_operator_id
-    FROM session WHERE id=NEW."sessionId";
+  SELECT "clientId",erasure_human_id,erasure_operator_id
+    INTO NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
+    FROM session WHERE id=NEW."sessionId" FOR KEY SHARE;
+  IF NEW."sessionId" IS NOT NULL AND NOT FOUND THEN
+    RAISE EXCEPTION 'Auth source session missing' USING ERRCODE='55000';
+  END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_attribution BEFORE INSERT ON "oauthAccessToken" FOR EACH ROW EXECUTE FUNCTION auth_erasure_token_roles();
@@ -171,13 +187,15 @@ CREATE TRIGGER erasure_attribution BEFORE INSERT ON "oauthRefreshToken" FOR EACH
 CREATE FUNCTION auth_erasure_verification_roles() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' AND OLD.erasure_account_id IS NOT NULL AND
-     (NEW.erasure_account_id,NEW.erasure_client_id,NEW.erasure_session_id) IS DISTINCT FROM
-     (OLD.erasure_account_id,OLD.erasure_client_id,OLD.erasure_session_id) THEN
+     (NEW.erasure_account_id,NEW.erasure_client_id,NEW.erasure_session_id,NEW.erasure_source_client_id) IS DISTINCT FROM
+     (OLD.erasure_account_id,OLD.erasure_client_id,OLD.erasure_session_id,OLD.erasure_source_client_id) THEN
     RAISE EXCEPTION 'Auth verification attribution is immutable';
   END IF;
   IF NEW.erasure_session_id IS NOT NULL THEN
-    SELECT erasure_human_id,erasure_operator_id INTO NEW.erasure_human_id,NEW.erasure_operator_id
-      FROM session WHERE id=NEW.erasure_session_id;
+    SELECT "clientId",erasure_human_id,erasure_operator_id
+      INTO NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
+      FROM session WHERE id=NEW.erasure_session_id FOR KEY SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Auth source session missing' USING ERRCODE='55000'; END IF;
   END IF;
   RETURN NEW;
 END $$;
@@ -194,6 +212,7 @@ BEGIN
   IF NEW.purpose='consent-reduction' AND NEW.evidence->>0='consent-v1' THEN
     NEW.erasure_session_id:=NEW.evidence->>3;
     NEW.erasure_client_id:=NEW.evidence->>8;
+    NEW.erasure_source_client_id:=NEW.evidence->>4;
     SELECT erasure_human_id,erasure_operator_id INTO NEW.erasure_human_id,NEW.erasure_operator_id
       FROM session WHERE id=NEW.erasure_session_id;
   END IF;
@@ -202,8 +221,8 @@ END $$;
 CREATE TRIGGER erasure_attribution BEFORE INSERT ON auth_barrier_proof FOR EACH ROW EXECUTE FUNCTION auth_erasure_proof_roles();
 CREATE FUNCTION auth_erasure_establishment_roles() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  SELECT erasure_client_id,erasure_human_id,erasure_operator_id
-    INTO NEW.erasure_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
+  SELECT erasure_client_id,erasure_source_client_id,erasure_human_id,erasure_operator_id
+    INTO NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
     FROM auth_barrier_proof WHERE reference=NEW.reference;
   RETURN NEW;
 END $$;
@@ -282,6 +301,7 @@ CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "session" FOR EACH ROW E
 CREATE FUNCTION auth_erasure_guard_oauthaccesstoken() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
   PERFORM auth_erasure_admit(OLD."userId");
   PERFORM auth_erasure_admit(OLD."erasure_human_id");
   PERFORM auth_erasure_admit(OLD."erasure_operator_id");
@@ -291,12 +311,14 @@ BEGIN
   PERFORM auth_erasure_admit(NEW."erasure_human_id");
   PERFORM auth_erasure_admit(NEW."erasure_operator_id");
   PERFORM auth_erasure_admit_client(NEW."clientId");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "oauthAccessToken" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_oauthaccesstoken();
 CREATE FUNCTION auth_erasure_guard_oauthrefreshtoken() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
   PERFORM auth_erasure_admit(OLD."userId");
   PERFORM auth_erasure_admit(OLD."erasure_human_id");
   PERFORM auth_erasure_admit(OLD."erasure_operator_id");
@@ -306,12 +328,14 @@ BEGIN
   PERFORM auth_erasure_admit(NEW."erasure_human_id");
   PERFORM auth_erasure_admit(NEW."erasure_operator_id");
   PERFORM auth_erasure_admit_client(NEW."clientId");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "oauthRefreshToken" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_oauthrefreshtoken();
 CREATE FUNCTION auth_erasure_guard_oauthrefreshfamily() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
   PERFORM auth_erasure_admit(OLD."erasure_account_id");
   PERFORM auth_erasure_admit(OLD."erasure_human_id");
   PERFORM auth_erasure_admit(OLD."erasure_operator_id");
@@ -321,6 +345,7 @@ BEGIN
   PERFORM auth_erasure_admit(NEW."erasure_human_id");
   PERFORM auth_erasure_admit(NEW."erasure_operator_id");
   PERFORM auth_erasure_admit_client(NEW."clientId");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "oauthRefreshFamily" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_oauthrefreshfamily();
@@ -376,6 +401,7 @@ CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_recovery" FOR EACH
 CREATE FUNCTION auth_erasure_guard_auth_barrier_proof() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
   PERFORM auth_erasure_admit(OLD."account_id");
   PERFORM auth_erasure_admit(OLD."erasure_human_id");
   PERFORM auth_erasure_admit(OLD."erasure_operator_id");
@@ -385,12 +411,14 @@ BEGIN
   PERFORM auth_erasure_admit(NEW."erasure_human_id");
   PERFORM auth_erasure_admit(NEW."erasure_operator_id");
   PERFORM auth_erasure_admit_client(NEW."erasure_client_id");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_barrier_proof" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_auth_barrier_proof();
 CREATE FUNCTION auth_erasure_guard_auth_recovery_establishment() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
   PERFORM auth_erasure_admit(OLD."account_id");
   PERFORM auth_erasure_admit(OLD.erasure_human_id);
   PERFORM auth_erasure_admit(OLD.erasure_operator_id);
@@ -400,6 +428,7 @@ BEGIN
   PERFORM auth_erasure_admit(NEW.erasure_human_id);
   PERFORM auth_erasure_admit(NEW.erasure_operator_id);
   PERFORM auth_erasure_admit_client(NEW.erasure_client_id);
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_recovery_establishment" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_auth_recovery_establishment();
@@ -460,6 +489,7 @@ CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_registration_stage
 CREATE FUNCTION auth_erasure_guard_verification() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
   PERFORM auth_erasure_admit(OLD."erasure_account_id");
   PERFORM auth_erasure_admit(OLD."erasure_human_id");
   PERFORM auth_erasure_admit(OLD."erasure_operator_id");
@@ -469,6 +499,7 @@ BEGIN
   PERFORM auth_erasure_admit(NEW."erasure_human_id");
   PERFORM auth_erasure_admit(NEW."erasure_operator_id");
   PERFORM auth_erasure_admit_client(NEW."erasure_client_id");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "verification" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_verification();

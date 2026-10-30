@@ -73,7 +73,7 @@ function verificationPlugin(alreadyInTransaction = false) {
           } else {
             const verification = await db
               .selectFrom('verification')
-              .select(['erasure_account_id', 'erasure_human_id', 'erasure_operator_id'])
+              .select(['erasure_account_id', 'erasure_human_id', 'erasure_operator_id', 'erasure_source_client_id'])
               .where('identifier', '=', id)
               .orderBy('createdAt', 'desc')
               .orderBy('id', 'desc')

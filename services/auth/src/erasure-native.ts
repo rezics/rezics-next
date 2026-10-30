@@ -114,8 +114,22 @@ export const nativeErasureStores: readonly Store[] = [
   { table: 'oauthClientResource', key: 'id', roles: [], client: 'clientId' },
   { table: 'auth_workflow_request', key: 'workflow_id', roles: [], client: 'erasure_client_id' },
 ];
+const sourceClientStores = new Set([
+  'oauthAccessToken',
+  'verification',
+  'oauthRefreshToken',
+  'oauthRefreshFamily',
+  'auth_recovery_establishment',
+  'auth_barrier_proof',
+]);
 const subjectPhases = nativeErasureStores.flatMap((store) => store.roles.map((role) => ({ store, role })));
-const clientPhases = nativeErasureStores.filter((store) => store.client);
+const clientPhases = nativeErasureStores
+  .filter((store) => store.client)
+  .flatMap((store) =>
+    sourceClientStores.has(store.table)
+      ? [store, { ...store, roles: [], client: 'erasure_source_client_id' }]
+      : [store],
+  );
 const quote = (key: string) => `"${key}"`;
 // A fixed adopted role inventory, not a walk over owners or protocol payloads.
 // Capture positive applicability at acceptance, before any native page or
