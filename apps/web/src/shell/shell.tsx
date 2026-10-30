@@ -26,7 +26,6 @@ import { UnreadBadge } from '../inbox/unread-badge';
 import {
   Folders,
   Globe,
-  House,
   Inbox as InboxIcon,
   Library,
   LogIn,
@@ -34,8 +33,6 @@ import {
   Menu as MenuIcon,
   Monitor,
   Moon,
-  Search,
-  ReceiptText,
   Settings,
   ShieldCheck,
   Sun,
@@ -43,9 +40,12 @@ import {
   Users,
 } from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
-import type { SessionState } from '../session/state.ts';
+import { NavigationEntries, NavigationLinks, NavigationProvider } from './navigation-view';
+import type { NavigationContribution, NavigationSession } from './navigation';
+import { FeatureSlotsProvider } from './feature-slots';
+import type { SubjectPurchaseRegions } from '../features/pages/subject-slots';
 import { useSession } from '../session/query';
-type ShellSession = SessionState | 'unknown';
+type ShellSession = NavigationSession;
 
 const names = {
   en: 'English',
@@ -87,27 +87,6 @@ const messages = {
   error_heading: m.error_heading,
   error_message: m.error_message,
 };
-const destinations = [
-  { to: '/', message: messages.nav_home, icon: House, phone: true },
-  { to: '/search', message: messages.nav_search, icon: Search, phone: true },
-  { to: '/library', message: messages.nav_library, icon: Library, phone: true, signedIn: 'library' },
-  { to: '/orders', message: messages.nav_orders, icon: ReceiptText, phone: true, signedIn: 'orders' },
-] as const;
-
-function destinationCurrent(pathname: string, to: (typeof destinations)[number]['to']): boolean {
-  if (to === '/library') return pathname === '/library' || pathname.startsWith('/library/');
-  if (to === '/orders') return pathname === '/orders' || pathname.startsWith('/orders/');
-  return pathname === to;
-}
-
-function useOfferedDestinations(session: ShellSession) {
-  const libraryAdmitted = useOperation('library_entry.list');
-  const ordersAdmitted = useOperation('order.list');
-  return destinations.filter((item) => {
-    if (!('signedIn' in item)) return true;
-    return session === 'signed-in' && (item.signedIn === 'library' ? libraryAdmitted : ordersAdmitted);
-  });
-}
 const headerControlClass =
   'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 const statusControlClass =
@@ -145,7 +124,6 @@ function Logo() {
   );
 }
 function Navigation({ pathname, session }: { pathname: string; session: ShellSession }) {
-  const offered = useOfferedDestinations(session);
   return (
     <nav
       aria-label={m.shell_navigation()}
@@ -154,22 +132,24 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
       <SidebarContent className="overflow-visible!">
         <SidebarGroup>
           <SidebarMenu>
-            {offered.map((item) => {
-              const Icon = item.icon;
-              return (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton
-                    className="h-10"
-                    isActive={destinationCurrent(pathname, item.to)}
-                    tooltip={item.message()}
-                    render={<Link to={item.to} />}
-                  >
-                    <Icon aria-hidden="true" className="text-sidebar-primary" />
-                    <span>{item.message()}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
+            <NavigationEntries context={{ locale: getLocale(), pathname }} session={session}>
+              {(item) => {
+                const Icon = item.icon;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      className="h-10"
+                      isActive={item.current}
+                      tooltip={item.label}
+                      render={<Link to={item.path} />}
+                    >
+                      {Icon && <Icon aria-hidden="true" className="text-sidebar-primary" />}
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              }}
+            </NavigationEntries>
             {session === 'signed-in' ? (
               <SidebarMenuItem>
                 <SidebarMenuButton
@@ -200,26 +180,27 @@ function NavigationColumn({ pathname, session }: { pathname: string; session: Sh
   );
 }
 function ScriptFreeNavigation({ pathname, session }: { pathname: string; session: ShellSession }) {
-  const offered = useOfferedDestinations(session);
   return (
     <noscript>
       <nav aria-label={m.shell_navigation()} className="border-b border-border/60 px-3 py-2 md:hidden">
         <ul className="flex flex-wrap gap-1">
-          {offered.map((item) => {
-            const Icon = item.icon;
-            return (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  aria-current={destinationCurrent(pathname, item.to) ? 'page' : undefined}
-                  className="flex min-h-9 items-center gap-2 rounded-xl px-3 text-sm aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
-                >
-                  <Icon aria-hidden="true" className="size-4 text-sidebar-primary" />
-                  {item.message()}
-                </Link>
-              </li>
-            );
-          })}
+          <NavigationEntries context={{ locale: getLocale(), pathname }} session={session}>
+            {(item) => {
+              const Icon = item.icon;
+              return (
+                <li key={item.id}>
+                  <Link
+                    to={item.path}
+                    aria-current={item.current ? 'page' : undefined}
+                    className="flex min-h-9 items-center gap-2 rounded-xl px-3 text-sm aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
+                  >
+                    {Icon && <Icon aria-hidden="true" className="size-4 text-sidebar-primary" />}
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            }}
+          </NavigationEntries>
           {session === 'signed-in' ? (
             <li>
               <Link
@@ -250,25 +231,8 @@ export function NavigationToggle({
   session: ShellSession;
 }) {
   const hydrated = useHydrated();
-  const offered = useOfferedDestinations(session);
-  const locale = getLocale();
   const navigation = (
-    <nav aria-label={m.shell_navigation()} className="grid gap-1">
-      {offered.map((item) => {
-        const Icon = item.icon;
-        return (
-          <a
-            key={item.to}
-            href={`/${locale}${item.to === '/' ? '' : item.to}`}
-            aria-current={destinationCurrent(pathname, item.to) ? 'page' : undefined}
-            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-medium"
-          >
-            <Icon aria-hidden="true" className="size-4 text-sidebar-primary" />
-            {item.message()}
-          </a>
-        );
-      })}
-    </nav>
+    <NavigationLinks context={{ locale: getLocale(), pathname }} session={session} label={m.shell_navigation()} />
   );
   return (
     <>
@@ -532,7 +496,21 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
     />
   );
 }
-export function AppShell({ children }: { children: React.ReactNode }) {
+export type AppShellProps = {
+  children: React.ReactNode;
+  navigation?: readonly NavigationContribution[];
+  subjectPurchase?: SubjectPurchaseRegions;
+};
+export function AppShell({ children, navigation, subjectPurchase }: AppShellProps) {
+  return (
+    <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
+      <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
+        <ShellContent>{children}</ShellContent>
+      </FeatureSlotsProvider>
+    </NavigationProvider>
+  );
+}
+function ShellContent({ children }: { children: React.ReactNode }) {
   const { state: session, csrfToken } = useSession();
   const location = useLocation();
   const router = useRouter();

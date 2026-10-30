@@ -26,6 +26,7 @@ import * as accounts from './account';
 import { accountOf } from './account-read';
 import * as overview from './overview';
 import { SubjectPageCover } from './subject-page-cover';
+import { SubjectPurchaseSlot } from './subject-slots';
 import {
   bestRank,
   ExternalValue,
@@ -91,6 +92,7 @@ export { pageText };
 type Frame = { typeLabel?: string; ratio?: CoverRatio };
 type Options = {
   locale: string;
+  subject?: string;
   messages: CoreMessages & SubjectMessages;
   link: PageLink;
   reader: Reader;
@@ -404,6 +406,9 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
           {options.headerActions}
         </div>
       </div>
+      {options.subject === subject.id && (
+        <SubjectPurchaseSlot context={{ subjectId: subject.id, subjectType: subject.type, locale: options.locale }} />
+      )}
     </div>
   );
 }
@@ -689,6 +694,7 @@ export function PageData({
   };
   const options: Options = {
     locale,
+    ...(subject ? { subject } : {}),
     messages: resolved,
     link,
     reader,
