@@ -106,7 +106,9 @@ nativeTest(
     );
     if (!result) {
       await runnerOwner.force();
-      throw new Error(`Native lifecycle injection command exceeded 28000ms: ${errorOutput}`);
+      throw new Error(
+        `Native lifecycle injection command exceeded 28000ms; stdout: ${output.slice(-3_000)}; stderr: ${errorOutput}`,
+      );
     }
     await runnerOwner.close();
     runnerOwner.release();
