@@ -142,8 +142,7 @@ export async function purchaseHistoryFixture() {
   // buyer histories. A nearly empty partition otherwise makes a sequential scan cheaper
   // than any B-tree seek, and cannot exercise the production buyer-leading access path.
   const background = await sameRoutePerson('background');
-  const otherBuyer = await actor(background);
-  for (let i = 0; i < 4096; i++) await commands.createOrder(otherBuyer, offer.id, Bun.randomUUIDv7());
+  for (let i = 0; i < 4096; i++) await commands.createOrder(await actor(background), offer.id, Bun.randomUUIDv7());
   const worker = Bun.spawn([process.execPath, `${import.meta.dir}/purchase-history-runtime.ts`], {
     env: { ...process.env, ...workerTestEnv({ DATABASE_URL: db.url, WORK_STRIPE_PORT: String(fake.port) }) },
     stdout: 'pipe',
