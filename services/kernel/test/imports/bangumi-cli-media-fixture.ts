@@ -301,12 +301,14 @@ export async function runBangumiMediaCliJourney() {
     }
     const summaryCandidate = await current('schema:abstract');
     await select('schema:abstract', summaryCandidate);
-    const reference = summaryCandidate.statement.value.content as { id: string };
-    const summaryResponse = await editor.http(`/v1/documents/${reference.id}`);
+    const reference = summaryCandidate.statement.value.content as { id?: string; document?: string };
+    const documentId = reference.id ?? reference.document;
+    if (!documentId) throw new Error('Missing public candidate document reference');
+    const summaryResponse = await editor.http(`/v1/documents/${documentId}`);
     expect(summaryResponse.status, JSON.stringify(summaryResponse.body)).toBe(200);
     const rights = await runtime.database.admin.query<{ rights: { license: string } }>(
       'SELECT rights FROM content.imported_field WHERE route=$1 AND id=$2',
-      [routeOf(reference.id), reference.id],
+      [routeOf(documentId), documentId],
     );
     expect(rights.rows).toHaveLength(1);
     const initialSummary = { licence: rights.rows[0]!.rights.license, text: JSON.stringify(summaryResponse.body) };
@@ -441,7 +443,7 @@ export async function runBangumiMediaCliJourney() {
       expect(denied.status).toBe(404);
     }
     // A cover complaint does not license or hide the independent summary tuple.
-    expect((await editor.http(`/v1/documents/${reference.id}`)).status).toBe(200);
+    expect((await editor.http(`/v1/documents/${documentId}`)).status).toBe(200);
     const summaryFence = await runtime.importTransport.fence(
       { source: owner.source, externalId: owner.external_id, fieldGroup: 'summary' },
       signal,
@@ -454,7 +456,7 @@ export async function runBangumiMediaCliJourney() {
       reason: 'Independent summary complaint',
     });
     expect(summaryTakedown.status).toBe(200);
-    expect((await editor.http(`/v1/documents/${reference.id}`)).status).toBe(404);
+    expect((await editor.http(`/v1/documents/${documentId}`)).status).toBe(404);
 
     const nativeWriteReceipts = [];
     for (const [key, { command }] of runtime.commands) {
