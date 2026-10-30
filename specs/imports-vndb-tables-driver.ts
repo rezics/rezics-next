@@ -276,7 +276,13 @@ export function sqliteEvidence() {
 
   function prove({ db, sql, parameters }: Call) {
     requireThat(!/\bOFFSET\b|\bCOUNT\s*\(/i.test(sql), 'OFFSET/history COUNT is forbidden');
-    const plan = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(parameters as never[])) as Array<{ detail: string }>;
+    const statement = db.prepare(`EXPLAIN QUERY PLAN ${sql}`);
+    let plan: Array<{ detail: string }>;
+    try {
+      plan = statement.all(...(parameters as never[])) as Array<{ detail: string }>;
+    } finally {
+      statement.finalize();
+    }
     const indexes = new Set(
       (db.query("SELECT name FROM sqlite_schema WHERE type = 'index'").all() as Array<{ name: string }>).map(
         (row) => row.name,
