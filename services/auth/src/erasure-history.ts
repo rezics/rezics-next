@@ -15,6 +15,7 @@ type Progress = {
   copies_completed_at: Date | null;
   copies_published_at: Date | null;
   native_completed_at: Date | null;
+  native_role_version: number;
   consent_completed_at: Date | null;
 };
 const unavailable = () => new Error('Auth erasure proof binding unavailable');
@@ -60,7 +61,6 @@ export async function erasureHistoryPage(database: Pool, id: string): Promise<bo
   const row = (await database.query<Progress>('SELECT * FROM auth_erasure WHERE id=$1', [id])).rows[0];
   if (!row || !barrier(row) || !row.native_completed_at || !row.consent_completed_at || !row.source_discharged_at)
     return false;
-  if (row.copies_completed_at) return true;
   // One account prefix, eight raw exact keys. Multiple roles never duplicate an
   // artifact's cleanup; removed scopes are bounded independently of its history.
   const page = (
@@ -86,7 +86,7 @@ export async function erasureHistoryPage(database: Pool, id: string): Promise<bo
       'SELECT 1 FROM auth_copy_coverage WHERE singleton AND version=1 AND covered AND native_covered',
     )
   ).rowCount;
-  if (!covered) return false;
+  if (!covered || row.native_role_version !== 1) return false;
   await database.query(
     `UPDATE auth_erasure SET copies_completed_at=COALESCE(copies_completed_at,clock_timestamp()),
     inventory_coverage='covered',pending_code='proof-submission' WHERE id=$1`,
@@ -114,7 +114,15 @@ export async function publishErasureProofs(database: Pool, ports: TrustedAccessP
       [id],
     );
   }
-  if (row.copies_completed_at && !row.copies_published_at) {
+  // An older ordinal/copy completion is not evidence of the added native roles.
+  // Recovered obligations revisit the same native engine and any exact local
+  // copy roles before their existing immutable completion can be published.
+  const historyCovered = row.copies_completed_at && !row.copies_published_at &&
+    row.native_role_version === 1 && row.native_completed_at && row.consent_completed_at &&
+    row.source_discharged_at && (await database.query(`SELECT 1 FROM auth_copy_coverage
+      WHERE singleton AND version=1 AND covered AND native_covered
+      AND NOT EXISTS(SELECT 1 FROM auth_copy_role WHERE account_id=$1 LIMIT 1)`, [row.account_id])).rowCount;
+  if (historyCovered) {
     if (!ports.recordAuthHistoryCompletion) throw unavailable();
     await ports.recordAuthHistoryCompletion(root);
     await database.query(

@@ -113,7 +113,10 @@ export function installNativeRoleProducer(pool: Pool): void {
  * never follows from a momentary empty-table probe or an ordinal cutover. */
 export async function installNativeRoleCoverage(pool: Pool): Promise<void> {
   await copyTransaction(pool, async (client) => {
-    // Same fixed lock order as the migration; no row lock held while acquiring it.
+    // Recovery holds this row before touching a native store. Take it first on
+    // restart too, so a concurrent deployment page cannot invert the lock order.
+    const deployment = await client.query('SELECT 1 FROM auth_native_role_deployment WHERE singleton AND version=1 FOR UPDATE');
+    if (!deployment.rowCount) throw new Error('Auth native role deployment unavailable');
     await client.query(`LOCK TABLE ${nativeRoleStores.map(([table]) => quote(table)).sort().join(',')} IN SHARE ROW EXCLUSIVE MODE`);
     const state = await client.query('UPDATE auth_native_role_deployment SET armed=true WHERE singleton AND version=1 RETURNING singleton');
     if (!state.rowCount) throw new Error('Auth native role deployment unavailable');
