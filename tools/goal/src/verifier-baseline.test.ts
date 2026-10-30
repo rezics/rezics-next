@@ -422,7 +422,7 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
   });
   try {
     await verifyDev({ ...infraContext, runGate: infraRunner });
-    expect(transportCalls).toEqual([infraBase, infraBase, infraBase]);
+    expect(transportCalls).toEqual([infraHead, infraBase, infraBase, infraBase]);
     expect(infraContext.store.devVerifierFindings()).toEqual(
       expect.arrayContaining([expect.objectContaining({ status: 'unknown' })]),
     );
