@@ -219,3 +219,22 @@ test('native member inventory prevents forged ready-empty and a missing Core com
     ).rows,
   ).toEqual([]);
 });
+
+test('a build cannot append or complete after its captured native owner binding changes', async () => {
+  const source = await f.collection(),
+    a = { ...source, generation: randomUUID() };
+  const id = await f.createSubject('game');
+  await f.command(source.collectionId, { begin: a }, (tx) => begin(tx, { ...a, expectedMembers: 1 }));
+  await f.pool.query(
+    'UPDATE library.collection_source_output SET account_id=NULL WHERE route=$1 AND collection_id=$2 AND generation=$3',
+    [source.route, source.collectionId, a.generation],
+  );
+  await expect(
+    f.command(source.collectionId, { append: a }, (tx) => append(tx, { ...a, after: null, subjectIds: [id] })),
+  ).rejects.toMatchObject({ code: 'conflict' });
+  await expect(f.command(source.collectionId, { complete: a }, (tx) => complete(tx, a))).rejects.toMatchObject({
+    code: 'conflict',
+  });
+  expect((await f.inspect(source.collectionId)).selected).toBeNull();
+  expect((await f.inspect(source.collectionId)).members).toEqual([]);
+});

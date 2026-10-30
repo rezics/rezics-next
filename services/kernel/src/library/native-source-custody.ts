@@ -402,7 +402,7 @@ async function bindOwner(
   const collectionFence = heads.find((row) => row.kind === 'collection')?.generation;
   const accountFence = heads.find((row) => row.kind === 'account')?.generation;
   if (collectionFence === undefined || accountFence === undefined) throw new Refused('binding');
-  return { collectionFence, accountFence, outputMembers };
+  return { collectionFence, accountFence, ...(outputMembers === undefined ? {} : { outputMembers }) };
 }
 function compareFences(state: State, fences: { collectionFence: string; accountFence: string }): void {
   if (state.collectionFence !== fences.collectionFence || state.accountFence !== fences.accountFence)

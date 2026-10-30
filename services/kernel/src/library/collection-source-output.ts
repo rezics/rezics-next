@@ -19,6 +19,7 @@ export type CollectionOutputPublication = Readonly<{
 export type CollectionOutputRef = Readonly<{ route: number; collectionId: string; generation: string }>;
 type Client = Pick<PoolClient, 'query'>;
 type Build = {
+  account_id: string | null;
   source_generation: string;
   expected_members: string;
   written_members: string;
@@ -68,7 +69,7 @@ async function writer(tx: CommandTransaction, input: CollectionOutputRef) {
 async function build(tx: Client, input: CollectionOutputRef): Promise<Build> {
   const row = (
     await tx.query<Build>(
-      `SELECT source_generation::text,expected_members::text,written_members::text,member_count::text,after_subject_id::text,state
+      `SELECT account_id::text,source_generation::text,expected_members::text,written_members::text,member_count::text,after_subject_id::text,state
      FROM library.collection_source_output
      WHERE route=$1 AND collection_id=$2 AND generation=$3 FOR UPDATE`,
       [input.route, input.collectionId, input.generation],
@@ -110,6 +111,7 @@ export async function beginCollectionSourceOutput(
   const current = await build(tx, input);
   if (
     current.state !== 'building' ||
+    current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
     BigInt(current.expected_members) !== BigInt(input.expectedMembers)
   )
@@ -140,6 +142,7 @@ export async function appendCollectionSourceOutput(
     current = await build(tx, input);
   if (
     current.state !== 'building' ||
+    current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
     current.after_subject_id !== input.after ||
     BigInt(current.written_members) + BigInt(input.subjectIds.length) > BigInt(current.expected_members)
@@ -166,6 +169,7 @@ export async function completeCollectionSourceOutput(
     current = await build(tx, input);
   if (
     current.state !== 'building' ||
+    current.account_id !== source.accountId ||
     current.source_generation !== source.sourceGeneration ||
     current.written_members !== current.expected_members ||
     current.member_count !== current.expected_members
@@ -201,7 +205,7 @@ export async function completeCollectionSourceOutput(
        JOIN library.native_source_fence f ON f.route=g.route AND f.kind='collection' AND f.owner_id=g.collection_id
        WHERE g.route=$1 AND g.collection_id=$2 AND g.generation=$3 AND h.source_generation=$4
          AND s.source_generation=$4 AND s.curator_account_id=$6 AND s.state='active' AND s.visibility<>'private'
-         AND g.source_generation+1=$4 AND g.state='complete'
+         AND g.source_generation+1=$4 AND g.state='complete' AND g.account_id=s.curator_account_id
          AND g.expected_members=g.written_members AND g.member_count=g.expected_members
        RETURNING transaction_id`,
       [input.route, input.collectionId, input.generation, sourceGeneration, transactionId, source.accountId],

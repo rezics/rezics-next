@@ -10,7 +10,7 @@ JOIN editorial.write_basis b ON b.partition_no=r.partition_no AND b.transaction_
 JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.epoch AND p.position>=b.position
 WHERE h.route=$1 AND h.collection_id=$2 AND h.source_generation=$3 AND r.source_generation=h.source_generation
   AND g.source_generation+1=h.source_generation AND g.state='complete'
-  AND s.curator_account_id=r.account_id AND s.state='active' AND s.visibility<>'private'
+  AND s.curator_account_id=r.account_id AND g.account_id=r.account_id AND s.state='active' AND s.visibility<>'private'
   AND s.source_generation=r.source_generation
   AND r.incarnation=s.collection_id::text || ':' || extract(epoch FROM s.created_at)::text
   AND g.expected_members=r.expected_members AND g.written_members=r.expected_members

@@ -3226,7 +3226,7 @@ BEGIN
     WHERE r.route=NEW.route AND r.collection_id=NEW.collection_id AND r.generation=NEW.generation
       AND r.native_xid=pg_current_xact_id() AND r.xmin=b.xmin AND r.xmin=g.xmin AND r.xmin=h.xmin
       AND b.principal_kind='account' AND b.position>0 AND p.write_state='active' AND p.moved_to IS NULL
-      AND s.curator_account_id=r.account_id AND s.state='active' AND s.visibility<>'private'
+      AND s.curator_account_id=r.account_id AND g.account_id=r.account_id AND s.state='active' AND s.visibility<>'private'
       AND r.incarnation=s.collection_id::text || ':' || extract(epoch FROM s.created_at)::text
       AND s.source_generation=r.source_generation AND h.source_generation=r.source_generation
       AND g.source_generation+1=r.source_generation AND g.state='complete'
