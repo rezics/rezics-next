@@ -13,7 +13,7 @@ export type IdentityReceivingSelection = Readonly<{
     sourceId: string;
     scope: string;
     disposition: IdentityReceivingDisposition;
-    /** Native capture hint from captureIdentityReceivingSource; revalidated by Source in the receiving command. */
+    /** Native capture locator; preparation and selection reads resolve actual retained Source records. */
     capture?: Readonly<{
         identity: NativeSourceIdentity;
         frontier: NativeSourceFrontier;

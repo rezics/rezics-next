@@ -1,4 +1,4 @@
-import type { IdentityExpiry } from './identity-expiry.ts';
+import { type IdentityExpiry } from './identity-expiry.ts';
 import { type KernelClock } from '../clock.ts';
 import { type FetchImplementation } from 'jose';
 import { type AccessClient, type AccessContext, type AccountActor } from '../request/access.ts';
@@ -31,6 +31,9 @@ export declare function createAuthenticator(configuration?: AuthenticationConfig
         pool: import("pg").Pool;
         deadline: number;
     }) => Promise<AccountActor>;
+    /** Refresh only an identity already verified by THIS authenticator/pool.
+     * No cryptography or key-fetch callback is treated as zero work. */
+    refresh(actor: AccountActor, context: AccessContext): Promise<boolean>;
     approvalScope: Readonly<{}>;
     durableScope: Readonly<{}>;
     /** Private operation proof, not a row/Actor registration API. */
@@ -40,4 +43,6 @@ export declare function createAuthenticator(configuration?: AuthenticationConfig
     restoreApproval(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
     identity(actor: AccountActor): Identity | undefined;
 };
+/** Native read time minted from this exact admitted SQL observation. Caller releases it. */
+export declare function readNativeAccessTime(context: AccessContext, clock?: KernelClock, instant?: string): Promise<AuthoritativeTime>;
 export {};

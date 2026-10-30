@@ -1009,7 +1009,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

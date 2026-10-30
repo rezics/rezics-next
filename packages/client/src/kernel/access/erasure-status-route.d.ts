@@ -945,7 +945,7 @@ export declare function erasureStatusRoutes(app: ReturnType<typeof definitionRou
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

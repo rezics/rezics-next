@@ -938,7 +938,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

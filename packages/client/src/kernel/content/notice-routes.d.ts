@@ -938,7 +938,7 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

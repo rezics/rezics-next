@@ -1067,7 +1067,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

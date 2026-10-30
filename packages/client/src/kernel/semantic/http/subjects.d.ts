@@ -1071,7 +1071,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

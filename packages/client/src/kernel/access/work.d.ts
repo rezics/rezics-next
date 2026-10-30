@@ -65,7 +65,7 @@ export declare function accessOwnerWork<C, R>(work: AccessWorkAccounting | undef
  * Byte reservations cover parameters and the closed projection. Only bytes and
  * the outer empty seek can settle below their bound on a completed statement.
  */
-export declare function accessNativeWork<T>(work: AccessWorkAccounting | undefined, operation: 'time' | 'assignment' | 'inverse' | 'membership' | 'candidates' | 'formula', input: unknown, shape: Readonly<{
+export declare function accessNativeDeclaration(operation: 'time' | 'assignment' | 'inverse' | 'membership' | 'candidates' | 'formula' | 'account-state' | 'opening' | 'opening-partition' | 'opening-moved-target' | 'transaction', input: unknown, shape: Readonly<{
     members?: number;
     groups?: number;
     targets?: number;
@@ -75,6 +75,20 @@ export declare function accessNativeWork<T>(work: AccessWorkAccounting | undefin
     public?: boolean;
     global?: boolean;
     assignment?: boolean;
-}>, dispatch: () => Promise<T>): Promise<T>;
+    movedToBytes?: number;
+}>): {
+    bound: Readonly<{
+        keys: number;
+        points: number;
+        witnesses: number;
+        rows: number;
+        bytes: number;
+        emptySeeks: number;
+    }>;
+    actual: (result: unknown) => AccessWork;
+};
+export declare function accessNativeWork<T>(work: AccessWorkAccounting | undefined, operation: Parameters<typeof accessNativeDeclaration>[0], input: unknown, shape: Parameters<typeof accessNativeDeclaration>[2], dispatch: () => Promise<T>): Promise<T>;
 /** Reserve before an explicit pool checkout, including its wait and failure. */
 export declare function accessCheckout<T>(work: AccessWorkAccounting | undefined, dispatch: () => Promise<T>): Promise<T>;
+/** Explicit transaction control; no SQL inspection or hidden queries. */
+export declare function accessTransaction(work: AccessWorkAccounting | undefined, client: import('../request/access.ts').AccessClient, statement: 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' | 'BEGIN READ ONLY' | 'COMMIT' | 'ROLLBACK'): Promise<void>;

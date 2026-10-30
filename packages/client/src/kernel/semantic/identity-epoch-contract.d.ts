@@ -172,6 +172,8 @@ export type IdentityEpochStore = Readonly<{
     readMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]>;
     /** Released-home admission producer. Returns durable preparation, never public completion.
      * Double-collects source/current generation bases before any effect, then reserves the FIRST ordered home.
+     * prearm-open and prearm-sealed are claim-free internal phases; all native Source scope custody precedes
+     * the first actual pending claim. A preparing ref is never a successful public mutation.
      * Bounded stepIdentityEpochAdmission takes actual receiving receipts into native job custody.
      */
     prepareAdmission(pool: Pool, authority: IdentityAdmissionAuthority, input: IdentityAdmissionInput): Promise<IdentityJobRef>;
@@ -179,6 +181,8 @@ export type IdentityEpochStore = Readonly<{
      * Exact maintained group cardinality (including the terminal), cap 4096 BEFORE any effect.
      * Busy conflicts without a second pending epoch. Repeated identical receipt returns the same job.
      * Emits native durable wakeup in the same command as pending + immutable intent.
+     * Consumes sealed native preparation, or a locked bounded colocated empty-directory proof.
+     * A nonempty unprepared inverse prefix returns retryable unavailability; use prepareAdmission after release.
      */
     admit(tx: CommandTransaction, input: Readonly<{
         intent: IdentityIntent;

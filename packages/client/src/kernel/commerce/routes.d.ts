@@ -952,7 +952,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;
@@ -3815,26 +3815,136 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
 } & {
     v1: {
         subjects: {
-            ':id': {
+            ":id": {
                 offers: {
                     get: {
                         body: unknown;
-                        params: { id: string };
-                        query: { cursor?: string; limit?: number };
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: number;
+                        };
                         headers: unknown;
                         response: {
-                            200: import('./model.ts').SubjectOffersPage;
-                            400: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
-                            401: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
-                            404: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
-                            409: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
-                            503: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
+                            200: {
+                                offers: {
+                                    moneyUnit: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    } | null;
+                                    taxBehavior: "exclusive" | null;
+                                    id: string;
+                                    targetSubjectId: string;
+                                    title: string;
+                                    currency: string;
+                                    unitAmountMinor: number;
+                                    revision: number;
+                                    contentEdition: {
+                                        benefit: {
+                                            kind: "content-edition";
+                                            resourceType: "content.edition";
+                                            resource: {
+                                                route: number;
+                                                id: string;
+                                            };
+                                            version: {
+                                                revisionId: string;
+                                                sha256: string;
+                                            };
+                                            action: "edition:read";
+                                        };
+                                        creatorAccountId: string;
+                                        targetSubjectId: string;
+                                        source: {
+                                            licence: string;
+                                        };
+                                        saleTermsReference: string;
+                                        delivery: "fixed-content-edition";
+                                        acquisition: "one-time-account-bound";
+                                        quantity: 1;
+                                    } | null;
+                                }[];
+                                next: string | null;
+                                projectionState: "preparing" | "ready";
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
                         };
                         error: never;
                     };
                 };
             };
         };
+    };
+} & {
+    v1: {
         commerceMoney: {
             get: {
                 body: unknown;
@@ -4202,6 +4312,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             }> | null;
                             taxBehavior: "exclusive" | null;
                             contentEdition: {
+                                source: {
+                                    licence: string;
+                                };
                                 benefit: import("./model.ts").ContentEditionBenefit;
                                 creatorAccountId: string;
                                 targetSubjectId: string;
@@ -4209,9 +4322,6 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 delivery: 'fixed-content-edition';
                                 acquisition: 'one-time-account-bound';
                                 quantity: 1;
-                                source: {
-                                    licence: string;
-                                };
                             } | null;
                         };
                     };
@@ -4708,6 +4818,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             }> | null;
                             taxBehavior: "exclusive" | null;
                             contentEdition: {
+                                source: {
+                                    licence: string;
+                                };
                                 benefit: import("./model.ts").ContentEditionBenefit;
                                 creatorAccountId: string;
                                 targetSubjectId: string;
@@ -4715,9 +4828,6 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 delivery: 'fixed-content-edition';
                                 acquisition: 'one-time-account-bound';
                                 quantity: 1;
-                                source: {
-                                    licence: string;
-                                };
                             } | null;
                             createdAt: string;
                         };
@@ -5946,6 +6056,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         revokeReason: import("./model.ts").RevokeReason | null;
         active: boolean;
         contentEdition: {
+            source: {
+                licence: string;
+            };
             benefit: import("./model.ts").ContentEditionBenefit;
             creatorAccountId: string;
             targetSubjectId: string;
@@ -5953,9 +6066,6 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             delivery: 'fixed-content-edition';
             acquisition: 'one-time-account-bound';
             quantity: 1;
-            source: {
-                licence: string;
-            };
         } | null;
         summary: SubjectSummary | null;
     };

@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
 /** Lookup hints only. Native records, not possession of this value, establish custody. */
 export type NativeSourceIdentity = Readonly<{
     route: number;
@@ -140,4 +141,3 @@ export declare function retireNativeCollectionCapturePage(client: CommandTransac
     captureId?: string;
     episode: NativeSourceRetirement['episode'];
 }): Promise<NativeSourceRetirementResult>;
-export {};

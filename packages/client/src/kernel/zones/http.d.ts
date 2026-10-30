@@ -939,7 +939,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

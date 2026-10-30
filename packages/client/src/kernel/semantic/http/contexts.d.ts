@@ -936,7 +936,7 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

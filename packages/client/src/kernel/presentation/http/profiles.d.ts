@@ -1552,7 +1552,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

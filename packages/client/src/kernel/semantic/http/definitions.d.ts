@@ -936,7 +936,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

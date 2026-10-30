@@ -939,7 +939,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

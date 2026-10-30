@@ -933,7 +933,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

@@ -20673,7 +20673,7 @@
     },
     "/v1/boards": {
       "get": {
-        "description": "Currently public Global boards, independently checked as anonymous for every caller. Examines at most 4 \u00d7 limit native candidates in (route, board id) order; default limit 20, maximum 100. Sparse or empty pages can have next; follow it until null. Realm boards use the Realm collection.",
+        "description": "Currently public Global boards, independently checked as anonymous for every caller. Examines at most 4 × limit native candidates in (route, board id) order; default limit 20, maximum 100. Sparse or empty pages can have next; follow it until null. Realm boards use the Realm collection.",
         "operationId": "board.list_global",
         "parameters": [
           {
@@ -182609,7 +182609,7 @@
     },
     "/v1/sitemap/boards": {
       "get": {
-        "description": "Keyset feed of the public boards for sitemaps, the same for every caller: it lists exactly what an anonymous reader can open, whatever bearer the request carries. Each page examines at most 4 \u00d7 `limit` candidate rows, so it may return fewer than `limit` items, even none, with a non-null `next`. Follow `next` until it is `null`. `lastModified` is the last significant change of what the page shows; a post edit or removal does not advance it.",
+        "description": "Keyset feed of the public boards for sitemaps, the same for every caller: it lists exactly what an anonymous reader can open, whatever bearer the request carries. Each page examines at most 4 × `limit` candidate rows, so it may return fewer than `limit` items, even none, with a non-null `next`. Follow `next` until it is `null`. `lastModified` is the last significant change of what the page shows; a post edit or removal does not advance it.",
         "operationId": "sitemap_boards.list",
         "parameters": [
           {
@@ -183174,7 +183174,7 @@
     },
     "/v1/sitemap/collections": {
       "get": {
-        "description": "Anonymous Collection sitemap feed in immutable route/id order. Each page visits at most four partitions and fetches at most 4 \u00d7 limit candidates. Follow next through short or empty pages until null. lastModified is the stored Collection updated_at; external subject rendering changes do not advance it.",
+        "description": "Anonymous Collection sitemap feed in immutable route/id order. Each page visits at most four partitions and fetches at most 4 × limit candidates. Follow next through short or empty pages until null. lastModified is the stored Collection updated_at; external subject rendering changes do not advance it.",
         "operationId": "sitemap_collections.list",
         "parameters": [
           {
@@ -183948,7 +183948,7 @@
     },
     "/v1/sitemap/realms": {
       "get": {
-        "description": "Keyset feed of the public Realms for server-to-server sitemaps, evaluated as an anonymous reader. Each page examines at most 4 \u00d7 limit candidates and may return fewer than limit items. Follow next until it is null.",
+        "description": "Keyset feed of the public Realms for server-to-server sitemaps, evaluated as an anonymous reader. Each page examines at most 4 × limit candidates and may return fewer than limit items. Follow next until it is null.",
         "operationId": "sitemap_realms.list",
         "parameters": [
           {
@@ -184561,7 +184561,7 @@
     },
     "/v1/sitemap/spaces": {
       "get": {
-        "description": "Keyset feed of the public Spaces for server-to-server sitemaps, evaluated as an anonymous reader. Each page examines at most 4 \u00d7 limit candidates and may return fewer than limit items. Follow next until it is null.",
+        "description": "Keyset feed of the public Spaces for server-to-server sitemaps, evaluated as an anonymous reader. Each page examines at most 4 × limit candidates and may return fewer than limit items. Follow next until it is null.",
         "operationId": "sitemap_spaces.list",
         "parameters": [
           {
@@ -185133,7 +185133,7 @@
     },
     "/v1/sitemap/threads": {
       "get": {
-        "description": "Keyset feed of the public threads for sitemaps, the same for every caller: it lists exactly what an anonymous reader can open, whatever bearer the request carries. Each page examines at most 4 \u00d7 `limit` candidate rows, so it may return fewer than `limit` items, even none, with a non-null `next`. Follow `next` until it is `null`. `lastModified` is the last significant change of what the page shows; a post edit or removal does not advance it.",
+        "description": "Keyset feed of the public threads for sitemaps, the same for every caller: it lists exactly what an anonymous reader can open, whatever bearer the request carries. Each page examines at most 4 × `limit` candidate rows, so it may return fewer than `limit` items, even none, with a non-null `next`. Follow `next` until it is `null`. `lastModified` is the last significant change of what the page shows; a post edit or removal does not advance it.",
         "operationId": "sitemap_threads.list",
         "parameters": [
           {

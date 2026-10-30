@@ -1,3 +1,4 @@
+export { createAccountPublicEligibility } from './account-authority.ts';
 export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult, } from './work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
 export { ERASURE_PARTICIPANTS, ERASURE_PARTICIPANT_VERSION, acknowledgeErasure, readErasureStatus, resolveRetention, recordLateErasureItem, resolveLateErasureItem, ERASURE_LOCATOR_EFFECTS, type RetentionException, type ErasureOutcome, type ErasureStatus, } from './erasure.ts';

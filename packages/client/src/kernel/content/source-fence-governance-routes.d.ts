@@ -930,7 +930,7 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

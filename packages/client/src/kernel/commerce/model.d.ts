@@ -266,10 +266,14 @@ export type StripeEventRef = {
     /** Set for charge, refund and dispute events. */
     paymentIntentId: string | null;
 };
-
+/** Public discovery terms only; no source body, native receipt or private ownership state. */
 export type PublicOfferCard = Pick<Offer, 'id' | 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'revision'> & {
     moneyUnit: StripeMoneyUnit | null;
     taxBehavior: 'exclusive' | null;
-    contentEdition: (Omit<CapturedContentEdition, 'source'> & { source: { licence: string } }) | null;
+    contentEdition: ReturnType<typeof import('./benefit.ts').contentEditionTermsView>;
 };
-export type SubjectOffersPage = { offers: PublicOfferCard[]; next: string | null; projectionState: 'ready' | 'preparing' };
+export type SubjectOffersPage = {
+    offers: PublicOfferCard[];
+    next: string | null;
+    projectionState: 'ready' | 'preparing';
+};

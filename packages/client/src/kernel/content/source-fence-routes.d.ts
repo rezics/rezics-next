@@ -936,7 +936,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;

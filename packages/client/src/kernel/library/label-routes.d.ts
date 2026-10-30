@@ -940,7 +940,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 candidates: {
                     ":candidate": {
                         delete: {
-                            body: object;
+                            body: object | null | undefined;
                             params: {
                                 id: string;
                                 candidate: string;
