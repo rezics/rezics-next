@@ -23,7 +23,7 @@ prearm-open -> prearm-sealed -> claiming -> pending -> existing apply/publicatio
 ```
 
 `prearm-open` reserves existing P capacity and excludes overlapping writers through PREPARE gates, but creates
-no pending claim, mapping change, reader publication or successful structural mutation. Its durable work and
+no pending claim, mapping change, canonical publication or successful structural mutation. Its durable work and
 receipt/history/outbox effects are real and recoverable. It cannot return public merge 202, successful verify/
 reversal, effect-free overflow or `not_applied`. The existing original receipt locates this same preparation.
 `claiming` starts with the first genuine pending claim; even partial claims have their existing pending meaning.
@@ -41,6 +41,16 @@ generation, counts, native owner epochs and immutable transform; distinguish gat
 basis versions. Later drift cancels/reconciles this attempt; it cannot become an effect-free overflow response.
 Use the original receipt binding and intent across recovery; a new attempt requires closed old delivery custody.
 
+The falsifiable invariants are:
+
+- Any committed pending claim implies a committed pre-arm seal for its exact attempt and unchanged inputs.
+- That seal implies a closed, exhausted enrollment prefix and exact native unsafe/retirement custody for EVERY
+  issued relevant inverse ticket. No missing page, unresolved item or newly granted ticket can coexist with it.
+- A ready Source has complete current registration and zero exact active obligations. Its ready CAS cannot
+  overwrite pre-arm, repair, retirement or a newer incarnation. No pre-arm obligation clears without terminal custody.
+- Any accepted arm/finish/cancellation state change advances the local committed revision; an old observation
+  cannot compare equal after a clean-to-clean transition, regardless of allocated job epoch order.
+
 ## Native keys and serialization surface
 
 These are required indexed records, not claims that these tables already exist. All keys lead with their actual
@@ -57,8 +67,8 @@ and complete normalized read definition. Do not derive scopes from positive retu
 - Structural inverse: `(h, groupGeneration, original, sourceRoute, sourceId, incarnation, scopeId, registration)`.
   Its B-tree prefix supports one generation and original range; the full suffix is the unique continuation tie.
   `registration` is a non-ABA source registration generation. Retain one structural dependency per original/
-  scope, not one row per session, fact or result. The source-local forward index leads with `(sourceRoute,
-  sourceId, incarnation, scopeId, registration, original)` and names its exact inverse ticket/custody.
+  scope, not one row per session, fact or result. The source-local forward index leads with
+  `(sourceRoute, sourceId, incarnation, scopeId, registration, original)` and names its exact inverse ticket/custody.
 - Input enumeration uses existing flat `(controlPartition, generation, original)` membership, including self,
   or the generation-prefixed inverse range directly. It never joins remote member/source tables. Empty proof
   is a bounded prefix seek, not a count/aggregate over all members or inverse rows.
