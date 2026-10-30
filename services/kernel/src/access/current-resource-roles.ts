@@ -49,8 +49,14 @@ function validateResource(resource: Resource) {
     throw new TypeError('Invalid current resource role resource');
 }
 function sameFrontier(a: CurrentResourceRoleFrontier, b: CurrentResourceRoleFrontier): boolean {
-  return a.resource.route === b.resource.route && a.resource.id === b.resource.id && a.version === b.version &&
-    a.validFrom === b.validFrom && a.validUntil === b.validUntil && JSON.stringify(a.roles) === JSON.stringify(b.roles);
+  return (
+    a.resource.route === b.resource.route &&
+    a.resource.id === b.resource.id &&
+    a.version === b.version &&
+    a.validFrom === b.validFrom &&
+    a.validUntil === b.validUntil &&
+    JSON.stringify(a.roles) === JSON.stringify(b.roles)
+  );
 }
 
 const frontierSql = `SELECT f.version::text, f.processed_at::text AS "validFrom",
@@ -72,9 +78,17 @@ export async function readCurrentResourceRolePage(
 ): Promise<CurrentResourceRolePage> {
   const { resource, at, after, limit } = input;
   validateResource(resource);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Array.isArray(input.roles) ||
-    input.roles.length < 1 || input.roles.length > 1000 ||
-    input.roles.some(role => typeof role !== 'string' || role.length > 128 || /^[a-z][a-z0-9_.-]*$/.exec(role)?.[0] !== role))
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 100 ||
+    !Array.isArray(input.roles) ||
+    input.roles.length < 1 ||
+    input.roles.length > 1000 ||
+    input.roles.some(
+      (role) => typeof role !== 'string' || role.length > 128 || /^[a-z][a-z0-9_.-]*$/.exec(role)?.[0] !== role,
+    )
+  )
     throw new TypeError('Invalid current resource role page');
   const roles = [...new Set(input.roles)].sort();
   const time = authoritativeTimeValue(at);
@@ -100,23 +114,50 @@ export async function readCurrentResourceRolePage(
       ) g ON g.route=p.route AND g.resource_id=p.resource_id AND g.grant_role=p.grant_role
         AND g.subject_kind=p.subject_kind AND g.subject_id=p.subject_id AND g.subject_role=p.subject_role
         AND g.valid @> $3::timestamptz), '[]'::jsonb) AS rows FROM frontier f`,
-    [resource.route, resource.id, time, roles, after?.key.grantRole ?? null, after?.key.subjectKind ?? null,
-      after?.key.subjectId ?? null, after?.key.subjectRole ?? null, after?.key.intervalKey ?? null, limit + 1],
+    [
+      resource.route,
+      resource.id,
+      time,
+      roles,
+      after?.key.grantRole ?? null,
+      after?.key.subjectKind ?? null,
+      after?.key.subjectId ?? null,
+      after?.key.subjectRole ?? null,
+      after?.key.intervalKey ?? null,
+      limit + 1,
+    ],
   );
   const row = result.rows[0];
-  if (!row?.ready || row.rows.some(key => key.valid === null)) return unavailable;
+  if (!row?.ready || row.rows.some((key) => key.valid === null)) return unavailable;
   const frontier: CurrentResourceRoleFrontier = {
-    resource: { route: resource.route, id: resource.id }, version: row.version,
-    validFrom: row.validFrom, validUntil: row.validUntil, roles,
+    resource: { route: resource.route, id: resource.id },
+    version: row.version,
+    validFrom: row.validFrom,
+    validUntil: row.validUntil,
+    roles,
   };
   if (after && !sameFrontier(after.frontier, frontier)) return unavailable;
   const more = row.rows.length > limit;
   const rows = row.rows.slice(0, limit) as (CurrentResourceRoleKey & { valid: string })[];
   const last = rows.at(-1);
-  return { status: 'ready', rows, frontier, after: more && last ? { frontier, key: {
-    grantRole: last.grantRole, subjectKind: last.subjectKind, subjectId: last.subjectId,
-    subjectRole: last.subjectRole, intervalKey: last.intervalKey,
-  } } : null };
+  return {
+    status: 'ready',
+    rows,
+    frontier,
+    after:
+      more && last
+        ? {
+            frontier,
+            key: {
+              grantRole: last.grantRole,
+              subjectKind: last.subjectKind,
+              subjectId: last.subjectId,
+              subjectRole: last.subjectRole,
+              intervalKey: last.intervalKey,
+            },
+          }
+        : null,
+  };
 }
 
 /** Call on the SAME real Realm writer transaction before concluding a traversal or applying selection.
@@ -128,12 +169,22 @@ export async function verifyCurrentResourceRoleFrontier(
   input: CurrentResourceRoleVerificationInput,
 ): Promise<CurrentResourceRoleVerification> {
   validateResource(input.resource);
-  const result = await client.query<FrontierRow>(`${frontierSql} FOR SHARE OF f`,
-    [input.resource.route, input.resource.id, authoritativeTimeValue(input.at)]);
+  const result = await client.query<FrontierRow>(`${frontierSql} FOR SHARE OF f`, [
+    input.resource.route,
+    input.resource.id,
+    authoritativeTimeValue(input.at),
+  ]);
   const row = result.rows[0];
-  if (!row?.ready || !sameFrontier(input.frontier, {
-    resource: input.resource, version: row.version, validFrom: row.validFrom,
-    validUntil: row.validUntil, roles: input.frontier.roles,
-  })) return unavailable;
+  if (
+    !row?.ready ||
+    !sameFrontier(input.frontier, {
+      resource: input.resource,
+      version: row.version,
+      validFrom: row.validFrom,
+      validUntil: row.validUntil,
+      roles: input.frontier.roles,
+    })
+  )
+    return unavailable;
   return { status: 'ready' };
 }
