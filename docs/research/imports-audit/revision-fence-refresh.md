@@ -96,3 +96,7 @@ execute in-process with the ordinary production driver. Result: 40 passed, zero 
 28 unchanged ledger cases, six focused regressions and six existing source-statistic cases. All three originally
 failing ledger cases passed, including rollback through the exact field fence. No native stack or effect
 counter was substituted for these local outcomes.
+
+The independent review continued on the final production revision and found no blocking issue in the
+acknowledged-revision/current-run signature rule. It specifically checked that rollback cannot retain a
+matching older candidate while acknowledged current-run work remains eligible for retention.
