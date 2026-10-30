@@ -45,7 +45,11 @@ import { routeOf } from '../route/route.ts';
 import type { SearchHit } from './query.ts';
 import { readSearchScopeRelease } from './scope-release.ts';
 import { subjectPartition, type RelationFacetMatch, type SubjectSource } from './source.ts';
-import { readMembersPreparationWorkDefinition, readCollectionKindPreparationWorkDefinition, readScopeWorkDefinition } from './scope-work-context.ts';
+import {
+  readMembersPreparationWorkDefinition,
+  readCollectionKindPreparationWorkDefinition,
+  readScopeWorkDefinition,
+} from './scope-work-context.ts';
 import type { ScopeLeafResume } from './scope-execution.ts';
 import type { CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
 
@@ -355,15 +359,17 @@ export function createSearchScopeSource({
         if (!isDeepStrictEqual(final, native)) unavailable();
         throw new ProblemError('dependency_unavailable');
       }
-      const workDefinition = evidence?.work?.kind === 'collection-kind-preparation'
-        ? await readCollectionKindPreparationWorkDefinition(evidence.work, { ...evidence, pool })
-        : undefined;
+      const workDefinition =
+        evidence?.work?.kind === 'collection-kind-preparation'
+          ? await readCollectionKindPreparationWorkDefinition(evidence.work, { ...evidence, pool })
+          : undefined;
       if (workDefinition) {
         const nativeOrder: SearchScopeOrder = { kind: 'id', source: workDefinition.sourceIdentity };
         if (
           (options?.releaseDigest !== undefined && options.releaseDigest !== workDefinition.releaseDigest) ||
           (options?.order !== undefined && !isDeepStrictEqual(options.order, nativeOrder))
-        ) unavailable();
+        )
+          unavailable();
         // Kind's default predicate remains Library-owned. Search admits the supplied query
         // against the native pinned release and exact source, using the ordinary interpreter.
         options = { ...options, releaseDigest: workDefinition.releaseDigest, order: nativeOrder };
@@ -603,13 +609,15 @@ export function createSearchScopeSource({
           clock,
         }).prepare(identity, reader.deadline, work);
       }
-      if (!workDefinition) work.consume({
-        ...zeroScopeWork(),
-        statements: 1,
-        nativeRows: 1,
-        bytes: 262144,
-      });
-      const observation = workDefinition?.identityObservation ?? await readPreparedScopeObservation(pool, prefix, identity);
+      if (!workDefinition)
+        work.consume({
+          ...zeroScopeWork(),
+          statements: 1,
+          nativeRows: 1,
+          bytes: 262144,
+        });
+      const observation =
+        workDefinition?.identityObservation ?? (await readPreparedScopeObservation(pool, prefix, identity));
       if (
         !observation ||
         (!workDefinition && observation.key.scopeId !== identity) ||
@@ -796,7 +804,11 @@ export function createSearchScopeSource({
           nativeRows: 1,
           bytes: 4096,
         });
-      const resume = value.readOnly ? null : value.workDefinition ? value.workResume ?? null : await store.readLeafProgress(value.basis.query);
+      const resume = value.readOnly
+        ? null
+        : value.workDefinition
+          ? (value.workResume ?? null)
+          : await store.readLeafProgress(value.basis.query);
       const { resume: nextResume, ...checked } = await evaluateScopeSubjects({
         pool,
         options: context(),

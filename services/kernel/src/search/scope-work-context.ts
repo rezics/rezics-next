@@ -68,8 +68,7 @@ export async function readCollectionKindPreparationWorkDefinition(
   authoritativeTimeValue(time);
   // Library verifies the COMMITTED prepare/repair intent, current audience and exact custody.
   // Neither the Core fence nor the returned definition is a substitute for this admission.
-  if ((await admitCollectionKindPreparationStep(tx, locator)) !== true)
-    throw new ProblemError('semantic_not_ready');
+  if ((await admitCollectionKindPreparationStep(tx, locator)) !== true) throw new ProblemError('semantic_not_ready');
   const native = await readCollectionKindWorkDefinition(tx, locator);
   if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline))
     throw new ProblemError('semantic_not_ready');

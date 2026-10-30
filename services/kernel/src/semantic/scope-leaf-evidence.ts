@@ -61,10 +61,7 @@ export type LeafOptions = Readonly<{
   routeKey: Uint8Array;
   deadline: number;
 }> &
-  (
-    | Readonly<{ actor: Actor; nativeT?: AuthoritativeTime; work?: never }>
-    | LeafWorkContext
-  );
+  (Readonly<{ actor: Actor; nativeT?: AuthoritativeTime; work?: never }> | LeafWorkContext);
 
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
 
