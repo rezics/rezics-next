@@ -25,7 +25,8 @@ const command = (
 test('Share or retract consent for an own unsourced catalogue assertion through the declared native contract with truthful authority and failure states', async () => {
   const fixture = consentFixture();
   const privateRead = await fixture.transport.read();
-  if (!privateRead.ok || !privateRead.candidate) throw new Error('Expected private assertion');
+  if (!privateRead.ok || !privateRead.candidate)
+    throw new Error(`Expected private assertion: ${JSON.stringify({ privateRead, calls: fixture.calls })}`);
   expect(privateRead.disclosure).toBe(true);
   expect(privateRead.public.state).toBe('absent');
   expect(privateRead.candidate.statement.references).toEqual([]);
@@ -125,7 +126,8 @@ test('Share or retract consent for an own unsourced catalogue assertion through 
 test('Terminal retraction clears withheld values, offers no undo and preserves native request identity on uncertain replay', async () => {
   const fixture = consentFixture('lagging-retraction');
   const before = await fixture.transport.read();
-  if (!before.ok || !before.candidate) throw new Error('Expected prepared assertion');
+  if (!before.ok || !before.candidate)
+    throw new Error(`Expected prepared assertion: ${JSON.stringify({ before, calls: fixture.calls })}`);
   const retract = command(fixture, 'retract');
   const result = await fixture.transport.change(retract);
   if (!result.ok) throw new Error('Expected native retraction');
