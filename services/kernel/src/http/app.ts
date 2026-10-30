@@ -313,13 +313,6 @@ export function createApp({
       const original = originalRequests.get(request) ?? request;
       const mounted = mountedFor(request, route);
       const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
-      // These mounted operations require an acting account and their exact
-      // credential scope even when domain input would otherwise refuse first.
-      // The command still evaluates its full native own-account permission.
-      if (detail?.['x-authority-anchor'] === 'own-account') {
-        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        if (!actor.scopes.includes(actionLabelOfMountedRoute(mounted))) throw new ProblemError('forbidden');
-      }
       const gated = typeof detail?.['x-exposure'] === 'string' && detail['x-exposure'].startsWith('gate:');
       if (
         !gated &&
@@ -337,6 +330,13 @@ export function createApp({
           deadline: job.deadline,
           clock: requestClock,
         });
+        // Preserve exposure admission's normal refusal, then require the acting
+        // account and exact credential scope before a domain-state refusal.
+        // The command still evaluates its full native own-account permission.
+        if (detail?.['x-authority-anchor'] === 'own-account') {
+          if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+          if (!actor.scopes.includes(actionLabelOfMountedRoute(mounted))) throw new ProblemError('forbidden');
+        }
         await rateStage({
           request,
           route,
