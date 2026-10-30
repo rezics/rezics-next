@@ -353,3 +353,116 @@ test('recent history round-trips native query text without trimming its meaning'
   expect(readRecentHistory(storage, 'account:reader').map((entry) => entry.query)).toEqual(['Prince', query]);
   expect(rememberRecent([], '   ')).toEqual([]);
 });
+
+test('the existing global empty-query phone search surface composes the sole native Realm discovery section with one explicit bounded shared-loader request per page while preserving scope Recent filters focus and navigation', async () => {
+  const { createSearchRealmDiscoveryPage } = await import('../src/search/realm-discovery-section');
+  type State = import('../src/search/realm-discovery-section').RealmDiscoveryState;
+  type Request = import('../src/search/realm-discovery-section').SearchRealmDiscoveryRequest;
+  type Page = Exclude<State, { kind: 'loading' }>;
+  const requests: Request[] = [];
+  const completions: ((state: Page) => void)[] = [];
+  const states: State[] = [];
+  const load = (input: Request) => {
+    requests.push(input);
+    return new Promise<Page>((resolve) => completions.push(resolve));
+  };
+  const page = createSearchRealmDiscoveryPage(load, 'zh-Hans', (state) => states.push(state));
+  // Constructing the controller or rendering the rest shell does not read discovery.
+  expect(requests).toEqual([]);
+  expect(present(initialHeaderSearchState(), { loadRealmDiscovery: load })).not.toContain('data-search-realm-discovery');
+  const expanded = reduceHeaderSearchState(initialHeaderSearchState(), { type: 'open-phone' });
+  const markup = present(expanded, {
+    loadRealmDiscovery: load,
+    region: { activeCount: 2, open() {} },
+    discovery: { popularRealms: [{ id: 'legacy', name: 'Legacy card', description: '', href: '/invented' }] },
+  });
+  expect(inputCount(markup)).toBe(1);
+  expect((markup.match(/data-search-realm-discovery/g) ?? [])).toHaveLength(1);
+  expect(markup).toContain(m.header_search_recent());
+  expect(markup).toContain(m.header_search_history());
+  expect(markup).toContain(m.header_search_trending_searches());
+  expect(markup).toContain(m.search_filters());
+  expect(markup).not.toContain('Legacy card');
+  expect(markup).not.toContain('/invented');
+  expect(markup.indexOf(m.search_filters())).toBeLessThan(markup.indexOf(m.header_search_recent()));
+  expect(requests).toEqual([]);
+  for (const hidden of [
+    reduceHeaderSearchState(expanded, { type: 'escape' }),
+    reduceHeaderSearchState(expanded, { type: 'query', query: 'Prince' }),
+    reduceHeaderSearchState(expanded, { type: 'sync-scope', scope }),
+  ]) expect(present(hidden, { loadRealmDiscovery: load })).not.toContain('data-search-realm-discovery');
+  expect(present(expanded)).toContain('method="get" action="/en/search"');
+
+  const first = page.start();
+  void page.start();
+  void page.next();
+  void page.retry();
+  expect(requests).toEqual([{ locale: 'zh-Hans', sort: 'trending', limit: 20 }]);
+  const card = { realmId: 'native-realm', spaceId: 'native-space', name: 'Native', description: '', avatar: null };
+  const cursor = 'opaque/native+cursor?sort=trending';
+  completions[0]!({ kind: 'ready', realms: [card], next: cursor });
+  await first;
+  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [card], next: cursor });
+  expect(requests).toHaveLength(1);
+
+  const second = page.next();
+  void page.next();
+  expect(states.at(-1)).toEqual({ kind: 'loading' });
+  expect(requests[1]).toEqual({ locale: 'zh-Hans', sort: 'trending', cursor, limit: 20 });
+  completions[1]!({ kind: 'unavailable' });
+  await second;
+  expect(states.at(-1)).toEqual({ kind: 'unavailable' });
+  const retry = page.retry();
+  void page.retry();
+  expect(requests[2]).toEqual(requests[1]);
+  completions[2]!({ kind: 'ready', realms: [], next: 'empty-with-next' });
+  await retry;
+  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [], next: 'empty-with-next' });
+  // A sparse page retains its exact continuation, without restoring or accumulating the previous card.
+  await Promise.resolve();
+  expect(requests).toHaveLength(3);
+  const last = page.next();
+  expect(requests[3]).toEqual({ locale: 'zh-Hans', sort: 'trending', cursor: 'empty-with-next', limit: 20 });
+  completions[3]!({ kind: 'ready', realms: [], next: null });
+  await last;
+  void page.next();
+  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [], next: null });
+  expect(requests).toHaveLength(4);
+  page.dispose();
+});
+
+test('Realm discovery disposal fences late success and failure across dismissal, scope, query, navigation and locale changes', async () => {
+  const { createSearchRealmDiscoveryPage } = await import('../src/search/realm-discovery-section');
+  type State = import('../src/search/realm-discovery-section').RealmDiscoveryState;
+  type Page = Exclude<State, { kind: 'loading' }>;
+  for (const change of ['dismiss', 'scope', 'query', 'navigate', 'locale']) {
+    for (const failure of [false, true]) {
+      const states: State[] = [];
+      const deferred = Promise.withResolvers<Page>();
+      let calls = 0;
+      const page = createSearchRealmDiscoveryPage(
+        async () => {
+          calls++;
+          return deferred.promise;
+        },
+        'en',
+        (state) => states.push(state),
+      );
+      const request = page.start();
+      page.dispose();
+      if (failure) deferred.reject(new Error(change));
+      else deferred.resolve({ kind: 'ready', realms: [], next: 'stale' });
+      await request;
+      void page.start();
+      void page.next();
+      void page.retry();
+      expect(calls).toBe(1);
+      expect(states).toEqual([{ kind: 'loading' }]);
+    }
+  }
+  const closed: State[] = [];
+  const page = createSearchRealmDiscoveryPage(async () => ({ kind: 'closed' }), 'en', (state) => closed.push(state));
+  await page.start();
+  void page.retry();
+  expect(closed).toEqual([{ kind: 'loading' }, { kind: 'closed' }]);
+});

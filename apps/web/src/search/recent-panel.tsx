@@ -3,9 +3,10 @@ import { ChevronRight, Clock, UserRound, X } from 'lucide-react';
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { RecentEntry, RecentHistory } from './recent-history';
+import { SearchRealmDiscoverySection, type SearchRealmDiscoveryLoader } from './realm-discovery-section';
 
 export type SearchRealmDiscovery = { id: string; name: string; description: string; href: string; avatar?: string };
-/** Supply only responses from a real owner endpoint. Absent endpoints leave discovery absent. */
+/** Legacy caller shape retained for compatibility. Realm arrays cannot establish native discovery authority. */
 export type SearchDiscovery = {
   popularRealms?: readonly SearchRealmDiscovery[];
   trendingQueries?: readonly string[];
@@ -17,42 +18,24 @@ export function RecentPanel({
   history,
   recent,
   onSelect,
-  discovery,
+  loadRealmDiscovery,
   onQuery,
   language = 'en',
   global = true,
+  query = '',
 }: {
   language?: string;
   global?: boolean;
+  query?: string;
   history?: RecentHistory | undefined;
   recent?: React.ReactNode;
   onSelect?: ((entry: RecentEntry) => void) | undefined;
   discovery?: SearchDiscovery | undefined;
+  loadRealmDiscovery?: SearchRealmDiscoveryLoader | undefined;
   onQuery?: ((query: string) => void) | undefined;
 }) {
   const [all, setAll] = useState(false);
   const entries = history?.entries ?? [];
-  const realms = (title: string, values: readonly SearchRealmDiscovery[] | undefined) =>
-    values?.length ? (
-      <section className="space-y-2 pt-5">
-        <h3 className="px-2 text-sm font-semibold">{title}</h3>
-        {values.slice(0, 8).map((realm) => (
-          <a key={realm.id} href={realm.href} className={control}>
-            {realm.avatar ? (
-              <img src={realm.avatar} alt="" className="size-9 shrink-0 rounded-full object-cover" />
-            ) : (
-              <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full bg-muted">
-                <UserRound className="size-4" />
-              </span>
-            )}
-            <span className="min-w-0">
-              <span className="block truncate font-medium">{realm.name}</span>
-              <span className="block truncate text-xs text-muted-foreground">{realm.description}</span>
-            </span>
-          </a>
-        ))}
-      </section>
-    ) : null;
   return (
     <div data-search-discovery className="px-2 py-4">
       {recent ?? (
@@ -131,8 +114,13 @@ export function RecentPanel({
         </section>
       )}
       {global ? <CurrentTrendingSearches language={language} onSelect={onQuery} /> : null}
-      {realms(m.header_search_trending_communities(), discovery?.trendingRealms)}
-      {realms(m.header_search_popular_realms(), discovery?.popularRealms)}
+      {global ? (
+        <SearchRealmDiscoverySection
+          key={JSON.stringify([language, query])}
+          locale={language}
+          load={loadRealmDiscovery}
+        />
+      ) : null}
     </div>
   );
 }

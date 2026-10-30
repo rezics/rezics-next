@@ -16,12 +16,21 @@ Shared entries retain the same session, operation and native route checks as des
 You includes Settings and the reusable display region.
 
 Exact IDs: `patterns-phone-shell--rest`, `--unread`, `--unread-unavailable`, `--search-empty`, `--search-recent`,
-`--search-trending`, `--search-typing`, `--search-filters-open`, `--creation-sheet`, `--you-settings`.
+`--search-trending`, `--search-loading`, `--search-unavailable`, `--search-closed`, `--search-typing`,
+`--search-filters-open`, `--creation-sheet`, `--you-settings`.
 The prefix `patterns-phone-shell` applies to every suffix. Review phone390/desktop1280 using locale/theme globals.
 
-SearchTrending injects a **contract-shaped story fixture**, not a production discovery source. Production omits
-trending and Popular Realms until a real owner response is supplied. Recent history stays in bounded, separate
-account/anonymous device buckets. Unknown identity exposes no previous history; no server history API is assumed.
+Web owns the RecentPanel/header placement and visible-page lifecycle. Content alone owns
+`community/realm-discovery/index.ts` (`RealmDiscoverySection`, `loadRealmDiscovery` and their types).
+The existing global empty-query region mounts its trending section once, with limit20; retry and Next each
+request one page, replacing the visible page. Dismissal, scope/query and locale changes discard old completions.
+Recent and native Trending searches retain their own adapters and ownership.
+
+The search stories inject **interface fakes**, including empty, pending, ready-with-next (SearchTrending),
+unavailable/retry and closed. They share the same IDs at phone390/desktop1280 and locale/theme globals.
+Content's module is absent in this source snapshot: the local typed consumer boundary reports unavailable,
+never renders successful cards, and never invents a GET adapter. SearchTrending explicitly checks that boundary
+until the real exports replace it. These states prove no native discovery or avatar readiness.
 
 Performance can import `AppearanceControls` and `AppearanceControlsProps` from
 `apps/web/src/shell/appearance-controls.tsx`. This region uses the existing language cookie/locale protocol and

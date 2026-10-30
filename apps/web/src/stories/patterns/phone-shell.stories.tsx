@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense, useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { AppShell } from '../../shell/shell';
 import { HeaderSearch } from '../../search/header-search/header-search';
 import { rememberRecent, type RecentHistory } from '../../search/recent-history';
-import type { SearchDiscovery } from '../../search/recent-panel';
+import type { SearchRealmDiscoveryLoader } from '../../search/realm-discovery-section';
 import { SearchPage } from '../../search/search';
 import { searchQueryOptions } from '../../search/search-queries';
 import { searchLoaderDeps } from '../../search/search-params';
@@ -40,7 +40,28 @@ type State =
   | 'filters'
   | 'creation'
   | 'settings';
-function Connected({ state }: { state: State }) {
+// Interface fakes for the single Content section. These are not native discovery recordings.
+const emptyRealms = fn<SearchRealmDiscoveryLoader>(async () => ({ kind: 'ready', realms: [], next: null }));
+const loadingRealms = fn<SearchRealmDiscoveryLoader>(() => new Promise(() => {}));
+const unavailableRealms = fn<SearchRealmDiscoveryLoader>(async () => ({ kind: 'unavailable' }));
+const closedRealms = fn<SearchRealmDiscoveryLoader>(async () => ({ kind: 'closed' }));
+const nextRealmPage = 'native/opaque+cursor?one';
+const sparseRealmPage = 'native/opaque+cursor?two';
+const readyRealms = fn<SearchRealmDiscoveryLoader>(async ({ cursor }) => ({
+  kind: 'ready',
+  realms:
+    cursor === undefined
+      ? [{
+          realmId: realmRecording.realm.realmId,
+          spaceId: realmRecording.realm.spaceId,
+          name: realmRecording.realm.title,
+          description: realmRecording.realm.summary ?? '',
+          avatar: null,
+        }]
+      : [],
+  next: cursor === undefined ? nextRealmPage : cursor === nextRealmPage ? sparseRealmPage : null,
+}));
+function Connected({ state, loadRealms = emptyRealms }: { state: State; loadRealms?: SearchRealmDiscoveryLoader }) {
   const client = useQueryClient();
   const [entries, setEntries] = useState(() => {
     client.setQueryData(sessionQuery.queryKey, {
@@ -68,28 +89,13 @@ function Connected({ state }: { state: State }) {
     remember: (query, scope) => setEntries((previous) => rememberRecent(previous, query, scope)),
     remove: (id) => setEntries((previous) => previous.filter((entry) => entry.id !== id)),
   };
-  // Contract-shaped future owner response, used ONLY by SearchTrending. No production source is claimed.
-  const discovery: SearchDiscovery | undefined =
-    state === 'trending'
-      ? {
-          trendingQueries: [recording.query],
-          trendingRealms: [
-            {
-              id: realmRecording.realm.realmId,
-              name: realmRecording.realm.title,
-              description: realmRecording.realm.summary ?? '',
-              href: `/${getLocale()}/realms/${realmRecording.realm.realmId}`,
-            },
-          ],
-        }
-      : undefined;
   return (
     <AppShell
       search={
         <HeaderSearch
           locale={getLocale()}
           history={history}
-          discovery={discovery}
+          loadRealmDiscovery={loadRealms}
           loadSuggestions={async () => ({ as_of: recording.as_of, subjects: recording.subjects, types: {} })}
         />
       }
@@ -103,10 +109,10 @@ function Connected({ state }: { state: State }) {
     </AppShell>
   );
 }
-function Example({ state = 'rest' }: { state?: State }) {
+function Example({ state = 'rest', loadRealms }: { state?: State; loadRealms?: SearchRealmDiscoveryLoader }) {
   return (
     <PatternStory visitor="Signed In" path={searchFacetStoryPaths.active}>
-      <Connected state={state} />
+      <Connected state={state} {...(loadRealms ? { loadRealms } : {})} />
     </PatternStory>
   );
 }
@@ -204,8 +210,11 @@ export const DesktopPersonalUnavailable: Story = {
 export const SearchEmpty: Story = {
   render: () => <Example state="empty" />,
   play: async (context) => {
+    emptyRealms.mockClear();
     const { canvas } = await search(context);
     await expect(canvas.getByText(m.header_search_recent_empty())).toBeVisible();
+    await realmState(context, 'ready');
+    await expect(emptyRealms).toHaveBeenCalledExactlyOnceWith({ locale: getLocale(), sort: 'trending', limit: 20 });
   },
 };
 export const SearchRecent: Story = {
@@ -218,10 +227,75 @@ export const SearchRecent: Story = {
   },
 };
 export const SearchTrending: Story = {
-  render: () => <Example state="trending" />,
+  render: () => <Example state="trending" loadRealms={readyRealms} />,
   play: async (context) => {
+    readyRealms.mockClear();
     const { canvas } = await search(context);
     await expect(canvas.getByRole('heading', { name: m.header_search_trending_searches() })).toBeVisible();
+    const region = await realmState(context, 'ready');
+    await expect(readyRealms).toHaveBeenCalledExactlyOnceWith({ locale: getLocale(), sort: 'trending', limit: 20 });
+    // Until Content's module is delivered, the composed boundary must report unavailable, even for this fake.
+    if (region.querySelector('[data-realm-discovery-producer="unavailable"]')) {
+      await expect(within(region).getByText(m.realm_shelf_unavailable())).toBeVisible();
+      await expect(within(region).queryByRole('link')).toBeNull();
+      return;
+    }
+    await expect(within(region).getByRole('link', { name: new RegExp(realmRecording.realm.title) })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/realms/${realmRecording.realm.realmId}`,
+    );
+    await userEvent.click(within(region).getByRole('button'));
+    await waitFor(() => expect(readyRealms).toHaveBeenCalledTimes(2));
+    await expect(readyRealms).toHaveBeenLastCalledWith({
+      locale: getLocale(), sort: 'trending', cursor: nextRealmPage, limit: 20,
+    });
+    await realmState(context, 'ready');
+    await expect(within(region).queryByRole('link')).toBeNull();
+    await userEvent.click(within(region).getByRole('button'));
+    await waitFor(() => expect(readyRealms).toHaveBeenCalledTimes(3));
+    await expect(readyRealms).toHaveBeenLastCalledWith({
+      locale: getLocale(), sort: 'trending', cursor: sparseRealmPage, limit: 20,
+    });
+    await realmState(context, 'ready');
+    await expect(within(region).queryByRole('button')).toBeNull();
+  },
+};
+async function realmState(context: { canvasElement: HTMLElement }, state: string) {
+  const region = context.canvasElement.querySelector<HTMLElement>('[data-search-realm-discovery]')!;
+  await waitFor(() => expect(region).toHaveAttribute('data-state', state));
+  return region;
+}
+export const SearchLoading: Story = {
+  render: () => <Example loadRealms={loadingRealms} />,
+  play: async (context) => {
+    loadingRealms.mockClear();
+    const { input } = await search(context);
+    await realmState(context, 'loading');
+    await expect(loadingRealms).toHaveBeenCalledTimes(1);
+    await expect(input).toHaveFocus();
+  },
+};
+export const SearchUnavailable: Story = {
+  render: () => <Example loadRealms={unavailableRealms} />,
+  play: async (context) => {
+    unavailableRealms.mockClear();
+    await search(context);
+    const region = await realmState(context, 'unavailable');
+    await expect(unavailableRealms).toHaveBeenCalledTimes(1);
+    await userEvent.click(within(region).getByRole('button'));
+    await realmState(context, 'unavailable');
+    await expect(unavailableRealms).toHaveBeenCalledTimes(2);
+  },
+};
+export const SearchClosed: Story = {
+  render: () => <Example loadRealms={closedRealms} />,
+  play: async (context) => {
+    closedRealms.mockClear();
+    await search(context);
+    const region = await realmState(context, 'closed');
+    await expect(within(region).getByText(m.platform_closed_message())).toBeVisible();
+    await expect(within(region).queryByRole('button')).toBeNull();
+    await expect(closedRealms).toHaveBeenCalledTimes(1);
   },
 };
 export const SearchTyping: Story = {

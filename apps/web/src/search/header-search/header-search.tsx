@@ -17,6 +17,7 @@ import { initialHeaderSearchState, reduceHeaderSearchState, type HeaderSearchSta
 import { loadGlobalHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
 import { RezicsMark } from '../../shell/mobile-mark';
 import { RecentPanel, type SearchDiscovery } from '../recent-panel';
+import type { SearchRealmDiscoveryLoader } from '../realm-discovery-section';
 import type { RecentEntry, RecentHistory } from '../recent-history';
 import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahead';
 import type { SearchScope } from './types';
@@ -25,6 +26,7 @@ export type HeaderSearchProps = {
   locale: string;
   history?: RecentHistory | undefined;
   discovery?: SearchDiscovery | undefined;
+  loadRealmDiscovery?: SearchRealmDiscoveryLoader | undefined;
   scope?: SearchScope | undefined;
   initialQuery?: string;
   fields?: readonly [string, string][] | undefined;
@@ -40,7 +42,10 @@ export type HeaderSearchProps = {
   presentation?: 'responsive' | 'sheet';
 };
 
-type ViewProps = Pick<HeaderSearchProps, 'locale' | 'fields' | 'suggestionRatio' | 'history' | 'discovery'> & {
+type ViewProps = Pick<
+  HeaderSearchProps,
+  'locale' | 'fields' | 'suggestionRatio' | 'history' | 'discovery' | 'loadRealmDiscovery'
+> & {
   id: string;
   state: HeaderSearchState;
   region: HeaderSearchFilterRegion | null;
@@ -84,6 +89,7 @@ export function HeaderSearchView({
   recent,
   history,
   discovery,
+  loadRealmDiscovery,
   onRecent,
   onQuery,
 }: ViewProps) {
@@ -241,9 +247,11 @@ export function HeaderSearchView({
               <RecentPanel
                 recent={recent}
                 language={locale}
+                query={query}
                 global={!scope}
                 history={history}
                 discovery={discovery}
+                loadRealmDiscovery={loadRealmDiscovery}
                 onSelect={onRecent}
                 onQuery={onQuery}
               />
@@ -352,6 +360,7 @@ function HeaderSearchController({
   presentation = 'responsive',
   history,
   discovery,
+  loadRealmDiscovery,
 }: HeaderSearchProps) {
   const [state, dispatch] = useReducer(reduceHeaderSearchState, undefined, () =>
     initialHeaderSearchState(scope, initialQuery),
@@ -470,6 +479,7 @@ function HeaderSearchController({
       id={id}
       history={history}
       discovery={discovery}
+      loadRealmDiscovery={loadRealmDiscovery}
       onQuery={(query) => submitQuery(query, undefined)}
       onRecent={(entry) => {
         dispatch({ type: 'sync-scope', scope: entry.scope });
