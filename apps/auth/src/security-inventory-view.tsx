@@ -253,7 +253,12 @@ export function SecurityInventory({
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <InventoryList view="clients" source={source} preflight={preflight} />
-      <InventoryList view="consents" source={source} preflight={preflight} onSessionEnded={onSessionEnded} />
+      <InventoryList
+        view="consents"
+        source={source}
+        preflight={preflight}
+        {...(onSessionEnded ? { onSessionEnded } : {})}
+      />
     </div>
   );
 }
