@@ -218,7 +218,10 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
             : { automatic_tax: { enabled: true } }),
         };
         // https://docs.stripe.com/api/idempotent_requests: Stripe retains the first result for this exact request key.
-        const session = await stripe.checkout.sessions.create(params, { idempotencyKey, ...(request.apiVersion ? { apiVersion: request.apiVersion } : {}) });
+        const session = await stripe.checkout.sessions.create(params, {
+          idempotencyKey,
+          ...(request.apiVersion ? { apiVersion: request.apiVersion } : {}),
+        });
         if (!session.url) throw new StripeUnavailableError('Stripe returned no Checkout URL');
         return { id: session.id, url: session.url, expiresAt: new Date(session.expires_at * 1000).toISOString() };
       });

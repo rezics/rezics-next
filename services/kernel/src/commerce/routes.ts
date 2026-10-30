@@ -72,20 +72,37 @@ const contentEditionSchema = t.Union([
     object,
   ),
 ]);
-const moneyUnitSchema = t.Object({
-  system: t.Literal('stripe-api'), exponent: t.Union([t.Literal(0), t.Literal(2)]), factsVersion: t.Literal('stripe-money-v1'),
-}, object);
+const moneyUnitSchema = t.Object(
+  {
+    system: t.Literal('stripe-api'),
+    exponent: t.Union([t.Literal(0), t.Literal(2)]),
+    factsVersion: t.Literal('stripe-money-v1'),
+  },
+  object,
+);
 const capturedMoneySchemas = {
   moneyUnit: t.Union([moneyUnitSchema, t.Null()]),
   taxBehavior: t.Union([t.Literal('exclusive'), t.Null()]),
 };
-const moneySchema = t.Object({
-  factsVersion: t.Literal('stripe-money-v1'), taxBehavior: t.Literal('exclusive'),
-  configuredSaleCurrencies: t.Array(t.Object({
-    currency: t.Union([t.Literal('usd'), t.Literal('eur')]), unit: moneyUnitSchema,
-    minAmountMinor: t.Literal(50), maxAmountMinor: t.Literal(99999999), chargeMultiple: t.Literal(1),
-  }, object)),
-}, object);
+const moneySchema = t.Object(
+  {
+    factsVersion: t.Literal('stripe-money-v1'),
+    taxBehavior: t.Literal('exclusive'),
+    configuredSaleCurrencies: t.Array(
+      t.Object(
+        {
+          currency: t.Union([t.Literal('usd'), t.Literal('eur')]),
+          unit: moneyUnitSchema,
+          minAmountMinor: t.Literal(50),
+          maxAmountMinor: t.Literal(99999999),
+          chargeMultiple: t.Literal(1),
+        },
+        object,
+      ),
+    ),
+  },
+  object,
+);
 const offerSchema = t.Object(
   {
     ...capturedMoneySchemas,
@@ -325,12 +342,19 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
     },
   });
   const routes = app
-    .get('/v1/commerceMoney', {
-      response: { 200: moneySchema, 401: unauthorized, 503: unavailable },
-      // Reuse the existing anonymous offer-read label; static configuration is no grant or selling permission.
-      detail: detail('commerce.money_schema', 'offer:read', 'gate:selling', true),
-    }, () => ({ factsVersion: 'stripe-money-v1' as const, taxBehavior: moneyPolicy.taxBehavior,
-      configuredSaleCurrencies: moneyPolicy.configuredSaleCurrencies.map((rule) => ({ ...rule })) }))
+    .get(
+      '/v1/commerceMoney',
+      {
+        response: { 200: moneySchema, 401: unauthorized, 503: unavailable },
+        // Reuse the existing anonymous offer-read label; static configuration is no grant or selling permission.
+        detail: detail('commerce.money_schema', 'offer:read', 'gate:selling', true),
+      },
+      () => ({
+        factsVersion: 'stripe-money-v1' as const,
+        taxBehavior: moneyPolicy.taxBehavior,
+        configuredSaleCurrencies: moneyPolicy.configuredSaleCurrencies.map((rule) => ({ ...rule })),
+      }),
+    )
     .get(
       '/v1/offers',
       {
@@ -493,7 +517,13 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
-            () => createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).reviseOffer(actor, params.offerId, body, key),
+            () =>
+              createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).reviseOffer(
+                actor,
+                params.offerId,
+                body,
+                key,
+              ),
             'not_found',
           ),
         );
@@ -532,7 +562,12 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
-            () => createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).delistOffer(actor, params.offerId, key),
+            () =>
+              createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).delistOffer(
+                actor,
+                params.offerId,
+                key,
+              ),
             'not_found',
           ),
         );
@@ -660,8 +695,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
                 orders: orders.map((order) => ({
                   ...order,
                   moneyUnit: order.moneyUnit ?? null,
-    taxBehavior: order.taxBehavior ?? null,
-    contentEdition: contentEditionTermsView(order.contentEdition),
+                  taxBehavior: order.taxBehavior ?? null,
+                  contentEdition: contentEditionTermsView(order.contentEdition),
                 })),
                 next:
                   rows.length > size && last && partition

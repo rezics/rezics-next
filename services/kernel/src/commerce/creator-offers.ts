@@ -92,7 +92,7 @@ export async function listCreatorOffers(
         if (!Number.isSafeInteger(amount)) throw new ProblemError('dependency_unavailable');
         return {
           ...row,
-          moneyUnit: row.moneyUnit === null ? null : JSON.parse(row.moneyUnit) as StripeMoneyUnit,
+          moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
           taxBehavior: row.taxBehavior as 'exclusive' | null,
           unitAmountMinor: amount,
           contentEdition: contentEditionTermsView(decodeCapturedContentEdition(row.contentEdition)),

@@ -475,7 +475,9 @@ test('commerce money schema publishes only closed static configured money facts 
   expect(operation['x-action']).toBe('offer:read');
   expect(operation.security).toEqual([{ bearerAuth: [] }, {}]);
   const schema = operation.responses!['200']!.content!['application/json']!.schema as {
-    additionalProperties: boolean; properties: Record<string, unknown>; required: string[];
+    additionalProperties: boolean;
+    properties: Record<string, unknown>;
+    required: string[];
   };
   expect(schema.additionalProperties).toBe(false);
   expect(Object.keys(schema.properties).sort()).toEqual(['configuredSaleCurrencies', 'factsVersion', 'taxBehavior']);

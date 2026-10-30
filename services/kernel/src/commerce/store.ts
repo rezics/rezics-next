@@ -61,7 +61,7 @@ function asOffer(row: OfferRow): Offer {
   return {
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
-    moneyUnit: row.moneyUnit === null ? null : JSON.parse(row.moneyUnit) as StripeMoneyUnit,
+    moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
     taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
   };
@@ -70,7 +70,7 @@ function asOrder(row: OrderRow): Order {
   return {
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
-    moneyUnit: row.moneyUnit === null ? null : JSON.parse(row.moneyUnit) as StripeMoneyUnit,
+    moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
     taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
     amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
@@ -203,7 +203,7 @@ export async function listBuyerOrders(
   return rows.map((row) => ({
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
-    moneyUnit: row.moneyUnit === null ? null : JSON.parse(row.moneyUnit) as StripeMoneyUnit,
+    moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
     taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
     amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),

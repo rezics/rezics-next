@@ -10,24 +10,53 @@ import { startFakeStripe } from './support/fake-stripe.ts';
 // Native Content admission remains independently required by the real commands.
 test('new tax is explicit; retrying an existing historical physical attempt preserves omission and original parameters', async () => {
   const fake = startFakeStripe();
-  const stripe = createStripePort({ apiKey: 'sk_test_units', managedPayments: true, host: '127.0.0.1',
-    port: fake.port, protocol: 'http', maxNetworkRetries: 0, clock: () => new Date() });
+  const stripe = createStripePort({
+    apiKey: 'sk_test_units',
+    managedPayments: true,
+    host: '127.0.0.1',
+    port: fake.port,
+    protocol: 'http',
+    maxNetworkRetries: 0,
+    clock: () => new Date(),
+  });
   const request: CheckoutRequest = {
-    orderId: 'order-old', buyerAccountId: 'buyer-old', title: 'Original price', currency: 'usd', unitAmountMinor: 1200,
-    taxCode: 'txcd_10302000', successUrl: 'https://old.test/success', cancelUrl: 'https://old.test/cancel',
-    managedPayments: false, expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    orderId: 'order-old',
+    buyerAccountId: 'buyer-old',
+    title: 'Original price',
+    currency: 'usd',
+    unitAmountMinor: 1200,
+    taxCode: 'txcd_10302000',
+    successUrl: 'https://old.test/success',
+    cancelUrl: 'https://old.test/cancel',
+    managedPayments: false,
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
   };
   let admitted = 0;
   const commands = {
-    async beginCheckoutCreation() { return { kind: 'ready', first: false, observedAt: new Date().toISOString(), attempt: {
-      firstAttemptId: 'original-attempt', firstAttemptAt: new Date().toISOString(), providerKey: 'order:order-old',
-      request: structuredClone(request), retried: true,
-    } }; },
-    consumeCheckoutCreationAdmission() { admitted++; },
+    async beginCheckoutCreation() {
+      return {
+        kind: 'ready',
+        first: false,
+        observedAt: new Date().toISOString(),
+        attempt: {
+          firstAttemptId: 'original-attempt',
+          firstAttemptAt: new Date().toISOString(),
+          providerKey: 'order:order-old',
+          request: structuredClone(request),
+          retried: true,
+        },
+      };
+    },
+    consumeCheckoutCreationAdmission() {
+      admitted++;
+    },
     async recordCheckout() {},
   } as unknown as ReturnType<typeof createCommerceCommands>;
   try {
-    await createCheckoutForOrder({ commands, stripe, urls: { successUrl: 'https://new.test/success', cancelUrl: 'https://new.test/cancel' } }, request.orderId);
+    await createCheckoutForOrder(
+      { commands, stripe, urls: { successUrl: 'https://new.test/success', cancelUrl: 'https://new.test/cancel' } },
+      request.orderId,
+    );
     expect(admitted).toBe(1);
     const old = fake.requests[0]!;
     expect(old.headers.get('idempotency-key')).toBe('order:order-old');
@@ -38,13 +67,24 @@ test('new tax is explicit; retrying an existing historical physical attempt pres
     expect(old.params.get('expires_at')).toBe(String(request.expiresAt));
     expect(old.params.get('automatic_tax[enabled]')).toBe('true');
     expect(old.params.has('managed_payments[enabled]')).toBe(false);
-    await stripe.createCheckoutSession({ ...request, orderId: 'order-new', apiVersion: '2026-09-30.endive',
-      ...validateOfferAmount({ currency: request.currency, amountMinor: request.unitAmountMinor }, readCommerceMoneyPolicy({})),
-    }, 'order:order-new');
+    await stripe.createCheckoutSession(
+      {
+        ...request,
+        orderId: 'order-new',
+        apiVersion: '2026-09-30.endive',
+        ...validateOfferAmount(
+          { currency: request.currency, amountMinor: request.unitAmountMinor },
+          readCommerceMoneyPolicy({}),
+        ),
+      },
+      'order:order-new',
+    );
     const fresh = fake.requests[1]!;
     expect(fresh.params.get('line_items[0][price_data][tax_behavior]')).toBe('exclusive');
     expect(fresh.params.get('line_items[0][price_data][unit_amount]')).toBe('1200');
     expect(fresh.headers.get('stripe-version')).toBe('2026-09-30.endive');
     expect(fake.requests).toHaveLength(2);
-  } finally { fake.stop(); }
+  } finally {
+    fake.stop();
+  }
 });

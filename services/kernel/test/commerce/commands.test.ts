@@ -622,34 +622,88 @@ test('explicit same-price reprice adopts unknown money in a new revision without
   const sellerActor = await actor(seller);
   const id = newId(routeOf(seller)!);
   const time = new Date().toISOString();
-  const historical = await store.insertOffer(pool, routeOf(seller)!, {
-    ...input(), id, creatorAccountId: seller, royaltyBasisPoints: 9000,
-  }, { transactionId: key(), time });
+  const historical = await store.insertOffer(
+    pool,
+    routeOf(seller)!,
+    {
+      ...input(),
+      id,
+      creatorAccountId: seller,
+      royaltyBasisPoints: 9000,
+    },
+    { transactionId: key(), time },
+  );
   expect(historical.moneyUnit).toBeNull();
   expect(historical.taxBehavior).toBeNull();
-  await pool.query(`INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-    VALUES ($1,$2,$3,'offer:manage','(,)',$3)`, [routeOf(id), id, seller]);
-  const old = await store.insertOrder(pool, routeOf(buyer)!, { id: newId(routeOf(buyer)!), buyerAccountId: buyer, offer: historical }, { transactionId: key(), time });
-  expect(await commands.beginCheckoutCreation(old.id, {
-    successUrl: 'https://checkout.test/success', cancelUrl: 'https://checkout.test/cancel', managedPayments: false,
-  })).toEqual({ kind: 'unknown' });
-  expect((await pool.query('SELECT order_id FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [routeOf(old.id), old.id])).rows).toEqual([]);
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'offer:manage','(,)',$3)`,
+    [routeOf(id), id, seller],
+  );
+  const old = await store.insertOrder(
+    pool,
+    routeOf(buyer)!,
+    { id: newId(routeOf(buyer)!), buyerAccountId: buyer, offer: historical },
+    { transactionId: key(), time },
+  );
+  expect(
+    await commands.beginCheckoutCreation(old.id, {
+      successUrl: 'https://checkout.test/success',
+      cancelUrl: 'https://checkout.test/cancel',
+      managedPayments: false,
+    }),
+  ).toEqual({ kind: 'unknown' });
+  expect(
+    (
+      await pool.query('SELECT order_id FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+        routeOf(old.id),
+        old.id,
+      ])
+    ).rows,
+  ).toEqual([]);
   const requestKey = key();
-  const adopted = await commands.reviseOffer(sellerActor, id, { unitAmountMinor: historical.unitAmountMinor }, requestKey);
-  expect(adopted.value).toEqual({ ...historical, revision: historical.revision + 1,
-    moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' }, taxBehavior: 'exclusive' });
-  expect(await commands.reviseOffer(sellerActor, id, { unitAmountMinor: historical.unitAmountMinor }, requestKey)).toEqual({ ...adopted, replayed: true });
+  const adopted = await commands.reviseOffer(
+    sellerActor,
+    id,
+    { unitAmountMinor: historical.unitAmountMinor },
+    requestKey,
+  );
+  expect(adopted.value).toEqual({
+    ...historical,
+    revision: historical.revision + 1,
+    moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+    taxBehavior: 'exclusive',
+  });
+  expect(
+    await commands.reviseOffer(sellerActor, id, { unitAmountMinor: historical.unitAmountMinor }, requestKey),
+  ).toEqual({ ...adopted, replayed: true });
   expect(await store.readOrder(pool, routeOf(buyer)!, old.id)).toEqual(old);
   expect(old.moneyUnit).toBeNull();
   expect(old.taxBehavior).toBeNull();
-  await expect(commands.reviseOffer(sellerActor, id, { unitAmountMinor: 49 }, key())).rejects.toBeInstanceOf(RangeError);
+  await expect(commands.reviseOffer(sellerActor, id, { unitAmountMinor: 49 }, key())).rejects.toBeInstanceOf(
+    RangeError,
+  );
   expect((await store.readOffer(pool, routeOf(id)!, id))?.revision).toBe(adopted.value.revision);
   const unsupportedId = newId(routeOf(seller)!);
-  const unsupported = await store.insertOffer(pool, routeOf(seller)!, {
-    ...input(), currency: 'jpy', id: unsupportedId, creatorAccountId: seller, royaltyBasisPoints: 9000,
-  }, { transactionId: key(), time });
-  await pool.query(`INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-    VALUES ($1,$2,$3,'offer:manage','(,)',$3)`, [routeOf(unsupportedId), unsupportedId, seller]);
-  await expect(commands.reviseOffer(sellerActor, unsupportedId, { unitAmountMinor: unsupported.unitAmountMinor }, key())).rejects.toBeInstanceOf(RangeError);
+  const unsupported = await store.insertOffer(
+    pool,
+    routeOf(seller)!,
+    {
+      ...input(),
+      currency: 'jpy',
+      id: unsupportedId,
+      creatorAccountId: seller,
+      royaltyBasisPoints: 9000,
+    },
+    { transactionId: key(), time },
+  );
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'offer:manage','(,)',$3)`,
+    [routeOf(unsupportedId), unsupportedId, seller],
+  );
+  await expect(
+    commands.reviseOffer(sellerActor, unsupportedId, { unitAmountMinor: unsupported.unitAmountMinor }, key()),
+  ).rejects.toBeInstanceOf(RangeError);
   expect(await store.readOffer(pool, routeOf(unsupportedId)!, unsupportedId)).toEqual(unsupported);
 });

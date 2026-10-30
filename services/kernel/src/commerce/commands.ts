@@ -191,7 +191,12 @@ function withSalePreparation<T>(
 /** Actor arguments are verified Access identities. Checkout methods are trusted
  * internal ports, not client operations: their receipts are attributed to the buyer.
  */
-export function createCommerceCommands(config: { pool: Pool; access: Access; royaltyBasisPoints?: number; moneyPolicy?: CommerceMoneyPolicy }) {
+export function createCommerceCommands(config: {
+  pool: Pool;
+  access: Access;
+  royaltyBasisPoints?: number;
+  moneyPolicy?: CommerceMoneyPolicy;
+}) {
   const { pool, access } = config;
   const moneyPolicy = config.moneyPolicy ?? readCommerceMoneyPolicy(process.env);
   const royaltyBasisPoints = config.royaltyBasisPoints ?? 9000;
@@ -376,7 +381,10 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         const current = await store.lockOffer(tx, r, id);
         if (!current) throw new GrantDeniedError();
         if (current.state !== 'active') throw new OfferUnavailableError();
-        const money = validateOfferAmount({ currency: current.currency, amountMinor: input.unitAmountMinor }, moneyPolicy);
+        const money = validateOfferAmount(
+          { currency: current.currency, amountMinor: input.unitAmountMinor },
+          moneyPolicy,
+        );
         await declareCommerceCommandHistory(tx, 'commerce.offer.revise', current);
         const value = await store.reviseOfferPrice(tx, r, id, input.unitAmountMinor, money, {
           transactionId: command.transactionId,
@@ -436,9 +444,14 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           if (error instanceof RangeError) throw new OfferUnavailableError();
           throw error;
         }
-        if (offer.taxBehavior !== money.taxBehavior || !offer.moneyUnit ||
-            offer.moneyUnit.system !== money.moneyUnit.system || offer.moneyUnit.exponent !== money.moneyUnit.exponent ||
-            offer.moneyUnit.factsVersion !== money.moneyUnit.factsVersion) throw new OfferUnavailableError();
+        if (
+          offer.taxBehavior !== money.taxBehavior ||
+          !offer.moneyUnit ||
+          offer.moneyUnit.system !== money.moneyUnit.system ||
+          offer.moneyUnit.exponent !== money.moneyUnit.exponent ||
+          offer.moneyUnit.factsVersion !== money.moneyUnit.factsVersion
+        )
+          throw new OfferUnavailableError();
         const contentEdition = sale.at(tx, command.time);
         if (
           !sameCapturedContentEdition(offer.contentEdition, contentEdition) ||
@@ -530,19 +543,27 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         )
           throw new CommandUnavailableError('contention', partitionOf(r));
         // An existing first call always retains its original parameters, even after configuration changes.
-        const request: CheckoutRequest = stored?.request ? JSON.parse(stored.request) : {
-          ...(!stored ? { moneyUnit: current.moneyUnit, taxBehavior: current.taxBehavior, apiVersion: '2026-09-30.endive' as const } : {}),
-          orderId: id,
-          buyerAccountId: current.buyerAccountId,
-          title: current.title,
-          currency: current.currency,
-          unitAmountMinor: current.unitAmountMinor,
-          taxCode: current.taxCode,
-          successUrl: stored?.successUrl ?? configuration.successUrl,
-          cancelUrl: stored?.cancelUrl ?? configuration.cancelUrl,
-          expiresAt: stored ? Number(stored.expiresAt) : Math.floor(Date.parse(current.createdAt) / 1000) + 3600,
-          managedPayments: stored?.managedPayments ?? configuration.managedPayments ?? false,
-        };
+        const request: CheckoutRequest = stored?.request
+          ? JSON.parse(stored.request)
+          : {
+              ...(!stored
+                ? {
+                    moneyUnit: current.moneyUnit,
+                    taxBehavior: current.taxBehavior,
+                    apiVersion: '2026-09-30.endive' as const,
+                  }
+                : {}),
+              orderId: id,
+              buyerAccountId: current.buyerAccountId,
+              title: current.title,
+              currency: current.currency,
+              unitAmountMinor: current.unitAmountMinor,
+              taxCode: current.taxCode,
+              successUrl: stored?.successUrl ?? configuration.successUrl,
+              cancelUrl: stored?.cancelUrl ?? configuration.cancelUrl,
+              expiresAt: stored ? Number(stored.expiresAt) : Math.floor(Date.parse(current.createdAt) / 1000) + 3600,
+              managedPayments: stored?.managedPayments ?? configuration.managedPayments ?? false,
+            };
         const attempt: CheckoutCreationAttempt = {
           firstAttemptId: stored?.firstAttemptId ?? attemptId,
           firstAttemptAt: stored?.firstAttemptAt ?? observedAt,
