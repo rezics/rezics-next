@@ -19,6 +19,14 @@ export type CommerceWorkerConfig = Omit<CommerceConfig, 'webhookSecrets'>;
 export type CheckoutUrls = Pick<CommerceWorkerConfig, 'successUrl' | 'cancelUrl'>;
 
 type Environment = Readonly<Record<string, string | undefined>>;
+/** A deployment's one direct account. Neither credentials nor provider payloads configure routing. */
+export function readCommerceProviderConfig(env: Environment) {
+  const accountNamespace = env.STRIPE_ACCOUNT_NAMESPACE ?? 'direct';
+  const mode = env.STRIPE_LIVEMODE ?? 'false';
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(accountNamespace)) throw new ConfigError('STRIPE_ACCOUNT_NAMESPACE');
+  if (mode !== 'true' && mode !== 'false') throw new ConfigError('STRIPE_LIVEMODE');
+  return { accountNamespace, livemode: mode === 'true' };
+}
 const commerceVariables = [
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRETS',

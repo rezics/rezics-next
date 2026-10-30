@@ -174,7 +174,9 @@ export async function createProfileEntryFixture(
       await lifecycle.claimHandle({ ...input, key: entryKey(), evidence: proof });
       await lifecycle.activate({ accountId, key: entryKey(), evidence: proof });
       const claims = { accountId, clientId, scopes };
-      const actor = await authenticateAccount(access, { pool, deadline: deadlineFor(30_000) }, claims);
+      // Native growth setup reuses this genuine five-minute test credential across requests.
+      // Each native command still supplies and enforces its own physical operation deadline.
+      const actor = await authenticateAccount(access, { pool, deadline: deadlineFor(300_000) }, claims);
       return { actor, bearer: await accountToken(claims) };
     }
     const steward = await identity([

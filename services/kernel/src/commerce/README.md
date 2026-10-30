@@ -69,6 +69,9 @@ One API key and outside-Stripe creator royalties do not prove eligibility. Requi
 `STRIPE_SECRET_KEY`, `STRIPE_MANAGED_PAYMENTS`, `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL` and HTTP endpoint
 `STRIPE_WEBHOOK_SECRETS`; matching mode and endpoint secrets, migrations and the shared worker/effects relay must
 be configured. `STRIPE_API_HOST` is the fixture override, not a production qualification step.
+`STRIPE_ACCOUNT_NAMESPACE` names the configured direct account (default `direct`); `STRIPE_LIVEMODE`
+is explicitly `true` or `false` (default `false`). Neither the credential text nor event payload selects this
+namespace/mode. Set the mode explicitly for a live deployment; separate direct accounts require distinct namespaces.
 [Configuration](config.ts) rejects partial/invalid settings; without Commerce configuration, provider operations
 are unavailable. Signed fixtures and implementation work do not wait for live keys.
 
@@ -193,7 +196,7 @@ read. Thus A cannot apply after later admission commits, even when B's business 
 or fails. A newer no-op never returns authority to an older observation. Stable completion lookup under that
 same lock also prevents an older apply committing between the completion check and the revision claim.
 
-### Delivered native ABI and remaining integration
+### Native admission and combined worker
 
 [Commands](commands.ts) exports these new types and returns these additional trusted methods from
 `createCommerceCommands`:
@@ -237,16 +240,16 @@ returns `{changed:false}` with apply rollback while the admission remains commit
 existing native `CommandOutcome<AppliedCheckoutDecision>` plus `changed:true`; receipt replay acknowledges the
 original result and original envelope before the body, even after later revisions. `observedAt` is metadata in
 this claimed path. `applyCheckoutSnapshot(body, workflowId)` remains explicitly legacy with its existing timestamp
-behavior until compatible production wiring. No workflow or StripePort caller is migrated by these additions.
+behavior for direct legacy native callers. Production refresh callers use the claimed port through one combined step.
 
 [Focused native admission tests](../../test/commerce/checkout-refresh-admission.test.ts) cover real claim envelopes,
 completion under the order lock, newer no-op fencing, equal/backward clocks, named financial reversal, native
 serialization retries, stale rollback, committed-effect-before-successor ordering and invalid/overflow rollback.
 They use the native profile fixture's provisioning, signed Access identities and ordinary grants/offer/order
-commands, plus the official Stripe adapter against the loopback fixture. This proves only the native slice.
-The existing [full SDK user cases](../../test/commerce/session-refresh-user-cases.test.ts) remain required.
-Native locator binding and transport bounds, combined fresh Session-queue wiring, compatible persisted-history/
-executor cutover, paid-order/event repair and composed/unrelated-data growth captures remain pending.
+commands, plus the official Stripe adapter against the loopback fixture. The
+[full SDK user cases](../../test/commerce/session-refresh-user-cases.test.ts) exercise the combined step with native
+lock/read/commit scheduling. [Default-worker cases](../../test/commerce/default-refresh.test.ts) run the actual
+worker entry point in its own process, including paid repair, signed outage intake and queue admission.
 
 ### SDK recovery, cutover and physical bounds
 
@@ -275,6 +278,13 @@ unfenced executors and explicitly drain histories, fork at a supported fresh bou
 discarding cached snapshots and delegating with the original stable apply intent. Never replay old function IDs
 against an incompatible step graph. A cancelled status alone is not physical drain. Preserve completion metadata
 for supported replay lifetimes, coordinating minimization/retirement with shared retention owners.
+
+The retained adapter preserves the old registered names and clock/read/apply function positions. After physically
+draining the old binary, run the compatible binary with the SDK's `DBOS__APPVERSION` set to the old deployment's
+recorded `applicationVersion` and the same executor identity. The SDK then recovers that version's pending histories;
+new source with a newly computed version alone does not select them. The adapter discards cached financial output
+and delegates to the Session queue with the original stable native apply intent. The native cutover tests create
+old SDK histories, kill their owned old process, and select their recorded version through this actual SDK setting.
 
 Bound provider, transport and native attempts physically, including abandoned promises. The actual
 [Stripe adapter](stripe.ts) now binds a fresh [transport](stripe-transport.ts) to each public create, locator,
@@ -316,20 +326,34 @@ successful empty routing/payment evidence. Other provider errors retain existing
 [Native loopback transport acceptance](../../test/commerce/stripe-transport.test.ts) uses the official SDK,
 streamed HTTP, real sends/termination and existing provider fixture exports. It checks boundaries, transient
 and closed connections, cancellation, shared capacity and fixed selected reads with unrelated provider growth.
-This establishes the adapter operation's resource boundary only. Session-native claim/read/apply consumption,
-remaining-deadline propagation across resolver/native work and one combined finite native/provider retry budget
-remain separate implementation requirements. No numeric plan allowance is inferred.
+The SDK boundary caps its timeout by both the configured maximum and the remaining `withRequestDeadline`
+context. An expired context refuses before a send. HTTP checkout and each combined physical attempt establish one
+enclosing deadline; admission, locator, full read, pages, backoff and native apply share it. A later physical retry
+starts a fresh deadline and native claim. [Caller-deadline cases](../../test/commerce/stripe-caller-deadline.test.ts)
+exercise the official SDK with a shorter caller deadline and the default 20-second maximum, including charged
+physical settlement after public failure. No numeric plan allowance is inferred.
 
-Actual [work implementation](work.ts) uses the unpartitioned `workflows` queue and Session-plus-event child IDs.
-It durably clocks, reads and applies in separate steps. Those identities deduplicate triggers but do not serialize
-Session refreshes. [Settlement](settlement.ts) rejects an older `observedAt`, while a newer business no-op is rolled
-back without retaining that observation. A delayed old pending-full-refund response with no Balance Transaction can
-therefore revoke after a newer canceled-refund no-op. Equal clocks also supply no ordering proof. Receipt-aware
-admission and mandatory apply revision checks are now available through the additional native ports documented above.
-The live split-step path remains unfenced. Fresh combined retries, Session routing, native locator binding,
-compatible cutover and combined native/provider attempt bounds remain unimplemented; neither native prerequisite tests nor the
-[current](../../../../docs/research/commerce-session-refresh-recovery-current.md) and
-[deep reports](../../../../docs/research/commerce-session-refresh-recovery-deep.md) prove runtime acceptance.
+The [worker](work.ts) keeps event/order/expiry/repair parents on `workflows`. Children use `effects` with
+`partitionConcurrency: 1` and `commerce:<configured-account>:<live|test>:<Session>` keys. Each trigger has its own
+child identity. `commerce.refreshCheckout` resolves the native immutable binding, begins a fresh revision claim,
+releases its native client, reads the unexpanded locator and full provider truth, and applies the captured revision
+with the original stable intent. The step checkpoints only after the whole attempt. Completed native intents return
+before any provider call; superseded apply adds no receipt/effect. The existing command retry policy also retries
+provider unavailability, repeating admission and all reads within a new physical attempt. Native retries inside apply
+retain its original revision. Timestamps are diagnostic, including equal/backward clocks and newer business no-ops.
+Eight unsettled physical attempt bodies are admitted per worker registration; provider capacity remains shared
+across factories in the delivered transport.
+
+Legacy `commerce.clock`, `commerce.readCheckout`, `commerce.applyCheckout` and workflow names remain registered.
+Cached old routing outputs retain the old graph. The apply adapter uses only Session/order candidate locators,
+discards cached financial truth and delegates to a combined effects child with the **original** native apply intent.
+Old completed native effects acknowledge completion without another provider read. New resolver/order outputs mark
+new routing paths; they confer no saved native authority. [Legacy SDK cases](../../test/commerce/legacy-refresh.test.ts)
+create real old split checkpoints in one binary and recover them using the default worker. Deployment must physically
+drain/stop pre-fence binaries before relying on revision admission: status cancellation cannot stop an old unfenced
+body. The adapter supports persisted histories after that drain; it does not certify an independently running old
+binary safe. The [adopted recovery reports](../../../../docs/research/commerce-session-refresh-recovery-current.md)
+describe the SDK ownership and deployment boundary.
 
 ### Paid-order recovery
 
@@ -340,7 +364,13 @@ but failed work (DBOS recovery or fresh repair), and events outside provider ret
 Batch continuations, exact event types and Event-ID dedupe must bound recovery. Each new named repair or verified
 event recovery uses a new trigger identity; never reuse a completed initial reconciliation identity. Current
 initial/expiry workflows exit for paid/failed orders; their completion shortcuts are not late-payment recovery.
-There is no current explicit known-order repair route or implemented bounded event-recovery path in Commerce.
+The internal `createCommerceWork(client).enqueueKnownOrderRepair(orderId, name)` caller accepts paid orders and
+uses a distinct durable identity for each bounded repair name. Reusing a name dedupes that request. It fabricates
+no buyer and exposes no public repair endpoint. `recoverSignedEventPage` accepts at most 100 signed deliveries,
+each with the existing 256-KiB body bound and a 16-KiB signature-header bound. It verifies/classifies the entire
+page before dispatch through ordinary Event-ID dedupe and returns only count/last Event ID as continuation.
+Provider resends must carry a current valid signature; an expired archived signature grants no bypass. Operational
+outage enumeration stays outside this service and must supply finite pages, never a global paid-order sweep.
 
 ### Settlement, benefits and accounting
 
@@ -503,6 +533,16 @@ The integrated review's historical focused 23-case pass does not prove current m
 payout lifecycle, erasure or the root gate. Record current candidate/check/promoted-main evidence through the
 integration owner; neither source inspection nor this README's local acceptance supplies it.
 
+The current managed native run passes all 35 resolver semantics, admission, default-worker signed intake/repair,
+Session queue isolation, provider recovery, compatible legacy histories, the official-SDK caller deadline cases and
+retained financial reconciliation without benefit restoration after real Auth deletion through the default worker.
+It does not establish completion: the SQL serialization scheduling case remains red. In its single worker/pool,
+the process-local partition command gate keeps successor admission behind the paused native apply, so B never
+reaches its provider read. Moving the latch before apply authorization's first order lock does not establish the
+intended cross-executor PostgreSQL serialization race; the command gate and financial assertions remain intact.
+The growth runs below also fail their stated bounds. Frozen Commerce queue acceptance expects six queues while the
+integrated erasure registry requires the seventh `locator-effects` queue; that registry has been retained.
+
 ## Cost
 
 These are derivations from the commerce adapters and SQL, `src/work/`, `db/commerce/migrations/` and `db/commerce/schema.sql`, not measurements or guaranteed PostgreSQL plans.
@@ -532,7 +572,7 @@ The checkout recorder permits pending → unknown once, then a session or failed
 | Statement read and list                | Creator account authorization, then 0–1 `payout_statement` PK row with hard creator equality for read; list uses `payout_statement_creator_page(route,creator_account_id,statement_id)` descending below cursor, at most s+1 rows. Same creator partition; projection divides persisted weighted numerator, no royalty scan. Grow N/P/q/d, fixing creator, s and permissions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | R `O(1)` read / `O(s+1)` list, B `O(L(N)+s)`, S 1 plus authorization; independent of q/d.                                                                                                                                                                                                                                                                                                                                                                                                                                   | `test/commerce/growth-payouts.test.ts`: `Statement read and list stays within its bound as d grows`                                     |
 | Payout lines page                      | Authorize creator and read 0–1 statement PK with owner filter, then `royalty_line_statement_page(route,statement_id,balance_transaction_id)` above cursor ascending, at most s+1 lines in creator partition; no writes or total count. Grow N/P/q/l/d, fixing statement, s and permissions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | R `O(s+1)`, B `O(L(N)+s)`, S 2 plus authorization; no depth or payout-size scan.                                                                                                                                                                                                                                                                                                                                                                                                                                            | `test/commerce/growth-payouts.test.ts`: `Payout lines page stays within its bound as d grows`                                           |
 | Mark paid                              | Route-0 root authorization is prepared and checked at each attempt time, releasing root connection before creator transaction. Creator partition: 1 statement PK read and 1 conditional PK update (open, completed UTC month); guard inspects only OLD/NEW. Receipt replay reauthorizes; envelope emits paid event. No Stripe transfer or payout-line read. Grow N/P/q/l, fixing statement, k=1 and root permissions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | R `O(1)`, B `O(L(N))`, S 2 plus authorization/envelope; independent of q/l.                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `test/commerce/growth-payouts.test.ts`: `Mark paid stays within its bound as q grows`                                                   |
-| Webhook and commerce jobs              | Webhook verifies <=256 KiB body against configured secrets, no Access check or commerce SQL, then enqueues one DBOS workflow keyed by event ID. `commerce.stripeEvent` resolves at most 1 session (PaymentIntent filter, limit 1), clocks once (`work-clock.sql`, no relation, 1 result/statement), reads provider snapshot and applies settlement above. `commerce.reconcileOrder` reads at most 2 order PK rows, optionally creates/records checkout, syncs at most twice with 2 clocks and one durable sleep. Royalty effect passes the event transaction IDs to one `recordTransactions`; order-created effect enqueues one reconciliation delayed 900 seconds. `src/work/` registers fixed queues/modules against shared DBOS system DB. Grow N/P/o/q, fixing one job/ref, provider history l, k and retry configuration.                                                                                                                   | Wrapper SQL R/S `O(1)`, B `O(L(N))`, plus the invoked checkout/settlement/royalty bounds, with snapshot transactions capped at 256 and source reads restricted to named keys. Stripe steps retry at most 5 times; SDK defaults add network retries. DBOS persistence/index/block/statement bounds are not established by these wrappers; constant enqueue/step call count is not a DB cost proof.                                                                                                                           | `test/commerce/growth-orders.test.ts`: `Webhook and commerce jobs stays within its bound as N grows`                                    |
+| Webhook and commerce jobs | Webhook verifies <=256 KiB against configured secrets, then enqueues one event-ID parent on workflows. The parent resolves unexpanded provider/native binding and delegates to an effects child partitioned by trusted account/mode/Session. Each combined physical attempt revalidates the native binding, admits a fresh revision (or returns completed), releases its native client, validates the unexpanded locator, reads fresh financial truth and applies the captured revision with the original stable intent. Order, expiry and internal named-repair parents delegate to the same child; paid orders remain eligible for explicit repair. Legacy registrations discard cached clock/financial outputs and delegate with the original apply identity. Royalty effects read only their named transaction IDs. Grow unrelated native, provider and DBOS histories independently, fixing selected order/Session and bounded financial history. | Per-attempt keyed native wrapper work has R/S `O(1)`, B `O(L(N))`, plus the invoked authorization/envelope and bounded named settlement/royalty work. The existing eight-attempt command-step policy retries the whole refresh under a fresh physical-attempt deadline; one enclosing 20-second budget, or a shorter active caller deadline, covers each physical attempt and SDK retries/pages. Abandoned bodies remain charged until settlement. Actual DBOS persistence rows/blocks/statements and pool custody must be measured; fixed wrapper call counts do not establish those bounds. The current combined growth check fails. | `test/commerce/combined-refresh-growth.test.ts` measures the real SDK/native composition and remains red. The older growth-orders job case measures a known-order read, not this combined path. |
 | Erasure                                | No commerce erasure command/job/SQL exists; order and royalty transaction DELETE/UPDATE triggers reject one attempted row, while offer delisting and entitlement revocation preserve records. No fanout deletion or erasure projection to derive. Grow N/P/o/e/q, fixing rejected point target.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Absent operation: R/B/S 0; a direct point-delete attempt on immutable transaction PK has R/S `O(1)`, B `O(L(N))`, then raises without changing rows. No bound is claimed for arbitrary administrative deletes.                                                                                                                                                                                                                                                                                                              | `test/commerce/growth-orders.test.ts`: `Erasure stays within its bound as N grows`                                                      |
 
 Offer initialization and payout owner-grant insertion use temporal GiST constraints, whose worst-case block cost cannot be derived as a B-tree logarithmic probe.
@@ -556,8 +596,13 @@ Parent/root authorization and royalty source reads are separate anchored checkou
   request and the closed DTO for open and paid provider fixture Sessions, growing refunds/disputes at 1/4/16.
   It preserves foreign/missing correlation for later native validation and checks provider rejection. This proves
   neither native authorization/binding nor forged webhook refusal, queue/CAS or runtime wiring.
-  Three-scale native resolver and combined transport capture remain release requirements alongside combined
-  refresh, compatible cutover and paid-order/event repair.
+  The [native resolver](checkout-anchor.ts) adds exactly one route/order-PK read after correlation validation,
+  releases its client and returns only order/Session locators. Known-order repair uses that one read without
+  provider I/O. PaymentIntent routing adds one filtered Session list before the unexpanded GET. Missing/mismatched
+  bindings do no financial read. The frozen [native](../../test/commerce/checkout-anchor.test.ts) and
+  [growth](../../test/commerce/checkout-anchor-growth.test.ts) cases cover 35 semantics and four 64/512/4096 paths.
+  The current growth run fails: at 64 unrelated orders PostgreSQL selects a sequential scan examining 66 rows;
+  later scales use the PK index. A logical PK predicate alone has not proved the required physical one-row probe.
 
 ### Native refresh admission and application
 
@@ -570,17 +615,28 @@ Parent/root authorization and royalty source reads are separate anchored checkou
   intents and terminal suppression, plus constant keyed claim/lookup work and bounded named apply work, using existing maximum 256 transactions
   and 257-key total-count lookahead. Current provider caps are 100 refunds and 10 disputes, with advancing-page
   validation. The actual provider adapter now enforces pagination, nested expansion/fee-detail bytes, total
-  sends and its operation deadline as above; combined native/provider attempts still need enforcement/evidence. Stripe steps currently allow five attempts plus SDK network retries; no combined
-  attempt budget is implemented. Shared DBOS partition walks/sorts, backlog and fork/rewind history work require
-  measurement; fixed wrappers or timeouts alone prove none of those bounds. No numeric plan allowance is invented.
+  sends and its operation deadline as above. Each combined physical attempt has a 20-second enclosing budget,
+  capped by an existing caller's shorter deadline, with the existing eight-attempt command step policy and bounded
+  SDK network retries. New physical retries claim/read again; native apply retries retain their captured revision.
+  Shared DBOS partition walks/sorts, backlog and fork/rewind history work require measurement; fixed wrappers or
+  timeouts alone prove none of those bounds. No numeric plan allowance is invented.
 - Growth check: retain the existing named-key histories 1/64/255 and 256/257 boundary evidence in
   [growth transactions](../../test/commerce/growth-transactions.test.ts) and
   [order bounds](../../test/commerce/order-bounds.test.ts). Require real SDK/native first and replay/superseded/
   no-op/completed-A attempts and named repair at three legal unrelated-data/history scales. Grow unrelated orders,
   creator history, provider history, DBOS backlog and partition count independently with selected keys fixed;
   include cancellation/timeouts and terminal races. Measure examined rows, buffers, statements, provider elements/
-  bytes, pool time and persistence, including abandoned work and retries. These measurements are absent and this
-  native slice proves ordering/rollback only, not those measurements. The old growth-orders “Webhook and commerce
+  bytes, pool time and persistence, including abandoned work and retries.
+  [Combined growth](../../test/commerce/combined-refresh-growth.test.ts) captures the actual installed SDK plus
+  default Commerce registration, native claim/full read/no-op apply and internal repair with a fixed paid order/Session.
+  It separately grows unrelated command-created native orders, real provider Sessions and real completed workflow
+  histories at 64/512/4096. The shared harness records every SQL occurrence/backend, plans, rows, buffers, statements
+  and SQL bytes; provider sends/bytes, native transaction attempts/retries and native-client custody are counted too.
+  The current combined run fails its constant-row bound: the unrelated-provider axis reports 1928/2372/2332 examined
+  rows, led by real DBOS workflow status/output/input scans. Native-axis repetitions also report row noise and one
+  held-transaction settle failure. No allowance or subtraction has been added. These cases still require a passing
+  managed native run; backlog/partition fanout and arbitrary administrative
+  fork floods remain outside that selected fixed-key capture. The old growth-orders “Webhook and commerce
   jobs” case measures a known-order read, not a real signed-event queue run; its pass cannot fill this gap.
 
 ### Financial erasure participation

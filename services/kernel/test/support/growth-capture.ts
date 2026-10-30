@@ -303,7 +303,9 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
   const queryWithoutAttribution = (statement: string): unknown => {
     suppressAttribution = true;
     try {
-      return client.query(statement);
+      // Measurement controls are not application statements. Use the captured driver entry
+      // point so a later application observer does not count this SET as application SQL.
+      return query(statement);
     } finally {
       suppressAttribution = false;
     }

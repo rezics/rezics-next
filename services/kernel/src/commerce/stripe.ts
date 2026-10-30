@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { deadlineFor } from '../request/deadline.ts';
 import { stripeTransport } from './stripe-transport.ts';
 import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
 import {
@@ -98,8 +99,15 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
 
   async function call<T>(requests: number, input: unknown, operation: (stripe: Stripe) => Promise<T>): Promise<T> {
     try {
+      const remainingMs = Math.min(timeoutMs, deadlineFor(timeoutMs) - Date.now());
+      if (remainingMs <= 0) throw new StripeUnavailableError('Stripe request deadline expired');
       const signal = config.signal;
-      const transport = stripeTransport({ timeoutMs, retries, requests, ...(signal === undefined ? {} : { signal }) });
+      const transport = stripeTransport({
+        timeoutMs: remainingMs,
+        retries,
+        requests,
+        ...(signal === undefined ? {} : { signal }),
+      });
       return await transport.run(async () => {
         transport.inspectInput({ input, apiKey: config.apiKey, host: config.host });
         // One SDK instance binds the supported fetch hook to this physical operation, including retries/pages.
@@ -107,7 +115,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
           ...(config.host === undefined ? {} : { host: config.host }),
           ...(config.port === undefined ? {} : { port: config.port }),
           ...(config.protocol === undefined ? {} : { protocol: config.protocol }),
-          timeout: timeoutMs,
+          timeout: remainingMs,
           maxNetworkRetries: retries,
           httpClient: Stripe.createFetchHttpClient(transport.fetch),
         });

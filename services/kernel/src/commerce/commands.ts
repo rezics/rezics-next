@@ -296,9 +296,10 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     const prefix = `order:${id}:checkout:`;
     // A competing outcome can win this numbered receipt. Re-read its sequence
     // after a digest conflict; runCommand itself handles serialization retries.
-    // Stripe has already created or refused the session, so recording uses a fresh work budget.
+    // Recording also consumes the enclosing physical/request budget when there is one.
     const deadline = Date.now() + WORK_STEP_DEADLINE_MS;
-    while (Date.now() < deadline) {
+    const expiresAt = Math.min(deadline, deadlineFor(20_000));
+    while (Date.now() < expiresAt) {
       const order = await store.readOrder(pool, r, id);
       if (!order || order.checkoutSessionId !== null || order.settlement === 'failed' || order.settlement === 'paid')
         return unchanged;
@@ -316,7 +317,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           pool,
           {
             partition: partitionOf(r),
-            deadline,
+            deadline: expiresAt,
             receipt: {
               actorAccountId: order.buyerAccountId,
               kind: 'commerce.checkout.record',

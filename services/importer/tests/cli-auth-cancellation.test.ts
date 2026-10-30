@@ -98,7 +98,7 @@ test('oversized account-key Auth body is cancelled and never supplies a token', 
       fetch: (async (_input: RequestInfo | URL) => {
         requests++;
         return new Response(body, { status: 200, headers: { 'set-cookie': 'fixture=session; Secure; HttpOnly' } });
-      }) as typeof fetch,
+      }) as unknown as typeof fetch,
     });
     await expect(token()).rejects.toBeInstanceOf(CredentialServiceError);
     expect(requests).toBe(1);

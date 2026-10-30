@@ -1,5 +1,5 @@
 import { createStripePort } from './stripe.ts';
-import { readCommerceWorkerConfig } from './config.ts';
+import { readCommerceWorkerConfig, readCommerceProviderConfig } from './config.ts';
 import type { WorkModule } from '../work/registry.ts';
 
 export const commerceWorkModule: WorkModule = {
@@ -9,7 +9,8 @@ export const commerceWorkModule: WorkModule = {
     if (config === null) return;
     const { createCommerceWork } = await import('./work.ts');
     await createCommerceWork({
-      stripe: createStripePort({ ...config.stripe, clock: () => new Date() }),
+      stripe: createStripePort({ ...config.stripe, clock: context.clock }),
+      provider: readCommerceProviderConfig(context.env),
       checkout: { successUrl: config.successUrl, cancelUrl: config.cancelUrl },
     }).register(context);
   },

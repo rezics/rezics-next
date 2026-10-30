@@ -48,16 +48,34 @@ export async function refreshUserFixture(provider?: ReturnType<typeof startFakeS
   const fake = provider ?? startFakeStripe();
   // Legal provider states lacking a balance transaction. Only provider HTTP bytes change.
   const refundBytes = new Map<string, 'pending' | 'canceled'>();
+  const fullReads = new Map<string, { captured: PromiseWithResolvers<void>; released: PromiseWithResolvers<void> }>();
+  const failingReads = new Set<string>();
   const proxy = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
     async fetch(request) {
       const url = new URL(request.url);
+      const session = url.pathname.match(/^\/v1\/checkout\/sessions\/([^/]+)$/)?.[1];
+      const financial = session && (url.searchParams.has('expand[0]') || url.searchParams.has('expand[]'));
+      if (financial && failingReads.delete(session))
+        return Response.json(
+          { error: { type: 'api_error' } },
+          { status: 503, headers: { 'stripe-should-retry': 'false' } },
+        );
       const response = await fetch(`http://127.0.0.1:${fake.port}${url.pathname}${url.search}`, {
         method: request.method,
         headers: request.headers,
         ...(request.method === 'POST' ? { body: await request.text() } : {}),
       });
+      if (financial && fullReads.has(session)) {
+        const gate = fullReads.get(session)!;
+        fullReads.delete(session);
+        // Buffer real provider bytes before the scheduling latch; never manufacture a snapshot.
+        const bytes = await response.arrayBuffer();
+        gate.captured.resolve();
+        await gate.released.promise;
+        return new Response(bytes, { status: response.status, headers: response.headers });
+      }
       if (url.pathname !== '/v1/refunds' || !response.ok) return response;
       const body = await response.json();
       for (const refund of body.data)
@@ -237,11 +255,20 @@ export async function refreshUserFixture(provider?: ReturnType<typeof startFakeS
         return notices.slice(after).find(accept);
       },
       (value) => value !== undefined,
-    ).then((value) => value!);
+    )
+      .then((value) => value!)
+      .catch((error) => {
+        throw new Error(JSON.stringify({ waitingFor: accept.toString(), notices: notices.slice(after), diagnostics }), {
+          cause: error,
+        });
+      });
   }
-  async function start() {
+  async function start(
+    runtime: 'refresh-user' | 'default-work' | 'legacy-work' = 'refresh-user',
+    applicationVersion?: string,
+  ) {
     const before = notices.length;
-    child = Bun.spawn([process.execPath, `${import.meta.dir}/refresh-user-runtime.ts`], {
+    child = Bun.spawn([process.execPath, `${import.meta.dir}/${runtime}-runtime.ts`], {
       env: {
         ...process.env,
         ...workerTestEnv({
@@ -256,6 +283,7 @@ export async function refreshUserFixture(provider?: ReturnType<typeof startFakeS
           CHECKOUT_SUCCESS_URL: 'https://web.test/success',
           CHECKOUT_CANCEL_URL: 'https://web.test/cancel',
           REFRESH_TIME: instant,
+          ...(applicationVersion === undefined ? {} : { DBOS__APPVERSION: applicationVersion }),
           OPENSEARCH_URL: undefined,
         }),
       },
@@ -306,6 +334,16 @@ export async function refreshUserFixture(provider?: ReturnType<typeof startFakeS
     pool,
     client,
     fake,
+    enqueue,
+    handle: app.handle.bind(app),
+    delayFullRead(session: string) {
+      const gate = { captured: Promise.withResolvers<void>(), released: Promise.withResolvers<void>() };
+      fullReads.set(session, gate);
+      return { captured: gate.captured.promise, release: gate.released.resolve };
+    },
+    failFullRead(session: string) {
+      failingReads.add(session);
+    },
     buyer,
     offer,
     request,

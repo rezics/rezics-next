@@ -27,7 +27,15 @@ test('createCommerceWork returns the commerce module and keeps exactly the ADR-0
   });
   expect(module.name).toBe('commerce');
   expect(typeof module.register).toBe('function');
-  expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
+  expect(Object.keys(WORK_QUEUES)).toEqual([
+    'governance',
+    'effects',
+    'locator-effects',
+    'workflows',
+    'delivery',
+    'import',
+    'maintenance',
+  ]);
 });
 
 test('a verified paid event delivered twice runs one event parent and one Session-partitioned refresh and grants once in the buyer partition', async () => {

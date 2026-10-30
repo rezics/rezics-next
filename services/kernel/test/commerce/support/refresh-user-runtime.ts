@@ -59,6 +59,7 @@ const module: WorkModule = {
       const query = client.query.bind(client);
       let native = false;
       let applying = false;
+      let admission = false;
       client.query = (async (...args: unknown[]) => {
         const config = args[0] as { text?: string; values?: unknown[] };
         const statement = typeof args[0] === 'string' ? args[0] : (config?.text ?? '');
@@ -67,12 +68,16 @@ const module: WorkModule = {
         if (/^BEGIN/i.test(statement)) {
           native = /SERIALIZABLE/i.test(statement);
           applying = false;
+          admission = false;
         }
         if (native && values?.includes('commerce.checkout.apply')) applying = true;
+        if (native && values?.includes('commerce.checkout.refresh')) admission = true;
+        // Admission precedes the full read. Apply's authorization locks the order before
+        // its receipt lookup, so the receipt kind cannot identify that first lock.
         if (
           workflow &&
+          returned.has(workflow) &&
           native &&
-          applying &&
           /commerce\.purchase_order/i.test(statement) &&
           /FOR UPDATE/i.test(statement)
         ) {
@@ -82,7 +87,7 @@ const module: WorkModule = {
           const result = await (query as (...values: unknown[]) => Promise<unknown>)(...args);
           if (workflow && returned.has(workflow) && /SELECT owner_xid FROM/i.test(statement))
             send({ kind: 'checkpoint', workflow });
-          if (workflow && native && applying && /^COMMIT/i.test(statement)) {
+          if (workflow && native && applying && !admission && /^COMMIT/i.test(statement)) {
             native = false;
             await boundary(workflow, 'commit');
           }
