@@ -1,4 +1,4 @@
-import { useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -101,8 +101,16 @@ export function ProfileCard({
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const profile = state.draft;
   const ids = useId();
-  const [validate, setValidate] = useState(false);
-  const errors = profile && validate ? profileFieldErrors(profile) : {};
+  const [validationAttempt, setValidationAttempt] = useState(0);
+  const controls = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLDivElement | null>>({});
+  const pendingFocus = useRef<string | undefined>(undefined);
+  const submittedDraft = useRef<typeof profile>(null);
+  const errors = profile && validationAttempt > 0 ? profileFieldErrors(profile) : {};
+  useEffect(() => {
+    const field = pendingFocus.current;
+    pendingFocus.current = undefined;
+    if (field) controls.current[field]?.focus();
+  }, [validationAttempt]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const closed = !writable || state.phase === 'unavailable';
   const avatar = useProfileAvatarUpload(editor, closed, avatarUpload);
@@ -120,14 +128,28 @@ export function ProfileCard({
         links: profile.links,
       }),
     ).length > 0;
+  const errorMessage = (field: string) =>
+    errors[field] === 'text'
+      ? m.settings_profile_text_limit()
+      : errors[field] === 'label'
+        ? m.settings_profile_label_limit()
+        : errors[field] === 'links'
+          ? m.settings_profile_links_limit()
+          : m.settings_profile_https_link();
+  const fieldLabel = (field: string) => {
+    if (field === 'displayName') return m.settings_profile_display_name();
+    if (field === 'biography') return m.settings_profile_biography();
+    if (field === 'links') return m.settings_profile_links();
+    const [kind, index] = field.split('-');
+    return m.settings_profile_link_field({
+      number: Number(index) + 1,
+      field: kind === 'label' ? m.settings_profile_link_label() : m.settings_profile_link_url(),
+    });
+  };
   const fieldError = (field: string) =>
     errors[field] ? (
       <p id={`${ids}-${field}-error`} className="text-sm text-destructive">
-        {errors[field] === 'text'
-          ? m.settings_profile_text_limit()
-          : errors[field] === 'label'
-            ? m.settings_profile_label_limit()
-            : m.settings_profile_https_link()}
+        {errorMessage(field)}
       </p>
     ) : null;
   return (
@@ -147,13 +169,54 @@ export function ProfileCard({
             aria-busy={busy || uploading}
             onSubmit={(event) => {
               event.preventDefault();
-              setValidate(true);
+              const invalidFields = Object.keys(profileFieldErrors(profile));
+              if (invalidFields.length) {
+                submittedDraft.current = profile;
+                pendingFocus.current = invalidFields[0];
+                setValidationAttempt((attempt) => attempt + 1);
+                return;
+              }
               if (!closed && !uploading) void editor.submit('profile');
             }}
           >
-            <label className="grid gap-2 text-sm font-medium">
+            {Object.keys(errors).length ? (
+              <Alert variant="destructive" role="group" aria-labelledby={`${ids}-validation-summary`}>
+                <AlertTitle
+                  key={validationAttempt}
+                  id={`${ids}-validation-summary`}
+                  // Only an explicit invalid submission announces; edits update the links quietly.
+                  role={submittedDraft.current === profile ? 'alert' : undefined}
+                  aria-atomic="true"
+                >
+                  {m.settings_profile_validation_summary()}
+                </AlertTitle>
+                <AlertDescription>
+                  <ul>
+                    {Object.keys(errors).map((field) => (
+                      <li key={field}>
+                        <a
+                          href={`#${ids}-${field}`}
+                          className="block min-h-11 content-center rounded-sm py-2 break-words underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            controls.current[field]?.focus();
+                          }}
+                        >
+                          {fieldLabel(field)}: {errorMessage(field)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <label htmlFor={`${ids}-displayName`} className="grid gap-2 text-sm font-medium">
               {m.settings_profile_display_name()}
               <Input
+                id={`${ids}-displayName`}
+                ref={(control) => {
+                  controls.current.displayName = control;
+                }}
                 value={profile.displayName ?? ''}
                 maxLength={4096}
                 disabled={closed}
@@ -163,9 +226,13 @@ export function ProfileCard({
               />
               {fieldError('displayName')}
             </label>
-            <label className="grid gap-2 text-sm font-medium">
+            <label htmlFor={`${ids}-biography`} className="grid gap-2 text-sm font-medium">
               {m.settings_profile_biography()}
               <Textarea
+                id={`${ids}-biography`}
+                ref={(control) => {
+                  controls.current.biography = control;
+                }}
                 value={profile.biography ?? ''}
                 rows={6}
                 maxLength={4096}
@@ -182,12 +249,30 @@ export function ProfileCard({
               upload={avatar}
               disabled={closed || busy || !!state.attempt}
             />
-            <div className="space-y-3">
-              <h3 className="font-medium">{m.settings_profile_links()}</h3>
+            <div
+              id={`${ids}-links`}
+              ref={(control) => {
+                controls.current.links = control;
+              }}
+              role="group"
+              tabIndex={-1}
+              aria-labelledby={`${ids}-links-heading`}
+              aria-invalid={!!errors.links}
+              aria-describedby={errors.links ? `${ids}-links-error` : undefined}
+              className="space-y-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              <h3 id={`${ids}-links-heading`} className="font-medium">
+                {m.settings_profile_links()}
+              </h3>
+              {fieldError('links')}
               {profile.links.map((link, index) => (
                 <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]" key={index}>
                   <div className="space-y-1">
                     <Input
+                      id={`${ids}-label-${index}`}
+                      ref={(control) => {
+                        controls.current[`label-${index}`] = control;
+                      }}
                       aria-label={m.settings_profile_link_label()}
                       value={link.label}
                       required
@@ -206,6 +291,10 @@ export function ProfileCard({
                   </div>
                   <div className="space-y-1">
                     <Input
+                      id={`${ids}-url-${index}`}
+                      ref={(control) => {
+                        controls.current[`url-${index}`] = control;
+                      }}
                       aria-label={m.settings_profile_link_url()}
                       type="url"
                       value={link.url}

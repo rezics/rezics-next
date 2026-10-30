@@ -310,6 +310,38 @@ test('field validation matches Accounts limits and refuses credentialed, insecur
   expect(() => parseProfileWrite({ before: profile, after: {}, idempotencyKey: crypto.randomUUID() })).toThrow();
 });
 
+test('invalid profile submission keeps the exact draft and local avatar without reading or sending a native command', async () => {
+  const boundary = api();
+  const editor = new ProfileEditor(boundary.io, initial());
+  const localAvatar = { media: '019a0000-0000-7000-8000-000000000099' };
+  editor.edit({
+    displayName: 'x'.repeat(4097),
+    biography: null,
+    avatar: localAvatar,
+    links: [{ label: '😀'.repeat(65), url: 'http://example.test/exact draft' }],
+  });
+  const draft = editor.snapshot().draft;
+  await editor.submit('profile');
+  expect(profileFieldErrors(draft!)).toEqual({ displayName: 'text', 'label-0': 'label', 'url-0': 'url' });
+  expect(editor.snapshot().draft).toBe(draft);
+  expect(editor.snapshot().draft?.avatar).toBe(localAvatar);
+  expect(editor.snapshot().draft?.displayName).toHaveLength(4097);
+  expect(editor.snapshot().known).toEqual(initial());
+  expect(editor.snapshot().attempt).toBeNull();
+  expect(boundary.writes).toHaveLength(0);
+  expect(boundary.reads).toHaveLength(0);
+  editor.edit({ displayName: null, avatar: null, links: [{ label: '😀'.repeat(64), url: 'https://example.test' }] });
+  await editor.submit('profile');
+  expect(boundary.writes).toHaveLength(1);
+  expect(boundary.writes[0]?.patch).toEqual({
+    displayName: null,
+    biography: null,
+    avatar: null,
+    links: [{ label: '😀'.repeat(64), url: 'https://example.test' }],
+  });
+  expect(editor.snapshot().phase).toBe('saved');
+});
+
 test('organization-only speaker listing and native avatar references use the ordinary patch boundary', async () => {
   const boundary = api();
   const before = { ...initial(), kind: 'organization' as const, speakersListed: false };

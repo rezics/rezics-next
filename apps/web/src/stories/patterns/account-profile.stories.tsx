@@ -10,17 +10,28 @@ import {
   RouterProvider,
   useRouter,
 } from '@tanstack/react-router';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from '@rezics/ui/shadcn/button';
 import { createProfileStoryIO, type ProfileScenario } from '../../kernel/fake/settings-profile';
 import { m } from '../../paraglide/messages.js';
 import { ProfileCard } from '../../settings/profile';
 import { PublicViewsCard } from '../../settings/public-views';
-import { ProfileEditor } from '../../settings/profile-write';
+import { ProfileEditor, type ProfileAttempt } from '../../settings/profile-write';
 import { ProfileNavigation } from '../../settings/profile-navigation';
 
-function ProfileExample({ scenario }: { scenario: ProfileScenario }) {
-  const [editor] = useState(() => new ProfileEditor(createProfileStoryIO(scenario)));
+type SaveObserver = ((attempt: ProfileAttempt) => void) | undefined;
+
+function ProfileExample({ scenario, onSave }: { scenario: ProfileScenario; onSave?: SaveObserver }) {
+  const [editor] = useState(() => {
+    const io = createProfileStoryIO(scenario);
+    return new ProfileEditor({
+      ...io,
+      save: (attempt) => {
+        onSave?.(attempt);
+        return io.save(attempt);
+      },
+    });
+  });
   useEffect(() => {
     void editor.reload().then(() => {
       if (scenario === 'pending') {
@@ -61,20 +72,20 @@ function ProfileHome() {
   );
 }
 
-function Example({ scenario = 'normal' }: { scenario?: ProfileScenario }) {
+function Example({ scenario = 'normal', onSave }: { scenario?: ProfileScenario; onSave?: SaveObserver }) {
   const router = useMemo(() => {
     const root = createRootRoute({ component: Outlet });
     const profile = createRoute({
       getParentRoute: () => root,
       path: '/settings',
-      component: () => <ProfileExample scenario={scenario} />,
+      component: () => <ProfileExample scenario={scenario} onSave={onSave} />,
     });
     const home = createRoute({ getParentRoute: () => root, path: '/', component: ProfileHome });
     return createRouter({
       routeTree: root.addChildren([profile, home]),
       history: createMemoryHistory({ initialEntries: ['/settings'] }),
     });
-  }, [scenario]);
+  }, [scenario, onSave]);
   return <RouterProvider router={router} />;
 }
 
@@ -204,6 +215,75 @@ export const InvalidLink: Story = {
     await userEvent.type(url, 'https://example.test/notes');
     await userEvent.click(view.getByRole('button', { name: m.settings_profile_save() }));
     await view.findByText(m.settings_saved());
+  },
+};
+
+export const ValidationFeedback: Story = {
+  name: 'Submitting an invalid profile announces actionable field errors and focuses the first invalid control while preserving the exact draft and sending no native command',
+  args: { onSave: fn() },
+  play: async ({ canvasElement, args }) => {
+    const view = await profileView(canvasElement);
+    const label = await view.findByRole('textbox', { name: m.settings_profile_link_label() });
+    const url = view.getByRole('textbox', { name: m.settings_profile_link_url() });
+    const biography = view.getByRole('textbox', { name: m.settings_profile_biography() });
+    const draftLabel = 'x'.repeat(65);
+    await userEvent.clear(label);
+    await userEvent.type(label, draftLabel);
+    await userEvent.clear(url);
+    await userEvent.type(url, 'http://example.test');
+    await userEvent.clear(biography);
+    await userEvent.type(biography, 'Keep this draft exactly.');
+    await expect(view.queryByRole('alert')).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.settings_profile_save() }));
+    await waitFor(() => expect(label).toHaveFocus());
+    const announcement = view.getByRole('alert');
+    await expect(announcement).toHaveTextContent(m.settings_profile_validation_summary());
+    const summary = within(view.getByRole('group', { name: m.settings_profile_validation_summary() }));
+    const links = summary.getAllByRole('link');
+    await expect(links).toHaveLength(2);
+    await expect(links[0]).toHaveAttribute('href', `#${label.id}`);
+    await expect(links[1]).toHaveAttribute('href', `#${url.id}`);
+    await expect(label).toHaveAttribute('aria-invalid', 'true');
+    await expect(label).toHaveAccessibleDescription(m.settings_profile_label_limit());
+    await expect(url).toHaveAccessibleDescription(m.settings_profile_https_link());
+    links[1]!.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(url).toHaveFocus();
+    await userEvent.type(url, '/draft');
+    await expect(url).toHaveFocus();
+    await expect(view.queryByRole('alert')).toBeNull();
+    await expect(view.getByText(m.settings_profile_validation_summary())).toBe(announcement);
+    await expect(label).toHaveValue(draftLabel);
+    await expect(url).toHaveValue('http://example.test/draft');
+    await expect(biography).toHaveValue('Keep this draft exactly.');
+    await expect(args.onSave).not.toHaveBeenCalled();
+    await userEvent.click(view.getByRole('button', { name: m.settings_profile_save() }));
+    await waitFor(() => expect(label).toHaveFocus());
+    await expect(view.getByRole('alert')).not.toBe(announcement);
+    await userEvent.clear(label);
+    await userEvent.type(label, 'Notes');
+    await userEvent.clear(url);
+    await userEvent.type(url, 'https://example.test/notes');
+    await expect(view.queryByRole('alert')).toBeNull();
+    await expect(view.queryByRole('group', { name: m.settings_profile_validation_summary() })).toBeNull();
+    // A newly invalid draft after correction stays quiet until the next explicit submission.
+    await userEvent.clear(url);
+    await userEvent.type(url, 'http://example.test');
+    await expect(url).toHaveFocus();
+    await expect(view.queryByRole('alert')).toBeNull();
+    await userEvent.clear(url);
+    await userEvent.type(url, 'https://example.test/notes');
+    await userEvent.click(view.getByRole('button', { name: m.settings_profile_save() }));
+    await view.findByText(m.settings_saved());
+    await expect(args.onSave).toHaveBeenCalledTimes(1);
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        after: expect.objectContaining({
+          biography: 'Keep this draft exactly.',
+          links: [{ label: 'Notes', url: 'https://example.test/notes' }],
+        }),
+      }),
+    );
   },
 };
 
