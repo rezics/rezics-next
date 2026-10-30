@@ -63,3 +63,37 @@ keys remain with their owning components. Terms mutation and detailed Changes pr
 native bindings; a menu link establishes neither availability nor a successful write. The Contribute stories use
 actual routes for navigation and the existing terms page for explicit denied/unavailable samples. Native acceptance,
 interaction execution and phone/desktop visual review remain integration work.
+
+## Browser flow: fictional character identity and credits
+
+The catalogue creation entry, a fictional character's header and a work's Characters view offer **Character identity
+and credit editor**. `/{locale}/catalogue/character?work={id}` starts from an exact existing work;
+`/{locale}/subjects/{id}/{slug}/character` corrects the canonical character, optionally retaining `work`. These
+private, noindex routes keep the actual `wd:Q95074` identity separate from people and accounts. Current public
+subjects and the active release load independently; the immutable release decides effective fields, targets,
+qualifiers, units and classifications. Definition fallback carries its actual language.
+
+Subject and work entries use the shared **Contribute** menu, preserving the exact character or work address and
+the existing signed-out return destination. The standalone catalogue creation entry shares that destination.
+
+Names, original text, traits, measurements and identifiers appear in meaningful groups. Initial creation reuses
+native subject POST, initial-term validation and scalar controls. Only explicitly entered languages and added facts
+are sent; no birth year, classification, image, Source metadata or work credit is inferred. Native initial facts
+are selected at creation. The exact returned UUID is reread before providing the canonical reader and correction
+address; concealed or unavailable readback offers a read retry without another create.
+
+Scalar corrections reuse the multi-field workspace, with unchanged fields excluded and independent per-field
+results. Classification targets use the existing subject picker and the same statement, qualifier, grouped-reference,
+validation and sealed-command helpers, with field-wide candidate review. Current assertions, other languages,
+qualifiers and references survive replacement drafting. Name maps link to the actual terms adapter; an unavailable
+native producer stays unavailable. Original text links to the existing authored editor with explicit language and
+licence. No candidate is presented as current publication.
+
+Appearances and credits are statements on the selected existing work. The existing relation editor retains separate
+emitted properties, the native `wdt:P453` character qualifier and exact target/key slots, credited names, roles,
+order and citations. The current release emits `schema:character` and qualified `wdt:P725` voice credits, but no
+separate actor-to-character credit property. That gap is visible; no actor control or substitute property is invented.
+Choosing another work never copies credits. Existing native candidate decisions, adoption, disclosure and
+source-or-consent behavior remain authoritative. Invalid input, stale metadata, denial and unavailability retain
+drafts. Uncertain requests freeze the original body and key for retry; changing metadata or session state hides
+the retained workspace until it can be read again.

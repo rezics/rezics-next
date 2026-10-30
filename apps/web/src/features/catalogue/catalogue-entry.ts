@@ -44,6 +44,18 @@ export const catalogueEntries = {
     label: m.publication_add({}, options(locale)),
     href: `/${locale}/catalogue/publication?work=${encodeURIComponent(work)}`,
   }),
+  character: ({
+    id,
+    label,
+    work,
+    locale,
+  }: Locale & { id?: string | undefined; label?: string | undefined; work?: string | undefined }): CatalogueEntry => ({
+    group: id ? 'edit' : 'create',
+    label: m.character_title({}, options(locale)),
+    href: id
+      ? `${subject({ id, label: label ?? '', locale })}/character`
+      : `/${locale}/catalogue/character${work ? `?work=${encodeURIComponent(work)}` : ''}`,
+  }),
   changes: ({ id, title, locale }: Locale & { id: string; title: string }): CatalogueEntry => ({
     group: 'read',
     label: m.changes_title({}, options(locale)),

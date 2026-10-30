@@ -5,6 +5,7 @@ import type { PublicFigure } from './subject-ratings';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
+import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
@@ -389,6 +390,12 @@ export function SubjectPage({
         >
           {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
           <CreateSubjectEntry locale={locale} />
+          {read.subject.type === 'wd:Q95074' && (
+            <CharacterProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          )}
+          {page.views?.includes('characters') && read.subject.type !== 'wd:Q95074' && (
+            <CharacterProfileEntry work={read.subject.id} locale={locale} />
+          )}
           <AuthoredFieldEntry id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
           <SubjectFactsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           {read.subject.type === 'schema:Recipe' && (

@@ -6,6 +6,7 @@ import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
+import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import type { KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -262,6 +263,10 @@ export function SubjectFrame({
           <EditorialEntry id={frame.id} label={title} locale={locale} context={context ?? frame.context} realm={realm}>
             {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
             <CreateSubjectEntry locale={locale} />
+            {frame.type === 'wd:Q95074' && <CharacterProfileEntry id={frame.id} label={title} locale={locale} />}
+            {(view === 'characters' || view === 'credits') && frame.type !== 'wd:Q95074' && (
+              <CharacterProfileEntry work={frame.id} locale={locale} />
+            )}
             <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
             <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
             {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}

@@ -9,6 +9,7 @@ import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { RecipeEditorEntry } from './recipe-editor-entry';
+import { CharacterProfileEntry } from './character-profile-entry';
 import {
   initialTerms,
   type CreateFailure,
@@ -194,6 +195,7 @@ export function CreateSubjectForm({
             </div>
           )}
           <RecipeEditorEntry locale={locale} />
+          <CharacterProfileEntry locale={locale} />
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && types.length > 0 && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
