@@ -148,15 +148,15 @@ async function readViewer(
   auth: Auth,
 ): Promise<{ state: MemberState; idempotencyKey: string }> {
   const [membership, participation] = await Promise.all([
-    readOptional(client.realms({ realmId }).members.me.get(auth)),
+    client.realms({ realmId }).members.me.get(auth).then(readCommunity),
     client.realms({ realmId }).participation.get(auth),
   ]);
-  const state = membership?.state ?? 'none';
+  const state = membership.state;
   const participationStatus = statusOf(participation);
   const denied = participationStatus === 403 && !isPlatformClosedProblem(403, participation.error?.value);
   if (participation.error && !denied) throw new Error('Kernel Realm participation read failed');
   if (participationStatus !== 204 && !denied) throw new Error('Kernel Realm participation read failed');
-  return { state: state === 'none' && denied ? 'banned' : state, idempotencyKey: crypto.randomUUID() };
+  return { state: denied ? 'banned' : state, idempotencyKey: crypto.randomUUID() };
 }
 
 /** The public Realm content. Personal membership is loaded separately after hydration. */
@@ -291,26 +291,40 @@ export async function loadMyRealms(
 }
 
 export type MembershipOutcome = 'accepted' | 'closed' | 'refused';
+export type MembershipResult =
+  | { outcome: 'accepted'; workflowId: string }
+  | { outcome: 'closed' | 'refused'; detail?: string };
 
-/** Asks to join (`POST`) or leave (`DELETE`) one Realm with the session's credential and the page's idempotency key. */
+type MembershipInput = { realmId: string; action: 'join' | 'leave'; idempotencyKey: string };
+
+/** Acceptance starts a native workflow; it does not establish membership or following. */
+export async function requestRealmMembership(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: MembershipInput,
+): Promise<MembershipResult> {
+  const { signedIn, auth } = await session(request, sessionEnv, 'session');
+  if (!signedIn || !('headers' in auth)) return { outcome: 'refused' };
+  const realm = client.realms({ realmId: input.realmId });
+  const headers = { ...auth.headers, 'idempotency-key': JSON.stringify(input.idempotencyKey) };
+  const result =
+    input.action === 'join'
+      ? await realm.membership.post({}, { headers })
+      : await realm.membership.delete(undefined, { headers });
+  const body = isRecord(result.error) && isRecord(result.error.value) ? result.error.value : undefined;
+  if (isPlatformClosedProblem(statusOf(result), body)) return { outcome: 'closed' };
+  if (result.error || statusOf(result) !== 202 || !result.data?.workflowId)
+    return { outcome: 'refused', ...(typeof body?.detail === 'string' ? { detail: body.detail } : {}) };
+  return { outcome: 'accepted', workflowId: result.data.workflowId };
+}
+
+/** Compatibility for consumers that need only the command's acceptance outcome. */
 export async function changeMembership(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { realmId: string; action: 'join' | 'leave'; idempotencyKey: string },
+  input: MembershipInput,
 ): Promise<MembershipOutcome> {
-  const { signedIn, auth } = await session(request, sessionEnv, 'session');
-  if (!signedIn) return 'refused';
-  const realm = client.realms({ realmId: input.realmId });
-  const headers = {
-    ...(auth as { headers: { authorization: string } }).headers,
-    'idempotency-key': JSON.stringify(input.idempotencyKey),
-  };
-  const result =
-    input.action === 'join'
-      ? await realm.membership.post({}, { headers })
-      : await realm.membership.delete(undefined, { headers: headers as never });
-  if (isPlatformClosedProblem(statusOf(result), isRecord(result.error) ? result.error.value : undefined))
-    return 'closed';
-  return result.error ? 'refused' : 'accepted';
+  return (await requestRealmMembership(client, request, sessionEnv, input)).outcome;
 }

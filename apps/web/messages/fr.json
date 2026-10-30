@@ -1051,5 +1051,12 @@
   "settings_reading_show": "Afficher les images sensibles",
   "settings_display_heading": "Affichage",
   "settings_display_text": "La langue et l’apparence s’appliquent à ce navigateur. Changer l’apparence recharge cette page.",
-  "settings_reading_review_changes": "Examiner mes modifications"
+  "settings_reading_review_changes": "Examiner mes modifications",
+  "realm_membership_retry": "Vérifier l’adhésion",
+  "realm_membership_loading": "Chargement de l’adhésion…",
+  "realm_membership_checking": "Demande acceptée. Vérification de l’adhésion actuelle…",
+  "realm_membership_still_pending": "Votre demande est toujours en attente. Vérifiez à nouveau votre adhésion.",
+  "realm_membership_pending_unavailable": "Demande acceptée, mais l’adhésion actuelle est indisponible. Une nouvelle vérification ne renverra pas la demande.",
+  "realm_protected_admission": "Le propriétaire doit ajouter les membres de ce Realm. L’adhésion directe est indisponible.",
+  "space_follow_label": "Suivi du Space"
 }

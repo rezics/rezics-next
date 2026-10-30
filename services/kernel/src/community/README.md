@@ -156,6 +156,24 @@ binding per publication/cancellation; constant rows/statements/output with logar
 64/512/4096 growth series in `test/access/growth-realm-membership-transition.test.ts` includes the shared workflow,
 Access consumers, source proofs, transaction controls and DBOS work.
 
+## Participation on the Space home
+
+The Space home keeps Realm membership separate from following the Space. Public self-join and direct,
+owner-selected add-member use the existing membership commands and their `202 { workflowId }` acceptance.
+Protected Realms do not offer self-join; an owner admits an account through `POST /v1/realms/{realmId}/members`.
+Resource roles do not create membership or a My Realms entry.
+
+After an accepted self join or leave, the web interface refreshes `GET /v1/realms/{realmId}/members/me` and
+`GET /v1/realms/{realmId}/participation` at most four times per refresh. Acceptance alone never means that the
+membership changed. An unsettled or unavailable result keeps a pending state with a manual read retry; that
+retry does not resend a command. A denied or hidden read is not an empty membership. Settlement invalidates
+My Realms and the carrying Space's independent follow read. No workflow-status endpoint is introduced.
+
+The follow control uses only `GET/PUT/DELETE /v1/follows/{spaceId}` through the shared Library interface.
+Leave never unfollows, and an explicit unfollow remains authoritative when a later native join workflow applies
+its implied Space follow. There is no Realm follow. A native leave denial remains a denial; the interface does
+not transfer ownership or introduce a separate holder authority.
+
 ## Account erasure
 
 The account-partition `party_locator` projects the committing ban, membership-operation and curator-verdict

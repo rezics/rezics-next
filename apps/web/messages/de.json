@@ -1051,5 +1051,12 @@
   "settings_reading_show": "Sensible Bilder anzeigen",
   "settings_display_heading": "Anzeige",
   "settings_display_text": "Sprache und Darstellung gelten für diesen Browser. Ein Wechsel der Darstellung lädt die Seite neu.",
-  "settings_reading_review_changes": "Meine Änderungen prüfen"
+  "settings_reading_review_changes": "Meine Änderungen prüfen",
+  "realm_membership_retry": "Mitgliedschaft prüfen",
+  "realm_membership_loading": "Mitgliedschaft wird geladen…",
+  "realm_membership_checking": "Anfrage angenommen. Aktuelle Mitgliedschaft wird geprüft…",
+  "realm_membership_still_pending": "Deine Anfrage ist noch offen. Prüfe die Mitgliedschaft erneut.",
+  "realm_membership_pending_unavailable": "Anfrage angenommen, aber der aktuelle Status ist nicht verfügbar. Erneutes Prüfen sendet die Anfrage nicht noch einmal.",
+  "realm_protected_admission": "In diesem Realm muss ein Eigentümer Mitglieder hinzufügen. Selbst beitreten ist nicht möglich.",
+  "space_follow_label": "Space folgen"
 }

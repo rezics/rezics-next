@@ -1051,5 +1051,12 @@
   "settings_reading_show": "Mostrar imágenes sensibles",
   "settings_display_heading": "Pantalla",
   "settings_display_text": "El idioma y la apariencia se aplican en este navegador. Cambiar la apariencia vuelve a cargar la página.",
-  "settings_reading_review_changes": "Revisar mis cambios"
+  "settings_reading_review_changes": "Revisar mis cambios",
+  "realm_membership_retry": "Comprobar membresía",
+  "realm_membership_loading": "Cargando membresía…",
+  "realm_membership_checking": "Solicitud aceptada. Comprobando la membresía actual…",
+  "realm_membership_still_pending": "Tu solicitud sigue pendiente. Vuelve a comprobar la membresía.",
+  "realm_membership_pending_unavailable": "Solicitud aceptada, pero la membresía actual no está disponible. Comprobar de nuevo no reenviará la solicitud.",
+  "realm_protected_admission": "El propietario debe añadir a los miembros de este Realm. No puedes unirte por tu cuenta.",
+  "space_follow_label": "Seguimiento del Space"
 }

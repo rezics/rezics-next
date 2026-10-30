@@ -1051,5 +1051,12 @@
   "settings_reading_show": "配慮が必要な画像を表示",
   "settings_display_heading": "表示",
   "settings_display_text": "言語と外観はこのブラウザーに適用されます。外観を変更するとページが再読み込みされます。",
-  "settings_reading_review_changes": "自分の変更を確認"
+  "settings_reading_review_changes": "自分の変更を確認",
+  "realm_membership_retry": "メンバー状態を確認",
+  "realm_membership_loading": "メンバー状態を読み込み中…",
+  "realm_membership_checking": "リクエストを受け付けました。現在のメンバー状態を確認中…",
+  "realm_membership_still_pending": "リクエストは処理中です。もう一度確認してください。",
+  "realm_membership_pending_unavailable": "リクエストは受け付けましたが、現在の状態を取得できません。再確認してもリクエストは再送されません。",
+  "realm_protected_admission": "このRealmには所有者によるメンバー追加が必要です。自分では参加できません。",
+  "space_follow_label": "Spaceのフォロー"
 }

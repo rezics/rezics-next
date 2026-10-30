@@ -1052,5 +1052,12 @@
   "settings_reading_show": "显示敏感图片",
   "settings_display_heading": "显示",
   "settings_display_text": "语言与外观设置适用于这个浏览器。更改外观会重新加载页面。",
-  "settings_reading_review_changes": "查看我的更改"
+  "settings_reading_review_changes": "查看我的更改",
+  "realm_membership_retry": "检查成员状态",
+  "realm_membership_loading": "正在加载成员状态…",
+  "realm_membership_checking": "请求已接受。正在检查当前成员状态…",
+  "realm_membership_still_pending": "请求仍在处理中。请再次检查以刷新成员状态。",
+  "realm_membership_pending_unavailable": "请求已接受，但暂时无法获取当前成员状态。再次检查不会重新发送请求。",
+  "realm_protected_admission": "此领域需要由所有者添加成员，无法自行加入。",
+  "space_follow_label": "空间关注"
 }

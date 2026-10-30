@@ -1051,5 +1051,12 @@
   "settings_reading_show": "顯示敏感圖片",
   "settings_display_heading": "顯示",
   "settings_display_text": "語言與外觀設定適用於這個瀏覽器。變更外觀會重新載入頁面。",
-  "settings_reading_review_changes": "檢視我的變更"
+  "settings_reading_review_changes": "檢視我的變更",
+  "realm_membership_retry": "檢查成員狀態",
+  "realm_membership_loading": "正在載入成員狀態…",
+  "realm_membership_checking": "請求已接受。正在檢查目前成員狀態…",
+  "realm_membership_still_pending": "請求仍在處理中。請再次檢查以更新成員狀態。",
+  "realm_membership_pending_unavailable": "請求已接受，但暫時無法取得目前成員狀態。再次檢查不會重新傳送請求。",
+  "realm_protected_admission": "此領域需要由擁有者新增成員，無法自行加入。",
+  "space_follow_label": "空間追蹤"
 }

@@ -13,7 +13,8 @@ export const readRealmMembership = createServerFn({ method: 'GET' })
       typeof input !== 'object' ||
       !('realmId' in input) ||
       typeof input.realmId !== 'string' ||
-      !input.realmId
+      !input.realmId ||
+      input.realmId.length > 128
     )
       throw new Error('Invalid Realm membership request');
     return { realmId: input.realmId };

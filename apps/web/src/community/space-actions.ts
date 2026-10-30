@@ -6,13 +6,13 @@ import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import {
-  changeMembership,
+  requestRealmMembership,
   loadMyRealms,
   loadSpacePage,
   locateRealm,
   namePublishedTypes,
   type Located,
-  type MembershipOutcome,
+  type MembershipResult,
   type MyRealmsPage,
   type SpacePageData,
 } from './space';
@@ -110,10 +110,10 @@ export const readMyRealmsPage = createServerFn({ method: 'GET' })
 
 export const changeRealmMembership = createServerFn({ method: 'POST' })
   .validator(validateChange)
-  .handler(async ({ data }): Promise<{ outcome: MembershipOutcome }> => {
+  .handler(async ({ data }): Promise<MembershipResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     try {
-      return { outcome: await changeMembership(kernelClient(), getRequest(), env as Partial<SessionEnv>, data) };
+      return requestRealmMembership(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     } catch {
       return { outcome: 'refused' };
     }

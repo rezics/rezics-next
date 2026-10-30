@@ -174,7 +174,11 @@ export function SpacePage({ page }: { page: SpacePageData }) {
           <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
           {page.realm ? (
             <div className="shrink-0">
-              <RealmMembership realm={page.realm} returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
+              <RealmMembership
+                realm={page.realm}
+                spaceId={page.space.id}
+                returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+              />
             </div>
           ) : null}
         </div>
@@ -182,7 +186,9 @@ export function SpacePage({ page }: { page: SpacePageData }) {
           <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
         ) : null}
       </header>
-      <FollowTargetControl targetId={page.space.id} />
+      <section aria-label={m.space_follow_label()}>
+        <FollowTargetControl targetId={page.space.id} />
+      </section>
       {page.realm ? <Home realm={page.realm} /> : null}
     </article>
   );

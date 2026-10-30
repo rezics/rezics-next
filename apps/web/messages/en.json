@@ -1052,5 +1052,12 @@
   "settings_reading_show": "Show sensitive images",
   "settings_display_heading": "Display",
   "settings_display_text": "Language and appearance apply in this browser. Changing appearance reloads this page.",
-  "settings_reading_review_changes": "Review my changes"
+  "settings_reading_review_changes": "Review my changes",
+  "realm_membership_retry": "Check membership",
+  "realm_membership_loading": "Loading membership…",
+  "realm_membership_checking": "Your request was accepted. Checking current membership…",
+  "realm_membership_still_pending": "Your request is still pending. Check again to refresh membership.",
+  "realm_membership_pending_unavailable": "Your request was accepted, but current membership is unavailable. Check again; this will not resend the request.",
+  "realm_protected_admission": "This Realm requires an owner to add members. Self-join is unavailable.",
+  "space_follow_label": "Space following"
 }
