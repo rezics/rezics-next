@@ -660,6 +660,14 @@ ${replacementSource}
             throw new Error('fixture runner identity changed before interruption');
           const tree = processTreeMembers(identity.pid);
           process.kill(identity.pid, 'SIGKILL');
+          for (const member of tree) {
+            if (member.pid === identity.pid || !sameProcess(member)) continue;
+            try {
+              process.kill(member.pid, 'SIGKILL');
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+            }
+          }
           await untilRecorded(
             () => tree.every((member) => !sameProcess(member)) && processGroupMembers(identity.group).length === 0,
           );
