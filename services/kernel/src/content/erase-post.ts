@@ -1,3 +1,4 @@
+import { retractDiscoveryStart } from './discovery.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -232,6 +233,12 @@ async function prepareAuthorizedPoint(
       // A different key cannot turn an already erased object into a new effect.
       // Same-key retries have already returned from the native receipt phase.
       if (!changed) throw new GrantDeniedError();
+      const discoveryEvents =
+        point.kind === 'thread'
+          ? await retractDiscoveryStart(tx, { threadId: point.id })
+          : point.kind === 'post' && scope.container_id
+            ? await retractDiscoveryStart(tx, { threadId: scope.container_id, postId: point.id })
+            : [];
       const securityRevision = changed.security_revision;
       const value = { targetId: point.id, securityRevision };
       if (point.action === 'moderation:takedown') {
@@ -256,6 +263,7 @@ async function prepareAuthorizedPoint(
                 securityRevision,
               },
             },
+            ...discoveryEvents,
           ],
         };
       }
@@ -268,6 +276,7 @@ async function prepareAuthorizedPoint(
               subject: point.id,
               data: { postId: point.id, securityRevision },
             },
+            ...discoveryEvents,
           ],
         };
       // The media purge consumer resolves this ID and purges only m/<id>/.
@@ -501,6 +510,7 @@ export async function erasePostLogicalPageAsInitiator(
         const changed = (await tx.query<{ security_revision: string }>(erase.sql, args(erase))).rows[0];
         // An already erased post cannot become a new effect on a different key.
         if (!changed) throw new GrantDeniedError();
+        events.push(...(await retractDiscoveryStart(tx, { threadId: input.threadId, postId: id })));
         events.push({
           type: 'com.rezics.content.post.erased.v1',
           subject: id,

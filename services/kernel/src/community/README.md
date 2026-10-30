@@ -362,3 +362,38 @@ there is no catalogue, grant, membership or descendant scan and no per-card requ
 | Ban, unban or list current bans                              | Ban opens the Realm ban record and two identity denials, checks the owner/moderator grant keys and probes current membership; an existing member also gets a removal operation/workflow. Unban closes the record and denials. Listing keyset-reads at most L current bans plus one lookahead row. | Ban and unban have constant rows and statements; listing has linear rows in L and constant statements. Logarithmic blocks in Realm and ban indexes, plus bounded Access and removal workflow where applicable. | `test/community/growth-ban.test.ts`: `Realm ban, unban and list`.                                                                                                                                                                                                                                                        |
 
 A is bounded Access admission and permission evaluation. Each `runCommand` phase is a single-partition transaction. Fixed request, page and change limits are inputs; no operation above depends on scanning unrelated history. Bounds describe database rows, statements and indexed blocks, not wall-clock latency or engine posting-list work.
+
+## Public Realm discussion discovery
+
+Community owns Popular and Trending. Their adopted definition is public discussion starts in the previous 30 and
+1 complete UTC days respectively, ordered count descending then Realm ID ascending, omitting zero. Trending means
+recent volume. Membership, unique people, votes, views and population normalization are not inputs. Later public
+cards expose no counts and use null avatars/initials: there is no Realm/Space avatar-selection authority, and an
+owner's photo is not a substitute. The aggregate and public route are separate, pending delivery.
+
+The delivered source is Content's native `realm-discovery.changed.v1` catalogue entry and per-thread contribution.
+`prepareRealmDiscoverySource` in `discovery-source.ts` verifies explicit public Realm state and independent anonymous
+`realm:read` and host `space:read` at the originating command T. Access evidence and exact routed anchor reads finish
+before the thread command opens its home. Realm `discovery_epoch` changes durably with visibility/state/host changes;
+metadata-only head edits retain it. A return from protected visibility starts a new epoch. An original private
+creation can never acquire qualification on replay, publication or delayed delivery. Epoch initialization does not
+scan old content or infer historical publicity. The source's original epoch never changes.
+
+The exact source read/apply preparation contract is exported by Content's `discovery.ts` as `DiscoverySourceFact`,
+`readDiscoverySource` and `prepareDiscoverySourceApply`, with `DiscoveryDelta` defined by the closed native schema.
+It supplies source version/state, not current rank eligibility. The aggregate must independently validate the current
+Realm/Space binding and epoch; original-public evidence alone cannot authorize current disclosure.
+
+The missing lifecycle hook is a native durable operation stage before source mutation, rather than an asynchronous
+notification after it. It must fence the exact `(realmId, realmEpoch)` generation in the Realm home before board,
+thread/opening, Realm or Space invalidation; include durable source operation identity; and resolve that operation
+before clearing its own pending fence after ordered verified application. Pending or mismatched generations cannot
+serve. There is currently no such stage in point moderation/appeal restoration, so no exported fence-clear function
+or always-unavailable rank facade claims to implement it. Container removal/restoration writers must use the eventual
+same operation stage, preserve the Context pointer, check lifecycle/publication before and at final disclosure, and
+never fall back to Global for removed containers. Readable orphan resources remain distinct from removed resources.
+
+Source qualification and epoch changes touch exact routed keys with constant rows/statements plus bounded native
+Access work. Later aggregation must use at most 31 day-bucket keys per affected board, durable bounded pages for
+multi-board changes, and at most 50 indexed due keys per recovery step, with O(changes log R) rank maintenance.
+No new queue, authority or recovery scheduler is introduced here. Existing growth evidence remains for integration.

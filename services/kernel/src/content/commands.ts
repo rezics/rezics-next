@@ -1,3 +1,5 @@
+import { prepareRealmDiscoverySource, type RealmDiscoveryBinding } from '../community/discovery-source.ts';
+import { appendDiscoveryStart } from './discovery.ts';
 import { createHash, createHmac } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -608,6 +610,7 @@ export async function createThread(
   );
   let boardCheck: Awaited<ReturnType<typeof accessCheck>>;
   let threadPlaceId = GLOBAL_CONTEXT;
+  const discovery = new WeakMap<AuthoritativeTime, { boardVersion: string; binding: RealmDiscoveryBinding }>();
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const base = parentCreationAuthorization({
     access: dependencies.access,
@@ -627,6 +630,14 @@ export async function createThread(
           throw new ContentNotFoundError();
         const current = await mediaParentBoard(client, board.id);
         threadPlaceId = current.realm_id ?? GLOBAL_CONTEXT;
+        const qualified = discovery.get(time);
+        if (
+          qualified &&
+          (current.realm_id !== qualified.binding.realmId ||
+            row.visibility !== 'published' ||
+            row.security_revision !== qualified.boardVersion)
+        )
+          discovery.delete(time);
         // board_identity makes purpose immutable, so this validation cannot race a purpose change.
         if ((current.purpose === 'reviews') !== (threadKind === 'review')) throw new InvalidDocumentError();
         if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
@@ -667,6 +678,24 @@ export async function createThread(
         );
         if (!proof.allowed) throw new ContentForbiddenError();
         participation.set(attempt.time, proof);
+      }
+      if (threadKind === 'discussion' && body.visibility === 'published') {
+        const original = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
+          readBoard.run(client, { route: board.route, id: board.id }),
+        );
+        if (
+          original?.visibility === 'published' &&
+          original.realm_id !== null &&
+          Date.parse(original.created_at) <= Date.parse(authoritativeTimeValue(attempt.time))
+        ) {
+          const binding = await prepareRealmDiscoverySource(
+            dependencies,
+            original.realm_id,
+            attempt.time,
+            context.deadline,
+          );
+          if (binding) discovery.set(attempt.time, { boardVersion: original.security_revision, binding });
+        }
       }
       return base.prepare!(attempt);
     },
@@ -739,12 +768,22 @@ export async function createThread(
             revisionId: value.revisionId,
             boardId: body.boardId,
           });
-        return result(value, actor, 'thread', {
+        const created = result(value, actor, 'thread', {
           placeId: threadPlaceId,
           kind: threadKind,
           subjectIds,
           activityAt: eventActivityAt(command.time),
         });
+        const qualified = discovery.get(command.time);
+        const deltas = qualified
+          ? await appendDiscoveryStart(tx, {
+              threadId: value.threadId,
+              boardId: body.boardId,
+              binding: qualified.binding,
+              time: command.time,
+            })
+          : [];
+        return { value: created.value, events: [...created.events, ...deltas] };
       },
     );
   } catch (error) {

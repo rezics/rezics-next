@@ -922,3 +922,38 @@ Limits: board candidates <= 200, collection <= 100, public pages <= 100 results 
 - **Touches:** Appeal reads one decision and inserts one appeal row. Resolve updates one appeal row and checks target authorization, plus `liftTakedown`'s bound and one notice. Pending lists follow the report list bound: at most L + 1 queue candidates and L independently authorized source reads, with L <= 100. The existing appeal read returns the decision statement, target and decider identity internally; list projection exposes only the statement and target, and derives `canResolve` from that same current target authorization plus the independent-review comparison. Board candidates are projected from committed events on the board route; a resolution permanently removes the candidate from its pending index.
 - **Bound:** Constant rows and statements per appeal and resolution; O(L) rows and statements per list, independent of appeals per board.
 - **Growth check:** `test/content/appeals-http.test.ts`, `appeals per board`, at 64, 256 and 1024 appeals; rows per call stay constant.
+
+## Realm discovery source
+
+`createThread` records original public discussion starts in the thread home. Qualification belongs to that
+command's authoritative T: published discussion/thread/opening, published Realm board, active explicitly public
+Realm epoch and independently anonymous-readable active host Space. Board, Realm and Space checks release their
+connections before the next home. Drafts, reviews, replies, edits, publication, membership and Global or protected
+boards supply no contribution. Existing threads are never backfilled. Canonical documents, references, grants and
+parent creation retain their native command behavior.
+
+`realm_discovery_contribution` stores only exact source identities, original epoch, UTC creation day, current state
+and a bigint source version. The closed internal `com.rezics.content.realm-discovery.changed.v1` event commits with
+the source command in its native outbox. It carries no body or actor identity. Native opening-post deletion/erasure
+and thread/opening takedown retract an originally qualified start once; replies do not retract it. Native page erasure
+uses the same exact source module. Source versions advance on actual state changes, independently of receipt replay.
+
+Community's consumer contract is `readDiscoverySource` followed by `prepareDiscoverySourceApply` from
+`discovery.ts`: release the source read before the aggregate command, compare immutable binding, and apply the
+absolute source state only above the consumer's stored version. A delayed positive delta reads a newer negative
+source fact rather than resurrecting it. The native envelope supplies causality and deduplication; this preparation
+is not a fence acknowledgement or permission to disclose a rank.
+
+Strict pre-invalidation fencing and positive restoration remain undelivered. Ordinary point moderation currently
+mutates directly in `prepareAuthorizedPoint().mutate`; appeal `liftTakedown` composes inside an already-open source
+transaction. Neither has a durable discovery operation spanning a prior Realm-home fence and source outcome. The
+existing author-erasure operation/relay covers author erasure only. Adding independent callbacks here would hold two
+homes or invent a second coordinator. A future native operation stage must commit the Realm fence before the point
+mutation, resolve the source operation on failure, and clear only its own fence after verified ordered application.
+`restorePost`, `liftTakedown`, board invalidation and container lifecycle need that same stage; restoration currently
+leaves a retracted discovery source retracted. No aggregate or endpoint is exposed by this source delivery.
+
+Cost: one exact board/Realm/Space neighborhood with native bounded Access preparation, one source INSERT and one
+bounded outbox delta for qualifying creation; one exact source UPDATE and at most one thread identity read for a
+point invalidation. Erasure pages retain their existing maximum of 100 posts, with constant point work per post.
+There is no thread, membership, revision-history or descendant scan, cross-home SQL join or held transaction.

@@ -1,3 +1,4 @@
+import { DISCOVERY_EVENTS } from './discovery-events.ts';
 import { Type, type Static } from 'typebox';
 import { BOARD_EVENTS } from './board-events.ts';
 import { MEDIA_EVENTS } from './media-events.ts';
@@ -95,6 +96,7 @@ export const CONTENT_EVENTS = {
     { additionalProperties: false },
   ),
   ...SOURCE_FENCE_EVENTS,
+  ...DISCOVERY_EVENTS,
 } as const;
 
 export type ContentEventType = keyof typeof CONTENT_EVENTS;
