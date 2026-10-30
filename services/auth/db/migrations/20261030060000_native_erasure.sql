@@ -512,6 +512,17 @@ BEGIN
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_attempt_account" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_auth_attempt_account();
+CREATE FUNCTION auth_erasure_guard_consent() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    PERFORM auth_erasure_admit(OLD.account_id);
+    PERFORM auth_erasure_admit_client(OLD.client_id);
+  END IF;
+  PERFORM auth_erasure_admit(NEW.account_id);
+  PERFORM auth_erasure_admit_client(NEW.client_id);
+  RETURN NEW;
+END $$;
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON auth_consent FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_consent();
 CREATE FUNCTION auth_erasure_guard_auth_recent_oidc_session() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='UPDATE' THEN

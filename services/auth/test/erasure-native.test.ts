@@ -283,6 +283,9 @@ test('existing deletion caller drains real Auth stores before user deletion; def
       ])
     ).rows[0]!;
     expect(access.state).toBe('deleted');
+    await expect(
+      f.pool.query("INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,'erasure-web','{}')", [owner]),
+    ).rejects.toThrow('Auth erasure fence');
     expect(Number(access.minimum_authn_epoch)).toBe(obligation.barrier);
     const due = obligation.consent_due_at;
     // Stale native issuance/recovery/reduction cannot recreate any of these rows.
