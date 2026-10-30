@@ -439,7 +439,7 @@ async function reconcileDiscoveryPage(pool: Pool,search: OpenSearch,projection: 
     expected=discoveryDocumentActions(registry,{owner:'accounts',snapshot},keys);
   } else {
     const snapshot=await entry.source.read(partition,keys.map(({id})=>id));
-    validateObservation(snapshot,partition,keys.map(({id})=>id),census.position);
+    validateObservation(snapshot,partition,keys.map(({id})=>id),census.position,true);
     const counts=await projection.listing.read(partition,snapshot.subjects.map(({id})=>id));
     expected=discoveryDocumentActions(registry,{owner:'semantic',snapshot},keys,counts);
     const semantic=expected.filter((action):action is Extract<DiscoveryIndexAction,{op:'index'}> & {document:SubjectDocument & IndexedDiscoveryDocument}=>action.op==='index' && action.document.owner==='semantic');
@@ -524,7 +524,8 @@ export async function advanceDiscovery(options: {
       const witness=witnesses.get(row.partition);
       if (row.position===row.head && row.semantic_position===row.head && witness?.revision===BigInt(row.revision) && witness.claimRevision===BigInt(row.claim_revision)) continue;
       await withConnection(pool,(client)=>client.query(`UPDATE search.discovery_population SET certified=false,after_route=NULL,after_id=NULL,reconcile_position=NULL,indexed=0
-        WHERE prefix=$1 AND generation=$2 AND partition_no=$3`,[prefix,target.generation,row.partition])); return;
+        WHERE prefix=$1 AND generation=$2 AND partition_no=$3`,[prefix,target.generation,row.partition]));
+      await withConnection(pool,(client)=>client.query("UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'",[prefix,target.generation])); return;
     }
   }
   if (await discoveryIndexUuid(search,index)!==target.uuid) throw new Error('Discovery incarnation changed before activation');

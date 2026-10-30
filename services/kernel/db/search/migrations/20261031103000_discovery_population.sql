@@ -48,5 +48,12 @@ CREATE TABLE search.discovery_copy (
   CHECK (route = get_byte(uuid_send(source_id),10)*256 + get_byte(uuid_send(source_id),11))
 );
 CREATE INDEX discovery_copy_generation ON search.discovery_copy(prefix,generation,route,source_id,kind);
+-- Participant progress survives bounded copy pages and replay; it never stores profile text.
+CREATE TABLE search.discovery_erasure (
+  route integer NOT NULL,
+  account_id uuid NOT NULL,
+  PRIMARY KEY(route,account_id),
+  CHECK (route = get_byte(uuid_send(account_id),10)*256 + get_byte(uuid_send(account_id),11))
+);
 -- migrate:down
 -- Forward only: physical locators and deletion high water survive binary rollback.

@@ -139,7 +139,8 @@ export async function writeDiscoveryActions(
   const receiptItems: unknown[] = response.items;
   const conflicts = actions.filter((action, offset) => {
     const item = receiptItems[offset];
-    return isRecord(item) && isRecord(item[action.op]) && item[action.op].status === 409;
+    const receipt = isRecord(item) ? item[action.op] : undefined;
+    return isRecord(receipt) && receipt.status === 409;
   });
   const observed = await search.request<unknown>('POST', `/${index}/_search`, {
     size: conflicts.length, version: true, query: { ids: { values: conflicts.map(({ id }) => id) } },
@@ -161,7 +162,7 @@ export async function writeDiscoveryActions(
   }
 }
 
-function validateRefreshResponse(status: number, response: unknown): void {
+export function validateRefreshResponse(status: number, response: unknown): void {
   if (!Number.isInteger(status) || status < 200 || status >= 300 || !isRecord(response)) return writeError([response]);
 
   if (!completeShards(response._shards)) return writeError([response]);

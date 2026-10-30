@@ -13,7 +13,7 @@ import type { OpenSearch } from './opensearch.ts';
 import { createDiscoveryRegistry } from './discovery-registry.ts';
 import { discoveryDocumentActions, discoveryDocumentId, parseDiscoveryDocumentId } from './discovery-documents.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
-import { writeDiscoveryActions } from './write-actions.ts';
+import { writeDiscoveryActions, validateRefreshResponse } from './write-actions.ts';
 import { validateObservation } from './indexer.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
@@ -300,6 +300,7 @@ async function locateAccount(pool: Pool, target: DiscoveryTarget, key: Discovery
     if (erased) {
       const copy = await tx.query('SELECT 1 FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5', values);
       if (!copy.rowCount) return noEffect(false);
+      await tx.query('INSERT INTO search.discovery_erasure(route,account_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',[key.route,key.id]);
       await recordLateErasureItem(tx, { accountId:key.id, participant:'search', locator:copyLocator(target) });
       return { value:false, events:[{ type:'com.rezics.access.account-updated.v1', subject:key.id, data:{accountId:key.id} }] };
     }
@@ -336,7 +337,7 @@ export function createDiscoveryProjection(options: {
           const bindings=await readAccountDiscoveryBindings(pool,partition,ids);
           for (const row of snapshot.accounts) {
             const binding=bindings.get(row.id);
-            if (!binding || binding.revision !== row.revision) throw new Error('Account discovery revision moved; retry');
+            if (!binding || binding.revision !== row.revision || (row.handle!==null && binding.claim===null)) throw new Error('Account discovery revision moved; retry');
             if (binding.claim && binding.consumedClaimRevision < binding.claim.revision) {
               await redriveAccountDiscovery({pool},partitionOf(binding.claim.route));
               throw new Error('Account claim consumption advanced; resnapshot before projection');
@@ -350,7 +351,7 @@ export function createDiscoveryProjection(options: {
         } else {
           if (!subject || subject.owner !== 'semantic') throw new Error('Subject source is required');
           const snapshot=await subject.source.read(partition,ids);
-          validateObservation(snapshot,partition,ids,atLeast);
+          validateObservation(snapshot,partition,ids,atLeast,true);
           const counts=await listing.read(partition,snapshot.subjects.filter((row)=>row.visibility==='visible' && row.redirect===null).map(({id})=>id));
           actions=discoveryDocumentActions(registry,{owner,snapshot},chunk,counts);
           const semantic = actions.filter((action): action is Extract<DiscoveryIndexAction,{op:'index'}> & {document: SubjectDocument & IndexedDiscoveryDocument} => action.op==='index' && action.document.owner==='semantic');
@@ -407,20 +408,23 @@ export async function eraseDiscoveryAccount(pool: Pool, search: OpenSearch, regi
       if (!head || BigInt(head.position)<BigInt(target.position)) throw new Error('Erasure source position rewound');
       await writeDiscoveryActions(search,registry,index,[{op:'delete',id:discoveryDocumentId(registry,{owner:'accounts',kind:'account',route,id:accountId}),version:BigInt(head.position)}]);
       const merged=await search.request<{_shards?:{failed?:number}}>('POST',`/${index}/_forcemerge`,undefined,{query:{only_expunge_deletes:true}});
-      if (merged.body._shards?.failed!==0) throw new Error('Discovery erasure segment reclaim failed');
-      await client.query("DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind='account'",[route,accountId,target.prefix,target.generation]);
+      validateRefreshResponse(merged.status,merged.body);
+      const cleared=await search.request('POST',`/${index}/_cache/clear`);
+      validateRefreshResponse(cleared.status,cleared.body);
     },true);
+    await withConnection(pool,(client)=>client.query("DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind='account'",[route,accountId,target.prefix,target.generation]));
     await resolveLateErasureItem({pool},{accountId,participant:'search',locator:copyLocator(target)});
   }
   if (copies.length===100) return; // A bounded page is never an all-copy acknowledgement.
   const status=await withConnection(pool,(client)=>readErasureStatus(client,accountId));
   if (status?.participants.search?.outcome==='pending')
-    await acknowledgeErasure({pool},{accountId,participant:'search',outcome:copies.length ? 'erased':'none'});
+    await acknowledgeErasure({pool},{accountId,participant:'search',outcome:await withConnection(pool,async(client)=>(await client.query('SELECT 1 FROM search.discovery_erasure WHERE route=$1 AND account_id=$2',[route,accountId])).rowCount) ? 'erased':'none'});
 }
 
 /** A physically deleted generation may still own an open erasure locator. */
 export async function registerRetiredErasure(pool:Pool,target:DiscoveryTarget,accountId:string) {
   return runCommand(pool,{partition:discoveryPartition(accountId)},async(tx)=>{
+    await tx.query('INSERT INTO search.discovery_erasure(route,account_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',[routeOf(accountId),accountId]);
     await recordLateErasureItem(tx,{accountId,participant:'search',locator:copyLocator(target)});
     return {value:true,events:[{type:'com.rezics.access.account-updated.v1',subject:accountId,data:{accountId}}]};
   });
