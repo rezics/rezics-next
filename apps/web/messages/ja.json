@@ -3067,5 +3067,13 @@
   "library_progress_meaning_unknown": "元の単位の意味は不明です。保存された値を変更せずに表示しています。",
   "library_progress_structure_unverified": "単位IDと位置のテキストはこのセッションの記録です。現在のコンテンツ構造との対応は確認されていません。",
   "library_progress_recording_unavailable": "進捗を記録できるか確認できませんでした。このセッションの保存済み履歴は引き続き読めます。",
-  "library_progress_retry": "再試行"
+  "library_progress_retry": "再試行",
+  "addon_title": "追加コンテンツ・拡張パックの編集",
+  "addon_intro": "独立した識別情報を持つゲームの追加コンテンツや拡張パックを作成・修正します。本編、ファイル、配布、言語やプラットフォームの組み合わせとは別の対象です。この追加コンテンツ固有の情報だけを入力してください。本編のクレジット、対応機種、進捗は引き継ぎません。",
+  "addon_base": "本編作品",
+  "addon_use_base": "この本編作品を使用",
+  "addon_choose_existing": "既存の追加コンテンツを選択",
+  "addon_correct": "この追加コンテンツを修正",
+  "addon_corrections": "作成後の変更は審査待ちの候補です。選択された情報は現在の閲覧結果で確認します。名前とオリジナルの文章には別の編集画面を使います。",
+  "addon_relations": "本編作品・制作者・その他の関係"
 }

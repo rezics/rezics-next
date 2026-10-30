@@ -3067,5 +3067,13 @@
   "library_progress_meaning_unknown": "Die ursprüngliche Bedeutung der Einheit ist unbekannt. Gespeicherte Werte werden unverändert angezeigt.",
   "library_progress_structure_unverified": "Einheiten-IDs und Positionstext gehören zu dieser Sitzung. Ihr Bezug zur aktuellen Inhaltsstruktur wurde nicht überprüft.",
   "library_progress_recording_unavailable": "Ob weitere Einträge möglich sind, konnte nicht überprüft werden. Der gespeicherte Verlauf dieser Sitzung bleibt lesbar.",
-  "library_progress_retry": "Erneut versuchen"
+  "library_progress_retry": "Erneut versuchen",
+  "addon_title": "Editor für Add-ons und Erweiterungen",
+  "addon_intro": "Erstelle oder korrigiere ein eigenständig identifiziertes Spiel-Add-on oder eine Erweiterung. Grundspiel, Datei, Vertrieb sowie Sprach- oder Plattformkombinationen sind andere Objekte. Trage nur eigene Fakten des Add-ons ein; Mitwirkende, Plattformen und Fortschritt des Grundspiels werden nicht übernommen.",
+  "addon_base": "Grundwerk",
+  "addon_use_base": "Dieses Grundwerk verwenden",
+  "addon_choose_existing": "Vorhandenes Add-on wählen",
+  "addon_correct": "Dieses Add-on korrigieren",
+  "addon_corrections": "Spätere Änderungen sind Vorschläge für die native Prüfung. Nur die aktuelle Leseansicht bestimmt die ausgewählten Fakten. Namen und eigene Texte haben getrennte Editoren.",
+  "addon_relations": "Grundwerk, Urheber und weitere Beziehungen"
 }

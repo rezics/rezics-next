@@ -1,5 +1,6 @@
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { EditorialEntry } from '../catalogue/editorial-entry';
+import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
 import { SubjectChangesLink } from '../catalogue/subject-changes-link';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
@@ -280,6 +281,11 @@ export function SubjectFrame({
               context={context ?? frame.context}
               realm={realm}
             >
+              {frame.type === 'wd:Q209163' ? (
+                <AddonProfileEntry id={frame.id} label={title} locale={locale} />
+              ) : (
+                <AddonProfileEntry locale={locale} {...(frame.type === 'schema:VideoGame' ? { work: frame.id } : {})} />
+              )}
               {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
               <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
               <CreateSubjectEntry locale={locale} />

@@ -3067,5 +3067,13 @@
   "library_progress_meaning_unknown": "Se desconoce el significado original de la unidad. Los valores guardados se muestran sin cambios.",
   "library_progress_structure_unverified": "Los identificadores de unidad y el texto de ubicación pertenecen a esta sesión. No se ha verificado su relación con la estructura actual del contenido.",
   "library_progress_recording_unavailable": "No se ha podido verificar si se puede registrar progreso. Puedes seguir leyendo el historial guardado de esta sesión.",
-  "library_progress_retry": "Reintentar"
+  "library_progress_retry": "Reintentar",
+  "addon_title": "Editor de complementos y expansiones",
+  "addon_intro": "Crea o corrige un complemento o una expansión de juego con identidad propia. El juego base, un archivo, una distribución o una combinación de idioma y plataforma son objetos diferentes. Introduce solo los datos propios del complemento; no se heredan créditos, plataformas ni progreso.",
+  "addon_base": "Obra base",
+  "addon_use_base": "Usar esta obra base",
+  "addon_choose_existing": "Elegir un complemento existente",
+  "addon_correct": "Corregir este complemento",
+  "addon_corrections": "Los cambios posteriores son propuestas pendientes de revisión nativa. Solo la lectura actual determina los datos seleccionados. Los nombres y los textos originales tienen editores separados.",
+  "addon_relations": "Obra base, creadores y otras relaciones"
 }

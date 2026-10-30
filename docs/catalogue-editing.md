@@ -339,3 +339,31 @@ Web owns the normal next visual review using the unchanged `pages-catalogue-chan
 `concealed`, `unavailable-retry`, `detail-retry` and `detail-loading`. The unchanged
 `pages-catalogue-why-this-value--` stories retain their existing outcomes and plays. Root samples direction;
 there is no capture restart.
+the native selection bounds. No second history or personal-payload store is introduced. Native outcome checks,
+generated client/OpenAPI refresh and complete mutation integration remain deferred; type checking alone does
+not prove these acceptance outcomes.
+
+## Browser flow: add-ons and expansions
+
+The subject's existing **Contribute** menu offers **Add-on and expansion editor**. Creation uses
+`/{locale}/catalogue/addon`, optionally retaining an exact base-game `work` query. An add-on's menu opens
+`/{locale}/subjects/{id}/{slug}/addon`. Both private, noindex routes retain the native `wd:Q209163` identity and
+released `game.addon` profile. A game work, distribution, file or language/platform combination is a different
+object. Neither the editor nor a base-work link changes Library behavior.
+
+Creation configures the existing game initial-facts and terms controls with the active emitted profile.
+Only explicitly added facts enter native subject POST. **Use this base work** adds the emitted `wdt:P8646` assertion
+only after the contributor chooses it; it never copies base credits, languages, platforms or progress. Targets use
+the existing picker and exact native IDs. Date precision, language strings, qualifiers and grouped citations retain
+native schemas. Item-valued qualifier keys use the same native picker as game credits; later corrections use the
+existing relation editor. Initial facts are selected at creation; the exact returned UUID is reread before offering
+the reader and correction links.
+Concealed or unavailable readback keeps that UUID and offers a read retry without another creation.
+
+Correction reuses the multi-field workspace, classification controls, authored and terms destinations, exact-slot
+relation editor and native candidate review. Platform claims use field-wide classification review; credits retain
+emitted character-key slots. Unchanged values are excluded, each field reports its own result, and a proposal or
+acceptance alone never establishes current selection. No platform compatibility is inferred. Current denial,
+unavailability and metadata changes retain drafts; uncertain writes retain their sealed body and key. Ordinary
+forms send citations as statement references, never ingestion Source metadata. Existing BFF, native disclosure,
+rights and source-or-consent rules remain authoritative; unavailable terms production stays unavailable.

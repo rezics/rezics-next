@@ -1,5 +1,6 @@
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { EditorialEntry } from '../catalogue/editorial-entry';
+import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
 import { SubjectChangesLink } from '../catalogue/subject-changes-link';
 import type { PublicFigure } from './subject-ratings';
@@ -413,6 +414,14 @@ export function SubjectPage({
             locale={locale}
           />
           <CreateSubjectEntry locale={locale} />
+          {read.subject.type === 'wd:Q209163' ? (
+            <AddonProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          ) : (
+            <AddonProfileEntry
+              locale={locale}
+              {...(read.subject.type === 'schema:VideoGame' ? { work: read.subject.id } : {})}
+            />
+          )}
           {read.subject.type === 'wd:Q2620972' && (
             <StoryArcProfileEntry
               id={read.subject.id}

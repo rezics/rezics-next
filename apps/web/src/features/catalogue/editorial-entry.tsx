@@ -10,6 +10,7 @@ import { GameProfileEntry } from './game-profile-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
+import { AddonProfileEntry } from './addon-profile-entry';
 import { StoryArcProfileEntry, storyArcEntry } from './story-arc-profile-entry';
 import { SubjectFactsEntry } from './subject-facts-entry';
 import { SubjectTermsEntry } from './subject-terms-entry';
@@ -53,6 +54,7 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       match(node, SubjectTermsEntry, catalogueEntries.terms) ??
       match(node, RecipeEditorEntry, catalogueEntries.recipe) ??
       match(node, CharacterProfileEntry, catalogueEntries.character) ??
+      match(node, AddonProfileEntry, catalogueEntries.addon) ??
       match(node, StoryArcProfileEntry, storyArcEntry) ??
       match(node, PublicationEditorEntry, catalogueEntries.publication) ??
       match(node, SubjectChangesLink, catalogueEntries.changes);

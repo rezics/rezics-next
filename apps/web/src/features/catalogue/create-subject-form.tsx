@@ -33,10 +33,13 @@ export function CreateSubjectForm({
   transport,
   onNavigate,
   profile,
+  onCreated,
 }: {
   profile?: {
     title: string;
     scope: string;
+    hideHeading?: boolean;
+    control?: (pointer: string) => string | undefined;
     type?: string;
     intro?: string;
     href?: string;
@@ -49,6 +52,7 @@ export function CreateSubjectForm({
   session: Session;
   transport: CreateTransport;
   onNavigate: (href: string) => void;
+  onCreated?: (result: Created) => void;
 }) {
   const options = { locale: locale as never };
   const client = useQueryClient();
@@ -74,6 +78,8 @@ export function CreateSubjectForm({
   const errors = failure?.errors ?? [];
 
   function control(pointer: string): string {
+    const profileControl = profile?.control?.(pointer);
+    if (profileControl) return profileControl;
     const [kind, escaped] = pointer.slice(1).split('/');
     if (kind === 'type') return 'create-type';
     const language = escaped?.replaceAll('~1', '/').replaceAll('~0', '~');
@@ -120,6 +126,7 @@ export function CreateSubjectForm({
       const result = await transport.submit(request.current);
       if (result.ok) {
         setCreated(result);
+        onCreated?.(result);
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
         setFailure(result);
@@ -148,6 +155,7 @@ export function CreateSubjectForm({
     try {
       const reader = await transport.read(created.id);
       setCreated({ ...created, reader });
+      onCreated?.({ ...created, reader });
       if (reader.state === 'ready') onNavigate(reader.href);
     } catch {
       setCreated({ ...created, reader: { state: 'unavailable' } });
@@ -159,7 +167,7 @@ export function CreateSubjectForm({
 
   return (
     <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
-      <header className="space-y-3">
+      <header hidden={profile?.hideHeading} className="space-y-3">
         {profile ? (
           <PageHeading>{profile.title}</PageHeading>
         ) : (
@@ -233,7 +241,7 @@ export function CreateSubjectForm({
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && types.length > 0 && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
-              <Field data-invalid={invalid('create-type') || undefined}>
+              <Field hidden={!!profile?.type && profile.hideHeading} data-invalid={invalid('create-type') || undefined}>
                 <FieldLabel htmlFor="create-type">{m.catalogue_create_type({}, options)}</FieldLabel>
                 <NativeSelect
                   id="create-type"
@@ -368,15 +376,17 @@ export function CreateSubjectForm({
                       {[...new Set(errors.map((error) => control(error.pointer)))].map((id) => (
                         <li key={id}>
                           <a className="underline" href={`#${id}`}>
-                            {id === 'create-type'
-                              ? m.catalogue_create_type({}, options)
-                              : id.includes('-language-')
-                                ? m.catalogue_create_language({}, options)
-                                : id.includes('-description-')
-                                  ? m.catalogue_create_description({}, options)
-                                  : id.includes('-aliases-')
-                                    ? m.catalogue_create_aliases({}, options)
-                                    : m.catalogue_create_label({}, options)}
+                            {profile?.control?.(errors.find((error) => control(error.pointer) === id)?.pointer ?? '')
+                              ? errors.find((error) => control(error.pointer) === id)?.pointer
+                              : id === 'create-type'
+                                ? m.catalogue_create_type({}, options)
+                                : id.includes('-language-')
+                                  ? m.catalogue_create_language({}, options)
+                                  : id.includes('-description-')
+                                    ? m.catalogue_create_description({}, options)
+                                    : id.includes('-aliases-')
+                                      ? m.catalogue_create_aliases({}, options)
+                                      : m.catalogue_create_label({}, options)}
                           </a>
                         </li>
                       ))}
