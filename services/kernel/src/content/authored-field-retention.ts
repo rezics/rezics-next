@@ -53,7 +53,7 @@ export async function purgeAuthoredFieldForDeletedRecord(
   };
   // Source first, then this exact immutable authored tuple; never reverse the
   // lock order used to serialize source restoration and purge progress.
-  const row = (await lock.run(tx, binding))[0];
+  const row = await lock.run(tx, binding);
   if (!row || (row.recorded && !row.same_source)) return null;
   if (row.recorded) {
     if (!row.body_is_null || row.availability !== 'erased')
@@ -71,7 +71,7 @@ export async function purgeAuthoredFieldForDeletedRecord(
   if (!alreadyErased) {
     if (row.availability !== 'available' || row.body_is_null)
       throw new Error('Invalid authored field physical custody');
-    if ((await purge.run(tx, binding)).length !== 1)
+    if ((await purge.run(tx, binding)) === null)
       throw new Error('Authored field physical purge did not complete');
   }
   // The INSERT independently requires the exact native tombstone with NULL bytes.
