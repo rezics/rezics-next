@@ -1,3 +1,4 @@
+import { enrollResourceRecordSources } from './record-purge-custody.ts';
 import { withReadTransaction } from './read.ts';
 import type { Pool } from 'pg';
 import { createResourcePublicEligibility, initializeResourceGrants, type ParentAnchor } from '../access/index.ts';
@@ -132,6 +133,7 @@ export async function createContext(
         defaults,
         transaction_id: transactionId,
       });
+      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: id }], true);
       if (options.authorization)
         await initializeResourceGrants(tx, {
           resource: options.target,

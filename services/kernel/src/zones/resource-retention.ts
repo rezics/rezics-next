@@ -1,8 +1,15 @@
+import { lockRecordPurgeAuthoritySource, type RecordPurgeAuthority } from '../semantic/record-purge-authority.ts';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
 import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-store.ts';
 
-type ZoneRetentionInput = Readonly<{ route: number; id: string; deletedAt: string; transactionId: string }>;
+type ZoneRetentionInput = Readonly<{
+  route: number;
+  id: string;
+  deletedAt: string;
+  transactionId: string;
+  authority: RecordPurgeAuthority | null;
+}>;
 async function source(
   tx: CommandTransaction,
   input: ZoneRetentionInput,
@@ -15,6 +22,14 @@ async function source(
   const row = await lockZoneHead(tx, input.route, input.id);
   if (!row) throw new Error('zone_record_retention_source_missing');
   if (row.state === 'active' || row.state === 'purged') return { outcome: 'cancelled', row };
+  const authority = input.authority && (await lockRecordPurgeAuthoritySource(tx, input.authority));
+  if (
+    !authority ||
+    !('kind' in authority.reference) ||
+    authority.reference.kind !== 'zone' ||
+    authority.reference.zoneId !== input.id
+  )
+    return { outcome: 'ineligible', row };
   const eligibility = await tx.query<{ eligible: boolean }>(
     `SELECT state='deleted' AND NOT held
     AND deleted_at=$3::timestamptz AND restore_until=deleted_at+interval '720 hours'

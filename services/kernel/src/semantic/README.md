@@ -1294,26 +1294,26 @@ payload fragments. Its rotating partition cursor revisits held and future-due ke
 fragment progress and the exact page result share a native transaction. Reusing a page key with another
 limit is refused. Native Content and shared-history closure are required before a key counts as purged.
 
-`record-purge-authority.ts` owns the closed `RecordPurgeReference`, `RecordPurgeSource`, opaque
-`RecordPurgeAuthority` and prepare/read/lock exports. Issuance checks native committed deletion, current
-source version, generation, expiry and hold/takedown state. A live authority has private object identity;
-serialized work retains only source keys and reacquires authority. Read/lock revalidate the exact source
-and current home epoch. Ordinary authority grants neither account erasure nor early/legal-order purge.
+`record-purge-authority.ts` owns the unchanged contribution `RecordPurgeReference`, the closed
+`NativeRecordPurgeReference` union with Context/Zone keys, `RecordPurgeSource`, and the original opaque
+`RecordPurgeAuthority` prepare/read/lock exports. Native resource deletion records its actual generation,
+transaction and original 720-hour deadline with deferred same-command commit provenance. Issuance and effect
+locks verify current native versions, home epoch, hold and restore disposition. Zone withholding prevents
+ordinary purge. No resource becomes a candidate, revision or authored document.
 
-`retention-lifecycle.ts` supplies the source-native contribution lifecycle writer. The contribution command
-must bind it to its actual original-revision authorization, suppression and identity events; that command
-producer is absent on this base. Context and Zone discovery already follows their actual native lifecycle
-rows. Zone cleanup uses its existing locked CAS writer and retains its stable resource identity.
+Context creation/lifecycle/extension and Zone commands declare actual source roots before history serialization.
+Mounted/referenced resources acquire no ownership association. Source enrollment records original command
+positions without a deletion generation at birth; historical unconverted writers keep inventory pending.
+`record-purge-custody.ts` implements durable source holds, committed released-home receiving acceptance,
+receiver locks and native callback completion, and bounded source inventory cuts. Its opaque handles are lookup
+hints; native retained rows provide the proof. Source eligibility writers serialize against outstanding holds,
+and release requires exact committed target completion. See the [deletion contract](deletion-contract.md#ordinary-owner-issued-purge-authority).
 
-The agreed Content export `purgeAuthoredFieldForDeletedRecord` is represented by a visibly provisional,
-throwing adapter until Content supplies its own implementation. Accounts' adopted record-purge declaration is
-copied under `history/record-purge.ts` with provisional throwing implementations of
-`prepareRecordHistoryPurge` and `minimizeRecordHistoryPurge`. Candidate shared work calls these exact
-ports with released source checkouts, then locks the current source again before accepting real completion.
-Context/Zone still lack a declared native shared-history authority; no candidate identities stand in for them.
-Missing producer implementations therefore throw unavailable, rather than reporting cleanup, custody or completion.
-The same slice still requires actual producer integration and the original native physical-absence proof.
-No account-T, caller callback, author Actor or direct Content/Core SQL substitutes for those boundaries.
+Resource retention now uses the same issuer and Accounts history prepare/minimize port as contributions,
+releasing checkouts between homes. Content's authored-field hook remains contribution-only. Accounts owns
+native resource history storage/mapping and its copy minimizers; unsupported integration remains unavailable,
+with no shared completion from local payload cleanup or a source inventory cut. This implementation stage
+runs Kernel typing only; original native physical absence, custody, growth and rollback acceptance remains later.
 
 - Touches: only selected native source identities, their exact indexed fragments, owning source locks,
   partition cursor and page result. Shared physical minimizers retain their existing immutable field guards.

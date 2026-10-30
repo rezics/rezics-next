@@ -5,6 +5,7 @@ UPDATE semantic.context AS context
 SET state = input.state,
     deleted_at = CASE WHEN input.state = 'deleted' THEN input.at ELSE context.deleted_at END,
     purge_after = CASE WHEN input.state = 'deleted' THEN input.at + interval '720 hours' ELSE context.purge_after END,
+    deletion_transaction_id = CASE WHEN input.state = 'deleted' THEN :transaction_id::uuid ELSE context.deletion_transaction_id END,
     security_revision = context.security_revision + 1
 FROM input
 WHERE context.route = :route::integer AND context.context_id = :context_id::uuid AND context.kind = 'community'

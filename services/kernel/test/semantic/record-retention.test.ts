@@ -140,3 +140,66 @@ test('ordinary expiry removes the exact Content-owned authored body as well as i
   expect(await bodies()).toContainEqual(expect.objectContaining({ body: null, availability: 'erased' }));
   await f.absentPayload(secret);
 });
+
+test('Context native issuer binds committed generation and original source enrollment across restoration', async () => {
+  const { prepareRecordPurgeAuthority, readRecordPurgeAuthoritySource } =
+    await import('../../src/semantic/record-purge-authority.ts');
+  const { sealRecordPurgeSourceInventory, verifyRecordPurgeSourceInventory } =
+    await import('../../src/semantic/record-purge-custody.ts');
+  const { runCommand, noEffect } = await import('../../src/command/command.ts');
+  const made = await f.call('POST', '/v1/contexts', 'owner', { labels: { en: `Native issuer ${randomUUID()}` } });
+  f.status(made, 201);
+  const contextId = made.body.context.id as string,
+    route = routeOf(contextId)!,
+    partition = partitionOf(route);
+  const path = `/v1/contexts/${contextId}`;
+  f.status(await f.call('DELETE', path, 'owner'), 200);
+  const native = async () =>
+    (
+      await f.admin.query(
+        'SELECT deletion_generation,security_revision::text AS version FROM semantic.context WHERE route=$1 AND context_id=$2',
+        [route, contextId],
+      )
+    ).rows[0]!;
+  const first = await native();
+  const deps = { pool: f.pool, clock: f.clock },
+    context = { deadline: Date.now() + 10_000 };
+  const ref = { kind: 'context' as const, contextId, deletionGeneration: first.deletion_generation as string };
+  expect(await prepareRecordPurgeAuthority(deps, ref, context)).toBeNull();
+  f.status(await f.call('POST', `${path}:restore`, 'owner', {}), 200);
+  f.status(await f.call('DELETE', path, 'owner'), 200);
+  const current = await native();
+  expect(current.deletion_generation).not.toBe(first.deletion_generation);
+  f.setNow(new Date(f.clock().getTime() + 30 * day));
+  expect(await prepareRecordPurgeAuthority(deps, ref, context)).toBeNull();
+  const authority = await prepareRecordPurgeAuthority(
+    deps,
+    { ...ref, deletionGeneration: current.deletion_generation },
+    context,
+  );
+  expect(authority).not.toBeNull();
+  const source = await readRecordPurgeAuthoritySource(deps, authority!, context);
+  expect(source?.reference).toEqual({ ...ref, deletionGeneration: current.deletion_generation });
+  expect(source?.sourceVersion).toBe(current.version);
+  const enrollment = (
+    await f.admin.query(
+      `SELECT l.source_key,l.original_position FROM core.record_history_locator l WHERE source_key=$1`,
+      [JSON.stringify(['context', contextId])],
+    )
+  ).rows;
+  expect(enrollment.length).toBeGreaterThan(0);
+  expect(enrollment.every((row) => row.original_position !== null)).toBe(true);
+  let cut = await sealRecordPurgeSourceInventory(deps, authority!, context);
+  for (let page = 0; cut.state === 'pending' && page < 3; page++)
+    cut = await sealRecordPurgeSourceInventory(deps, authority!, context);
+  expect(cut.state).toBe('sealed');
+  if (cut.state !== 'sealed') throw new Error('Native enrolled source cut did not seal');
+  const proof = cut.cut;
+  expect(
+    (
+      await runCommand(f.pool, { partition, clock: f.clock, deadline: context.deadline }, async (tx) =>
+        noEffect(await verifyRecordPurgeSourceInventory(tx, authority!, proof)),
+      )
+    ).value,
+  ).toBe(true);
+});

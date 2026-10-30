@@ -40,3 +40,49 @@ test('deleted Zone retains its body until the exclusive deadline then minimizes 
   expect(await semanticRetention(f.db.pool, { clock: f.clock }).step(input)).toEqual(first);
   expect((await f.call('anonymous', 'GET', path)).status).toBe(404);
 });
+
+test('Zone native issuer and restarted receiving custody retain the source hold until real completion', async () => {
+  const { prepareRecordPurgeAuthority } = await import('../../src/semantic/record-purge-authority.ts');
+  const {
+    prepareRecordPurgeReceivingHold,
+    readRecordPurgeReceivingHold,
+    lockRecordPurgeReceivingHold,
+    releaseRecordPurgeReceivingHold,
+  } = await import('../../src/semantic/record-purge-custody.ts');
+  const { runCommand, noEffect } = await import('../../src/command/command.ts');
+  await f.available();
+  const zone = await f.create(createBody()),
+    route = routeOf(zone.id)!,
+    partition = partitionOf(route);
+  expect(
+    (await f.call('owner', 'DELETE', `/v1/zones/${zone.id}`, undefined, f.conditional(zone.revision))).status,
+  ).toBe(200);
+  const native = (
+    await f.db.pool.query(
+      'SELECT deletion_generation,revision::text AS version FROM zones.zone WHERE route=$1 AND zone_id=$2',
+      [route, zone.id],
+    )
+  ).rows[0]!;
+  const ref = { kind: 'zone' as const, zoneId: zone.id, deletionGeneration: native.deletion_generation as string };
+  const deps = { pool: f.db.pool, clock: f.clock },
+    context = { deadline: Date.now() + 10_000 };
+  expect(await prepareRecordPurgeAuthority(deps, ref, context)).toBeNull();
+  f.advance(30 * day);
+  const authority = await prepareRecordPurgeAuthority(deps, ref, context);
+  expect(authority).not.toBeNull();
+  const target = { partition, receivingId: randomUUID() };
+  expect(await prepareRecordPurgeReceivingHold(deps, authority!, target, context)).not.toBeNull();
+  const resumed = await readRecordPurgeReceivingHold(deps, ref, target, context);
+  expect(resumed).not.toBeNull();
+  const source = (
+    await runCommand(f.db.pool, { partition, clock: f.clock, deadline: context.deadline }, async (tx) =>
+      noEffect(await lockRecordPurgeReceivingHold(tx, resumed!)),
+    )
+  ).value;
+  expect(source?.reference).toEqual(ref);
+  expect(source?.sourceVersion).toBe(native.version);
+  expect(await releaseRecordPurgeReceivingHold(deps, ref, target, context)).toEqual({ state: 'pending' });
+  await expect(
+    f.db.pool.query('UPDATE zones.zone SET held=true WHERE route=$1 AND zone_id=$2', [route, zone.id]),
+  ).rejects.toThrow('record_purge_receiving_hold_outstanding');
+});

@@ -129,8 +129,11 @@ owner retention hooks, not broad JSON scans in production. Test-wide JSON eviden
 
 ## Ordinary owner-issued purge authority
 
-The native source implementation is `record-purge-authority.ts`. Its closed reference binds
+The native source implementation is `record-purge-authority.ts`. The original `RecordPurgeReference` binds
 `subjectId`, `candidateId`, original `revision`, optional exact `documentId` and `deletionGeneration`.
+`NativeRecordPurgeReference` adds exactly `{kind:'context',contextId,deletionGeneration}` and
+`{kind:'zone',zoneId,deletionGeneration}`. These resolve native Context/Zone rows and versions; resource
+links, including Realm/Space removal, never confer Context lifecycle or purge authority.
 The opaque authority is held in a private identity registry, never in JSON or a durable workflow payload.
 `prepareRecordPurgeAuthority({pool,clock?},reference,{deadline})` verifies native committed ordinary deletion;
 `readRecordPurgeAuthoritySource` revalidates it after releasing the source home, and
@@ -141,10 +144,29 @@ Hold, restoration, generation and current takedown serialize before removal. Thi
 no early/legal-order or account-erasure permission.
 
 Content alone implements `purgeAuthoredFieldForDeletedRecord(tx,authority)` and exact body/binding validation.
-Its agreed declaration is presently a throwing unavailable adapter. Accounts alone supplies
-`history/record-purge.ts` prepare/minimize implementations and actual receiving/consumer closure. The adopted
-declarations are present with provisional throwing adapters; released-home candidate progress consumes those
-exact ports and source-locked completion. Context/Zone still need their own native shared-history authority.
+Accounts alone supplies
+`history/record-purge.ts` prepare/minimize implementations and actual receiving/consumer closure. Resource
+retention supplies the same native authority to that port after releasing the source checkout. Accounts' native
+resource history mapping remains its dependency; an unsupported adapter cannot certify shared completion.
+
+`record-purge-custody.ts` implements source-owned durable holds and receiving roots. Preparation commits a
+hold while locking native source eligibility, releases the checkout, rereads committed source provenance, then
+accepts immutable custody at the target home. Source hold, restore, takedown, generation and native payload
+writers serialize on that source gate until actual receiver completion. There is no lease or timeout release.
+Receiver lock revalidates its committed accepted binding and current epoch in the effect transaction; completion
+uses the native command callback and a deferred same-command basis/position proof. Release verifies that exact
+committed target completion before changing the source hold. Restart retains native locators and reissues handles.
+Moved/unproven homes remain errors or pending; moving a source must preserve its outstanding native holds and
+cannot discard them or change source eligibility. Receiving transfer is not inferred from absence.
+
+Original Context creation/lifecycle/extension and Zone commands declare only their actual resource roots once,
+before history serialization, through `declareCommandRecordSources`, under its existing maximum of 16. Source
+birth has no deletion generation. Their source-owned command enrollment records native committed positions.
+The bounded inventory cut covers those finite writer references and the exact source generation/version only.
+Older unconverted births/writers stay pending; current roles, known artifact EOF and JSON scans cannot seal them.
+This cut supplies no historical artifact completeness, consumer closure, account-family proof or erasure ACK.
+Custody and inventory use retained progress under the existing WorkModule and deadlines, with at most four
+command references examined per page and no additional scheduling or native resource allowance.
 Local progress is distinct from completion and missing implementations explicitly fail unavailable. These seams do
 not replace the original native physical absence, exact custody, growth or rollback outcomes above.
 

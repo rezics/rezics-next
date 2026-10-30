@@ -19,6 +19,7 @@ import {
   lockRecordPurgeAuthoritySource,
   type RecordPurgeAuthority,
   type RecordPurgeReference,
+  type NativeRecordPurgeReference,
 } from './record-purge-authority.ts';
 import { nextRecordFragment, minimizeRecordFragment, type RetentionKey } from './retention-fragments.ts';
 
@@ -94,6 +95,33 @@ async function prepare(
   clock: (() => Date) | undefined,
   deadline: number,
 ): Promise<Prepared> {
+  if (work.kind !== 'candidate') {
+    const context = work.kind === 'context';
+    const metadata = (
+      await runCommand(pool, { partition: partitionOf(work.route), clock, deadline }, async (tx) =>
+        noEffect(
+          await tx.query<{ deletion_generation: string | null }>(
+            `SELECT deletion_generation FROM ${context ? 'semantic.context' : 'zones.zone'}
+         WHERE route=$1 AND ${context ? 'context_id' : 'zone_id'}=$2`,
+            [work.route, work.record_id],
+          ),
+        ),
+      )
+    ).value.rows[0];
+    if (!metadata) throw new Error('record_retention_lifecycle_unavailable');
+    const ref: NativeRecordPurgeReference = context
+      ? { kind: 'context', contextId: work.record_id, deletionGeneration: metadata.deletion_generation! }
+      : { kind: 'zone', zoneId: work.record_id, deletionGeneration: metadata.deletion_generation! };
+    // Rows predating committed native provenance remain pending; they are never fabricated.
+    const deps = { pool, clock };
+    const authority = metadata.deletion_generation ? await prepareRecordPurgeAuthority(deps, ref, { deadline }) : null;
+    const historyPreparation =
+      authority && work.phase === 'shared' ? await prepareRecordHistoryPurge(deps, authority, { deadline }) : null;
+    const history = historyPreparation
+      ? await minimizeRecordHistoryPurge(deps, historyPreparation, { deadline })
+      : null;
+    return { authority, document: null, documentId: null, history };
+  }
   const metadata = (
     await runCommand(pool, { partition: partitionOf(work.route), clock, deadline }, async (tx) =>
       noEffect(
@@ -130,11 +158,6 @@ async function prepare(
   return { authority, document, documentId: row.document_id, history };
 }
 
-/** The adopted authored-record authority cannot represent a Context or Zone source. */
-function requireResourceHistory(kind: 'context' | 'zone'): never {
-  throw new Error(`history_record_purge_unavailable: ${kind} native source authority is not declared`);
-}
-
 /** Same small native adapter used by acceptance and default scheduled work. All writes and the page
  * receipt commit in one source-home command; preparation releases every source checkout before entry.
  */
@@ -152,8 +175,7 @@ export function semanticRetention(pool: Pool, options: Readonly<{ clock?: () => 
         ).value;
         if (observed.receipt) return observed.receipt;
         const prepared = new Map<string, Prepared>();
-        for (const work of observed.rows)
-          if (work.kind === 'candidate') prepared.set(work.key, await prepare(pool, work, options.clock, deadline));
+        for (const work of observed.rows) prepared.set(work.key, await prepare(pool, work, options.clock, deadline));
         try {
           const result = await runCommand(
             pool,
@@ -209,7 +231,11 @@ export function semanticRetention(pool: Pool, options: Readonly<{ clock?: () => 
                     [work.route, work.record_id, work.deleted_at, at],
                   );
                   if (!source.rows[0]) throw new Error('context_record_retention_source_missing');
-                  eligible = source.rows[0].eligible;
+                  const auth = prepared.get(work.key)!;
+                  eligible =
+                    source.rows[0].eligible &&
+                    auth.authority !== null &&
+                    (await lockRecordPurgeAuthoritySource(tx, auth.authority)) !== null;
                   cancelled = source.rows[0].state === 'active' || source.rows[0].state === 'purged';
                 }
                 // Source rows lock before their derived work index, matching ordinary writer/hold ordering.
@@ -220,6 +246,7 @@ export function semanticRetention(pool: Pool, options: Readonly<{ clock?: () => 
                     id: work.record_id,
                     deletedAt: work.deleted_at,
                     transactionId: command.transactionId,
+                    authority: prepared.get(work.key)!.authority,
                   };
                   if (work.phase === 'shared') {
                     const outcome = await inspectDeletedZoneRetention(tx, source);
@@ -246,13 +273,25 @@ export function semanticRetention(pool: Pool, options: Readonly<{ clock?: () => 
                 }
                 if (!eligible) continue;
                 if (work.phase === 'shared') {
-                  if (work.kind !== 'candidate') requireResourceHistory(work.kind);
                   if (prepared.get(work.key)?.history?.state === 'complete') {
-                    await tx.query(
-                      `UPDATE semantic.record_lifecycle SET state='purged',version=version+1
-                    WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`,
-                      [work.route, work.owner_id, work.record_id],
-                    );
+                    if (work.kind === 'candidate')
+                      await tx.query(
+                        `UPDATE semantic.record_lifecycle SET state='purged',version=version+1
+                       WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`,
+                        [work.route, work.owner_id, work.record_id],
+                      );
+                    else if (work.kind === 'context')
+                      await tx.query(
+                        `UPDATE semantic.context SET state='purged',security_revision=security_revision+1
+                       WHERE route=$1 AND context_id=$2`,
+                        [work.route, work.record_id],
+                      );
+                    else
+                      await tx.query(
+                        `UPDATE zones.zone SET state='purged',revision=revision+1,lifecycle_revision=lifecycle_revision+1
+                      WHERE route=$1 AND zone_id=$2`,
+                        [work.route, work.record_id],
+                      );
                     await tx.query(
                       `UPDATE semantic.record_retention_key SET phase='complete'
                     WHERE partition_no=$1 AND key=$2 AND generation=$3`,
@@ -335,7 +374,7 @@ export function semanticRetention(pool: Pool, options: Readonly<{ clock?: () => 
                 `INSERT INTO semantic.record_retention_page(partition_no,key,input_limit,result) VALUES($1,$2,$3,$4)`,
                 [input.partition, input.key, input.limit, page],
               );
-              return { value: page, events: [] };
+              return noEffect(page);
             },
           );
           return result.value;

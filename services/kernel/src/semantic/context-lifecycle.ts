@@ -1,3 +1,4 @@
+import { enrollResourceRecordSources } from './record-purge-custody.ts';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import { resourceAuthorization } from '../access/index.ts';
@@ -67,16 +68,18 @@ export async function changeContextLifecycle(
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
       authorization,
     },
-    async (tx, { time }) => {
+    async (tx, { time, transactionId }) => {
       const row = await readContext.run(tx, { route, context_id: context });
       if (!row) throw new ContextNotFoundError();
       if (row.kind !== 'community') throw new GrantDeniedError();
       const value = { id: context, state };
       if (row.state === state) return noEffect(value);
+      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: context }]);
       const [changed] = await writeContext.run(tx, {
         route,
         context_id: context,
         state,
+        transaction_id: transactionId,
         at: authoritativeTimeValue(time),
       });
       if (!changed) throw new ContextLifecycleConflictError();

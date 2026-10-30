@@ -35,7 +35,13 @@ type Binding = Readonly<{ source: RecordPurgeSource; partition: number; epoch: n
 const issued = new WeakMap<RecordPurgeAuthority, Binding>();
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-function reference(value: RecordPurgeReference): RecordPurgeReference {
+function reference(value: NativeRecordPurgeReference): NativeRecordPurgeReference {
+  if (value && 'kind' in value) {
+    const id = value.kind === 'context' ? value.contextId : value.kind === 'zone' ? value.zoneId : null;
+    if (Object.keys(value).length !== 3 || !id || routeOf(id) === null || !uuid.test(value.deletionGeneration))
+      throw new TypeError('Invalid record purge reference');
+    return Object.freeze({ ...value });
+  }
   if (
     !value ||
     Object.keys(value).length !== 5 ||
@@ -62,7 +68,8 @@ function binding(authority: RecordPurgeAuthority): Binding {
 }
 
 /** Always rereads the native lifecycle, original command and current home under the same row locks. */
-async function source(tx: CommandTransaction, ref: RecordPurgeReference): Promise<RecordPurgeSource | null> {
+async function source(tx: CommandTransaction, ref: NativeRecordPurgeReference): Promise<RecordPurgeSource | null> {
+  if ('kind' in ref) return resourceSource(tx, ref);
   const command = currentCommand(tx);
   const route = routeOf(ref.subjectId)!;
   if (command.partition !== partitionOf(route)) throw new RangeError('Record purge source is in another home');
@@ -123,7 +130,9 @@ export async function prepareRecordPurgeAuthority(
   context: Readonly<{ deadline: number }>,
 ): Promise<RecordPurgeAuthority | null> {
   const copied = reference(ref);
-  const partition = partitionOf(routeOf(copied.subjectId)!);
+  const partition = partitionOf(
+    routeOf('subjectId' in copied ? copied.subjectId : copied.kind === 'context' ? copied.contextId : copied.zoneId)!,
+  );
   const read = await runCommand(deps.pool, { partition, deadline: context.deadline, clock: deps.clock }, async (tx) =>
     noEffect(await source(tx, copied)),
   );
@@ -163,5 +172,54 @@ export async function lockRecordPurgeAuthoritySource(
     row.deletionCommittedAt === saved.source.deletionCommittedAt &&
     row.purgeAfter === saved.source.purgeAfter
     ? row
+    : null;
+}
+
+/** Both resource variants resolve their own native key/version, without a contribution tuple. */
+async function resourceSource(
+  tx: CommandTransaction,
+  ref: ResourceRecordPurgeReference,
+): Promise<RecordPurgeSource | null> {
+  const command = currentCommand(tx);
+  const id = ref.kind === 'context' ? ref.contextId : ref.zoneId;
+  const route = routeOf(id)!;
+  if (command.partition !== partitionOf(route)) throw new RangeError('Record purge source is in another home');
+  const context = ref.kind === 'context';
+  const table = context ? 'semantic.context' : 'zones.zone';
+  const key = context ? 'context_id' : 'zone_id';
+  const version = context ? 'security_revision' : 'revision';
+  const due = context ? 'purge_after' : 'restore_until';
+  const result = await tx.query<{
+    source_version: string;
+    deletion_transaction_id: string;
+    committed_transaction_id: string | null;
+    deleted_at: string;
+    purge_after: string;
+  }>(
+    `SELECT r.${version}::text AS source_version,r.deletion_transaction_id,
+      b.transaction_id AS committed_transaction_id,
+      to_char(r.deleted_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS deleted_at,
+      to_char(r.${due} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS purge_after
+     FROM ${table} r LEFT JOIN semantic.resource_record_purge_commit b
+       ON b.route=r.route AND b.kind=$3 AND b.resource_id=r.${key}
+       AND b.deletion_generation=r.deletion_generation AND b.transaction_id=r.deletion_transaction_id
+       AND b.deleted_at=r.deleted_at AND b.purge_after=r.${due}
+     WHERE r.route=$1 AND r.${key}=$2 AND r.deletion_generation=$4 AND r.state='deleted' AND NOT r.held
+       AND r.${due}=r.deleted_at+interval '720 hours' AND r.${due}<=$5::timestamptz
+       AND ${context ? "r.kind='community'" : "r.withholding='{}'::jsonb"}
+     FOR UPDATE OF r`,
+    [route, id, ref.kind, ref.deletionGeneration, authoritativeTimeValue(command.time)],
+  );
+  const row = result.rows[0];
+  if (row && row.committed_transaction_id === null) throw new Error('record_purge_native_commit_unavailable');
+  return row
+    ? Object.freeze({
+        reference: ref,
+        disposition: 'ordinary-deletion',
+        sourceVersion: row.source_version,
+        deletionTransactionId: row.deletion_transaction_id,
+        deletionCommittedAt: row.deleted_at,
+        purgeAfter: row.purge_after,
+      })
     : null;
 }
