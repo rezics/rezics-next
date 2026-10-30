@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { authenticator, passkeyDatabase, passkeyFixture, cookies } from './passkeys.test.ts';
-import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, GrowthBoundError, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 for (const path of ['signin', 'list'] as const)
   test(`passkey ${path} remains bounded as unrelated credentials and own consumed effects grow at 1x/8x/64x`, async () => {
@@ -314,6 +314,12 @@ for (const path of ['registration options', 'verified registration', 'registrati
         },
         prepare,
         operation,
+      }).catch((error: unknown) => {
+        // Retain the failing measured occurrences and their native documents.
+        // Never execute a replacement operation after a growth failure.
+        if (error instanceof GrowthBoundError)
+          console.error(`Passkey ${path} growth failure:`, JSON.stringify(error.samples));
+        throw error;
       });
       expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
       for (const { cost } of report.samples) {
