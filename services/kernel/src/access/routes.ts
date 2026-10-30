@@ -27,6 +27,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
 import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
+import { readEditableAccountProfile, type EditableAccountProfile } from './account-edit-profile.ts';
 import { createLifecycleCommands, LifecycleDeniedError, normalizeLookupHandle } from './lifecycle.ts';
 import {
   readAgentPages,
@@ -213,6 +214,19 @@ const shelf = t.Object(
   closed,
 );
 const nullable = <S extends TSchema>(schema: S) => t.Union([schema, t.Null()]);
+const editableProfileFields = {
+  id,
+  handle: nullable(t.String()),
+  displayName: nullable(t.String()),
+  bio: nullable(t.String()),
+  links: publicProfile.properties.links,
+  avatar: nullable(coverSummary),
+  publicViews: publicProfile.properties.publicViews,
+};
+const editableProfile = t.Unsafe<EditableAccountProfile>(t.Union([
+  t.Object({ ...editableProfileFields, kind: t.Literal('actor') }, closed),
+  t.Object({ ...editableProfileFields, kind: t.Literal('organization'), speakersListed: t.Boolean() }, closed),
+]));
 const profilePatch = t.Object(
   {
     displayName: t.Optional(nullable(t.String({ maxLength: 4096 }))),
@@ -480,6 +494,36 @@ export function accessRoutes(
       clock: dependencies.clock,
     }));
   return app
+    .get(
+      '/v1/accounts/:accountId/profile',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: {
+          200: t.Object({ profile: editableProfile }, closed),
+          400: problemSchema('invalid_request'),
+          401: problemSchema('authentication_required', 'invalid_credentials'),
+          403: problemSchema('forbidden', 'platform_closed'),
+          503: publicReadFailures[503],
+        },
+        detail: {
+          operationId: 'account.read_editable_profile',
+          'x-action': 'account:update',
+          'x-exposure': 'public',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        return admission.run('normal', job, () =>
+          readEditableAccountProfile(
+            dependencies.access(),
+            { pool: dependencies.pool, actor, deadline: job.deadline },
+            params.accountId,
+          ),
+        );
+      },
+    )
     .patch(
       '/v1/accounts/:accountId',
       {

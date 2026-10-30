@@ -1226,6 +1226,18 @@ work and no additional relation or growth check. Existing claim storage bounds r
 
 ### Public identity read
 
+`GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) returns the private editable
+`{ profile }` source by full account key, including handleless accounts. It requires `updateAccount`'s native
+authority: `account:update` on an ordinary account, or `account:manage` on an operated actor's current operator.
+Preparation releases foreign evidence before checkout; the operator check is separately released and the subject
+snapshot confirms the exact binding. Current viewer, scope, principal, state and fences still apply. Unknown,
+inactive, fenced and denied subjects return no profile (403); authentication failures retain 401. Normal platform
+admission precedes the handler. This GET has no write-rate declaration or command receipt. Responses use
+`private, no-store`. The closed DTO contains `id`, `kind`, nullable current `handle`, `displayName`, `bio`, `links`,
+Content's current `AvatarSummary` (or null), four `publicViews` flags and organization-only `speakersListed`.
+Missing/malformed visibility values fail closed to false; no proof or stored avatar URL is returned. Former handles
+are never read keys. Public identity and discovery projections are independent.
+
 `PATCH /v1/accounts/{accountId}` (`account.update`, action `account:update`) updates the public profile through
 `updateAccount`. It accepts a nonempty partial patch of `displayName`, `biography`, `avatar`, `links`, `publicViews`
 and organization-only `speakersListed`, preserves omitted values, clears nullable fields with null, merges view flags,
