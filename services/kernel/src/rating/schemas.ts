@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { strictContentSchema } from '../content/schemas.ts';
+import { SourceFenceQuerySchema, strictContentSchema } from '../content/schemas.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -86,6 +86,7 @@ const sourceScale = t.Object(
 export const SourceStatisticInputSchema = strictContentSchema(
   t.Object(
     {
+      sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
       sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
       scale: sourceScale,
       mean: t.Number(),
@@ -101,6 +102,7 @@ export const SourceStatisticInputSchema = strictContentSchema(
 export const SourceStatisticClearInputSchema = strictContentSchema(
   t.Object(
     {
+      sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
       sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
       count: t.Literal(0),
       asOf: t.String({ format: 'date' }),
@@ -112,6 +114,7 @@ export const SourceStatisticClearInputSchema = strictContentSchema(
 export const SourceStatisticResponseSchema = t.Object(
   {
     source: t.Literal('vndb'),
+    sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
     sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
     scale: sourceScale,
     mean: t.Number(),

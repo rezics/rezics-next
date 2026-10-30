@@ -253,12 +253,12 @@ async function seedSourceHistory(
        CROSS JOIN (VALUES (0), (1), (2)) AS buckets(bucket)
      )
      INSERT INTO rating.source_statistic
-       (route, subject_id, source, source_record_id, scale_min, scale_max, mean, count, as_of,
+       (route, subject_id, source, source_alias, source_record_id, scale_min, scale_max, mean, count, as_of,
         licence, attribution, transaction_id)
      SELECT route,
             ('00000000-0000-7000-8000-' || lpad(to_hex(route), 4, '0') ||
              lpad(to_hex($4::integer + n * 3 + bucket), 8, '0'))::uuid,
-            'vndb', 'growth-record-' || $5::text || '-' || n || '-' || bucket,
+            'vndb', 'vndb', 'growth-record-' || $5::text || '-' || n || '-' || bucket,
             0, 10, 8.5, 1234, '2026-10-01', 'CC BY 4.0', 'VNDB users',
             ('00000000-0000-7000-8000-' || lpad(to_hex(route), 4, '0') ||
              lpad(to_hex($4::integer + n * 3 + bucket), 8, '0'))::uuid
@@ -267,9 +267,9 @@ async function seedSourceHistory(
   );
   await db.admin.query(
     `INSERT INTO rating.source_statistic
-       (route, subject_id, source, source_record_id, scale_min, scale_max, mean, count, as_of,
+       (route, subject_id, source, source_alias, source_record_id, scale_min, scale_max, mean, count, as_of,
         licence, attribution, transaction_id)
-     SELECT $1, subject_id, 'vndb', 'probe-' || $2::text || '-' || subject_id::text,
+     SELECT $1, subject_id, 'vndb', 'vndb', 'probe-' || $2::text || '-' || subject_id::text,
             0, 10, 8.5, 1234, '2026-10-01', 'CC BY 4.0', 'VNDB users', subject_id
      FROM unnest($3::uuid[]) AS subject_id`,
     [sourceRoute, dataset, listIds],

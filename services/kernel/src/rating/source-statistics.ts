@@ -19,6 +19,7 @@ import { readPartition } from '../partition/partition.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KernelClock } from '../clock.ts';
+import { SourceFenceQuerySchema } from '../content/schemas.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import sourceStatisticList from './source-statistic-list.sql';
@@ -36,10 +37,13 @@ const SOURCE_STATISTIC_EVENT = 'com.rezics.rating.source_statistic.changed.v1';
 const SOURCE_STATISTIC_OPERATION = 'rating.source_statistic.write';
 const SOURCE_STATISTIC_CLEAR_OPERATION = 'rating.source_statistic.clear';
 const root = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
+const sourceAliasSchema = SourceFenceQuerySchema.properties.source;
+const sourceAliasPattern = new RegExp(sourceAliasSchema.pattern!);
 const sourceRecordControls = /[\u0000-\u001f\u007f-\u009f]/u;
 
 type SourceStatistic = {
   source: 'vndb';
+  sourceAlias?: string;
   sourceRecordId: string;
   scale: { min: number; max: number };
   mean: number;
@@ -50,9 +54,10 @@ type SourceStatistic = {
 };
 
 type Input = Omit<SourceStatistic, 'source'>;
-type ClearInput = Readonly<{ sourceRecordId: string; count: 0; asOf: string }>;
+type ClearInput = Readonly<{ sourceAlias?: string; sourceRecordId: string; count: 0; asOf: string }>;
 type Row = {
   source: 'vndb';
+  sourceAlias: string;
   sourceRecordId: string;
   scaleMin: number;
   scaleMax: number;
@@ -112,6 +117,7 @@ export class SourceStatisticNotFoundError extends Error {
 function statistic(row: Row): SourceStatistic {
   return {
     source: row.source,
+    ...(row.sourceAlias === row.source ? {} : { sourceAlias: row.sourceAlias }),
     sourceRecordId: row.sourceRecordId,
     scale: { min: Number(row.scaleMin), max: Number(row.scaleMax) },
     mean: Number(row.mean),
@@ -130,6 +136,27 @@ function validateSourceRecordId(value: unknown): value is string {
     !sourceRecordControls.test(value) &&
     Buffer.byteLength(value, 'utf8') <= 1024
   );
+}
+
+function effectiveAlias(source: string, value: { sourceAlias?: string }): string {
+  return value.sourceAlias ?? source;
+}
+
+function validateAlias(value: { sourceAlias?: string }): void {
+  const alias = value.sourceAlias;
+  if (alias === undefined) return;
+  if (
+    typeof alias !== 'string' ||
+    sourceAliasPattern.exec(alias)?.[0] !== alias ||
+    Buffer.byteLength(alias, 'utf8') > sourceAliasSchema.maxLength!
+  )
+    throw new SourceStatisticInvalidError('sourceAlias');
+}
+
+function digestValue<T extends { sourceAlias?: string }>(source: string, value: T): T | Omit<T, 'sourceAlias'> {
+  if (value.sourceAlias !== source) return value;
+  const { sourceAlias: _alias, ...legacy } = value;
+  return legacy;
 }
 
 function validateAsOf(value: unknown): value is string {
@@ -155,6 +182,7 @@ function validate(source: string, subjectId: string, value: Input, authorization
   const route = authorizeWrite(source, subjectId, authorization);
   if (!value || typeof value !== 'object' || !value.scale || typeof value.scale !== 'object')
     throw new SourceStatisticInvalidError('statistic');
+  validateAlias(value);
   if (
     !Number.isSafeInteger(value.scale.min) ||
     !Number.isSafeInteger(value.scale.max) ||
@@ -189,6 +217,7 @@ function validateClear(
 ): number {
   const route = authorizeWrite(source, subjectId, authorization);
   if (!value || typeof value !== 'object') throw new SourceStatisticInvalidError('clear');
+  validateAlias(value);
   if (!validateSourceRecordId(value.sourceRecordId)) throw new SourceStatisticInvalidError('sourceRecordId');
   if (value.count !== 0) throw new SourceStatisticInvalidError('count');
   if (!validateAsOf(value.asOf)) throw new SourceStatisticInvalidError('asOf');
@@ -196,13 +225,13 @@ function validateClear(
 }
 
 function digest(subjectId: string, source: string, value: Input): Buffer {
-  const canonical = canonicalize([subjectId, source, value]);
+  const canonical = canonicalize([subjectId, source, digestValue(source, value)]);
   if (typeof canonical !== 'string') throw new TypeError('Source statistic must be canonical JSON');
   return createHash('sha256').update(canonical, 'utf8').digest();
 }
 
 function clearDigest(subjectId: string, source: string, value: ClearInput): Buffer {
-  const canonical = canonicalize([subjectId, source, value]);
+  const canonical = canonicalize([subjectId, source, digestValue(source, value)]);
   if (typeof canonical !== 'string') throw new TypeError('Source statistic clear must be canonical JSON');
   return createHash('sha256').update(canonical, 'utf8').digest();
 }
@@ -250,9 +279,8 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
   async function writeCommand(input: WriteInput): Promise<WriteCommandOutcome> {
     if (input.actor.kind !== 'account') throw new GrantDeniedError();
     const route = validate(input.source, input.subjectId, input.value, input.authorization);
-    const tuple = tupleFor(config.routeKey, input.source, input.value.sourceRecordId);
+    const tuple = tupleFor(config.routeKey, effectiveAlias(input.source, input.value), input.value.sourceRecordId);
     const preparedFence = await readFenceSnapshot(config, tuple, input.deadline);
-    if (preparedFence.fence.takenDown) throw new GrantDeniedError();
     const outcome = await runCommand(
       config.pool,
       {
@@ -273,10 +301,12 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
         },
       },
       async (tx, command) => {
+        if (preparedFence.fence.takenDown) throw new GrantDeniedError();
         const rows = await sourceStatisticUpsert.run(tx, {
           route,
           subject_id: input.subjectId,
           source: input.source,
+          source_alias: effectiveAlias(input.source, input.value),
           source_record_id: input.value.sourceRecordId,
           scale_min: input.value.scale.min,
           scale_max: input.value.scale.max,
@@ -296,12 +326,19 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
             {
               type: SOURCE_STATISTIC_EVENT,
               subject: input.subjectId,
-              data: { subjectId: input.subjectId, source: value.source, sourceRecordId: value.sourceRecordId },
+              data: {
+                subjectId: input.subjectId,
+                source: value.source,
+                ...(value.sourceAlias === undefined ? {} : { sourceAlias: value.sourceAlias }),
+                sourceRecordId: value.sourceRecordId,
+              },
             },
           ],
         };
       },
     );
+    // Receipt lookup precedes a publication denial so a committed replay never claims no effect.
+    if (preparedFence.fence.takenDown) throw new ProblemError('forbidden', { effectStatus: 'not_applicable' });
     return { ...outcome, preparedFenceRevision: preparedFence.fence.securityRevision };
   }
 
@@ -332,6 +369,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           route,
           subject_id: input.subjectId,
           source: input.source,
+          source_alias: effectiveAlias(input.source, input.value),
           source_record_id: input.value.sourceRecordId,
         });
         if (!result.subjectExists) throw new SourceStatisticNotFoundError();
@@ -345,6 +383,9 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
               data: {
                 subjectId: input.subjectId,
                 source: input.source,
+                ...(effectiveAlias(input.source, input.value) === input.source
+                  ? {}
+                  : { sourceAlias: input.value.sourceAlias }),
                 sourceRecordId: input.value.sourceRecordId,
               },
             },
@@ -372,7 +413,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
   ): Promise<SourceStatistic[]> {
     const initial = await readRaw(subjectId, deadline);
     if (initial.length === 0) return initial;
-    const tuples = initial.map((row) => tupleFor(config.routeKey, row.source, row.sourceRecordId));
+    const tuples = initial.map((row) => tupleFor(config.routeKey, effectiveAlias(row.source, row), row.sourceRecordId));
     const first = await Promise.all(tuples.map((tuple) => readFenceSnapshot(config, tuple, deadline)));
     const final = await Promise.all(tuples.map((tuple) => readFenceSnapshot(config, tuple, deadline)));
     const current = await readRaw(subjectId, deadline);
@@ -382,7 +423,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
       const after = final[index]!.fence;
       const matchesExpected =
         expectedFence === undefined ||
-        initial[index]!.source !== expectedFence.source ||
+        effectiveAlias(initial[index]!.source, initial[index]!) !== expectedFence.source ||
         initial[index]!.sourceRecordId !== expectedFence.external_id ||
         after.securityRevision === expectedFence.securityRevision;
       return (
@@ -547,7 +588,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
           );
           if (!current || current.subjectId !== params.id) throw new ProblemError('not_found');
           const rows = await commands().read(current.subjectId, job.deadline, {
-            source: params.source,
+            source: effectiveAlias(result.value.source, result.value),
             external_id: result.value.sourceRecordId,
             securityRevision: result.preparedFenceRevision,
           });

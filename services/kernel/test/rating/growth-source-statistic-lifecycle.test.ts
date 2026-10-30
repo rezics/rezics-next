@@ -85,10 +85,11 @@ async function seedProbe(db: GrowthDatabase, scale: number, repetition: number):
   );
   await db.admin.query(
     `INSERT INTO rating.source_statistic
-       (route, subject_id, source, source_record_id, scale_min, scale_max, mean, count, as_of,
+       (route, subject_id, source, source_alias, source_record_id, scale_min, scale_max, mean, count, as_of,
         licence, attribution, transaction_id)
-     VALUES ($1,$2,'vndb',$3,0,10,8.5,1234,'2026-10-01','CC BY 4.0','VNDB users',$2)
-     ON CONFLICT (route, subject_id, source) DO UPDATE SET source_record_id=EXCLUDED.source_record_id,
+     VALUES ($1,$2,'vndb','vndb',$3,0,10,8.5,1234,'2026-10-01','CC BY 4.0','VNDB users',$2)
+     ON CONFLICT (route, subject_id, source) DO UPDATE SET source_alias=EXCLUDED.source_alias,
+       source_record_id=EXCLUDED.source_record_id,
        scale_min=EXCLUDED.scale_min, scale_max=EXCLUDED.scale_max, mean=EXCLUDED.mean, count=EXCLUDED.count,
        as_of=EXCLUDED.as_of, licence=EXCLUDED.licence, attribution=EXCLUDED.attribution,
        transaction_id=EXCLUDED.transaction_id`,
@@ -117,6 +118,42 @@ async function exercise(subjectId: string, scale: number, repetition: number) {
   return { read: read.status, put: put.status, clear: clear.status };
 }
 
+async function exerciseWithAliases(subjectId: string, scale: number, repetition: number) {
+  const legacy = await exercise(subjectId, scale, repetition);
+  const sourceRecordId = `growth-alias-${scale}-${repetition}`;
+  const value = { ...statisticValue(sourceRecordId), sourceAlias: 'feed-two' };
+  const key = randomUUID();
+  const put = await request('PUT', `${path(subjectId)}/vndb`, { body: value, key });
+  expect(put.status).toBe(200);
+  expect(await put.json()).toEqual({ source: 'vndb', ...value });
+  const read = await request('GET', path(subjectId));
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual([{ source: 'vndb', ...value }]);
+  const stale = await request('POST', clearPath(subjectId), {
+    body: { sourceRecordId, sourceAlias: 'feed-one', count: 0, asOf: value.asOf },
+    key: randomUUID(),
+  });
+  expect(stale.status).toBe(204);
+  const retained = await request('GET', path(subjectId));
+  expect(retained.status).toBe(200);
+  expect(await retained.json()).toEqual([{ source: 'vndb', ...value }]);
+  const replay = await request('PUT', `${path(subjectId)}/vndb`, { body: value, key });
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toEqual({ source: 'vndb', ...value });
+  const cleared = await request('POST', clearPath(subjectId), {
+    body: { sourceRecordId, sourceAlias: value.sourceAlias, count: 0, asOf: value.asOf },
+    key: randomUUID(),
+  });
+  expect(cleared.status).toBe(204);
+  return {
+    ...legacy,
+    aliasPut: put.status,
+    aliasRead: read.status,
+    staleClear: stale.status,
+    aliasClear: cleared.status,
+  };
+}
+
 async function seedStatisticHistory(db: GrowthDatabase, scale: number, previous: number): Promise<void> {
   const first = previous + 1;
   const unrelatedIds = Array.from({ length: scale - previous }, (_, index) => index + first);
@@ -137,9 +174,9 @@ async function seedStatisticHistory(db: GrowthDatabase, scale: number, previous:
        FROM unnest($2::integer[]) AS n
      )
      INSERT INTO rating.source_statistic
-       (route, subject_id, source, source_record_id, scale_min, scale_max, mean, count, as_of,
+       (route, subject_id, source, source_alias, source_record_id, scale_min, scale_max, mean, count, as_of,
         licence, attribution, transaction_id)
-     SELECT $1, subject_id, 'vndb', 'growth-unrelated-' || n, 0, 10, 8.5, 1234, '2026-10-01',
+     SELECT $1, subject_id, 'vndb', 'vndb', 'growth-unrelated-' || n, 0, 10, 8.5, 1234, '2026-10-01',
             'CC BY 4.0', 'VNDB users', subject_id FROM history`,
     [sourceRoute, unrelatedIds],
   );
@@ -285,11 +322,11 @@ test('source statistic GET, PUT and authoritative zero clear stay bounded as row
     prepare: (db, scale, repetition) => seedProbe(db, scale, repetition),
     warmup: async (db, scale, repetition) => {
       await seedProbe(db, scale, repetition);
-      return exercise(probeSubject(scale, repetition), scale, repetition);
+      return exerciseWithAliases(probeSubject(scale, repetition), scale, repetition);
     },
     operation: async (_db, scale, repetition) => {
       const subjectId = probeSubject(scale, repetition);
-      return exercise(subjectId, scale, repetition);
+      return exerciseWithAliases(subjectId, scale, repetition);
     },
   });
 

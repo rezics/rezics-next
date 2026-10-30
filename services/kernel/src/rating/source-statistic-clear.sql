@@ -2,6 +2,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route,
          :subject_id::uuid AS subject_id,
          :source::text AS source,
+         :source_alias::text AS source_alias,
          :source_record_id::text AS source_record_id
 ), target AS MATERIALIZED (
   SELECT subject.subject_id
@@ -13,6 +14,7 @@ WITH input AS NOT MATERIALIZED (
   WHERE statistic.route = input.route
     AND statistic.subject_id = target.subject_id
     AND statistic.source = input.source
+    AND statistic.source_alias = input.source_alias
     AND statistic.source_record_id = input.source_record_id
   RETURNING statistic.source_record_id
 )

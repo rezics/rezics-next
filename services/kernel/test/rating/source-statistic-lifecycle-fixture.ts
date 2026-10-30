@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
+import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { createAuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -16,7 +21,14 @@ import { createFigureFixture, type FigureFixture } from './support/figure-fixtur
 const issuer = 'https://source-statistic.auth.example.test';
 const audience = 'https://api.rezics.test';
 const password = 'source statistic lifecycle fixture password';
-const scopes = ['rating:vote', 'source_fence:takedown', 'source_statistic:write', 'subject:read'];
+const scopes = [
+  'rating:vote',
+  'source_fence:takedown',
+  'source_statistic:write',
+  'subject:read',
+  'subject:create',
+  'subject:merge',
+];
 
 export type SourceStatisticLifecycleFixture = Awaited<ReturnType<typeof createSourceStatisticLifecycleFixture>>;
 
@@ -101,6 +113,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       accountId,
     ]);
 
+    let access: ReturnType<typeof createAccess>;
     const app = createKernel({
       pool: database.pool,
       routeKey,
@@ -111,7 +124,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       }),
       ratePeer: () => '127.0.0.1',
       access: (config) =>
-        createAccess({
+        (access = createAccess({
           ...config,
           auth: {
             issuer,
@@ -119,7 +132,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
             jwksUrl: `${issuer}/.well-known/jwks.json`,
             fetch: (input, init) => auth.handler(new Request(input, init)),
           },
-        }),
+        })),
     });
     const fullBearer = await issue(auth, accountId, clientId, scopes);
     const readerBearer = await issue(auth, accountId, clientId, ['subject:read']);
@@ -140,6 +153,21 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       [crypto.randomUUID()],
     );
 
+    async function identityCommand(action: string) {
+      const context = { pool: database!.pool, deadline: Date.now() + 30_000 };
+      const actor = await access.authenticate(fullBearer, context);
+      if (actor.kind !== 'account') throw new Error('Expected authenticated lifecycle account');
+      const authorization = await accessCommandAuthorization(
+        access,
+        actor,
+        action,
+        { route: 0, id: GLOBAL_CONTEXT },
+        context,
+        () => new Error(`Denied lifecycle ${action}`),
+      );
+      return { actor, authorization, deadline: context.deadline };
+    }
+    const release = { digest: bundledDigest, release: bundledRelease };
     let closed = false;
     return {
       database,
@@ -149,6 +177,30 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       bearer: fullBearer,
       readerBearer,
       nativeFigures,
+      async createSubject() {
+        const key = crypto.randomUUID();
+        const command = await identityCommand('subject:create');
+        const result = await createSubject(database!.pool, {
+          ...command,
+          target: subjectTarget(routeKey, accountId, key),
+          idempotencyKey: key,
+          digest: createHash('sha256').update(key).digest(),
+          item: { type: 'schema:Book', labels: { en: 'Alias lifecycle subject' } },
+          release,
+        });
+        return result.subject.id;
+      },
+      async merge(original: string, survivor: string) {
+        const key = crypto.randomUUID();
+        return mergeSubjects(database!.pool, {
+          ...(await identityCommand('subject:merge')),
+          subjects: [original, survivor],
+          survivor,
+          idempotencyKey: key,
+          digest: createHash('sha256').update(key).digest(),
+          release,
+        });
+      },
       async request(
         method: string,
         path: string,
