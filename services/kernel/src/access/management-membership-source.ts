@@ -73,7 +73,7 @@ export async function readOrganizationMembershipCommandState(
         member_id: memberAccountId,
         organization_id: organizationId,
       });
-      return await withConnection(pool, async (client) => {
+      const source = await withConnection(pool, async (client) => {
         if (!(await check(client, time))) throw new AuthBindingDeniedError();
         const rows = await organizationSource.run(client, {
           route: route!,
@@ -106,6 +106,15 @@ export async function readOrganizationMembershipCommandState(
         requireAccessDeadline(context.deadline);
         return { org, member, human };
       });
+      // Re-read the human anchor after releasing organization checkout: an Access
+      // preparation must not conceal a concurrent session-floor/fencing change.
+      const finalHuman = await actorSource.run(pool, {
+        route: routeOf(actor.accountId)!,
+        account_id: actor.accountId,
+      });
+      if (JSON.stringify(human) !== JSON.stringify(finalHuman)) throw new AccessUnavailableError('contention');
+      requireAccessDeadline(context.deadline);
+      return source;
     } finally {
       releaseOperationalTime(time);
     }

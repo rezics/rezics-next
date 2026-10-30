@@ -276,9 +276,7 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                   <p>{holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
                   {holder.reservationId ? (
                     <p className="break-all">{m.auth_members_reservation({ reservation: holder.reservationId })}</p>
-                  ) : (
-                    <p>{m.auth_members_no_reservation()}</p>
-                  )}
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
